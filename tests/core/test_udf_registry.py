@@ -13,8 +13,8 @@ from agent_actions.utilities.udf_management.udf_registry import (
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 
-# Default test type for tests that don't care about schema content
-class SimpleInput(TypedDict):
+# Default test type for output schema validation
+class SimpleOutput(TypedDict):
     text: str
 
 
@@ -32,7 +32,7 @@ class TestUDFRegistration:
     def test_udf_registration(self):
         """Test that @udf_tool decorator registers function in registry."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def test_function():
             """Test docstring."""
             return "test"
@@ -44,12 +44,12 @@ class TestUDFRegistration:
     def test_same_file_duplicate_returns_existing(self):
         """Test that same-file duplicates return existing function (import deduplication)."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def duplicate_func():
             return "first"
 
         # Same file duplicate should return the existing function, not raise error
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def duplicate_func():  # noqa: F811
             return "second"
 
@@ -60,7 +60,7 @@ class TestUDFRegistration:
     def test_registry_stores_metadata(self):
         """Test that all metadata is captured and stored."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def metadata_func(x, y):
             """Function with metadata."""
             return x + y
@@ -77,7 +77,7 @@ class TestUDFRegistration:
     def test_decorator_preserves_function(self):
         """Test that decorator returns original function unchanged."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def preserved_func(a, b):
             """Original docstring."""
             return a * b
@@ -89,12 +89,12 @@ class TestUDFRegistration:
     def test_case_insensitive_duplicate_returns_existing(self):
         """Test that case-insensitive duplicates in same file return existing function."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def My_Function():
             return "original"
 
         # Same file, different case - returns existing function
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def my_function():  # noqa: F811
             return "duplicate"
 
@@ -109,7 +109,7 @@ class TestUDFRetrieval:
     def test_get_udf_retrieves_function(self):
         """Test that get_udf() retrieves registered function."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def retrieve_test():
             return "retrieved"
 
@@ -119,7 +119,7 @@ class TestUDFRetrieval:
     def test_get_udf_case_insensitive(self):
         """Test that get_udf() is case-insensitive."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def CaseSensitive():
             return "result"
 
@@ -131,7 +131,7 @@ class TestUDFRetrieval:
     def test_get_udf_not_found_raises_error(self):
         """Test that FunctionNotFoundError is raised when function not found."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def existing_func():
             pass
 
@@ -144,7 +144,7 @@ class TestUDFRetrieval:
     def test_get_udf_returns_callable(self):
         """Test that retrieved function is callable."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def callable_test(x):
             return x * 2
 
@@ -159,15 +159,15 @@ class TestListUDFs:
     def test_list_udfs_returns_all(self):
         """Test that list_udfs() returns all registered functions."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def func1():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def func2():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def func3():
             pass
 
@@ -181,7 +181,7 @@ class TestListUDFs:
     def test_list_udfs_includes_metadata(self):
         """Test that list_udfs() includes all metadata fields."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def meta_test(a, b):
             """Test function."""
             pass
@@ -198,15 +198,15 @@ class TestListUDFs:
     def test_list_udfs_sorted_alphabetically(self):
         """Test that list_udfs() returns functions sorted alphabetically."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def zebra():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def Alpha():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def middle():
             pass
 
@@ -221,11 +221,11 @@ class TestClearRegistry:
     def test_clear_registry(self):
         """Test that clear_registry() removes all functions."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def func1():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def func2():
             pass
 
@@ -237,7 +237,7 @@ class TestClearRegistry:
     def test_clear_registry_isolation(self):
         """Test that clear_registry() provides test isolation."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def test_func():
             pass
 
@@ -252,13 +252,13 @@ class TestExceptionContext:
     def test_duplicate_error_context(self):
         """Test that DuplicateFunctionError includes both locations."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def dup_func():
             pass
 
         try:
 
-            @udf_tool(input_type=SimpleInput)
+            @udf_tool()
             def dup_func():  # noqa: F811
                 pass
         except DuplicateFunctionError as e:
@@ -273,11 +273,11 @@ class TestExceptionContext:
     def test_not_found_error_lists_available(self):
         """Test that FunctionNotFoundError lists available functions."""
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def available1():
             pass
 
-        @udf_tool(input_type=SimpleInput)
+        @udf_tool()
         def available2():
             pass
 
@@ -290,21 +290,19 @@ class TestExceptionContext:
             assert len(e.context["available_functions"]) == 2
 
 
-class TestNewStyleUDFWithoutInputType:
-    """Tests for new style UDFs without input_type (context_scope defines input)."""
+class TestOutputSchemaValidation:
+    """Tests for output schema configuration (input is defined by context_scope in workflow YAML)."""
 
-    def test_udf_without_input_type(self):
-        """Test that UDF can be registered without input_type."""
+    def test_udf_with_output_type(self):
+        """Test that UDF can be registered with output_type for validation."""
 
-        @udf_tool(output_type=SimpleInput)
-        def new_style_func(data):
+        @udf_tool(output_type=SimpleOutput)
+        def output_validated_func(data):
             return {"text": "processed"}
 
-        assert "new_style_func" in UDF_REGISTRY
-        meta = UDF_REGISTRY["new_style_func"]
-        assert meta["input_type"] is None
-        assert meta["json_schema"] is None  # No input schema
-        assert meta["output_type"] == SimpleInput
+        assert "output_validated_func" in UDF_REGISTRY
+        meta = UDF_REGISTRY["output_validated_func"]
+        assert meta["output_type"] == SimpleOutput
         assert meta["json_output_schema"] is not None  # Output schema exists
 
     def test_udf_with_no_schemas(self):
@@ -316,9 +314,7 @@ class TestNewStyleUDFWithoutInputType:
 
         assert "minimal_func" in UDF_REGISTRY
         meta = UDF_REGISTRY["minimal_func"]
-        assert meta["input_type"] is None
         assert meta["output_type"] is None
-        assert meta["json_schema"] is None
         assert meta["json_output_schema"] is None
 
     def test_udf_with_output_schema_name(self):
@@ -339,24 +335,23 @@ class TestNewStyleUDFWithoutInputType:
 
         with pytest.raises(ConfigurationError) as exc_info:
 
-            @udf_tool(output_type=SimpleInput, output_schema="MyOutput")
+            @udf_tool(output_type=SimpleOutput, output_schema="MyOutput")
             def conflicting_func(data):
                 return {"text": "test"}
 
         assert "Cannot specify both output_schema and output_type" in str(exc_info.value)
 
-    def test_list_udfs_handles_none_input_type(self):
-        """Test that list_udfs handles None input_type gracefully."""
+    def test_list_udfs_shows_output_type(self):
+        """Test that list_udfs shows output_type when provided."""
 
-        @udf_tool(output_type=SimpleInput)
-        def no_input_type_func(data):
+        @udf_tool(output_type=SimpleOutput)
+        def typed_output_func(data):
             return {"text": "test"}
 
         udfs = list_udfs()
         assert len(udfs) == 1
         udf = udfs[0]
-        assert udf["input_type"] is None
-        assert udf["output_type"] == "SimpleInput"
+        assert udf["output_type"] == "SimpleOutput"
 
     def test_list_udfs_shows_output_schema_name(self):
         """Test that list_udfs includes output_schema field."""
@@ -370,20 +365,3 @@ class TestNewStyleUDFWithoutInputType:
         udf = udfs[0]
         assert udf["output_schema"] == "CustomOutput"
         assert udf["output_type"] is None
-
-    def test_deprecation_warning_for_input_type(self):
-        """Test that using input_type shows deprecation warning."""
-        import warnings
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-
-            @udf_tool(input_type=SimpleInput)
-            def deprecated_style(data):
-                return {"text": "test"}
-
-            # Find the deprecation warning
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) >= 1
-            assert "input_type" in str(deprecation_warnings[0].message)
-            assert "deprecated" in str(deprecation_warnings[0].message)

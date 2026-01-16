@@ -87,27 +87,25 @@ UDF_REGISTRY: Dict[str, Dict[str, Any]] = {}
 def udf_tool(
     func: Optional[Callable] = None,
     *,
-    input_type: Optional[type] = None,
     output_type: Optional[type] = None,
     output_schema: Optional[str] = None,
     granularity: Granularity = Granularity.RECORD,
 ) -> Callable:
     """
-    Decorator to register a UDF with optional type-based or file-based schema.
+    Decorator to register a UDF with output schema validation.
 
-    Input structure is defined by context_scope in workflow YAML, so input_type
-    is optional (deprecated). Only output schema validation is performed at runtime.
+    Input structure is defined by context_scope in workflow YAML.
+    Only output schema validation is performed at runtime.
 
     Args:
         func: The function to register
-        input_type: Python type for input validation (DEPRECATED - use context_scope instead)
         output_type: Python type for output validation (optional)
         output_schema: Schema file name for output validation (e.g., "ValidationResult")
         granularity: RECORD (default) or FILE processing
 
     Note:
         At least one of output_type or output_schema should be provided for output validation.
-        input_type is deprecated - context_scope in workflow YAML defines input structure.
+        Input structure is defined by context_scope in workflow YAML.
 
     Examples:
         from typing import TypedDict
@@ -115,11 +113,10 @@ def udf_tool(
         class UserOutput(TypedDict):
             status: str
 
-        # New style: no input_type (recommended)
-        # Input structure guaranteed by context_scope in workflow YAML
+        # Using output_type
         @udf_tool(output_type=UserOutput)
         def process_user(data, **kwargs):
-            # data structure comes from context_scope
+            # data structure comes from context_scope in workflow YAML
             return {'status': 'processed'}
 
         # Using external schema file
@@ -127,10 +124,10 @@ def udf_tool(
         def process_user_v2(data, **kwargs):
             return {'status': 'processed'}
 
-        # Legacy style with input_type (deprecated but still supported)
-        @udf_tool(input_type=UserInput, output_type=UserOutput)
-        def process_user_legacy(data, **kwargs):
-            return {'status': 'processed'}
+        # No output validation
+        @udf_tool()
+        def simple_transform(data, **kwargs):
+            return data
 
         # Batch processing with FILE granularity
         @udf_tool(output_type=UserOutput, granularity=Granularity.FILE)
@@ -139,23 +136,6 @@ def udf_tool(
     """
 
     def decorator(f: Callable) -> Callable:
-        import warnings
-
-        # Deprecation warning for input_type
-        if input_type is not None:
-            warnings.warn(
-                f"input_type parameter in @udf_tool is deprecated for '{f.__name__}'. "
-                f"Use context_scope in workflow YAML to define input structure. "
-                f"input_type will be removed in v2.0.0.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
-
-        # Derive input schema from type (if provided - legacy support)
-        resolved_schema = None
-        if input_type is not None:
-            resolved_schema = derive_schema_from_type(input_type)
-
         # Derive output schema - prefer output_schema file over output_type
         resolved_output_schema = None
         output_schema_name = output_schema  # Store for registry
@@ -194,11 +174,6 @@ def udf_tool(
                     new_file=new_file,
                 )
 
-            # Convert input schema to JSON Schema for validation (if provided)
-            json_schema = None
-            if resolved_schema is not None:
-                json_schema = unified_to_json_schema(resolved_schema)
-
             # Convert output schema if provided via output_type
             json_output_schema = None
             if resolved_output_schema is not None:
@@ -212,19 +187,16 @@ def udf_tool(
                 "file": inspect.getfile(f),
                 "docstring": f.__doc__,
                 "signature": inspect.signature(f),
-                "input_type": input_type,  # May be None (new style)
                 "output_type": output_type,  # May be None
-                "output_schema_name": output_schema_name,  # Schema file name (new)
-                "schema": resolved_schema,  # May be None (new style)
+                "output_schema_name": output_schema_name,  # Schema file name
                 "output_schema": resolved_output_schema,
                 "granularity": granularity,
-                "json_schema": json_schema,  # May be None (new style)
                 "json_output_schema": json_output_schema,  # May be None if using output_schema file
             }
 
         return f
 
-    # Support @udf_tool() with no arguments (new style)
+    # Support @udf_tool() with no arguments
     if func is not None:
         # Called as @udf_tool without parentheses
         return decorator(func)
@@ -304,7 +276,6 @@ def list_udfs() -> List[Dict[str, Any]]:
                 "file": meta["file"],
                 "docstring": meta["docstring"],
                 "signature": str(meta["signature"]),
-                "input_type": meta["input_type"].__name__ if meta.get("input_type") else None,
                 "output_type": meta["output_type"].__name__ if meta.get("output_type") else None,
                 "output_schema": meta.get("output_schema_name"),
             }
