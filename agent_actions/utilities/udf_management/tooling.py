@@ -90,18 +90,23 @@ def execute_user_defined_function(
     input_data: Union[Dict[str, Any], List[Any]],
     validate_input: bool = True,
     validate_output: bool = True,
+    schema_dir: Optional[Path] = None,
     **kwargs: Any,
 ) -> Any:
     """
-    Execute UDF with input and output schema validation.
+    Execute UDF with optional input and output schema validation.
+
+    Input validation is optional - when no input_type is defined, the UDF relies
+    on context_scope in workflow YAML to define input structure (progressive data exposure).
 
     Uses CACHED compiled schemas for performance.
 
     Args:
         udf_name: Simple function name (e.g., 'my_function')
         input_data: Input data (single object or array depending on granularity)
-        validate_input: Whether to validate input against schema
-        validate_output: Whether to validate output against schema (if output_type defined)
+        validate_input: Whether to validate input against schema (if schema defined)
+        validate_output: Whether to validate output against schema (if output_type/output_schema defined)
+        schema_dir: Optional schema directory for loading external schema files
         **kwargs: Additional arguments
 
     Returns:
@@ -111,17 +116,31 @@ def execute_user_defined_function(
         SchemaValidationError: If input or output validation fails
         AgentActionsException: If execution fails
     """
+    import logging
+
     from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
+
+    logger = logging.getLogger(__name__)
 
     metadata = get_udf_metadata(udf_name)
     udf = metadata["function"]
     granularity = metadata["granularity"]
-    json_schema = metadata["json_schema"]  # Direct JSON Schema
+    json_schema = metadata.get("json_schema")  # May be None (new style - no input_type)
     json_output_schema = metadata.get("json_output_schema")  # May be None
+    output_schema_name = metadata.get("output_schema_name")  # External schema file name
 
-    # Validate input if enabled
-    if validate_input:
+    # Validate input if enabled AND schema is defined
+    # With new style UDFs (no input_type), input validation is skipped
+    # because context_scope in workflow YAML guarantees input structure
+    if validate_input and json_schema is not None:
         _validate_udf_input(udf_name, input_data, granularity, json_schema)
+    elif validate_input and json_schema is None:
+        # No input schema - relying on context_scope for input structure
+        logger.debug(
+            "Skipping input validation for UDF '%s' (no input_type defined, "
+            "relying on context_scope for input structure)",
+            udf_name,
+        )
 
     # Execute function
     try:
@@ -137,11 +156,54 @@ def execute_user_defined_function(
             cause=e,
         ) from e
 
+    # Resolve output schema if using external file
+    if validate_output and json_output_schema is None and output_schema_name:
+        # Load schema from file at runtime
+        json_output_schema = _load_output_schema(output_schema_name, schema_dir, udf_name)
+
     # Validate output if enabled and output schema is defined
     if validate_output and json_output_schema is not None:
         _validate_udf_output(udf_name, result, granularity, json_output_schema)
 
     return result
+
+
+def _load_output_schema(
+    schema_name: str,
+    schema_dir: Optional[Path],
+    udf_name: str,
+) -> Dict[str, Any]:
+    """Load output schema from external file.
+
+    Args:
+        schema_name: Name of the schema file (without extension)
+        schema_dir: Directory containing schema files
+        udf_name: UDF function name for error messages
+
+    Returns:
+        JSON schema for validation
+
+    Raises:
+        ConfigurationError: If schema file not found
+    """
+    from agent_actions.response_processing.schema_loader import SchemaLoader
+    from agent_actions.utilities.udf_management.type_conversion import unified_to_json_schema
+
+    resolved_dir = schema_dir or Path.cwd() / "schema"
+
+    try:
+        loaded = SchemaLoader.load_schema(schema_name, resolved_dir)
+        return unified_to_json_schema(loaded)
+    except FileNotFoundError as e:
+        raise ConfigurationError(
+            f"Output schema file '{schema_name}' not found for UDF '{udf_name}'",
+            context={
+                "schema_name": schema_name,
+                "schema_dir": str(resolved_dir),
+                "function": udf_name,
+            },
+            cause=e,
+        ) from e
 
 
 def _validate_udf_input(

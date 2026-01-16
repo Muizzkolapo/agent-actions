@@ -200,7 +200,14 @@ class SchemaExtractor:
         config: Dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
-        """Extract input schema from tool/UDF agent using impl field."""
+        """Extract input schema from tool/UDF agent.
+
+        Tries the following sources in order:
+        1. Python files via scanner (AST parsing)
+        2. UDF registry (for UDFs with input_type - legacy)
+        3. Inline input_schema in tool config
+        4. context_scope (new style - infer from observe declarations)
+        """
         # impl may be stored as 'impl' or 'model_name' depending on config processing
         impl = config.get("impl") or config.get("model_name") or ""
 
@@ -216,11 +223,11 @@ class SchemaExtractor:
                     self._extract_input_fields_from_json_schema(json_schema, input_schema)
                     return
 
-        # Fallback: try UDF registry (for backward compatibility)
+        # Fallback: try UDF registry (for backward compatibility with input_type)
         impl_key = impl.lower() if impl else ""
         if impl_key and impl_key in self.udf_registry:
             udf_info = self.udf_registry[impl_key]
-            json_schema = udf_info.get("json_schema")  # Input schema
+            json_schema = udf_info.get("json_schema")  # Input schema (may be None for new style)
             if json_schema:
                 input_schema.json_schema = json_schema
                 self._extract_input_fields_from_json_schema(json_schema, input_schema)
@@ -231,9 +238,68 @@ class SchemaExtractor:
         if schema_def and isinstance(schema_def, dict):
             input_schema.json_schema = schema_def
             self._extract_input_fields_from_json_schema(schema_def, input_schema)
-        else:
-            # Tool without explicit input schema
+            return
+
+        # NEW: Infer from context_scope if no explicit schema
+        # This is the new style where input structure is defined by context_scope
+        self._infer_tool_input_from_context_scope(config, input_schema)
+
+    def _infer_tool_input_from_context_scope(
+        self,
+        config: Dict[str, Any],
+        input_schema: InputSchema,
+    ) -> None:
+        """Infer input schema from context_scope declarations.
+
+        For UDFs without explicit input_type, the input structure is defined by
+        context_scope.observe declarations. We parse these references and add them
+        as required fields.
+
+        Args:
+            config: Action configuration with context_scope
+            input_schema: InputSchema to populate
+        """
+        context_scope = config.get("context_scope", {})
+        observe = context_scope.get("observe", [])
+        passthrough = context_scope.get("passthrough", [])
+
+        # Combine observe and passthrough as inputs
+        all_refs = []
+        if isinstance(observe, list):
+            all_refs.extend(observe)
+        if isinstance(passthrough, list):
+            all_refs.extend(passthrough)
+
+        if not all_refs:
+            # No context_scope declarations - truly dynamic input
             input_schema.is_dynamic = True
+            return
+
+        # Parse field references and add as required fields
+        for field_ref in all_refs:
+            if not isinstance(field_ref, str):
+                continue
+
+            # Handle "dep_name.field_name" or "dep_name.*" or just "dep_name"
+            if "." in field_ref:
+                parts = field_ref.split(".", 1)
+                dep_name = parts[0]
+                field_path = parts[1] if len(parts) > 1 else "*"
+
+                if field_path == "*":
+                    # Wildcard - mark as required dependency but don't add specific fields
+                    input_schema.required_fields.add(f"{dep_name}.*")
+                else:
+                    # Specific field reference
+                    input_schema.required_fields.add(field_ref)
+            else:
+                # Just dependency name - mark entire dependency as required
+                input_schema.required_fields.add(f"{field_ref}.*")
+
+        # Mark that this schema was derived from context_scope
+        if input_schema.required_fields:
+            input_schema.is_dynamic = False
+            input_schema.derived_from_context_scope = True
 
     def _extract_input_fields_from_json_schema(
         self,

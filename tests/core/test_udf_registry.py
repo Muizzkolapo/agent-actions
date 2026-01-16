@@ -288,3 +288,102 @@ class TestExceptionContext:
             assert "available1" in e.context["available_functions"]
             assert "available2" in e.context["available_functions"]
             assert len(e.context["available_functions"]) == 2
+
+
+class TestNewStyleUDFWithoutInputType:
+    """Tests for new style UDFs without input_type (context_scope defines input)."""
+
+    def test_udf_without_input_type(self):
+        """Test that UDF can be registered without input_type."""
+
+        @udf_tool(output_type=SimpleInput)
+        def new_style_func(data):
+            return {"text": "processed"}
+
+        assert "new_style_func" in UDF_REGISTRY
+        meta = UDF_REGISTRY["new_style_func"]
+        assert meta["input_type"] is None
+        assert meta["json_schema"] is None  # No input schema
+        assert meta["output_type"] == SimpleInput
+        assert meta["json_output_schema"] is not None  # Output schema exists
+
+    def test_udf_with_no_schemas(self):
+        """Test that UDF can be registered with no schemas at all."""
+
+        @udf_tool()
+        def minimal_func(data):
+            return {"result": data}
+
+        assert "minimal_func" in UDF_REGISTRY
+        meta = UDF_REGISTRY["minimal_func"]
+        assert meta["input_type"] is None
+        assert meta["output_type"] is None
+        assert meta["json_schema"] is None
+        assert meta["json_output_schema"] is None
+
+    def test_udf_with_output_schema_name(self):
+        """Test that UDF can be registered with output_schema (file reference)."""
+
+        @udf_tool(output_schema="MyOutputSchema")
+        def schema_file_func(data):
+            return {"result": data}
+
+        assert "schema_file_func" in UDF_REGISTRY
+        meta = UDF_REGISTRY["schema_file_func"]
+        assert meta["output_schema_name"] == "MyOutputSchema"
+        assert meta["json_output_schema"] is None  # Resolved at runtime
+
+    def test_cannot_specify_both_output_type_and_output_schema(self):
+        """Test that specifying both output_type and output_schema raises error."""
+        from agent_actions.errors import ConfigurationError
+
+        with pytest.raises(ConfigurationError) as exc_info:
+
+            @udf_tool(output_type=SimpleInput, output_schema="MyOutput")
+            def conflicting_func(data):
+                return {"text": "test"}
+
+        assert "Cannot specify both output_schema and output_type" in str(exc_info.value)
+
+    def test_list_udfs_handles_none_input_type(self):
+        """Test that list_udfs handles None input_type gracefully."""
+
+        @udf_tool(output_type=SimpleInput)
+        def no_input_type_func(data):
+            return {"text": "test"}
+
+        udfs = list_udfs()
+        assert len(udfs) == 1
+        udf = udfs[0]
+        assert udf["input_type"] is None
+        assert udf["output_type"] == "SimpleInput"
+
+    def test_list_udfs_shows_output_schema_name(self):
+        """Test that list_udfs includes output_schema field."""
+
+        @udf_tool(output_schema="CustomOutput")
+        def schema_name_func(data):
+            return data
+
+        udfs = list_udfs()
+        assert len(udfs) == 1
+        udf = udfs[0]
+        assert udf["output_schema"] == "CustomOutput"
+        assert udf["output_type"] is None
+
+    def test_deprecation_warning_for_input_type(self):
+        """Test that using input_type shows deprecation warning."""
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+
+            @udf_tool(input_type=SimpleInput)
+            def deprecated_style(data):
+                return {"text": "test"}
+
+            # Find the deprecation warning
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) >= 1
+            assert "input_type" in str(deprecation_warnings[0].message)
+            assert "deprecated" in str(deprecation_warnings[0].message)
