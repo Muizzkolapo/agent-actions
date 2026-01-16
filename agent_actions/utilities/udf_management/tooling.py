@@ -88,27 +88,30 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
 def execute_user_defined_function(
     udf_name: str,
     input_data: Union[Dict[str, Any], List[Any]],
-    validate_input: bool = True,
     validate_output: bool = True,
+    schema_dir: Optional[Path] = None,
     **kwargs: Any,
 ) -> Any:
     """
-    Execute UDF with input and output schema validation.
+    Execute UDF with output schema validation.
+
+    Input structure is defined by context_scope in workflow YAML (progressive data exposure).
+    Only output schema validation is performed.
 
     Uses CACHED compiled schemas for performance.
 
     Args:
         udf_name: Simple function name (e.g., 'my_function')
         input_data: Input data (single object or array depending on granularity)
-        validate_input: Whether to validate input against schema
-        validate_output: Whether to validate output against schema (if output_type defined)
+        validate_output: Whether to validate output against schema (if output_type/output_schema defined)
+        schema_dir: Optional schema directory for loading external schema files
         **kwargs: Additional arguments
 
     Returns:
         Result from UDF execution
 
     Raises:
-        SchemaValidationError: If input or output validation fails
+        SchemaValidationError: If output validation fails
         AgentActionsException: If execution fails
     """
     from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
@@ -116,12 +119,10 @@ def execute_user_defined_function(
     metadata = get_udf_metadata(udf_name)
     udf = metadata["function"]
     granularity = metadata["granularity"]
-    json_schema = metadata["json_schema"]  # Direct JSON Schema
     json_output_schema = metadata.get("json_output_schema")  # May be None
+    output_schema_name = metadata.get("output_schema_name")  # External schema file name
 
-    # Validate input if enabled
-    if validate_input:
-        _validate_udf_input(udf_name, input_data, granularity, json_schema)
+    # No input validation - context_scope in workflow YAML guarantees input structure
 
     # Execute function
     try:
@@ -137,6 +138,11 @@ def execute_user_defined_function(
             cause=e,
         ) from e
 
+    # Resolve output schema if using external file
+    if validate_output and json_output_schema is None and output_schema_name:
+        # Load schema from file at runtime
+        json_output_schema = _load_output_schema(output_schema_name, schema_dir, udf_name)
+
     # Validate output if enabled and output schema is defined
     if validate_output and json_output_schema is not None:
         _validate_udf_output(udf_name, result, granularity, json_output_schema)
@@ -144,48 +150,42 @@ def execute_user_defined_function(
     return result
 
 
-def _validate_udf_input(
+def _load_output_schema(
+    schema_name: str,
+    schema_dir: Optional[Path],
     udf_name: str,
-    input_data: Union[Dict[str, Any], List[Any]],
-    granularity: Any,
-    json_schema: Dict[str, Any],
-) -> None:
-    """Validate UDF input data against schema."""
-    from agent_actions.configuration.new_format_schema import Granularity
-    from agent_actions.errors import SchemaValidationError
+) -> Dict[str, Any]:
+    """Load output schema from external file.
 
-    if granularity == Granularity.FILE:
-        # Expect array input
-        if not isinstance(input_data, list):
-            raise SchemaValidationError(
-                f"UDF '{udf_name}' expects array input (FILE granularity) "
-                f"but received {type(input_data).__name__}",
-                context={
-                    "function": udf_name,
-                    "granularity": "FILE",
-                    "expected_type": "list",
-                    "received_type": type(input_data).__name__,
-                },
-            )
-        # Validate each item in array
-        for idx, item in enumerate(input_data):
-            _validate_against_schema(item, json_schema, udf_name, item_index=idx)
-    else:  # RECORD granularity
-        # Expect single object input
-        if not isinstance(input_data, dict):
-            raise SchemaValidationError(
-                f"UDF '{udf_name}' expects object input (RECORD granularity) "
-                f"but received {type(input_data).__name__}",
-                context={
-                    "function": udf_name,
-                    "granularity": "RECORD",
-                    "expected_type": "dict",
-                    "received_type": type(input_data).__name__,
-                },
-            )
+    Args:
+        schema_name: Name of the schema file (without extension)
+        schema_dir: Directory containing schema files
+        udf_name: UDF function name for error messages
 
-        # Validate against schema
-        _validate_against_schema(input_data, json_schema, udf_name)
+    Returns:
+        JSON schema for validation
+
+    Raises:
+        ConfigurationError: If schema file not found
+    """
+    from agent_actions.response_processing.schema_loader import SchemaLoader
+    from agent_actions.utilities.udf_management.type_conversion import unified_to_json_schema
+
+    resolved_dir = schema_dir or Path.cwd() / "schema"
+
+    try:
+        loaded = SchemaLoader.load_schema(schema_name, resolved_dir)
+        return unified_to_json_schema(loaded)
+    except FileNotFoundError as e:
+        raise ConfigurationError(
+            f"Output schema file '{schema_name}' not found for UDF '{udf_name}'",
+            context={
+                "schema_name": schema_name,
+                "schema_dir": str(resolved_dir),
+                "function": udf_name,
+            },
+            cause=e,
+        ) from e
 
 
 def _validate_udf_output(

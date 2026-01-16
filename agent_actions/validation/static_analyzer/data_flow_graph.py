@@ -65,7 +65,8 @@ class InputSchema:
     """Represents the input schema of an agent.
 
     Tracks what fields an agent expects as input, either from:
-    - Tool/UDF: explicit json_schema from UDF_REGISTRY
+    - Tool/UDF: explicit json_schema from UDF_REGISTRY (legacy with input_type)
+    - Tool/UDF: inferred from context_scope (new style without input_type)
     - LLM: inferred from template variables
 
     Attributes:
@@ -74,6 +75,8 @@ class InputSchema:
         json_schema: Full JSON schema for validation (tools only)
         is_dynamic: Whether input schema is determined at runtime
         is_template_based: Whether inputs are inferred from templates (LLMs)
+        derived_from_context_scope: Whether schema was inferred from context_scope
+            (new style UDFs without input_type)
     """
 
     required_fields: Set[str] = field(default_factory=set)
@@ -81,6 +84,7 @@ class InputSchema:
     json_schema: Optional[Dict[str, Any]] = None
     is_dynamic: bool = False
     is_template_based: bool = False
+    derived_from_context_scope: bool = False
 
     @property
     def all_fields(self) -> Set[str]:

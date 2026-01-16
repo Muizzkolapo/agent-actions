@@ -3,7 +3,6 @@
 import pytest
 import sys
 from pathlib import Path
-from typing import TypedDict
 import tempfile
 import shutil
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
@@ -14,11 +13,6 @@ from agent_actions.utilities.udf_management.udf_registry import (
 )
 from agent_actions.utilities.udf_management.type_conversion import clear_schema_cache
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
-
-
-# Type for tests (prefixed to avoid pytest collection)
-class _TestInput(TypedDict):
-    value: str
 
 
 # Track modules added by tests for cleanup
@@ -68,31 +62,23 @@ def temp_user_code_dir():
     shutil.rmtree(temp_dir)
 
 
-# Template for UDF files with required input_type
+# Template for UDF files (no input_type - context_scope defines input)
 UDF_TEMPLATE = """
-from typing import TypedDict
 from agent_actions import udf_tool
 
-class Input(TypedDict):
-    value: str
-
-@udf_tool(input_type=Input)
+@udf_tool()
 def {func_name}(data):
     return "{return_value}"
 """
 
 MULTI_UDF_TEMPLATE = """
-from typing import TypedDict
 from agent_actions import udf_tool
 
-class Input(TypedDict):
-    value: str
-
-@udf_tool(input_type=Input)
+@udf_tool()
 def func1(data):
     return "func1"
 
-@udf_tool(input_type=Input)
+@udf_tool()
 def func2(data):
     return "func2"
 """
@@ -154,7 +140,7 @@ class TestDiscoverUDFs:
         """Test that import errors are wrapped in UDFLoadError."""
         bad_file = temp_user_code_dir / "bad.py"
         bad_file.write_text(
-            '\nfrom agent_actions import udf_tool\n\n@udf_tool(input_type=dict)\ndef bad_func()  # Missing colon - syntax error\n    return "bad"\n'
+            '\nfrom agent_actions import udf_tool\n\n@udf_tool()\ndef bad_func()  # Missing colon - syntax error\n    return "bad"\n'
         )
         with pytest.raises(UDFLoadError) as exc_info:
             discover_udfs(temp_user_code_dir)
@@ -224,7 +210,7 @@ class TestValidateUDFReferences:
     def test_validate_udf_references_success(self):
         """Test that valid references pass validation."""
 
-        @udf_tool(input_type=_TestInput)
+        @udf_tool()
         def valid_func(data):
             pass
 
@@ -242,7 +228,7 @@ class TestValidateUDFReferences:
     def test_validate_udf_references_nested_config(self):
         """Test validation works with nested config structures."""
 
-        @udf_tool(input_type=_TestInput)
+        @udf_tool()
         def nested_func(data):
             pass
 
@@ -256,7 +242,7 @@ class TestValidateUDFReferences:
     def test_validate_udf_references_list_config(self):
         """Test validation works with list-based configs."""
 
-        @udf_tool(input_type=_TestInput)
+        @udf_tool()
         def list_func(data):
             pass
 

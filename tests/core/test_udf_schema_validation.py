@@ -1,10 +1,13 @@
 """
 Integration tests for UDF schema validation and execution.
 
-Tests end-to-end UDF execution with schema validation, including:
-- Input validation against schemas
-- Granularity enforcement (RECORD/FILE)
+Tests end-to-end UDF execution with output schema validation, including:
+- Output validation against schemas
+- Granularity handling (RECORD/FILE)
 - Error handling and messages
+
+Note: Input validation is no longer performed - context_scope in workflow YAML
+defines input structure and build_context handles input assembly.
 """
 
 import pytest
@@ -15,8 +18,8 @@ from agent_actions.utilities.udf_management.tooling import execute_user_defined_
 from agent_actions.errors import SchemaValidationError, AgentActionsException
 
 
-class TestSchemaValidation:
-    """Test schema validation during UDF execution."""
+class TestOutputSchemaValidation:
+    """Test output schema validation during UDF execution."""
 
     @pytest.fixture(autouse=True)
     def cleanup(self):
@@ -25,13 +28,13 @@ class TestSchemaValidation:
         yield
         clear_registry()
 
-    def test_valid_input_passes_validation(self):
-        """Test that valid input passes schema validation."""
+    def test_valid_output_passes_validation(self):
+        """Test that valid output passes schema validation."""
 
-        class TransformInput(TypedDict):
-            text: str
+        class TransformOutput(TypedDict):
+            result: str
 
-        @udf_tool(input_type=TransformInput)
+        @udf_tool(output_type=TransformOutput)
         def transform_text(data):
             return {"result": data["text"].upper()}
 
@@ -39,82 +42,72 @@ class TestSchemaValidation:
 
         assert result == {"result": "HELLO WORLD"}
 
-    def test_missing_required_field_fails_validation(self):
-        """Test that missing required field fails validation."""
+    def test_missing_required_output_field_fails_validation(self):
+        """Test that missing required output field fails validation."""
 
-        class UserInput(TypedDict):
+        class UserOutput(TypedDict):
             user_id: str
             email: str
 
-        @udf_tool(input_type=UserInput)
+        @udf_tool(output_type=UserOutput)
         def process_user(data):
-            return data
+            return {"user_id": "123"}  # Missing email
 
         with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function(
-                "process_user",
-                {"user_id": "123"},  # Missing email
-            )
+            execute_user_defined_function("process_user", {"data": "any"})
 
         assert "validation failed" in str(exc_info.value).lower()
 
-    def test_wrong_type_fails_validation(self):
-        """Test that wrong type fails validation."""
+    def test_wrong_output_type_fails_validation(self):
+        """Test that wrong output type fails validation."""
 
-        class AgeInput(TypedDict):
+        class AgeOutput(TypedDict):
             age: int
 
-        @udf_tool(input_type=AgeInput)
-        def check_age(data):
-            return data
+        @udf_tool(output_type=AgeOutput)
+        def return_age(data):
+            return {"age": "not a number"}  # Wrong type
 
         with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function(
-                "check_age",
-                {"age": "not a number"},  # Wrong type
-            )
+            execute_user_defined_function("return_age", {"data": "any"})
 
         assert "validation failed" in str(exc_info.value).lower()
 
-    def test_optional_field_can_be_missing(self):
-        """Test that optional fields can be omitted."""
+    def test_optional_output_field_can_be_missing(self):
+        """Test that optional output fields can be omitted."""
 
-        class NameInput(TypedDict):
+        class NameOutput(TypedDict):
             name: str
             nickname: Optional[str]
 
-        @udf_tool(input_type=NameInput)
+        @udf_tool(output_type=NameOutput)
         def process_name(data):
-            return {"name": data["name"], "nickname": data.get("nickname", "N/A")}
+            return {"name": "John"}  # nickname is optional
 
-        result = execute_user_defined_function(
-            "process_name",
-            {"name": "John"},  # nickname is optional
-        )
+        result = execute_user_defined_function("process_name", {"input": "any"})
 
         assert result["name"] == "John"
-        assert result["nickname"] == "N/A"
 
-    def test_validation_can_be_disabled(self):
-        """Test that validation can be disabled."""
+    def test_output_validation_can_be_disabled(self):
+        """Test that output validation can be disabled."""
 
-        class TextInput(TypedDict):
+        class TextOutput(TypedDict):
             text: str
 
-        @udf_tool(input_type=TextInput)
+        @udf_tool(output_type=TextOutput)
         def no_validation(data):
-            return data
+            return {"wrong_field": "value"}  # Invalid output
 
-        # Should not raise even with invalid input when validation disabled
+        # Should not raise even with invalid output when validation disabled
         result = execute_user_defined_function(
-            "no_validation", {"wrong_field": "value"}, validate_input=False
+            "no_validation", {"data": "any"}, validate_output=False
         )
 
         assert result == {"wrong_field": "value"}
 
 
-class TestGranularityEnforcement:
-    """Test processing mode enforcement during execution."""
+class TestGranularityHandling:
+    """Test granularity handling during execution (input shape is controlled by context_scope)."""
 
     @pytest.fixture(autouse=True)
     def cleanup(self):
@@ -123,75 +116,74 @@ class TestGranularityEnforcement:
         yield
         clear_registry()
 
-    def test_record_mode_expects_dict_input(self):
-        """Test that RECORD mode expects dict input."""
+    def test_record_mode_processes_dict_input(self):
+        """Test that RECORD mode processes dict input."""
 
-        class RecordInput(TypedDict):
-            text: str
-
-        @udf_tool(input_type=RecordInput, granularity=Granularity.RECORD)
+        @udf_tool(granularity=Granularity.RECORD)
         def record_processor(data):
-            return data
+            return {"processed": data["text"]}
 
-        # Valid: dict input
         result = execute_user_defined_function("record_processor", {"text": "hello"})
-        assert result == {"text": "hello"}
+        assert result == {"processed": "hello"}
 
-    def test_record_mode_rejects_array_input(self):
-        """Test that RECORD mode rejects array input."""
+    def test_file_mode_processes_array_input(self):
+        """Test that FILE mode processes array input."""
 
-        class RecordInput(TypedDict):
-            text: str
-
-        @udf_tool(input_type=RecordInput, granularity=Granularity.RECORD)
-        def record_only(data):
-            return data
-
-        with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function(
-                "record_only",
-                [{"text": "hello"}, {"text": "world"}],  # Array not allowed
-            )
-
-        assert "expects object input" in str(exc_info.value).lower()
-        assert "RECORD" in str(exc_info.value)
-
-    def test_file_mode_expects_array_input(self):
-        """Test that FILE mode expects array input."""
-
-        class FileItem(TypedDict):
-            id: int
-
-        @udf_tool(input_type=FileItem, granularity=Granularity.FILE)
+        @udf_tool(granularity=Granularity.FILE)
         def file_processor(data):
-            return [item for item in data]
+            return [{"processed": item["text"]} for item in data]
 
-        # Valid: array input
-        result = execute_user_defined_function("file_processor", [{"id": 1}, {"id": 2}])
+        result = execute_user_defined_function(
+            "file_processor", [{"text": "hello"}, {"text": "world"}]
+        )
         assert len(result) == 2
+        assert result[0] == {"processed": "hello"}
+        assert result[1] == {"processed": "world"}
 
-    def test_file_mode_rejects_dict_input(self):
-        """Test that FILE mode rejects dict input."""
+    def test_file_mode_with_output_validation(self):
+        """Test FILE mode validates each output item."""
 
-        class FileItem(TypedDict):
-            id: int
+        class ItemOutput(TypedDict):
+            value: int
 
-        @udf_tool(input_type=FileItem, granularity=Granularity.FILE)
-        def file_only(data):
-            return data
+        @udf_tool(output_type=ItemOutput, granularity=Granularity.FILE)
+        def batch_multiply(data):
+            return [{"value": item["value"] * 2} for item in data]
+
+        result = execute_user_defined_function(
+            "batch_multiply", [{"value": 1}, {"value": 2}, {"value": 3}]
+        )
+
+        assert len(result) == 3
+        assert result[0]["value"] == 2
+        assert result[1]["value"] == 4
+        assert result[2]["value"] == 6
+
+    def test_file_mode_invalid_output_fails(self):
+        """Test FILE mode fails if any output item is invalid."""
+
+        class ItemOutput(TypedDict):
+            value: int
+
+        @udf_tool(output_type=ItemOutput, granularity=Granularity.FILE)
+        def batch_with_error(data):
+            return [
+                {"value": 1},
+                {"wrong_field": "oops"},  # Invalid item
+                {"value": 3},
+            ]
 
         with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function(
-                "file_only",
-                {"id": 1},  # Dict not allowed in FILE mode
-            )
+            execute_user_defined_function("batch_with_error", [{"x": 1}, {"x": 2}, {"x": 3}])
 
-        assert "expects array input" in str(exc_info.value).lower()
-        assert "FILE" in str(exc_info.value)
+        assert (
+            "item 1" in str(exc_info.value).lower()
+            or "validation failed" in str(exc_info.value).lower()
+        )
 
 
 class TestEndToEndExecution:
-    """Test end-to-end UDF execution with various schemas."""
+    """Test end-to-end UDF execution without input validation."""
 
     @pytest.fixture(autouse=True)
     def cleanup(self):
@@ -200,13 +192,10 @@ class TestEndToEndExecution:
         yield
         clear_registry()
 
-    def test_simple_transform_with_validation(self):
-        """Test simple data transformation with validation."""
+    def test_simple_transform_without_schemas(self):
+        """Test simple data transformation without any schemas."""
 
-        class TextInput(TypedDict):
-            text: str
-
-        @udf_tool(input_type=TextInput)
+        @udf_tool()
         def uppercase_transform(data):
             return {"text": data["text"].upper()}
 
@@ -217,11 +206,7 @@ class TestEndToEndExecution:
     def test_complex_object_processing(self):
         """Test processing complex nested objects."""
 
-        class ProfileInput(TypedDict):
-            user: dict
-            preferences: Optional[dict]
-
-        @udf_tool(input_type=ProfileInput)
+        @udf_tool()
         def process_user_profile(data):
             user = data["user"]
             prefs = data.get("preferences", {})
@@ -239,10 +224,11 @@ class TestEndToEndExecution:
     def test_array_field_processing(self):
         """Test processing array fields."""
 
-        class TagsInput(TypedDict):
+        class TagsOutput(TypedDict):
             tags: List[str]
+            count: int
 
-        @udf_tool(input_type=TagsInput)
+        @udf_tool(output_type=TagsOutput)
         def process_tags(data):
             return {"tags": [tag.upper() for tag in data["tags"]], "count": len(data["tags"])}
 
@@ -256,10 +242,10 @@ class TestEndToEndExecution:
     def test_batch_processing_file_mode(self):
         """Test batch processing in FILE mode."""
 
-        class BatchItem(TypedDict):
+        class BatchOutput(TypedDict):
             value: int
 
-        @udf_tool(input_type=BatchItem, granularity=Granularity.FILE)
+        @udf_tool(output_type=BatchOutput, granularity=Granularity.FILE)
         def batch_multiply(data):
             return [{"value": item["value"] * 2} for item in data]
 
@@ -286,10 +272,7 @@ class TestErrorHandling:
     def test_execution_error_includes_context(self):
         """Test that execution errors include helpful context."""
 
-        class TextInput(TypedDict):
-            text: str
-
-        @udf_tool(input_type=TextInput)
+        @udf_tool()
         def failing_function(data):
             raise ValueError("Something went wrong")
 
@@ -300,39 +283,22 @@ class TestErrorHandling:
         assert "failing_function" in error_msg
         assert "Something went wrong" in error_msg
 
-    def test_validation_error_includes_schema_info(self):
-        """Test that validation errors include schema information."""
+    def test_output_validation_error_includes_schema_info(self):
+        """Test that output validation errors include schema information."""
 
-        class RequiredInput(TypedDict):
+        class RequiredOutput(TypedDict):
             required_field: str
 
-        @udf_tool(input_type=RequiredInput)
+        @udf_tool(output_type=RequiredOutput)
         def needs_field(data):
-            return data
+            return {"wrong_field": "value"}
 
         with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function("needs_field", {"wrong_field": "value"})
+            execute_user_defined_function("needs_field", {"data": "any"})
 
         error_msg = str(exc_info.value)
         assert "needs_field" in error_msg
         assert "validation failed" in error_msg.lower()
-
-    def test_granularity_error_is_clear(self):
-        """Test that processing mode errors are clear."""
-
-        class RecordInput(TypedDict):
-            text: str
-
-        @udf_tool(input_type=RecordInput, granularity=Granularity.RECORD)
-        def record_func(data):
-            return data
-
-        with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function("record_func", ["array", "input"])
-
-        error_msg = str(exc_info.value)
-        assert "RECORD" in error_msg
-        assert "expects object input" in error_msg.lower()
 
 
 class TestSchemaIntegrationWithExistingSystem:
@@ -345,37 +311,60 @@ class TestSchemaIntegrationWithExistingSystem:
         yield
         clear_registry()
 
-    def test_unified_format_compatibility(self):
-        """Test that schemas use unified format compatible with existing system."""
+    def test_unified_format_compatibility_for_output(self):
+        """Test that output schemas use unified format compatible with existing system."""
 
-        class TestInput(TypedDict):
+        class TestOutput(TypedDict):
             field1: str
 
-        @udf_tool(input_type=TestInput)
+        @udf_tool(output_type=TestOutput)
         def test_func(data):
-            return data
+            return {"field1": "value"}
 
         from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
 
         metadata = get_udf_metadata("test_func")
 
-        # Should have unified format
-        assert "fields" in metadata["schema"]
-        assert isinstance(metadata["schema"]["fields"], list)
+        # Should have unified format for output
+        assert "fields" in metadata["output_schema"]
+        assert isinstance(metadata["output_schema"]["fields"], list)
 
-    def test_schema_compilation_for_validation(self):
-        """Test that schemas can be compiled for validation."""
+    def test_schema_compilation_for_output_validation(self):
+        """Test that output schemas can be compiled for validation."""
 
-        class CompilableInput(TypedDict):
+        class CompilableOutput(TypedDict):
             text: str
 
-        @udf_tool(input_type=CompilableInput)
+        @udf_tool(output_type=CompilableOutput)
         def compilable_schema(data):
-            return data
+            return {"text": "test"}
 
         # This should work without errors
         result = execute_user_defined_function(
-            "compilable_schema", {"text": "test"}, validate_input=True
+            "compilable_schema", {"data": "any"}, validate_output=True
         )
 
         assert result == {"text": "test"}
+
+    def test_no_input_schema_stored(self):
+        """Test that no input schema is stored (input comes from context_scope)."""
+
+        class OutputOnly(TypedDict):
+            result: str
+
+        @udf_tool(output_type=OutputOnly)
+        def output_only_func(data):
+            return {"result": "done"}
+
+        from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
+
+        metadata = get_udf_metadata("output_only_func")
+
+        # Should NOT have input-related fields
+        assert "input_type" not in metadata
+        assert "json_schema" not in metadata
+        assert "schema" not in metadata
+
+        # Should have output schema
+        assert metadata["output_type"] == OutputOnly
+        assert metadata["json_output_schema"] is not None

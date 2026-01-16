@@ -1,6 +1,7 @@
 """Integration tests for UDF type hint support.
 
-Tests the full flow: register with types -> compile -> execute -> validate.
+Tests the full flow: register with output types -> compile -> execute -> validate output.
+Note: Input validation is no longer performed - context_scope in workflow YAML defines input structure.
 """
 
 import dataclasses
@@ -32,116 +33,101 @@ def cleanup_registry():
 # =============================================================================
 
 
-class TestTypeHintRegistration:
-    """Tests for registering UDFs with type hints."""
-
-    def test_register_with_input_type(self):
-        """UDF with input_type should register successfully."""
-
-        class Input(TypedDict):
-            name: str
-            age: int
-
-        @udf_tool(input_type=Input)
-        def process(data):
-            return data
-
-        metadata = get_udf_metadata("process")
-        assert metadata["schema"] is not None
-        assert metadata["schema"]["name"] == "Input"
-        assert metadata["json_schema"] is not None
+class TestOutputTypeRegistration:
+    """Tests for registering UDFs with output type hints."""
 
     def test_register_with_output_type(self):
         """UDF with output_type should store output schema."""
 
-        class Input(TypedDict):
-            text: str
-
         class Output(TypedDict):
             result: str
+            count: int
 
-        @udf_tool(input_type=Input, output_type=Output)
+        @udf_tool(output_type=Output)
         def process(data):
-            return {"result": "done"}
+            return {"result": "done", "count": 1}
 
         metadata = get_udf_metadata("process")
+        assert metadata["output_type"] == Output
         assert metadata["output_schema"] is not None
         assert metadata["output_schema"]["name"] == "Output"
         assert metadata["json_output_schema"] is not None
 
-    def test_register_with_dataclass(self):
-        """UDF with dataclass input_type should work."""
+    def test_register_with_dataclass_output(self):
+        """UDF with dataclass output_type should work."""
 
         @dataclasses.dataclass
-        class Input:
+        class Output:
             name: str
             count: int = 0
 
-        @udf_tool(input_type=Input)
+        @udf_tool(output_type=Output)
         def process(data):
-            return data
+            return {"name": "test", "count": 5}
 
         metadata = get_udf_metadata("process")
-        fields = {f["id"]: f for f in metadata["schema"]["fields"]}
+        fields = {f["id"]: f for f in metadata["output_schema"]["fields"]}
         assert fields["name"]["required"] is True
         assert fields["count"]["required"] is False
 
     @pytest.mark.skipif(not HAS_PYDANTIC, reason="Pydantic not installed")
-    def test_register_with_pydantic(self):
-        """UDF with Pydantic input_type should work."""
+    def test_register_with_pydantic_output(self):
+        """UDF with Pydantic output_type should work."""
         from pydantic import BaseModel
 
-        class Input(BaseModel):
+        class Output(BaseModel):
             name: str
             count: int = 0
 
-        @udf_tool(input_type=Input)
+        @udf_tool(output_type=Output)
+        def process(data):
+            return {"name": "test", "count": 5}
+
+        metadata = get_udf_metadata("process")
+        fields = {f["id"]: f for f in metadata["output_schema"]["fields"]}
+        assert fields["name"]["required"] is True
+        assert fields["count"]["required"] is False
+
+    def test_register_without_output_type(self):
+        """UDF without output_type should register with no schema."""
+
+        @udf_tool()
         def process(data):
             return data
 
         metadata = get_udf_metadata("process")
-        fields = {f["id"]: f for f in metadata["schema"]["fields"]}
-        assert fields["name"]["required"] is True
-        assert fields["count"]["required"] is False
+        assert metadata["output_type"] is None
+        assert metadata["output_schema"] is None
+        assert metadata["json_output_schema"] is None
 
 
 # =============================================================================
-# Execution Tests
+# Execution Tests (No Input Validation)
 # =============================================================================
 
 
-class TestTypeHintExecution:
-    """Tests for executing UDFs with type hints."""
+class TestExecution:
+    """Tests for executing UDFs (no input validation - context_scope handles input)."""
 
-    def test_execute_with_valid_input(self):
-        """Valid input should pass validation."""
+    def test_execute_without_output_type(self):
+        """UDF without output_type should execute without validation."""
 
-        class Input(TypedDict):
-            name: str
-            age: int
-
-        @udf_tool(input_type=Input)
+        @udf_tool()
         def process(data):
-            return {"status": "ok", "name": data["name"]}
+            return {"status": "ok", "data": data}
 
-        result = execute_user_defined_function("process", {"name": "Alice", "age": 30})
-        assert result == {"status": "ok", "name": "Alice"}
+        result = execute_user_defined_function("process", {"anything": "goes"})
+        assert result == {"status": "ok", "data": {"anything": "goes"}}
 
-    def test_execute_with_invalid_input(self):
-        """Invalid input should raise SchemaValidationError."""
+    def test_execute_returns_any_shape_without_output_type(self):
+        """Without output_type, any return shape is valid."""
 
-        class Input(TypedDict):
-            name: str
-            age: int
-
-        @udf_tool(input_type=Input)
+        @udf_tool()
         def process(data):
-            return data
+            return "just a string"
 
-        with pytest.raises(SchemaValidationError) as exc_info:
-            execute_user_defined_function("process", {"name": "Alice"})  # missing age
-
-        assert "age" in str(exc_info.value) or "required" in str(exc_info.value).lower()
+        result = execute_user_defined_function("process", {"x": 1})
+        assert result == "just a string"
 
 
 # =============================================================================
@@ -155,13 +141,10 @@ class TestOutputValidation:
     def test_valid_output_passes(self):
         """Valid output should pass validation."""
 
-        class Input(TypedDict):
-            text: str
-
         class Output(TypedDict):
             result: str
 
-        @udf_tool(input_type=Input, output_type=Output)
+        @udf_tool(output_type=Output)
         def process(data):
             return {"result": "processed"}
 
@@ -171,13 +154,10 @@ class TestOutputValidation:
     def test_invalid_output_raises(self):
         """Invalid output should raise SchemaValidationError."""
 
-        class Input(TypedDict):
-            text: str
-
         class Output(TypedDict):
             result: str
 
-        @udf_tool(input_type=Input, output_type=Output)
+        @udf_tool(output_type=Output)
         def bad_process(data):
             return {"wrong_field": "value"}  # Missing 'result' field
 
@@ -189,13 +169,10 @@ class TestOutputValidation:
     def test_output_validation_disabled(self):
         """Output validation can be disabled."""
 
-        class Input(TypedDict):
-            text: str
-
         class Output(TypedDict):
             result: str
 
-        @udf_tool(input_type=Input, output_type=Output)
+        @udf_tool(output_type=Output)
         def process(data):
             return {"wrong": "output"}  # Would fail validation
 
@@ -206,10 +183,7 @@ class TestOutputValidation:
     def test_no_output_schema_skips_validation(self):
         """Without output_type, output validation is skipped."""
 
-        class Input(TypedDict):
-            text: str
-
-        @udf_tool(input_type=Input)  # No output_type
+        @udf_tool()  # No output_type
         def process(data):
             return {"anything": "goes"}
 
@@ -219,56 +193,56 @@ class TestOutputValidation:
 
 
 # =============================================================================
-# Complex Type Tests
+# Complex Output Type Tests
 # =============================================================================
 
 
-class TestComplexTypes:
-    """Tests for complex type handling."""
+class TestComplexOutputTypes:
+    """Tests for complex output type handling."""
 
-    def test_list_field(self):
-        """List[T] field should work."""
+    def test_list_field_in_output(self):
+        """List[T] field in output should work."""
 
-        class Input(TypedDict):
+        class Output(TypedDict):
             items: List[str]
 
-        @udf_tool(input_type=Input)
+        @udf_tool(output_type=Output)
         def process(data):
-            return {"count": len(data["items"])}
+            return {"items": ["a", "b", "c"]}
 
-        result = execute_user_defined_function("process", {"items": ["a", "b", "c"]})
-        assert result == {"count": 3}
+        result = execute_user_defined_function("process", {"x": 1})
+        assert result == {"items": ["a", "b", "c"]}
 
-    def test_optional_field(self):
-        """Optional[T] field should not be required."""
+    def test_optional_field_in_output(self):
+        """Optional[T] field in output should not be required."""
 
-        class Input(TypedDict):
+        class Output(TypedDict):
             required: str
             optional: Optional[str]
 
-        @udf_tool(input_type=Input)
+        @udf_tool(output_type=Output)
         def process(data):
-            return data
+            return {"required": "value"}  # No optional field
 
         # Should work without optional field
-        result = execute_user_defined_function("process", {"required": "value"})
+        result = execute_user_defined_function("process", {"x": 1})
         assert result == {"required": "value"}
 
-    def test_dict_field(self):
-        """Dict[str, V] field should work."""
+    def test_dict_field_in_output(self):
+        """Dict[str, V] field in output should work."""
 
-        class Input(TypedDict):
+        class Output(TypedDict):
             metadata: Dict[str, int]
 
-        @udf_tool(input_type=Input)
+        @udf_tool(output_type=Output)
         def process(data):
-            return {"total": sum(data["metadata"].values())}
+            return {"metadata": {"a": 1, "b": 2}}
 
-        result = execute_user_defined_function("process", {"metadata": {"a": 1, "b": 2}})
-        assert result == {"total": 3}
+        result = execute_user_defined_function("process", {"x": 1})
+        assert result == {"metadata": {"a": 1, "b": 2}}
 
-    def test_nested_typeddict(self):
-        """Nested TypedDict should work."""
+    def test_nested_typeddict_in_output(self):
+        """Nested TypedDict in output should work."""
 
         class Inner(TypedDict):
             value: int
@@ -276,9 +250,9 @@ class TestComplexTypes:
         class Outer(TypedDict):
             inner: Inner
 
-        @udf_tool(input_type=Outer)
+        @udf_tool(output_type=Outer)
         def process(data):
-            return {"doubled": data["inner"]["value"] * 2}
+            return {"inner": {"value": 42}}
 
-        result = execute_user_defined_function("process", {"inner": {"value": 21}})
-        assert result == {"doubled": 42}
+        result = execute_user_defined_function("process", {"x": 1})
+        assert result == {"inner": {"value": 42}}
