@@ -61,7 +61,7 @@ actions:
 | `intent` | string | Human-readable description |
 | `kind` | string | `llm` (default) or `tool` |
 | `impl` | string | Python function name (for tool actions) |
-| `dependencies` | list | Upstream action names or workflow references |
+| `dependencies` | string/list | Input source(s) - single action or list for merge pattern |
 | `model_vendor` | string | LLM provider |
 | `model_name` | string | Model identifier |
 | `api_key` | string | Environment variable name |
@@ -89,7 +89,7 @@ actions:
 ```yaml
 - name: extract_facts
   intent: "Extract facts from content"
-  dependencies: [prior_action]
+  dependencies: prior_action           # Single input source
 
   # LLM Settings
   model_vendor: openai
@@ -105,7 +105,7 @@ actions:
   run_mode: online
   granularity: record
 
-  # Context
+  # Context (context deps auto-inferred)
   context_scope:
     observe: [upstream.field]
     drop: [source.unused]
@@ -127,7 +127,7 @@ actions:
   kind: tool
   impl: flatten_quotes  # Function name (case-insensitive)
   granularity: record
-  dependencies: [prior_action]
+  dependencies: prior_action           # Single input source
 ```
 
 ## Loop Configuration
@@ -159,7 +159,7 @@ Execute actions in parallel or sequential loops:
 
 ```yaml
 - name: combine_results
-  dependencies: [generate_distractors]
+  dependencies: generate_distractors
   loop_consumption:
     source: generate_distractors
     pattern: merge    # Combines all loop outputs
@@ -179,9 +179,12 @@ actions:
 
 | Syntax | Description |
 |--------|-------------|
-| `[action_name]` | Same-workflow dependency |
+| `action_name` | Single input source |
+| `[action_a, action_b]` | Multiple inputs (merge pattern) |
 | `[{workflow: name}]` | Cross-workflow (all outputs) |
 | `[{workflow: name, action: act}]` | Specific action from another workflow |
+
+**Note:** Context dependencies (actions referenced in `context_scope` but not in `dependencies`) are auto-inferred. Only specify input sources in `dependencies`.
 
 ## Guards
 

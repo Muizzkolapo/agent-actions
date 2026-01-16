@@ -31,13 +31,15 @@ Include fields in LLM context. When specified, **only listed fields** are visibl
 
 ```yaml
 - name: Cluster_Validation_Agent
-  dependencies: [group_by_similarity, cluster_list]
+  dependencies: group_by_similarity       # Input source
   context_scope:
     observe:
-      - canonicalize_facts.candidate_facts_list
-      - cluster_list.semantic_unique_id
-      - group_by_similarity.num_similar_facts
+      - canonicalize_facts.candidate_facts_list   # Context (auto-inferred)
+      - cluster_list.semantic_unique_id           # Context (auto-inferred)
+      - group_by_similarity.num_similar_facts     # Input
 ```
+
+**Note:** Actions referenced in `observe`/`passthrough` but not in `dependencies` are auto-inferred as context dependencies.
 
 **Use cases:**
 - Focus LLM attention on specific fields
@@ -164,6 +166,7 @@ Chain data through multiple actions:
 
 ```yaml
 - name: score_question_quality
+  dependencies: generate_scenarios         # Input source
   context_scope:
     observe:
       - source.referenced_in
@@ -173,10 +176,10 @@ Chain data through multiple actions:
       - generate_scenarios.answer
 
 - name: suggest_distractor_counts
-  dependencies: [filter_low_quality_questions]
+  dependencies: filter_low_quality_questions
   context_scope:
     passthrough:
-      - generate_scenarios.question     # Continues from previous
+      - generate_scenarios.question     # Context (auto-inferred)
       - generate_scenarios.options
       - generate_scenarios.answer
 ```
@@ -201,9 +204,14 @@ ConfigurationError: Field 'nonexistent_action.field' in observe not found
 ```
 Ensure the referenced action exists and produces the field.
 
-**Invalid Passthrough Source:**
+**Invalid Action Reference:**
 ```
-ConfigurationError: Cannot passthrough from action 'future_action' -
-  action is not an upstream dependency
+ConfigurationError: Action 'nonexistent_action' referenced in context_scope not found in workflow
 ```
-You can only passthrough from actions that are dependencies.
+All actions referenced in `context_scope` must exist in the workflow. They're auto-inferred as context dependencies.
+
+**Missing agent_indices:**
+```
+ConfigurationError: agent_indices is required when action has dependencies
+```
+This error occurs during execution if `agent_indices` wasn't provided but the action has dependencies.
