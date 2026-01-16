@@ -112,13 +112,29 @@ class WorkflowParser:
 
         # Parse actions (flat structure from rendered workflows)
         actions = data.get("actions", [])
+        action_names = [a.get("name") for a in actions if a.get("name")]
+
         for action_data in actions:
             action_name = action_data.get("name", "unnamed")
+
+            # Use auto-inferred dependencies for complete graph
+            from agent_actions.preprocessing.context.context_scope_processor import (
+                ContextScopeProcessor,
+            )
+
+            try:
+                input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                    action_data, action_names, action_name
+                )
+                all_dependencies = input_sources + context_sources
+            except Exception:
+                # Fallback to explicit dependencies
+                all_dependencies = action_data.get("dependencies", [])
 
             action = {
                 "name": action_name,
                 "intent": action_data.get("intent", ""),
-                "dependencies": action_data.get("dependencies", []),
+                "dependencies": all_dependencies,
             }
 
             # Determine action type (llm or tool) from flat structure

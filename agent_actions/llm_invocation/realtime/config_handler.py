@@ -236,18 +236,39 @@ class ConfigManager:
         """
         Determines the execution order of agents based on their dependencies,
         considering only is_operational agents.
+
+        Uses auto-inferred dependencies from context_scope to build the execution graph.
         """
+        from agent_actions.preprocessing.context.context_scope_processor import (
+            ContextScopeProcessor,
+        )
+
         instance_config = ConfigValidator()
         agent_configs_dict = {
             agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
         }
         instance_config.validate(agent_configs_dict)
+
+        # Get list of all workflow actions for dependency inference
+        workflow_actions = list(self.agent_configs.keys())
+
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
+                # Use auto-inferred dependencies (input + context sources)
+                try:
+                    input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                        config.model_dump(), workflow_actions, agent_type
+                    )
+                    all_deps = input_sources + context_sources
+                except Exception:
+                    # Fallback to explicit dependencies if inference fails
+                    all_deps = config.dependencies
+
+                # Filter to only operational dependencies
                 dependencies = [
                     dep
-                    for dep in config.dependencies
+                    for dep in all_deps
                     if isinstance(dep, str)
                     and dep in self.agent_configs
                     and self.agent_configs[dep].is_operational
