@@ -95,8 +95,11 @@ class TargetGenerator:
 
         self.config = config
         self.model_vendor = (config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+        self.action_kind = (config.agent_config.get("kind") or "").lower()
         self.granularity = (config.agent_config.get("granularity") or "").lower()
         self.side_output_enabled = config.agent_config.get("side_output", False)
+        # kind: "tool" = tool action, "llm" = LLM action
+        self.is_tool_action = self.action_kind == "tool"
         if processor_factory is None:
             raise DependencyError(
                 "TargetGenerator requires processor_factory",
@@ -330,8 +333,8 @@ class TargetGenerator:
             )
             # source_data remains 'data' (the fallback)
 
-        # Batch mode check
-        if self.config.agent_config.get("run_mode") == "batch" and self.model_vendor != TOOL_VENDOR:
+        # Batch mode check (tools run synchronously, not in batch)
+        if self.config.agent_config.get("run_mode") == "batch" and not self.is_tool_action:
             self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 
@@ -364,7 +367,7 @@ class TargetGenerator:
 
         # Process via RecordProcessor
         # Check if FILE mode for tools - bypass record loop
-        if self.granularity == "file" and self.model_vendor == "tool":
+        if self.granularity == "file" and self.is_tool_action:
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
             context.source_data = data

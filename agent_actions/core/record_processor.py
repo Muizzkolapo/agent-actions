@@ -75,19 +75,36 @@ class RecordProcessor:
         self.agent_name = agent_name
 
         # Validate granularity setting
+        # kind: "tool" = tool action, "llm" = LLM action (default)
         granularity = agent_config.get("granularity", "record")
-        model_vendor = agent_config.get("model_vendor", "")
+        action_kind = (agent_config.get("kind") or "").lower()
 
-        if isinstance(granularity, str) and granularity.lower() == "file":
-            if model_vendor != "tool":
+        # FILE granularity only allowed for tool actions
+        is_file_granularity = isinstance(granularity, str) and granularity.lower() == "file"
+        if is_file_granularity:
+            if action_kind != "tool":
                 raise ConfigurationError(
-                    "FILE granularity is only supported for tool actions. "
-                    "LLM actions must use RECORD granularity. "
-                    "See: https://github.com/Muizzkolapo/agent-actions/issues/740",
+                    "FILE granularity is only supported for tool actions (kind: tool). "
+                    "LLM actions must use RECORD granularity.",
                     context={
                         "agent_name": agent_name,
                         "granularity": granularity,
-                        "model_vendor": model_vendor,
+                        "kind": action_kind or "(not set)",
+                    },
+                )
+
+            # Guards not supported in FILE mode (tool processes entire array at once)
+            guard_config = agent_config.get("guard")
+            if guard_config:
+                raise ConfigurationError(
+                    "Guards are not supported with FILE granularity. "
+                    "FILE mode processes the entire array at once, so per-record guards cannot be applied. "
+                    "Remove the guard or use RECORD granularity.",
+                    context={
+                        "agent_name": agent_name,
+                        "granularity": granularity,
+                        "kind": action_kind,
+                        "guard": guard_config,
                     },
                 )
 
