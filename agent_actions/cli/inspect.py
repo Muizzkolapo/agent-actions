@@ -41,6 +41,7 @@ class BaseInspectCommand:
         self.user_code = user_code
         self.json_output = json_output
         self.console = Console()
+        self.paths = None  # Will be set by _load_workflow
 
     def _find_config_file(self, config_dir: Path, filename: str) -> Path:
         """Find the configuration file."""
@@ -57,14 +58,14 @@ class BaseInspectCommand:
         return full_path
 
     def _load_workflow(self) -> AgentWorkflow:
-        """Load workflow configuration."""
-        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)
+        """Load workflow configuration and store paths."""
+        self.paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)
         filename = f"{self.agent_name}.yml"
-        full_path = self._find_config_file(paths.agent_config_dir, filename)
+        full_path = self._find_config_file(self.paths.agent_config_dir, filename)
 
         # Render configuration
         ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+            self.agent_name, full_path, self.paths.template_dir, self.paths.rendered_workflows_dir
         )
 
         # Load workflow
@@ -73,7 +74,7 @@ class BaseInspectCommand:
                 paths=WorkflowPaths(
                     constructor_path=str(full_path),
                     user_code_path=str(self.user_code) if self.user_code else None,
-                    default_path=str(paths.default_config_path),
+                    default_path=str(self.paths.default_config_path),
                 ),
                 use_tools=False,
             )
@@ -145,8 +146,8 @@ class FieldFlowCommand(BaseInspectCommand):
             workflow_config,
             udf_registry=udf_registry,
             schema_loader=schema_loader,
-            project_root=paths.current_dir,
-            schema_dir=paths.schema_dir,
+            project_root=self.paths.current_dir,
+            schema_dir=self.paths.schema_dir,
         )
 
         # Run validation
@@ -510,8 +511,8 @@ class ConflictsCommand(BaseInspectCommand):
             workflow_config,
             udf_registry=udf_registry,
             schema_loader=schema_loader,
-            project_root=paths.current_dir,
-            schema_dir=paths.schema_dir,
+            project_root=self.paths.current_dir,
+            schema_dir=self.paths.schema_dir,
         )
 
         # Run conflict detection
