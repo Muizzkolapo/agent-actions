@@ -133,6 +133,9 @@ class ProcessingResult:
     source_snapshot: Optional[Dict[str, Any]] = None
     input_record: Optional[Dict[str, Any]] = None
 
+    # For downstream: preserve full input record (with lineage, target_id, etc.)
+    input_record: Optional[Dict[str, Any]] = None
+
     # Execution state
     executed: bool = True
     skip_reason: Optional[str] = None
