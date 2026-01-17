@@ -49,7 +49,6 @@
 | `factory.py` | Module | Factory module for creating components with dependency injection. | `orchestration` |
 | `application_container_context` | Function | Context manager for proper DI container lifecycle management. | - |
 | `create_agent_runner` | Function | Create an AgentRunner with proper dependency injection. | - |
-| `create_target_content_processor` | Function | Create a TargetContentProcessor with proper dependency injection. | - |
 | `init.py` | Module | Module for initializing new Agent Actions projects. | `utilities` |
 | `ProjectInitializer` | Class | Initialize new Agent Actions projects with standard structure. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_directory` | Method | Create a directory if it doesn't exist. | - |
@@ -59,7 +58,6 @@
 | `initialize_application` | Function | Initialize the application with full startup validation. | - |
 | `application_container_context` | Function | Context manager for proper DI container lifecycle management. | - |
 | `create_agent_runner` | Function | Create an AgentRunner with proper dependency injection. | - |
-| `create_target_content_processor` | Function | Create a TargetContentProcessor with proper dependency injection. | - |
 | `interfaces.py` | Module | Common interfaces for processors. | - |
 | `ProcessingMode` | Class | Defines the processing mode for processors. | - |
 | `IAsyncCapable` | Class | Interface for components that support async operations. | - |

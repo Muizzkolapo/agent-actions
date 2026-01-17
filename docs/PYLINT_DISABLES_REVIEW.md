@@ -151,7 +151,6 @@ Classes that might be better as dataclasses, functions, or protocols.
 | `agent_actions/response_processing/guard_parser.py` | 15 | `GuardExpression` |
 | `agent_actions/prompt_generation/sample_enricher.py` | 12 | class |
 | `agent_actions/prompt_generation/config_renderer.py` | 32, 53, 72, 89, 191, 233, 261, 471 | multiple renderer classes |
-| `agent_actions/prompt_generation/directory_handler.py` | 11 | class |
 | `agent_actions/configuration/base.py` | 18 | `ArtifactMetadata` |
 | `agent_actions/configuration/base_async_processor.py` | 179 | `ProcessingContext` |
 | `agent_actions/configuration/interfaces.py` | 23, 35, 39, 43 | interface classes |

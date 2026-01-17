@@ -27,8 +27,6 @@ class TestPrintStatementMigration:
         "agent_actions/orchestration/batch_manager.py",  # Batch status messages
         "agent_actions/orchestration/output_manager.py",  # Loop correlation messages
         "agent_actions/orchestration/action_level_executor.py",  # Action execution status
-        # Prompt generation with user notifications
-        "agent_actions/prompt_generation/directory_handler.py",  # Copy notifications
         # LLM invocation with debug output
         "agent_actions/llm_invocation/realtime/services/prompt_service.py",  # Debug mode output
         "agent_actions/llm_invocation/providers/gemini/batch_client.py",  # Batch client status output

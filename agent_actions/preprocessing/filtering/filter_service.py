@@ -28,9 +28,9 @@ class FilterService:
     """
     Centralized filtering service for WHERE clause and conditional clause evaluation.
 
-    This service is shared between batch mode (batch_service.py) and realtime mode
-    (target_content_processor.py) to eliminate code duplication and ensure consistent
-    filtering behavior.
+    This service is shared between batch mode (batch_service.py) and realtime
+    processing to eliminate code duplication and ensure consistent filtering
+    behavior.
     """
 
     def __init__(self):

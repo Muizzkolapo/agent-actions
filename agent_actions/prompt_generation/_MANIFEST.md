@@ -21,31 +21,12 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `render_and_load_config` | Method | Render templates and load configuration data. | - |
 | `ConfigRenderer` | Class | Static facade for backwards compatibility with old code. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `render_and_load_config` | Method | Static method for backwards compatibility. | - |
-| `content_generator.py` | Module | Module for generating content using prompt processors and LLMs. | - |
-| `ContentGenerator` | Class | A class responsible for generating content using prompt processors and LLMs. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `generate_from_text` | Method | Generate agent content from a text input. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `generate_from_json` | Method | Generate agent content for each JSON object individually. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `generate_from_tabular` | Method | Generate agent content from tabular (CSV/TSV) input. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `generate_from_xml` | Method | Generate agent content from XML input. | - |
 | `data_generator.py` | Module | Module for generating data using agents. | `configuration`, `errors`, `orchestration`, `prompt_generation`, `response_processing`, `utilities` |
 | `GuardEvaluationContext` | Class | Context for early guard evaluation. | - |
 | `DataGenerator` | Class | Handles agent creation and data generation (Single Responsibility). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `supports_async` | Method | Return True as this generator supports async operations. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_processing_mode` | Method | Return AUTO processing mode to let system choose. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_agent_with_data` | Method | Create an agent with the provided data and generate results. | - |
-| `directory_handler.py` | Module | Module for handling directory operations and combining JSON files. | `prompt_generation` |
-| `DirectoryCombiner` | Class | Handles combining JSON data from directories. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `combine_directories` | Method | Combine JSON files from two directories into an output directory. | - |
-| `json_file_handler.py` | Module | Module for processing and combining output files. | - |
-| `JsonFileHandler` | Class | Handles JSON file operations for the output processor. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `list_json_files` | Method | List all JSON files in a directory. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `read_json_file` | Method | Read JSON data from a file. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `write_json_file` | Method | Write JSON data to a file. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `ensure_directory` | Method | Ensure a directory exists, creating it if necessary. | - |
-| `output_processor.py` | Module | Module for processing and combining output files. | `prompt_generation` |
-| `OutputProcessor` | Class | Processes output data from workflow runs. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `combine_json_arrays` | Method | Combine JSON arrays from two directories. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `process_final_output` | Method | Process the final output from a workflow run. | - |
 | `prompt_formatter.py` | Module | Module for prompt formatting and loading. | `errors`, `prompt_generation`, `utilities` |
 | `PromptFormatter` | Class | Handles prompt formatting and loading (Single Responsibility). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_raw_prompt` | Method | Retrieve and process the raw prompt from the agent configuration. | - |
@@ -77,9 +58,3 @@
 | `sample_enricher.py` | Module | Module for enriching prompts with few-shot samples. | `errors`, `file_io`, `prompt_generation` |
 | `SampleEnricher` | Class | Handles enriching prompts with few-shot samples. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `append_few_shot_samples` | Method | Append few-shot samples to the prompt if configured. | - |
-| `target_content_processor.py` | Module | Module for processing target content with specialized components. | `configuration`, `errors`, `llm_invocation`, `orchestration`, `preprocessing`, `utilities` |
-| `TargetContentProcessor` | Class | Orchestrates the target content processing workflow. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `process_async` | Method | Async version: process items in parallel using proper async patterns. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `process` | Method | Process a list of data items with WHERE clause filtering support. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `process_for_side_output` | Method | Process data and separate into main and side outputs. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `process_file_level` | Method | Process data at the file level. | - |

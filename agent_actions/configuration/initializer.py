@@ -123,29 +123,3 @@ def create_agent_runner(
     ) as container:
         return container.get_agent_runner(use_tools)
 
-
-def create_target_content_processor(
-    config: Optional[Dict[str, Any]] = None,
-    agent_config: Dict = None,
-    agent_name: str = None,
-    idx: int = None,
-    agent_configs: Optional[Dict[str, Dict]] = None,
-):
-    """
-    Create a TargetContentProcessor with proper dependency injection.
-
-    Args:
-        config: Optional DI configuration dictionary
-        agent_config: Configuration for the agent
-        agent_name: Name of the agent
-        idx: Index of the config being processed
-        agent_configs: Optional dict mapping agent names to their configs
-            (for dependency resolution)
-
-    Returns:
-        TargetContentProcessor instance with injected dependencies
-    """
-    with application_container_context(config) as container:
-        return container.create_target_content_processor(
-            agent_config, agent_name, idx, agent_configs
-        )
