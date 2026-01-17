@@ -453,15 +453,10 @@ class BatchResultProcessor:
         recovery_metadata: RecoveryMetadata,
     ) -> Dict[str, Any]:
         """
-        Create an exhausted retry item with empty schema fields.
+        Create an exhausted retry item using shared utility.
 
-        For records where retry was exhausted, we create a record with:
-        - The expected output schema fields, but with empty/null values
-        - The _recovery metadata indicating retry exhaustion
-        - Preserved source_guid, target_id, lineage for tracking
-
-        This allows downstream actions to see the expected structure
-        rather than old content from the previous action.
+        Delegates to ExhaustedRecordBuilder for consistent behavior
+        between batch and online modes.
 
         Args:
             ctx: Processing context
@@ -472,56 +467,16 @@ class BatchResultProcessor:
         Returns:
             Exhausted item dict with empty content + _recovery
         """
+        from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
+
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
-        # Get empty schema from agent_config if available
-        # See #719 for limitations of this simple heuristic
-        empty_content = {}
-        if ctx.agent_config:
-            schema = ctx.agent_config.get("schema")
-            if schema and isinstance(schema, dict):
-                # Create empty values for each schema field
-                properties = schema.get("properties", {})
-                for field_name, field_spec in properties.items():
-                    field_type = field_spec.get("type", "string")
-                    if field_type == "array":
-                        empty_content[field_name] = []
-                    elif field_type == "object":
-                        empty_content[field_name] = {}
-                    elif field_type == "boolean":
-                        empty_content[field_name] = False
-                    elif field_type in ("number", "integer"):
-                        empty_content[field_name] = 0
-                    else:
-                        empty_content[field_name] = None
-
-        # Generate node_id for this exhausted record
-        action_name = "unknown_action"
-        if ctx.agent_config:
-            action_name = ctx.agent_config.get(
-                "agent_type", ctx.agent_config.get("name", "unknown_action")
-            )
-        node_id = IDGenerator.generate_node_id(action_name)
-
-        exhausted_item: Dict[str, Any] = {
-            "source_guid": source_guid,
-            "content": empty_content,
-            "node_id": node_id,
-            "metadata": {"retry_exhausted": True},
-            "_recovery": recovery_metadata.to_dict(),
-        }
-
-        # Preserve target_id if available
-        if original_row.get("target_id"):
-            exhausted_item["target_id"] = original_row["target_id"]
-
-        # Preserve lineage and extend with this node
-        if original_row.get("lineage"):
-            exhausted_item["lineage"] = original_row["lineage"] + [node_id]
-        else:
-            exhausted_item["lineage"] = [node_id]
-
-        return exhausted_item
+        return ExhaustedRecordBuilder.build_exhausted_item(
+            source_guid=source_guid,
+            original_row=original_row,
+            recovery_metadata=recovery_metadata,
+            agent_config=ctx.agent_config or {},
+        )
 
     def _stage_6_merge_passthroughs(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """

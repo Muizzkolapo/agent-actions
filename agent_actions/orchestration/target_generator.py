@@ -382,21 +382,63 @@ class TargetGenerator:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
 
-        # Collect success results
+        # ===== UNIFIED AGGREGATION: Check on_exhausted config =====
+        from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
+
+        exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
+
+        if exhausted_results:
+            retry_config = self.config.agent_config.get("retry", {})
+            on_exhausted = retry_config.get("on_exhausted", "return_last")
+
+            logger.warning(
+                f"[{self.config.agent_name}] {len(exhausted_results)} records have exhausted retries "
+                f"(on_exhausted={on_exhausted})"
+            )
+
+            if on_exhausted == "raise":
+                # Fail action immediately (matches batch mode)
+                exhausted_record = exhausted_results[0]
+                attempts = (
+                    exhausted_record.recovery_metadata.retry.attempts
+                    if exhausted_record.recovery_metadata
+                    and exhausted_record.recovery_metadata.retry
+                    else "unknown"
+                )
+                raise AgentActionsException(
+                    f"Retry exhausted for record {exhausted_record.source_guid} after "
+                    f"{attempts} attempts (on_exhausted=raise)",
+                    context={
+                        "agent_name": self.config.agent_name,
+                        "exhausted_records": len(exhausted_results),
+                        "on_exhausted": "raise",
+                    },
+                )
+
+        # Collect results into output
         output = []
         for result in results:
             if result.status == ProcessingStatus.SUCCESS:
                 output.extend(result.data)
             elif result.status == ProcessingStatus.SKIPPED:
-                # Depending on how SKIPPED behavior should work for StandardStrategy
-                # usually means passthrough data
                 output.extend(result.data)
+            elif result.status == ProcessingStatus.EXHAUSTED:
+                # Use shared utility for exhausted records
+                if result.recovery_metadata and result.recovery_metadata.retry:
+                    exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
+                        source_guid=result.source_guid,
+                        original_row=result.source_snapshot,
+                        recovery_metadata=result.recovery_metadata,
+                        agent_config=self.config.agent_config,
+                        action_name=self.config.agent_name,
+                    )
+                    output.append(exhausted_item)
+                    logger.info(
+                        f"[{self.config.agent_name}] Added exhausted record: source_guid={result.source_guid}"
+                    )
             elif result.status == ProcessingStatus.FAILED:
-                # Log error but continue
                 logger.error(f"Failed to process record: {result.error}")
 
-        # Determine output type (Main vs Side Output)
-        # Note: Side output logic removed as per cleanup.
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:
