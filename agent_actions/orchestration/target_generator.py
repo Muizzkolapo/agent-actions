@@ -417,6 +417,7 @@ class TargetGenerator:
 
         # Collect results into output
         output = []
+        exhausted_count = 0
         for result in results:
             if result.status == ProcessingStatus.SUCCESS:
                 logger.debug(
@@ -449,32 +450,23 @@ class TargetGenerator:
                         action_name=self.config.agent_name,
                     )
                     output.append(exhausted_item)
-                    logger.info(
-                        f"[{self.config.agent_name}] ✓ EXHAUSTED RECORD WRITTEN: "
-                        f"source_guid={result.source_guid}, "
-                        f"content={exhausted_item.get('content')}, "
-                        f"retry_attempts={result.recovery_metadata.retry.attempts}, "
-                        f"lineage_length={len(exhausted_item.get('lineage', []))}"
-                    )
+                    exhausted_count += 1
             elif result.status == ProcessingStatus.FAILED:
                 logger.error(
-                    f"[{self.config.agent_name}] Processing FAILED result: "
-                    f"source_guid={result.source_guid}, error={result.error} "
-                    f"(FAILED records are NOT written to output file)"
+                    f"[{self.config.agent_name}] Processing FAILED: "
+                    f"source_guid={result.source_guid}, error={result.error}"
                 )
 
-        logger.info(f"[{self.config.agent_name}] ===== WRITING {len(output)} RECORDS TO FILE =====")
-        for i, item in enumerate(output):
-            is_exhausted = item.get("metadata", {}).get("retry_exhausted", False)
-            status_label = "EXHAUSTED" if is_exhausted else "NORMAL"
-            logger.debug(
-                f"[{self.config.agent_name}]   Record {i + 1}/{len(output)}: {status_label} - "
-                f"source_guid={item.get('source_guid')}, "
-                f"content_keys={list(item.get('content', {}).keys()) if 'content' in item else 'N/A'}"
+        # Log summary
+        if exhausted_count > 0:
+            logger.info(
+                f"[{self.config.agent_name}] Writing {len(output)} records "
+                f"({exhausted_count} exhausted, {len(output) - exhausted_count} normal)"
             )
+        else:
+            logger.debug(f"[{self.config.agent_name}] Writing {len(output)} records")
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
-        logger.info(f"[{self.config.agent_name}] ===== FILE WRITE COMPLETE =====")
 
     def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:
         """

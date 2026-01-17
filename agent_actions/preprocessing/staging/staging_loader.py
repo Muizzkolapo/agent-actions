@@ -645,6 +645,7 @@ def _process_realtime_mode_with_record_processor(
 
     # Extract data from results
     processed_items = []
+    exhausted_count = 0
     for result in results:
         # Check specific statuses using enum
         if result.status in [ProcessingStatus.SUCCESS, ProcessingStatus.SKIPPED]:
@@ -667,14 +668,16 @@ def _process_realtime_mode_with_record_processor(
                     action_name=ctx.agent_name,
                 )
                 processed_items.append(exhausted_item)
-                logger.info(
-                    f"[{ctx.agent_name}] ✓ EXHAUSTED RECORD WRITTEN (first-stage): "
-                    f"source_guid={result.source_guid}, "
-                    f"retry_attempts={result.recovery_metadata.retry.attempts}"
-                )
+                exhausted_count += 1
         elif result.status == ProcessingStatus.FAILED:
             logger.error("Item processing failed: %s", result.error)
-            # Optionally preserve failed items or rely on retry_service exhaustion
+
+    # Log summary
+    if exhausted_count > 0:
+        logger.info(
+            f"[{ctx.agent_name}] Writing {len(processed_items)} records "
+            f"({exhausted_count} exhausted, {len(processed_items) - exhausted_count} normal)"
+        )
 
     # Write output
     file_writer = FileWriter(str(output_file_path))
