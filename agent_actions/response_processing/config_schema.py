@@ -248,19 +248,10 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class EnhancedAgentConfig(AgentConfig):
-    """Extended agent configuration with filtering options."""
-
-    conditional_clause: Optional[str] = None
-    where_clause: Optional[WhereClauseConfig] = None
-    skip_if: Optional[str] = None
-
-
 __all__ = [
     "DefaultAgentConfig",
     "AgentConfig",
     "WhereClauseConfig",
-    "EnhancedAgentConfig",
     "FilterScope",
     "SkipConditionConfig",
 ]
