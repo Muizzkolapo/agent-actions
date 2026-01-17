@@ -197,7 +197,7 @@ class TestFileGranularityRouting:
 class TestFileModeTool:
     """Test _process_file_mode_tool method."""
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_invokes_tool_with_full_array(self, mock_run):
         """Tool receives full array in FILE mode."""
         # Mock run_dynamic_agent to return array
@@ -253,7 +253,7 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.SUCCESS
         assert len(results[0].data) == 2
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_handles_n_to_m_transformation(self, mock_run):
         """Tool can transform N inputs to M outputs (e.g., 1→4)."""
         # Tool returns 4 outputs from 1 input
@@ -321,7 +321,7 @@ class TestFileModeTool:
         # Each has unique ID
         assert all("target_id" in item for item in results[0].data)
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_error_if_tool_returns_non_array(self, mock_run):
         """Error if tool returns non-array in FILE mode."""
         mock_run.return_value = ({"not": "array"}, True)
@@ -356,7 +356,7 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.FAILED
         assert "must return array" in results[0].error
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_handles_empty_array(self, mock_run):
         """Handles empty array gracefully."""
         mock_run.return_value = ([], True)
@@ -399,7 +399,7 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.SUCCESS
         assert len(results[0].data) == 0
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_handles_tool_exception(self, mock_run):
         """Handles exception from tool gracefully."""
         mock_run.side_effect = Exception("Tool execution failed")
@@ -434,10 +434,10 @@ class TestFileModeTool:
         assert "Tool execution failed" in results[0].error
 
 
-class TestFileModeLiineageChaining:
+class TestFileModeLineageChaining:
     """Test lineage chaining in FILE mode."""
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_lineage_chains_from_parent(self, mock_run):
         """FILE mode chains lineage from parent records."""
         # Tool preserves source_guid in output
@@ -505,7 +505,7 @@ class TestFileModeLiineageChaining:
             # source_guid should be preserved at top level
             assert item.get("source_guid") == "parent-1"
 
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
     def test_first_stage_starts_fresh_lineage(self, mock_run):
         """First stage starts fresh lineage without chaining."""
         mock_run.return_value = ([{"data": "value"}], True)

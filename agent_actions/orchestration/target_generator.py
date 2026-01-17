@@ -15,7 +15,13 @@ from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.utilities.safe_format import safe_format_error
 from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
+from agent_actions.core.types import (
+    ProcessingContext,
+    ProcessingMode,
+    ProcessingResult,
+    ProcessingStatus,
+)
+from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
 
 TOOL_VENDOR = "tool"
 SOURCE_FOLDER = "source"
@@ -409,9 +415,6 @@ class TargetGenerator:
         Returns:
             List with single ProcessingResult containing all outputs
         """
-        from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
-        from agent_actions.core.types import ProcessingResult, ProcessingStatus
-
         try:
             # Get tools_path from agent config
             tools_path = context.agent_config.get("tools_path")
