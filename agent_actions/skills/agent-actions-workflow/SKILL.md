@@ -200,7 +200,7 @@ defaults:
   # Retry: transient errors
   retry:
     max_attempts: 3
-    on_exhausted: continue  # continue | fail
+    on_exhausted: return_last  # return_last | raise
 
   # Reprompt: validation errors (requires explicit config)
   reprompt:
@@ -208,7 +208,7 @@ defaults:
     json_repair: true           # Fix malformed JSON without API call
     use_llm_critique: true      # Use LLM to analyze failures
     critique_after_attempt: 2   # Start critique after N attempts
-    on_exhausted: continue
+    on_exhausted: return_last
 ```
 
 To disable: `reprompt: false`
@@ -436,20 +436,12 @@ Build on the previous action's output.
 
 ## UDF Tool Pattern
 
+UDFs work like LLM actions: `context_scope` defines input, `schema` defines output.
+
 ```python
-from typing import List, TypedDict
 from agent_actions import udf_tool
 
-class MyInput(TypedDict, total=False):
-    """Source: node_N output, Destination: node_M output.
-
-    Use total=False to make all fields optional.
-    """
-    question: str
-    options: List[str]
-    metadata: dict  # Passthrough fields
-
-@udf_tool(input_type=MyInput)
+@udf_tool()  # No input_type needed - input comes from context_scope
 def my_function(data: dict) -> dict:
     """Process data and return modified dict."""
     # Handle content wrapper if present
@@ -468,6 +460,17 @@ def my_function(data: dict) -> dict:
     return result
 ```
 
+```yaml
+# Workflow YAML - context_scope defines what data the UDF receives
+- name: process_data
+  kind: tool
+  impl: my_function
+  context_scope:
+    include:
+      - upstream_action.question
+      - upstream_action.options
+```
+
 ### Granularity Options
 
 **Record (default):** Process one record at a time
@@ -482,10 +485,26 @@ def my_function(data: dict) -> dict:
 ```python
 from agent_actions.configuration.new_format_schema import Granularity
 
-@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
+@udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: List[Dict]) -> List[Dict]:
     seen = set()
     return [r for r in data if r['fact'] not in seen and not seen.add(r['fact'])]
+```
+
+**Constraints:** FILE granularity only works with `kind: tool`, and guards are not supported.
+
+**Important:** In FILE mode, copy `source_guid` from input to output to maintain lineage chaining:
+```python
+@udf_tool(granularity=Granularity.FILE)
+def flatten(data: List[Dict]) -> List[Dict]:
+    results = []
+    for rec in data:
+        for item in rec.get("items", []):
+            results.append({
+                "source_guid": rec.get("source_guid"),  # Preserve for lineage!
+                **item
+            })
+    return results
 ```
 
 ### FileUDFResult for Lineage
@@ -495,7 +514,7 @@ Track input→output mapping in FILE granularity:
 ```python
 from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
-@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
+@udf_tool(granularity=Granularity.FILE)
 def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
     seen = {}
     outputs = []
@@ -569,7 +588,7 @@ reprompt:
   json_repair: true
   use_llm_critique: true
   critique_after_attempt: 2
-  on_exhausted: continue
+  on_exhausted: return_last
 ```
 
 See `references/debugging-guide.md` for complete troubleshooting.
