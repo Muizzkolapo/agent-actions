@@ -19,7 +19,6 @@ class ResultCollector:
         agent_name: str,
         *,
         is_first_stage: bool,
-        include_skipped: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Flatten ProcessingResult entries into output records.
@@ -29,8 +28,6 @@ class ResultCollector:
             agent_config: Agent configuration for schema hints.
             agent_name: Agent name for exhausted record lineage.
             is_first_stage: True for staging, False for downstream.
-            include_skipped: Whether to include skipped records.
-
         Returns:
             List of output records.
         """
@@ -48,13 +45,12 @@ class ResultCollector:
                 )
             elif result.status == ProcessingStatus.SKIPPED:
                 data = result.data or []
-                if include_skipped and data:
+                if data:
                     output.extend(data)
                 logger.debug(
-                    "Collected SKIPPED result source_guid=%s count=%d include=%s",
+                    "Collected SKIPPED result source_guid=%s count=%d",
                     result.source_guid,
                     len(data),
-                    include_skipped,
                 )
             elif result.status == ProcessingStatus.EXHAUSTED:
                 if result.recovery_metadata and result.recovery_metadata.retry:

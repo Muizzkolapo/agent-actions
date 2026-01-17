@@ -174,10 +174,9 @@ class RecordProcessor:
             if response is None:
                 # Check if this is a retry exhaustion vs guard filter
                 if recovery_metadata and recovery_metadata.retry:
-                    return ProcessingResult(
-                        status=ProcessingStatus.EXHAUSTED,
-                        source_guid=source_guid,
+                    return ProcessingResult.exhausted(
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
+                        source_guid=source_guid,
                         recovery_metadata=recovery_metadata,
                         source_snapshot=source_snapshot,  # Preserve for source saving
                         input_record=input_record,

@@ -179,6 +179,17 @@ class ProcessingResult:
         """Factory for failed result."""
         return cls(status=ProcessingStatus.FAILED, data=[], executed=False, error=error, **kwargs)
 
+    @classmethod
+    def exhausted(cls, error: str, **kwargs) -> "ProcessingResult":
+        """Factory for exhausted (retry) result."""
+        return cls(
+            status=ProcessingStatus.EXHAUSTED,
+            data=[],
+            executed=False,
+            error=error,
+            **kwargs,
+        )
+
 
 @dataclass
 class ProcessingContext:
