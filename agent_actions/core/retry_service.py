@@ -41,8 +41,8 @@ class RetryResult:
 
     @property
     def needed_retry(self) -> bool:
-        """Return True if retry was triggered (attempts > 1)."""
-        return self.attempts > 1
+        """Return True if retry was triggered (attempts > 1) or exhausted on first attempt."""
+        return self.attempts > 1 or self.exhausted
 
 
 def classify_error(error: Exception) -> str:
@@ -185,13 +185,9 @@ class RetryService:
                     )
                     raise
 
-        # Exhausted all retries
-        if self.on_exhausted == "raise":
-            if last_error:
-                raise last_error
-            raise RuntimeError("Retry exhausted with no response")
-
-        # on_exhausted == "return_last"
+        # Exhausted all retries - always return result, let caller decide whether to raise
+        # The on_exhausted config is just stored in self.on_exhausted for reference
+        # but the actual decision to raise is made by the higher-level code
         return RetryResult(
             response=last_response,
             attempts=self.max_attempts,

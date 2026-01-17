@@ -419,27 +419,62 @@ class TargetGenerator:
         output = []
         for result in results:
             if result.status == ProcessingStatus.SUCCESS:
+                logger.debug(
+                    f"[{self.config.agent_name}] Processing SUCCESS result: "
+                    f"source_guid={result.source_guid}, records={len(result.data)}"
+                )
                 output.extend(result.data)
             elif result.status == ProcessingStatus.SKIPPED:
+                logger.debug(
+                    f"[{self.config.agent_name}] Processing SKIPPED result: "
+                    f"source_guid={result.source_guid}, records={len(result.data)}"
+                )
                 output.extend(result.data)
             elif result.status == ProcessingStatus.EXHAUSTED:
                 # Use shared utility for exhausted records
+                logger.debug(
+                    f"[{self.config.agent_name}] Processing EXHAUSTED result: "
+                    f"source_guid={result.source_guid}, "
+                    f"has_recovery_metadata={result.recovery_metadata is not None}, "
+                    f"has_retry={result.recovery_metadata.retry is not None if result.recovery_metadata else False}"
+                )
                 if result.recovery_metadata and result.recovery_metadata.retry:
+                    # Use input_record (has full lineage) for downstream, source_snapshot for first-stage
+                    original_row = result.input_record or result.source_snapshot
                     exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
                         source_guid=result.source_guid,
-                        original_row=result.source_snapshot,
+                        original_row=original_row,
                         recovery_metadata=result.recovery_metadata,
                         agent_config=self.config.agent_config,
                         action_name=self.config.agent_name,
                     )
                     output.append(exhausted_item)
                     logger.info(
-                        f"[{self.config.agent_name}] Added exhausted record: source_guid={result.source_guid}"
+                        f"[{self.config.agent_name}] ✓ EXHAUSTED RECORD WRITTEN: "
+                        f"source_guid={result.source_guid}, "
+                        f"content={exhausted_item.get('content')}, "
+                        f"retry_attempts={result.recovery_metadata.retry.attempts}, "
+                        f"lineage_length={len(exhausted_item.get('lineage', []))}"
                     )
             elif result.status == ProcessingStatus.FAILED:
-                logger.error(f"Failed to process record: {result.error}")
+                logger.error(
+                    f"[{self.config.agent_name}] Processing FAILED result: "
+                    f"source_guid={result.source_guid}, error={result.error} "
+                    f"(FAILED records are NOT written to output file)"
+                )
+
+        logger.info(f"[{self.config.agent_name}] ===== WRITING {len(output)} RECORDS TO FILE =====")
+        for i, item in enumerate(output):
+            is_exhausted = item.get("metadata", {}).get("retry_exhausted", False)
+            status_label = "EXHAUSTED" if is_exhausted else "NORMAL"
+            logger.debug(
+                f"[{self.config.agent_name}]   Record {i + 1}/{len(output)}: {status_label} - "
+                f"source_guid={item.get('source_guid')}, "
+                f"content_keys={list(item.get('content', {}).keys()) if 'content' in item else 'N/A'}"
+            )
 
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
+        logger.info(f"[{self.config.agent_name}] ===== FILE WRITE COMPLETE =====")
 
     def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:
         """
