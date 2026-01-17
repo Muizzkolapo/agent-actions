@@ -66,6 +66,10 @@ class ExhaustedRecordBuilder:
         if isinstance(original_row, dict):
             if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
+            if original_row.get("parent_target_id"):
+                exhausted_item["parent_target_id"] = original_row["parent_target_id"]
+            if original_row.get("root_target_id"):
+                exhausted_item["root_target_id"] = original_row["root_target_id"]
             if original_row.get("lineage"):
                 exhausted_item["lineage"] = original_row["lineage"] + [node_id]
             else:

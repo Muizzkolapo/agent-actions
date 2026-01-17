@@ -2,6 +2,8 @@
 
 from typing import Any, Dict
 
+import pytest
+
 from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
 from agent_actions.core.result_collector import ResultCollector
 from agent_actions.core.types import (
@@ -10,6 +12,7 @@ from agent_actions.core.types import (
     RecoveryMetadata,
     RetryMetadata,
 )
+from agent_actions.errors import AgentActionsException
 from agent_actions.utilities.id_generation import IDGenerator
 
 
@@ -47,8 +50,8 @@ def test_result_collector_aggregates_statuses_first_stage(monkeypatch):
         error="Retry exhausted",
         source_guid="src-3",
         recovery_metadata=_retry_metadata(),
-        input_record={"target_id": "t-1", "lineage": ["prev"]},
-        source_snapshot={"target_id": "t-ignored", "lineage": ["ignored"]},
+        input_record={"target_id": "t-ignored", "lineage": ["ignored"]},
+        source_snapshot={"target_id": "t-1", "lineage": ["prev"]},
     )
     failed = ProcessingResult.failed(error="Boom", source_guid="src-4")
     filtered = ProcessingResult.filtered(source_guid="src-5")
@@ -63,6 +66,7 @@ def test_result_collector_aggregates_statuses_first_stage(monkeypatch):
     assert output[0] == {"content": {"value": 1}}
     assert output[1] == {"content": {"value": 2}}
 
+    # First stage uses source_snapshot
     exhausted_item = output[2]
     assert exhausted_item["source_guid"] == "src-3"
     assert exhausted_item["target_id"] == "t-1"
@@ -79,7 +83,8 @@ def test_result_collector_aggregates_statuses_first_stage(monkeypatch):
     assert len(output) == 3
 
 
-def test_result_collector_uses_source_snapshot_downstream(monkeypatch):
+def test_result_collector_uses_input_record_downstream(monkeypatch):
+    """Downstream stages use input_record to preserve lineage."""
     monkeypatch.setattr(IDGenerator, "generate_node_id", lambda _: "action_node")
     agent_config = {"agent_type": "downstream"}
     exhausted = ProcessingResult.exhausted(
@@ -97,9 +102,10 @@ def test_result_collector_uses_source_snapshot_downstream(monkeypatch):
         is_first_stage=False,
     )
 
+    # Downstream uses input_record for lineage preservation
     exhausted_item = output[0]
-    assert exhausted_item["target_id"] == "t-snapshot"
-    assert exhausted_item["lineage"] == ["snapshot", "action_node"]
+    assert exhausted_item["target_id"] == "t-input"
+    assert exhausted_item["lineage"] == ["input", "action_node"]
 
 
 def test_result_collector_handles_none_data():
@@ -130,3 +136,54 @@ def test_exhausted_record_builder_preserves_lineage(monkeypatch):
 
     assert exhausted_item["target_id"] == "t-7"
     assert exhausted_item["lineage"] == ["root", "action_node"]
+
+
+def test_result_collector_on_exhausted_raise():
+    """Test that on_exhausted=raise throws AgentActionsException."""
+    agent_config = {
+        "agent_type": "test_action",
+        "retry": {"on_exhausted": "raise"},
+    }
+    exhausted = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid="src-raise",
+        recovery_metadata=_retry_metadata(),
+        input_record={"target_id": "t-1"},
+    )
+
+    with pytest.raises(AgentActionsException) as exc_info:
+        ResultCollector.collect_results(
+            [exhausted],
+            agent_config,
+            "test_agent",
+            is_first_stage=True,
+        )
+
+    assert "on_exhausted=raise" in str(exc_info.value)
+    assert exc_info.value.context["exhausted_records"] == 1
+
+
+def test_result_collector_on_exhausted_return_last_does_not_raise(monkeypatch):
+    """Test that on_exhausted=return_last (default) does not raise."""
+    monkeypatch.setattr(IDGenerator, "generate_node_id", lambda _: "action_node")
+    agent_config = {
+        "agent_type": "test_action",
+        "retry": {"on_exhausted": "return_last"},
+    }
+    exhausted = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid="src-return",
+        recovery_metadata=_retry_metadata(),
+        input_record={"target_id": "t-1"},
+    )
+
+    # Should not raise, should return exhausted record
+    output = ResultCollector.collect_results(
+        [exhausted],
+        agent_config,
+        "test_agent",
+        is_first_stage=True,
+    )
+
+    assert len(output) == 1
+    assert output[0]["source_guid"] == "src-return"

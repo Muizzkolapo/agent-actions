@@ -66,17 +66,18 @@ class TestInputNormalization:
         assert "content" in snapshot
 
     def test_subsequent_stage_extracts_content_and_guid(self):
-        """Subsequent-stage: extracts content and source_guid."""
+        """Subsequent-stage: extracts content, source_guid, and preserves input_record."""
         processor = RecordProcessor(agent_config={}, agent_name="test")
         context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=False)
 
         item = {"content": {"key": "value"}, "source_guid": "guid-456"}
 
-        content, source_guid, snapshot = processor._normalize_input(item, context)
+        content, source_guid, input_record = processor._normalize_input(item, context)
 
         assert content == {"key": "value"}
         assert source_guid == "guid-456"
-        assert snapshot is None
+        # Subsequent stages preserve the full input_record for lineage tracking
+        assert input_record == item
 
     def test_subsequent_stage_handles_flat_item(self):
         """Subsequent-stage: handles item without 'content' key."""
