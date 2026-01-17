@@ -17,6 +17,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from ollama import Client
 from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
+from agent_actions.llm_invocation.providers.ollama.failure_injection import (
+    should_fail_batch_record,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,6 +163,14 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 ollama_response = self.client.chat(
                     model=model, messages=messages, options=options, format=format_param
                 )
+
+                # Failure injection AFTER successful call - simulates "result lost/missing"
+                # We simply don't add this result, making it a "missing" record for retry
+                if should_fail_batch_record(custom_id, idx):
+                    logger.debug(f"[INJECTION] Simulating missing result for {custom_id}")
+                    # Don't add to results - this makes it truly "missing"
+                    failed += 1
+                    continue
 
                 # Transform to OpenAI format
                 openai_response = self._transform_ollama_response(ollama_response, custom_id, model)
