@@ -17,7 +17,8 @@ from agent_actions.preprocessing.transformation.string_transformer import Tokeni
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
+from agent_actions.core.result_collector import ResultCollector
+from agent_actions.core.types import ProcessingContext, ProcessingMode
 
 
 logger = logging.getLogger(__name__)
@@ -610,74 +611,13 @@ def _process_realtime_mode_with_record_processor(
     # The data_chunk here contains raw items (strings, dicts) or pre-chunked items
     results = processor.process_batch(data_chunk, processing_context)
 
-    # Check on_exhausted config for raise behavior
-    from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
-    from agent_actions.errors import AgentActionsException
-
-    exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
-
-    if exhausted_results:
-        retry_config = ctx.agent_config.get("retry", {})
-        on_exhausted = retry_config.get("on_exhausted", "return_last")
-
-        logger.warning(
-            f"[{ctx.agent_name}] {len(exhausted_results)} records have exhausted retries "
-            f"(on_exhausted={on_exhausted})"
-        )
-
-        if on_exhausted == "raise":
-            # Fail action immediately (matches TargetGenerator behavior)
-            exhausted_record = exhausted_results[0]
-            attempts = (
-                exhausted_record.recovery_metadata.retry.attempts
-                if exhausted_record.recovery_metadata and exhausted_record.recovery_metadata.retry
-                else "unknown"
-            )
-            raise AgentActionsException(
-                f"Retry exhausted for record {exhausted_record.source_guid} after "
-                f"{attempts} attempts (on_exhausted=raise)",
-                context={
-                    "agent_name": ctx.agent_name,
-                    "exhausted_records": len(exhausted_results),
-                    "on_exhausted": "raise",
-                },
-            )
-
     # Extract data from results
-    processed_items = []
-    exhausted_count = 0
-    for result in results:
-        # Check specific statuses using enum
-        if result.status in [ProcessingStatus.SUCCESS, ProcessingStatus.SKIPPED]:
-            processed_items.extend(result.data)
-        elif result.status == ProcessingStatus.EXHAUSTED:
-            # Use shared utility for exhausted records (matches TargetGenerator)
-            logger.debug(
-                f"[{ctx.agent_name}] Processing EXHAUSTED result: "
-                f"source_guid={result.source_guid}, "
-                f"has_recovery_metadata={result.recovery_metadata is not None}"
-            )
-            if result.recovery_metadata and result.recovery_metadata.retry:
-                # Use input_record (has full lineage) for downstream, source_snapshot for first-stage
-                original_row = result.input_record or result.source_snapshot
-                exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
-                    source_guid=result.source_guid,
-                    original_row=original_row,
-                    recovery_metadata=result.recovery_metadata,
-                    agent_config=ctx.agent_config,
-                    action_name=ctx.agent_name,
-                )
-                processed_items.append(exhausted_item)
-                exhausted_count += 1
-        elif result.status == ProcessingStatus.FAILED:
-            logger.error("Item processing failed: %s", result.error)
-
-    # Log summary
-    if exhausted_count > 0:
-        logger.info(
-            f"[{ctx.agent_name}] Writing {len(processed_items)} records "
-            f"({exhausted_count} exhausted, {len(processed_items) - exhausted_count} normal)"
-        )
+    processed_items = ResultCollector.collect_results(
+        results,
+        ctx.agent_config,
+        ctx.agent_name,
+        is_first_stage=True,
+    )
 
     # Write output
     file_writer = FileWriter(str(output_file_path))

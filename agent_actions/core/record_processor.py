@@ -138,10 +138,8 @@ class RecordProcessor:
             ProcessingResult with enriched data
         """
         # Step 1: Normalize input format
+        input_record = item if isinstance(item, dict) else None
         content, source_guid, source_snapshot = self._normalize_input(item, context)
-
-        # Preserve full input record for downstream actions (for lineage preservation)
-        input_record = item if not context.is_first_stage and isinstance(item, dict) else None
 
         # Step 2: Early guard evaluation (FIRST guard check)
         # Evaluates guards on input content to avoid expensive operations
@@ -176,23 +174,17 @@ class RecordProcessor:
             if response is None:
                 # Check if this is a retry exhaustion vs guard filter
                 if recovery_metadata and recovery_metadata.retry:
-                    logger.debug(
-                        f"[{context.agent_name}] EXHAUSTED DETECTED for source_guid={source_guid}: "
-                        f"attempts={recovery_metadata.retry.attempts}, "
-                        f"succeeded={recovery_metadata.retry.succeeded}, "
-                        f"reason={recovery_metadata.retry.reason}"
-                    )
-                    return ProcessingResult(
-                        status=ProcessingStatus.EXHAUSTED,
-                        source_guid=source_guid,
+                    return ProcessingResult.exhausted(
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
+                        source_guid=source_guid,
                         recovery_metadata=recovery_metadata,
                         source_snapshot=source_snapshot,  # Preserve for source saving
-                        input_record=input_record,  # Preserve for lineage in downstream
+                        input_record=input_record,
                     )
                 return ProcessingResult.filtered(
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,  # Preserve for source saving
+                    input_record=input_record,
                 )
             return ProcessingResult.skipped(
                 passthrough_data=response,
@@ -200,6 +192,7 @@ class RecordProcessor:
                 source_guid=source_guid,
                 passthrough_fields=passthrough_fields,
                 source_snapshot=source_snapshot,
+                input_record=input_record,
             )
 
         # Step 7: Transform response
@@ -215,6 +208,7 @@ class RecordProcessor:
             source_snapshot=source_snapshot,
             raw_response=response,
             recovery_metadata=recovery_metadata,
+            input_record=input_record,
         )
 
         # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
@@ -255,6 +249,7 @@ class RecordProcessor:
                     f"[{context.agent_name}] Error processing item {idx}: {str(e)}"
                 )
                 # Preserve source_snapshot and source_guid for first-stage source saving
+                input_record = item if isinstance(item, dict) else None
                 source_snapshot = None
                 source_guid = None
                 if context.is_first_stage:
@@ -268,6 +263,7 @@ class RecordProcessor:
                     error=f"Error processing item {idx}: {str(e)}",
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
+                    input_record=input_record,
                 )
                 results.append(failed_result)
         return results
@@ -304,7 +300,7 @@ class RecordProcessor:
             if isinstance(item, dict):
                 content = item.get("content", item)
                 source_guid = item.get("source_guid")
-                return content, source_guid, None
+                return content, source_guid, item
             else:
                 # Non-dict input in subsequent-stage: treat as raw content
                 return item, None, None
@@ -615,13 +611,6 @@ class RecordProcessor:
                     succeeded=succeeded,
                     reason=retry_result.reason or "unknown",
                     timestamp=datetime.now(timezone.utc).isoformat(),
-                )
-                logger.debug(
-                    f"[{context.agent_name}] RETRY METADATA POPULATED: "
-                    f"needed_retry={retry_result.needed_retry}, "
-                    f"exhausted={retry_result.exhausted}, "
-                    f"attempts={retry_result.attempts}, "
-                    f"succeeded={succeeded}"
                 )
 
             # Handle exhausted case

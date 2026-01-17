@@ -15,6 +15,7 @@ from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.utilities.safe_format import safe_format_error
 from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.core.result_collector import ResultCollector
 from agent_actions.core.types import (
     ProcessingContext,
     ProcessingMode,
@@ -382,90 +383,16 @@ class TargetGenerator:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
 
-        # ===== UNIFIED AGGREGATION: Check on_exhausted config =====
-        from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
+        # Collect success results
+        output = ResultCollector.collect_results(
+            results,
+            self.config.agent_config,
+            self.config.agent_name,
+            is_first_stage=False,
+        )
 
-        exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
-
-        if exhausted_results:
-            retry_config = self.config.agent_config.get("retry", {})
-            on_exhausted = retry_config.get("on_exhausted", "return_last")
-
-            logger.warning(
-                f"[{self.config.agent_name}] {len(exhausted_results)} records have exhausted retries "
-                f"(on_exhausted={on_exhausted})"
-            )
-
-            if on_exhausted == "raise":
-                # Fail action immediately (matches batch mode)
-                exhausted_record = exhausted_results[0]
-                attempts = (
-                    exhausted_record.recovery_metadata.retry.attempts
-                    if exhausted_record.recovery_metadata
-                    and exhausted_record.recovery_metadata.retry
-                    else "unknown"
-                )
-                raise AgentActionsException(
-                    f"Retry exhausted for record {exhausted_record.source_guid} after "
-                    f"{attempts} attempts (on_exhausted=raise)",
-                    context={
-                        "agent_name": self.config.agent_name,
-                        "exhausted_records": len(exhausted_results),
-                        "on_exhausted": "raise",
-                    },
-                )
-
-        # Collect results into output
-        output = []
-        exhausted_count = 0
-        for result in results:
-            if result.status == ProcessingStatus.SUCCESS:
-                logger.debug(
-                    f"[{self.config.agent_name}] Processing SUCCESS result: "
-                    f"source_guid={result.source_guid}, records={len(result.data)}"
-                )
-                output.extend(result.data)
-            elif result.status == ProcessingStatus.SKIPPED:
-                logger.debug(
-                    f"[{self.config.agent_name}] Processing SKIPPED result: "
-                    f"source_guid={result.source_guid}, records={len(result.data)}"
-                )
-                output.extend(result.data)
-            elif result.status == ProcessingStatus.EXHAUSTED:
-                # Use shared utility for exhausted records
-                logger.debug(
-                    f"[{self.config.agent_name}] Processing EXHAUSTED result: "
-                    f"source_guid={result.source_guid}, "
-                    f"has_recovery_metadata={result.recovery_metadata is not None}, "
-                    f"has_retry={result.recovery_metadata.retry is not None if result.recovery_metadata else False}"
-                )
-                if result.recovery_metadata and result.recovery_metadata.retry:
-                    # Use input_record (has full lineage) for downstream, source_snapshot for first-stage
-                    original_row = result.input_record or result.source_snapshot
-                    exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
-                        source_guid=result.source_guid,
-                        original_row=original_row,
-                        recovery_metadata=result.recovery_metadata,
-                        agent_config=self.config.agent_config,
-                        action_name=self.config.agent_name,
-                    )
-                    output.append(exhausted_item)
-                    exhausted_count += 1
-            elif result.status == ProcessingStatus.FAILED:
-                logger.error(
-                    f"[{self.config.agent_name}] Processing FAILED: "
-                    f"source_guid={result.source_guid}, error={result.error}"
-                )
-
-        # Log summary
-        if exhausted_count > 0:
-            logger.info(
-                f"[{self.config.agent_name}] Writing {len(output)} records "
-                f"({exhausted_count} exhausted, {len(output) - exhausted_count} normal)"
-            )
-        else:
-            logger.debug(f"[{self.config.agent_name}] Writing {len(output)} records")
-
+        # Determine output type (Main vs Side Output)
+        # Note: Side output logic removed as per cleanup.
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:

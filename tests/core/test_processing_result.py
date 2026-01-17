@@ -88,6 +88,14 @@ class TestProcessingResultFactories:
         assert result.retry_state == retry
         assert result.retry_state.exhausted is True
 
+    def test_exhausted_creates_result_with_error(self):
+        """ProcessingResult.exhausted() sets status=EXHAUSTED and executed=False."""
+        result = ProcessingResult.exhausted(error="Retry exhausted")
+
+        assert result.status == ProcessingStatus.EXHAUSTED
+        assert result.error == "Retry exhausted"
+        assert result.executed is False
+
 
 class TestProcessingResultDefaults:
     """Test default values for ProcessingResult fields."""

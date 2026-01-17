@@ -1,47 +1,45 @@
-"""Shared utility for creating exhausted retry records."""
+"""Utilities for constructing exhausted retry records."""
 
 from typing import Any, Dict, Optional
-import logging
 
 from agent_actions.core.types import RecoveryMetadata
 from agent_actions.utilities.id_generation import IDGenerator
 
-logger = logging.getLogger(__name__)
-
 
 class ExhaustedRecordBuilder:
-    """
-    Build exhausted retry items when retry attempts are exhausted.
-
-    Provides unified interface for both batch and online modes to create
-    records with empty schema fields when retries are exhausted.
-    """
+    """Build exhausted records with empty content and recovery metadata."""
 
     @staticmethod
     def build_exhausted_item(
-        source_guid: str,
-        original_row: Optional[Dict[str, Any]],
+        *,
+        source_guid: Optional[str],
+        original_row: Any,
         recovery_metadata: RecoveryMetadata,
         agent_config: Dict[str, Any],
-        action_name: Optional[str] = None,
+        action_name: str,
     ) -> Dict[str, Any]:
         """
-        Build an exhausted retry item with empty schema fields.
+        Build an exhausted retry record.
 
         Args:
-            source_guid: Source GUID for lineage tracking
-            original_row: Original row data (for target_id, lineage preservation)
-            recovery_metadata: Recovery metadata with retry info
-            agent_config: Agent configuration (for schema, agent_type)
-            action_name: Override action name (defaults to agent_type from config)
+            source_guid: Source GUID for the record.
+            original_row: Original input row (for lineage and target_id).
+            recovery_metadata: Recovery metadata containing retry info.
+            agent_config: Agent configuration for schema hints.
+            action_name: Action name for node ID generation.
 
         Returns:
-            Exhausted item dict with empty content + _recovery metadata
+            Exhausted record dict.
         """
-        # Build empty content based on schema
+        resolved_source_guid = source_guid
+        if resolved_source_guid is None and isinstance(original_row, dict):
+            resolved_source_guid = original_row.get("source_guid")
+        if resolved_source_guid is None:
+            resolved_source_guid = "unknown"
+
         empty_content: Dict[str, Any] = {}
-        schema = agent_config.get("schema", {})
-        if isinstance(schema, dict):
+        schema = agent_config.get("schema") if agent_config else None
+        if schema and isinstance(schema, dict):
             properties = schema.get("properties", {})
             for field_name, field_spec in properties.items():
                 field_type = field_spec.get("type", "string")
@@ -56,22 +54,16 @@ class ExhaustedRecordBuilder:
                 else:
                     empty_content[field_name] = None
 
-        # Generate node_id
-        if not action_name:
-            action_name = agent_config.get("agent_type", agent_config.get("name", "unknown_action"))
         node_id = IDGenerator.generate_node_id(action_name)
-
-        # Build exhausted record
         exhausted_item: Dict[str, Any] = {
-            "source_guid": source_guid,
+            "source_guid": resolved_source_guid,
             "content": empty_content,
             "node_id": node_id,
             "metadata": {"retry_exhausted": True},
             "_recovery": recovery_metadata.to_dict(),
         }
 
-        # Preserve lineage and target tracking fields from original row
-        if original_row:
+        if isinstance(original_row, dict):
             if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
             if original_row.get("parent_target_id"):
