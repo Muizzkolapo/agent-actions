@@ -61,7 +61,6 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_runner` | Method | Create an AgentRunner with all dependencies injected. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_processor_factory` | Method | Get the processor factory for creating processors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_dependency_container` | Method | Get the underlying dependency container. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_target_content_processor` | Method | Create a TargetContentProcessor with all dependencies injected. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_for_environment` | Method | Create application container for specific environment. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_for_testing` | Method | Create application container configured for testing. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `configure_logging` | Method | Configure application logging based on container settings. | - |

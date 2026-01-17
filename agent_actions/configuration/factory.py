@@ -1,7 +1,7 @@
 """
 Factory module for creating components with dependency injection.
 
-Provides factory functions to create AgentRunner and TargetContentProcessor
+Provides factory functions to create AgentRunner
 instances with proper DI container lifecycle management.
 """
 
@@ -63,28 +63,3 @@ def create_agent_runner(
     with application_container_context(config) as container:
         return container.get_agent_runner(use_tools)
 
-
-def create_target_content_processor(
-    config: Optional[Dict[str, Any]] = None,
-    agent_config: Dict = None,
-    agent_name: str = None,
-    idx: int = None,
-    agent_configs: Optional[Dict[str, Dict]] = None,
-):
-    """
-    Create a TargetContentProcessor with proper dependency injection.
-
-    Args:
-        config: Optional DI configuration dictionary
-        agent_config: Configuration for the agent
-        agent_name: Name of the agent
-        idx: Index of the config being processed
-        agent_configs: Optional dictionary of all agent configurations
-
-    Returns:
-        TargetContentProcessor instance with injected dependencies
-    """
-    with application_container_context(config) as container:
-        return container.create_target_content_processor(
-            agent_config, agent_name, idx, agent_configs
-        )

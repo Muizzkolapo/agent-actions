@@ -6,10 +6,10 @@ ProcessingResult objects to legacy formats expected by existing code.
 Usage:
     from agent_actions.core.result_adapters import ProcessingResultAdapter
 
-    # For ContentGenerator (first-stage processing)
+    # For first-stage processing
     data_chunk, src_text = ProcessingResultAdapter.to_staging_tuple(results)
 
-    # For TargetContentProcessor (subsequent-stage processing)
+    # For subsequent-stage processing
     output = ProcessingResultAdapter.to_list(results)
 """
 
@@ -28,8 +28,8 @@ class ProcessingResultAdapter:
         """
         Convert ProcessingResults to (data_chunk, src_text) tuple.
 
-        Used by ContentGenerator for first-stage processing to maintain
-        compatibility with the legacy StagingProcessor return format.
+        Used for first-stage processing to maintain compatibility with the
+        legacy StagingProcessor return format.
 
         Args:
             results: List of ProcessingResult from RecordProcessor
@@ -68,8 +68,8 @@ class ProcessingResultAdapter:
         """
         Convert ProcessingResults to flat list of dicts.
 
-        Used by TargetContentProcessor for subsequent-stage processing
-        to maintain compatibility with the legacy return format.
+        Used for subsequent-stage processing to maintain compatibility with
+        the legacy return format.
 
         Args:
             results: List of ProcessingResult from RecordProcessor

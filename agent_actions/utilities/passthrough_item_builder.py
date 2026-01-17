@@ -1,8 +1,9 @@
 """
 Unified passthrough item construction for batch and online modes.
 
-This module consolidates passthrough item building logic from batch (batch_passthrough_builder.py)
-and online (target_content_processor.py) modes into a unified interface.
+This module consolidates passthrough item building logic from batch
+(batch_passthrough_builder.py) and online (record_processor.py) modes into a
+unified interface.
 """
 
 from typing import Dict, Optional, Any
