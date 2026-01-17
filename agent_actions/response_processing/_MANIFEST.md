@@ -26,7 +26,6 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `validate_expression` | Method | Validate custom expressions for safety. | - |
 | `DefaultAgentConfig` | Class | Default settings applied to each agent configuration. | - |
 | `AgentConfig` | Class | Schema for an individual agent configuration entry. | - |
-| `EnhancedAgentConfig` | Class | Extended agent configuration with filtering options. | - |
 | `config_types.py` | Module | Type definitions for agent configuration structures. | - |
 | `AgentEntryDict` | Class | Typed representation of a single agent configuration entry. | - |
 | `consolidated_guard.py` | Module | Consolidated guard configuration with explicit behavior control. | `errors` |
@@ -73,18 +72,6 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_workflow` | Method | Get a workflow configuration. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `list_pipelines` | Method | List all registered pipeline names. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `list_workflows` | Method | List all registered workflow names. | - |
-| `processor_config.py` | Module | Processor configuration models for standardized configuration management. | `errors` |
-| `ProcessingMode` | Class | Processing modes supported by processors. | - |
-| `CacheStrategy` | Class | Cache strategies for processors. | - |
-| `ProcessorConfig` | Class | Base configuration for all processors. | - |
-| `CacheConfig` | Class | Cache configuration for processors. | - |
-| `DataProcessorConfig` | Class | Configuration specific to data processors. | - |
-| `GeneratorConfig` | Class | Configuration specific to data generators. | - |
-| `ContentProcessorConfig` | Class | Configuration for content processors. | - |
-| `BatchProcessorConfig` | Class | Configuration for batch processing operations. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `validate_max_batch_size` | Method | Ensure max_batch_size is not smaller than default_batch_size. | - |
-| `ProcessorRegistryConfig` | Class | Configuration for the processor registry. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_processor_config` | Method | Get configuration for a specific processor. | - |
 | `schema_change.py` | Module | Schema compilation and transformation utilities for multi-vendor support. | `errors`, `prompt_generation`, `response_processing`, `utilities` |
 | `compile_field` | Function | Convert a single unified field into the shape required by the target system. | - |
 | `compile_unified_schema` | Function | Convert a unified YAML/JSON definition into the schema dialect required by | - |
