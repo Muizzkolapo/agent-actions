@@ -37,11 +37,22 @@ class LineageEnricher(Enricher):
 
         base_node_id = IDGenerator.generate_node_id(context.action_name)
 
-        # Look up parent item for subsequent-stage lineage chaining
-        parent_item = self._get_parent_item(result.source_guid, context)
+        # For FILE mode (result.source_guid is None), look up parent per-item
+        # For RECORD mode, look up once using result.source_guid
+        use_per_item_parent_lookup = result.source_guid is None and not context.is_first_stage
+
+        # Pre-compute parent for RECORD mode (single parent for all items)
+        parent_item = None
+        if not use_per_item_parent_lookup:
+            parent_item = self._get_parent_item(result.source_guid, context)
 
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
+
+            # For FILE mode, look up parent using each item's individual source_guid
+            if use_per_item_parent_lookup:
+                item_source_guid = item.get("source_guid")
+                parent_item = self._get_parent_item(item_source_guid, context)
 
             # Use unified lineage method with parent lookup
             enriched = LineageBuilder.add_unified_lineage(
