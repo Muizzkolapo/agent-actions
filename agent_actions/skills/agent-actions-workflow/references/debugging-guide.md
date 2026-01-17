@@ -177,7 +177,7 @@ reprompt:
   json_repair: true
   use_llm_critique: true
   critique_after_attempt: 2
-  on_exhausted: continue
+  on_exhausted: return_last
 ```
 
 ## Debugging Workflow
@@ -212,7 +212,7 @@ reprompt:
   json_repair: true        # Try to fix malformed JSON first (no API call)
   use_llm_critique: false  # Use LLM to analyze failures
   critique_after_attempt: 2  # Start LLM critique after N attempts
-  on_exhausted: continue   # continue | fail
+  on_exhausted: return_last   # return_last | raise
 ```
 
 **Options:**
@@ -223,7 +223,7 @@ reprompt:
 | `json_repair` | Attempt JSON repair before retry (default: true) |
 | `use_llm_critique` | Use LLM to analyze failures (default: false) |
 | `critique_after_attempt` | Start LLM critique after N attempts (default: 2) |
-| `on_exhausted` | Behavior when exhausted: `continue` or `fail` |
+| `on_exhausted` | Behavior when exhausted: `return_last` or `raise` |
 
 To disable: `reprompt: false`
 

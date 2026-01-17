@@ -1,0 +1,29 @@
+name: FlattenedQuestion
+fields:
+  - id: question_text
+    type: string
+  - id: answer_text
+    type: string
+  - id: source_quote
+    type: string
+    required: false
+  - id: difficulty_reason
+    type: string
+    required: false
+  - id: question
+    type: string
+    required: false
+  - id: options
+    type: array
+    items:
+      type: string
+    required: false
+  - id: answer
+    type: string
+    required: false
+  - id: answer_explanation
+    type: string
+    required: false
+  - id: question_type
+    type: string
+    required: false
