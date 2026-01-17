@@ -38,20 +38,22 @@ class ResultCollector:
 
         for result in results:
             if result.status == ProcessingStatus.SUCCESS:
-                if result.data:
-                    output.extend(result.data)
+                data = result.data or []
+                if data:
+                    output.extend(data)
                 logger.debug(
                     "Collected SUCCESS result source_guid=%s count=%d",
                     result.source_guid,
-                    len(result.data),
+                    len(data),
                 )
             elif result.status == ProcessingStatus.SKIPPED:
-                if include_skipped and result.data:
-                    output.extend(result.data)
+                data = result.data or []
+                if include_skipped and data:
+                    output.extend(data)
                 logger.debug(
                     "Collected SKIPPED result source_guid=%s count=%d include=%s",
                     result.source_guid,
-                    len(result.data),
+                    len(data),
                     include_skipped,
                 )
             elif result.status == ProcessingStatus.EXHAUSTED:
