@@ -68,6 +68,7 @@ from agent_actions.errors.operations import (
     OperationalError,
     AgentExecutionError,
     TemplateRenderingError,
+    TemplateVariableError,
 )
 
 # Pre-flight validation errors
@@ -131,6 +132,7 @@ __all__ = [
     "OperationalError",
     "AgentExecutionError",
     "TemplateRenderingError",
+    "TemplateVariableError",
     # Pre-flight validation
     "PreFlightValidationError",
     "VendorConfigError",

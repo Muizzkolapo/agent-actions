@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, Literal
 from dataclasses import dataclass
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
+from agent_actions.errors import TemplateVariableError
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.prompt_generation.prompt_utils import PromptUtils
 from agent_actions.prompt_generation.sample_enricher import SampleEnricher
