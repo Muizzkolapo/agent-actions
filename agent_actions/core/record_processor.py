@@ -138,6 +138,7 @@ class RecordProcessor:
             ProcessingResult with enriched data
         """
         # Step 1: Normalize input format
+        input_record = item if isinstance(item, dict) else None
         content, source_guid, source_snapshot = self._normalize_input(item, context)
 
         # Step 2: Early guard evaluation (FIRST guard check)
@@ -179,10 +180,12 @@ class RecordProcessor:
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
                         recovery_metadata=recovery_metadata,
                         source_snapshot=source_snapshot,  # Preserve for source saving
+                        input_record=input_record,
                     )
                 return ProcessingResult.filtered(
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,  # Preserve for source saving
+                    input_record=input_record,
                 )
             return ProcessingResult.skipped(
                 passthrough_data=response,
@@ -190,6 +193,7 @@ class RecordProcessor:
                 source_guid=source_guid,
                 passthrough_fields=passthrough_fields,
                 source_snapshot=source_snapshot,
+                input_record=input_record,
             )
 
         # Step 7: Transform response
@@ -205,6 +209,7 @@ class RecordProcessor:
             source_snapshot=source_snapshot,
             raw_response=response,
             recovery_metadata=recovery_metadata,
+            input_record=input_record,
         )
 
         # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
@@ -245,6 +250,7 @@ class RecordProcessor:
                     f"[{context.agent_name}] Error processing item {idx}: {str(e)}"
                 )
                 # Preserve source_snapshot and source_guid for first-stage source saving
+                input_record = item if isinstance(item, dict) else None
                 source_snapshot = None
                 source_guid = None
                 if context.is_first_stage:
@@ -258,6 +264,7 @@ class RecordProcessor:
                     error=f"Error processing item {idx}: {str(e)}",
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
+                    input_record=input_record,
                 )
                 results.append(failed_result)
         return results
@@ -294,7 +301,7 @@ class RecordProcessor:
             if isinstance(item, dict):
                 content = item.get("content", item)
                 source_guid = item.get("source_guid")
-                return content, source_guid, None
+                return content, source_guid, item
             else:
                 # Non-dict input in subsequent-stage: treat as raw content
                 return item, None, None

@@ -15,6 +15,7 @@ from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.utilities.safe_format import safe_format_error
 from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.core.result_collector import ResultCollector
 from agent_actions.core.types import (
     ProcessingContext,
     ProcessingMode,
@@ -383,17 +384,12 @@ class TargetGenerator:
             results = self.record_processor.process_batch(data, context)
 
         # Collect success results
-        output = []
-        for result in results:
-            if result.status == ProcessingStatus.SUCCESS:
-                output.extend(result.data)
-            elif result.status == ProcessingStatus.SKIPPED:
-                # Depending on how SKIPPED behavior should work for StandardStrategy
-                # usually means passthrough data
-                output.extend(result.data)
-            elif result.status == ProcessingStatus.FAILED:
-                # Log error but continue
-                logger.error(f"Failed to process record: {result.error}")
+        output = ResultCollector.collect_results(
+            results,
+            self.config.agent_config,
+            self.config.agent_name,
+            is_first_stage=False,
+        )
 
         # Determine output type (Main vs Side Output)
         # Note: Side output logic removed as per cleanup.

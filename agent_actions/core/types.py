@@ -131,6 +131,7 @@ class ProcessingResult:
 
     # For first-stage: preserve original input for source saving
     source_snapshot: Optional[Dict[str, Any]] = None
+    input_record: Optional[Dict[str, Any]] = None
 
     # Execution state
     executed: bool = True

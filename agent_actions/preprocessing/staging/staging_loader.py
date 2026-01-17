@@ -17,7 +17,8 @@ from agent_actions.preprocessing.transformation.string_transformer import Tokeni
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
+from agent_actions.core.result_collector import ResultCollector
+from agent_actions.core.types import ProcessingContext, ProcessingMode
 
 
 logger = logging.getLogger(__name__)
@@ -611,14 +612,12 @@ def _process_realtime_mode_with_record_processor(
     results = processor.process_batch(data_chunk, processing_context)
 
     # Extract data from results
-    processed_items = []
-    for result in results:
-        # Check specific statuses using enum
-        if result.status in [ProcessingStatus.SUCCESS, ProcessingStatus.SKIPPED]:
-            processed_items.extend(result.data)
-        elif result.status == ProcessingStatus.FAILED:
-            logger.error("Item processing failed: %s", result.error)
-            # Optionally preserve failed items or rely on retry_service exhaustion
+    processed_items = ResultCollector.collect_results(
+        results,
+        ctx.agent_config,
+        ctx.agent_name,
+        is_first_stage=True,
+    )
 
     # Write output
     file_writer = FileWriter(str(output_file_path))
