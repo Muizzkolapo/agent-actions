@@ -53,8 +53,24 @@ class RepromptService:
             on_exhausted: Behavior when exhausted ("return_last" | "raise")
 
         Raises:
-            ValueError: If validation UDF not found
+            ValueError: If validation_name is empty, max_attempts < 1,
+                       on_exhausted is invalid, or validation UDF not found
         """
+        # Validate validation_name
+        if not validation_name or not validation_name.strip():
+            raise ValueError("validation_name cannot be empty")
+
+        # Validate max_attempts
+        if max_attempts < 1:
+            raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
+
+        # Validate on_exhausted
+        valid_exhausted_options = ("return_last", "raise")
+        if on_exhausted not in valid_exhausted_options:
+            raise ValueError(
+                f"on_exhausted must be one of {valid_exhausted_options}, got: '{on_exhausted}'"
+            )
+
         self.validation_name = validation_name
         self.max_attempts = max_attempts
         self.on_exhausted = on_exhausted
@@ -121,7 +137,13 @@ class RepromptService:
             try:
                 is_valid = self.validation_func(response)
             except Exception as e:
-                logger.error(f"[{context}] Validation UDF error: {e}")
+                # Log validator exception with full context and traceback
+                # This helps distinguish validator bugs from actual validation failures
+                logger.warning(
+                    f"[{context}] Validation UDF '{self.validation_name}' raised exception "
+                    f"(treating as validation failure): {e.__class__.__name__}: {e}",
+                    exc_info=True,
+                )
                 is_valid = False
 
             if is_valid:
@@ -216,6 +238,9 @@ def create_reprompt_service_from_config(
     Returns:
         RepromptService instance or None if not enabled
 
+    Raises:
+        ValueError: If required 'validation' key is missing from config
+
     Example:
         config = {
             "validation": "check_no_forbidden_words",
@@ -226,6 +251,13 @@ def create_reprompt_service_from_config(
     """
     if not reprompt_config:
         return None
+
+    # Validate required "validation" key
+    if "validation" not in reprompt_config:
+        raise ValueError(
+            "Reprompt configuration missing required 'validation' field. "
+            "Example: {'validation': 'check_no_forbidden_words', 'max_attempts': 2}"
+        )
 
     return RepromptService(
         validation_name=reprompt_config["validation"],

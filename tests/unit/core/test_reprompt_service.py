@@ -481,3 +481,67 @@ class TestRepromptServiceEdgeCases:
         )
 
         assert result.passed is True
+
+
+class TestParameterValidation:
+    """Tests for parameter validation in RepromptService and config factory."""
+
+    def setup_method(self):
+        """Clear registry and register test UDF."""
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be valid")
+        def test_validator(response: dict) -> bool:
+            return response.get("valid", False)
+
+    def test_empty_validation_name_raises(self):
+        """Should raise ValueError for empty validation_name."""
+        with pytest.raises(ValueError, match="validation_name cannot be empty"):
+            RepromptService(validation_name="", max_attempts=2)
+
+    def test_whitespace_validation_name_raises(self):
+        """Should raise ValueError for whitespace-only validation_name."""
+        with pytest.raises(ValueError, match="validation_name cannot be empty"):
+            RepromptService(validation_name="   ", max_attempts=2)
+
+    def test_max_attempts_zero_raises(self):
+        """Should raise ValueError for max_attempts < 1."""
+        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
+            RepromptService(validation_name="test_validator", max_attempts=0)
+
+    def test_max_attempts_negative_raises(self):
+        """Should raise ValueError for negative max_attempts."""
+        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
+            RepromptService(validation_name="test_validator", max_attempts=-1)
+
+    def test_invalid_on_exhausted_raises(self):
+        """Should raise ValueError for invalid on_exhausted value."""
+        with pytest.raises(ValueError, match="on_exhausted must be one of"):
+            RepromptService(validation_name="test_validator", on_exhausted="invalid")
+
+    def test_typo_in_on_exhausted_raises(self):
+        """Should catch typos in on_exhausted (e.g., 'rais' instead of 'raise')."""
+        with pytest.raises(ValueError, match="on_exhausted must be one of"):
+            RepromptService(validation_name="test_validator", on_exhausted="rais")
+
+    def test_missing_validation_key_raises(self):
+        """Should raise ValueError when 'validation' key is missing from config."""
+        config = {"max_attempts": 3}  # Missing "validation" key
+
+        with pytest.raises(ValueError, match="missing required 'validation' field"):
+            create_reprompt_service_from_config(config)
+
+    def test_valid_on_exhausted_values_accepted(self):
+        """Should accept valid on_exhausted values."""
+        # "return_last" should work
+        service1 = RepromptService(validation_name="test_validator", on_exhausted="return_last")
+        assert service1.on_exhausted == "return_last"
+
+        # "raise" should work
+        service2 = RepromptService(validation_name="test_validator", on_exhausted="raise")
+        assert service2.on_exhausted == "raise"
+
+    def test_max_attempts_one_is_valid(self):
+        """Should accept max_attempts=1 (no retry)."""
+        service = RepromptService(validation_name="test_validator", max_attempts=1)
+        assert service.max_attempts == 1

@@ -51,6 +51,8 @@ class BatchProcessingService:
         result_processor: BatchResultProcessor,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         source_handler: Optional[Any] = None,
+        agent_indices: Optional[Dict[str, int]] = None,
+        dependency_configs: Optional[Dict[str, Dict]] = None,
     ):
         """Initialize processing service with dependencies.
 
@@ -60,12 +62,16 @@ class BatchProcessingService:
             result_processor: Processor for batch results
             registry_manager_factory: Factory function to create registry managers
             source_handler: Optional handler for source data
+            agent_indices: Dict mapping agent names to node indices (for reprompt)
+            dependency_configs: Dict mapping dependency names to configs (for reprompt)
         """
         self._client_resolver = client_resolver
         self._context_manager = context_manager
         self._result_processor = result_processor
         self._registry_manager_factory = registry_manager_factory
         self._source_handler = source_handler
+        self._agent_indices = agent_indices or {}
+        self._dependency_configs = dependency_configs or {}
 
     def process_batch_results(
         self,
@@ -331,6 +337,19 @@ class BatchProcessingService:
             )
             exhausted_recovery = None
 
+            # Run reprompt validation even when retry is disabled
+            # _retrieve_results_with_retry calls this internally, so only needed here
+            batch_results = self._validate_and_reprompt(
+                results=batch_results,
+                provider=provider,
+                context_map=context_map,
+                output_directory=output_directory,
+                file_name=file_name,
+                agent_config=agent_config,
+                agent_indices=self._agent_indices,
+                dependency_configs=self._dependency_configs,
+            )
+
         # Convert results to workflow format
         # exhausted_recovery is a dict mapping custom_id -> RecoveryMetadata for records that never succeeded
         processed_data = self._convert_batch_results_to_workflow_format(
@@ -486,95 +505,106 @@ class BatchProcessingService:
             file_name=file_name,
         )
 
+        # =========================================================================
+        # PHASE 1: RETRY - Ensure we have all records we can get
+        # =========================================================================
+        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
+
         if not retry_enabled:
-            return all_results, None
+            # No retry configured - skip to validation
+            pass
+        else:
+            # Check for missing records
+            expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
+            received_ids = BatchResultReconciler.collect_result_custom_ids(all_results)
+            missing_ids = expected_ids - received_ids
 
-        # Check for missing records
-        expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
-        received_ids = BatchResultReconciler.collect_result_custom_ids(all_results)
-        missing_ids = expected_ids - received_ids
+            if not missing_ids:
+                # All records received on first try - skip retry loop
+                pass
+            else:
+                # Per-record failure tracking: each record tracks its own failure count
+                # Initial failure = 1 (the initial batch didn't return this record)
+                record_failure_counts: Dict[str, int] = {rid: 1 for rid in missing_ids}
 
-        if not missing_ids:
-            return all_results, None
+                # Retry loop for missing records
+                retry_attempts = 0
 
-        # Per-record failure tracking: each record tracks its own failure count
-        # Initial failure = 1 (the initial batch didn't return this record)
-        record_failure_counts: Dict[str, int] = {rid: 1 for rid in missing_ids}
+                while missing_ids and retry_attempts < max_attempts:
+                    retry_attempts += 1
+                    logger.info(
+                        "Batch retry attempt %d/%d: resubmitting %d missing records",
+                        retry_attempts,
+                        max_attempts,
+                        len(missing_ids),
+                    )
 
-        # Retry loop for missing records
-        retry_attempts = 0
+                    # Resubmit missing records
+                    retry_results = self._resubmit_missing_records(
+                        provider=provider,
+                        missing_ids=missing_ids,
+                        context_map=context_map,
+                        output_directory=output_directory,
+                        file_name=file_name,
+                        agent_config=agent_config,
+                    )
 
-        while missing_ids and retry_attempts < max_attempts:
-            retry_attempts += 1
-            logger.info(
-                "Batch retry attempt %d/%d: resubmitting %d missing records",
-                retry_attempts,
-                max_attempts,
-                len(missing_ids),
-            )
+                    if retry_results:
+                        # Attach per-record recovery metadata based on individual failure counts
+                        for res in retry_results:
+                            if res.success:
+                                custom_id = res.custom_id
+                                failures = record_failure_counts.get(custom_id, 1)
+                                res.recovery_metadata = RecoveryMetadata(
+                                    retry=RetryMetadata(
+                                        attempts=failures + 1,  # failures + 1 success
+                                        failures=failures,
+                                        succeeded=True,
+                                        reason="missing",
+                                        timestamp=datetime.now(timezone.utc).isoformat(),
+                                    )
+                                )
 
-            # Resubmit missing records
-            retry_results = self._resubmit_missing_records(
-                provider=provider,
-                missing_ids=missing_ids,
-                context_map=context_map,
-                output_directory=output_directory,
-                file_name=file_name,
-                agent_config=agent_config,
-            )
+                        # Merge results
+                        all_results.extend(retry_results)
 
-            if retry_results:
-                # Attach per-record recovery metadata based on individual failure counts
-                for res in retry_results:
-                    if res.success:
-                        custom_id = res.custom_id
-                        failures = record_failure_counts.get(custom_id, 1)
-                        res.recovery_metadata = RecoveryMetadata(
+                        # Update missing IDs and increment failure counts for still-missing records
+                        new_received = BatchResultReconciler.collect_result_custom_ids(
+                            retry_results
+                        )
+                        missing_ids = missing_ids - new_received
+
+                    # Increment failure count for records that are still missing after this retry
+                    for rid in missing_ids:
+                        record_failure_counts[rid] = record_failure_counts.get(rid, 0) + 1
+
+                # Build per-record recovery metadata for exhausted records (still missing after all retries)
+                # This is used by passthrough processing for records that never succeeded
+                if retry_attempts > 0 and missing_ids:
+                    exhausted_recovery = {}
+                    for rid in missing_ids:
+                        failures = record_failure_counts.get(rid, 1)
+                        # For exhausted records: attempts = failures (no successful attempt to add)
+                        exhausted_recovery[rid] = RecoveryMetadata(
                             retry=RetryMetadata(
-                                attempts=failures + 1,  # failures + 1 success
+                                attempts=failures,
                                 failures=failures,
-                                succeeded=True,
+                                succeeded=False,
                                 reason="missing",
                                 timestamp=datetime.now(timezone.utc).isoformat(),
                             )
                         )
-
-                # Merge results
-                all_results.extend(retry_results)
-
-                # Update missing IDs and increment failure counts for still-missing records
-                new_received = BatchResultReconciler.collect_result_custom_ids(retry_results)
-                missing_ids = missing_ids - new_received
-
-            # Increment failure count for records that are still missing after this retry
-            for rid in missing_ids:
-                record_failure_counts[rid] = record_failure_counts.get(rid, 0) + 1
-
-        # Build per-record recovery metadata for exhausted records (still missing after all retries)
-        # This is used by passthrough processing for records that never succeeded
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
-        if retry_attempts > 0 and missing_ids:
-            exhausted_recovery = {}
-            for rid in missing_ids:
-                failures = record_failure_counts.get(rid, 1)
-                # For exhausted records: attempts = failures (no successful attempt to add)
-                exhausted_recovery[rid] = RecoveryMetadata(
-                    retry=RetryMetadata(
-                        attempts=failures,
-                        failures=failures,
-                        succeeded=False,
-                        reason="missing",
-                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    logger.warning(
+                        "Batch retry exhausted: %d records still missing after %d attempts",
+                        len(missing_ids),
+                        retry_attempts,
                     )
-                )
-            logger.warning(
-                "Batch retry exhausted: %d records still missing after %d attempts",
-                len(missing_ids),
-                retry_attempts,
-            )
 
-        # Phase 2: Validate and reprompt (after retry completes)
-        # Only validate successful results - skip retry-exhausted records
+        # =========================================================================
+        # PHASE 2: VALIDATE - Ensure all records meet validation conditions
+        # =========================================================================
+        # Validate all successful results we have (regardless of whether retry ran)
+        # Missing/exhausted records are not in all_results, so they're skipped
         all_results = self._validate_and_reprompt(
             results=all_results,
             provider=provider,
@@ -582,6 +612,8 @@ class BatchProcessingService:
             output_directory=output_directory,
             file_name=file_name,
             agent_config=agent_config,
+            agent_indices=self._agent_indices,
+            dependency_configs=self._dependency_configs,
         )
 
         return all_results, exhausted_recovery
@@ -708,6 +740,8 @@ class BatchProcessingService:
         output_directory: str,
         file_name: Optional[str],
         agent_config: Optional[Dict[str, Any]],
+        agent_indices: Optional[Dict[str, int]] = None,
+        dependency_configs: Optional[Dict[str, Dict]] = None,
     ) -> List[BatchResult]:
         """Validate results and reprompt failures with feedback.
 
@@ -721,19 +755,30 @@ class BatchProcessingService:
             output_directory: Output directory path
             file_name: Original file name
             agent_config: Agent configuration with reprompt settings
+            agent_indices: Dict mapping agent names to node indices (for dependency resolution)
+            dependency_configs: Dict mapping dependency names to configs (for dependency resolution)
 
         Returns:
             Consolidated list of batch results (original passes + reprompt results)
         """
+        import sys
+
         from agent_actions.core.reprompt_validation import get_validation_function
         from agent_actions.core.types import RepromptMetadata
         from agent_actions.llm_invocation.batch.processing.batch_task_preparator import (
             BatchTaskPreparator,
         )
+        from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         # Check if reprompt is enabled
         reprompt_config = (agent_config or {}).get("reprompt")
+        logger.debug(
+            "Batch reprompt check: agent_config has %d keys, reprompt_config=%s",
+            len(agent_config or {}),
+            reprompt_config,
+        )
         if not reprompt_config:
+            logger.debug("Reprompt not configured, skipping validation")
             return results
 
         validation_name = reprompt_config.get("validation")
@@ -744,6 +789,34 @@ class BatchProcessingService:
         max_attempts = reprompt_config.get("max_attempts", 2)
         on_exhausted = reprompt_config.get("on_exhausted", "return_last")
 
+        # Load validation UDF module before trying to get the function
+        # The UDF is registered via decorator at import time, so we need to import the module
+        #
+        # Priority for finding the validation module:
+        # 1. reprompt.validation_path (explicit path in reprompt config)
+        # 2. resolve_tools_path(agent_config) (standard tools path resolution)
+        validation_path = reprompt_config.get("validation_path")
+        if not validation_path:
+            validation_path = resolve_tools_path(agent_config or {})
+
+        # Get validation module name (defaults to "reprompt_validations")
+        validation_module = reprompt_config.get("validation_module", "reprompt_validations")
+
+        if validation_path:
+            if validation_path not in sys.path:
+                sys.path.insert(0, validation_path)
+                logger.debug("Added validation_path to sys.path for reprompt: %s", validation_path)
+
+            # Import the validation module to register the UDFs
+            self._import_validation_module(validation_module, validation_path)
+        else:
+            # No path configured - try direct import (module might be in PYTHONPATH)
+            logger.debug(
+                "No validation_path configured, attempting direct import of '%s'",
+                validation_module,
+            )
+            self._import_validation_module(validation_module, None)
+
         # Get validation function
         try:
             validation_func, feedback_message = get_validation_function(validation_name)
@@ -751,8 +824,11 @@ class BatchProcessingService:
             logger.error("Failed to get validation function: %s", e)
             return results
 
-        # Track per-record reprompt attempts
+        # Track per-record reprompt attempts (counts how many times each record failed)
         reprompt_attempts: Dict[str, int] = {}
+
+        # Track final validation status for each record (to avoid double validation calls)
+        validation_status: Dict[str, bool] = {}
 
         # Track which results have been replaced (for consolidation)
         result_map = {r.custom_id: r for r in results}
@@ -780,12 +856,16 @@ class BatchProcessingService:
                 try:
                     is_valid = validation_func(result.content)
                 except Exception as e:
-                    logger.error(
-                        "Validation UDF error for %s: %s",
+                    logger.warning(
+                        "Validation UDF error for %s (treating as failure): %s",
                         result.custom_id,
                         e,
+                        exc_info=True,
                     )
                     is_valid = False
+
+                # Store validation status for this record (avoids double validation later)
+                validation_status[result.custom_id] = is_valid
 
                 if not is_valid:
                     failed_results.append(result)
@@ -802,9 +882,12 @@ class BatchProcessingService:
                 len(failed_results),
             )
 
-            # Track attempts for failed records
+            # Track attempts for failed records (increment count per record)
             for failed_result in failed_results:
-                reprompt_attempts[failed_result.custom_id] = attempt
+                # Increment the count for this record each time it fails
+                reprompt_attempts[failed_result.custom_id] = (
+                    reprompt_attempts.get(failed_result.custom_id, 0) + 1
+                )
 
             # Check if exhausted
             if attempt >= max_attempts:
@@ -865,7 +948,10 @@ class BatchProcessingService:
             # Submit reprompt batch
             try:
                 reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
-                preparator = BatchTaskPreparator()
+                preparator = BatchTaskPreparator(
+                    agent_indices=agent_indices or {},
+                    dependency_configs=dependency_configs or {},
+                )
                 result = preparator.prepare_tasks(
                     agent_config=agent_config or {},
                     data=reprompt_records,
@@ -887,7 +973,7 @@ class BatchProcessingService:
                 )
 
                 # Wait for completion
-                final_status = self._wait_for_batch(provider, batch_id)
+                final_status = self._wait_for_batch_completion(provider, batch_id)
 
                 if final_status != BatchStatus.COMPLETED:
                     logger.error(
@@ -905,10 +991,13 @@ class BatchProcessingService:
                     # Preserve existing recovery metadata (e.g., retry metadata)
                     if reprompt_result.custom_id in result_map:
                         existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
-                        if existing_recovery and not reprompt_result.recovery_metadata:
-                            reprompt_result.recovery_metadata = existing_recovery
-                        elif existing_recovery and reprompt_result.recovery_metadata:
-                            # Merge: preserve retry, will add reprompt later
+
+                        # Always ensure recovery_metadata exists on the new result
+                        if not reprompt_result.recovery_metadata:
+                            reprompt_result.recovery_metadata = RecoveryMetadata()
+
+                        # Merge existing retry metadata if present
+                        if existing_recovery and existing_recovery.retry:
                             reprompt_result.recovery_metadata.retry = existing_recovery.retry
 
                     result_map[reprompt_result.custom_id] = reprompt_result
@@ -922,11 +1011,8 @@ class BatchProcessingService:
             if custom_id in result_map:
                 result = result_map[custom_id]
 
-                # Check final validation status
-                try:
-                    passed = validation_func(result.content)
-                except Exception:
-                    passed = False
+                # Use cached validation status (avoids redundant validation call)
+                passed = validation_status.get(custom_id, False)
 
                 # Add or update recovery metadata
                 if not result.recovery_metadata:
@@ -939,6 +1025,54 @@ class BatchProcessingService:
                 )
 
         return list(result_map.values())
+
+    def _import_validation_module(
+        self, validation_module: str, validation_path: Optional[str]
+    ) -> None:
+        """Import validation module to register UDFs via decorators.
+
+        Args:
+            validation_module: Name of the Python module (without .py extension)
+            validation_path: Path where the module is located (or None for PYTHONPATH)
+        """
+        import importlib
+        import importlib.util
+        import sys
+
+        try:
+            # Try direct import first (works if module is in sys.path or PYTHONPATH)
+            try:
+                importlib.import_module(validation_module)
+                logger.debug("Imported validation module: %s", validation_module)
+                return
+            except ImportError:
+                pass
+
+            # Try loading from file if validation_path is provided
+            if validation_path:
+                potential_file = Path(validation_path) / f"{validation_module}.py"
+                if potential_file.exists():
+                    spec = importlib.util.spec_from_file_location(validation_module, potential_file)
+                    if spec and spec.loader:
+                        module = importlib.util.module_from_spec(spec)
+                        sys.modules[validation_module] = module
+                        spec.loader.exec_module(module)
+                        logger.debug("Loaded validation module from file: %s", potential_file)
+                        return
+                else:
+                    logger.warning(
+                        "Validation module '%s' not found at: %s",
+                        validation_module,
+                        potential_file,
+                    )
+
+            logger.warning(
+                "Could not import validation module '%s'. "
+                "Ensure the module exists and validation_path is configured correctly.",
+                validation_module,
+            )
+        except Exception as e:
+            logger.warning("Failed to import validation module '%s': %s", validation_module, e)
 
     def _build_reprompt_feedback(self, failed_response: Any, feedback_message: str) -> str:
         """Build feedback message for reprompt batch.
