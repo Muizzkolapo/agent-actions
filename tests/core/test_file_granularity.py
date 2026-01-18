@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.orchestration.target_generator import TargetGenerator, GeneratorConfig
+from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.core.types import (
     ProcessingContext,
@@ -95,11 +95,13 @@ class TestFileGranularityValidation:
 
 
 class TestFileGranularityRouting:
-    """Test routing logic in TargetGenerator."""
+    """Test routing logic in ProcessingPipeline."""
 
     @pytest.mark.skip(reason="Integration test - requires full generate flow setup")
-    @patch("agent_actions.orchestration.target_generator.TargetGenerator._process_file_mode_tool")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
+    @patch(
+        "agent_actions.orchestration.processing_pipeline.ProcessingPipeline._process_file_mode_tool"
+    )
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
     def test_routes_to_file_mode_handler(self, mock_reader, mock_file_handler):
         """FILE + TOOL routes to _process_file_mode_tool."""
         mock_file_handler.return_value = [
@@ -116,8 +118,8 @@ class TestFileGranularityRouting:
             {"input": "data2"},
         ]
 
-        # Create TargetGenerator with FILE granularity
-        config = GeneratorConfig(
+        # Create ProcessingPipeline with FILE granularity
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -129,7 +131,7 @@ class TestFileGranularityRouting:
         processor_factory = MagicMock()
         processor_factory.create_processor.return_value = MagicMock()
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
 
         # Mock dependencies
         generator.output_handler = MagicMock()
@@ -147,13 +149,13 @@ class TestFileGranularityRouting:
         mock_file_handler.assert_called_once()
 
     @pytest.mark.skip(reason="Integration test - requires full generate flow setup")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
     def test_routes_to_record_mode_for_llm(self, mock_reader):
         """RECORD + LLM routes to process_batch."""
         mock_reader.return_value.read_input_file.return_value = [{"input": "data"}]
 
-        # Create TargetGenerator with RECORD granularity
-        config = GeneratorConfig(
+        # Create ProcessingPipeline with RECORD granularity
+        config = PipelineConfig(
             agent_config={
                 "granularity": "record",
                 "model_vendor": "anthropic",
@@ -175,7 +177,7 @@ class TestFileGranularityRouting:
         ]
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         # Mock dependencies
@@ -197,13 +199,13 @@ class TestFileGranularityRouting:
 class TestFileModeTool:
     """Test _process_file_mode_tool method."""
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_invokes_tool_with_full_array(self, mock_run):
         """Tool receives full array in FILE mode."""
         # Mock run_dynamic_agent to return array
         mock_run.return_value = ([{"output": "1"}, {"output": "2"}], True)
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -226,7 +228,7 @@ class TestFileModeTool:
         mock_processor.enrichment_pipeline = mock_enrichment
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         # Create context
@@ -253,7 +255,7 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.SUCCESS
         assert len(results[0].data) == 2
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_handles_n_to_m_transformation(self, mock_run):
         """Tool can transform N inputs to M outputs (e.g., 1→4)."""
         # Tool returns 4 outputs from 1 input
@@ -267,7 +269,7 @@ class TestFileModeTool:
             True,
         )
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -300,7 +302,7 @@ class TestFileModeTool:
         mock_processor.enrichment_pipeline = mock_enrichment
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         context = ProcessingContext(
@@ -321,12 +323,12 @@ class TestFileModeTool:
         # Each has unique ID
         assert all("target_id" in item for item in results[0].data)
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_error_if_tool_returns_non_array(self, mock_run):
         """Error if tool returns non-array in FILE mode."""
         mock_run.return_value = ({"not": "array"}, True)
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -339,7 +341,7 @@ class TestFileModeTool:
         mock_processor = MagicMock()
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         context = ProcessingContext(
@@ -356,12 +358,12 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.FAILED
         assert "must return array" in results[0].error
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_handles_empty_array(self, mock_run):
         """Handles empty array gracefully."""
         mock_run.return_value = ([], True)
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -383,7 +385,7 @@ class TestFileModeTool:
         mock_processor.enrichment_pipeline = mock_enrichment
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         context = ProcessingContext(
@@ -399,12 +401,12 @@ class TestFileModeTool:
         assert results[0].status == ProcessingStatus.SUCCESS
         assert len(results[0].data) == 0
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_handles_tool_exception(self, mock_run):
         """Handles exception from tool gracefully."""
         mock_run.side_effect = Exception("Tool execution failed")
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -417,7 +419,7 @@ class TestFileModeTool:
         mock_processor = MagicMock()
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         context = ProcessingContext(
@@ -437,7 +439,7 @@ class TestFileModeTool:
 class TestFileModeLineageChaining:
     """Test lineage chaining in FILE mode."""
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_lineage_chains_from_parent(self, mock_run):
         """FILE mode chains lineage from parent records."""
         # Tool preserves source_guid in output
@@ -449,7 +451,7 @@ class TestFileModeLineageChaining:
             True,
         )
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -467,7 +469,7 @@ class TestFileModeLineageChaining:
         mock_processor.enrichment_pipeline = EnrichmentPipeline()
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         # Input with parent lineage (simulating previous stage output)
@@ -505,12 +507,12 @@ class TestFileModeLineageChaining:
             # source_guid should be preserved at top level
             assert item.get("source_guid") == "parent-1"
 
-    @patch("agent_actions.orchestration.target_generator.run_dynamic_agent")
+    @patch("agent_actions.orchestration.processing_pipeline.run_dynamic_agent")
     def test_first_stage_starts_fresh_lineage(self, mock_run):
         """First stage starts fresh lineage without chaining."""
         mock_run.return_value = ([{"data": "value"}], True)
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={
                 "granularity": "file",
                 "kind": "tool",
@@ -527,7 +529,7 @@ class TestFileModeLineageChaining:
         mock_processor.enrichment_pipeline = EnrichmentPipeline()
         processor_factory.create_processor.return_value = mock_processor
 
-        generator = TargetGenerator(config, processor_factory)
+        generator = ProcessingPipeline(config, processor_factory)
         generator.record_processor = mock_processor
 
         context = ProcessingContext(

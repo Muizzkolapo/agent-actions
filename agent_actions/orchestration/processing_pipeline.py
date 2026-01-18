@@ -1,4 +1,4 @@
-"""Module for target data generation based on configuration."""
+"""Module for orchestrating data processing pipelines through configured agents."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class GeneratorConfig:
-    """Configuration for TargetGenerator."""
+class PipelineConfig:
+    """Configuration for ProcessingPipeline."""
 
     agent_config: Dict[str, Any]
     agent_name: str
@@ -40,11 +40,11 @@ class GeneratorConfig:
 
 
 @dataclass
-class BatchGenerationParams:
-    """Parameters for batch generation."""
+class BatchPipelineParams:
+    """Parameters for batch pipeline processing."""
 
-    generator_agent_config: Dict[str, Any]
-    generator_agent_name: str
+    pipeline_agent_config: Dict[str, Any]
+    pipeline_agent_name: str
     batch_file_path: str
     batch_base_directory: str
     batch_output_directory: str
@@ -62,8 +62,8 @@ class FilePathsConfig:
 
 
 @dataclass
-class GenerateParams:
-    """Parameters for target generation."""
+class ProcessParams:
+    """Parameters for pipeline processing."""
 
     agent_config: Dict[str, Any]
     agent_name: str
@@ -73,18 +73,20 @@ class GenerateParams:
     agent_configs: Optional[Dict[str, Any]] = None
 
 
-class TargetGenerator:
+class ProcessingPipeline:
     """
-    Responsible for generating target data from input files based on
-    configuration.
+    Orchestrates data processing workflows through configured agents.
+
+    Handles both batch and online processing modes, routing input files
+    through agent pipelines and generating enriched output files.
     """
 
-    def __init__(self, config: GeneratorConfig, processor_factory: ProcessorFactory):
+    def __init__(self, config: PipelineConfig, processor_factory: ProcessorFactory):
         """
-        Initialize the target generator.
+        Initialize the processing pipeline.
 
         Args:
-            config: GeneratorConfig with agent configuration
+            config: PipelineConfig with agent configuration
             processor_factory: Required factory for creating processors with DI
 
         Raises:
@@ -109,9 +111,9 @@ class TargetGenerator:
         self.is_tool_action = self.action_kind == "tool"
         if processor_factory is None:
             raise DependencyError(
-                "TargetGenerator requires processor_factory",
+                "ProcessingPipeline requires processor_factory",
                 {
-                    "component": "TargetGenerator",
+                    "component": "ProcessingPipeline",
                     "dependency": "processor_factory",
                     "agent_name": config.agent_name,
                 },
@@ -125,8 +127,8 @@ class TargetGenerator:
         self.output_handler = OutputHandler()
 
     @staticmethod
-    def _handle_batch_generation(params: BatchGenerationParams) -> str:
-        """Handle batch mode generation."""
+    def _handle_batch_generation(params: BatchPipelineParams) -> str:
+        """Handle batch mode processing."""
         agent_indices = None
         if params.batch_agent_configs:
             agent_indices = {
@@ -143,7 +145,7 @@ class TargetGenerator:
         file_name = Path(params.batch_file_path).name
 
         result = batch_service.submit_batch_job(
-            params.generator_agent_config,
+            params.pipeline_agent_config,
             file_name,
             data,
             params.batch_output_directory,
@@ -163,19 +165,19 @@ class TargetGenerator:
         placeholder = {
             "batch_job_id": result,
             "status": "submitted",
-            "agent": params.generator_agent_name,
+            "agent": params.pipeline_agent_name,
         }
         with open(output_file_path, "w", encoding="utf-8") as f:
             json.dump(placeholder, f)
         return str(output_file_path)
 
     @staticmethod
-    def generate(params: GenerateParams):
+    def process_file(params: ProcessParams):
         """
-        Static method for generating target data.
+        Static method for processing data through the pipeline.
 
         Args:
-            params: GenerateParams containing all generation parameters
+            params: ProcessParams containing all processing parameters
 
         Returns:
             Path to the generated output file
@@ -185,9 +187,9 @@ class TargetGenerator:
         """
         if params.processor_factory is None:
             raise DependencyError(
-                "TargetGenerator.generate requires processor_factory",
+                "ProcessingPipeline.process_file requires processor_factory",
                 {
-                    "method": "TargetGenerator.generate",
+                    "method": "ProcessingPipeline.process_file",
                     "dependency": "processor_factory",
                     "agent_name": params.agent_name,
                 },
@@ -196,24 +198,24 @@ class TargetGenerator:
         is_tool_action = params.agent_config.get("model_vendor") == TOOL_VENDOR
 
         if params.agent_config.get("run_mode") == "batch" and not is_tool_action:
-            return TargetGenerator._handle_batch_generation(
-                BatchGenerationParams(
-                    generator_agent_config=params.agent_config,
-                    generator_agent_name=params.agent_name,
+            return ProcessingPipeline._handle_batch_generation(
+                BatchPipelineParams(
+                    pipeline_agent_config=params.agent_config,
+                    pipeline_agent_name=params.agent_name,
                     batch_file_path=params.paths.file_path,
                     batch_base_directory=params.paths.base_directory,
                     batch_output_directory=params.paths.output_directory,
                     batch_agent_configs=params.agent_configs,
                 )
             )
-        generator = create_target_generator_from_params(
+        pipeline = create_processing_pipeline_from_params(
             agent_config=params.agent_config,
             agent_name=params.agent_name,
             idx=params.idx,
             processor_factory=params.processor_factory,
             agent_configs=params.agent_configs,
         )
-        return generator.process(
+        return pipeline.process(
             params.paths.file_path, params.paths.base_directory, params.paths.output_directory
         )
 
@@ -280,9 +282,9 @@ class TargetGenerator:
             output_directory: Directory for output files
         """
         result_path = self._handle_batch_generation(
-            BatchGenerationParams(
-                generator_agent_config=self.config.agent_config,
-                generator_agent_name=self.config.agent_name,
+            BatchPipelineParams(
+                pipeline_agent_config=self.config.agent_config,
+                pipeline_agent_name=self.config.agent_name,
                 batch_file_path=file_path,
                 batch_base_directory=base_directory,
                 batch_output_directory=output_directory,
@@ -487,31 +489,31 @@ class TargetGenerator:
             return [error_result]
 
 
-def create_target_generator(
-    config: GeneratorConfig, processor_factory: ProcessorFactory
-) -> TargetGenerator:
+def create_processing_pipeline(
+    config: PipelineConfig, processor_factory: ProcessorFactory
+) -> ProcessingPipeline:
     """
-    Factory function for creating a TargetGenerator instance.
+    Factory function for creating a ProcessingPipeline instance.
 
     Args:
-        config: GeneratorConfig with agent configuration
+        config: PipelineConfig with agent configuration
         processor_factory: Required factory for creating processors with DI
 
     Returns:
-        TargetGenerator instance
+        ProcessingPipeline instance
     """
-    return TargetGenerator(config, processor_factory)
+    return ProcessingPipeline(config, processor_factory)
 
 
-def create_target_generator_from_params(
+def create_processing_pipeline_from_params(
     agent_config: Dict[str, Any],
     agent_name: str,
     idx: int,
     processor_factory: ProcessorFactory,
     agent_configs: Optional[Dict[str, Any]] = None,
-) -> TargetGenerator:
+) -> ProcessingPipeline:
     """
-    Factory function for creating a TargetGenerator instance from individual parameters.
+    Factory function for creating a ProcessingPipeline instance from individual parameters.
 
     Args:
         agent_config: Configuration for the agent
@@ -521,9 +523,9 @@ def create_target_generator_from_params(
         agent_configs: Optional dictionary of all agent configurations
 
     Returns:
-        TargetGenerator instance
+        ProcessingPipeline instance
     """
-    config = GeneratorConfig(
+    config = PipelineConfig(
         agent_config=agent_config, agent_name=agent_name, idx=idx, agent_configs=agent_configs
     )
-    return TargetGenerator(config, processor_factory)
+    return ProcessingPipeline(config, processor_factory)

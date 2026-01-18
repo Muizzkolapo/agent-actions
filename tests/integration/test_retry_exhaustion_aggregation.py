@@ -1,7 +1,7 @@
 """
 Integration tests for retry exhaustion aggregation in online mode.
 
-Tests verify that TargetGenerator and StagingLoader correctly handle
+Tests verify that ProcessingPipeline and StagingLoader correctly handle
 EXHAUSTED ProcessingResult statuses based on the on_exhausted config.
 """
 
@@ -18,12 +18,12 @@ from agent_actions.core.types import (
     RetryMetadata,
 )
 from agent_actions.errors import AgentActionsException
-from agent_actions.orchestration.target_generator import TargetGenerator, GeneratorConfig
+from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 
-class TestTargetGeneratorExhaustedHandling:
-    """Tests for TargetGenerator aggregation of EXHAUSTED results."""
+class TestProcessingPipelineExhaustedHandling:
+    """Tests for ProcessingPipeline aggregation of EXHAUSTED results."""
 
     def _create_exhausted_result(
         self,
@@ -62,9 +62,9 @@ class TestTargetGeneratorExhaustedHandling:
             source_guid=source_guid,
         )
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_on_exhausted_raise_throws_exception(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -84,13 +84,13 @@ class TestTargetGeneratorExhaustedHandling:
             },
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Mock process_batch to return an EXHAUSTED result
         exhausted_result = self._create_exhausted_result()
@@ -113,9 +113,9 @@ class TestTargetGeneratorExhaustedHandling:
         assert exc_info.value.context["on_exhausted"] == "raise"
         assert exc_info.value.context["exhausted_records"] == 1
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_on_exhausted_return_last_writes_exhausted_record(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -141,13 +141,13 @@ class TestTargetGeneratorExhaustedHandling:
             },
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Mock process_batch to return an EXHAUSTED result
         exhausted_result = self._create_exhausted_result()
@@ -189,9 +189,9 @@ class TestTargetGeneratorExhaustedHandling:
         assert exhausted_record["content"]["summary"] is None
         assert exhausted_record["content"]["tags"] == []
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_mixed_results_success_and_exhausted(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -214,13 +214,13 @@ class TestTargetGeneratorExhaustedHandling:
             },
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Create mixed results
         success_result = self._create_success_result(
@@ -274,9 +274,9 @@ class TestTargetGeneratorExhaustedHandling:
         assert exhausted_records[0]["source_guid"] == "guid-exhausted"
         assert exhausted_records[0]["_recovery"]["retry"]["succeeded"] is False
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_on_exhausted_raise_with_mixed_results_still_raises(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -296,13 +296,13 @@ class TestTargetGeneratorExhaustedHandling:
             },
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Create mixed results: 2 success, 1 exhausted
         success1 = self._create_success_result(source_guid="guid-1")
@@ -333,9 +333,9 @@ class TestTargetGeneratorExhaustedHandling:
         assert "Retry exhausted" in str(exc_info.value)
         assert exc_info.value.context["exhausted_records"] == 1
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_exhausted_record_preserves_lineage(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -350,13 +350,13 @@ class TestTargetGeneratorExhaustedHandling:
             "retry": {"enabled": True, "max_attempts": 3},
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Create exhausted result with lineage in input_record
         exhausted_result = ProcessingResult(
@@ -401,9 +401,9 @@ class TestTargetGeneratorExhaustedHandling:
         assert exhausted_record["parent_target_id"] == "parent-xyz"
         assert exhausted_record["root_target_id"] == "root-123"
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
-    @patch("agent_actions.orchestration.target_generator.OutputHandler")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.OutputHandler")
     def test_default_on_exhausted_is_return_last(
         self, mock_output_handler, mock_file_reader, mock_record_processor
     ):
@@ -423,13 +423,13 @@ class TestTargetGeneratorExhaustedHandling:
             },
         }
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config=agent_config,
             agent_name="test_action",
             idx=1,
         )
         mock_factory = MagicMock(spec=ProcessorFactory)
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         exhausted_result = self._create_exhausted_result()
         mock_record_processor.return_value.process_batch.return_value = [exhausted_result]
