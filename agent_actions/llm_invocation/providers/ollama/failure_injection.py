@@ -6,7 +6,6 @@ in both online and batch modes.
 
 Environment variables:
     OLLAMA_FAIL_FIRST_N=2           Fail first N calls/records (online + batch)
-    REPROMPT_INJECT=true            Force malformed JSON to trigger reprompt (online)
 
 Usage:
     # Online mode - fail first 2 calls, 3rd succeeds
@@ -25,16 +24,6 @@ from typing import Set
 from agent_actions.errors import NetworkError
 
 logger = logging.getLogger(__name__)
-
-# Reprompt injection config (loaded once)
-_REPROMPT_INJECT = os.getenv("REPROMPT_INJECT", "").lower() == "true"
-
-if _REPROMPT_INJECT:
-    logger.info("Ollama reprompt injection enabled via REPROMPT_INJECT=true")
-
-# Malformed JSON sample to force parse failure (trigger reprompt validation)
-_REPROMPT_MALFORMED_SAMPLE = '```json\n{"forced": true,}\n```'
-_REPROMPT_SENTINEL_VALUE = "[REPROMPT_INJECTED]"
 
 # Module-level state
 _online_call_count = 0
@@ -122,30 +111,6 @@ def should_fail_batch_record(custom_id: str, record_index: int) -> bool:
             return True
 
     return False
-
-
-def maybe_inject_reprompt_failure(
-    content: object,
-    mode: str,
-    output_field: str = "raw_response",
-) -> object:
-    """
-    Inject malformed JSON to trigger reprompt on demand.
-
-    Args:
-        content: The normal response content
-        mode: "json" or "non_json"
-        output_field: Output field for non-JSON responses
-
-    Returns:
-        Either the original content or injected test response
-    """
-    if not _REPROMPT_INJECT:
-        return content
-    logger.info("[INJECTION] Reprompt forced via REPROMPT_INJECT=true")
-    if mode == "non_json":
-        return {output_field: _REPROMPT_SENTINEL_VALUE, "_reprompt_injected": True}
-    return _REPROMPT_MALFORMED_SAMPLE
 
 
 def get_injection_status() -> dict:
