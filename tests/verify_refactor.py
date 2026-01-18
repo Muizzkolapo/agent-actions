@@ -11,7 +11,10 @@ import sys
 sys.path.append(os.getcwd())
 
 from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
-from agent_actions.preprocessing.staging.staging_loader import generate_staging, StagingContext
+from agent_actions.preprocessing.staging.initial_stage_pipeline import (
+    process_initial_stage,
+    InitialStageContext,
+)
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.core.record_processor import RecordProcessor
 from agent_actions.core.types import ProcessingResult, ProcessingStatus
@@ -38,9 +41,9 @@ class TestRefactor(unittest.TestCase):
         if self.test_dir.exists():
             shutil.rmtree(self.test_dir)
 
-    @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.RecordProcessor")
     def test_initial_strategy_calls_record_processor(self, MockRecordProcessor):
-        """Verify generate_staging uses RecordProcessor."""
+        """Verify process_initial_stage uses RecordProcessor."""
         # Setup mock calls
         mock_instance = MockRecordProcessor.return_value
         mock_instance.process_batch.return_value = [
@@ -48,7 +51,7 @@ class TestRefactor(unittest.TestCase):
         ]
 
         # Added model_vendor to satisfy preflight validation
-        ctx = StagingContext(
+        ctx = InitialStageContext(
             agent_config={"run_mode": "online", "model_vendor": "openai"},
             agent_name="test_agent",
             file_path=str(self.input_file),
@@ -56,7 +59,7 @@ class TestRefactor(unittest.TestCase):
             output_directory=str(self.output_dir),
         )
 
-        generate_staging(ctx)
+        process_initial_stage(ctx)
 
         # Verify RecordProcessor was instantiated and called
         # Note: RecordProcessor init might verify keys, but we mock it.

@@ -9,7 +9,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, TYPE_CHECKING
 import asyncio
-from agent_actions.preprocessing.staging.staging_loader import generate_staging, StagingContext
+from agent_actions.preprocessing.staging.initial_stage_pipeline import (
+    process_initial_stage,
+    InitialStageContext,
+)
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 if TYPE_CHECKING:
@@ -120,8 +123,8 @@ class InitialStrategy(AgentStrategy):
         Returns:
             Path to the generated output file.
         """
-        return generate_staging(
-            StagingContext(
+        return process_initial_stage(
+            InitialStageContext(
                 agent_config=params.agent_config,
                 agent_name=params.agent_name,
                 file_path=params.file_path,

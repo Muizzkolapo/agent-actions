@@ -38,12 +38,11 @@ from .transformation.string_transformer import StringProcessor, Tokenizer
 from .context.context_preprocessor import ContextPreprocessor
 from .context.historical_node_loader import HistoricalNodeDataLoader
 
-# Staging submodule - Lazy imports to avoid circular dependencies
-# These imports are deferred because staging_loader imports BatchService,
+# Initial stage pipeline - Lazy imports to avoid circular dependencies
+# These imports are deferred because initial_stage_pipeline imports BatchService,
 # which imports DataTransformer, creating a circular dependency chain.
-# Use: from agent_actions.preprocessing.staging.staging_loader import generate_staging
-# from .staging.staging_loader import generate_staging
-# from .staging.staging_content import StagingContentLoader
+# Use: from agent_actions.preprocessing.staging.initial_stage_pipeline import process_initial_stage
+# from .staging.initial_stage_pipeline import process_initial_stage
 
 # Processing submodule - Lazy import to avoid circular dependencies
 # DataProcessor imports from processor_helpers, which imports agent_builder,
@@ -92,9 +91,9 @@ __all__ = [
     # Context
     "ContextPreprocessor",
     "HistoricalNodeDataLoader",
-    # Staging - Not exported to avoid circular imports
-    # Import directly: from agent_actions.preprocessing.staging.staging_loader
-    # import generate_staging
+    # Initial stage pipeline - Not exported to avoid circular imports
+    # Import directly: from agent_actions.preprocessing.staging.initial_stage_pipeline
+    # import process_initial_stage
     # Processing - Not exported to avoid circular imports
     # Import directly: from agent_actions.preprocessing.processing.data_processor
     # import DataProcessor

@@ -1,5 +1,12 @@
 """
-Module for staging data loading and processing.
+Module for initial stage pipeline processing.
+
+Handles the first stage of data processing workflows including:
+- Reading and validating input files
+- Preparing data (chunking, parsing, transforming)
+- Saving source data
+- Processing through RecordProcessor (batch or online mode)
+- Collecting and writing results
 """
 
 from dataclasses import dataclass
@@ -25,8 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class StagingContext:
-    """Context for staging data processing."""
+class InitialStageContext:
+    """Context for initial stage pipeline processing."""
 
     agent_config: dict
     agent_name: str
@@ -34,6 +41,10 @@ class StagingContext:
     base_directory: str
     output_directory: str
     idx: int = 0
+
+
+# Backward compatibility alias
+StagingContext = InitialStageContext
 
 
 @dataclass
@@ -178,15 +189,22 @@ def _validate_staged_data(
     )
 
 
-def generate_staging(ctx: StagingContext):
+def process_initial_stage(ctx: InitialStageContext):
     """
-    Processes a file by splitting its content into chunks or looping through its objects/rows,
-    and generating data using RecordProcessor.
+    Processes input files through the initial stage pipeline.
 
-    Refactored to use RecordProcessor directly, removing StagingContentLoader/ContentGenerator.
+    This is the entry point for first-stage processing, handling:
+    - File reading and validation
+    - Data preparation (chunking, parsing, etc.)
+    - Source data saving
+    - Processing via RecordProcessor (batch or online)
+    - Result collection and output
 
     Parameters:
-        ctx: StagingContext with all necessary parameters
+        ctx: InitialStageContext with all necessary parameters
+
+    Returns:
+        Path to the generated output file
     """
     from agent_actions.input_loading.file_reader import FileReader
 
@@ -582,7 +600,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
 
 
 def _process_realtime_mode_with_record_processor(
-    data_chunk, ctx: StagingContext, file_path, base_directory, output_directory
+    data_chunk, ctx: InitialStageContext, file_path, base_directory, output_directory
 ):
     """
     Process data in realtime mode using RecordProcessor.
@@ -622,3 +640,7 @@ def _process_realtime_mode_with_record_processor(
     # Write output
     file_writer = FileWriter(str(output_file_path))
     file_writer.write_staging(processed_items)
+
+
+# Backward compatibility alias
+generate_staging = process_initial_stage
