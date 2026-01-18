@@ -158,6 +158,8 @@ class BatchService:
                 result_processor=self._result_processor,
                 registry_manager_factory=self._registry_manager_factory,
                 source_handler=self._source_handler,
+                agent_indices=self.agent_indices,
+                dependency_configs=self.dependency_configs,
             )
         return self._processing_service
 
