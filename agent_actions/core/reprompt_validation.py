@@ -3,15 +3,21 @@ Reprompt validation UDF system.
 
 Provides decorator for registering validation functions and
 feedback message management.
+
+Thread-safe: All registry access is protected by a lock for concurrent environments.
 """
 
 from typing import Dict, Callable, Tuple
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 # Global registry: UDF name -> (function, message)
 _VALIDATION_REGISTRY: Dict[str, Tuple[Callable[[dict], bool], str]] = {}
+
+# Lock for thread-safe registry access
+_REGISTRY_LOCK = threading.Lock()
 
 
 def reprompt_validation(feedback_message: str):
@@ -43,8 +49,10 @@ def reprompt_validation(feedback_message: str):
 
     def decorator(func: Callable[[dict], bool]) -> Callable[[dict], bool]:
         func_name = func.__name__
-        _VALIDATION_REGISTRY[func_name] = (func, feedback_message)
-        logger.debug(f"Registered reprompt validation: {func_name}")
+        # Thread-safe registration
+        with _REGISTRY_LOCK:
+            _VALIDATION_REGISTRY[func_name] = (func, feedback_message)
+            logger.debug(f"Registered reprompt validation: {func_name}")
         return func
 
     return decorator
@@ -67,10 +75,12 @@ def get_validation_function(name: str) -> Tuple[Callable[[dict], bool], str]:
         validator, message = get_validation_function("check_no_forbidden_words")
         is_valid = validator(response)
     """
-    if name not in _VALIDATION_REGISTRY:
-        available = list(_VALIDATION_REGISTRY.keys())
-        raise ValueError(f"Validation UDF '{name}' not found. Available: {available}")
-    return _VALIDATION_REGISTRY[name]
+    # Thread-safe lookup
+    with _REGISTRY_LOCK:
+        if name not in _VALIDATION_REGISTRY:
+            available = list(_VALIDATION_REGISTRY.keys())
+            raise ValueError(f"Validation UDF '{name}' not found. Available: {available}")
+        return _VALIDATION_REGISTRY[name]
 
 
 def list_validation_functions() -> list[str]:
@@ -84,4 +94,6 @@ def list_validation_functions() -> list[str]:
         >>> list_validation_functions()
         ['check_no_forbidden_words', 'check_format', 'check_required_fields']
     """
-    return list(_VALIDATION_REGISTRY.keys())
+    # Thread-safe list copy
+    with _REGISTRY_LOCK:
+        return list(_VALIDATION_REGISTRY.keys())

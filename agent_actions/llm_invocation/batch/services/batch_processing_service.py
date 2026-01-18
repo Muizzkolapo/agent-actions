@@ -751,8 +751,11 @@ class BatchProcessingService:
             logger.error("Failed to get validation function: %s", e)
             return results
 
-        # Track per-record reprompt attempts
+        # Track per-record reprompt attempts (counts how many times each record failed)
         reprompt_attempts: Dict[str, int] = {}
+
+        # Track final validation status for each record (to avoid double validation calls)
+        validation_status: Dict[str, bool] = {}
 
         # Track which results have been replaced (for consolidation)
         result_map = {r.custom_id: r for r in results}
@@ -780,12 +783,16 @@ class BatchProcessingService:
                 try:
                     is_valid = validation_func(result.content)
                 except Exception as e:
-                    logger.error(
-                        "Validation UDF error for %s: %s",
+                    logger.warning(
+                        "Validation UDF error for %s (treating as failure): %s",
                         result.custom_id,
                         e,
+                        exc_info=True,
                     )
                     is_valid = False
+
+                # Store validation status for this record (avoids double validation later)
+                validation_status[result.custom_id] = is_valid
 
                 if not is_valid:
                     failed_results.append(result)
@@ -802,9 +809,12 @@ class BatchProcessingService:
                 len(failed_results),
             )
 
-            # Track attempts for failed records
+            # Track attempts for failed records (increment count per record)
             for failed_result in failed_results:
-                reprompt_attempts[failed_result.custom_id] = attempt
+                # Increment the count for this record each time it fails
+                reprompt_attempts[failed_result.custom_id] = (
+                    reprompt_attempts.get(failed_result.custom_id, 0) + 1
+                )
 
             # Check if exhausted
             if attempt >= max_attempts:
@@ -905,10 +915,13 @@ class BatchProcessingService:
                     # Preserve existing recovery metadata (e.g., retry metadata)
                     if reprompt_result.custom_id in result_map:
                         existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
-                        if existing_recovery and not reprompt_result.recovery_metadata:
-                            reprompt_result.recovery_metadata = existing_recovery
-                        elif existing_recovery and reprompt_result.recovery_metadata:
-                            # Merge: preserve retry, will add reprompt later
+
+                        # Always ensure recovery_metadata exists on the new result
+                        if not reprompt_result.recovery_metadata:
+                            reprompt_result.recovery_metadata = RecoveryMetadata()
+
+                        # Merge existing retry metadata if present
+                        if existing_recovery and existing_recovery.retry:
                             reprompt_result.recovery_metadata.retry = existing_recovery.retry
 
                     result_map[reprompt_result.custom_id] = reprompt_result
@@ -922,11 +935,8 @@ class BatchProcessingService:
             if custom_id in result_map:
                 result = result_map[custom_id]
 
-                # Check final validation status
-                try:
-                    passed = validation_func(result.content)
-                except Exception:
-                    passed = False
+                # Use cached validation status (avoids redundant validation call)
+                passed = validation_status.get(custom_id, False)
 
                 # Add or update recovery metadata
                 if not result.recovery_metadata:

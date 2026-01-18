@@ -372,3 +372,93 @@ class TestEdgeCases:
         assert flexible_validator("not a dict") is False
         assert flexible_validator(None) is False
         assert flexible_validator([]) is False
+
+
+class TestThreadSafety:
+    """Tests for thread-safe registry access."""
+
+    def setup_method(self):
+        """Clear registry before each test."""
+        _VALIDATION_REGISTRY.clear()
+
+    def test_concurrent_registration_and_lookup(self):
+        """Should handle concurrent registration and lookup without errors."""
+        import threading
+        import time
+
+        errors = []
+        registered_names = []
+
+        def register_validator(name):
+            """Register a validator with given name."""
+            try:
+
+                @reprompt_validation(f"Check {name}")
+                def validator(r):
+                    return True
+
+                # Override the function name
+                validator.__name__ = name
+                registered_names.append(name)
+            except Exception as e:
+                errors.append(e)
+
+        def list_validators():
+            """List validators multiple times."""
+            try:
+                for _ in range(50):
+                    list_validation_functions()
+                    time.sleep(0.001)  # Small delay to encourage race conditions
+            except Exception as e:
+                errors.append(e)
+
+        # First register some validators
+        for i in range(5):
+            register_validator(f"pre_check_{i}")
+
+        # Spawn threads for concurrent access
+        threads = []
+        for i in range(10):
+            # Register new validators concurrently
+            threads.append(threading.Thread(target=register_validator, args=(f"check_{i}",)))
+            # List validators concurrently
+            threads.append(threading.Thread(target=list_validators))
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should have no errors
+        assert len(errors) == 0, f"Errors during concurrent access: {errors}"
+
+    def test_concurrent_get_validation_function(self):
+        """Should handle concurrent get_validation_function calls."""
+        import threading
+
+        errors = []
+
+        # Register a validator first
+        @reprompt_validation("Test message")
+        def test_validator(r):
+            return True
+
+        def get_validator():
+            """Get validator multiple times."""
+            try:
+                for _ in range(100):
+                    func, msg = get_validation_function("test_validator")
+                    assert msg == "Test message"
+            except Exception as e:
+                errors.append(e)
+
+        # Spawn threads for concurrent get
+        threads = [threading.Thread(target=get_validator) for _ in range(10)]
+
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Should have no errors
+        assert len(errors) == 0, f"Errors during concurrent get: {errors}"
