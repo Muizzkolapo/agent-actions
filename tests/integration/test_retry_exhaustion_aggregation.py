@@ -1,7 +1,7 @@
 """
 Integration tests for retry exhaustion aggregation in online mode.
 
-Tests verify that ProcessingPipeline and StagingLoader correctly handle
+Tests verify that ProcessingPipeline and InitialStagePipeline correctly handle
 EXHAUSTED ProcessingResult statuses based on the on_exhausted config.
 """
 
@@ -487,17 +487,17 @@ class TestStagingLoaderExhaustedHandling:
             source_guid=source_guid,
         )
 
-    @patch("agent_actions.preprocessing.staging.staging_loader.FileWriter")
-    @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.FileWriter")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.RecordProcessor")
     def test_first_stage_on_exhausted_raise(
         self, mock_record_processor, mock_file_writer, tmp_path
     ):
         """
         First-stage processing with on_exhausted='raise' should raise exception.
         """
-        from agent_actions.preprocessing.staging.staging_loader import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
-            StagingContext,
+            InitialStageContext,
         )
 
         agent_config = {
@@ -520,7 +520,7 @@ class TestStagingLoaderExhaustedHandling:
         file_path = base_dir / "input.json"
         file_path.touch()
 
-        ctx = StagingContext(
+        ctx = InitialStageContext(
             agent_config=agent_config,
             agent_name="extract_action",
             file_path=str(file_path),
@@ -544,17 +544,17 @@ class TestStagingLoaderExhaustedHandling:
         assert "Retry exhausted" in str(exc_info.value)
         assert exc_info.value.context["on_exhausted"] == "raise"
 
-    @patch("agent_actions.preprocessing.staging.staging_loader.FileWriter")
-    @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.FileWriter")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.RecordProcessor")
     def test_first_stage_on_exhausted_return_last(
         self, mock_record_processor, mock_file_writer, tmp_path
     ):
         """
         First-stage processing with on_exhausted='return_last' should write exhausted record.
         """
-        from agent_actions.preprocessing.staging.staging_loader import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
-            StagingContext,
+            InitialStageContext,
         )
 
         agent_config = {
@@ -583,7 +583,7 @@ class TestStagingLoaderExhaustedHandling:
         file_path = base_dir / "input.json"
         file_path.touch()
 
-        ctx = StagingContext(
+        ctx = InitialStageContext(
             agent_config=agent_config,
             agent_name="extract_action",
             file_path=str(file_path),
@@ -617,15 +617,15 @@ class TestStagingLoaderExhaustedHandling:
         assert record["content"]["summary"] is None
         assert record["content"]["items"] == []
 
-    @patch("agent_actions.preprocessing.staging.staging_loader.FileWriter")
-    @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.FileWriter")
+    @patch("agent_actions.preprocessing.staging.initial_stage_pipeline.RecordProcessor")
     def test_first_stage_mixed_results(self, mock_record_processor, mock_file_writer, tmp_path):
         """
         First-stage processing with mixed SUCCESS and EXHAUSTED should include both.
         """
-        from agent_actions.preprocessing.staging.staging_loader import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
-            StagingContext,
+            InitialStageContext,
         )
 
         agent_config = {
@@ -644,7 +644,7 @@ class TestStagingLoaderExhaustedHandling:
         file_path = base_dir / "input.json"
         file_path.touch()
 
-        ctx = StagingContext(
+        ctx = InitialStageContext(
             agent_config=agent_config,
             agent_name="extract_action",
             file_path=str(file_path),
