@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError
+from agent_actions.utilities.module_loader import ensure_path_importable
 from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY, get_udf
 
 
@@ -49,24 +50,31 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
             error="User code path is not a directory",
             context=error_context,
         )
-    user_code_str = str(user_code_path.absolute())
-    if user_code_str not in sys.path:
-        sys.path.insert(0, user_code_str)
+
+    # Use centralized path management (thread-safe, cached)
+    ensure_path_importable(user_code_path)
+
     python_files = list(user_code_path.rglob("*.py"))
     python_files = [
         f for f in python_files if not f.name.startswith("_") and not f.name.startswith("test_")
     ]
+
     for py_file in python_files:
         try:
             relative_path = py_file.relative_to(user_code_path)
             module_name = str(relative_path.with_suffix("")).replace("/", ".").replace("\\", ".")
+
             if module_name in sys.modules:
                 continue
+
+            # Keep original module loading logic to preserve exception behavior
+            # (DuplicateFunctionError must bubble up directly)
             spec = importlib.util.spec_from_file_location(module_name, py_file)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[module_name] = module
                 spec.loader.exec_module(module)
+
         except DuplicateFunctionError:
             raise
         except Exception as e:
@@ -74,6 +82,7 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
             raise UDFLoadError(
                 module=module_name, file=str(py_file), error=str(e), context=error_context, cause=e
             ) from e
+
     return UDF_REGISTRY
 
 

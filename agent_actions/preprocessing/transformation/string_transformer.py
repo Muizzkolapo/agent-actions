@@ -10,6 +10,7 @@ from typing import List
 import tiktoken
 
 from agent_actions.errors import AgentActionsException, ConfigurationError
+from agent_actions.utilities.module_loader import ensure_path_importable
 
 # Optional dependencies
 try:
@@ -75,15 +76,9 @@ class StringProcessor:
                 function_name = full_function_name
 
             if tools_path:
-                tools_path_resolved = Path(tools_path).resolve()
-                # Add tools_path and all subdirectories to sys.path for nested module discovery
-                if str(tools_path_resolved) not in sys.path:
-                    sys.path.insert(0, str(tools_path_resolved))
-                for subdir in tools_path_resolved.rglob("*"):
-                    if subdir.is_dir() and not subdir.name.startswith("_"):
-                        subdir_str = str(subdir)
-                        if subdir_str not in sys.path:
-                            sys.path.insert(0, subdir_str)
+                # Use centralized path management with recursive subdirectory support
+                # This is thread-safe and cached
+                ensure_path_importable(tools_path, recursive=True)
 
             module = importlib.import_module(module_name)
             function = getattr(module, function_name)
@@ -305,8 +300,9 @@ class Tokenizer:
     ) -> List[str]:
         try:
             tools_path = os.environ.get("TOOLS_PATH", "tools")
-            if tools_path and tools_path not in sys.path:
-                sys.path.insert(0, str(Path(tools_path).resolve()))
+            if tools_path:
+                # Use centralized path management (thread-safe, cached)
+                ensure_path_importable(tools_path)
             module = importlib.import_module(split_method)
             function = getattr(module, split_method)
             return function(text, chunk_size, overlap, tokenizer_model)

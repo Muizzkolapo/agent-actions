@@ -15,6 +15,7 @@ from typing import Optional, Dict, Any, List, Callable, Set
 from agent_actions.core.types import RecoveryMetadata, RetryMetadata
 from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
+from agent_actions.utilities.module_loader import ensure_path_importable, load_module_from_path
 from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
     BatchContextManager,
@@ -803,9 +804,9 @@ class BatchProcessingService:
         validation_module = reprompt_config.get("validation_module", "reprompt_validations")
 
         if validation_path:
-            if validation_path not in sys.path:
-                sys.path.insert(0, validation_path)
-                logger.debug("Added validation_path to sys.path for reprompt: %s", validation_path)
+            # Use centralized path management (thread-safe, cached)
+            ensure_path_importable(validation_path)
+            logger.debug("Ensured validation_path is importable for reprompt: %s", validation_path)
 
             # Import the validation module to register the UDFs
             self._import_validation_module(validation_module, validation_path)
@@ -1035,42 +1036,24 @@ class BatchProcessingService:
             validation_module: Name of the Python module (without .py extension)
             validation_path: Path where the module is located (or None for PYTHONPATH)
         """
-        import importlib
-        import importlib.util
-        import sys
-
         try:
-            # Try direct import first (works if module is in sys.path or PYTHONPATH)
-            try:
-                importlib.import_module(validation_module)
-                logger.debug("Imported validation module: %s", validation_module)
-                return
-            except ImportError:
-                pass
-
-            # Try loading from file if validation_path is provided
-            if validation_path:
-                potential_file = Path(validation_path) / f"{validation_module}.py"
-                if potential_file.exists():
-                    spec = importlib.util.spec_from_file_location(validation_module, potential_file)
-                    if spec and spec.loader:
-                        module = importlib.util.module_from_spec(spec)
-                        sys.modules[validation_module] = module
-                        spec.loader.exec_module(module)
-                        logger.debug("Loaded validation module from file: %s", potential_file)
-                        return
-                else:
-                    logger.warning(
-                        "Validation module '%s' not found at: %s",
-                        validation_module,
-                        potential_file,
-                    )
-
-            logger.warning(
-                "Could not import validation module '%s'. "
-                "Ensure the module exists and validation_path is configured correctly.",
-                validation_module,
+            # Use centralized module loader with fallback import support
+            module = load_module_from_path(
+                module_name=validation_module,
+                module_path=validation_path,
+                execute=True,  # Trigger @reprompt_validation decorator
+                fallback_import=True,  # Try standard import if path loading fails
+                cache=True,
             )
+
+            if module:
+                logger.debug("Successfully imported validation module: %s", validation_module)
+            else:
+                logger.warning(
+                    "Could not import validation module '%s'. "
+                    "Ensure the module exists and validation_path is configured correctly.",
+                    validation_module,
+                )
         except Exception as e:
             logger.warning("Failed to import validation module '%s': %s", validation_module, e)
 

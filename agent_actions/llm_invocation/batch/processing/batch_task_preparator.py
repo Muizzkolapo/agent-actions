@@ -14,6 +14,7 @@ from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.filtering.guard_handler import GuardHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.module_loader import ensure_path_importable
 from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.llm_invocation.batch.core.batch_models import (
     PreparedBatchTasks,
@@ -354,8 +355,8 @@ class BatchTaskPreparator:
 
     def _add_tools_to_path(self, tools_path: Optional[str]) -> None:
         """Add tools path to sys.path if not already present."""
-        if tools_path and tools_path not in sys.path:
-            sys.path.insert(0, tools_path)
+        if tools_path:
+            ensure_path_importable(tools_path)
 
     def _get_filter_service(self):
         """Get filter service instance."""
