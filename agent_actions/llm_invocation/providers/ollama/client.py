@@ -21,6 +21,7 @@ from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 from agent_actions.llm_invocation.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
+    maybe_inject_reprompt_failure,
 )
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,8 @@ class OllamaClient(BaseClient):
 
         # Parse JSON response
         content = response.message.content
+        # Optional reprompt injection (forces malformed JSON for testing)
+        content = maybe_inject_reprompt_failure(content, mode="json")
 
         if isinstance(content, str):
             try:
@@ -237,5 +240,12 @@ class OllamaClient(BaseClient):
         maybe_inject_online_failure(model)
 
         output_field = agent_config.get("output_field", "raw_response")
-        response_content = {output_field: response.message.content}
+        injected = maybe_inject_reprompt_failure(
+            response.message.content,
+            mode="non_json",
+            output_field=output_field,
+        )
+        if isinstance(injected, dict):
+            return [injected]
+        response_content = {output_field: injected}
         return [response_content]
