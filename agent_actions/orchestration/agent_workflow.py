@@ -14,6 +14,7 @@ from rich.console import Console
 
 from agent_actions.configuration.factory import create_agent_runner
 from agent_actions.input_loading.udf_loader import discover_udfs
+from agent_actions.utilities.module_loader import ensure_path_importable
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.logging import CorrelationContext
 from agent_actions.orchestration.action_level_executor import (
@@ -311,17 +312,18 @@ class AgentWorkflow:
 
     def _discover_udfs_from_path(self, path: str, is_primary: bool) -> int:
         """Discover UDFs from a specific path."""
-        abs_path = str(Path(path).resolve())
-        if abs_path not in sys.path:
-            sys.path.insert(0, abs_path)
+        abs_path = Path(path).absolute()
 
-        if Path(abs_path).exists() and Path(abs_path).is_dir():
+        if abs_path.exists() and abs_path.is_dir():
+            # Use centralized path management (thread-safe, cached)
+            ensure_path_importable(abs_path)
+
             if not is_primary:
                 self.console.print(f"[cyan]🔍 Discovering UDFs in {abs_path}...[/cyan]")
             else:
                 self.console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
 
-            registry = discover_udfs(Path(abs_path))
+            registry = discover_udfs(abs_path)
 
             if is_primary:
                 self.console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]")

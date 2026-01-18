@@ -9,6 +9,7 @@ import json
 import sys
 from typing import Dict, Any, Optional, List, Union
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
+from agent_actions.utilities.module_loader import ensure_path_importable
 from .services import (
     PromptService,
     ContextService,
@@ -71,8 +72,8 @@ def create_dynamic_agent(
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
-    if tools_path and tools_path not in sys.path:
-        sys.path.insert(0, tools_path)
+    if tools_path:
+        ensure_path_importable(tools_path)
 
     # Get model vendor and check if tool
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
