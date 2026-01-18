@@ -10,7 +10,7 @@ import sys
 # Ensure we can import from root
 sys.path.append(os.getcwd())
 
-from agent_actions.orchestration.target_generator import TargetGenerator, GeneratorConfig
+from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
 from agent_actions.preprocessing.staging.staging_loader import generate_staging, StagingContext
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.core.record_processor import RecordProcessor
@@ -67,15 +67,15 @@ class TestRefactor(unittest.TestCase):
         mock_instance.process_batch.assert_called_once()
         print("InitialStrategy verified to use RecordProcessor!")
 
-    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
+    @patch("agent_actions.orchestration.processing_pipeline.RecordProcessor")
     def test_standard_strategy_calls_record_processor(self, MockRecordProcessor):
-        """Verify TargetGenerator uses RecordProcessor."""
+        """Verify ProcessingPipeline uses RecordProcessor."""
         mock_instance = MockRecordProcessor.return_value
         mock_instance.process_batch.return_value = [
             ProcessingResult.success(data=[{"content": "processed"}])
         ]
 
-        config = GeneratorConfig(
+        config = PipelineConfig(
             agent_config={"run_mode": "online", "model_vendor": "openai"},
             agent_name="test_agent",
             idx=0,
@@ -84,7 +84,7 @@ class TestRefactor(unittest.TestCase):
         # Processor factory mock (not used for RecordProcessor creation anymore but needed for init)
         mock_factory = MagicMock(spec=ProcessorFactory)
 
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         generator.process(str(self.json_file), str(self.test_dir), str(self.output_dir))
 

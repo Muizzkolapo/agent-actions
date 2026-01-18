@@ -6,16 +6,16 @@ import sys
 # Ensure we can import from root
 sys.path.append(os.getcwd())
 
-from agent_actions.orchestration.target_generator import (
-    TargetGenerator,
-    GeneratorConfig,
-    BatchGenerationParams,
+from agent_actions.orchestration.processing_pipeline import (
+    ProcessingPipeline,
+    PipelineConfig,
+    BatchPipelineParams,
 )
 
 
 class TestBatchRefactor(unittest.TestCase):
-    @patch("agent_actions.orchestration.target_generator.BatchService")
-    @patch("agent_actions.orchestration.target_generator.FileReader")
+    @patch("agent_actions.orchestration.processing_pipeline.BatchService")
+    @patch("agent_actions.orchestration.processing_pipeline.FileReader")
     def test_batch_generation_calls_service_correctly(self, MockFileReader, MockBatchService):
         """Verify _handle_batch_generation calls BatchService.submit_batch_job with correct arguments."""
 
@@ -25,21 +25,21 @@ class TestBatchRefactor(unittest.TestCase):
 
         MockFileReader.return_value.read.return_value = [{"some": "data"}]
 
-        # TargetGenerator instance (mocking dependencies)
-        config = GeneratorConfig(
+        # ProcessingPipeline instance (mocking dependencies)
+        config = PipelineConfig(
             agent_config={"run_mode": "batch", "model_vendor": "openai"},
             agent_name="test_agent",
             idx=0,
         )
         mock_factory = MagicMock()
 
-        generator = TargetGenerator(config, mock_factory)
+        generator = ProcessingPipeline(config, mock_factory)
 
         # Call the private method via static access or public process if possible
         # Since _handle_batch_generation is static but used by instance, we can call it via class
-        params = BatchGenerationParams(
-            generator_agent_config=config.agent_config,
-            generator_agent_name="test_agent",
+        params = BatchPipelineParams(
+            pipeline_agent_config=config.agent_config,
+            pipeline_agent_name="test_agent",
             batch_file_path="/path/to/input.json",
             batch_base_directory="/path/to",
             batch_output_directory="/path/to/output",
@@ -50,7 +50,7 @@ class TestBatchRefactor(unittest.TestCase):
             patch("pathlib.Path.mkdir") as mock_mkdir,
             patch("builtins.open", unittest.mock.mock_open()) as mock_file,
         ):
-            result_path = TargetGenerator._handle_batch_generation(params)
+            result_path = ProcessingPipeline._handle_batch_generation(params)
 
         # Check call
         mock_batch_service.submit_batch_job.assert_called_once()

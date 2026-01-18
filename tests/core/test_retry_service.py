@@ -152,7 +152,7 @@ class TestRetryServiceOnlineExhausted:
         operation = Mock(side_effect=error)
 
         # Changed behavior: retry_service always returns result, never raises
-        # The decision to raise is made by TargetGenerator/BatchResultProcessor
+        # The decision to raise is made by ProcessingPipeline/BatchResultProcessor
         result = service.execute(operation)
 
         assert result.response is None

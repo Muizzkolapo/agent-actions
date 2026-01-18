@@ -13,7 +13,7 @@ from agent_actions.preprocessing.staging.staging_loader import generate_staging,
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 if TYPE_CHECKING:
-    from agent_actions.orchestration.target_generator import TargetGenerator, GeneratorConfig
+    from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
 
 
 @dataclass
@@ -63,7 +63,7 @@ class AgentStrategy(ABC):
 
     def _execute_generate_target(self, params: StrategyExecutionParams) -> str:
         """
-        Helper method to generate target data.
+        Helper method to process data through pipeline.
 
         Args:
             params: StrategyExecutionParams with all required parameters
@@ -74,16 +74,18 @@ class AgentStrategy(ABC):
         if self.processor_factory is None:
             raise RuntimeError("BaseAgentStrategy requires processor_factory")
         # Import here to avoid circular dependency
-        from agent_actions.orchestration.target_generator import create_target_generator_from_params
+        from agent_actions.orchestration.processing_pipeline import (
+            create_processing_pipeline_from_params,
+        )
 
-        generator = create_target_generator_from_params(
+        pipeline = create_processing_pipeline_from_params(
             agent_config=params.agent_config,
             agent_name=params.agent_name,
             idx=params.idx,
             processor_factory=self.processor_factory,
             agent_configs=params.agent_configs,
         )
-        result = generator.process(params.file_path, params.base_directory, params.output_directory)
+        result = pipeline.process(params.file_path, params.base_directory, params.output_directory)
         if asyncio.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()
