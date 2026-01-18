@@ -1036,23 +1036,26 @@ class BatchProcessingService:
             validation_module: Name of the Python module (without .py extension)
             validation_path: Path where the module is located (or None for PYTHONPATH)
         """
-        # Use centralized module loader with fallback import support
-        module = load_module_from_path(
-            module_name=validation_module,
-            module_path=validation_path,
-            execute=True,  # Trigger @reprompt_validation decorator
-            fallback_import=True,  # Try standard import if path loading fails
-            cache=True,
-        )
-
-        if module:
-            logger.debug("Successfully imported validation module: %s", validation_module)
-        else:
-            logger.warning(
-                "Could not import validation module '%s'. "
-                "Ensure the module exists and validation_path is configured correctly.",
-                validation_module,
+        try:
+            # Use centralized module loader with fallback import support
+            module = load_module_from_path(
+                module_name=validation_module,
+                module_path=validation_path,
+                execute=True,  # Trigger @reprompt_validation decorator
+                fallback_import=True,  # Try standard import if path loading fails
+                cache=True,
             )
+
+            if module:
+                logger.debug("Successfully imported validation module: %s", validation_module)
+            else:
+                logger.warning(
+                    "Could not import validation module '%s'. "
+                    "Ensure the module exists and validation_path is configured correctly.",
+                    validation_module,
+                )
+        except Exception as e:
+            logger.warning("Failed to import validation module '%s': %s", validation_module, e)
 
     def _build_reprompt_feedback(self, failed_response: Any, feedback_message: str) -> str:
         """Build feedback message for reprompt batch.

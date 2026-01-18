@@ -32,12 +32,39 @@ from agent_actions.utilities.module_loader import (
 
 @pytest.fixture(autouse=True)
 def cleanup_caches():
-    """Clear caches before and after each test."""
+    """Clear caches and test modules before and after each test."""
+    # Track modules that exist before the test
+    modules_before = set(sys.modules.keys())
+
     clear_path_cache()
     clear_module_cache()
     yield
     clear_path_cache()
     clear_module_cache()
+
+    # Clean up modules that were added during the test
+    # This prevents test pollution across test cases
+    test_module_prefixes = (
+        "sample_module",
+        "decorator_module",
+        "subpackage",
+        "test_module",
+        "test_sys_modules",
+        "test_clear",
+        "concurrent_test",
+        "bad_module",
+        "no_exec_module",
+        "transient_missing",
+        "cached_missing",
+    )
+    modules_to_remove = [
+        name
+        for name in sys.modules
+        if name not in modules_before
+        and any(name.startswith(prefix) for prefix in test_module_prefixes)
+    ]
+    for name in modules_to_remove:
+        del sys.modules[name]
 
 
 @pytest.fixture
@@ -258,6 +285,43 @@ def test_load_module_from_path_executes_decorators(temp_module_dir):
     assert "registered_function" in registry
 
 
+def test_load_module_from_path_no_execute_skips_decorators(tmp_path):
+    """Test that execute=False does NOT trigger decorator side effects.
+
+    When execute=False, the module is loaded but NOT executed, meaning:
+    - The module object exists and is registered in sys.modules
+    - But none of the module-level code runs (no attribute definitions, no decorators)
+    - This is useful for introspection without side effects
+    """
+    # Create a module with decorator side effects
+    decorator_module = tmp_path / "no_exec_module.py"
+    decorator_module.write_text("""
+# Module that registers via decorator
+_REGISTRY = []
+
+def register(func):
+    _REGISTRY.append(func.__name__)
+    return func
+
+@register
+def registered_function():
+    return "I was registered"
+
+def get_registry():
+    return _REGISTRY
+""")
+
+    # Load with execute=False
+    module = load_module_from_path("no_exec_module", decorator_module, execute=False, cache=False)
+
+    assert module is not None
+    # Module is NOT executed, so it has no attributes defined
+    # (module-level code never ran)
+    assert not hasattr(module, "_REGISTRY")
+    assert not hasattr(module, "register")
+    assert not hasattr(module, "registered_function")
+
+
 def test_load_module_from_path_caching(temp_module_dir):
     """Test that module caching prevents re-execution."""
     module_path = temp_module_dir / "decorator_module.py"
@@ -315,6 +379,43 @@ def test_load_module_from_path_missing_file(temp_module_dir):
     module = load_module_from_path("missing", missing_path)
 
     assert module is None
+
+
+def test_load_module_from_path_cache_failures_false(temp_module_dir):
+    """Test that cache_failures=False (default) doesn't cache None results."""
+    missing_path = temp_module_dir / "transient_missing.py"
+
+    # First load should fail and return None
+    module1 = load_module_from_path(
+        "transient_missing", missing_path, cache=True, cache_failures=False
+    )
+    assert module1 is None
+
+    # Create the file now (simulating transient availability)
+    missing_path.write_text("VALUE = 123")
+
+    # Second load should succeed because failure was NOT cached
+    module2 = load_module_from_path(
+        "transient_missing", missing_path, cache=True, cache_failures=False
+    )
+    assert module2 is not None
+    assert module2.VALUE == 123
+
+
+def test_load_module_from_path_cache_failures_true(temp_module_dir):
+    """Test that cache_failures=True caches None results."""
+    missing_path = temp_module_dir / "cached_missing.py"
+
+    # First load should fail and cache the None result
+    module1 = load_module_from_path("cached_missing", missing_path, cache=True, cache_failures=True)
+    assert module1 is None
+
+    # Create the file now
+    missing_path.write_text("VALUE = 456")
+
+    # Second load should still return None because failure was cached
+    module2 = load_module_from_path("cached_missing", missing_path, cache=True, cache_failures=True)
+    assert module2 is None  # Cached None
 
 
 def test_load_module_from_path_directory(temp_module_dir):

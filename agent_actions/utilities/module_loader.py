@@ -26,10 +26,21 @@ Thread Safety:
     All functions are thread-safe using a reentrant lock (RLock).
     Concurrent calls to add paths or load modules are properly synchronized.
 
+    Exception handling: If a module raises during exec_module(), the exception
+    propagates after the lock is released. The module may be partially initialized
+    but will be cached to prevent repeated failures.
+
 Caching:
     - Path cache: Prevents redundant sys.path insertions
     - Module cache: Prevents re-execution of already loaded modules
+    - Module failures: By default, failed loads (None) are NOT cached, allowing
+      retry on transient failures. Set cache_failures=True to cache failures.
     - Cache invalidation: Use clear_*_cache() functions (testing only)
+
+Performance Notes:
+    - The recursive=True option in ensure_path_importable() traverses the entire
+      directory tree. For large directories, this may be slow on first call.
+      Subsequent calls are fast due to caching.
 """
 
 import importlib
@@ -38,11 +49,25 @@ import logging
 import sys
 import threading
 from contextlib import contextmanager
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
 logger = logging.getLogger(__name__)
+
+# Public API
+__all__ = [
+    # Low-level API
+    "ensure_path_importable",
+    "ensure_paths_importable",
+    "importable_path",
+    "clear_path_cache",
+    # Mid-level API
+    "load_module_from_path",
+    "clear_module_cache",
+    # High-level API
+    "discover_and_load_udfs",
+    "discover_and_load_udfs_recursive",
+]
 
 # Thread-safe caches
 _LOCK = threading.RLock()
@@ -60,10 +85,13 @@ def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -
 
     Args:
         path: Directory path to add to sys.path
-        recursive: If True, also add all subdirectories (for nested packages)
+        recursive: If True, also add all subdirectories (for nested packages).
+            Note: For large directory trees, this may be slow on first call
+            as it traverses the entire tree. Subsequent calls are fast due
+            to caching. The lock is NOT held during traversal.
 
     Returns:
-        True if path was added, False if already present
+        True if path was added to cache, False if already cached
 
     Example:
         >>> ensure_path_importable("/path/to/user/code")
@@ -85,12 +113,12 @@ def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -
         # Add to sys.path if not already present
         if path_str not in sys.path:
             sys.path.insert(0, path_str)
-            logger.debug(f"Added to sys.path: {path_str}")
+            logger.debug("Added to sys.path: %s", path_str)
 
         # Update cache
         _PATH_CACHE.add(path_str)
 
-    # Handle recursive subdirectories
+    # Handle recursive subdirectories (lock is NOT held during traversal)
     if recursive:
         path_obj = Path(path)
         if path_obj.is_dir():
@@ -199,15 +227,21 @@ def load_module_from_path(
     execute: bool = True,
     fallback_import: bool = True,
     cache: bool = True,
+    cache_failures: bool = False,
 ) -> Optional[Any]:
     """Load a module from a file path or standard import (thread-safe, cached).
 
     Args:
         module_name: Name of the module (e.g., "my_module")
         module_path: Optional path to .py file or directory containing module
-        execute: If True, execute the module (triggers decorators)
+        execute: If True, execute the module (triggers decorators).
+            If False, the module is loaded but not executed, so decorators
+            like @udf_tool will NOT be triggered.
         fallback_import: If True, try standard import if path load fails
         cache: If True, return cached module on subsequent calls
+        cache_failures: If True, cache None results to avoid repeated failures.
+            If False (default), failed loads are not cached, allowing retry
+            on transient failures (e.g., file being written).
 
     Returns:
         The loaded module object, or None if loading failed
@@ -219,7 +253,7 @@ def load_module_from_path(
         >>> # Load with fallback to standard import
         >>> module = load_module_from_path("json", fallback_import=True)
 
-        >>> # Load without execution (inspect only)
+        >>> # Load without execution (inspect only, decorators NOT triggered)
         >>> module = load_module_from_path("config", execute=False)
 
     Note:
@@ -232,7 +266,7 @@ def load_module_from_path(
     with _LOCK:
         # Check cache first
         if cache and cache_key in _MODULE_CACHE:
-            logger.debug(f"Returning cached module: {module_name}")
+            logger.debug("Returning cached module: %s", module_name)
             return _MODULE_CACHE[cache_key]
 
         module = None
@@ -252,7 +286,7 @@ def load_module_from_path(
                     elif module_file.exists():
                         module_path_obj = module_file
                     else:
-                        logger.warning(f"No valid module file found in {module_path}")
+                        logger.warning("No valid module file found in %s", module_path)
                         module_path_obj = None
 
                 # Load from file
@@ -270,32 +304,36 @@ def load_module_from_path(
                             # Execute module (triggers decorator registration)
                             spec.loader.exec_module(module)
                             logger.debug(
-                                f"Loaded and executed module: {module_name} from {module_path_obj}"
+                                "Loaded and executed module: %s from %s",
+                                module_name,
+                                module_path_obj,
                             )
                         else:
                             logger.debug(
-                                f"Loaded module (not executed): {module_name} from {module_path_obj}"
+                                "Loaded module (not executed): %s from %s",
+                                module_name,
+                                module_path_obj,
                             )
                     else:
                         logger.warning(
-                            f"Could not create spec for {module_name} from {module_path_obj}"
+                            "Could not create spec for %s from %s", module_name, module_path_obj
                         )
 
             except Exception as e:
-                logger.warning(f"Failed to load module {module_name} from path: {e}")
+                logger.warning("Failed to load module %s from path: %s", module_name, e)
                 module = None
 
         # Fallback to standard import
         if module is None and fallback_import:
             try:
                 module = importlib.import_module(module_name)
-                logger.debug(f"Loaded module via standard import: {module_name}")
+                logger.debug("Loaded module via standard import: %s", module_name)
             except ImportError as e:
-                logger.warning(f"Could not import module {module_name}: {e}")
+                logger.warning("Could not import module %s: %s", module_name, e)
                 module = None
 
-        # Cache the result (even if None to avoid repeated failures)
-        if cache:
+        # Cache the result (only cache failures if cache_failures=True)
+        if cache and (module is not None or cache_failures):
             _MODULE_CACHE[cache_key] = module
 
         return module
