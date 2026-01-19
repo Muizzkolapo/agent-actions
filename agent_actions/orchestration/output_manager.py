@@ -1,7 +1,7 @@
 """
 Agent output management module.
 
-Handles previous output loading, passthrough creation, and loop correlation.
+Handles previous output loading, passthrough creation, and version correlation.
 Extracted from agent_workflow.py to consolidate output handling.
 """
 
@@ -38,7 +38,7 @@ class AgentOutputManager:
     Responsibilities:
     - Load previous agent outputs with metadata
     - Create passthrough outputs for skipped agents
-    - Setup loop output correlation
+    - Setup version output correlation
     - Manage input directory resolution
     """
 
@@ -438,29 +438,29 @@ class AgentOutputManager:
             if upstream_dirs:
                 return upstream_dirs
 
-        # Check if agent consumes loop outputs
-        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
+        # Check if agent consumes version outputs
+        version_consumption_map = self.loop_correlator.detect_explicit_version_consumption(
             self.execution_order, self.agent_configs
         )
 
-        if current_agent in loop_consumption_map:
-            consumption_config = loop_consumption_map[current_agent]
-            loop_sources = consumption_config["loop_agents"]
+        if current_agent in version_consumption_map:
+            consumption_config = version_consumption_map[current_agent]
+            version_sources = consumption_config["version_agents"]
             pattern = consumption_config["pattern"]
 
             correlated_dir = self.loop_correlator.prepare_correlated_input(
-                current_agent, loop_sources, idx
+                current_agent, version_sources, idx
             )
 
             if correlated_dir:
                 self.console.print(
                     f"[blue]🔗 Using correlated input for {current_agent} from "
-                    f"{len(loop_sources)} loop sources (pattern: {pattern})[/blue]"
+                    f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
                 )
                 return [correlated_dir]
 
             self.console.print(
-                f"[yellow]⚠️ Failed to correlate loop outputs for "
+                f"[yellow]⚠️ Failed to correlate version outputs for "
                 f"{current_agent}, falling back to standard input[/yellow]"
             )
 
@@ -484,29 +484,29 @@ class AgentOutputManager:
         """
         current_agent = self.execution_order[idx]
 
-        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
+        version_consumption_map = self.loop_correlator.detect_explicit_version_consumption(
             self.execution_order, self.agent_configs
         )
 
-        if current_agent not in loop_consumption_map:
+        if current_agent not in version_consumption_map:
             return None
 
-        consumption_config = loop_consumption_map[current_agent]
-        loop_sources = consumption_config["loop_agents"]
+        consumption_config = version_consumption_map[current_agent]
+        version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 
         def correlation_setup_directories(
             agent_folder, agent_config, previous_agent_type, agent_idx
         ):
-            """Wrapper that uses correlated input for loop consumers."""
+            """Wrapper that uses correlated input for version consumers."""
             correlated_dir = self.loop_correlator.prepare_correlated_input(
-                current_agent, loop_sources, agent_idx
+                current_agent, version_sources, agent_idx
             )
 
             if correlated_dir:
                 self.console.print(
                     f"[blue]🔗 Using correlated input for {current_agent} from "
-                    f"{len(loop_sources)} loop sources (pattern: {pattern})[/blue]"
+                    f"{len(version_sources)} version sources (pattern: {pattern})[/blue]"
                 )
                 input_directory = correlated_dir
                 # Setup output directory (simple name, no index prefix)
@@ -517,7 +517,7 @@ class AgentOutputManager:
                 return ([str(input_directory)], str(output_directory))
 
             self.console.print(
-                f"[yellow]⚠️ Failed to correlate loop outputs for "
+                f"[yellow]⚠️ Failed to correlate version outputs for "
                 f"{current_agent}, falling back to standard input[/yellow]"
             )
             input_directories, output_dir = original_setup_directories(

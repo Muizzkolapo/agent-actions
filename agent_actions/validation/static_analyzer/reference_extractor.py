@@ -103,12 +103,12 @@ class ReferenceExtractor:
                     self._extract_from_context_scope(refs, agent_name, f"context_scope.{directive}")
                 )
 
-        # Extract from loop items_from
-        loop = agent_config.get("loop", {})
-        items_from = loop.get("items_from", "")
+        # Extract from versions items_from
+        versions = agent_config.get("versions", {})
+        items_from = versions.get("items_from", "")
         if items_from:
             requirements.extend(
-                self._extract_from_template(str(items_from), agent_name, "loop.items_from")
+                self._extract_from_template(str(items_from), agent_name, "versions.items_from")
             )
 
         # Extract from conditional_clause

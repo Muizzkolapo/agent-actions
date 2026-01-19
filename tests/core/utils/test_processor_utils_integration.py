@@ -10,8 +10,7 @@ from typing import List, Dict, Any
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
-from agent_actions.utilities.correlation.loop_id_generator import LoopIdGenerator
+from agent_actions.utilities.correlation import VersionIdGenerator
 
 
 class TestProcessorUtilsIntegration:
@@ -24,17 +23,17 @@ class TestProcessorUtilsIntegration:
 
     def setup_method(self):
         """Clear the registry before each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def teardown_method(self):
         """Clear the registry after each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def test_parallel_loop_agents_simulation(self):
         """Simulate parallel loop agents processing the same data."""
         source_records = [{"source_guid": f"record-{i}", "content": f"data-{i}"} for i in range(10)]
         loop_agents = ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"]
-        loop_base_name = "generate_distractors"
+        version_base_name = "generate_distractors"
         results: Dict[str, List[str]] = {}
         results_lock = threading.Lock()
 
@@ -42,8 +41,8 @@ class TestProcessorUtilsIntegration:
             """Simulate a loop agent processing records."""
             for record in records:
                 source_guid = record["source_guid"]
-                correlation_id = LoopIdGenerator.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name, self.get_test_session_id()
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
+                    source_guid, version_base_name, self.get_test_session_id()
                 )
                 time.sleep(0.001)
                 with results_lock:
@@ -75,7 +74,7 @@ class TestProcessorUtilsIntegration:
         """Simulate position-based correlation ID generation in batch processing."""
         batch_size = 5
         num_parallel_processors = 4
-        loop_base_name = "batch_processor"
+        version_base_name = "batch_processor"
         file_context = "batch_file.json"
         results: Dict[int, List[str]] = {}
         results_lock = threading.Lock()
@@ -83,8 +82,10 @@ class TestProcessorUtilsIntegration:
         def simulate_batch_processor(processor_id: int):
             """Simulate a batch processor working on specific positions."""
             for position in range(batch_size):
-                correlation_id = LoopIdGenerator.get_or_create_position_based_loop_correlation_id(
-                    position, loop_base_name, self.get_test_session_id(), file_context
+                correlation_id = (
+                    VersionIdGenerator.get_or_create_position_based_version_correlation_id(
+                        position, version_base_name, self.get_test_session_id(), file_context
+                    )
                 )
                 time.sleep(0.002)
                 with results_lock:
@@ -116,7 +117,7 @@ class TestProcessorUtilsIntegration:
         """Simulate mixed use of source_guid and position-based correlation strategies."""
         source_guids = [f"guid-{i}" for i in range(5)]
         positions = list(range(5))
-        loop_base_name = "mixed_loop"
+        version_base_name = "mixed_loop"
         guid_results: Dict[str, List[str]] = {}
         position_results: Dict[int, List[str]] = {}
         results_lock = threading.Lock()
@@ -124,8 +125,8 @@ class TestProcessorUtilsIntegration:
         def worker_source_guid(source_guid: str):
             """Worker using source_guid strategy."""
             for _ in range(3):
-                correlation_id = LoopIdGenerator.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name, self.get_test_session_id()
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
+                    source_guid, version_base_name, self.get_test_session_id()
                 )
                 with results_lock:
                     if source_guid not in guid_results:
@@ -135,8 +136,10 @@ class TestProcessorUtilsIntegration:
         def worker_position(position: int):
             """Worker using position strategy."""
             for _ in range(3):
-                correlation_id = LoopIdGenerator.get_or_create_position_based_loop_correlation_id(
-                    position, loop_base_name, self.get_test_session_id()
+                correlation_id = (
+                    VersionIdGenerator.get_or_create_position_based_version_correlation_id(
+                        position, version_base_name, self.get_test_session_id()
+                    )
                 )
                 with results_lock:
                     if position not in position_results:
@@ -173,8 +176,8 @@ class TestProcessorUtilsIntegration:
             {"source_guid": f"input-{i}", "content": f"original-data-{i}"} for i in range(8)
         ]
         agent_config = {
-            "is_loop_agent": True,
-            "loop_base_name": "workflow_loop",
+            "is_versioned_agent": True,
+            "version_base_name": "workflow_loop",
             "workflow_session_id": self.get_test_session_id(),
         }
         all_outputs: List[Dict[str, Any]] = []
@@ -183,7 +186,7 @@ class TestProcessorUtilsIntegration:
         def simulate_loop_agent_processing(agent_id: int, data_subset: List[Dict]):
             """Simulate a loop agent processing a subset of data."""
             for record_index, item in enumerate(data_subset):
-                processed_item = LoopIdGenerator.add_loop_correlation_id(
+                processed_item = VersionIdGenerator.add_version_correlation_id(
                     item.copy(), agent_config, record_index=record_index
                 )
                 time.sleep(0.001)
@@ -214,10 +217,10 @@ class TestProcessorUtilsIntegration:
         for source_guid, outputs in outputs_by_guid.items():
             assert len(outputs) == 1, f"Source {source_guid} has {len(outputs)} outputs, expected 1"
             output = outputs[0]
-            assert "loop_correlation_id" in output, f"Missing loop_correlation_id in {output}"
-            assert output["loop_correlation_id"] is not None
+            assert "version_correlation_id" in output, f"Missing version_correlation_id in {output}"
+            assert output["version_correlation_id"] is not None
         correlation_ids = {
-            outputs[0]["loop_correlation_id"] for outputs in outputs_by_guid.values()
+            outputs[0]["version_correlation_id"] for outputs in outputs_by_guid.values()
         }
         expected_positions = set()
         chunk_size = len(input_data) // 3

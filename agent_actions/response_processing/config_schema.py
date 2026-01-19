@@ -251,8 +251,8 @@ class AgentConfig(BaseModel):
     )
     context_scope_expanded: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Loop-expanded version of context_scope. List directives have "
-        "loop references expanded to field prefix patterns.",
+        description="Version-expanded context_scope. List directives have "
+        "version references expanded to field prefix patterns.",
     )
 
     model_config = ConfigDict(extra="allow")

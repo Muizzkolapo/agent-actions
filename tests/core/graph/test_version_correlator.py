@@ -6,11 +6,11 @@ import pytest
 from pathlib import Path
 from typing import Dict, List, Any
 from unittest.mock import MagicMock, patch
-from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
+from agent_actions.orchestration.version_correlator import VersionOutputCorrelator
 
 
-class TestLoopOutputCorrelator:
-    """Test suite for LoopOutputCorrelator."""
+class TestVersionOutputCorrelator:
+    """Test suite for VersionOutputCorrelator."""
 
     @pytest.fixture
     def temp_agent_folder(self):
@@ -20,8 +20,8 @@ class TestLoopOutputCorrelator:
 
     @pytest.fixture
     def correlator(self, temp_agent_folder):
-        """Create a LoopOutputCorrelator instance."""
-        return LoopOutputCorrelator(temp_agent_folder)
+        """Create a VersionOutputCorrelator instance."""
+        return VersionOutputCorrelator(temp_agent_folder)
 
     @pytest.fixture
     def sample_execution_order(self):
@@ -60,7 +60,10 @@ class TestLoopOutputCorrelator:
             "reconstruct_options": {
                 "agent_type": "reconstruct_options",
                 "dependencies": [],
-                "loop_consumption_config": {"source": "generate_distractors", "pattern": "merge"},
+                "version_consumption_config": {
+                    "source": "generate_distractors",
+                    "pattern": "merge",
+                },
             },
             "validate_quiz": {
                 "agent_type": "validate_quiz",
@@ -68,25 +71,25 @@ class TestLoopOutputCorrelator:
             },
         }
 
-    def test_detect_explicit_loop_consumption(
+    def test_detect_explicit_version_consumption(
         self, correlator, sample_execution_order, sample_agent_configs
     ):
         """Test detection of explicit loop consumption."""
-        consumption_map = correlator.detect_explicit_loop_consumption(
+        consumption_map = correlator.detect_explicit_version_consumption(
             sample_execution_order, sample_agent_configs
         )
         assert "reconstruct_options" in consumption_map
         config = consumption_map["reconstruct_options"]
         assert config["source_base_name"] == "generate_distractors"
         assert config["pattern"] == "merge"
-        assert set(config["loop_agents"]) == {
+        assert set(config["version_agents"]) == {
             "generate_distractors_1",
             "generate_distractors_2",
             "generate_distractors_3",
         }
         assert "validate_quiz" not in consumption_map
 
-    def test_detect_explicit_loop_consumption_no_consumption(self, correlator):
+    def test_detect_explicit_version_consumption_no_consumption(self, correlator):
         """Test when no agents have loop consumption config."""
         execution_order = ["agent_a", "agent_b", "agent_c"]
         agent_configs = {
@@ -94,7 +97,7 @@ class TestLoopOutputCorrelator:
             "agent_b": {"dependencies": ["agent_a"]},
             "agent_c": {"dependencies": ["agent_b"]},
         }
-        consumption_map = correlator.detect_explicit_loop_consumption(
+        consumption_map = correlator.detect_explicit_version_consumption(
             execution_order, agent_configs
         )
         assert consumption_map == {}
@@ -111,7 +114,7 @@ class TestLoopOutputCorrelator:
             test_data = [
                 {
                     "source_guid": "test-guid-1",
-                    "loop_correlation_id": "test-corr-1",
+                    "version_correlation_id": "test-corr-1",
                     "target_id": "target-1",
                     "content": {f"distractor_{i}": f"Wrong answer {i}"},
                 }
@@ -139,36 +142,36 @@ class TestLoopOutputCorrelator:
         data_loop1 = [
             {
                 "source_guid": "guid-1",
-                "loop_correlation_id": "corr-1",
+                "version_correlation_id": "corr-1",
                 "content": {"field_1": "value1"},
             },
             {
                 "source_guid": "guid-2",
-                "loop_correlation_id": "corr-2",
+                "version_correlation_id": "corr-2",
                 "content": {"field_1": "value2"},
             },
             {
                 "source_guid": "guid-3",
-                "loop_correlation_id": "corr-3",
+                "version_correlation_id": "corr-3",
                 "content": {"field_1": "value3"},
             },
         ]
         data_loop2 = [
             {
                 "source_guid": "guid-1",
-                "loop_correlation_id": "corr-1",
+                "version_correlation_id": "corr-1",
                 "content": {"field_2": "value1"},
             },
             {
                 "source_guid": "guid-2",
-                "loop_correlation_id": "corr-2",
+                "version_correlation_id": "corr-2",
                 "content": {"field_2": "value2"},
             },
         ]
         data_loop3 = [
             {
                 "source_guid": "guid-1",
-                "loop_correlation_id": "corr-1",
+                "version_correlation_id": "corr-1",
                 "content": {"field_3": "value1"},
             }
         ]
@@ -211,7 +214,7 @@ class TestLoopOutputCorrelator:
             data1 = [
                 {
                     "source_guid": f"{filename}-guid-1",
-                    "loop_correlation_id": f"{filename}-corr-1",
+                    "version_correlation_id": f"{filename}-corr-1",
                     "content": {"loop1_data": f"data_from_{filename}"},
                 }
             ]
@@ -220,7 +223,7 @@ class TestLoopOutputCorrelator:
             data2 = [
                 {
                     "source_guid": f"{filename}-guid-1",
-                    "loop_correlation_id": f"{filename}-corr-1",
+                    "version_correlation_id": f"{filename}-corr-1",
                     "content": {"loop2_data": f"data_from_{filename}"},
                 }
             ]
@@ -272,20 +275,40 @@ class TestLoopOutputCorrelator:
 
     def test_correlate_by_source_record(self, correlator):
         """Test the correlation logic for merging records with prefixed field names."""
-        loop_outputs = {
+        version_outputs = {
             "loop_1": [
-                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f1": "v1"}},
-                {"source_guid": "guid-b", "loop_correlation_id": "corr-2", "content": {"f1": "v2"}},
+                {
+                    "source_guid": "guid-a",
+                    "version_correlation_id": "corr-1",
+                    "content": {"f1": "v1"},
+                },
+                {
+                    "source_guid": "guid-b",
+                    "version_correlation_id": "corr-2",
+                    "content": {"f1": "v2"},
+                },
             ],
             "loop_2": [
-                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f2": "v3"}},
-                {"source_guid": "guid-b", "loop_correlation_id": "corr-2", "content": {"f2": "v4"}},
+                {
+                    "source_guid": "guid-a",
+                    "version_correlation_id": "corr-1",
+                    "content": {"f2": "v3"},
+                },
+                {
+                    "source_guid": "guid-b",
+                    "version_correlation_id": "corr-2",
+                    "content": {"f2": "v4"},
+                },
             ],
             "loop_3": [
-                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f3": "v5"}}
+                {
+                    "source_guid": "guid-a",
+                    "version_correlation_id": "corr-1",
+                    "content": {"f3": "v5"},
+                }
             ],
         }
-        result = correlator._correlate_by_source_record(loop_outputs)
+        result = correlator._correlate_by_source_record(version_outputs)
         assert len(result) == 2
         rec_a = next((r for r in result if r["source_guid"] == "guid-a"))
         # Fields are now prefixed with agent name to avoid collisions
@@ -312,7 +335,7 @@ class TestLoopOutputCorrelator:
         source_file = temp_agent_folder / "source" / "custom_output.json"
         assert source_file.exists()
 
-    def test_empty_loop_outputs(self, correlator, temp_agent_folder):
+    def test_empty_version_outputs(self, correlator, temp_agent_folder):
         """Test handling when no loop outputs exist."""
         result = correlator.prepare_correlated_input(
             "consumer", ["nonexistent_1", "nonexistent_2"], 5
@@ -335,7 +358,7 @@ class TestLoopOutputCorrelator:
                     assert data == []
 
 
-class TestLoopOutputCorrelatorIntegration:
+class TestVersionOutputCorrelatorIntegration:
     """Integration tests with AgentWorkflow."""
 
     @pytest.fixture
@@ -362,7 +385,7 @@ class TestLoopOutputCorrelatorIntegration:
     def test_integration_with_agent_workflow(self, mock_agent_workflow):
         """Test integration with AgentWorkflow's _setup_correlation_if_needed."""
         workflow, agent_folder = mock_agent_workflow
-        correlator = LoopOutputCorrelator(agent_folder)
+        correlator = VersionOutputCorrelator(agent_folder)
         workflow.loop_correlator = correlator
         for i in range(1, 4):
             # Use simple directory names (no node_X_ prefix)
@@ -371,7 +394,7 @@ class TestLoopOutputCorrelatorIntegration:
             data = [
                 {
                     "source_guid": "test-guid",
-                    "loop_correlation_id": "test-corr",
+                    "version_correlation_id": "test-corr",
                     "content": {f"field_{i}": f"value_{i}"},
                 }
             ]
@@ -391,7 +414,7 @@ class TestLoopOutputCorrelatorIntegration:
 
 
 class TestLoopCorrelatorWithSequentialMode:
-    """Test suite for LoopOutputCorrelator with sequential loop execution."""
+    """Test suite for VersionOutputCorrelator with sequential loop execution."""
 
     @pytest.fixture
     def temp_agent_folder(self):
@@ -401,8 +424,8 @@ class TestLoopCorrelatorWithSequentialMode:
 
     @pytest.fixture
     def correlator(self, temp_agent_folder):
-        """Create a LoopOutputCorrelator instance."""
-        return LoopOutputCorrelator(temp_agent_folder)
+        """Create a VersionOutputCorrelator instance."""
+        return VersionOutputCorrelator(temp_agent_folder)
 
     def test_sequential_loop_correlation_works(self, correlator, temp_agent_folder):
         """Test that correlator works correctly with sequential loop outputs."""
@@ -413,7 +436,7 @@ class TestLoopCorrelatorWithSequentialMode:
             test_data = [
                 {
                     "source_guid": f"test-{i}",
-                    "loop_correlation_id": f"test-corr-{i}",
+                    "version_correlation_id": f"test-corr-{i}",
                     "content": {"iteration": i, "data": f"refined_data_{i}"},
                 }
             ]
@@ -445,7 +468,7 @@ class TestLoopCorrelatorWithSequentialMode:
             test_data = [
                 {
                     "source_guid": "test-guid",
-                    "loop_correlation_id": "test-corr",
+                    "version_correlation_id": "test-corr",
                     "content": {f"field_{i}": f"value_{i}"},
                 }
             ]
@@ -473,9 +496,9 @@ class TestLoopCorrelatorWithSequentialMode:
             test_data = [
                 {
                     "source_guid": "test-guid",
-                    "loop_correlation_id": "test-corr",
+                    "version_correlation_id": "test-corr",
                     "loop_mode": "sequential",
-                    "loop_iteration": i,
+                    "version_number": i,
                     "content": {"step": i, "result": f"step_{i}_result"},
                 }
             ]
@@ -502,7 +525,7 @@ class TestLoopCorrelatorWithSequentialMode:
             test_data = [
                 {
                     "source_guid": "guid-1",
-                    "loop_correlation_id": "corr-1",
+                    "version_correlation_id": "corr-1",
                     "loop_mode": "sequential",
                     "content": {f"seq_field_{i}": f"seq_value_{i}"},
                 }
@@ -515,7 +538,7 @@ class TestLoopCorrelatorWithSequentialMode:
             test_data = [
                 {
                     "source_guid": "guid-2",
-                    "loop_correlation_id": "corr-2",
+                    "version_correlation_id": "corr-2",
                     "loop_mode": "parallel",
                     "content": {f"par_field_{i - 2}": f"par_value_{i - 2}"},
                 }

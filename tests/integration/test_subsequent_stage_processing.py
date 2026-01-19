@@ -20,7 +20,7 @@ class TestSubsequentStageStructuredInput:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_structured_input_content_and_guid(
         self,
@@ -100,7 +100,7 @@ class TestSubsequentStagePassthroughFields:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_passthrough_fields_merged(
         self,
@@ -157,9 +157,9 @@ class TestSubsequentStageLoopCorrelation:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
-    def test_loop_correlation_id_added(
+    def test_version_correlation_id_added(
         self,
         mock_field_mgr,
         mock_loop_id,
@@ -252,7 +252,7 @@ class TestSubsequentStageSplitRecords:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_split_records_indexed_node_ids(
         self,
@@ -311,7 +311,7 @@ class TestSubsequentStageMetadata:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_metadata_added_correctly(
         self,

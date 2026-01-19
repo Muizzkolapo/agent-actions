@@ -376,18 +376,18 @@ class ActionExpander:
         return replacer
 
     @staticmethod
-    def _expand_loop_action(
+    def _expand_versioned_action(
         action: Dict[str, Any],
-        loop_config: Dict[str, Any],
+        version_config: Dict[str, Any],
         defaults: Dict[str, Any],
         is_operational: bool,
     ) -> AgentConfigList:
         """
-        Expand a loop action into multiple agent configurations.
+        Expand a versioned action into multiple agent configurations.
 
         Args:
-            action: Action configuration with loop
-            loop_config: Loop configuration
+            action: Action configuration with versions
+            version_config: Version configuration
             defaults: Default settings
             is_operational: Whether this action should run
 
@@ -395,30 +395,30 @@ class ActionExpander:
             List of expanded agent configurations
         """
         agents: AgentConfigList = []
-        param_name = loop_config.get("param", "i")
-        loop_range = loop_config.get("range", [1, 1])
+        param_name = version_config.get("param", "i")
+        version_range = version_config.get("range", [1, 1])
 
-        if len(loop_range) == 2:
-            start, end = loop_range
+        if len(version_range) == 2:
+            start, end = version_range
             range_values = range(start, end + 1)
         else:
-            range_values = loop_range
+            range_values = version_range
 
         range_values_list = list(range_values)
         for idx, i in enumerate(range_values_list):
             agent: AgentEntryDict = {}
 
-            # Create template replacer with captured loop variables
+            # Create template replacer with captured version variables
             template_replacer = ActionExpander._create_template_replacer(
                 param_name, i, idx, range_values_list
             )
 
             agent["agent_type"] = f"{action.get('name', 'unknown')}_{i}"
             agent["name"] = f"{action.get('name')}_{i}"
-            agent["is_loop_agent"] = True
-            agent["loop_base_name"] = action.get("name", "unknown")
-            agent["loop_iteration"] = i
-            agent["loop_mode"] = loop_config.get("mode", "parallel")
+            agent["is_versioned_agent"] = True
+            agent["version_base_name"] = action.get("name", "unknown")
+            agent["version_number"] = i
+            agent["version_mode"] = version_config.get("mode", "parallel")
 
             # Create agent
             created_agent = ActionExpander._create_agent_from_action(
@@ -502,15 +502,15 @@ class ActionExpander:
         # Initialize optional fields
         ActionExpander._initialize_optional_fields(agent)
 
-        # Process loop consumption
-        loop_consumption = action.get("loop_consumption")
-        if loop_consumption:
-            agent["loop_consumption_config"] = {
-                "source": loop_consumption.get("source"),
-                "pattern": loop_consumption.get("pattern", "merge"),
+        # Process version consumption
+        version_consumption = action.get("version_consumption")
+        if version_consumption:
+            agent["version_consumption_config"] = {
+                "source": version_consumption.get("source"),
+                "pattern": version_consumption.get("pattern", "merge"),
             }
         else:
-            agent["loop_consumption_config"] = None
+            agent["version_consumption_config"] = None
 
         # Process interceptors
         interceptors = action.get("interceptors")
@@ -544,13 +544,13 @@ class ActionExpander:
             # or we could filter by some other logic. For now, we take all actions.
             is_operational = True
 
-            loop_config = action.get("loop")
-            if loop_config:
-                # Expand loop action into multiple agents
-                loop_agents = ActionExpander._expand_loop_action(
-                    action, loop_config, defaults, is_operational
+            version_config = action.get("versions")
+            if version_config:
+                # Expand versioned action into multiple agents
+                version_agents = ActionExpander._expand_versioned_action(
+                    action, version_config, defaults, is_operational
                 )
-                agents.extend(loop_agents)
+                agents.extend(version_agents)
             else:
                 agent: AgentEntryDict = {}
                 agent["agent_type"] = action.get("name", "unknown")

@@ -20,7 +20,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Process with template vars",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Processing stage ${stage}",
-                    "loop": {"param": "stage", "range": [1, 3]},
+                    "versions": {"param": "stage", "range": [1, 3]},
                 }
             ],
             "plan": ["process"],
@@ -45,7 +45,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Refine with previous reference",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Refine output from stage ${stage-1}",
-                    "loop": {"param": "stage", "range": [1, 4], "mode": "sequential"},
+                    "versions": {"param": "stage", "range": [1, 4], "mode": "sequential"},
                 }
             ],
             "plan": ["refine"],
@@ -71,7 +71,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Compare iterations",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Compare stage ${i} with stage ${i-1}",
-                    "loop": {"param": "i", "range": [1, 3]},
+                    "versions": {"param": "i", "range": [1, 3]},
                 }
             ],
             "plan": ["compare"],
@@ -99,7 +99,7 @@ class TestTemplateVariableReplacement:
                         "previous": "stage_${n-1}",
                         "nested": {"value": "iteration_${n}"},
                     },
-                    "loop": {"param": "n", "range": [5, 6]},
+                    "versions": {"param": "n", "range": [5, 6]},
                 }
             ],
             "plan": ["structured"],
@@ -128,7 +128,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Process with list range",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Stage ${idx} (prev: ${idx-1})",
-                    "loop": {"param": "idx", "range": [10, 20, 30]},
+                    "versions": {"param": "idx", "range": [10, 20, 30]},
                 }
             ],
             "plan": ["process"],
@@ -153,7 +153,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Simple template var",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Iteration ${iter} only",
-                    "loop": {"param": "iter", "range": [1, 2]},
+                    "versions": {"param": "iter", "range": [1, 2]},
                 }
             ],
             "plan": ["simple"],
@@ -176,7 +176,7 @@ class TestTemplateVariableReplacement:
                     "intent": "Multiple previous refs",
                     "api_key": "OPENAI_API_KEY",
                     "prompt": "Compare ${x-1} with ${x-1} again",
-                    "loop": {"param": "x", "range": [1, 2]},
+                    "versions": {"param": "x", "range": [1, 2]},
                 }
             ],
             "plan": ["multi"],

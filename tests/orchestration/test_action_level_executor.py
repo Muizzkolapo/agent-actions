@@ -62,7 +62,7 @@ class TestActionLevelOrchestrator:
 class TestLoopDependencyExpansion:
     """Test suite for loop dependency expansion in ActionLevelOrchestrator."""
 
-    def test_build_loop_base_name_map(self):
+    def test_build_version_base_name_map(self):
         """Test building the loop base name mapping."""
         execution_order = [
             "extract_raw_qa_1",
@@ -73,57 +73,59 @@ class TestLoopDependencyExpansion:
         agent_configs = {
             "extract_raw_qa_1": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 1,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 1,
             },
             "extract_raw_qa_2": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 2,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 2,
             },
             "extract_raw_qa_3": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 3,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 3,
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],
             },
         }
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
-        loop_base_map = orchestrator._build_loop_base_name_map()
+        version_base_map = orchestrator._build_version_base_name_map()
 
-        assert "extract_raw_qa" in loop_base_map
-        assert set(loop_base_map["extract_raw_qa"]) == {
+        assert "extract_raw_qa" in version_base_map
+        assert set(version_base_map["extract_raw_qa"]) == {
             "extract_raw_qa_1",
             "extract_raw_qa_2",
             "extract_raw_qa_3",
         }
 
-    def test_expand_loop_dependencies(self):
+    def test_expand_version_dependencies(self):
         """Test expanding loop base name dependencies."""
         execution_order = ["loop_1", "loop_2", "consumer"]
         agent_configs = {
-            "loop_1": {"is_loop_agent": True, "loop_base_name": "loop"},
-            "loop_2": {"is_loop_agent": True, "loop_base_name": "loop"},
+            "loop_1": {"is_versioned_agent": True, "version_base_name": "loop"},
+            "loop_2": {"is_versioned_agent": True, "version_base_name": "loop"},
             "consumer": {"dependencies": []},
         }
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
-        loop_base_map = {"loop": ["loop_1", "loop_2"]}
+        version_base_map = {"loop": ["loop_1", "loop_2"]}
 
         # Test expansion of loop base name
-        expanded = orchestrator._expand_loop_dependencies(["loop"], loop_base_map)
+        expanded = orchestrator._expand_version_dependencies(["loop"], version_base_map)
         assert set(expanded) == {"loop_1", "loop_2"}
 
         # Test mixed dependencies
-        expanded = orchestrator._expand_loop_dependencies(["other_agent", "loop"], loop_base_map)
+        expanded = orchestrator._expand_version_dependencies(
+            ["other_agent", "loop"], version_base_map
+        )
         assert set(expanded) == {"other_agent", "loop_1", "loop_2"}
 
         # Test non-loop dependencies unchanged
-        expanded = orchestrator._expand_loop_dependencies(["regular_dep"], loop_base_map)
+        expanded = orchestrator._expand_version_dependencies(["regular_dep"], version_base_map)
         assert expanded == ["regular_dep"]
 
     def test_loop_dependency_execution_levels(self):
@@ -137,21 +139,21 @@ class TestLoopDependencyExpansion:
         agent_configs = {
             "extract_raw_qa_1": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 1,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 1,
             },
             "extract_raw_qa_2": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 2,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 2,
             },
             "extract_raw_qa_3": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
-                "loop_iteration": 3,
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
+                "version_number": 3,
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # References the base name
@@ -182,13 +184,13 @@ class TestLoopDependencyExpansion:
         agent_configs = {
             "extract_raw_qa_1": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
             },
             "extract_raw_qa_2": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
             },
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # Base name, not expanded
@@ -215,23 +217,23 @@ class TestLoopDependencyExpansion:
         agent_configs = {
             "loop_a_1": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "loop_a",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_a",
             },
             "loop_a_2": {
                 "dependencies": [],
-                "is_loop_agent": True,
-                "loop_base_name": "loop_a",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_a",
             },
             "loop_b_1": {
                 "dependencies": ["loop_a"],  # Depends on loop_a
-                "is_loop_agent": True,
-                "loop_base_name": "loop_b",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_b",
             },
             "loop_b_2": {
                 "dependencies": ["loop_a"],  # Depends on loop_a
-                "is_loop_agent": True,
-                "loop_base_name": "loop_b",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_b",
             },
             "consumer": {
                 "dependencies": ["loop_a", "loop_b"],  # Depends on both
@@ -262,13 +264,13 @@ class TestLoopDependencyExpansion:
             },
             "loop_1": {
                 "dependencies": ["setup"],
-                "is_loop_agent": True,
-                "loop_base_name": "loop",
+                "is_versioned_agent": True,
+                "version_base_name": "loop",
             },
             "loop_2": {
                 "dependencies": ["setup"],
-                "is_loop_agent": True,
-                "loop_base_name": "loop",
+                "is_versioned_agent": True,
+                "version_base_name": "loop",
             },
             "consumer": {
                 "dependencies": ["setup", "loop"],  # Mixed: regular + loop base

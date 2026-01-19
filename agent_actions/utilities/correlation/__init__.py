@@ -1,8 +1,8 @@
-"""Loop correlation utilities for processors."""
+"""Version correlation utilities for processors."""
 
-from .loop_id_generator import LoopIdGenerator
+from .version_id_generator import VersionIdGenerator
 
 # Backward compatibility alias
-LoopCorrelator = LoopIdGenerator
+VersionCorrelator = VersionIdGenerator
 
-__all__ = ["LoopIdGenerator", "LoopCorrelator"]
+__all__ = ["VersionIdGenerator", "VersionCorrelator"]

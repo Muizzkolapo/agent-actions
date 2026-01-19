@@ -10,7 +10,7 @@ from agent_actions.core.types import RecoveryMetadata
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopIdGenerator
+from agent_actions.utilities.correlation import VersionIdGenerator
 from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
     BatchResultReconciler,
 )
@@ -335,11 +335,11 @@ class BatchResultProcessor:
             if "source_guid" not in item or not item["source_guid"]:
                 item["source_guid"] = original_source_guid
 
-            # Loop correlation ID (if agent_config present)
+            # Version correlation ID (if agent_config present)
             if ctx.agent_config:
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 if record_index >= 0:
-                    structured_items[idx] = LoopIdGenerator.add_loop_correlation_id(
+                    structured_items[idx] = VersionIdGenerator.add_version_correlation_id(
                         item, ctx.agent_config, record_index=record_index
                     )
 

@@ -223,21 +223,21 @@ class ContextScopeProcessor:
                     continue
             context_sources.append(action)
 
-        # 4. Expand loop base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
-        # This handles loop_consumption where context_scope references the base name
-        def expand_loop_base_names(
+        # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
+        # This handles version_consumption where context_scope references the base name
+        def expand_version_base_names(
             action_list: List[str], is_context_sources: bool = False
         ) -> List[str]:
-            """Expand loop base names to their actual variants in the workflow."""
+            """Expand version base names to their actual variants in the workflow."""
             expanded = []
             for action in action_list:
-                # Skip validation for loop field prefix patterns (ending with _)
-                # These are field prefix patterns from loop_consumption merge, not action names
+                # Skip validation for version field prefix patterns (ending with _)
+                # These are field prefix patterns from version_consumption merge, not action names
                 # Example: "extract_raw_qa_" matches fields like "extract_raw_qa_1_questions"
                 if action.endswith("_"):
                     expanded.append(action)
                     logger.debug(
-                        f"[LOOP_FIELD_PREFIX] Keeping '{action}' as field prefix pattern (not an action)"
+                        f"[VERSION_FIELD_PREFIX] Keeping '{action}' as field prefix pattern (not an action)"
                     )
                     continue
 
@@ -245,36 +245,38 @@ class ContextScopeProcessor:
                     # Action exists as-is
                     expanded.append(action)
                 else:
-                    # Check if this is a loop base name
-                    loop_variants = [
+                    # Check if this is a version base name
+                    version_variants = [
                         wf_action
                         for wf_action in workflow_actions
                         if wf_action.startswith(f"{action}_")
                         and wf_action[len(action) + 1 :].isdigit()
                     ]
-                    if loop_variants:
+                    if version_variants:
                         # For context sources with wildcards, use field prefix pattern (action_)
                         # For dependencies or specific fields, expand to all variants
                         if is_context_sources and action in wildcard_actions:
-                            # Loop consumption with wildcard - use field prefix pattern
+                            # Version consumption with wildcard - use field prefix pattern
                             expanded.append(f"{action}_")
                             logger.debug(
-                                f"[LOOP_FIELD_PREFIX] Converted loop base name '{action}' with wildcard to field prefix '{action}_'"
+                                f"[VERSION_FIELD_PREFIX] Converted version base name '{action}' with wildcard to field prefix '{action}_'"
                             )
                         else:
                             # Expand to all variants
-                            expanded.extend(loop_variants)
+                            expanded.extend(version_variants)
                             logger.debug(
-                                f"[LOOP_EXPAND] Expanded loop base name '{action}' to {loop_variants}"
+                                f"[VERSION_EXPAND] Expanded version base name '{action}' to {version_variants}"
                             )
                     else:
-                        # Not a loop base name - keep as-is (will error in validation)
+                        # Not a version base name - keep as-is (will error in validation)
                         expanded.append(action)
             return expanded
 
         # Expand both input_sources and context_sources
-        input_sources_expanded = expand_loop_base_names(input_sources, is_context_sources=False)
-        context_sources_expanded = expand_loop_base_names(context_sources, is_context_sources=True)
+        input_sources_expanded = expand_version_base_names(input_sources, is_context_sources=False)
+        context_sources_expanded = expand_version_base_names(
+            context_sources, is_context_sources=True
+        )
 
         # 5. Validate all referenced actions exist in workflow
         # Skip validation for field prefix patterns (ending with _)

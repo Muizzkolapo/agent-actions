@@ -107,11 +107,11 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_loader` | Method | Create a loader instance with injected dependencies. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_generator` | Method | Create a generator instance with injected dependencies. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_service` | Method | Create a service instance with injected dependencies. | - |
-| `loop_correlator.py` | Module | Loop output correlation system for parallel map-reduce patterns. | `errors` |
+| `version_correlator.py` | Module | Version output correlation system for parallel map-reduce patterns. | `errors` |
 | `JsonLoadParams` | Class | Parameters for loading JSON from file. | - |
-| `LoopOutputCorrelator` | Class | Correlates outputs from parallel loop executions for downstream consumption. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `detect_explicit_loop_consumption` | Method | Detect agents with explicit loop consumption configurations. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `prepare_correlated_input` | Method | Prepare correlated input directory for an agent that depends on loop outputs. | - |
+| `VersionOutputCorrelator` | Class | Correlates outputs from parallel version executions for downstream consumption. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `detect_explicit_version_consumption` | Method | Detect agents with explicit version consumption configurations. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `prepare_correlated_input` | Method | Prepare correlated input directory for an agent that depends on version outputs. | - |
 | `node_mapper.py` | Module | Module for mapping agent names to node indices. | - |
 | `NodeMappingService` | Class | Service for mapping agent names to their node indices in a workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `build_agent_index_map` | Method | Build a mapping of agent names to their node indices. | - |

@@ -306,7 +306,7 @@ class TestStrategySelectionByDependencies:
         params = call_args[0][0]
         assert params.strategy == runner.strategies["intermediate"]
 
-    def test_loop_iterations_all_use_initial_strategy(self, mock_process_and_generate):
+    def test_version_numbers_all_use_initial_strategy(self, mock_process_and_generate):
         """All loop iterations without dependencies should use InitialStrategy.
 
         This is the key fix: extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3
@@ -320,32 +320,32 @@ class TestStrategySelectionByDependencies:
         }
 
         # Simulate 3 loop iterations, all without dependencies
-        loop_iterations = [
+        version_numbers = [
             {
                 "agent_type": "extract_raw_qa_1",
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
                 "dependencies": [],
             },
             {
                 "agent_type": "extract_raw_qa_2",
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
                 "dependencies": [],
             },
             {
                 "agent_type": "extract_raw_qa_3",
-                "is_loop_agent": True,
-                "loop_base_name": "extract_raw_qa",
+                "is_versioned_agent": True,
+                "version_base_name": "extract_raw_qa",
                 "dependencies": [],
             },
         ]
 
-        for idx, config in enumerate(loop_iterations):
+        for idx, config in enumerate(version_numbers):
             runner.run_agent(
                 agent_config=config,
                 agent_name=config["agent_type"],
-                previous_agent_type=None if idx == 0 else loop_iterations[idx - 1]["agent_type"],
+                previous_agent_type=None if idx == 0 else version_numbers[idx - 1]["agent_type"],
                 idx=idx,
             )
 
@@ -371,22 +371,22 @@ class TestStrategySelectionByDependencies:
         }
 
         # Simulate loop_b iterations that depend on loop_a
-        downstream_loop_iterations = [
+        downstream_version_numbers = [
             {
                 "agent_type": "loop_b_1",
-                "is_loop_agent": True,
-                "loop_base_name": "loop_b",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_b",
                 "dependencies": ["loop_a"],  # Has dependencies!
             },
             {
                 "agent_type": "loop_b_2",
-                "is_loop_agent": True,
-                "loop_base_name": "loop_b",
+                "is_versioned_agent": True,
+                "version_base_name": "loop_b",
                 "dependencies": ["loop_a"],
             },
         ]
 
-        for idx, config in enumerate(downstream_loop_iterations):
+        for idx, config in enumerate(downstream_version_numbers):
             runner.run_agent(
                 agent_config=config,
                 agent_name=config["agent_type"],

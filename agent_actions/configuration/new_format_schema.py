@@ -24,33 +24,33 @@ class Granularity(str, Enum):
     FILE = "file"
 
 
-class LoopMode(str, Enum):
-    """Loop execution modes."""
+class VersionMode(str, Enum):
+    """Version execution modes."""
 
     PARALLEL = "parallel"
     SEQUENTIAL = "sequential"
 
 
-class LoopConfig(BaseModel):
-    """Configuration for loop-based actions."""
+class VersionConfig(BaseModel):
+    """Configuration for version-based actions."""
 
-    param: str = Field(..., description="Parameter name for loop variable")
-    range: List[int] = Field(..., description="Range of values for loop parameter")
-    mode: LoopMode = Field(default=LoopMode.PARALLEL, description="Execution mode")
+    param: str = Field(..., description="Parameter name for version variable")
+    range: List[int] = Field(..., description="Range of values for version parameter")
+    mode: VersionMode = Field(default=VersionMode.PARALLEL, description="Execution mode")
 
 
 class MergePattern(str, Enum):
-    """Patterns for merging loop outputs."""
+    """Patterns for merging version outputs."""
 
     MERGE = "merge"
 
 
-class LoopConsumptionConfig(BaseModel):
-    """Configuration for consuming loop outputs."""
+class VersionConsumptionConfig(BaseModel):
+    """Configuration for consuming version outputs."""
 
-    source: str = Field(..., description="Base name of the loop action to consume")
+    source: str = Field(..., description="Base name of the version action to consume")
     pattern: MergePattern = Field(
-        default=MergePattern.MERGE, description="Pattern for merging loop outputs"
+        default=MergePattern.MERGE, description="Pattern for merging version outputs"
     )
 
 
@@ -114,9 +114,9 @@ class ActionConfig(BaseModel):
     )
     policy: Optional[str] = Field(default=None, description="Execution policy")
     few_shot: Optional[int] = Field(default=None, description="Number of few-shot examples")
-    loop: Optional[LoopConfig] = Field(default=None, description="Loop configuration")
-    loop_consumption: Optional[LoopConsumptionConfig] = Field(
-        default=None, description="Loop output consumption configuration"
+    versions: Optional[VersionConfig] = Field(default=None, description="Version configuration")
+    version_consumption: Optional[VersionConsumptionConfig] = Field(
+        default=None, description="Version output consumption configuration"
     )
     retry: Optional[RetryConfig] = Field(
         default=None, description="Retry configuration for transport-layer failures"
@@ -205,7 +205,7 @@ class WorkflowConfigV2(BaseModel):
 __all__ = [
     "ActionKind",
     "Granularity",
-    "LoopConfig",
+    "VersionConfig",
     "RetryConfig",
     "ActionConfig",
     "DefaultsConfig",

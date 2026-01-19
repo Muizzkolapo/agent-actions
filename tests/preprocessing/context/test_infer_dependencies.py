@@ -311,7 +311,7 @@ class TestBuildFieldContextRequiresAgentIndices:
 class TestLoopBaseNameExpansion:
     """Test automatic expansion of loop base names in dependencies and context_scope."""
 
-    def test_loop_base_name_in_dependencies_expands_to_variants(self):
+    def test_version_base_name_in_dependencies_expands_to_variants(self):
         """When dependencies references a loop base name, it should expand to all variants."""
         action_config = {
             "dependencies": ["extract_raw_qa"],  # Loop base name
@@ -331,7 +331,7 @@ class TestLoopBaseNameExpansion:
         assert set(input_sources) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
         assert context_sources == []
 
-    def test_loop_base_name_in_context_scope_expands_to_variants(self):
+    def test_version_base_name_in_context_scope_expands_to_variants(self):
         """When context_scope references a loop base name, it should expand to all variants."""
         action_config = {
             "dependencies": ["other_action"],

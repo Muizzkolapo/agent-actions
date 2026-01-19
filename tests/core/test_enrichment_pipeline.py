@@ -7,7 +7,7 @@ from agent_actions.core.enrichment import (
     Enricher,
     EnrichmentPipeline,
     LineageEnricher,
-    LoopIdEnricher,
+    VersionIdEnricher,
     MetadataEnricher,
     PassthroughEnricher,
     RequiredFieldsEnricher,
@@ -254,12 +254,12 @@ class TestMetadataEnricher:
         assert mock_add.call_count == 2
 
 
-class TestLoopIdEnricher:
-    """Test LoopIdEnricher."""
+class TestVersionIdEnricher:
+    """Test VersionIdEnricher."""
 
     def test_skips_filtered_results(self):
         """FILTERED status → no loop ID added."""
-        enricher = LoopIdEnricher()
+        enricher = VersionIdEnricher()
         result = ProcessingResult.filtered()
         context = ProcessingContext(agent_config={}, agent_name="test")
 
@@ -267,15 +267,15 @@ class TestLoopIdEnricher:
 
         assert enriched.data == []
 
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
-    def test_adds_loop_correlation_id_to_each_item(self, mock_add):
-        """LoopIdGenerator.add_loop_correlation_id called per item."""
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
+    def test_adds_version_correlation_id_to_each_item(self, mock_add):
+        """VersionIdGenerator.add_version_correlation_id called per item."""
         mock_add.side_effect = lambda item, *args, **kwargs: {
             **item,
             "loop_id": "loop_123",
         }
 
-        enricher = LoopIdEnricher()
+        enricher = VersionIdEnricher()
         result = ProcessingResult.success(data=[{"key": "value"}])
         context = ProcessingContext(
             agent_config={"loop_id": "parent_loop"}, agent_name="test", record_index=5
@@ -286,12 +286,12 @@ class TestLoopIdEnricher:
         mock_add.assert_called_once()
         assert "loop_id" in enriched.data[0]
 
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     def test_uses_record_index_from_context(self, mock_add):
-        """record_index from context passed to LoopIdGenerator."""
+        """record_index from context passed to VersionIdGenerator."""
         mock_add.return_value = {"key": "value", "loop_id": "loop_123"}
 
-        enricher = LoopIdEnricher()
+        enricher = VersionIdEnricher()
         result = ProcessingResult.success(data=[{"key": "value"}])
         context = ProcessingContext(agent_config={}, agent_name="test", record_index=42)
 
@@ -389,7 +389,7 @@ class TestEnrichmentPipeline:
         assert len(pipeline.enrichers) == 6
         assert isinstance(pipeline.enrichers[0], LineageEnricher)
         assert isinstance(pipeline.enrichers[1], MetadataEnricher)
-        assert isinstance(pipeline.enrichers[2], LoopIdEnricher)
+        assert isinstance(pipeline.enrichers[2], VersionIdEnricher)
         assert isinstance(pipeline.enrichers[3], PassthroughEnricher)
         assert isinstance(pipeline.enrichers[4], RequiredFieldsEnricher)
         assert isinstance(pipeline.enrichers[5], RecoveryEnricher)
