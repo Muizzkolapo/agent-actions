@@ -15,6 +15,7 @@ from agent_actions.response_processing.pipeline_config import WorkflowConfig, Pi
 from agent_actions.state_management.path_config import load_project_config
 from agent_actions.state_management.path_manager import PathManager
 from agent_actions.response_processing.action_expander import ActionExpander
+from agent_actions.preprocessing.context.context_scope_normalizer import normalize_all_agent_configs
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +276,16 @@ class ConfigManager:
                 ]
                 dependency_graph[agent_type] = dependencies
         self.execution_order = topological_sort(dependency_graph)
+
+        # Normalize context_scope for all agents, adding context_scope_expanded field
+        agent_configs_dict = {
+            agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
+        }
+        normalize_all_agent_configs(agent_configs_dict, self.execution_order)
+
+        # Update self.agent_configs with normalized versions
+        for agent_type, config_dict in agent_configs_dict.items():
+            self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 
     def load_environment_config(self) -> EnvironmentConfig:
         """Load and validate environment configuration."""

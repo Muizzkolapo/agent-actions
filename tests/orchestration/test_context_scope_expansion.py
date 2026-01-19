@@ -1,19 +1,38 @@
 """
 Tests for context_scope expansion at orchestration level.
 
-Verifies that loop base name references in context_scope are expanded
-to field prefix patterns during execution level computation.
+Note: As of the context scope normalization RFC, context_scope expansion
+now happens at config load time via context_scope_normalizer.py (called by
+ConfigManager.determine_execution_order()). The ActionLevelOrchestrator
+no longer mutates context_scope - it stays raw while context_scope_expanded
+contains the loop-expanded version.
+
+These tests verify that:
+1. context_scope is preserved as raw (not mutated) in ActionLevelOrchestrator
+2. Dependencies are still expanded to loop variants
+3. The normalizer properly creates context_scope_expanded
 """
 
 import pytest
 from agent_actions.orchestration.action_level_executor import ActionLevelOrchestrator
+from agent_actions.preprocessing.context.context_scope_normalizer import (
+    normalize_context_scope,
+    normalize_all_agent_configs,
+    _build_loop_base_name_map,
+)
 
 
 class TestContextScopeExpansion:
     """Test context_scope expansion for loop references."""
 
     def test_wildcard_loop_reference_expands_to_field_prefix_pattern(self):
-        """Test that wildcard references to loop base names become field prefix patterns."""
+        """Test that wildcard references to loop base names become field prefix patterns.
+
+        Note: context_scope expansion now happens via normalize_all_agent_configs()
+        at config load time. This test verifies both:
+        1. ActionLevelOrchestrator preserves raw context_scope
+        2. The normalizer creates correct context_scope_expanded
+        """
         # Setup: Loop action extract_raw_qa with 3 iterations
         # Consumer action flatten_questions depends on loop and references it in context_scope
         execution_order = [
@@ -42,14 +61,17 @@ class TestContextScopeExpansion:
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # Will be expanded to loop variants
                 "context_scope": {
-                    "observe": ["extract_raw_qa.*"]  # Should expand to "extract_raw_qa_"
+                    "observe": ["extract_raw_qa.*"]  # Raw, not expanded here
                 },
             },
         }
 
+        # First, apply normalization (as ConfigManager would do)
+        normalize_all_agent_configs(agent_configs, execution_order)
+
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
 
-        # Act: Compute execution levels (triggers expansion)
+        # Act: Compute execution levels (triggers dependency expansion only)
         levels = orchestrator.compute_execution_levels()
 
         # Assert: Dependencies should be expanded to loop variants
@@ -59,8 +81,13 @@ class TestContextScopeExpansion:
             "extract_raw_qa_3",
         ]
 
-        # Assert: Context scope should have field prefix pattern
+        # Assert: Raw context_scope should be preserved
         assert agent_configs["flatten_questions"]["context_scope"] == {
+            "observe": ["extract_raw_qa.*"]  # Raw, preserved
+        }
+
+        # Assert: context_scope_expanded should have field prefix pattern
+        assert agent_configs["flatten_questions"]["context_scope_expanded"] == {
             "observe": ["extract_raw_qa_"]  # Field prefix pattern
         }
 
@@ -122,7 +149,11 @@ class TestContextScopeExpansion:
         }
 
     def test_mixed_loop_and_regular_references(self):
-        """Test context_scope with both loop and regular action references."""
+        """Test context_scope with both loop and regular action references.
+
+        Note: context_scope expansion now happens via normalize_all_agent_configs().
+        Raw context_scope is preserved, expanded version in context_scope_expanded.
+        """
         execution_order = [
             "loop_action_1",
             "loop_action_2",
@@ -151,15 +182,24 @@ class TestContextScopeExpansion:
             },
         }
 
+        # Apply normalization (as ConfigManager would do)
+        normalize_all_agent_configs(agent_configs, execution_order)
+
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
         orchestrator.compute_execution_levels()
 
-        # Loop reference should expand, regular references unchanged
-        expected_context_scope = {
+        # Raw context_scope should be preserved
+        assert agent_configs["consumer"]["context_scope"] == {
+            "observe": ["loop_action.*", "regular_action.field1"],
+            "passthrough": ["regular_action.field2"],
+        }
+
+        # Loop reference should expand in context_scope_expanded
+        expected_expanded = {
             "observe": ["loop_action_", "regular_action.field1"],
             "passthrough": ["regular_action.field2"],
         }
-        assert agent_configs["consumer"]["context_scope"] == expected_context_scope
+        assert agent_configs["consumer"]["context_scope_expanded"] == expected_expanded
 
     def test_no_context_scope_no_expansion(self):
         """Test that actions without context_scope are not affected."""

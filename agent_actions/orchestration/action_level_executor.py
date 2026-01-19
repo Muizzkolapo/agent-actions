@@ -111,71 +111,6 @@ class ActionLevelOrchestrator:
                 expanded.append(dep)
         return expanded
 
-    def _expand_context_scope_loop_references(
-        self, context_scope: Optional[Dict[str, Any]], loop_base_map: Dict[str, List[str]]
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Expand loop base name references in context_scope to field prefix patterns.
-
-        For wildcard references to loop base names (e.g., "extract_raw_qa.*"),
-        converts to field prefix pattern (e.g., "extract_raw_qa_") which matches
-        all prefixed fields from loop iterations.
-
-        For specific field references (e.g., "extract_raw_qa.field1"), keeps as-is
-        since they refer to the original action's fields, not loop outputs.
-
-        Args:
-            context_scope: Context scope configuration with observe/passthrough
-            loop_base_map: Mapping from loop base names to expanded agent names
-
-        Returns:
-            Updated context_scope with expanded references, or None if input is None
-        """
-        if not context_scope:
-            return context_scope
-
-        expanded_scope = dict(context_scope)
-        for scope_type in ["observe", "passthrough", "drop", "drops"]:
-            if scope_type not in context_scope:
-                continue
-
-            field_refs = context_scope[scope_type]
-            if not isinstance(field_refs, list):
-                continue
-
-            expanded_refs = []
-            for field_ref in field_refs:
-                if not isinstance(field_ref, str) or "." not in field_ref:
-                    expanded_refs.append(field_ref)
-                    continue
-
-                # Parse action name and field from reference
-                parts = field_ref.split(".", 1)
-                if len(parts) != 2:
-                    expanded_refs.append(field_ref)
-                    continue
-
-                action_name, field_name = parts
-
-                # Check if this references a loop base name
-                if action_name in loop_base_map:
-                    # If wildcard reference to loop base name, convert to field prefix pattern
-                    if field_name == "*":
-                        # Convert "extract_raw_qa.*" to "extract_raw_qa_"
-                        # This matches all prefixed fields: extract_raw_qa_1_*, extract_raw_qa_2_*, etc.
-                        expanded_refs.append(f"{action_name}_")
-                    else:
-                        # Specific field reference - keep as-is
-                        # User is referencing the original action's field, not loop outputs
-                        expanded_refs.append(field_ref)
-                else:
-                    # Not a loop base name - keep as-is
-                    expanded_refs.append(field_ref)
-
-            expanded_scope[scope_type] = expanded_refs
-
-        return expanded_scope
-
     def compute_execution_levels(self) -> List[List[str]]:
         """
         Compute execution levels from dependency graph.
@@ -191,16 +126,8 @@ class ActionLevelOrchestrator:
         # Build mapping of loop base names to their expanded variants
         loop_base_map = self._build_loop_base_name_map()
 
-        # Expand context_scope loop references in agent configs
-        # This must happen before dependency validation to avoid mismatches
-        for agent in self.execution_order:
-            context_scope = self.agent_configs[agent].get("context_scope")
-            if context_scope and loop_base_map:
-                expanded_scope = self._expand_context_scope_loop_references(
-                    context_scope, loop_base_map
-                )
-                if expanded_scope:
-                    self.agent_configs[agent]["context_scope"] = expanded_scope
+        # Note: context_scope loop reference expansion is now handled at config load time
+        # by context_scope_normalizer.py via ConfigManager.determine_execution_order()
 
         # Build dependency map, expanding loop base name references
         deps_map = {}
