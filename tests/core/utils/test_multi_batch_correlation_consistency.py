@@ -13,8 +13,7 @@ from typing import Dict, List, Set
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
-from agent_actions.utilities.correlation.loop_id_generator import LoopIdGenerator
+from agent_actions.utilities.correlation import VersionIdGenerator
 
 
 class TestMultiBatchCorrelationConsistency:
@@ -27,22 +26,22 @@ class TestMultiBatchCorrelationConsistency:
 
     def setup_method(self):
         """Clear the registry before each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def teardown_method(self):
         """Clear the registry after each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def test_same_session_produces_identical_correlation_ids(self):
         """Test that same session + same input = identical correlation IDs."""
         session_id = self.get_shared_session_id()
         source_guid = "record-123"
         version_base_name = "generate_distractors"
-        id1 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id1 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, session_id
         )
-        LoopIdGenerator.clear_loop_correlation_registry()
-        id2 = LoopIdGenerator.get_or_create_version_correlation_id(
+        VersionIdGenerator.clear_version_correlation_registry()
+        id2 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, session_id
         )
         assert id1 == id2, f"Expected identical IDs, got {id1} and {id2}"
@@ -51,10 +50,10 @@ class TestMultiBatchCorrelationConsistency:
         """Test that different sessions produce different correlation IDs."""
         source_guid = "record-123"
         version_base_name = "generate_distractors"
-        id1 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id1 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, "session_1"
         )
-        id2 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id2 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, "session_2"
         )
         assert id1 != id2, f"Expected different IDs for different sessions, got {id1} and {id2}"
@@ -80,21 +79,21 @@ class TestMultiBatchCorrelationConsistency:
             """Simulate batches 1 & 2 completing simultaneously."""
             for record in source_records:
                 source_guid = record["source_guid"]
-                correlation_id = LoopIdGenerator.get_or_create_version_correlation_id(
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                     source_guid, version_base_name, shared_session_id
                 )
                 batch_1_2_results[source_guid] = correlation_id
 
         simulate_batch_1_2()
         original_results = batch_1_2_results.copy()
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
         batch_3_results = {}
 
         def simulate_batch_3():
             """Simulate batch 3 completing after session restart."""
             for record in source_records:
                 source_guid = record["source_guid"]
-                correlation_id = LoopIdGenerator.get_or_create_version_correlation_id(
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                     source_guid, version_base_name, shared_session_id
                 )
                 batch_3_results[source_guid] = correlation_id
@@ -131,14 +130,14 @@ class TestMultiBatchCorrelationConsistency:
         file_context = "batch_file.json"
         batch_1_results = {}
         for position in positions:
-            correlation_id = LoopIdGenerator.get_or_create_position_based_version_correlation_id(
+            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
                 position, version_base_name, shared_session_id, file_context
             )
             batch_1_results[position] = correlation_id
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
         batch_2_results = {}
         for position in positions:
-            correlation_id = LoopIdGenerator.get_or_create_position_based_version_correlation_id(
+            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
                 position, version_base_name, shared_session_id, file_context
             )
             batch_2_results[position] = correlation_id
@@ -161,7 +160,7 @@ class TestMultiBatchCorrelationConsistency:
             """Simulate a batch processing records."""
             batch_results = {}
             for source_guid in source_records:
-                correlation_id = LoopIdGenerator.get_or_create_version_correlation_id(
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                     source_guid, version_base_name, shared_session_id
                 )
                 batch_results[source_guid] = correlation_id
@@ -193,14 +192,14 @@ class TestMultiBatchCorrelationConsistency:
         source_guid = "shared-record"
         version_base_name = "shared-loop"
         workflow_1_session = "workflow_1_session"
-        id1 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id1 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, workflow_1_session
         )
         workflow_2_session = "workflow_2_session"
-        id2 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id2 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, workflow_2_session
         )
-        id3 = LoopIdGenerator.get_or_create_version_correlation_id(
+        id3 = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, workflow_1_session
         )
         assert id1 != id2, f"Different workflows should have different IDs: {id1} vs {id2}"
@@ -215,9 +214,9 @@ class TestMultiBatchCorrelationConsistency:
             "workflow_session_id": shared_session_id,
         }
         record = {"source_guid": "test-record-123", "content": "test data"}
-        result1 = LoopIdGenerator.add_version_correlation_id(record, agent_config)
-        LoopIdGenerator.clear_loop_correlation_registry()
-        result2 = LoopIdGenerator.add_version_correlation_id(record, agent_config)
+        result1 = VersionIdGenerator.add_version_correlation_id(record, agent_config)
+        VersionIdGenerator.clear_version_correlation_registry()
+        result2 = VersionIdGenerator.add_version_correlation_id(record, agent_config)
         assert "version_correlation_id" in result1
         assert "version_correlation_id" in result2
         assert result1["version_correlation_id"] == result2["version_correlation_id"]
@@ -230,7 +229,7 @@ class TestMultiBatchCorrelationConsistency:
         agent_config = {"is_versioned_agent": True, "version_base_name": "missing_session_loop"}
         record = {"source_guid": "test-record", "content": "test data"}
         with pytest.raises(ValueError) as exc_info:
-            LoopIdGenerator.add_version_correlation_id(record, agent_config)
+            VersionIdGenerator.add_version_correlation_id(record, agent_config)
         error_message = str(exc_info.value)
         assert "Missing workflow_session_id" in error_message
         assert "deterministic correlation IDs" in error_message

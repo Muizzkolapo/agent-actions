@@ -10,8 +10,7 @@ from typing import Set, List
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
-from agent_actions.utilities.correlation.loop_id_generator import LoopIdGenerator
+from agent_actions.utilities.correlation import VersionIdGenerator
 
 
 class TestProcessorUtilsThreadSafety:
@@ -24,11 +23,11 @@ class TestProcessorUtilsThreadSafety:
 
     def setup_method(self):
         """Clear the registry before each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def teardown_method(self):
         """Clear the registry after each test."""
-        LoopIdGenerator.clear_loop_correlation_registry()
+        VersionIdGenerator.clear_version_correlation_registry()
 
     def test_concurrent_version_correlation_id_generation_consistency(self):
         """Test that concurrent access generates consistent correlation IDs."""
@@ -43,7 +42,7 @@ class TestProcessorUtilsThreadSafety:
             """Worker function that generates correlation IDs."""
             local_ids = []
             for _ in range(num_calls_per_thread):
-                correlation_id = LoopIdGenerator.get_or_create_version_correlation_id(
+                correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                     source_guid, version_base_name, self.get_test_session_id()
                 )
                 local_ids.append(correlation_id)
@@ -73,7 +72,7 @@ class TestProcessorUtilsThreadSafety:
 
         def worker():
             """Worker function that generates position-based correlation IDs."""
-            correlation_id = LoopIdGenerator.get_or_create_position_based_version_correlation_id(
+            correlation_id = VersionIdGenerator.get_or_create_position_based_version_correlation_id(
                 record_index, version_base_name, self.get_test_session_id(), file_context
             )
             with correlation_ids_lock:
@@ -99,7 +98,7 @@ class TestProcessorUtilsThreadSafety:
 
         def worker(source_guid: str):
             """Worker function for a specific source_guid."""
-            correlation_id = LoopIdGenerator.get_or_create_version_correlation_id(
+            correlation_id = VersionIdGenerator.get_or_create_version_correlation_id(
                 source_guid, version_base_name, self.get_test_session_id()
             )
             with results_lock:
@@ -134,11 +133,11 @@ class TestProcessorUtilsThreadSafety:
         """Test that registry clearing is thread-safe and deterministic generation persists."""
         source_guid = "clear-test-guid"
         version_base_name = "clear_test_loop"
-        original_id = LoopIdGenerator.get_or_create_version_correlation_id(
+        original_id = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, self.get_test_session_id()
         )
         assert original_id is not None
-        same_id = LoopIdGenerator.get_or_create_version_correlation_id(
+        same_id = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, self.get_test_session_id()
         )
         assert same_id == original_id
@@ -146,13 +145,13 @@ class TestProcessorUtilsThreadSafety:
 
         def clear_worker():
             """Worker that clears the registry."""
-            LoopIdGenerator.clear_loop_correlation_registry()
+            VersionIdGenerator.clear_version_correlation_registry()
             clear_completed.set()
 
         def access_worker():
             """Worker that tries to access the registry during clearing."""
             time.sleep(0.01)
-            return LoopIdGenerator.get_or_create_version_correlation_id(
+            return VersionIdGenerator.get_or_create_version_correlation_id(
                 source_guid, version_base_name, self.get_test_session_id()
             )
 
@@ -162,7 +161,7 @@ class TestProcessorUtilsThreadSafety:
         access_thread.start()
         clear_thread.join()
         access_thread.join()
-        new_id = LoopIdGenerator.get_or_create_version_correlation_id(
+        new_id = VersionIdGenerator.get_or_create_version_correlation_id(
             source_guid, version_base_name, self.get_test_session_id()
         )
         assert new_id == original_id, (
@@ -178,18 +177,18 @@ class TestProcessorUtilsThreadSafety:
             """Worker that performs various operations."""
             for i in range(operations_per_worker):
                 if i % 3 == 0:
-                    LoopIdGenerator.get_or_create_version_correlation_id(
+                    VersionIdGenerator.get_or_create_version_correlation_id(
                         f"guid-{worker_id}-{i}", f"loop-{worker_id % 5}", self.get_test_session_id()
                     )
                 elif i % 3 == 1:
-                    LoopIdGenerator.get_or_create_position_based_version_correlation_id(
+                    VersionIdGenerator.get_or_create_position_based_version_correlation_id(
                         i,
                         f"pos-loop-{worker_id % 3}",
                         self.get_test_session_id(),
                         f"file-{worker_id % 2}",
                     )
                 else:
-                    LoopIdGenerator.get_or_create_version_correlation_id(
+                    VersionIdGenerator.get_or_create_version_correlation_id(
                         "shared-guid", "shared-loop", self.get_test_session_id()
                     )
 
@@ -200,10 +199,10 @@ class TestProcessorUtilsThreadSafety:
             thread.start()
         for thread in threads:
             thread.join()
-        shared_id_1 = LoopIdGenerator.get_or_create_version_correlation_id(
+        shared_id_1 = VersionIdGenerator.get_or_create_version_correlation_id(
             "shared-guid", "shared-loop", self.get_test_session_id()
         )
-        shared_id_2 = LoopIdGenerator.get_or_create_version_correlation_id(
+        shared_id_2 = VersionIdGenerator.get_or_create_version_correlation_id(
             "shared-guid", "shared-loop", self.get_test_session_id()
         )
         assert shared_id_1 == shared_id_2
@@ -221,7 +220,7 @@ class TestProcessorUtilsThreadSafety:
         def worker(worker_id: int):
             """Worker that adds loop correlation IDs."""
             obj = {"source_guid": "test-guid", "content": f"worker-{worker_id}"}
-            updated_obj = LoopIdGenerator.add_version_correlation_id(
+            updated_obj = VersionIdGenerator.add_version_correlation_id(
                 obj, agent_config, record_index=0
             )
             with results_lock:
@@ -247,7 +246,7 @@ class TestProcessorUtilsThreadSafety:
 
         def get_correlation_id():
             """Function to be executed in thread pool."""
-            return LoopIdGenerator.get_or_create_version_correlation_id(
+            return VersionIdGenerator.get_or_create_version_correlation_id(
                 source_guid, version_base_name, self.get_test_session_id()
             )
 

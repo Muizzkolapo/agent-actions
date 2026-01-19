@@ -335,11 +335,11 @@ class BatchResultProcessor:
             if "source_guid" not in item or not item["source_guid"]:
                 item["source_guid"] = original_source_guid
 
-            # Loop correlation ID (if agent_config present)
+            # Version correlation ID (if agent_config present)
             if ctx.agent_config:
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 if record_index >= 0:
-                    structured_items[idx] = VersionIdGenerator.add_loop_correlation_id(
+                    structured_items[idx] = VersionIdGenerator.add_version_correlation_id(
                         item, ctx.agent_config, record_index=record_index
                     )
 

@@ -457,10 +457,10 @@ class LoopIdEnricher(Enricher):
         if result.status == ProcessingStatus.FILTERED:
             return result
 
-        from agent_actions.utilities.correlation import LoopIdGenerator
+        from agent_actions.utilities.correlation import VersionIdGenerator
 
         for i, item in enumerate(result.data):
-            result.data[i] = LoopIdGenerator.add_loop_correlation_id(
+            result.data[i] = VersionIdGenerator.add_version_correlation_id(
                 item, context.agent_config, record_index=context.record_index
             )
 
@@ -1018,11 +1018,11 @@ class TestLoopIdEnricher:
     def test_skips_filtered_results(self):
         """FILTERED status → no loop ID added"""
 
-    def test_adds_loop_correlation_id_to_each_item(self):
-        """LoopIdGenerator.add_loop_correlation_id called per item"""
+    def test_adds_version_correlation_id_to_each_item(self):
+        """VersionIdGenerator.add_version_correlation_id called per item"""
 
     def test_uses_record_index_from_context(self):
-        """record_index from context passed to LoopIdGenerator"""
+        """record_index from context passed to VersionIdGenerator"""
 ```
 
 ### 4.4 PassthroughEnricher
@@ -1189,8 +1189,8 @@ class TestSubsequentStageProcessing:
     def test_passthrough_fields_merged(self):
         """passthrough_fields from context_scope merged into output"""
 
-    def test_loop_correlation_id_added(self):
-        """loop_correlation_id added based on record_index"""
+    def test_version_correlation_id_added(self):
+        """version_correlation_id added based on record_index"""
 
     def test_guard_skip_preserves_input(self):
         """Guard skip → input passed through unchanged"""
