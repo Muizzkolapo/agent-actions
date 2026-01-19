@@ -61,6 +61,9 @@ def normalize_context_scope(
                 expanded_scope[directive_name] = directive_value
         else:
             # Dict directive or unknown - preserve as-is
+            # Note: Using deepcopy to avoid shared references between raw and expanded.
+            # For large seed_data dicts, this has a performance cost, but ensures safety.
+            # Could optimize to shallow copy if values are guaranteed immutable.
             expanded_scope[directive_name] = deepcopy(directive_value)
 
     return expanded_scope
@@ -75,6 +78,19 @@ def _expand_list_directive(
 
     Converts wildcard references like "extract_raw_qa.*" to field prefix
     patterns like "extract_raw_qa_" which match all loop iteration fields.
+
+    Field Prefix Pattern Convention:
+    --------------------------------
+    A trailing underscore WITHOUT a dot indicates a field prefix pattern.
+
+    Examples:
+    - "extract_raw_qa.*"  -> "extract_raw_qa_"   (matches all fields from loop iterations)
+    - "extract_raw_qa_1_questions", "extract_raw_qa_2_questions", etc.
+
+    The trailing underscore is detected by context_scope_processor.py:368-379
+    using the pattern: field_ref.endswith("_") and "." not in field_ref
+
+    This convention allows efficient field matching without regex overhead.
     """
     expanded_refs = []
 
@@ -111,11 +127,19 @@ def normalize_all_agent_configs(
     """
     Normalize context_scope for all agents, adding context_scope_expanded field.
 
-    Mutates agent_configs in place by adding 'context_scope_expanded' to each agent
-    that has a context_scope.
+    MUTATION CONTRACT:
+    ------------------
+    This function mutates agent_configs IN PLACE by adding 'context_scope_expanded'
+    to each agent that has a context_scope. The original 'context_scope' field is
+    preserved and NOT mutated.
+
+    This is part of the config normalization pipeline:
+    1. ConfigManager.determine_execution_order() calls this function
+    2. ActionLevelOrchestrator.compute_execution_levels() expands dependencies
+    3. Both stages mutate agent_configs as part of config bootstrapping
 
     Args:
-        agent_configs: Dictionary of agent configurations
+        agent_configs: Dictionary of agent configurations (WILL BE MUTATED)
         execution_order: List of agent names in topological order
     """
     # Build loop base name map
@@ -133,8 +157,8 @@ def normalize_all_agent_configs(
             logger.debug(
                 "Normalized context_scope for '%s': raw=%s, expanded=%s",
                 agent_name,
-                list(context_scope.keys()),
-                list(expanded.keys()) if expanded else None,
+                context_scope.keys(),
+                expanded.keys() if expanded else None,
             )
 
 
