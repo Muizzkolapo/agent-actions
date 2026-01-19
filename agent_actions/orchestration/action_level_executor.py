@@ -134,8 +134,8 @@ class ActionLevelOrchestrator:
         if not context_scope:
             return context_scope
 
-        expanded_scope = {}
-        for scope_type in ["observe", "passthrough"]:
+        expanded_scope = dict(context_scope)
+        for scope_type in ["observe", "passthrough", "drop", "drops"]:
             if scope_type not in context_scope:
                 continue
 
