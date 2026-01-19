@@ -355,16 +355,24 @@ class LoopOutputCorrelator:
         """
         Merge content from multiple loop agent records using merge pattern.
 
+        Prefixes each field with the agent name to avoid collisions:
+        - extract_raw_qa_1 output: {"questions": [...]}
+        - extract_raw_qa_2 output: {"questions": [...]}
+        - Merged: {"extract_raw_qa_1_questions": [...], "extract_raw_qa_2_questions": [...]}
+
         Args:
             agent_records: Dict mapping loop agent names to their records
 
         Returns:
-            Merged content dictionary
+            Merged content dictionary with prefixed field names
         """
         merged_content = {}
-        for record in agent_records.values():
+        for agent_name, record in agent_records.items():
             content = record.get("content", {})
-            merged_content.update(content)
+            # Prefix each field with agent name to avoid collisions
+            for field_name, field_value in content.items():
+                prefixed_field = f"{agent_name}_{field_name}"
+                merged_content[prefixed_field] = field_value
         return merged_content
 
     def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:

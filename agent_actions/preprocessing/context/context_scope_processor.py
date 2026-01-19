@@ -20,18 +20,35 @@ class ContextScopeProcessor:
 
     @staticmethod
     def parse_field_reference(field_ref: str) -> Tuple[str, str]:
-        """Parse field reference in 'action.field' format, returning (action_name, field_name)."""
+        """
+        Parse field reference in 'action.field' format, returning (action_name, field_name).
+
+        Also handles loop field prefix patterns (e.g., 'extract_raw_qa_') which indicate
+        fields from all loop iterations. For these patterns, returns (base_name, '_')
+        where '_' signals a field prefix pattern.
+        """
         if not field_ref or not isinstance(field_ref, str):
             raise ValueError(
                 f"Invalid field reference: {field_ref!r}. "
-                f"Expected non-empty string in format 'action.field'"
+                f"Expected non-empty string in format 'action.field' or field prefix pattern ending with '_'"
             )
+
+        # Check if this is a field prefix pattern (ends with _ but no dot)
+        # e.g., "extract_raw_qa_" for loop consumption
+        if field_ref.endswith("_") and "." not in field_ref:
+            # Field prefix pattern - return base name and '_' marker
+            base_name = field_ref[:-1]  # Remove trailing underscore
+            if not base_name:
+                raise ValueError(
+                    f"Invalid field prefix pattern: '{field_ref}'. Base name cannot be empty"
+                )
+            return (base_name, "_")
 
         parts = field_ref.split(".", 1)
         if len(parts) != 2:
             raise ValueError(
                 f"Invalid field reference: '{field_ref}'. "
-                f"Expected format: 'action.field' (with exactly one dot)"
+                f"Expected format: 'action.field' (with exactly one dot) or field prefix pattern ending with '_'"
             )
 
         action_name, field_name = parts
@@ -170,32 +187,123 @@ class ContextScopeProcessor:
             context_scope
         )
 
-        # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
-        context_sources = list(referenced_actions - set(input_sources))
+        # 2b. Identify field prefix patterns and wildcards from context_scope
+        # Collect all field references once to avoid duplication
+        field_prefix_base_names = set()
+        wildcard_actions = set()
+        all_field_refs = []
+        all_field_refs.extend(context_scope.get("observe", []))
+        all_field_refs.extend(context_scope.get("passthrough", []))
+        for field_ref in all_field_refs:
+            try:
+                ref_action, ref_field = ContextScopeProcessor.parse_field_reference(field_ref)
+                if ref_field == "_":  # Field prefix pattern
+                    field_prefix_base_names.add(ref_action)
+                elif ref_field == "*":  # Wildcard pattern
+                    wildcard_actions.add(ref_action)
+            except ValueError:
+                continue
 
-        # 4. Validate all referenced actions exist in workflow
-        all_deps = set(input_sources) | set(context_sources)
+        # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
+        # Exclude base names of field prefix patterns if they match loop iterations in dependencies
+        potential_context_sources = referenced_actions - set(input_sources)
+        context_sources = []
+        for action in potential_context_sources:
+            # Check if this is a field prefix base name and if dependencies contain loop iterations of it
+            if action in field_prefix_base_names:
+                # Check if any dependency starts with this base name (loop iteration pattern)
+                has_loop_iterations = any(dep.startswith(f"{action}_") for dep in input_sources)
+                if has_loop_iterations:
+                    # This base name corresponds to loop iterations in dependencies
+                    # Don't treat it as a separate context source
+                    logger.debug(
+                        f"[LOOP_FIELD_PREFIX] Excluding '{action}' from context sources - "
+                        f"field prefix pattern matches loop iterations in dependencies"
+                    )
+                    continue
+            context_sources.append(action)
+
+        # 4. Expand loop base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
+        # This handles loop_consumption where context_scope references the base name
+        def expand_loop_base_names(
+            action_list: List[str], is_context_sources: bool = False
+        ) -> List[str]:
+            """Expand loop base names to their actual variants in the workflow."""
+            expanded = []
+            for action in action_list:
+                # Skip validation for loop field prefix patterns (ending with _)
+                # These are field prefix patterns from loop_consumption merge, not action names
+                # Example: "extract_raw_qa_" matches fields like "extract_raw_qa_1_questions"
+                if action.endswith("_"):
+                    expanded.append(action)
+                    logger.debug(
+                        f"[LOOP_FIELD_PREFIX] Keeping '{action}' as field prefix pattern (not an action)"
+                    )
+                    continue
+
+                if action in workflow_actions:
+                    # Action exists as-is
+                    expanded.append(action)
+                else:
+                    # Check if this is a loop base name
+                    loop_variants = [
+                        wf_action
+                        for wf_action in workflow_actions
+                        if wf_action.startswith(f"{action}_")
+                        and wf_action[len(action) + 1 :].isdigit()
+                    ]
+                    if loop_variants:
+                        # For context sources with wildcards, use field prefix pattern (action_)
+                        # For dependencies or specific fields, expand to all variants
+                        if is_context_sources and action in wildcard_actions:
+                            # Loop consumption with wildcard - use field prefix pattern
+                            expanded.append(f"{action}_")
+                            logger.debug(
+                                f"[LOOP_FIELD_PREFIX] Converted loop base name '{action}' with wildcard to field prefix '{action}_'"
+                            )
+                        else:
+                            # Expand to all variants
+                            expanded.extend(loop_variants)
+                            logger.debug(
+                                f"[LOOP_EXPAND] Expanded loop base name '{action}' to {loop_variants}"
+                            )
+                    else:
+                        # Not a loop base name - keep as-is (will error in validation)
+                        expanded.append(action)
+            return expanded
+
+        # Expand both input_sources and context_sources
+        input_sources_expanded = expand_loop_base_names(input_sources, is_context_sources=False)
+        context_sources_expanded = expand_loop_base_names(context_sources, is_context_sources=True)
+
+        # 5. Validate all referenced actions exist in workflow
+        # Skip validation for field prefix patterns (ending with _)
+        all_deps = set(input_sources_expanded) | set(context_sources_expanded)
         for dep_action in all_deps:
+            # Skip validation for loop field prefix patterns
+            if dep_action.endswith("_"):
+                continue
+
             if dep_action not in workflow_actions:
                 raise ConfigurationError(
-                    f"Action '{action_name}': References '{dep_action}' in context_scope "
+                    f"Action '{action_name}': References '{dep_action}' in dependencies/context_scope "
                     f"but '{dep_action}' not found in workflow.\n\n"
                     f"Available actions: {workflow_actions}",
                     context={
                         "action": action_name,
                         "missing_action": dep_action,
                         "workflow_actions": workflow_actions,
-                        "input_sources": input_sources,
-                        "context_sources": context_sources,
+                        "input_sources": input_sources_expanded,
+                        "context_sources": context_sources_expanded,
                     },
                 )
 
         logger.debug(
             f"[INFER_DEPS] Action '{action_name}': "
-            f"input_sources={input_sources}, context_sources={context_sources}"
+            f"input_sources={input_sources_expanded}, context_sources={context_sources_expanded}"
         )
 
-        return input_sources, context_sources
+        return input_sources_expanded, context_sources_expanded
 
     @staticmethod
     def extract_field_value(field_context: Dict, action_name: str, field_name: str) -> Any:
@@ -469,11 +577,19 @@ class ContextScopeProcessor:
         all_field_refs.extend(context_scope.get("passthrough", []))
 
         # Track which dependencies are declared in context_scope
+        # Also track field prefix patterns (for loop consumption)
         declared_deps = set()
+        field_prefix_patterns = (
+            set()
+        )  # Base names with field prefix patterns (e.g., 'extract_raw_qa')
+
         for field_ref in all_field_refs:
             try:
-                ref_action, _ = ContextScopeProcessor.parse_field_reference(field_ref)
+                ref_action, ref_field = ContextScopeProcessor.parse_field_reference(field_ref)
                 declared_deps.add(ref_action)
+                # Track field prefix patterns (indicated by '_' field marker)
+                if ref_field == "_":
+                    field_prefix_patterns.add(ref_action)
             except ValueError:
                 continue
 
@@ -485,11 +601,21 @@ class ContextScopeProcessor:
                 try:
                     ref_action, ref_field = ContextScopeProcessor.parse_field_reference(field_ref)
 
+                    # Check for exact match or field prefix pattern match
                     if ref_action != dep_name:
+                        # Check if this is a field prefix pattern that covers the dependency
+                        if ref_field == "_" and dep_name.startswith(f"{ref_action}_"):
+                            # Field prefix pattern covers all loop iterations
+                            wildcard_found = True
+                            break
                         continue  # Not for this dependency
 
                     if ref_field == "*":
                         # Wildcard: dep_name.*
+                        wildcard_found = True
+                        break
+                    elif ref_field == "_":
+                        # Field prefix pattern: dep_name_
                         wildcard_found = True
                         break
                     else:
