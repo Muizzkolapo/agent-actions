@@ -1,7 +1,7 @@
 """
-Loop output correlation system for parallel map-reduce patterns.
+Version output correlation system for parallel map-reduce patterns.
 
-Handles correlation of loop iteration outputs for downstream agents
+Handles correlation of version iteration outputs for downstream agents
 without breaking existing sequential execution.
 """
 
@@ -29,102 +29,102 @@ class JsonLoadParams:
     add_source_file: bool = False
 
 
-class LoopOutputCorrelator:
-    """Correlates outputs from parallel loop executions for downstream consumption."""
+class VersionOutputCorrelator:
+    """Correlates outputs from parallel version executions for downstream consumption."""
 
     def __init__(self, agent_folder: Path):
         self.agent_folder = agent_folder
         self.correlations_cache = {}
 
-    def detect_explicit_loop_consumption(
+    def detect_explicit_version_consumption(
         self, execution_order: List[str], agent_configs: Dict[str, Any]
     ) -> Dict[str, Dict[str, Any]]:
         """
-        Detect agents with explicit loop consumption configurations.
+        Detect agents with explicit version consumption configurations.
 
         Returns:
             Dict mapping agent_name -> {
                 'source_base_name': str,
                 'pattern': str,
-                'loop_agents': List[str]
+                'version_agents': List[str]
             }
         """
-        loop_consumption_map = {}
-        loop_groups = {}
+        version_consumption_map = {}
+        version_groups = {}
         for agent_name in execution_order:
             if "_" in agent_name and agent_name.count("_") >= 1:
                 parts = agent_name.rsplit("_", 1)
                 if len(parts) == 2:
                     base_name, suffix = parts
                     if suffix.isdigit():
-                        if base_name not in loop_groups:
-                            loop_groups[base_name] = []
-                        loop_groups[base_name].append(agent_name)
+                        if base_name not in version_groups:
+                            version_groups[base_name] = []
+                        version_groups[base_name].append(agent_name)
         for agent_name in execution_order:
             agent_config = agent_configs.get(agent_name, {})
-            loop_consumption_config = agent_config.get("loop_consumption_config")
-            if loop_consumption_config:
-                source_base_name = loop_consumption_config.get("source")
-                pattern = loop_consumption_config.get("pattern", "merge")
-                loop_agents = loop_groups.get(source_base_name, [])
-                if loop_agents:
-                    loop_consumption_map[agent_name] = {
+            version_consumption_config = agent_config.get("version_consumption_config")
+            if version_consumption_config:
+                source_base_name = version_consumption_config.get("source")
+                pattern = version_consumption_config.get("pattern", "merge")
+                version_agents = version_groups.get(source_base_name, [])
+                if version_agents:
+                    version_consumption_map[agent_name] = {
                         "source_base_name": source_base_name,
                         "pattern": pattern,
-                        "loop_agents": loop_agents,
+                        "version_agents": version_agents,
                     }
                 else:
                     logger.warning(
-                        "Agent '%s' consumes loop '%s' but no loop agents found",
+                        "Agent '%s' consumes version '%s' but no version agents found",
                         agent_name,
                         source_base_name,
                     )
-        return loop_consumption_map
+        return version_consumption_map
 
-    def _load_loop_outputs(
-        self, loop_sources: List[str]
+    def _load_version_outputs(
+        self, version_sources: List[str]
     ) -> tuple[Dict[str, List[Dict[str, Any]]], set]:
-        """Load outputs from all loop sources."""
-        loop_outputs = {}
-        loop_filenames = set()
-        for loop_agent in loop_sources:
-            loop_idx = self._find_agent_index(loop_agent)
-            if loop_idx is None:
+        """Load outputs from all version sources."""
+        version_outputs = {}
+        version_filenames = set()
+        for version_agent in version_sources:
+            version_idx = self._find_agent_index(version_agent)
+            if version_idx is None:
                 continue
             # Use simple directory name (no index prefix)
-            loop_output_dir = self.agent_folder / "target" / loop_agent
-            if loop_output_dir.exists():
-                outputs, filenames = self._load_agent_outputs_with_filenames(loop_output_dir)
-                loop_outputs[loop_agent] = outputs
-                loop_filenames.update(filenames)
-        return loop_outputs, loop_filenames
+            version_output_dir = self.agent_folder / "target" / version_agent
+            if version_output_dir.exists():
+                outputs, filenames = self._load_agent_outputs_with_filenames(version_output_dir)
+                version_outputs[version_agent] = outputs
+                version_filenames.update(filenames)
+        return version_outputs, version_filenames
 
-    def _process_loop_files(
+    def _process_version_files(
         self,
-        loop_outputs: Dict[str, List[Dict[str, Any]]],
-        loop_filenames: set,
+        version_outputs: Dict[str, List[Dict[str, Any]]],
+        version_filenames: set,
         correlation_dir: Path,
     ):
         """Process and correlate outputs by file."""
-        for filename in loop_filenames:
-            file_loop_outputs = {}
-            for loop_agent, outputs in loop_outputs.items():
+        for filename in version_filenames:
+            file_version_outputs = {}
+            for version_agent, outputs in version_outputs.items():
                 file_outputs = [o for o in outputs if o.get("_source_file") == filename]
                 if file_outputs:
-                    file_loop_outputs[loop_agent] = file_outputs
-            if file_loop_outputs:
-                correlated_data = self._correlate_by_source_record(file_loop_outputs)
+                    file_version_outputs[version_agent] = file_outputs
+            if file_version_outputs:
+                correlated_data = self._correlate_by_source_record(file_version_outputs)
                 self._write_correlated_data(correlation_dir, correlated_data, filename)
 
     def prepare_correlated_input(
-        self, agent_name: str, loop_sources: List[str], _current_idx: int
+        self, agent_name: str, version_sources: List[str], _current_idx: int
     ) -> Optional[str]:
         """
-        Prepare correlated input directory for an agent that depends on loop outputs.
+        Prepare correlated input directory for an agent that depends on version outputs.
 
         Args:
             agent_name: Name of the agent that needs correlated input
-            loop_sources: List of loop agent names this agent depends on
+            version_sources: List of version agent names this agent depends on
             _current_idx: Unused - kept for API compatibility
 
         Returns:
@@ -135,11 +135,11 @@ class LoopOutputCorrelator:
             correlation_dir = self.agent_folder / "target" / agent_name
             correlation_dir.mkdir(parents=True, exist_ok=True)
 
-            loop_outputs, loop_filenames = self._load_loop_outputs(loop_sources)
-            if not loop_outputs:
+            version_outputs, version_filenames = self._load_version_outputs(version_sources)
+            if not version_outputs:
                 return None
 
-            self._process_loop_files(loop_outputs, loop_filenames, correlation_dir)
+            self._process_version_files(version_outputs, version_filenames, correlation_dir)
             return str(correlation_dir)
         except (OSError, IOError, ValueError, KeyError) as e:
             logger.exception("Error preparing correlated input for %s: %s", agent_name, e)
@@ -179,7 +179,7 @@ class LoopOutputCorrelator:
                     params.outputs.append(data)
         except json.JSONDecodeError as e:
             logger.warning(
-                "Skipping corrupted JSON file in loop output",
+                "Skipping corrupted JSON file in version output",
                 extra={
                     "operation": params.operation,
                     "file": str(params.json_file),
@@ -191,7 +191,7 @@ class LoopOutputCorrelator:
             params.corrupted_files.append(str(params.json_file.name))
         except (OSError, IOError) as e:
             logger.error(
-                "Failed to read loop output file",
+                "Failed to read version output file",
                 extra={
                     "operation": params.operation,
                     "file": str(params.json_file),
@@ -202,7 +202,7 @@ class LoopOutputCorrelator:
             params.corrupted_files.append(str(params.json_file.name))
         except (ValueError, TypeError, UnicodeDecodeError) as e:
             logger.exception(
-                "Unexpected error loading loop output file",
+                "Unexpected error loading version output file",
                 extra={
                     "operation": params.operation,
                     "file": str(params.json_file),
@@ -225,14 +225,14 @@ class LoopOutputCorrelator:
                     outputs=outputs,
                     corrupted_files=corrupted_files,
                     output_dir=output_dir,
-                    operation="load_loop_outputs",
+                    operation="load_version_outputs",
                     add_source_file=False,
                 )
             )
 
         if corrupted_files:
             logger.warning(
-                "Skipped %d corrupted files in loop output",
+                "Skipped %d corrupted files in version output",
                 len(corrupted_files),
                 extra={
                     "operation": "load_loop_outputs",
@@ -261,7 +261,7 @@ class LoopOutputCorrelator:
                     outputs=outputs,
                     corrupted_files=corrupted_files,
                     output_dir=output_dir,
-                    operation="load_loop_outputs_with_filenames",
+                    operation="load_version_outputs_with_filenames",
                     add_source_file=True,
                 )
             )
@@ -271,7 +271,7 @@ class LoopOutputCorrelator:
 
         if corrupted_files:
             logger.warning(
-                "Skipped %d corrupted files in loop output",
+                "Skipped %d corrupted files in version output",
                 len(corrupted_files),
                 extra={
                     "operation": "load_loop_outputs_with_filenames",
@@ -285,32 +285,32 @@ class LoopOutputCorrelator:
         return (outputs, filenames)
 
     def _build_correlation_groups(
-        self, loop_outputs: Dict[str, List[Dict[str, Any]]]
+        self, version_outputs: Dict[str, List[Dict[str, Any]]]
     ) -> defaultdict:
-        """Build correlation groups from loop outputs."""
+        """Build correlation groups from version outputs."""
         correlation_groups = defaultdict(dict)
-        for loop_agent, outputs in loop_outputs.items():
+        for version_agent, outputs in version_outputs.items():
             for record in outputs:
                 # Use dict comprehension instead of copy()+pop() for efficiency
                 record_copy = {k: v for k, v in record.items() if k != "_source_file"}
-                correlation_key = record_copy.get("loop_correlation_id")
+                correlation_key = record_copy.get("version_correlation_id")
                 if not correlation_key:
                     source_guid = record_copy.get("source_guid", "unknown")
                     raise DataValidationError(
-                        "Missing required field: loop_correlation_id",
+                        "Missing required field: version_correlation_id",
                         {
                             "source_guid": source_guid,
-                            "loop_agent": loop_agent,
-                            "operation": "correlate_loop_outputs",
+                            "version_agent": version_agent,
+                            "operation": "correlate_version_outputs",
                         },
                     )
-                correlation_groups[correlation_key][loop_agent] = record_copy
+                correlation_groups[correlation_key][version_agent] = record_copy
         return correlation_groups
 
     def _create_merged_record(
         self,
         agent_records: Dict[str, Dict[str, Any]],
-        loop_outputs: Dict[str, List[Dict[str, Any]]],
+        version_outputs: Dict[str, List[Dict[str, Any]]],
     ) -> Dict[str, Any]:
         """Create a merged record from agent records."""
         base_record = next(iter(agent_records.values()))
@@ -332,41 +332,41 @@ class LoopOutputCorrelator:
             "target_id": base_record.get("target_id"),
             "node_id": base_record.get("node_id"),
             "lineage": merged_lineage,
-            "loop_correlation_id": base_record.get("loop_correlation_id"),
+            "version_correlation_id": base_record.get("version_correlation_id"),
             "content": self._merge_with_pattern(agent_records),
             "_correlation_sources": list(agent_records.keys()),
         }
         # Check for missing iterations
-        all_expected_loops = set(loop_outputs.keys())
-        present_loops = set(agent_records.keys())
-        missing_loops = all_expected_loops - present_loops
-        if missing_loops:
-            merged_record["_missing_iterations"] = list(missing_loops)
+        all_expected_versions = set(version_outputs.keys())
+        present_versions = set(agent_records.keys())
+        missing_versions = all_expected_versions - present_versions
+        if missing_versions:
+            merged_record["_missing_iterations"] = list(missing_versions)
         return merged_record
 
     def _correlate_by_source_record(
-        self, loop_outputs: Dict[str, List[Dict[str, Any]]]
+        self, version_outputs: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
         """
-        Correlate loop outputs by source record ID using merge pattern.
+        Correlate version outputs by source record ID using merge pattern.
 
         Handles the agent-actions data structure where actual content is nested
         in a 'content' field and correlation is done by 'source_guid'.
 
         Args:
-            loop_outputs: Dict mapping loop agent names to their outputs
+            version_outputs: Dict mapping version agent names to their outputs
         """
-        correlation_groups = self._build_correlation_groups(loop_outputs)
+        correlation_groups = self._build_correlation_groups(version_outputs)
         correlated_records = []
         for agent_records in correlation_groups.values():
             if agent_records:
-                merged_record = self._create_merged_record(agent_records, loop_outputs)
+                merged_record = self._create_merged_record(agent_records, version_outputs)
                 correlated_records.append(merged_record)
         return correlated_records
 
     def _merge_with_pattern(self, agent_records: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Merge content from multiple loop agent records using merge pattern.
+        Merge content from multiple version agent records using merge pattern.
 
         Prefixes each field with the agent name to avoid collisions:
         - extract_raw_qa_1 output: {"questions": [...]}
@@ -374,7 +374,7 @@ class LoopOutputCorrelator:
         - Merged: {"extract_raw_qa_1_questions": [...], "extract_raw_qa_2_questions": [...]}
 
         Args:
-            agent_records: Dict mapping loop agent names to their records
+            agent_records: Dict mapping version agent names to their records
 
         Returns:
             Merged content dictionary with prefixed field names
@@ -390,7 +390,7 @@ class LoopOutputCorrelator:
 
     def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:
         """
-        Extract a correlation key from a record to match it across loop iterations.
+        Extract a correlation key from a record to match it across version iterations.
 
         Tries multiple strategies to find a suitable correlation key.
         """
@@ -463,4 +463,4 @@ class LoopOutputCorrelator:
             logger.warning("Could not create correlation source data: %s", e)
 
 
-__all__ = ["LoopOutputCorrelator"]
+__all__ = ["VersionOutputCorrelator"]

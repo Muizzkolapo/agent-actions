@@ -24,7 +24,7 @@ from agent_actions.orchestration.action_level_executor import (
 from agent_actions.orchestration.agent_executor import AgentExecutor, ExecutorDependencies
 from agent_actions.orchestration.artifact_linker import ArtifactLinker
 from agent_actions.orchestration.batch_manager import BatchLifecycleManager
-from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
+from agent_actions.orchestration.version_correlator import VersionOutputCorrelator
 from agent_actions.orchestration.manifest_manager import ManifestManager
 from agent_actions.orchestration.output_manager import AgentOutputManager, OutputManagerConfig
 from agent_actions.orchestration.skip_evaluator import SkipEvaluator
@@ -169,7 +169,7 @@ class AgentWorkflow:
         status_file = agent_folder / ".agent_status.json"
 
         # Initialize loop correlator
-        loop_correlator = LoopOutputCorrelator(agent_folder)
+        loop_correlator = VersionOutputCorrelator(agent_folder)
 
         # Initialize modular components
         state_manager = AgentStateManager(status_file, self.execution_order)

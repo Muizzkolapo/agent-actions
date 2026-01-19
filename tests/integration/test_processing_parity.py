@@ -21,7 +21,7 @@ class TestStagingProcessorParity:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_simple_input_parity(
         self,
@@ -147,7 +147,7 @@ class TestTargetContentProcessorParity:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_simple_input_parity(
         self,
@@ -200,7 +200,7 @@ class TestTargetContentProcessorParity:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_passthrough_parity(
         self,
@@ -271,7 +271,7 @@ class TestTargetContentProcessorParity:
     @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
     @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
-    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
     def test_loop_context_parity(
         self,

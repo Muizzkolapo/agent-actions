@@ -122,18 +122,18 @@ class MetadataEnricher(Enricher):
         return result
 
 
-class LoopIdEnricher(Enricher):
-    """Add loop correlation IDs."""
+class VersionIdEnricher(Enricher):
+    """Add version correlation IDs."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Add loop correlation ID to each item."""
+        """Add version correlation ID to each item."""
         if result.status == ProcessingStatus.FILTERED:
             return result
 
-        from agent_actions.utilities.correlation import LoopIdGenerator
+        from agent_actions.utilities.correlation import VersionIdGenerator
 
         for i, item in enumerate(result.data):
-            result.data[i] = LoopIdGenerator.add_loop_correlation_id(
+            result.data[i] = VersionIdGenerator.add_version_correlation_id(
                 item, context.agent_config, record_index=context.record_index
             )
 
@@ -214,7 +214,7 @@ class EnrichmentPipeline:
             else [
                 LineageEnricher(),
                 MetadataEnricher(),
-                LoopIdEnricher(),
+                VersionIdEnricher(),
                 PassthroughEnricher(),
                 RequiredFieldsEnricher(),
                 RecoveryEnricher(),

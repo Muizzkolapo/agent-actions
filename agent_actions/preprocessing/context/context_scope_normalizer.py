@@ -3,7 +3,7 @@ Context Scope Normalizer - Centralized normalization for context_scope directive
 
 Handles:
 - Directive registry (list vs dict directives)
-- Loop reference expansion (action.* -> action_)
+- Version reference expansion (action.* -> action_)
 - Preserves both raw and expanded versions
 """
 
@@ -16,29 +16,29 @@ logger = logging.getLogger(__name__)
 # Directive registry: distinguishes how each directive type should be handled
 DIRECTIVE_REGISTRY = {
     # List directives - contain field references to expand
-    "observe": {"type": "list", "expand_loops": True},
-    "passthrough": {"type": "list", "expand_loops": True},
-    "drop": {"type": "list", "expand_loops": True},
-    "drops": {"type": "list", "expand_loops": True},
+    "observe": {"type": "list", "expand_versions": True},
+    "passthrough": {"type": "list", "expand_versions": True},
+    "drop": {"type": "list", "expand_versions": True},
+    "drops": {"type": "list", "expand_versions": True},
     # Dict directives - preserve as-is (never expand)
-    "seed_data": {"type": "dict", "expand_loops": False},
+    "seed_data": {"type": "dict", "expand_versions": False},
 }
 
 
 def normalize_context_scope(
     context_scope: Optional[Dict[str, Any]],
-    loop_base_map: Dict[str, List[str]],
+    version_base_map: Dict[str, List[str]],
 ) -> Optional[Dict[str, Any]]:
     """
-    Normalize context_scope by expanding loop references in list directives only.
+    Normalize context_scope by expanding version references in list directives only.
 
     Args:
         context_scope: Raw context_scope from config
-        loop_base_map: Mapping of loop base names to expanded agent names
+        version_base_map: Mapping of version base names to expanded agent names
                        e.g., {"extract_raw_qa": ["extract_raw_qa_1", "extract_raw_qa_2"]}
 
     Returns:
-        Normalized context_scope with loop references expanded in list directives,
+        Normalized context_scope with version references expanded in list directives,
         dict directives preserved as-is.
     """
     if not context_scope:
@@ -48,14 +48,14 @@ def normalize_context_scope(
 
     for directive_name, directive_value in context_scope.items():
         directive_info = DIRECTIVE_REGISTRY.get(
-            directive_name, {"type": "unknown", "expand_loops": False}
+            directive_name, {"type": "unknown", "expand_versions": False}
         )
 
-        if directive_info["type"] == "list" and directive_info["expand_loops"]:
-            # List directive - expand loop references
+        if directive_info["type"] == "list" and directive_info["expand_versions"]:
+            # List directive - expand version references
             if isinstance(directive_value, list):
                 expanded_scope[directive_name] = _expand_list_directive(
-                    directive_value, loop_base_map
+                    directive_value, version_base_map
                 )
             else:
                 expanded_scope[directive_name] = directive_value
@@ -71,20 +71,20 @@ def normalize_context_scope(
 
 def _expand_list_directive(
     field_refs: List[str],
-    loop_base_map: Dict[str, List[str]],
+    version_base_map: Dict[str, List[str]],
 ) -> List[str]:
     """
-    Expand loop base name references in a list of field references.
+    Expand version base name references in a list of field references.
 
     Converts wildcard references like "extract_raw_qa.*" to field prefix
-    patterns like "extract_raw_qa_" which match all loop iteration fields.
+    patterns like "extract_raw_qa_" which match all version iteration fields.
 
     Field Prefix Pattern Convention:
     --------------------------------
     A trailing underscore WITHOUT a dot indicates a field prefix pattern.
 
     Examples:
-    - "extract_raw_qa.*"  -> "extract_raw_qa_"   (matches all fields from loop iterations)
+    - "extract_raw_qa.*"  -> "extract_raw_qa_"   (matches all fields from version iterations)
     - "extract_raw_qa_1_questions", "extract_raw_qa_2_questions", etc.
 
     The trailing underscore is detected by context_scope_processor.py:368-379
@@ -106,7 +106,7 @@ def _expand_list_directive(
 
         action_name, field_name = parts
 
-        if action_name in loop_base_map:
+        if action_name in version_base_map:
             if field_name == "*":
                 # Wildcard: "extract_raw_qa.*" -> "extract_raw_qa_"
                 expanded_refs.append(f"{action_name}_")
@@ -114,7 +114,7 @@ def _expand_list_directive(
                 # Specific field reference - keep as-is
                 expanded_refs.append(field_ref)
         else:
-            # Not a loop base name - keep as-is
+            # Not a version base name - keep as-is
             expanded_refs.append(field_ref)
 
     return expanded_refs
@@ -142,8 +142,8 @@ def normalize_all_agent_configs(
         agent_configs: Dictionary of agent configurations (WILL BE MUTATED)
         execution_order: List of agent names in topological order
     """
-    # Build loop base name map
-    loop_base_map = _build_loop_base_name_map(agent_configs, execution_order)
+    # Build version base name map
+    version_base_map = _build_version_base_name_map(agent_configs, execution_order)
 
     for agent_name in execution_order:
         config = agent_configs.get(agent_name, {})
@@ -151,7 +151,7 @@ def normalize_all_agent_configs(
 
         if context_scope:
             # Create expanded version
-            expanded = normalize_context_scope(context_scope, loop_base_map)
+            expanded = normalize_context_scope(context_scope, version_base_map)
             config["context_scope_expanded"] = expanded
 
             logger.debug(
@@ -162,20 +162,20 @@ def normalize_all_agent_configs(
             )
 
 
-def _build_loop_base_name_map(
+def _build_version_base_name_map(
     agent_configs: Dict[str, Dict[str, Any]],
     execution_order: List[str],
 ) -> Dict[str, List[str]]:
-    """Build mapping from loop base names to their expanded agent names."""
-    loop_base_map: Dict[str, List[str]] = {}
+    """Build mapping from version base names to their expanded agent names."""
+    version_base_map: Dict[str, List[str]] = {}
 
     for agent_name in execution_order:
         config = agent_configs.get(agent_name, {})
-        if config.get("is_loop_agent"):
-            base_name = config.get("loop_base_name")
+        if config.get("is_versioned_agent"):
+            base_name = config.get("version_base_name")
             if base_name:
-                if base_name not in loop_base_map:
-                    loop_base_map[base_name] = []
-                loop_base_map[base_name].append(agent_name)
+                if base_name not in version_base_map:
+                    version_base_map[base_name] = []
+                version_base_map[base_name].append(agent_name)
 
-    return loop_base_map
+    return version_base_map
