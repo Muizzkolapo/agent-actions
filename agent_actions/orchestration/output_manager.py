@@ -513,22 +513,22 @@ class AgentOutputManager:
                 agent_type = agent_config["agent_type"]
                 output_directory = Path(agent_folder) / "target" / agent_type
                 output_directory.mkdir(parents=True, exist_ok=True)
-                return (str(input_directory), str(output_directory))
+                # Return list of directories (not a single string) to match setup_directories signature
+                return ([str(input_directory)], str(output_directory))
 
             self.console.print(
                 f"[yellow]⚠️ Failed to correlate loop outputs for "
                 f"{current_agent}, falling back to standard input[/yellow]"
             )
-            input_dir, _ = original_setup_directories(
+            input_directories, output_dir = original_setup_directories(
                 agent_folder, agent_config, previous_agent_type, agent_idx
             )
-            input_directory = input_dir
-
+            # input_directories is already a list from setup_directories
             # Setup output directory (simple name, no index prefix)
             agent_type = agent_config["agent_type"]
             output_directory = Path(agent_folder) / "target" / agent_type
             output_directory.mkdir(parents=True, exist_ok=True)
 
-            return (str(input_directory), str(output_directory))
+            return (input_directories, str(output_directory))
 
         return correlation_setup_directories

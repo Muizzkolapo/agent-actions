@@ -308,6 +308,115 @@ class TestBuildFieldContextRequiresAgentIndices:
         assert isinstance(result, dict)
 
 
+class TestLoopBaseNameExpansion:
+    """Test automatic expansion of loop base names in dependencies and context_scope."""
+
+    def test_loop_base_name_in_dependencies_expands_to_variants(self):
+        """When dependencies references a loop base name, it should expand to all variants."""
+        action_config = {
+            "dependencies": ["extract_raw_qa"],  # Loop base name
+        }
+        workflow_actions = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "extract_raw_qa_3",
+            "flatten_questions",
+        ]
+
+        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+            action_config, workflow_actions, "flatten_questions"
+        )
+
+        # Should expand to all loop variants
+        assert set(input_sources) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
+        assert context_sources == []
+
+    def test_loop_base_name_in_context_scope_expands_to_variants(self):
+        """When context_scope references a loop base name, it should expand to all variants."""
+        action_config = {
+            "dependencies": ["other_action"],
+            "context_scope": {
+                "observe": [
+                    "extract_raw_qa.field1",  # Loop base name
+                    "other_action.field2",
+                ]
+            },
+        }
+        workflow_actions = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "extract_raw_qa_3",
+            "other_action",
+            "flatten_questions",
+        ]
+
+        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+            action_config, workflow_actions, "flatten_questions"
+        )
+
+        # dependencies should expand
+        assert input_sources == ["other_action"]
+        # context_scope should expand loop base name
+        assert set(context_sources) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
+
+    def test_loop_consumption_pattern_with_context_scope(self):
+        """Test the common loop_consumption pattern where both deps and context reference loop."""
+        action_config = {
+            "dependencies": ["extract_raw_qa"],
+            "loop_consumption": {
+                "source": "extract_raw_qa",
+                "pattern": "merge",
+            },
+            "context_scope": {"observe": ["extract_raw_qa.*"]},
+        }
+        workflow_actions = [
+            "extract_raw_qa_1",
+            "extract_raw_qa_2",
+            "extract_raw_qa_3",
+            "flatten_questions",
+        ]
+
+        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+            action_config, workflow_actions, "flatten_questions"
+        )
+
+        # Both should expand to all variants
+        # Note: extract_raw_qa is in BOTH deps and context_scope
+        # So after expansion, all variants are input_sources (since they're in dependencies)
+        assert set(input_sources) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
+        # Context sources are auto-inferred: actions in context_scope but NOT in dependencies
+        # Since extract_raw_qa is in both, after expansion all variants are in input_sources
+        # So context_sources should be empty
+        assert context_sources == []
+
+    def test_mixed_loop_and_regular_actions(self):
+        """Test expansion when both loop and regular actions are referenced."""
+        action_config = {
+            "dependencies": ["regular_action"],
+            "context_scope": {
+                "observe": [
+                    "loop_action.field1",
+                    "regular_action.field2",
+                ]
+            },
+        }
+        workflow_actions = [
+            "loop_action_1",
+            "loop_action_2",
+            "regular_action",
+            "consumer",
+        ]
+
+        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+            action_config, workflow_actions, "consumer"
+        )
+
+        # Regular action stays as-is
+        assert input_sources == ["regular_action"]
+        # Loop action expands
+        assert set(context_sources) == {"loop_action_1", "loop_action_2"}
+
+
 class TestInferDependenciesEdgeCases:
     """Test edge cases for infer_dependencies()."""
 

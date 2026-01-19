@@ -241,3 +241,163 @@ class TestResolveDependencyDirectoriesIntegration:
         # Context deps are NOT returned here - they're loaded via historical loader
         assert len(result) == 1
         assert result[0] == temp_workflow_folder / "target" / "get_authoring_prompt"
+
+
+class TestStrategySelectionByDependencies:
+    """Test that strategy selection is based on dependencies, not position index.
+
+    This ensures loop iterations of first-stage actions all use InitialStrategy
+    to generate consistent source_guid values.
+    """
+
+    @pytest.fixture
+    def mock_process_and_generate(self):
+        """Mock process_and_generate_for_agent to capture strategy selection."""
+        return MagicMock(return_value="/fake/output")
+
+    def test_action_without_dependencies_uses_initial_strategy(self, mock_process_and_generate):
+        """Actions without dependencies should use InitialStrategy regardless of idx."""
+        runner = AgentRunner.__new__(AgentRunner)
+        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner.strategies = {
+            "initial": MagicMock(name="InitialStrategy"),
+            "intermediate": MagicMock(name="StandardStrategy"),
+        }
+
+        # Call with idx=5 but no dependencies - should still use initial
+        agent_config = {"agent_type": "test_action", "dependencies": []}
+        runner.run_agent(
+            agent_config=agent_config,
+            agent_name="test_action",
+            previous_agent_type=None,
+            idx=5,  # Non-zero index
+        )
+
+        # Verify initial strategy was used
+        call_args = mock_process_and_generate.call_args
+        assert call_args is not None
+        params = call_args[0][0]
+        assert params.strategy == runner.strategies["initial"]
+
+    def test_action_with_dependencies_uses_intermediate_strategy(self, mock_process_and_generate):
+        """Actions with dependencies should use StandardStrategy."""
+        runner = AgentRunner.__new__(AgentRunner)
+        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner.strategies = {
+            "initial": MagicMock(name="InitialStrategy"),
+            "intermediate": MagicMock(name="StandardStrategy"),
+        }
+
+        # Call with idx=0 but HAS dependencies - should use intermediate
+        agent_config = {
+            "agent_type": "downstream_action",
+            "dependencies": ["upstream_action"],
+        }
+        runner.run_agent(
+            agent_config=agent_config,
+            agent_name="downstream_action",
+            previous_agent_type="upstream_action",
+            idx=0,  # Zero index but has dependencies
+        )
+
+        # Verify intermediate strategy was used
+        call_args = mock_process_and_generate.call_args
+        assert call_args is not None
+        params = call_args[0][0]
+        assert params.strategy == runner.strategies["intermediate"]
+
+    def test_loop_iterations_all_use_initial_strategy(self, mock_process_and_generate):
+        """All loop iterations without dependencies should use InitialStrategy.
+
+        This is the key fix: extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3
+        should ALL use InitialStrategy to generate consistent source_guid.
+        """
+        runner = AgentRunner.__new__(AgentRunner)
+        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner.strategies = {
+            "initial": MagicMock(name="InitialStrategy"),
+            "intermediate": MagicMock(name="StandardStrategy"),
+        }
+
+        # Simulate 3 loop iterations, all without dependencies
+        loop_iterations = [
+            {
+                "agent_type": "extract_raw_qa_1",
+                "is_loop_agent": True,
+                "loop_base_name": "extract_raw_qa",
+                "dependencies": [],
+            },
+            {
+                "agent_type": "extract_raw_qa_2",
+                "is_loop_agent": True,
+                "loop_base_name": "extract_raw_qa",
+                "dependencies": [],
+            },
+            {
+                "agent_type": "extract_raw_qa_3",
+                "is_loop_agent": True,
+                "loop_base_name": "extract_raw_qa",
+                "dependencies": [],
+            },
+        ]
+
+        for idx, config in enumerate(loop_iterations):
+            runner.run_agent(
+                agent_config=config,
+                agent_name=config["agent_type"],
+                previous_agent_type=None if idx == 0 else loop_iterations[idx - 1]["agent_type"],
+                idx=idx,
+            )
+
+        # Verify ALL calls used initial strategy
+        assert mock_process_and_generate.call_count == 3
+        for call in mock_process_and_generate.call_args_list:
+            params = call[0][0]
+            assert params.strategy == runner.strategies["initial"], (
+                f"Loop iteration {params.agent_name} should use InitialStrategy"
+            )
+
+    def test_loop_with_dependencies_uses_intermediate_strategy(self, mock_process_and_generate):
+        """Loop iterations WITH dependencies should use StandardStrategy.
+
+        This verifies downstream loop actions (loop_b depends on loop_a)
+        correctly use StandardStrategy to read source_guid from upstream.
+        """
+        runner = AgentRunner.__new__(AgentRunner)
+        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner.strategies = {
+            "initial": MagicMock(name="InitialStrategy"),
+            "intermediate": MagicMock(name="StandardStrategy"),
+        }
+
+        # Simulate loop_b iterations that depend on loop_a
+        downstream_loop_iterations = [
+            {
+                "agent_type": "loop_b_1",
+                "is_loop_agent": True,
+                "loop_base_name": "loop_b",
+                "dependencies": ["loop_a"],  # Has dependencies!
+            },
+            {
+                "agent_type": "loop_b_2",
+                "is_loop_agent": True,
+                "loop_base_name": "loop_b",
+                "dependencies": ["loop_a"],
+            },
+        ]
+
+        for idx, config in enumerate(downstream_loop_iterations):
+            runner.run_agent(
+                agent_config=config,
+                agent_name=config["agent_type"],
+                previous_agent_type="loop_a_2" if idx > 0 else "loop_a_1",
+                idx=idx + 10,  # Non-zero indices
+            )
+
+        # Verify ALL calls used intermediate strategy
+        assert mock_process_and_generate.call_count == 2
+        for call in mock_process_and_generate.call_args_list:
+            params = call[0][0]
+            assert params.strategy == runner.strategies["intermediate"], (
+                f"Loop iteration {params.agent_name} with dependencies should use StandardStrategy"
+            )

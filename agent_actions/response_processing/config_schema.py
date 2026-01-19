@@ -244,6 +244,16 @@ class AgentConfig(BaseModel):
         default=300, description="Maximum execution time in seconds"
     )
     enable_caching: bool = Field(default=True, description="Enable caching for performance")
+    context_scope: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Context scope configuration for data visibility and flow control "
+        "(seed_data, observe, drop directives). This is the raw config.",
+    )
+    context_scope_expanded: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Loop-expanded version of context_scope. List directives have "
+        "loop references expanded to field prefix patterns.",
+    )
 
     model_config = ConfigDict(extra="allow")
 

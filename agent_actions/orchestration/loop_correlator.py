@@ -314,11 +314,24 @@ class LoopOutputCorrelator:
     ) -> Dict[str, Any]:
         """Create a merged record from agent records."""
         base_record = next(iter(agent_records.values()))
+
+        # Merge lineages from all agent records (not just base_record)
+        merged_lineage = []
+        seen_lineage_entries: set = set()
+        for record in agent_records.values():
+            record_lineage = record.get("lineage", [])
+            if isinstance(record_lineage, list):
+                for entry in record_lineage:
+                    entry_key = entry if isinstance(entry, str) else entry.get("node_id")
+                    if entry_key and entry_key not in seen_lineage_entries:
+                        merged_lineage.append(entry)
+                        seen_lineage_entries.add(entry_key)
+
         merged_record = {
             "source_guid": base_record["source_guid"],
             "target_id": base_record.get("target_id"),
             "node_id": base_record.get("node_id"),
-            "lineage": base_record.get("lineage"),
+            "lineage": merged_lineage,
             "loop_correlation_id": base_record.get("loop_correlation_id"),
             "content": self._merge_with_pattern(agent_records),
             "_correlation_sources": list(agent_records.keys()),
@@ -355,16 +368,24 @@ class LoopOutputCorrelator:
         """
         Merge content from multiple loop agent records using merge pattern.
 
+        Prefixes each field with the agent name to avoid collisions:
+        - extract_raw_qa_1 output: {"questions": [...]}
+        - extract_raw_qa_2 output: {"questions": [...]}
+        - Merged: {"extract_raw_qa_1_questions": [...], "extract_raw_qa_2_questions": [...]}
+
         Args:
             agent_records: Dict mapping loop agent names to their records
 
         Returns:
-            Merged content dictionary
+            Merged content dictionary with prefixed field names
         """
         merged_content = {}
-        for record in agent_records.values():
+        for agent_name, record in agent_records.items():
             content = record.get("content", {})
-            merged_content.update(content)
+            # Prefix each field with agent name to avoid collisions
+            for field_name, field_value in content.items():
+                prefixed_field = f"{agent_name}_{field_name}"
+                merged_content[prefixed_field] = field_value
         return merged_content
 
     def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:

@@ -807,7 +807,11 @@ class AgentRunner:
         Returns:
             str: Path to the output directory.
         """
-        if idx == 0:
+        # Determine strategy based on dependencies, not position
+        # Actions without dependencies (including loop iterations of first-stage actions)
+        # should use InitialStrategy with is_first_stage=True to generate source_guid
+        dependencies = agent_config.get("dependencies", [])
+        if not dependencies:
             strategy_name = "initial"
         else:
             strategy_name = "intermediate"

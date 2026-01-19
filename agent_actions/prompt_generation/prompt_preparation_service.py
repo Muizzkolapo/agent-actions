@@ -234,7 +234,10 @@ class PromptPreparationService:
         logger.debug("Loaded raw prompt (length: %d)", len(raw_prompt))
 
         # Step 1.5: Extract context_scope for progressive data exposure
-        context_scope = request.agent_config.get("context_scope", {})
+        # Prefer expanded version (has loop references resolved), fall back to raw
+        context_scope = request.agent_config.get(
+            "context_scope_expanded"
+        ) or request.agent_config.get("context_scope", {})
 
         # Step 2: Build field context with historical node loading
         # Pass context_scope to control which fields are loaded (progressive data exposure)

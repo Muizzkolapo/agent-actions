@@ -62,6 +62,55 @@ class ActionLevelOrchestrator:
         self.agent_configs = agent_configs
         self.console = console or Console()
 
+    def _build_loop_base_name_map(self) -> Dict[str, List[str]]:
+        """
+        Build a mapping from loop base names to their expanded agent names.
+
+        For example, if extract_raw_qa is a loop action that expands to
+        extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3, this returns:
+        {"extract_raw_qa": ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]}
+
+        Returns:
+            Dictionary mapping loop base names to list of expanded agent names
+        """
+        loop_base_map: Dict[str, List[str]] = {}
+        for agent_name in self.execution_order:
+            config = self.agent_configs[agent_name]
+            if config.get("is_loop_agent"):
+                base_name = config.get("loop_base_name")
+                if base_name:
+                    if base_name not in loop_base_map:
+                        loop_base_map[base_name] = []
+                    loop_base_map[base_name].append(agent_name)
+        return loop_base_map
+
+    def _expand_loop_dependencies(
+        self, dependencies: List[str], loop_base_map: Dict[str, List[str]]
+    ) -> List[str]:
+        """
+        Expand dependencies that reference loop base names to their expanded variants.
+
+        For example, if dependencies is ["extract_raw_qa"] and loop_base_map is
+        {"extract_raw_qa": ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]},
+        this returns ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"].
+
+        Args:
+            dependencies: List of dependency names
+            loop_base_map: Mapping from loop base names to expanded agent names
+
+        Returns:
+            List of expanded dependency names
+        """
+        expanded = []
+        for dep in dependencies:
+            if dep in loop_base_map:
+                # Dependency references a loop base name - expand to all variants
+                expanded.extend(loop_base_map[dep])
+            else:
+                # Regular dependency - keep as-is
+                expanded.append(dep)
+        return expanded
+
     def compute_execution_levels(self) -> List[List[str]]:
         """
         Compute execution levels from dependency graph.
@@ -74,13 +123,24 @@ class ActionLevelOrchestrator:
         Raises:
             WorkflowError: If circular dependencies detected
         """
-        # Build dependency map
-        deps_map = {
-            agent: [
+        # Build mapping of loop base names to their expanded variants
+        loop_base_map = self._build_loop_base_name_map()
+
+        # Note: context_scope loop reference expansion is now handled at config load time
+        # by context_scope_normalizer.py via ConfigManager.determine_execution_order()
+
+        # Build dependency map, expanding loop base name references
+        deps_map = {}
+        for agent in self.execution_order:
+            raw_deps = [
                 d for d in self.agent_configs[agent].get("dependencies", []) if isinstance(d, str)
             ]
-            for agent in self.execution_order
-        }
+            # Expand any loop base name references to their expanded variants
+            expanded_deps = self._expand_loop_dependencies(raw_deps, loop_base_map)
+            deps_map[agent] = expanded_deps
+            # Update agent config with expanded dependencies
+            if expanded_deps != raw_deps:
+                self.agent_configs[agent]["dependencies"] = expanded_deps
 
         levels = []
         assigned = set()

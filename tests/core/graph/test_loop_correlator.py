@@ -186,17 +186,18 @@ class TestLoopOutputCorrelator:
             correlated_data = json.load(f)
         assert len(correlated_data) == 3
         record1 = next((r for r in correlated_data if r["source_guid"] == "guid-1"))
-        assert "field_1" in record1["content"]
-        assert "field_2" in record1["content"]
-        assert "field_3" in record1["content"]
+        # Fields are now prefixed with agent name
+        assert "distractor_1_field_1" in record1["content"]
+        assert "distractor_2_field_2" in record1["content"]
+        assert "distractor_3_field_3" in record1["content"]
         record2 = next((r for r in correlated_data if r["source_guid"] == "guid-2"))
-        assert "field_1" in record2["content"]
-        assert "field_2" in record2["content"]
-        assert "field_3" not in record2["content"]
+        assert "distractor_1_field_1" in record2["content"]
+        assert "distractor_2_field_2" in record2["content"]
+        assert "distractor_3_field_3" not in record2["content"]
         record3 = next((r for r in correlated_data if r["source_guid"] == "guid-3"))
-        assert "field_1" in record3["content"]
-        assert "field_2" not in record3["content"]
-        assert "field_3" not in record3["content"]
+        assert "distractor_1_field_1" in record3["content"]
+        assert "distractor_2_field_2" not in record3["content"]
+        assert "distractor_3_field_3" not in record3["content"]
 
     def test_multiple_file_correlation(self, correlator, temp_agent_folder):
         """Test correlation when loop agents produce multiple files."""
@@ -234,8 +235,9 @@ class TestLoopOutputCorrelator:
             with open(output_file, "r") as f:
                 data = json.load(f)
                 assert len(data) == 1
-                assert "loop1_data" in data[0]["content"]
-                assert "loop2_data" in data[0]["content"]
+                # Fields are now prefixed with agent name
+                assert "processor_1_loop1_data" in data[0]["content"]
+                assert "processor_2_loop2_data" in data[0]["content"]
 
     def test_find_agent_index(self, correlator, temp_agent_folder):
         """Test finding agent by checking directory existence."""
@@ -269,7 +271,7 @@ class TestLoopOutputCorrelator:
         assert len(file2_outputs) == 1
 
     def test_correlate_by_source_record(self, correlator):
-        """Test the correlation logic for merging records."""
+        """Test the correlation logic for merging records with prefixed field names."""
         loop_outputs = {
             "loop_1": [
                 {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f1": "v1"}},
@@ -286,9 +288,10 @@ class TestLoopOutputCorrelator:
         result = correlator._correlate_by_source_record(loop_outputs)
         assert len(result) == 2
         rec_a = next((r for r in result if r["source_guid"] == "guid-a"))
-        assert rec_a["content"] == {"f1": "v1", "f2": "v3", "f3": "v5"}
+        # Fields are now prefixed with agent name to avoid collisions
+        assert rec_a["content"] == {"loop_1_f1": "v1", "loop_2_f2": "v3", "loop_3_f3": "v5"}
         rec_b = next((r for r in result if r["source_guid"] == "guid-b"))
-        assert rec_b["content"] == {"f1": "v2", "f2": "v4"}
+        assert rec_b["content"] == {"loop_1_f1": "v2", "loop_2_f2": "v4"}
 
     def test_write_correlated_data(self, correlator, temp_agent_folder):
         """Test writing correlated data and source file creation."""
@@ -381,9 +384,10 @@ class TestLoopOutputCorrelatorIntegration:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 1
-            assert data[0]["content"]["field_1"] == "value_1"
-            assert data[0]["content"]["field_2"] == "value_2"
-            assert data[0]["content"]["field_3"] == "value_3"
+            # Fields are now prefixed with agent name
+            assert data[0]["content"]["loop_1_field_1"] == "value_1"
+            assert data[0]["content"]["loop_2_field_2"] == "value_2"
+            assert data[0]["content"]["loop_3_field_3"] == "value_3"
 
 
 class TestLoopCorrelatorWithSequentialMode:
@@ -424,7 +428,13 @@ class TestLoopCorrelatorWithSequentialMode:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 3
-            iterations = {item["content"]["iteration"] for item in data}
+            # Fields are now prefixed with agent name
+            # Extract iteration values from prefixed fields
+            iterations = set()
+            for item in data:
+                for key, value in item["content"].items():
+                    if key.endswith("_iteration"):
+                        iterations.add(value)
             assert iterations == {1, 2, 3}
 
     def test_partial_sequential_failure_correlation(self, correlator, temp_agent_folder):
@@ -451,7 +461,9 @@ class TestLoopCorrelatorWithSequentialMode:
                 data = json.load(f)
                 assert len(data) <= 2
                 if len(data) > 0:
-                    assert "field_1" in data[0]["content"] or "field_2" in data[0]["content"]
+                    # Fields are prefixed with agent name
+                    content_keys = data[0]["content"].keys()
+                    assert any("field_1" in k or "field_2" in k for k in content_keys)
 
     def test_sequential_loop_with_mixed_metadata(self, correlator, temp_agent_folder):
         """Test correlation when sequential loop agents have loop_mode metadata."""
@@ -476,7 +488,11 @@ class TestLoopCorrelatorWithSequentialMode:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 1
-            assert data[0]["content"]["step"] in [1, 2, 3]
+            # Fields are now prefixed with agent name
+            # Check that at least one step field exists with expected value
+            content = data[0]["content"]
+            step_values = [content.get(f"step_{i}_step") for i in range(1, 4)]
+            assert any(v in [1, 2, 3] for v in step_values if v is not None)
 
     def test_sequential_vs_parallel_correlation_same_behavior(self, correlator, temp_agent_folder):
         """Test that correlation behavior is identical for sequential and parallel loops."""
@@ -520,10 +536,11 @@ class TestLoopCorrelatorWithSequentialMode:
             par_data = json.load(f)
         assert len(seq_data) == 1
         assert len(par_data) == 1
-        assert "seq_field_1" in seq_data[0]["content"]
-        assert "seq_field_2" in seq_data[0]["content"]
-        assert "par_field_1" in par_data[0]["content"]
-        assert "par_field_2" in par_data[0]["content"]
+        # Fields are now prefixed with agent name
+        assert "seq_1_seq_field_1" in seq_data[0]["content"]
+        assert "seq_2_seq_field_2" in seq_data[0]["content"]
+        assert "par_1_par_field_1" in par_data[0]["content"]
+        assert "par_2_par_field_2" in par_data[0]["content"]
 
 
 if __name__ == "__main__":
