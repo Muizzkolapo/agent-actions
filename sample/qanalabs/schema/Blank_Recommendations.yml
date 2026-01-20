@@ -1,0 +1,14 @@
+name: Blank_Recommendations
+fields:
+  - id: Blank_Recommendations
+    type: array
+    items:
+      type: object
+      properties:
+        code_to_blank:
+          type: string
+        reason:
+          type: string
+      required:
+        - code_to_blank
+        - reason

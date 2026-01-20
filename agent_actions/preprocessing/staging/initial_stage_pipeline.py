@@ -11,6 +11,7 @@ Handles the first stage of data processing workflows including:
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import List, Dict, Optional
 import json
 import logging
 import uuid
@@ -283,6 +284,93 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
 
+def _should_save_source_items(
+    new_items: List[Dict],
+    file_path: str,
+    base_directory: str,
+    output_directory: Optional[str] = None,
+) -> bool:
+    """
+    Determine if new source items should be saved based on richness comparison.
+
+    Prevents sparse downstream outputs from overwriting rich initial source data.
+    Returns True if new data is richer (has more fields) than existing data.
+
+    Args:
+        new_items: New source items to potentially save
+        file_path: Path to the input file
+        base_directory: Base directory for input files
+        output_directory: Optional output directory
+
+    Returns:
+        True if new items should be saved, False otherwise
+    """
+    if not new_items:
+        return False
+
+    # Build path to existing source file
+    relative_path = Path(file_path).relative_to(base_directory)
+
+    # Determine workflow root (same logic as _save_source_items_helper)
+    if output_directory:
+        output_path = Path(output_directory)
+        parts = output_path.parts
+        if "agent_io" in parts:
+            agent_io_idx = parts.index("agent_io")
+            workflow_root = Path(*parts[:agent_io_idx])
+        else:
+            workflow_root = output_path.parent.parent.parent
+    else:
+        base_path = Path(base_directory)
+        parts = base_path.parts
+        if "agent_io" in parts:
+            agent_io_idx = parts.index("agent_io")
+            workflow_root = Path(*parts[:agent_io_idx])
+        else:
+            workflow_root = base_path.parent.parent.parent
+
+    source_file = workflow_root / "agent_io" / "source" / f"{relative_path.with_suffix('')}.json"
+
+    # If source file doesn't exist, always save
+    if not source_file.exists():
+        logger.debug("Source file doesn't exist, proceeding with save: %s", source_file)
+        return True
+
+    # Load existing source data
+    try:
+        with open(source_file, "r", encoding="utf-8") as f:
+            existing_items = json.load(f)
+            if not existing_items:
+                logger.debug("Existing source file is empty, proceeding with save")
+                return True
+
+            # Compare field counts: use first item as representative
+            existing_fields = set(existing_items[0].keys()) if existing_items else set()
+            new_fields = set(new_items[0].keys()) if new_items else set()
+
+            # Only save if new data has MORE fields than existing (is richer)
+            if len(new_fields) > len(existing_fields):
+                logger.info(
+                    "New source data is richer (%d fields) than existing (%d fields), proceeding with save",
+                    len(new_fields),
+                    len(existing_fields),
+                )
+                return True
+            else:
+                logger.debug(
+                    "Existing source data is richer (%d fields) than new data (%d fields), skipping save",
+                    len(existing_fields),
+                    len(new_fields),
+                )
+                return False
+
+    except (IOError, json.JSONDecodeError) as e:
+        logger.warning(
+            "Error reading existing source file %s: %s, proceeding with save", source_file, e
+        )
+        return True
+
+
 def _save_source_data(src_text, data_chunk, file_path, base_directory, output_directory=None):
     """UNIFIED source saving logic for both batch and realtime modes."""
     # Determine source items to save
@@ -295,6 +383,14 @@ def _save_source_data(src_text, data_chunk, file_path, base_directory, output_di
 
     # Save to source folder (single source of truth)
     if source_items:
+        # Check if we're about to save sparse data when rich data might exist
+        if not _should_save_source_items(source_items, file_path, base_directory, output_directory):
+            logger.debug(
+                "Skipping source save - existing source data is richer than new data for %s",
+                file_path,
+            )
+            return
+
         _save_source_items_helper(source_items, file_path, base_directory, output_directory)
 
 

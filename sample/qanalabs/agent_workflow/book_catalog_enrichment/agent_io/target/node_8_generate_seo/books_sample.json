@@ -1,0 +1,161 @@
+[
+    {
+        "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e",
+        "content": {
+            "primary_keywords": [
+                "Effective Java",
+                "Joshua Bloch",
+                "Java programming",
+                "best practices Java",
+                "object-oriented programming",
+                "learn Java",
+                "Java coding techniques"
+            ],
+            "long_tail_keywords": [
+                "best practices for Java programming",
+                "Effective Java guide by Joshua Bloch",
+                "Java programming techniques for beginners",
+                "improve Java coding skills with Effective Java"
+            ],
+            "meta_title": "Effective Java by Joshua Bloch | Master Java Programming",
+            "meta_description": "Unlock Java programming best practices with Effective Java by Joshua Bloch. Enhance your coding skills and write better software today!"
+        },
+        "target_id": "f6a541bf-9c27-4fa8-b0f7-61bd6c625a32",
+        "node_id": "node_8_48a428ce-355b-4571-91f7-6e3d4de427e0",
+        "lineage": [
+            "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f",
+            "node_1_d16eb09c-66d9-4d34-a477-7b512499cb6a",
+            "node_2_f6715a5d-3f4e-4650-b683-0ef1ba2e9a12",
+            "node_3_840f8a5b-aa67-4b8f-b412-c284ff242b29",
+            "node_8_48a428ce-355b-4571-91f7-6e3d4de427e0"
+        ],
+        "parent_target_id": "6bbe5711-fcb6-4436-ad6b-bada80912df2",
+        "root_target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b"
+    },
+    {
+        "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8",
+        "content": {
+            "primary_keywords": [
+                "Head First Design Patterns",
+                "Eric Freeman",
+                "Java design patterns",
+                "programming patterns",
+                "object-oriented design",
+                "software design solutions",
+                "design patterns book"
+            ],
+            "long_tail_keywords": [
+                "best book for learning design patterns in Java",
+                "understanding design patterns for software development",
+                "comprehensive guide to software design patterns"
+            ],
+            "meta_title": "Head First Design Patterns: Unlock Java Programming Skills",
+            "meta_description": "Discover effective software design with engaging visuals and real-world examples in Head First Design Patterns by Eric Freeman."
+        },
+        "target_id": "0d4982b3-d6c4-4359-9d8a-97e7707ed0be",
+        "node_id": "node_8_7ececc41-016b-4358-8e7e-e27345385b2e",
+        "lineage": [
+            "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9",
+            "node_1_a6f6659f-9f9b-44d7-b29d-623d5d3b6d3e",
+            "node_2_eb07c056-036c-4435-ad0a-e7cd5f76ff96",
+            "node_3_2b8c8389-eb50-400b-b0ff-4e88eb605d5c",
+            "node_8_7ececc41-016b-4358-8e7e-e27345385b2e"
+        ],
+        "parent_target_id": "bf23691e-ae1e-4b4c-ac33-8dae32af26a7",
+        "root_target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949"
+    },
+    {
+        "source_guid": "45646a71-507d-5d51-9034-bebd96999996",
+        "content": {
+            "primary_keywords": [
+                "Design Patterns",
+                "Erich Gamma",
+                "Object-Oriented Design",
+                "programming",
+                "software development",
+                "John Vlissides",
+                "essential design patterns"
+            ],
+            "long_tail_keywords": [
+                "best books for object-oriented programming",
+                "learn design patterns in software engineering",
+                "increase software maintainability with design patterns"
+            ],
+            "meta_title": "Design Patterns: Essential Guide for Object-Oriented Programming",
+            "meta_description": "Master software development with 'Design Patterns' by Gamma et al. Discover essential OO patterns to boost productivity and improve coding standards."
+        },
+        "target_id": "e395df3a-467d-49d4-968a-66d7eae26b55",
+        "node_id": "node_8_a2b4ae01-7efa-495f-9220-4a3b9794c1c0",
+        "lineage": [
+            "node_0_4211abbc-29c8-4811-9e0a-3347ac006459",
+            "node_1_e89a425e-4236-4c21-9e8e-b6e696187e25",
+            "node_2_c9b48aac-ad36-4e68-b6c2-a7a63d8fd552",
+            "node_3_f459ac03-3c88-42d2-8c27-b8d50e8f3703",
+            "node_8_a2b4ae01-7efa-495f-9220-4a3b9794c1c0"
+        ],
+        "parent_target_id": "caacd63c-b992-47ae-a625-d08d9a0a95ed",
+        "root_target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6"
+    },
+    {
+        "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e",
+        "content": {
+            "primary_keywords": [
+                "Clean Code",
+                "Robert C. Martin",
+                "Agile Software Craftsmanship",
+                "software development",
+                "clean coding principles"
+            ],
+            "long_tail_keywords": [
+                "best practices for clean code",
+                "guide to agile software craftsmanship",
+                "how to write maintainable code"
+            ],
+            "meta_title": "Clean Code by Robert C. Martin - Essential Coding Practices",
+            "meta_description": "Discover essential coding practices in Clean Code by Robert C. Martin. Learn maintainability, refactoring, and agile principles for software development."
+        },
+        "target_id": "d9df90e0-484a-46b2-a074-2352e116a3f7",
+        "node_id": "node_8_aeceb76b-417f-45c8-9094-6a4ba9f35e6d",
+        "lineage": [
+            "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c",
+            "node_1_87bc6438-81b7-4244-b05a-a556048db345",
+            "node_2_79fb3899-993f-40f9-b1fc-f9a5bf90f9c9",
+            "node_3_d0b35ae3-9598-42d1-af21-9201845b2c6c",
+            "node_8_aeceb76b-417f-45c8-9094-6a4ba9f35e6d"
+        ],
+        "parent_target_id": "412ebb67-f010-4309-bb79-a5664e288e53",
+        "root_target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88"
+    },
+    {
+        "source_guid": "7b310659-e099-577a-928a-e1a039f654b6",
+        "content": {
+            "primary_keywords": [
+                "JavaScript books",
+                "Douglas Crockford JavaScript",
+                "JavaScript programming best practices",
+                "JavaScript coding",
+                "learn JavaScript",
+                "JavaScript web development",
+                "JavaScript book recommendations"
+            ],
+            "long_tail_keywords": [
+                "best JavaScript books for beginners",
+                "Douglas Crockford JavaScript tips",
+                "JavaScript programming efficiency techniques"
+            ],
+            "meta_title": "JavaScript: The Good Parts by Douglas Crockford",
+            "meta_description": "Master JavaScript with Douglas Crockford's insights. Improve your coding efficiency and avoid common mistakes with 'JavaScript: The Good Parts'."
+        },
+        "target_id": "d2e41191-c5f2-4237-a4b3-3ac071d92905",
+        "node_id": "node_8_87c8e8ba-ae6a-4f0d-8a3e-df3b9843a84d",
+        "lineage": [
+            "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18",
+            "node_1_8fc62438-6791-402c-9216-ceb11f90cb23",
+            "node_2_064f50e5-3355-4c79-9a88-6700a374b471",
+            "node_3_56759c0a-525f-47de-a206-3dc6ef16934f",
+            "node_8_87c8e8ba-ae6a-4f0d-8a3e-df3b9843a84d"
+        ],
+        "parent_target_id": "ce918295-2413-4de6-8ad6-11ed385ad88e",
+        "root_target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09"
+    }
+]

@@ -1,0 +1,18 @@
+name: write_description
+description: Schema for book marketing description
+fields:
+  - id: marketing_description
+    type: string
+    description: "Full marketing description (100-300 words)"
+  - id: hook_sentence
+    type: string
+    description: "Opening hook sentence to capture attention"
+  - id: key_benefits
+    type: array
+    items:
+      type: string
+    description: "Key benefits/selling points (3-7 items)"
+  - id: target_audience
+    type: string
+    description: "Description of the target reader"
+additionalProperties: false

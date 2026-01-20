@@ -279,11 +279,16 @@ class ContextScopeProcessor:
         )
 
         # 5. Validate all referenced actions exist in workflow
-        # Skip validation for field prefix patterns (ending with _)
+        # Skip validation for field prefix patterns (ending with _) and special namespaces
+        SPECIAL_NAMESPACES = {"source", "loop", "workflow"}
         all_deps = set(input_sources_expanded) | set(context_sources_expanded)
         for dep_action in all_deps:
             # Skip validation for loop field prefix patterns
             if dep_action.endswith("_"):
+                continue
+
+            # Skip validation for special reserved namespaces
+            if dep_action in SPECIAL_NAMESPACES:
                 continue
 
             if dep_action not in workflow_actions:
@@ -495,6 +500,28 @@ class ContextScopeProcessor:
                 "chunk_info",
             ]
         }
+
+    @staticmethod
+    def _enrich_source_namespace(
+        base_namespace: Dict[str, Any], current_item: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Merge fallback fields into the source namespace from the current item.
+
+        This helps downstream actions get at least one source-like namespace even if the
+        stored source file was sparse (e.g., only identifiers).
+        """
+        merged = dict(base_namespace or {})
+
+        if not current_item or not isinstance(current_item, dict):
+            return merged
+
+        fallback = ContextScopeProcessor._extract_content_data(current_item)
+        for key, value in fallback.items():
+            if key not in merged:
+                merged[key] = value
+
+        return merged
 
     @staticmethod
     def _load_historical_node(
@@ -721,8 +748,16 @@ class ContextScopeProcessor:
         field_context = {}
 
         # 1. SOURCE namespace - original input data
+        source_namespace = {}
         if source_content:
-            field_context["source"] = ContextScopeProcessor._extract_content_data(source_content)
+            source_namespace = ContextScopeProcessor._extract_content_data(source_content)
+
+        source_namespace = ContextScopeProcessor._enrich_source_namespace(
+            source_namespace, current_item
+        )
+
+        if source_namespace:
+            field_context["source"] = source_namespace
             logger.debug("Added 'source' namespace with %s fields", len(field_context["source"]))
 
         # 2. DEPENDENCY namespaces - separate input sources from context sources
@@ -793,7 +828,15 @@ class ContextScopeProcessor:
                     f"[CONTEXT SOURCES] Loading {len(context_sources)} context dependencies: {context_sources}"
                 )
 
+                SPECIAL_NAMESPACES = {"source", "loop", "workflow"}
                 for dep_name in context_sources:
+                    # Skip special reserved namespaces - they're populated differently
+                    if dep_name in SPECIAL_NAMESPACES:
+                        logger.debug(
+                            f"Skipping special namespace '{dep_name}' (handled separately)"
+                        )
+                        continue
+
                     # Check if dependency should be loaded
                     dep_idx = agent_indices.get(dep_name)
                     if dep_idx is None:

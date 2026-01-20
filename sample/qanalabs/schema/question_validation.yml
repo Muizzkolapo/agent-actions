@@ -1,0 +1,9 @@
+name: question_validation
+fields:
+  - id: validation_result
+    type: boolean
+    required: true
+
+  - id: failure_reason
+    type: string
+    required: true

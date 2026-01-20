@@ -1,0 +1,112 @@
+[
+    {
+        "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM051010",
+                "COM051000"
+            ],
+            "bisac_names": [
+                "Programming / Object-Oriented"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "b1fee66e-eb08-4e65-b611-b9c92116216d",
+        "node_id": "node_1_d16eb09c-66d9-4d34-a477-7b512499cb6a",
+        "lineage": [
+            "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f",
+            "node_1_d16eb09c-66d9-4d34-a477-7b512499cb6a"
+        ],
+        "parent_target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b",
+        "root_target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b"
+    },
+    {
+        "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM051010",
+                "COM051230"
+            ],
+            "bisac_names": [
+                "Programming / Object-Oriented"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "c6a7b637-4c33-4a12-a37f-6f1218c6026f",
+        "node_id": "node_1_a6f6659f-9f9b-44d7-b29d-623d5d3b6d3e",
+        "lineage": [
+            "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9",
+            "node_1_a6f6659f-9f9b-44d7-b29d-623d5d3b6d3e"
+        ],
+        "parent_target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949",
+        "root_target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949"
+    },
+    {
+        "source_guid": "45646a71-507d-5d51-9034-bebd96999996",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM051010",
+                "COM051230"
+            ],
+            "bisac_names": [
+                "Programming / Object-Oriented"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "54139e48-2677-4cb2-ae96-fd0f65c20e98",
+        "node_id": "node_1_e89a425e-4236-4c21-9e8e-b6e696187e25",
+        "lineage": [
+            "node_0_4211abbc-29c8-4811-9e0a-3347ac006459",
+            "node_1_e89a425e-4236-4c21-9e8e-b6e696187e25"
+        ],
+        "parent_target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6",
+        "root_target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6"
+    },
+    {
+        "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM051230",
+                "COM051000"
+            ],
+            "bisac_names": [
+                "Software Development & Engineering / General"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "bdcef196-33d6-49f1-b060-b15dccb526b5",
+        "node_id": "node_1_87bc6438-81b7-4244-b05a-a556048db345",
+        "lineage": [
+            "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c",
+            "node_1_87bc6438-81b7-4244-b05a-a556048db345"
+        ],
+        "parent_target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88",
+        "root_target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88"
+    },
+    {
+        "source_guid": "7b310659-e099-577a-928a-e1a039f654b6",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM060160",
+                "COM051000"
+            ],
+            "bisac_names": [
+                "Web / Web Programming"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "720fc719-d5d3-4ec4-b946-aa15f26263ed",
+        "node_id": "node_1_8fc62438-6791-402c-9216-ceb11f90cb23",
+        "lineage": [
+            "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18",
+            "node_1_8fc62438-6791-402c-9216-ceb11f90cb23"
+        ],
+        "parent_target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09",
+        "root_target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09"
+    }
+]

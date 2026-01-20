@@ -1,0 +1,68 @@
+[
+  {
+    "isbn": "9780134685991",
+    "title": "Effective Java",
+    "authors": [
+      "Joshua Bloch"
+    ],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2017,
+    "page_count": 416,
+    "raw_description": "The definitive guide to Java Platform best practices from the creator of many key Java features.",
+    "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e"
+  },
+  {
+    "isbn": "9780596007126",
+    "title": "Head First Design Patterns",
+    "authors": [
+      "Eric Freeman",
+      "Elisabeth Freeman",
+      "Kathy Sierra",
+      "Bert Bates"
+    ],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2004,
+    "page_count": 638,
+    "raw_description": "A brain-friendly guide to design patterns using Java examples.",
+    "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8"
+  },
+  {
+    "isbn": "9780201633610",
+    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+    "authors": [
+      "Erich Gamma",
+      "John Vlissides",
+      "Richard Helm",
+      "Ralph Johnson"
+    ],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 1995,
+    "page_count": 395,
+    "raw_description": "The classic Gang of Four book on software design patterns.",
+    "source_guid": "45646a71-507d-5d51-9034-bebd96999996"
+  },
+  {
+    "isbn": "9780132350884",
+    "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+    "authors": [
+      "Robert C. Martin"
+    ],
+    "publisher": "Prentice Hall",
+    "publish_year": 2008,
+    "page_count": 431,
+    "raw_description": "A handbook of agile software craftsmanship focusing on writing clean, maintainable code.",
+    "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e"
+  },
+  {
+    "isbn": "9780596517748",
+    "title": "JavaScript: The Good Parts",
+    "authors": [
+      "Douglas Crockford"
+    ],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2008,
+    "page_count": 250,
+    "raw_description": "Unearthing the excellence in JavaScript by focusing on its best features.",
+    "source_guid": "7b310659-e099-577a-928a-e1a039f654b6"
+  }
+]

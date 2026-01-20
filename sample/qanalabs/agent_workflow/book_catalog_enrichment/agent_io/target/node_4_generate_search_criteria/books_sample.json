@@ -1,0 +1,170 @@
+[
+    {
+        "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e",
+        "content": {
+            "query_text": "Books that provide best practices, practical advice, and insights on Java programming and object-oriented design, aimed at both novice and experienced developers.",
+            "genres": [
+                "COM051010",
+                "COM051000"
+            ],
+            "keywords": [
+                "Java",
+                "programming",
+                "best practices",
+                "object-oriented",
+                "software design",
+                "effective coding",
+                "clear code",
+                "maintainable code"
+            ],
+            "target_audience": "Novice and seasoned Java developers looking to enhance their programming skills and the quality of their code.",
+            "exclude_isbn": "9780134685991"
+        },
+        "target_id": "da43cc3a-1d10-466e-8a89-1feb22af257d",
+        "node_id": "node_4_0be82db7-4274-4662-80cb-e431e6c6d0b8",
+        "lineage": [
+            "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f",
+            "node_1_d16eb09c-66d9-4d34-a477-7b512499cb6a",
+            "node_2_f6715a5d-3f4e-4650-b683-0ef1ba2e9a12",
+            "node_3_840f8a5b-aa67-4b8f-b412-c284ff242b29",
+            "node_4_0be82db7-4274-4662-80cb-e431e6c6d0b8"
+        ],
+        "parent_target_id": "6bbe5711-fcb6-4436-ad6b-bada80912df2",
+        "root_target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b"
+    },
+    {
+        "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8",
+        "content": {
+            "query_text": "Books that explore software design patterns, object-oriented programming concepts, and practical programming insights, especially focused on Java or similar languages. Ideal for developers of all experience levels looking to deepen their understanding of design patterns and improve their coding skills with engaging visuals and real-world examples.",
+            "genres": [
+                "COM051010",
+                "COM051230"
+            ],
+            "keywords": [
+                "design patterns",
+                "object-oriented programming",
+                "Java",
+                "practical application",
+                "software development",
+                "programming",
+                "engaging approach",
+                "real-world examples"
+            ],
+            "target_audience": "Software developers and programmers of all skill levels seeking to enhance their object-oriented design skills and understand design patterns in depth.",
+            "exclude_isbn": "9780596007126"
+        },
+        "target_id": "86fdde3e-c0bf-463e-becf-bd101d6dcc09",
+        "node_id": "node_4_5501a89d-5fed-49ac-b7e3-463f91acd609",
+        "lineage": [
+            "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9",
+            "node_1_a6f6659f-9f9b-44d7-b29d-623d5d3b6d3e",
+            "node_2_eb07c056-036c-4435-ad0a-e7cd5f76ff96",
+            "node_3_2b8c8389-eb50-400b-b0ff-4e88eb605d5c",
+            "node_4_5501a89d-5fed-49ac-b7e3-463f91acd609"
+        ],
+        "parent_target_id": "bf23691e-ae1e-4b4c-ac33-8dae32af26a7",
+        "root_target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949"
+    },
+    {
+        "source_guid": "45646a71-507d-5d51-9034-bebd96999996",
+        "content": {
+            "query_text": "Looking for comprehensive guides on software development principles, particularly those focusing on object-oriented design and reusable coding practices, including practical applications of design patterns.",
+            "genres": [
+                "COM051010",
+                "COM051230"
+            ],
+            "keywords": [
+                "design patterns",
+                "object-oriented",
+                "software engineering",
+                "best practices",
+                "programming",
+                "code reuse",
+                "maintainability",
+                "flexibility",
+                "collaboration"
+            ],
+            "target_audience": "Software developers, engineers, and architects aiming to enhance their software design skills and understanding.",
+            "exclude_isbn": "9780201633610"
+        },
+        "target_id": "181819e6-2c9d-4041-9adf-f5b853679bf3",
+        "node_id": "node_4_50b0fe96-ee86-4ec2-938e-d0df1bae3271",
+        "lineage": [
+            "node_0_4211abbc-29c8-4811-9e0a-3347ac006459",
+            "node_1_e89a425e-4236-4c21-9e8e-b6e696187e25",
+            "node_2_c9b48aac-ad36-4e68-b6c2-a7a63d8fd552",
+            "node_3_f459ac03-3c88-42d2-8c27-b8d50e8f3703",
+            "node_4_50b0fe96-ee86-4ec2-938e-d0df1bae3271"
+        ],
+        "parent_target_id": "caacd63c-b992-47ae-a625-d08d9a0a95ed",
+        "root_target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6"
+    },
+    {
+        "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e",
+        "content": {
+            "query_text": "Looking for books that focus on clean coding principles, software design, maintainable code, agile development practices, and strategies for effective refactoring. Ideal for software developers of all skill levels, these books should emphasize actionable insights and provide practical examples in software engineering.",
+            "genres": [
+                "COM051230",
+                "COM051000"
+            ],
+            "keywords": [
+                "clean code",
+                "agile development",
+                "software craftsmanship",
+                "refactoring",
+                "maintainability",
+                "coding practices",
+                "best practices",
+                "software engineering",
+                "development techniques"
+            ],
+            "target_audience": "Software developers, engineers, and programmers seeking to enhance their coding skills and practices, regardless of experience level.",
+            "exclude_isbn": "9780132350884"
+        },
+        "target_id": "085683f9-46c8-4074-b40d-3c033056b1f9",
+        "node_id": "node_4_318e35cc-247a-48d4-a03a-18e51dffa4af",
+        "lineage": [
+            "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c",
+            "node_1_87bc6438-81b7-4244-b05a-a556048db345",
+            "node_2_79fb3899-993f-40f9-b1fc-f9a5bf90f9c9",
+            "node_3_d0b35ae3-9598-42d1-af21-9201845b2c6c",
+            "node_4_318e35cc-247a-48d4-a03a-18e51dffa4af"
+        ],
+        "parent_target_id": "412ebb67-f010-4309-bb79-a5664e288e53",
+        "root_target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88"
+    },
+    {
+        "source_guid": "7b310659-e099-577a-928a-e1a039f654b6",
+        "content": {
+            "query_text": "Look for books that focus on JavaScript programming, best practices in coding, and learning resources for web development that emphasize maintaining code quality and efficiency. Suitable for both beginners and experienced developers, highlighting insights from industry experts.",
+            "genres": [
+                "COM060160",
+                "COM051000"
+            ],
+            "keywords": [
+                "javascript",
+                "web development",
+                "best practices",
+                "programming",
+                "coding patterns",
+                "efficiency",
+                "code maintainability",
+                "common pitfalls",
+                "developer resources"
+            ],
+            "target_audience": "Web developers of all levels, including those enhancing JavaScript skills and beginners building foundational knowledge.",
+            "exclude_isbn": "9780596517748"
+        },
+        "target_id": "4008c933-55db-4f10-98d7-aa5a507a0fe1",
+        "node_id": "node_4_d95b7145-c342-4388-a495-bf545c97ef36",
+        "lineage": [
+            "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18",
+            "node_1_8fc62438-6791-402c-9216-ceb11f90cb23",
+            "node_2_064f50e5-3355-4c79-9a88-6700a374b471",
+            "node_3_56759c0a-525f-47de-a206-3dc6ef16934f",
+            "node_4_d95b7145-c342-4388-a495-bf545c97ef36"
+        ],
+        "parent_target_id": "ce918295-2413-4de6-8ad6-11ed385ad88e",
+        "root_target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09"
+    }
+]

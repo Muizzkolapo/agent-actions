@@ -1,0 +1,26 @@
+{# DEBUG_RENDER=true  agent run -a qanalabs-quiz-gen #}
+{% macro thinkific_tools() -%}
+  name: format_quiz_object
+    kind: tool
+    impl: format_quiz_object_with_html
+    intent: "Format quiz object with HTML text"
+    # uses defaults
+
+  - name: add_asterisk_to_correct_answer
+    kind: tool
+    impl: add_asterisk_to_correct_answer
+    intent: "Add asterisk marker to correct answer option"
+    # uses defaults
+
+  - name: convert_html_json_to_thinkific
+    kind: tool
+    impl: convert_html_json_to_thinkific
+    granularity: File
+    intent: "Convert HTML JSON format to Thinkific-compatible structure"
+{%- endmacro %}
+
+{% macro thinkific_plan(first_dependency) -%}
+    format_quiz_object <- {{ first_dependency }}
+  - add_asterisk_to_correct_answer <- format_quiz_object
+  - convert_html_json_to_thinkific <- add_asterisk_to_correct_answer
+{%- endmacro %}

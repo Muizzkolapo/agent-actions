@@ -1,0 +1,82 @@
+[
+    {
+        "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e",
+        "content": {
+            "primary_bisac_code": "COM051010",
+            "primary_bisac_name": "Programming / Object-Oriented",
+            "secondary_bisac_codes": [
+                "COM051000"
+            ],
+            "classification_reasoning": "The book focuses on best practices for the Java programming language, which is an object-oriented programming language. Therefore, 'Programming / Object-Oriented' is the most relevant primary category. The secondary category 'Programming / General' also applies as it encompasses all programming topics."
+        },
+        "target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b",
+        "node_id": "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f",
+        "lineage": [
+            "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f"
+        ]
+    },
+    {
+        "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8",
+        "content": {
+            "primary_bisac_code": "COM051010",
+            "primary_bisac_name": "Programming / Object-Oriented",
+            "secondary_bisac_codes": [
+                "COM051230"
+            ],
+            "classification_reasoning": "The book focuses on design patterns, a concept broadly situated within object-oriented programming, and uses Java examples. Therefore, 'Programming / Object-Oriented' is the most applicable primary category. 'Software Development & Engineering / General' is included as a secondary category because design patterns are a key aspect of software engineering."
+        },
+        "target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949",
+        "node_id": "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9",
+        "lineage": [
+            "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9"
+        ]
+    },
+    {
+        "source_guid": "45646a71-507d-5d51-9034-bebd96999996",
+        "content": {
+            "primary_bisac_code": "COM051010",
+            "primary_bisac_name": "Programming / Object-Oriented",
+            "secondary_bisac_codes": [
+                "COM051230"
+            ],
+            "classification_reasoning": "The book focuses on design patterns, which are a key aspect of object-oriented programming, making 'Programming / Object-Oriented' the most specific primary category. Additionally, it falls under 'Software Development & Engineering / General' as it addresses broader software engineering principles."
+        },
+        "target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6",
+        "node_id": "node_0_4211abbc-29c8-4811-9e0a-3347ac006459",
+        "lineage": [
+            "node_0_4211abbc-29c8-4811-9e0a-3347ac006459"
+        ]
+    },
+    {
+        "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e",
+        "content": {
+            "primary_bisac_code": "COM051230",
+            "primary_bisac_name": "Software Development & Engineering / General",
+            "secondary_bisac_codes": [
+                "COM051000"
+            ],
+            "classification_reasoning": "The primary category reflects the book's focus on software craftsmanship and development practices in a general context. The secondary category represents its broader relation to programming."
+        },
+        "target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88",
+        "node_id": "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c",
+        "lineage": [
+            "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c"
+        ]
+    },
+    {
+        "source_guid": "7b310659-e099-577a-928a-e1a039f654b6",
+        "content": {
+            "primary_bisac_code": "COM060160",
+            "primary_bisac_name": "Web / Web Programming",
+            "secondary_bisac_codes": [
+                "COM051000"
+            ],
+            "classification_reasoning": "The book focuses specifically on JavaScript, emphasizing its best features and is targeted at web developers, making 'Web Programming' the primary classification. 'Programming / General' is included as a secondary category, as it encompasses general programming concepts applicable to JavaScript."
+        },
+        "target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09",
+        "node_id": "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18",
+        "lineage": [
+            "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18"
+        ]
+    }
+]

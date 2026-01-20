@@ -1,0 +1,60 @@
+################################################################################
+# QanaLabs Quiz Generation Workflow
+################################################################################
+# Description: Educational quiz generation workflow with fact extraction,
+#              deduplication, clustering, validation, and distractor generation
+# Version: 2.0.0
+# Workflow Phases:
+#   1. Fact Extraction, Deduplication & Validation
+#   2. Summary Generation & Code Cleanup
+#   3. Question Generation & Validation
+#   4. Explanation & Distractor Generation
+#   5. Quiz Validation
+#
+# See workflow plan at bottom of file for execution order
+################################################################################
+name: qanalabs_quiz_gen
+description: "Educational quiz generation workflow with fact extraction, clustering, validation, and distractor generation"
+version: "2.0.0"
+# Global defaults applied to all actions unless overridden
+defaults:
+  json_mode: true
+  kind: llm
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: false
+  prompt_debug: false
+  few_shot: 0
+  context_scope:
+    seed_data:
+        exam_syllabus: $file:mcp_qanalabs_syllabus.json
+actions:
+  # ============================================================================
+  # STEP 1: EXTRACT RAW Q&A FROM DOCUMENTATION
+  # ============================================================================
+  - name: extract_raw_qa
+    intent: "Extract staff/senior engineer level Q&A from documentation"
+    schema: extract_raw_qa
+    prompt: $qanalabs_quiz_gen.Extract_Raw_QA
+    context_scope:
+      drop:
+        - source.syllabus
+        - source.url
+    prompt_debug: false
+    granularity: Record
+
+  # ============================================================================
+  # STEP 2: FLATTEN QUESTIONS FOR PROCESSING
+  # ============================================================================
+  - name: flatten_raw_questions
+    dependencies: [extract_raw_qa]
+    kind: tool
+    impl: flatten_questions
+    intent: "Flatten questions array for individual processing"
+    granularity: File
+    context_scope:
+      observe:
+        - extract_raw_qa.*

@@ -1,0 +1,33 @@
+name: summary_quality_score
+fields:
+  - id: quality_score
+    type: number
+    description: "Overall quality score from 0-100 based on specific learning objective alignment and implementation specificity"
+
+  - id: quality_tier
+    type: string
+    description: "Quality tier: 'high' (>=65), 'borderline' (45-64), or 'low' (<45)"
+
+  - id: primary_skill_area
+    type: string
+    description: "Main exam skill area this summary aligns with (e.g., 'Design and prepare a machine learning solution')"
+
+  - id: objective_alignment
+    type: number
+    description: "How well summary addresses the specific learning objectives it was created for (0-35 points)"
+
+  - id: implementation_specificity
+    type: number
+    description: "Presence of code, technical details, and actionable content supporting objectives (0-30 points)"
+
+  - id: technical_depth
+    type: number
+    description: "Level of technical detail enabling objective achievement (0-20 points)"
+
+  - id: completeness
+    type: number
+    description: "Completeness of coverage for achieving the stated objectives (0-15 points)"
+
+  - id: reasoning
+    type: string
+    description: "Brief explanation explicitly referencing how the summary addresses (or fails to address) the specific objectives"

@@ -1,0 +1,7 @@
+{
+  "upstream_workflow": "qanalabs_quiz_gen",
+  "upstream_path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_17_format_quiz_text",
+  "files": [
+    "combined_scraped_sample.json"
+  ]
+}

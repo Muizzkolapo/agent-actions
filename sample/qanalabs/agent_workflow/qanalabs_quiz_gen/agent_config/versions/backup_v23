@@ -1,0 +1,514 @@
+################################################################################
+# QanaLabs Quiz Generation Workflow
+################################################################################
+# Description: Educational quiz generation workflow with fact extraction,
+#              deduplication, clustering, validation, and distractor generation
+# Version: 2.0.0
+# Workflow Phases:
+#   1. Fact Extraction, Deduplication & Validation
+#   2. Summary Generation & Code Cleanup
+#   3. Question Generation & Validation
+#   4. Explanation & Distractor Generation
+#   5. Quiz Validation
+#
+# See workflow plan at bottom of file for execution order
+################################################################################
+name: qanalabs_quiz_gen
+description: "Educational quiz generation workflow with fact extraction, clustering, validation, and distractor generation"
+version: "2.0.0"
+# Global defaults applied to all actions unless overridden
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: false
+  prompt_debug: false
+  few_shot: 0
+  context_scope:
+    observe:
+      - source.*
+    seed_data:
+        exam_syllabus: $file:mcp_qanalabs_syllabus.json
+actions:
+  # ============================================================================
+  # STEP 1: EXTRACT RAW Q&A FROM DOCUMENTATION
+  # ============================================================================
+  - name: extract_raw_qa
+    intent: "Extract staff/senior engineer level Q&A from documentation"
+    schema: extract_raw_qa
+    prompt: $qanalabs_quiz_gen.Extract_Raw_QA
+    context_scope:
+      observe:
+        - source.*
+      drop:
+        - source.syllabus
+        - source.url
+    prompt_debug: false
+
+  # ============================================================================
+  # STEP 2: FLATTEN QUESTIONS FOR PROCESSING
+  # ============================================================================
+  - name: flatten_raw_questions
+    dependencies: [extract_raw_qa]
+    kind: tool
+    impl: flatten_questions
+    intent: "Flatten questions array for individual processing"
+    granularity: Record
+    context_scope:
+      observe:
+        - extract_raw_qa.*
+
+  # ============================================================================
+  # STEP 3: CLASSIFY QUESTION TYPE
+  # ============================================================================
+  - name: classify_question_type
+    dependencies: [flatten_raw_questions]
+    intent: "Classify each question as APPLICATION, UNDERSTANDING, IMPLEMENTATION, or ANALYSIS"
+    schema: {
+      quiz_type: string,
+      classification_reason: string
+    }
+    context_scope:
+      observe:
+        - flatten_raw_questions.question_text
+        - flatten_raw_questions.answer_text
+      passthrough:
+        - flatten_raw_questions.question_text
+        - flatten_raw_questions.answer_text
+        - flatten_raw_questions.source_quote
+        - flatten_raw_questions.difficulty_reason
+    prompt: $qanalabs_quiz_gen.Classify_Question_Type
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    prompt_debug: true
+
+
+  # ============================================================================
+  # STEP 4: GET SCENARIO AUTHORING PROMPT
+  # ============================================================================
+  - name: get_authoring_prompt
+    dependencies: [classify_question_type]
+    kind: tool
+    impl: handle_quiz_type
+    intent: "Get the appropriate scenario authoring prompt based on question type"
+    granularity: Record
+    context_scope:
+      observe:
+        - classify_question_type.*
+
+  # ============================================================================
+  # STEP 5: WRITE SCENARIO-BASED QUESTION
+  # ============================================================================
+  - name: write_scenario_question
+    dependencies: [get_authoring_prompt, flatten_raw_questions, classify_question_type]
+    intent: "Write staff/senior engineer level scenario-based question"
+    schema: {
+      question: string,
+      options: array,
+      answer: string,
+      question_type: string,
+      answer_explanation: string
+    }
+    context_scope:
+      observe:
+        - flatten_raw_questions.question_text
+        - flatten_raw_questions.answer_text
+        - flatten_raw_questions.source_quote
+        - flatten_raw_questions.difficulty_reason
+        - classify_question_type.quiz_type
+        - get_authoring_prompt.authoring_prompt
+        - get_authoring_prompt.suggested_opener
+    prompt: $qanalabs_quiz_gen.Write_Scenario_Question
+    prompt_debug: true
+
+  # ============================================================================
+  # STEP 6: FIX OPTIONS FORMAT
+  # ============================================================================
+  - name: fix_options_format
+    dependencies: [write_scenario_question]
+    kind: tool
+    impl: fix_options_formatting
+    intent: "Convert options field from JSON string to array format"
+    granularity: Record
+    context_scope:
+      observe:
+        - write_scenario_question.*
+
+
+  # ============================================================================
+  # STEP 6: FIX OPTIONS FORMAT
+  # ============================================================================
+  - name: fix_options_format
+    dependencies: [write_scenario_question]
+    kind: tool
+    impl: fix_options_formatting
+    intent: "Convert options field from JSON string to array format"
+    granularity: Record
+    context_scope:
+      observe:
+        - write_scenario_question.*
+
+  # ============================================================================
+  # STEP 7: SUGGEST DISTRACTOR WORD COUNTS
+  # ============================================================================
+  - name: suggest_distractor_counts
+    dependencies: [fix_options_format, write_scenario_question]
+    kind: tool
+    impl: suggest_word_counts
+    intent: "Suggest word counts for answer distractors"
+    context_scope:
+      passthrough:
+        - write_scenario_question.question
+        - write_scenario_question.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+
+  # ============================================================================
+  # STEP 8: ADD ANSWER TEXT
+  # ============================================================================
+  - name: add_answer_text
+    dependencies: [suggest_distractor_counts]
+    kind: tool
+    impl: add_answer_text
+    granularity: Record
+    intent: "Add structured answer text to questions"
+    context_scope:
+      observe:
+        - suggest_distractor_counts.*
+
+
+  # ============================================================================
+  # STEP 9: GENERATE DISTRACTOR 1 - Wrong technology/service
+  # ============================================================================
+  - name: generate_distractor_1
+    dependencies: [add_answer_text, write_scenario_question]
+    intent: "Generate first distractor - focus on wrong technology/service"
+    schema:
+      distractor_1: string
+      explanation_why_it_is_incorrect_1: string
+      thinking_process_1: string
+    context_scope:
+      observe:
+        - add_answer_text.target_word_counts
+        - add_answer_text.answer_text
+      passthrough:
+        - write_scenario_question.question
+        - write_scenario_question.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - add_answer_text.answer_text
+        - add_answer_text.target_word_counts
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_1
+    prompt_debug: true
+
+  # ============================================================================
+  # STEP 10: GENERATE DISTRACTOR 2 - Wrong approach/concept
+  # ============================================================================
+  - name: generate_distractor_2
+    dependencies: [generate_distractor_1, suggest_distractor_counts, add_answer_text, write_scenario_question]
+    intent: "Generate second distractor - focus on wrong approach/concept"
+    schema:
+      distractor_2: string
+      explanation_why_it_is_incorrect_2: string
+      thinking_process_2: string
+    context_scope:
+      observe:
+        - suggest_distractor_counts.target_word_counts
+        - add_answer_text.answer_text
+      passthrough:
+        - write_scenario_question.question
+        - write_scenario_question.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - add_answer_text.answer_text
+        - suggest_distractor_counts.target_word_counts
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_2
+    prompt_debug: true
+
+  # ============================================================================
+  # STEP 11: GENERATE DISTRACTOR 3 - Edge case/misconception
+  # ============================================================================
+  - name: generate_distractor_3
+    dependencies:
+      [generate_distractor_2, suggest_distractor_counts, add_answer_text, write_scenario_question, generate_distractor_1]
+    intent: "Generate third distractor - focus on edge case/misconception"
+    schema:
+      distractor_3: string
+      explanation_why_it_is_incorrect_3: string
+      thinking_process_3: string
+    context_scope:
+      observe:
+        - suggest_distractor_counts.target_word_counts
+        - add_answer_text.answer_text
+      passthrough:
+        - write_scenario_question.question
+        - write_scenario_question.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_2.distractor_2
+        - generate_distractor_2.explanation_why_it_is_incorrect_2
+        - add_answer_text.answer_text
+        - suggest_distractor_counts.target_word_counts
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_3
+    prompt_debug: true
+
+  # ============================================================================
+  # STEP 12: RECONSTRUCT OPTIONS
+  # ============================================================================
+  - name: reconstruct_options
+    dependencies: [generate_distractor_3, add_answer_text]
+    kind: tool
+    impl: apply_edited_distractors
+    intent: "Reconstruct final answer options from correct answer and distractors"
+    granularity: Record
+    context_scope:
+      observe:
+        - add_answer_text.answer_text
+
+
+  # ============================================================================
+  # STEP 15: GENERATE FEYNMAN EXPLANATION
+  # ============================================================================
+  - name: generate_feynman_explanation
+    dependencies:
+      [
+        reconstruct_options,
+        flatten_raw_questions,
+        write_scenario_question,
+        add_answer_text,
+        generate_distractor_1,
+        generate_distractor_2,
+        generate_distractor_3,
+      ]
+    intent: "Generate Feynman-style explanations for why the answer is correct"
+    schema: {
+      question_explanation: string,
+      answer_reasoning: string,
+      key_concept_analogy: string,
+      memorable_takeaway: string
+    }
+    prompt: $qanalabs_quiz_gen.Feynman_Explanation_Generator
+    prompt_debug: true
+    context_scope:
+      observe:
+        - flatten_raw_questions.answer_text
+        - flatten_raw_questions.source_quote
+      passthrough:
+        - write_scenario_question.question
+        - reconstruct_options.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - add_answer_text.answer_text
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_2.distractor_2
+        - generate_distractor_2.explanation_why_it_is_incorrect_2
+        - generate_distractor_3.distractor_3
+        - generate_distractor_3.explanation_why_it_is_incorrect_3
+      drop: []
+    #guard:condition: 'question_status == "FILTER"'on_false: "filter"
+
+
+  # ============================================================================
+  # STEP 16: GENERATE CONCEPT EXPLANATION
+  # ============================================================================
+  - name: generate_concept_explanation
+    dependencies:
+      [
+        generate_feynman_explanation,
+        flatten_raw_questions,
+        write_scenario_question,
+        add_answer_text,
+        reconstruct_options,
+        generate_distractor_1,
+        generate_distractor_2,
+        generate_distractor_3,
+      ]
+    intent: "Generate educational explanation of the underlying concept being tested"
+    schema: {
+      concept_explanation: string
+    }
+    prompt: $qanalabs_quiz_gen.Generate_Concept_Explanation
+    context_scope:
+      observe:
+        - flatten_raw_questions.answer_text
+        - flatten_raw_questions.source_quote
+      passthrough:
+        - write_scenario_question.question
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - add_answer_text.answer_text
+        - generate_feynman_explanation.question_explanation
+        - generate_feynman_explanation.answer_reasoning
+        - generate_feynman_explanation.key_concept_analogy
+        - generate_feynman_explanation.memorable_takeaway
+        - reconstruct_options.options
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_2.distractor_2
+        - generate_distractor_2.explanation_why_it_is_incorrect_2
+        - generate_distractor_3.distractor_3
+        - generate_distractor_3.explanation_why_it_is_incorrect_3
+
+
+  # ============================================================================
+  # STEP 13: VALIDATE ANSWER FROM SOURCE (5 parallel AI validators)
+  # ============================================================================
+  # Uses Jinja2 macro to generate 5 parallel validator actions
+{% for validator_num in [1, 2, 3, 4, 5] %}
+  - {{ validator_action(
+        validator_num=validator_num,
+        dependencies=["reconstruct_options"],
+        prompt="$qanalabs_quiz_gen.Validate_Answer_From_Source",
+        prompt_debug=True
+    ) }}
+{% endfor %}
+
+  # ============================================================================
+  # STEP 14: AGGREGATE VALIDATION VOTES
+  # ============================================================================
+  - name: aggregate_validation_votes
+    dependencies: [validate_answer_1, validate_answer_2, validate_answer_3, validate_answer_4, validate_answer_5]
+    kind: tool
+    impl: aggregate_answer_votes
+    intent: "Aggregate 5 validator votes and determine if question is valid"
+    granularity: Record
+    reduce_key: parent_target_id   # Explicit correlation key
+    context_scope:
+      observe:
+        - validate_answer_1.*
+        - validate_answer_2.*
+        - validate_answer_3.*
+        - validate_answer_4.*
+        - validate_answer_5.*
+
+
+  # ============================================================================
+  # STEP 15: SCORE QUESTION SYLLABUS ALIGNMENT (3 parallel AI judges)
+  # ============================================================================
+{% for judge_num in [1, 2, 3] %}
+  - name: score_question_quality_{{ judge_num }}
+    dependencies: [aggregate_validation_votes, write_scenario_question, reconstruct_options]
+    intent: "Judge {{ judge_num }}: Score question alignment with exam syllabus"
+    schema:
+      syllabus_alignment_score_{{ judge_num }}: number
+      aligned_skill_area_{{ judge_num }}: string
+      objective_tested_{{ judge_num }}: string
+      alignment_reasoning_{{ judge_num }}: string
+    prompt: $qanalabs_quiz_gen.Score_Question_Alignment
+    prompt_debug: true
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    context_scope:
+      seed_data:
+        exam_syllabus: $file:mcp_qanalabs_syllabus.json
+        judge_num: $file:judge_{{ judge_num }}.json
+      observe:
+        - write_scenario_question.question
+        - reconstruct_options.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+        - seed.exam_syllabus
+{% endfor %}
+
+  # ============================================================================
+  # STEP 16: AGGREGATE SYLLABUS ALIGNMENT SCORES
+  # ============================================================================
+  - name: aggregate_alignment_scores
+    dependencies: [score_question_quality_1, score_question_quality_2, score_question_quality_3]
+    kind: tool
+    impl: aggregate_alignment_scores
+    intent: "Aggregate 3 alignment scores and determine if question meets >= 85"
+    granularity: Record
+    reduce_key: parent_target_id   # Explicit correlation key
+    context_scope:
+      observe:
+        - score_question_quality_1.*
+        - score_question_quality_2.*
+        - score_question_quality_3.*
+
+
+  # ============================================================================
+  # STEP 17: JUDGE QUESTION QUALITY (5 parallel AI judges)
+  # ============================================================================
+{% for judge_num in [1, 2, 3, 4, 5] %}
+  - name: judge_question_quality_{{ judge_num }}
+    dependencies: [aggregate_alignment_scores, write_scenario_question, reconstruct_options]
+    intent: "Judge {{ judge_num }}: Review question quality for clarity and learning value"
+    schema:
+      quality_vote_{{ judge_num }}: string
+      quality_reasoning_{{ judge_num }}: string
+      quality_flags_{{ judge_num }}: array
+    prompt: $qanalabs_quiz_gen.Judge_Question_Quality
+    prompt_debug: true
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    context_scope:
+      seed_data:
+        judge_num: $file:judge_{{ judge_num }}.json
+      observe:
+        - write_scenario_question.question
+        - reconstruct_options.options
+        - write_scenario_question.answer
+        - write_scenario_question.answer_explanation
+{% endfor %}
+
+  # ============================================================================
+  # STEP 18: AGGREGATE QUALITY VOTES
+  # ============================================================================
+  - name: aggregate_quality_votes
+    dependencies: [judge_question_quality_1, judge_question_quality_2, judge_question_quality_3, judge_question_quality_4, judge_question_quality_5]
+    kind: tool
+    impl: aggregate_quality_votes
+    intent: "Aggregate 5 quality votes and determine if question should be kept"
+    granularity: Record
+    reduce_key: parent_target_id   # Explicit correlation key
+    context_scope:
+      observe:
+        - judge_question_quality_1.*
+        - judge_question_quality_2.*
+        - judge_question_quality_3.*
+        - judge_question_quality_4.*
+        - judge_question_quality_5.*
+
+
+  # ============================================================================
+  # STEP 19: OPTIONS COMBINER
+  # ============================================================================
+  - name: OptionsCombiner
+    dependencies: [generate_concept_explanation,aggregate_quality_votes]
+    kind: tool
+    impl: merge_correct_answer_with_distractors
+    intent: "Merge correct answer with distractors into final options"
+    granularity: Record
+    context_scope:
+      observe:
+        - generate_concept_explanation.*
+        - aggregate_quality_votes.*
+      passthrough:
+        - aggregate_quality_votes.votes_summary
+
+  # ============================================================================
+  # STEP 18: FORMAT FINAL QUIZ
+  # ============================================================================
+  - name: format_quiz_text
+    dependencies: [OptionsCombiner]
+    kind: tool
+    impl: format_quiz_object
+    intent: "Format the final quiz output"
+    granularity: Record
+    context_scope:
+      observe:
+        - OptionsCombiner.*
+      passthrough:
+        - source.url

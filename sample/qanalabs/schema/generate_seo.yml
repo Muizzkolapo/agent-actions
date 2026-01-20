@@ -1,0 +1,20 @@
+name: generate_seo
+description: Schema for SEO keywords and metadata
+fields:
+  - id: primary_keywords
+    type: array
+    items:
+      type: string
+    description: "Primary SEO keywords (5-10)"
+  - id: long_tail_keywords
+    type: array
+    items:
+      type: string
+    description: "Long-tail keyword phrases"
+  - id: meta_title
+    type: string
+    description: "SEO-optimized page title (50-60 chars)"
+  - id: meta_description
+    type: string
+    description: "Meta description for search results (150-160 chars)"
+additionalProperties: false

@@ -1,0 +1,103 @@
+[
+    {
+        "source_guid": "18185d13-c68b-58d1-8b88-627a902f977e",
+        "content": {
+            "description_valid": false,
+            "word_count": 174,
+            "benefit_count": 5,
+            "validation_issues": [
+                "Contains placeholder text: 'example'"
+            ]
+        },
+        "target_id": "6bbe5711-fcb6-4436-ad6b-bada80912df2",
+        "node_id": "node_3_840f8a5b-aa67-4b8f-b412-c284ff242b29",
+        "lineage": [
+            "node_0_c3d7dc01-afb3-4088-909e-55e532b1d99f",
+            "node_1_d16eb09c-66d9-4d34-a477-7b512499cb6a",
+            "node_2_f6715a5d-3f4e-4650-b683-0ef1ba2e9a12",
+            "node_3_840f8a5b-aa67-4b8f-b412-c284ff242b29"
+        ],
+        "parent_target_id": "e30e5078-bfeb-4b0a-8aaa-9daf840971df",
+        "root_target_id": "2bc74828-db5d-4699-a3fc-b45165b7a21b"
+    },
+    {
+        "source_guid": "9c24babe-748e-5649-b4ca-8d81d6c2ace8",
+        "content": {
+            "description_valid": false,
+            "word_count": 199,
+            "benefit_count": 5,
+            "validation_issues": [
+                "Contains placeholder text: 'example'"
+            ]
+        },
+        "target_id": "bf23691e-ae1e-4b4c-ac33-8dae32af26a7",
+        "node_id": "node_3_2b8c8389-eb50-400b-b0ff-4e88eb605d5c",
+        "lineage": [
+            "node_0_e9eca30e-fece-4de8-b994-b2551aa3aeb9",
+            "node_1_a6f6659f-9f9b-44d7-b29d-623d5d3b6d3e",
+            "node_2_eb07c056-036c-4435-ad0a-e7cd5f76ff96",
+            "node_3_2b8c8389-eb50-400b-b0ff-4e88eb605d5c"
+        ],
+        "parent_target_id": "4c622b86-44de-41bf-9409-24f571f3d6d1",
+        "root_target_id": "f4b0c580-a9c0-40e1-a69a-9020725dd949"
+    },
+    {
+        "source_guid": "45646a71-507d-5d51-9034-bebd96999996",
+        "content": {
+            "description_valid": true,
+            "word_count": 155,
+            "benefit_count": 5,
+            "validation_issues": []
+        },
+        "target_id": "caacd63c-b992-47ae-a625-d08d9a0a95ed",
+        "node_id": "node_3_f459ac03-3c88-42d2-8c27-b8d50e8f3703",
+        "lineage": [
+            "node_0_4211abbc-29c8-4811-9e0a-3347ac006459",
+            "node_1_e89a425e-4236-4c21-9e8e-b6e696187e25",
+            "node_2_c9b48aac-ad36-4e68-b6c2-a7a63d8fd552",
+            "node_3_f459ac03-3c88-42d2-8c27-b8d50e8f3703"
+        ],
+        "parent_target_id": "518554a0-7780-4aa3-b861-068f05fb353b",
+        "root_target_id": "ce80f7e9-3897-482f-b7ac-83fbda7456d6"
+    },
+    {
+        "source_guid": "0eae7ae5-be4f-5879-8654-ca75ad4be53e",
+        "content": {
+            "description_valid": false,
+            "word_count": 158,
+            "benefit_count": 5,
+            "validation_issues": [
+                "Contains placeholder text: 'example'"
+            ]
+        },
+        "target_id": "412ebb67-f010-4309-bb79-a5664e288e53",
+        "node_id": "node_3_d0b35ae3-9598-42d1-af21-9201845b2c6c",
+        "lineage": [
+            "node_0_03a2fdaf-4163-4d32-b357-24e5194e181c",
+            "node_1_87bc6438-81b7-4244-b05a-a556048db345",
+            "node_2_79fb3899-993f-40f9-b1fc-f9a5bf90f9c9",
+            "node_3_d0b35ae3-9598-42d1-af21-9201845b2c6c"
+        ],
+        "parent_target_id": "a75dbe24-9c41-4732-a750-98d1789f3b30",
+        "root_target_id": "ee8e108e-d712-47fe-b753-11a7d5c19c88"
+    },
+    {
+        "source_guid": "7b310659-e099-577a-928a-e1a039f654b6",
+        "content": {
+            "description_valid": true,
+            "word_count": 192,
+            "benefit_count": 5,
+            "validation_issues": []
+        },
+        "target_id": "ce918295-2413-4de6-8ad6-11ed385ad88e",
+        "node_id": "node_3_56759c0a-525f-47de-a206-3dc6ef16934f",
+        "lineage": [
+            "node_0_babebc6f-4a8f-4d4a-b992-e15c222e1b18",
+            "node_1_8fc62438-6791-402c-9216-ceb11f90cb23",
+            "node_2_064f50e5-3355-4c79-9a88-6700a374b471",
+            "node_3_56759c0a-525f-47de-a206-3dc6ef16934f"
+        ],
+        "parent_target_id": "df535359-9c45-4542-ad4e-f869391ee049",
+        "root_target_id": "1bbd32a4-4ef5-462e-b318-4ba6778f2c09"
+    }
+]

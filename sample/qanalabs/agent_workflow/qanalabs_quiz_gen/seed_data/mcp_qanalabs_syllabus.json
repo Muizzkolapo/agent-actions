@@ -1,0 +1,325 @@
+{
+    "exam_name": "Model Context Protocol Specialist",
+    "certification": "MCP Specialist (MCP-101)",
+    "platform_name": "Model Context Protocol",
+    "effective_date": "2025-11-08",
+    "audience_profile": {
+      "description": "As a Model Context Protocol Specialist, you design, implement, and manage MCP-based integrations that enable AI systems to interact with external data sources and tools. You work with developers, AI engineers, and solution architects to build secure, extensible AI applications that leverage MCP servers and clients.",
+      "responsibilities": [
+        "Design and implement MCP server architectures for exposing tools, resources, and prompts to AI applications.",
+        "Develop MCP client integrations to connect AI models with external data sources and functionality.",
+        "Build custom MCP tools and resources that extend AI capabilities in domain-specific contexts.",
+        "Implement security and access control mechanisms for MCP servers.",
+        "Monitor, debug, and optimize MCP-based integrations.",
+        "Ensure responsible AI practices in MCP tool design and deployment."
+      ],
+      "required_knowledge": [
+        "Strong understanding of the Model Context Protocol specification and architecture.",
+        "Experience with JSON-RPC and server-client communication patterns.",
+        "Proficiency in programming languages such as Python, TypeScript, or JavaScript.",
+        "Knowledge of AI/LLM concepts including prompting, tool use, and context management.",
+        "Understanding of API design, authentication, and security best practices.",
+        "Familiarity with version control and collaborative development workflows."
+      ]
+    },
+    "skills_measured": [
+      {
+        "skill_area": "Understand MCP Architecture and Core Concepts",
+        "weight": "25–30%",
+        "sections": [
+          {
+            "section_name": "Understand the MCP protocol fundamentals",
+            "objectives": [
+              "Explain the purpose and benefits of the Model Context Protocol",
+              "Describe the client-server architecture of MCP",
+              "Understand the role of MCP in AI agent ecosystems",
+              "Differentiate between MCP servers, clients, and hosts",
+              "Explain the JSON-RPC transport layer and message format",
+              "Understand MCP protocol versioning and compatibility",
+              "Describe the MCP initialization and capability negotiation process"
+            ]
+          },
+          {
+            "section_name": "Understand MCP primitives",
+            "objectives": [
+              "Explain the purpose and structure of MCP resources",
+              "Understand MCP tools and their function signatures",
+              "Describe MCP prompts and their use cases",
+              "Differentiate between static and dynamic resources",
+              "Understand resource templates and URI schemes",
+              "Explain sampling and its role in MCP",
+              "Understand roots and their purpose in MCP servers"
+            ]
+          },
+          {
+            "section_name": "Select appropriate MCP components for use cases",
+            "objectives": [
+              "Determine when to use resources vs. tools",
+              "Select appropriate resource types for different data scenarios",
+              "Choose between built-in and custom MCP servers",
+              "Identify scenarios requiring multiple MCP servers",
+              "Determine appropriate granularity for MCP tool design",
+              "Select suitable transport mechanisms (stdio, SSE, HTTP)"
+            ]
+          }
+        ]
+      },
+      {
+        "skill_area": "Implement and Configure MCP Servers",
+        "weight": "30–35%",
+        "sections": [
+          {
+            "section_name": "Build MCP servers",
+            "objectives": [
+              "Create MCP servers using official SDKs (Python, TypeScript)",
+              "Implement server initialization and capability advertisement",
+              "Define and expose resources with appropriate schemas",
+              "Implement tool handlers with proper input validation",
+              "Create prompts with arguments and templates",
+              "Handle pagination for large resource collections",
+              "Implement error handling and logging in MCP servers",
+              "Support multiple transport protocols in server implementations"
+            ]
+          },
+          {
+            "section_name": "Design and implement MCP tools",
+            "objectives": [
+              "Define tool schemas with JSON Schema validation",
+              "Implement tool execution handlers with proper error handling",
+              "Design tools that follow single-responsibility principle",
+              "Implement asynchronous tool operations",
+              "Create tools that interact with external APIs and databases",
+              "Implement progress reporting for long-running tools",
+              "Design tools with appropriate security boundaries",
+              "Document tools with clear descriptions and examples"
+            ]
+          },
+          {
+            "section_name": "Implement MCP resources",
+            "objectives": [
+              "Expose file system resources through MCP",
+              "Implement database query results as MCP resources",
+              "Create API-backed resources with real-time data",
+              "Implement resource subscriptions for updates",
+              "Design resource URIs following best practices",
+              "Implement resource metadata and annotations",
+              "Handle binary and text resource content appropriately",
+              "Implement caching strategies for resource efficiency"
+            ]
+          },
+          {
+            "section_name": "Configure and deploy MCP servers",
+            "objectives": [
+              "Configure MCP server settings and environment variables",
+              "Set up authentication and authorization for MCP servers",
+              "Deploy MCP servers in different runtime environments",
+              "Configure transport layers (stdio, SSE, HTTP)",
+              "Implement rate limiting and resource quotas",
+              "Set up monitoring and observability for MCP servers",
+              "Configure CORS and security headers for HTTP servers",
+              "Manage MCP server dependencies and versioning"
+            ]
+          }
+        ]
+      },
+      {
+        "skill_area": "Integrate MCP Clients and Build Applications",
+        "weight": "25–30%",
+        "sections": [
+          {
+            "section_name": "Build and configure MCP clients",
+            "objectives": [
+              "Create MCP clients using official SDKs",
+              "Connect clients to MCP servers via different transports",
+              "Implement client initialization and server discovery",
+              "Handle server capability negotiation in clients",
+              "Implement reconnection and fault tolerance logic",
+              "Manage multiple simultaneous MCP server connections",
+              "Implement client-side caching of server capabilities",
+              "Handle protocol version mismatches gracefully"
+            ]
+          },
+          {
+            "section_name": "Consume MCP resources and tools",
+            "objectives": [
+              "Query and retrieve resources from MCP servers",
+              "Invoke MCP tools with proper parameter handling",
+              "Handle tool execution results and errors",
+              "Implement resource subscription and update handling",
+              "Process different resource content types (text, binary, JSON)",
+              "Implement retry logic for failed tool invocations",
+              "Handle partial results from paginated resources",
+              "Combine data from multiple MCP resources"
+            ]
+          },
+          {
+            "section_name": "Integrate MCP with AI applications",
+            "objectives": [
+              "Integrate MCP tools into LLM agent workflows",
+              "Implement tool selection and orchestration logic",
+              "Build context-aware prompts using MCP resources",
+              "Handle tool call results in AI conversation flows",
+              "Implement function calling with MCP tools",
+              "Design multi-step agent workflows using MCP primitives",
+              "Implement feedback loops between AI and MCP tools",
+              "Build RAG (Retrieval-Augmented Generation) systems with MCP"
+            ]
+          },
+          {
+            "section_name": "Build MCP-enabled applications",
+            "objectives": [
+              "Integrate MCP into existing applications and frameworks",
+              "Build custom MCP hosts for specific use cases",
+              "Implement MCP in web applications and APIs",
+              "Create CLI tools that leverage MCP servers",
+              "Build desktop applications with MCP integration",
+              "Implement MCP in serverless and cloud environments",
+              "Create browser extensions using MCP",
+              "Build multi-user applications with shared MCP servers"
+            ]
+          }
+        ]
+      },
+      {
+        "skill_area": "Secure, Monitor, and Optimize MCP Solutions",
+        "weight": "15–20%",
+        "sections": [
+          {
+            "section_name": "Implement security for MCP solutions",
+            "objectives": [
+              "Implement authentication mechanisms for MCP servers",
+              "Configure authorization and access control for tools and resources",
+              "Secure transport layers with encryption (TLS/SSL)",
+              "Implement API key and token-based authentication",
+              "Handle sensitive data in tool parameters and resource content",
+              "Implement input validation and sanitization",
+              "Protect against injection attacks in MCP tools",
+              "Implement audit logging for security events",
+              "Apply principle of least privilege to MCP tool design"
+            ]
+          },
+          {
+            "section_name": "Monitor and troubleshoot MCP integrations",
+            "objectives": [
+              "Implement logging and telemetry for MCP servers and clients",
+              "Monitor MCP server performance and resource usage",
+              "Debug connection and transport issues",
+              "Troubleshoot tool execution failures",
+              "Analyze MCP protocol messages for debugging",
+              "Implement health checks and status endpoints",
+              "Monitor tool invocation patterns and usage",
+              "Set up alerts for MCP system anomalies"
+            ]
+          },
+          {
+            "section_name": "Optimize MCP performance",
+            "objectives": [
+              "Optimize resource loading and caching strategies",
+              "Implement efficient pagination for large datasets",
+              "Optimize tool execution performance",
+              "Reduce latency in client-server communication",
+              "Implement connection pooling and reuse",
+              "Optimize JSON-RPC message serialization",
+              "Implement lazy loading for resources",
+              "Scale MCP servers for high-throughput scenarios"
+            ]
+          },
+          {
+            "section_name": "Apply responsible AI practices to MCP solutions",
+            "objectives": [
+              "Design tools that prevent harmful or biased outputs",
+              "Implement content filtering and safety checks in tools",
+              "Document tool capabilities and limitations clearly",
+              "Implement rate limiting to prevent abuse",
+              "Design tools with appropriate guardrails and constraints",
+              "Handle user privacy and data protection in MCP resources",
+              "Implement transparency in tool decision-making",
+              "Monitor and mitigate potential misuse of MCP tools"
+            ]
+          }
+        ]
+      }
+    ],
+    "study_resources": [
+      {
+        "category": "Official Documentation",
+        "resources": [
+          "Model Context Protocol Specification (https://spec.modelcontextprotocol.io/)",
+          "MCP Python SDK Documentation",
+          "MCP TypeScript SDK Documentation",
+          "MCP Server and Client Examples Repository",
+          "Official MCP Tutorial and Quickstart Guides"
+        ]
+      },
+      {
+        "category": "Hands-on Practice",
+        "resources": [
+          "Build a custom MCP server from scratch",
+          "Integrate MCP with popular LLM frameworks (LangChain, LlamaIndex)",
+          "Create domain-specific MCP tools for real-world scenarios",
+          "Deploy MCP servers to cloud platforms",
+          "Build an MCP-powered AI agent application"
+        ]
+      },
+      {
+        "category": "Community Resources",
+        "resources": [
+          "MCP GitHub repositories and discussions",
+          "Community-built MCP servers registry",
+          "MCP implementation patterns and best practices",
+          "Case studies of production MCP deployments"
+        ]
+      }
+    ],
+    "exam_details": {
+      "duration_minutes": 120,
+      "number_of_questions": "40-60",
+      "question_types": [
+        "Multiple choice",
+        "Multiple response",
+        "Scenario-based questions",
+        "Code analysis questions",
+        "Architecture design questions"
+      ],
+      "passing_score": 700,
+      "score_range": "100-1000",
+      "prerequisites": [
+        "Understanding of AI/LLM fundamentals",
+        "Programming experience in Python, TypeScript, or JavaScript",
+        "Basic knowledge of APIs and client-server architecture"
+      ],
+      "recommended_experience": [
+        "3-6 months of hands-on experience with MCP",
+        "Building at least 2-3 custom MCP servers",
+        "Integrating MCP clients with AI applications",
+        "Understanding of JSON-RPC and related protocols"
+      ]
+    },
+    "topics_by_depth": {
+      "foundational": [
+        "MCP architecture and components",
+        "Resources, tools, and prompts overview",
+        "JSON-RPC basics",
+        "Client-server communication patterns",
+        "MCP use cases and benefits"
+      ],
+      "intermediate": [
+        "Building custom MCP servers with SDKs",
+        "Implementing tools and resources",
+        "Integrating MCP clients in applications",
+        "Authentication and security basics",
+        "Error handling and debugging",
+        "Transport layer configuration"
+      ],
+      "advanced": [
+        "Complex multi-server architectures",
+        "Performance optimization and scaling",
+        "Advanced security implementations",
+        "Custom transport implementations",
+        "Production deployment patterns",
+        "Monitoring and observability",
+        "Integration with enterprise systems",
+        "Responsible AI implementation in tools"
+      ]
+    }
+  }
