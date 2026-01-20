@@ -6,7 +6,7 @@ import logging
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 
-from agent_actions.input.preprocessing.filtering.guard_filter import (
+from agent_actions.processing.guards.filter import (
     get_global_guard_filter,
     FilterItemRequest,
 )

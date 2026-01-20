@@ -23,9 +23,9 @@ from .parsing.parser import WhereClauseParser
 from .parsing.operator_registry import OperatorRegistry
 
 # Filtering submodule
-from .filtering.guard_filter import GuardFilter, FilterResult, FilterMetrics
-from .filtering.filter_service import FilterService, FilterStatus
-from .filtering.guard_handler import GuardHandler, GuardConfig, FilterBehavior
+from agent_actions.processing.guards.filter import GuardFilter, FilterResult, FilterMetrics
+from .filtering.service import FilterService, FilterStatus
+from agent_actions.processing.guards.handler import GuardHandler, GuardConfig, FilterBehavior
 
 # Chunking submodule
 from .chunking.field_chunking import FieldChunker, FieldAnalyzer, FieldAnalysisResult

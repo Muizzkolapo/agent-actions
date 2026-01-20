@@ -18,7 +18,7 @@ from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.errors import FileLoadError
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
-from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.workflow import WorkflowSchemaService
 
 

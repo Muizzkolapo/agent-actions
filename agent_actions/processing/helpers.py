@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm.realtime import agent_builder
-from agent_actions.input.preprocessing.filtering.guard_filter import (
+from agent_actions.processing.guards.filter import (
     get_global_guard_filter,
     FilterItemRequest,
 )

@@ -12,7 +12,7 @@ from agent_actions.errors import ConfigValidationError, ConfigurationError
 from agent_actions.llm.config.vendor_config import VendorType
 from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
-from agent_actions.output.response.schema_change import compile_unified_schema
+from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 from agent_actions.utils.udf_management import get_udf_metadata
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser

@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.output.response.loader import SchemaLoader
 
 from .parser import WorkflowParser, extract_fields_for_docs
 from .scanner import ProjectScanner

@@ -7,7 +7,7 @@ unified interface.
 """
 
 from typing import Dict, Optional, Any
-from agent_actions.utils.field_management.field_manager import FieldManager
+from agent_actions.utils.field_management.manager import FieldManager
 from agent_actions.utils.lineage.lineage_builder import LineageBuilder
 from agent_actions.utils.id_generation.id_generator import IDGenerator
 

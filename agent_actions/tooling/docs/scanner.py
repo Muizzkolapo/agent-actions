@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.output.response.loader import SchemaLoader
 from .parser import extract_fields_for_docs
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from agent_actions.tooling.docs.scanner import ProjectScanner
-from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.output.response.loader import SchemaLoader
 
 from .data_flow_graph import InputSchema, OutputSchema
 

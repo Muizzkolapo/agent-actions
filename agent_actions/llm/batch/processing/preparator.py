@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.input.preprocessing.filtering.guard_handler import GuardHandler
+from agent_actions.processing.guards.handler import GuardHandler
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.module_loader import ensure_path_importable
@@ -319,7 +319,7 @@ class BatchTaskPreparator:
             return self.guard_handler
 
         # Create handler with filter service
-        from agent_actions.input.preprocessing.filtering.guard_handler import (
+        from agent_actions.processing.guards.handler import (
             get_guard_handler,
         )
 
@@ -342,7 +342,7 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
         """Prepare and compile schema for provider (resolves schema references from registry)."""
-        from agent_actions.output.response.schema_change import prepare_schema_unified
+        from agent_actions.output.response.schema import prepare_schema_unified
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
         vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()

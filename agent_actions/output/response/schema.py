@@ -8,7 +8,7 @@ import logging
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
-from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.output.response.loader import SchemaLoader
 
 logger = logging.getLogger(__name__)
 

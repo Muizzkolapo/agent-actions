@@ -168,7 +168,7 @@ def _load_output_schema(
     Raises:
         ConfigurationError: If schema file not found
     """
-    from agent_actions.output.response.schema_loader import SchemaLoader
+    from agent_actions.output.response.loader import SchemaLoader
     from agent_actions.utils.udf_management.type_conversion import unified_to_json_schema
 
     resolved_dir = schema_dir or Path.cwd() / "schema"

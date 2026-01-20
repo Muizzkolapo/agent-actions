@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from rich.console import Console
 
-from agent_actions.input.preprocessing.filtering.guard_filter import (
+from agent_actions.processing.guards.filter import (
     get_global_guard_filter,
     FilterItemRequest,
 )

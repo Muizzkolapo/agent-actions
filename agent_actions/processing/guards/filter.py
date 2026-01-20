@@ -10,7 +10,11 @@ from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from agent_actions.utils.dict import get_nested_value
-from ..parsing.parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
+from agent_actions.input.preprocessing.parsing.parser import (
+    WhereClauseParser,
+    SafeExpressionEvaluator,
+    ParseResult,
+)
 
 logger = logging.getLogger(__name__)
 
