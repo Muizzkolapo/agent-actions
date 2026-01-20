@@ -8,7 +8,7 @@ import dataclasses
 import pytest
 from typing import Dict, List, Optional, TypedDict
 
-from agent_actions.utilities.udf_management.type_conversion import (
+from agent_actions.utils.udf_management.type_conversion import (
     derive_schema_from_type,
     is_typeddict,
     clear_schema_cache,

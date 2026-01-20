@@ -10,10 +10,10 @@ import threading
 import time
 import pytest
 from typing import Dict, List, Set
-from agent_actions.utilities.id_generation import IDGenerator
-from agent_actions.utilities.field_management import FieldManager
-from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import VersionIdGenerator
+from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.utils.field_management import FieldManager
+from agent_actions.utils.lineage import LineageBuilder
+from agent_actions.utils.correlation import VersionIdGenerator
 
 
 class TestMultiBatchCorrelationConsistency:

@@ -3,8 +3,8 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
+from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.types import ProcessingContext, ProcessingMode, ProcessingStatus
 
 
 class TestFirstStageRawTextProcessing:

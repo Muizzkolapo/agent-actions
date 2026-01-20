@@ -7,7 +7,7 @@ import re
 from typing import List, Pattern
 
 from agent_actions.logging.context import CorrelationContext
-from agent_actions.llm_invocation.providers.client_base import BaseClient
+from agent_actions.llm.providers.client_base import BaseClient
 
 
 class ContextInjectingFilter(logging.Filter):

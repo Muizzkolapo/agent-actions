@@ -1,7 +1,7 @@
 """Agent Actions framework entry point."""
 
-from agent_actions.utilities.udf_management.udf_registry import udf_tool, FileUDFResult
-from agent_actions.core.reprompt_validation import (
+from agent_actions.utils.udf_management.registry import udf_tool, FileUDFResult
+from agent_actions.processing.recovery.validation import (
     reprompt_validation,
     get_validation_function,
     list_validation_functions,

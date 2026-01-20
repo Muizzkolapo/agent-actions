@@ -16,10 +16,10 @@ from agent_actions.cli.cli_decorators import handles_user_errors, requires_proje
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.errors import FileLoadError
-from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
-from agent_actions.prompt_generation.config_renderer import ConfigRenderer
-from agent_actions.response_processing.schema_loader import SchemaLoader
-from agent_actions.services import WorkflowSchemaService
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.output.response.schema_loader import SchemaLoader
+from agent_actions.workflow import WorkflowSchemaService
 
 
 class SchemaCommand:
@@ -101,7 +101,7 @@ class SchemaCommand:
         # Get UDF registry (always try to load for tool schemas)
         udf_registry: Dict[str, Any] = {}
         try:
-            from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
+            from agent_actions.utils.udf_management.udf_registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY
         except ImportError:

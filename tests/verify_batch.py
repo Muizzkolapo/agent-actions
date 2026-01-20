@@ -6,7 +6,7 @@ import sys
 # Ensure we can import from root
 sys.path.append(os.getcwd())
 
-from agent_actions.orchestration.processing_pipeline import (
+from agent_actions.workflow.pipeline import (
     ProcessingPipeline,
     PipelineConfig,
     BatchPipelineParams,

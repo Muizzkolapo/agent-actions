@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.validation.static_analyzer import (
+from agent_actions.validation.static_analysis import (
     AgentKind,
     DataFlowEdge,
     DataFlowGraph,

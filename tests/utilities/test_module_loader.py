@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.utilities.module_loader import (
+from agent_actions.utils.module_loader import (
     clear_module_cache,
     clear_path_cache,
     discover_and_load_udfs,

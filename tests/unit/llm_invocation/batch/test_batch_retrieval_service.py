@@ -15,7 +15,7 @@ class TestBatchRetrievalServiceInit:
 
     def test_init_with_all_dependencies(self):
         """Should initialize with all required dependencies."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -39,7 +39,7 @@ class TestRetrieveResults:
 
     def test_retrieves_and_writes_results_to_jsonl(self, tmp_path):
         """Should retrieve results and write to JSONL file."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -91,7 +91,7 @@ class TestRetrieveResults:
 
     def test_uses_file_path_stem_for_output_name(self, tmp_path):
         """Should use file_path stem for output file name when provided."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -129,7 +129,7 @@ class TestRetrieveResults:
 
     def test_uses_batch_id_for_output_when_no_file_path(self, tmp_path):
         """Should use batch_id for output name when file_path not provided."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -165,7 +165,7 @@ class TestRetrieveResults:
 
     def test_skips_write_if_file_exists(self, tmp_path):
         """Should not overwrite existing results file."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -206,7 +206,7 @@ class TestRetrieveResults:
 
     def test_raises_external_service_error_on_failure(self, tmp_path):
         """Should raise ExternalServiceError when retrieval fails."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
         from agent_actions.errors import ExternalServiceError
@@ -229,7 +229,7 @@ class TestRetrieveResultsContextLoading:
 
     def test_loads_context_when_file_name_present(self, tmp_path):
         """Should load context map when entry has file_name."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 
@@ -263,7 +263,7 @@ class TestRetrieveResultsContextLoading:
 
     def test_uses_empty_context_when_no_file_name(self, tmp_path):
         """Should use empty context when entry has no file_name."""
-        from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
+        from agent_actions.llm.batch.services.batch_retrieval_service import (
             BatchRetrievalService,
         )
 

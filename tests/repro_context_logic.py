@@ -1,7 +1,7 @@
 import unittest
 import logging
 from unittest.mock import MagicMock, patch
-from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 # Configure logging to see the debug info
 logging.basicConfig(level=logging.INFO)
