@@ -16,7 +16,17 @@ logger = logging.getLogger(__name__)
 
 
 class ContextScopeProcessor:
-    """Processes context_scope configuration for field flow control."""
+    """
+    Processes context_scope configuration for field flow control.
+
+    Special Namespaces:
+        source: Original input data loaded from source files
+        loop: Current iteration context in versioned actions
+        workflow: Workflow metadata (name, version, run_id)
+    """
+
+    # Reserved namespaces that are not workflow actions
+    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow"})
 
     @staticmethod
     def parse_field_reference(field_ref: str) -> Tuple[str, str]:
@@ -280,15 +290,14 @@ class ContextScopeProcessor:
 
         # 5. Validate all referenced actions exist in workflow
         # Skip validation for field prefix patterns (ending with _) and special namespaces
-        SPECIAL_NAMESPACES = {"source", "loop", "workflow"}
         all_deps = set(input_sources_expanded) | set(context_sources_expanded)
         for dep_action in all_deps:
             # Skip validation for loop field prefix patterns
             if dep_action.endswith("_"):
                 continue
 
-            # Skip validation for special reserved namespaces
-            if dep_action in SPECIAL_NAMESPACES:
+            # Skip validation for special reserved namespaces (source, loop, workflow)
+            if dep_action in ContextScopeProcessor.SPECIAL_NAMESPACES:
                 continue
 
             if dep_action not in workflow_actions:
@@ -825,15 +834,16 @@ class ContextScopeProcessor:
                     )
 
                 logger.debug(
-                    f"[CONTEXT SOURCES] Loading {len(context_sources)} context dependencies: {context_sources}"
+                    "[CONTEXT SOURCES] Loading %d context dependencies: %s",
+                    len(context_sources),
+                    context_sources,
                 )
 
-                SPECIAL_NAMESPACES = {"source", "loop", "workflow"}
                 for dep_name in context_sources:
                     # Skip special reserved namespaces - they're populated differently
-                    if dep_name in SPECIAL_NAMESPACES:
+                    if dep_name in ContextScopeProcessor.SPECIAL_NAMESPACES:
                         logger.debug(
-                            f"Skipping special namespace '{dep_name}' (handled separately)"
+                            "Skipping special namespace '%s' (handled separately)", dep_name
                         )
                         continue
 

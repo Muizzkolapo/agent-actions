@@ -296,6 +296,19 @@ def _should_save_source_items(
     Prevents sparse downstream outputs from overwriting rich initial source data.
     Returns True if new data is richer (has more fields) than existing data.
 
+    Richness Comparison:
+        Uses field count as a simple heuristic: len(new_fields) > len(existing_fields)
+
+        Limitation: This does NOT compare field names/types, only counts. A file with
+        10 unimportant fields would be considered "richer" than one with 5 critical
+        fields. This is acceptable because:
+        - Initial source loads typically have the richest data
+        - Downstream sparse overwrites are the main threat
+        - False positives (allowing a save) are safer than false negatives
+
+        Future Enhancement: Could compare actual field names or use a field importance
+        scoring system if needed.
+
     Args:
         new_items: New source items to potentially save
         file_path: Path to the input file
