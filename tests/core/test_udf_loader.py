@@ -5,13 +5,13 @@ import sys
 from pathlib import Path
 import tempfile
 import shutil
-from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
-from agent_actions.utilities.udf_management.udf_registry import (
+from agent_actions.input.loaders.udf_loader import discover_udfs, validate_udf_references
+from agent_actions.utils.udf_management.udf_registry import (
     udf_tool,
     clear_registry,
     UDF_REGISTRY,
 )
-from agent_actions.utilities.udf_management.type_conversion import clear_schema_cache
+from agent_actions.utils.udf_management.type_conversion import clear_schema_cache
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
 
 

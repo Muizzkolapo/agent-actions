@@ -7,7 +7,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
     AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
-from agent_actions.utilities.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 
 
 class InlineSchemaValidator(BaseAgentEntryValidator):

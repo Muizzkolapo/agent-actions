@@ -13,7 +13,7 @@ Key scenarios tested:
 """
 
 import pytest
-from agent_actions.response_processing.action_expander import ActionExpander
+from agent_actions.output.response.action_expander import ActionExpander
 
 
 class TestContextScopeDeepMerge:

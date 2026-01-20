@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.validation.static_analyzer import (
+from agent_actions.validation.static_analysis import (
     AgentKind,
     DataFlowGraph,
     DataFlowNode,
@@ -101,7 +101,7 @@ class TestFieldConsumer:
 
     def test_to_dict(self):
         """Test FieldConsumer serialization."""
-        from agent_actions.validation.static_analyzer import FieldConsumer
+        from agent_actions.validation.static_analysis import FieldConsumer
 
         consumer = FieldConsumer(
             agent="summarizer",
@@ -121,7 +121,7 @@ class TestFieldLineage:
 
     def test_to_dict(self):
         """Test FieldLineage serialization."""
-        from agent_actions.validation.static_analyzer import FieldConsumer, FieldLineage
+        from agent_actions.validation.static_analysis import FieldConsumer, FieldLineage
 
         lineage = FieldLineage(
             producer="extractor",
@@ -147,7 +147,7 @@ class TestActionFlowInfo:
 
     def test_to_dict(self):
         """Test ActionFlowInfo serialization."""
-        from agent_actions.validation.static_analyzer import (
+        from agent_actions.validation.static_analysis import (
             ActionFlowInfo,
             FieldReference,
             OutputFieldInfo,
@@ -375,7 +375,7 @@ class TestOutputFieldInfo:
 
     def test_to_dict(self):
         """Test OutputFieldInfo serialization."""
-        from agent_actions.validation.static_analyzer import OutputFieldInfo
+        from agent_actions.validation.static_analysis import OutputFieldInfo
 
         info = OutputFieldInfo(
             schema_fields=["a", "b"],

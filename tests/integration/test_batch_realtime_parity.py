@@ -16,7 +16,7 @@ import pytest
 from typing import Dict, Any
 from unittest.mock import patch, MagicMock
 
-from agent_actions.prompt_generation.prompt_preparation_service import (
+from agent_actions.prompt.service import (
     PromptPreparationService,
     PromptPreparationResult,
 )

@@ -10,7 +10,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,
 )
-from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 
 
 class AgentTypeSpecificValidator(BaseAgentEntryValidator):
