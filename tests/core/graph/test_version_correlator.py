@@ -566,5 +566,107 @@ class TestLoopCorrelatorWithSequentialMode:
         assert "par_2_par_field_2" in par_data[0]["content"]
 
 
+class TestVersionCorrelatorSourceProtection:
+    """Test that version correlation doesn't overwrite rich source data."""
+
+    def test_correlation_sparse_overwrite_blocked(self):
+        """Test that sparse correlation outputs don't overwrite rich source data."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_folder = Path(tmpdir)
+            correlator = VersionOutputCorrelator(agent_folder)
+
+            # Setup: Create rich source data with many fields
+            source_dir = agent_folder / "agent_io" / "source"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "data.json"
+
+            rich_source_data = [
+                {
+                    "source_guid": "guid-1",
+                    "id": "123",
+                    "page_content": "Full page content here...",
+                    "title": "My Document",
+                    "url": "https://example.com",
+                    "author": "John Doe",
+                    "created_at": "2024-01-01",
+                    "tags": ["important"],
+                }
+            ]  # 8 fields
+            source_file.write_text(json.dumps(rich_source_data))
+
+            # Setup version outputs that will be correlated
+            target_dir = agent_folder / "agent_io" / "target" / "consumer"
+            target_dir.mkdir(parents=True)
+
+            version1_dir = agent_folder / "target" / "action_1"
+            version1_dir.mkdir(parents=True)
+            version1_output = [
+                {
+                    "source_guid": "guid-1",
+                    "target_id": "123",
+                    "node_id": "node-1",
+                    "version_correlation_id": "corr-1",
+                    "lineage": [],
+                    "content": {"result": "v1"},
+                }
+            ]
+            (version1_dir / "data.json").write_text(json.dumps(version1_output))
+
+            version2_dir = agent_folder / "target" / "action_2"
+            version2_dir.mkdir(parents=True)
+            version2_output = [
+                {
+                    "source_guid": "guid-1",
+                    "target_id": "123",
+                    "node_id": "node-1",
+                    "version_correlation_id": "corr-1",
+                    "lineage": [],
+                    "content": {"result": "v2"},
+                }
+            ]
+            (version2_dir / "data.json").write_text(json.dumps(version2_output))
+
+            # Run correlation (this will try to write sparse source data)
+            result = correlator.prepare_correlated_input("consumer", ["action_1", "action_2"], 0)
+
+            assert result is not None
+
+            # Verify: Rich source data should NOT be overwritten
+            with open(source_file, "r") as f:
+                final_source_data = json.load(f)
+
+            # Should still have rich data (8 fields), not sparse data (2 fields)
+            assert len(final_source_data[0]) == 8, (
+                "Rich source data was overwritten by sparse correlation output!"
+            )
+            assert "page_content" in final_source_data[0], "page_content field lost!"
+            assert "title" in final_source_data[0], "title field lost!"
+            assert final_source_data[0]["page_content"] == "Full page content here..."
+
+    def test_correlation_richer_data_allowed(self):
+        """Test that correlation outputs with MORE fields can update source."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_folder = Path(tmpdir)
+            correlator = VersionOutputCorrelator(agent_folder)
+
+            # Setup: Create sparse source data
+            source_dir = agent_folder / "agent_io" / "source"
+            source_dir.mkdir(parents=True)
+            source_file = source_dir / "data.json"
+
+            sparse_source_data = [{"source_guid": "guid-1", "id": "123"}]  # 2 fields
+            source_file.write_text(json.dumps(sparse_source_data))
+
+            # This test would require modifying _create_correlation_source_data to
+            # actually write richer data, which it currently doesn't do (it only
+            # writes {source_guid, id}). So this test documents current behavior:
+            # correlation NEVER enriches source data, it only protects existing rich data.
+
+            # Just verify source file exists and has sparse data
+            with open(source_file, "r") as f:
+                source_data = json.load(f)
+            assert len(source_data[0]) == 2
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

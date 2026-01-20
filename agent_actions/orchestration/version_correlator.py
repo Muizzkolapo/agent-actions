@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict
 
 from agent_actions.errors import DataValidationError
+from agent_actions.preprocessing.staging.initial_stage_pipeline import _should_save_source_items
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +436,11 @@ class VersionOutputCorrelator:
     def _create_correlation_source_data(
         self, target_file: Path, correlated_data: List[Dict[str, Any]]
     ):
-        """Create source data file that corresponds to the correlation target file."""
+        """Create source data file that corresponds to the correlation target file.
+
+        Protected by richness check to prevent sparse correlation outputs from
+        overwriting rich initial source data.
+        """
         try:
             parts = target_file.parts
             agent_io_index = None
@@ -457,6 +462,21 @@ class VersionOutputCorrelator:
                     "id": record.get("target_id", record.get("source_guid")),
                 }
                 source_records.append(source_record)
+
+            # Check if we should save based on richness comparison
+            # Pass target_file (not source_path) so path resolution works correctly
+            base_directory = str(target_file.parent)
+
+            # Prevent sparse correlation outputs from overwriting rich source data
+            if not _should_save_source_items(
+                source_records, str(target_file), base_directory, None
+            ):
+                logger.debug(
+                    "Skipping correlation source save - existing source data is richer than correlation output for %s",
+                    filename,
+                )
+                return
+
             with open(source_path, "w", encoding="utf-8") as f:
                 json.dump(source_records, f, indent=2)
         except (OSError, IOError, ValueError) as e:
