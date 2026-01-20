@@ -386,12 +386,26 @@ class RecordProcessor:
             Source content if found, None otherwise
         """
         if not context.source_data:
+            logger.debug(
+                "Source data not available for %s; cannot look up source_guid=%s",
+                context.agent_name,
+                source_guid,
+            )
             return None
         from agent_actions.preprocessing.transformation.data_transformer import (
             DataTransformer,
         )
 
-        return DataTransformer.get_content_by_source_guid(context.source_data, source_guid)
+        source_content = DataTransformer.get_content_by_source_guid(
+            context.source_data, source_guid
+        )
+        if source_content is None:
+            logger.debug(
+                "Could not resolve source content for %s (%s source_data items)",
+                context.agent_name,
+                len(context.source_data),
+            )
+        return source_content
 
     def _prepare_prompt(
         self,
