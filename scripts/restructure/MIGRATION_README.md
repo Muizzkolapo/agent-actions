@@ -49,6 +49,33 @@ python scripts/restructure/migrate.py --update-imports
 - Phase 15: Update imports
 - Phase 16: Cleanup old directories
 
+**Notes:**
+- Guard filtering remains in the input preprocessing domain (`input/preprocessing/filtering`). It does **not** move to `processing/guards` in the scripted migration to match current repo usage.
+
+---
+
+## Current Repo Alignment (Jan 21, 2026)
+
+The migration map is aligned to the current repository state:
+
+- **Correlation IDs:** `utilities/correlation/version_id_generator.py` migrates to `utils/correlation/version_id.py`.
+- **Chunking:** `preprocessing/chunking/field_chunking.py` and the `preprocessing/chunking/strategies/*` files are explicitly mapped.
+- **No shims/fallbacks:** The script expects real source files and produces a clean move/update. Missing files are treated as map errors and should be fixed, not bypassed.
+
+---
+
+## Dry-Run Validation Checklist
+
+Before running a real migration:
+
+1. Run a full dry run:
+   ```bash
+   python scripts/restructure/migrate.py --all --dry-run
+   ```
+2. Confirm **no** "Source not found" lines appear.
+3. Confirm import rewrites are non-zero and plausible.
+4. Only then run the real migration.
+
 ---
 
 ## Manual Changes Made

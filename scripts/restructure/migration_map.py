@@ -127,7 +127,7 @@ FILE_MIGRATIONS = {
     "utilities/metadata/metadata_extractor.py": "utils/metadata/extractor.py",
     "utilities/metadata/metadata_types.py": "utils/metadata/types.py",
     "utilities/metadata/__init__.py": "utils/metadata/__init__.py",
-    "utilities/correlation/loop_id_generator.py": "utils/correlation/loop_id.py",
+    "utilities/correlation/version_id_generator.py": "utils/correlation/version_id.py",
     "utilities/correlation/__init__.py": "utils/correlation/__init__.py",
     "utilities/transformation/passthrough_transformer.py": "utils/transformation/passthrough.py",
     "utilities/transformation/__init__.py": "utils/transformation/__init__.py",
@@ -188,8 +188,13 @@ FILE_MIGRATIONS = {
     # Preprocessing
     "preprocessing/staging/initial_stage_pipeline.py": "input/preprocessing/staging/initial_pipeline.py",
     "preprocessing/staging/__init__.py": "input/preprocessing/staging/__init__.py",
-    "preprocessing/chunking/chunker.py": "input/preprocessing/chunking/chunker.py",
+    "preprocessing/chunking/field_chunking.py": "input/preprocessing/chunking/field_chunking.py",
     "preprocessing/chunking/__init__.py": "input/preprocessing/chunking/__init__.py",
+    "preprocessing/chunking/strategies/chunking_strategies.py": "input/preprocessing/chunking/strategies/chunking_strategies.py",
+    "preprocessing/chunking/strategies/metadata_strategies.py": "input/preprocessing/chunking/strategies/metadata_strategies.py",
+    "preprocessing/chunking/strategies/fallback_strategies.py": "input/preprocessing/chunking/strategies/fallback_strategies.py",
+    "preprocessing/chunking/strategies/validation.py": "input/preprocessing/chunking/strategies/validation.py",
+    "preprocessing/chunking/strategies/__init__.py": "input/preprocessing/chunking/strategies/__init__.py",
     "preprocessing/parsing/parser.py": "input/preprocessing/parsing/parser.py",
     "preprocessing/parsing/ast_nodes.py": "input/preprocessing/parsing/ast_nodes.py",
     "preprocessing/parsing/__init__.py": "input/preprocessing/parsing/__init__.py",
@@ -230,9 +235,6 @@ FILE_MIGRATIONS = {
     "core/reprompt_service.py": "processing/recovery/reprompt.py",
     "core/reprompt_validation.py": "processing/recovery/validation.py",
     "core/recovery_stats.py": "processing/recovery/stats.py",
-    # Guards (from preprocessing filtering)
-    "preprocessing/filtering/guard_filter.py": "processing/guards/filter.py",
-    "preprocessing/filtering/guard_handler.py": "processing/guards/handler.py",
     # ============================================================
     # PROMPT DOMAIN
     # ============================================================
