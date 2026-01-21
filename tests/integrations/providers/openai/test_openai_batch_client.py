@@ -11,8 +11,8 @@ Total tests for OpenAI:
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.llm_invocation.providers.openai.batch_client import OpenAIBatchClient
-from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+from agent_actions.llm.providers.openai.batch_client import OpenAIBatchClient
+from agent_actions.llm.providers.batch_base import BatchResult
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 

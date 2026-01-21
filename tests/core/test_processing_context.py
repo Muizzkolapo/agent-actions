@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.core.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.types import ProcessingContext, ProcessingMode
 
 
 class TestProcessingContextRequired:

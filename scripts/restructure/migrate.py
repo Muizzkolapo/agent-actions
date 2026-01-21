@@ -99,9 +99,13 @@ class MigrationRunner:
         if self.dry_run:
             self.log(f"Would move: {old_path} -> {new_path}", "ACTION")
         else:
-            shutil.copy2(src, dst)
-            self.log(f"Moved: {old_path} -> {new_path}", "ACTION")
-            self.files_moved += 1
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+                self.log(f"Copied dir: {old_path} -> {new_path}", "ACTION")
+            else:
+                shutil.copy2(src, dst)
+                self.log(f"Moved: {old_path} -> {new_path}", "ACTION")
+                self.files_moved += 1
 
         return True
 

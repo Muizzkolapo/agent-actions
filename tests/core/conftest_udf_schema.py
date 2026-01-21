@@ -5,7 +5,7 @@ Provides shared fixtures and test utilities.
 """
 
 import pytest
-from agent_actions.utilities.udf_management.udf_registry import clear_registry
+from agent_actions.utils.udf_management.registry import clear_registry
 
 
 @pytest.fixture(autouse=True)

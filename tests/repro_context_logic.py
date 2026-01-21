@@ -1,7 +1,7 @@
 import unittest
 import logging
 from unittest.mock import MagicMock, patch
-from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 # Configure logging to see the debug info
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +48,7 @@ class TestContextScopeLogic(unittest.TestCase):
         self.assertIn("title", field_context)
         self.assertEqual(field_context["title"], "Effective Java")
 
-    @patch("agent_actions.input_loading.extractors_source_data_loader.SourceDataLoader")
+    @patch("agent_actions.input_loading.loaders.source_data.SourceDataLoader")
     @patch("agent_actions.state_management.path_manager.PathManager")
     def test_source_loader_integration(self, mock_pm, mock_loader_cls):
         """Test full integration with SourceDataLoader logic (lines 250-312)."""

@@ -4,8 +4,8 @@ Following TDD approach - these tests define the expected API and behavior.
 """
 
 import pytest
-from agent_actions.response_processing.guard_parser import GuardParser, GuardType, GuardExpression
-from agent_actions.response_processing.consolidated_guard import GuardConfig, GuardBehavior
+from agent_actions.output.response.guard_parser import GuardParser, GuardType, GuardExpression
+from agent_actions.output.response.consolidated_guard import GuardConfig, GuardBehavior
 from agent_actions.errors import ValidationError, ConfigValidationError  # New modular pattern!
 
 
@@ -95,7 +95,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_conditional_clause(self):
         """Test that skip behavior routes to conditional_clause."""
-        from agent_actions.response_processing.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",
@@ -116,7 +116,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_filter_behavior_to_guard(self):
         """Test that filter behavior routes to guard config."""
-        from agent_actions.response_processing.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",
@@ -140,7 +140,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_guard(self):
         """Test that SQL conditions with skip behavior route to guard config with skip behavior."""
-        from agent_actions.response_processing.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",
@@ -168,7 +168,7 @@ class TestSchemaValidation:
 
     def test_action_config_validates_consolidated_guard(self):
         """Test ActionConfig validates consolidated guard format."""
-        from agent_actions.configuration.new_format_schema import ActionConfig
+        from agent_actions.config.schema import ActionConfig
 
         action_data = {
             "name": "test_action",
@@ -181,7 +181,7 @@ class TestSchemaValidation:
 
     def test_action_config_validates_legacy_guard_string(self):
         """Test ActionConfig still accepts legacy string guards."""
-        from agent_actions.configuration.new_format_schema import ActionConfig
+        from agent_actions.config.schema import ActionConfig
 
         action_data = {
             "name": "test_action",
@@ -193,7 +193,7 @@ class TestSchemaValidation:
 
     def test_action_config_rejects_invalid_guard(self):
         """Test ActionConfig rejects invalid guard configurations."""
-        from agent_actions.configuration.new_format_schema import ActionConfig
+        from agent_actions.config.schema import ActionConfig
 
         with pytest.raises(ValidationError, match="Invalid UDF expression format"):
             ActionConfig(

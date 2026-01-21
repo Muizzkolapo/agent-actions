@@ -12,9 +12,9 @@ defines input structure and build_context handles input assembly.
 
 import pytest
 from typing import List, Optional, TypedDict
-from agent_actions.utilities.udf_management.udf_registry import udf_tool, clear_registry
-from agent_actions.configuration.new_format_schema import Granularity
-from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
+from agent_actions.utils.udf_management.registry import udf_tool, clear_registry
+from agent_actions.config.schema import Granularity
+from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.errors import SchemaValidationError, AgentActionsException
 
 
@@ -321,7 +321,7 @@ class TestSchemaIntegrationWithExistingSystem:
         def test_func(data):
             return {"field1": "value"}
 
-        from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
+        from agent_actions.utils.udf_management.registry import get_udf_metadata
 
         metadata = get_udf_metadata("test_func")
 
@@ -356,7 +356,7 @@ class TestSchemaIntegrationWithExistingSystem:
         def output_only_func(data):
             return {"result": "done"}
 
-        from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
+        from agent_actions.utils.udf_management.registry import get_udf_metadata
 
         metadata = get_udf_metadata("output_only_func")
 

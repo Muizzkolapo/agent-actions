@@ -71,7 +71,7 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                     # Just exit with error code, no duplicate message
                     raise SystemExit(1) from None
 
-                from agent_actions.shared.user_errors import format_user_error
+                from agent_actions.logging.errors import format_user_error
 
                 # Merge command context with extra context and all kwargs
                 context = {

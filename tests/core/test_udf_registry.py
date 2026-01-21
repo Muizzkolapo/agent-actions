@@ -3,7 +3,7 @@
 import pytest
 from pathlib import Path
 from typing import TypedDict
-from agent_actions.utilities.udf_management.udf_registry import (
+from agent_actions.utils.udf_management.registry import (
     udf_tool,
     get_udf,
     list_udfs,

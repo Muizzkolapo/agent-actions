@@ -10,7 +10,7 @@ modern AST-based implementation in preprocessing/parsing/.
 """
 
 import pytest
-from agent_actions.response_processing.config_schema import WhereClauseConfig, FilterScope
+from agent_actions.output.response.config_schema import WhereClauseConfig, FilterScope
 from agent_actions.errors import ValidationError
 
 

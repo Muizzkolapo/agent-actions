@@ -153,7 +153,7 @@ def mock_registry_manager(tmp_path):
     Returns:
         BatchRegistryManager instance for testing.
     """
-    from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    from agent_actions.llm.batch.infrastructure.registry import (
         BatchRegistryManager,
     )
 
@@ -169,7 +169,7 @@ def populated_registry(mock_registry_manager):
     Returns:
         Tuple of (registry_manager, dict of batch_ids by status).
     """
-    from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+    from agent_actions.llm.batch.core.batch_models import BatchJobEntry
     from datetime import datetime
 
     batch_ids = {}

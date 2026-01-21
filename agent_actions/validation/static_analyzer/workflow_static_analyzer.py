@@ -20,7 +20,7 @@ from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
 from .type_checker import StaticTypeChecker
-from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 
 
 class WorkflowStaticAnalyzer:
@@ -292,7 +292,7 @@ class WorkflowStaticAnalyzer:
         input_requirements = self.reference_extractor.extract_from_agent(action_config)
 
         # Use auto-inferred dependency model
-        from agent_actions.preprocessing.context.context_scope_processor import (
+        from agent_actions.prompt.context.scope import (
             ContextScopeProcessor,
         )
 

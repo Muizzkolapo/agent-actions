@@ -1,7 +1,7 @@
 """Tests for field reference pattern {reference.field} in PromptUtils."""
 
 import pytest
-from agent_actions.prompt_generation.prompt_utils import PromptUtils
+from agent_actions.prompt.prompt_utils import PromptUtils
 
 
 class TestParseFieldReferences:

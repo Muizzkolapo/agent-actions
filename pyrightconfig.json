@@ -1,0 +1,9 @@
+  {
+    "typeCheckingMode": "off",
+    "reportMissingImports": true,
+    "reportMissingModuleSource": true,
+    "reportImportCycles": true,
+    "reportUnusedImport": false,
+    "reportGeneralTypeIssues": false,
+    "reportOptionalMemberAccess": false
+  }

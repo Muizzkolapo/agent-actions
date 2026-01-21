@@ -11,8 +11,8 @@ Total tests for Ollama:
 """
 
 import pytest
-from agent_actions.llm_invocation.providers.ollama.batch_client import OllamaBatchClient
-from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+from agent_actions.llm.providers.ollama.batch_client import OllamaBatchClient
+from agent_actions.llm.providers.batch_base import BatchResult
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 

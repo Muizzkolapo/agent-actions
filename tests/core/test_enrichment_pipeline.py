@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from agent_actions.core.enrichment import (
+from agent_actions.processing.enrichment import (
     Enricher,
     EnrichmentPipeline,
     LineageEnricher,
@@ -12,7 +12,7 @@ from agent_actions.core.enrichment import (
     PassthroughEnricher,
     RequiredFieldsEnricher,
 )
-from agent_actions.core.types import (
+from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingMode,
     ProcessingResult,
@@ -382,7 +382,7 @@ class TestEnrichmentPipeline:
 
     def test_default_enricher_order(self):
         """Default order: Lineage → Metadata → LoopId → Passthrough → RequiredFields → Recovery."""
-        from agent_actions.core.enrichment import RecoveryEnricher
+        from agent_actions.processing.enrichment import RecoveryEnricher
 
         pipeline = EnrichmentPipeline()
 

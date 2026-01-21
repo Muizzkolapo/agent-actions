@@ -1,7 +1,7 @@
 """Tests for configuration hierarchy resolution (project → workflow → action)."""
 
 import pytest
-from agent_actions.response_processing.action_expander import ActionExpander
+from agent_actions.output.response.expander import ActionExpander
 
 
 class TestActionExpanderHierarchy:

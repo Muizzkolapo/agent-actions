@@ -197,7 +197,7 @@ class TestPrintStatementMigration:
         # List of modules that have been fully migrated (no prints allowed)
         FULLY_MIGRATED_MODULES = {
             "agent_actions/orchestration/agent_runner.py",
-            "agent_actions/input_loading/extractors_source_data_loader.py",
+            "agent_actions/input_loading/loaders.source_data.py",
             "agent_actions/preprocessing/staging_loader.py",
             "agent_actions/llm_invocation/batch/batch_service.py",
             "agent_actions/llm_invocation/batch/batch_side_output_handler.py",

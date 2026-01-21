@@ -6,14 +6,14 @@ recovery metadata statistics.
 """
 
 import pytest
-from agent_actions.core.recovery_stats import (
+from agent_actions.processing.recovery.stats import (
     RecoveryStats,
     calculate_recovery_stats_from_results,
     calculate_recovery_stats_from_output_data,
     add_recovery_stats_to_manifest,
     add_recovery_stats_to_agent_status,
 )
-from agent_actions.core.types import RecoveryMetadata, RetryMetadata, RepromptMetadata
+from agent_actions.processing.types import RecoveryMetadata, RetryMetadata, RepromptMetadata
 
 
 class TestRecoveryStats:

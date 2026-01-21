@@ -5,7 +5,7 @@ Tests the reconciliation logic for matching batch results to expected records.
 """
 
 import pytest
-from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+from agent_actions.llm.batch.processing.reconciler import (
     BatchResultReconciler,
     BatchReconciliationResult,
 )

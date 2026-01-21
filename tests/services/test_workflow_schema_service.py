@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.models.action_schema import ActionSchema, FieldSource
-from agent_actions.services.workflow_schema_service import WorkflowSchemaService
+from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 
 class TestWorkflowSchemaService:

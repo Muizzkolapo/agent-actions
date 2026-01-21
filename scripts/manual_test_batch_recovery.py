@@ -13,11 +13,11 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+from agent_actions.llm.batch.services.processing import (
     BatchProcessingService,
 )
-from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
-from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.core.types import RecoveryMetadata, RetryMetadata
 
 # Configure logging
@@ -97,7 +97,7 @@ def test_batch_retry():
         with patch.object(service, "_determine_output_path", return_value=Path("/tmp/out.json")):
             # Mock the preparator to avoid reading files
             with patch(
-                "agent_actions.llm_invocation.batch.processing.batch_task_preparator.BatchTaskPreparator"
+                "agent_actions.llm.batch.processing.batch_task_preparator.BatchTaskPreparator"
             ) as prep_cls:
                 prep_instance = prep_cls.return_value
                 prep_instance.prepare_tasks.return_value = Mock(tasks=[1])  # dummy task

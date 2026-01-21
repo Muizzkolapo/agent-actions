@@ -1,7 +1,7 @@
 """Tests for NodeMappingService."""
 
 import pytest
-from agent_actions.orchestration.node_mapper import NodeMappingService
+from agent_actions.workflow.node_mapper import NodeMappingService
 
 
 class TestNodeMappingService:

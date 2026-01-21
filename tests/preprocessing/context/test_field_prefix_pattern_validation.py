@@ -6,7 +6,7 @@ where merged outputs have prefixed field names like "extract_raw_qa_1_questions"
 """
 
 import pytest
-from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 from agent_actions.errors import ConfigurationError
 
 

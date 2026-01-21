@@ -279,7 +279,7 @@ def mock_batch_provider():
     Returns:
         MagicMock: A mock provider configured with submit_batch, check_status, and retrieve_results
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+    from agent_actions.llm.providers.batch_base import BatchResult
 
     mock_provider = MagicMock()
     mock_provider.submit_batch.return_value = "batch_test_id_001"
@@ -306,7 +306,7 @@ def mock_batch_provider_with_transitions():
     Returns:
         MagicMock: A mock provider with dynamic status changes
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+    from agent_actions.llm.providers.batch_base import BatchResult
     from itertools import cycle
 
     mock_provider = MagicMock()
@@ -331,7 +331,7 @@ def mock_batch_provider_with_failure():
     Returns:
         MagicMock: A mock provider configured to simulate failures
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+    from agent_actions.llm.providers.batch_base import BatchResult
 
     mock_provider = MagicMock()
     mock_provider.submit_batch.return_value = "batch_test_id_003"
@@ -356,7 +356,7 @@ def mock_batch_results():
     Returns:
         List[BatchResult]: Sample batch results with test data
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+    from agent_actions.llm.providers.batch_base import BatchResult
 
     return [
         BatchResult(
@@ -388,7 +388,7 @@ def sample_batch_task():
     Includes all common fields that every provider should handle correctly.
     Used for basic format_task_for_provider() testing.
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchTask
+    from agent_actions.llm.providers.batch_base import BatchTask
 
     return BatchTask(
         custom_id="test-123",
@@ -406,7 +406,7 @@ def sample_batch_task_no_max_tokens():
     Tests that providers correctly handle missing max_tokens and don't
     add it as null/None to the request body.
     """
-    from agent_actions.llm_invocation.providers.batch_client_base import BatchTask
+    from agent_actions.llm.providers.batch_base import BatchTask
 
     return BatchTask(
         custom_id="test-456",

@@ -6,7 +6,7 @@ Tests based on RFC_recovery.md test cases for retry mechanism.
 import pytest
 from unittest.mock import Mock, call
 
-from agent_actions.core.retry_service import (
+from agent_actions.processing.recovery.retry import (
     RetryService,
     RetryResult,
     classify_error,

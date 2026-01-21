@@ -3,7 +3,7 @@ Shared utilities for agent configuration validation.
 """
 
 from typing import Dict, Any, Set, Optional
-from agent_actions.utilities.constants import (
+from agent_actions.utils.constants import (
     MODEL_VENDOR_KEY,
     MODEL_NAME_KEY,
     JSON_MODE_KEY,
