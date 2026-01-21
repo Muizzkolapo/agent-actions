@@ -15,7 +15,7 @@ import tempfile
 import shutil
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from agent_actions.prompt.render_workflow import (
+from agent_actions.prompt_generation.render_workflow import (
     normalize_yaml_indentation,
     render_pipeline_with_templates,
 )

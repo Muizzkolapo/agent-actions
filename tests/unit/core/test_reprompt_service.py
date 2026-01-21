@@ -7,12 +7,12 @@ loops, feedback generation, and recovery metadata.
 
 import pytest
 from unittest.mock import Mock, call
-from agent_actions.processing.recovery.reprompt import (
+from agent_actions.core.reprompt_service import (
     RepromptService,
     RepromptResult,
     create_reprompt_service_from_config,
 )
-from agent_actions.processing.recovery.validation import (
+from agent_actions.core.reprompt_validation import (
     reprompt_validation,
     _VALIDATION_REGISTRY,
 )

@@ -1,7 +1,7 @@
 """Tests for ActionLevelOrchestrator functionality."""
 
 import pytest
-from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
+from agent_actions.orchestration.action_level_executor import ActionLevelOrchestrator
 from agent_actions.errors import WorkflowError
 
 

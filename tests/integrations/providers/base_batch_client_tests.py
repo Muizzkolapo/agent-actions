@@ -40,7 +40,7 @@ import pytest
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Any
-from agent_actions.llm.providers.batch_client_base import (
+from agent_actions.llm_invocation.providers.batch_client_base import (
     BaseBatchClient,
     BatchTask,
     BatchResult,

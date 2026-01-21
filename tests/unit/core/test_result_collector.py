@@ -4,16 +4,16 @@ from typing import Any, Dict
 
 import pytest
 
-from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.result_collector import ResultCollector
-from agent_actions.processing.types import (
+from agent_actions.core.exhausted_record_builder import ExhaustedRecordBuilder
+from agent_actions.core.result_collector import ResultCollector
+from agent_actions.core.types import (
     ProcessingResult,
     ProcessingStatus,
     RecoveryMetadata,
     RetryMetadata,
 )
 from agent_actions.errors import AgentActionsException
-from agent_actions.utils.id_generation import IDGenerator
+from agent_actions.utilities.id_generation import IDGenerator
 
 
 def _retry_metadata() -> RecoveryMetadata:

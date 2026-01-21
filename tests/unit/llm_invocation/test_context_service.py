@@ -1,6 +1,6 @@
 import json
 
-from agent_actions.llm.realtime.services.context_service import ContextService
+from agent_actions.llm_invocation.realtime.services.context_service import ContextService
 
 
 def test_prepare_context_data_tool_uses_llm_context():

@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors
-from agent_actions.tooling.docs.generator import generate_docs
-from agent_actions.tooling.docs.server import serve_docs
+from agent_actions.docs.generator import generate_docs
+from agent_actions.docs.server import serve_docs
 
 
 @click.group()

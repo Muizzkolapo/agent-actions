@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.validation.static_analysis import (
+from agent_actions.validation.static_analyzer import (
     AffectedReference,
     Conflict,
     ConflictAnalysisResult,
@@ -11,7 +11,7 @@ from agent_actions.validation.static_analysis import (
     ConflictType,
     FieldProducer,
 )
-from agent_actions.validation.static_analysis.data_flow_graph import (
+from agent_actions.validation.static_analyzer.data_flow_graph import (
     AgentKind,
     DataFlowGraph,
     DataFlowNode,

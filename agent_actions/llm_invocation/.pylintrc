@@ -1,0 +1,21 @@
+[MASTER]
+# Disable only non-critical checkers that are not code-quality issues
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    duplicate-code,
+    import-outside-toplevel,
+    wrong-import-order,
+    too-few-public-methods,
+    unused-argument,
+    no-else-return,
+    too-many-return-statements,
+    too-many-branches,
+    too-many-arguments,
+    too-many-locals,
+    unnecessary-pass,
+    no-member
+
+[FORMAT]
+max-line-length=100

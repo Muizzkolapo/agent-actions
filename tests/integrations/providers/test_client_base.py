@@ -2,7 +2,7 @@
 
 import pytest
 import os
-from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.errors import ConfigurationError
 
 

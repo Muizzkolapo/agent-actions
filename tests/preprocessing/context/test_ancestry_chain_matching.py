@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from agent_actions.input.context.historical_node_loader import (
+from agent_actions.preprocessing.context.historical_node_loader import (
     HistoricalDataRequest,
     HistoricalNodeDataLoader,
 )

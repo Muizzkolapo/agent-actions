@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.processing.types import ProcessingResult, ProcessingStatus, RetryState
+from agent_actions.core.types import ProcessingResult, ProcessingStatus, RetryState
 
 
 class TestProcessingResultFactories:

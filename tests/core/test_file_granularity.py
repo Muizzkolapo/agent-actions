@@ -3,10 +3,10 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from agent_actions.processing.processor import RecordProcessor
-from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
-from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.processing.types import (
+from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
+from agent_actions.orchestration.dependency_injection import ProcessorFactory
+from agent_actions.core.types import (
     ProcessingContext,
     ProcessingMode,
     ProcessingResult,
@@ -464,7 +464,7 @@ class TestFileModeLineageChaining:
         mock_processor = MagicMock()
 
         # Real enrichment pipeline to test lineage
-        from agent_actions.processing.enrichment import EnrichmentPipeline
+        from agent_actions.core.enrichment import EnrichmentPipeline
 
         mock_processor.enrichment_pipeline = EnrichmentPipeline()
         processor_factory.create_processor.return_value = mock_processor
@@ -524,7 +524,7 @@ class TestFileModeLineageChaining:
         processor_factory = MagicMock()
         mock_processor = MagicMock()
 
-        from agent_actions.processing.enrichment import EnrichmentPipeline
+        from agent_actions.core.enrichment import EnrichmentPipeline
 
         mock_processor.enrichment_pipeline = EnrichmentPipeline()
         processor_factory.create_processor.return_value = mock_processor

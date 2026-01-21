@@ -1,0 +1,217 @@
+/* ============================================
+   Detail Views & Observability Components
+   ============================================ */
+
+/* Detail Cards */
+.detail-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    margin-bottom: var(--space-5);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.detail-card:hover {
+    box-shadow: var(--shadow-sm);
+}
+
+.detail-card h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0;
+}
+
+.detail-card p {
+    margin-bottom: var(--space-2);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.detail-card p:last-child {
+    margin-bottom: 0;
+}
+
+/* Action Details */
+.action-details {
+    margin-bottom: var(--space-8);
+}
+
+.action-detail-section {
+    margin-bottom: var(--space-8);
+}
+
+.action-detail-section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+    color: var(--text);
+}
+
+/* Dependency List */
+.dependency-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.dependency-tag {
+    padding: var(--space-2) var(--space-3);
+    background: var(--gray-50);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.dependency-tag:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Detail Grid */
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-5);
+    margin-bottom: var(--space-8);
+}
+
+.detail-card.full-width {
+    grid-column: 1 / -1;
+}
+
+/* Observability Container */
+.observability-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: var(--space-12) var(--space-8);
+}
+
+/* Metrics Grid */
+.metrics-grid,
+.runs-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.metric-trend {
+    margin-top: var(--space-3);
+    font-size: 0.8125rem;
+    color: var(--text-subtle);
+}
+
+/* Workflow Health Section */
+.workflow-health-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
+}
+
+.workflow-health-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.workflow-health-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+    border-color: var(--border-strong);
+}
+
+.workflow-health-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-5);
+}
+
+.workflow-health-name {
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+/* Health Indicator */
+.health-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.health-indicator.healthy {
+    background: var(--success);
+}
+
+.health-indicator.degraded {
+    background: var(--warning);
+}
+
+.health-indicator.unhealthy {
+    background: var(--error);
+}
+
+/* Workflow Metrics */
+.workflow-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+}
+
+.workflow-metric-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle);
+    margin-bottom: var(--space-1);
+}
+
+.workflow-metric-value {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* Runs Section */
+.runs-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    margin-bottom: var(--space-8);
+    box-shadow: var(--shadow-sm);
+}
+
+.runs-section h2 {
+    font-size: 1rem;
+    margin-bottom: var(--space-6);
+    color: var(--text);
+}
+
+/* Workflows List */
+.workflows-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.workflows-list .workflow-card {
+    width: 100%;
+}
+
+/* Recent Runs Container */
+.recent-runs-container {
+    margin-bottom: var(--space-6);
+}
+
+.recent-runs-table {
+    margin-bottom: 0;
+}

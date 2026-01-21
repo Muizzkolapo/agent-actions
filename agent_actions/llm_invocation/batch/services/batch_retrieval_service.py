@@ -1,0 +1,175 @@
+"""Batch retrieval service for downloading batch job results.
+
+This service encapsulates all result retrieval functionality, extracted from
+BatchService to follow Single Responsibility Principle.
+"""
+
+import json
+import logging
+from pathlib import Path
+from typing import Optional, Dict, Any, List, Callable
+
+from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
+    BatchContextManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient, BatchResult
+from agent_actions.utilities.path_utils import ensure_directory_exists
+from agent_actions.errors import ExternalServiceError
+
+logger = logging.getLogger(__name__)
+
+
+class BatchRetrievalService:
+    """Service for retrieving batch job results.
+
+    Handles downloading results from batch API providers and saving to JSONL files.
+    """
+
+    def __init__(
+        self,
+        client_resolver: BatchClientResolver,
+        context_manager: BatchContextManager,
+        registry_manager_factory: Callable[[str], BatchRegistryManager],
+    ):
+        """Initialize retrieval service with dependencies.
+
+        Args:
+            client_resolver: Resolver for batch API clients
+            context_manager: Manager for batch context persistence
+            registry_manager_factory: Factory function to create registry managers
+        """
+        self._client_resolver = client_resolver
+        self._context_manager = context_manager
+        self._registry_manager_factory = registry_manager_factory
+
+    def retrieve_results(
+        self,
+        batch_id: str,
+        output_dir: str,
+        file_path: Optional[str] = None,
+    ) -> Path:
+        """Retrieve and save results from a completed batch job.
+
+        Args:
+            batch_id: ID of the batch job to retrieve results for
+            output_dir: Directory to save results to
+            file_path: Optional original file path for naming output
+
+        Returns:
+            Path to the saved results file
+
+        Raises:
+            ExternalServiceError: If retrieval fails
+        """
+        provider = None
+        try:
+            manager = self._registry_manager_factory(output_dir)
+            provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_dir)
+
+            # Get entry from registry
+            entry = manager.get_batch_job_by_id(batch_id)
+            file_name = entry.file_name if entry else None
+
+            # Load context and retrieve results
+            context_map = (
+                self._context_manager.load_batch_context_map(output_dir, file_name)
+                if file_name
+                else {}
+            )
+            batch_results = self._retrieve_results(
+                provider,
+                batch_id,
+                output_dir,
+                context_map=context_map,
+                record_count=entry.record_count if entry else None,
+                file_name=file_name,
+            )
+
+            # Write results to JSONL
+            output_path = Path(output_dir)
+            result_file = output_path / (
+                f"{Path(file_path).stem}_results.jsonl"
+                if file_path
+                else f"{batch_id}_results.jsonl"
+            )
+
+            if not result_file.exists():
+                ensure_directory_exists(output_path)
+                self._write_results_to_jsonl(result_file, batch_results)
+
+            return result_file
+
+        except Exception as e:
+            vendor = (
+                getattr(provider, "vendor_type", "unknown") if provider is not None else "unknown"
+            )
+            raise ExternalServiceError(
+                vendor, f"Failed to retrieve batch results: {e}", cause=e
+            ) from e
+
+    def _write_results_to_jsonl(self, result_file: Path, batch_results: List[BatchResult]) -> None:
+        """Write batch results to JSONL file.
+
+        Args:
+            result_file: Path to write results to
+            batch_results: List of batch results to write
+        """
+        with open(result_file, "w", encoding="utf-8") as f:
+            for result in batch_results:
+                raw_format = {
+                    "custom_id": result.custom_id,
+                    "response": {
+                        "body": {
+                            "choices": [{"message": {"content": json.dumps(result.content)}}],
+                            "usage": result.usage,
+                        }
+                    },
+                }
+                f.write(json.dumps(raw_format) + "\n")
+
+    def _retrieve_results(
+        self,
+        provider: BaseBatchClient,
+        batch_id: str,
+        output_directory: Optional[str],
+        *,
+        context_map: Optional[Dict[str, Any]] = None,
+        record_count: Optional[int] = None,
+        file_name: Optional[str] = None,
+    ) -> List[BatchResult]:
+        """Retrieve batch results from provider and log reconciliation.
+
+        Args:
+            provider: Batch API client
+            batch_id: Batch job ID
+            output_directory: Output directory path
+            context_map: Context map for reconciliation
+            record_count: Expected record count
+            file_name: Original file name
+
+        Returns:
+            List of batch results
+        """
+        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+            BatchResultReconciler,
+        )
+
+        batch_results = provider.retrieve_results(batch_id, output_directory)
+
+        # Log reconciliation
+        expected = BatchResultReconciler.collect_expected_custom_ids(context_map or {})
+        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+        BatchResultReconciler.log_batch_reconciliation(
+            batch_id=batch_id,
+            expected_count=len(expected) or record_count or 0,
+            received_count=len(received),
+            file_name=file_name,
+        )
+
+        return batch_results

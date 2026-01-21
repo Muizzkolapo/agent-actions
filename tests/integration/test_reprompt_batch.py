@@ -6,12 +6,12 @@ Tests the full batch reprompt flow through BatchProcessingService with validatio
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.processing.recovery.validation import (
+from agent_actions.core.reprompt_validation import (
     reprompt_validation,
     _VALIDATION_REGISTRY,
 )
-from agent_actions.llm.providers.batch_client_base import BatchResult
-from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
+from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+from agent_actions.core.types import RecoveryMetadata, RepromptMetadata
 
 
 class TestBatchRepromptIntegration:
@@ -42,10 +42,10 @@ class TestBatchRepromptIntegration:
         3. Verify resubmitted batch task has feedback in user_content
         4. Verify final result has reprompt metadata
         """
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         # Track submitted batch tasks to verify feedback injection
         submitted_tasks = []
@@ -57,7 +57,7 @@ class TestBatchRepromptIntegration:
             """Capture the records being prepared (which have feedback injected)."""
             reprompt_records_captured.extend(data)
             # Return mock PreparedBatchTasks
-            from agent_actions.llm.batch.core.batch_models import (
+            from agent_actions.llm_invocation.batch.core.batch_models import (
                 PreparedBatchTasks,
                 BatchTaskPreparationStats,
             )
@@ -190,7 +190,7 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_all_pass_validation_no_resubmit(self):
         """When all records pass validation, no reprompt batch should be submitted."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -254,10 +254,10 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_partial_failure_only_failed_resubmitted(self):
         """Only records that fail validation should be resubmitted."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         # Track submitted tasks
         reprompt_records_captured = []
@@ -267,7 +267,7 @@ class TestBatchRepromptIntegration:
         ):
             """Capture the records being prepared."""
             reprompt_records_captured.extend(data)
-            from agent_actions.llm.batch.core.batch_models import (
+            from agent_actions.llm_invocation.batch.core.batch_models import (
                 PreparedBatchTasks,
                 BatchTaskPreparationStats,
             )
@@ -382,16 +382,16 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_exhausted_returns_last_response(self):
         """When reprompt exhausts attempts with on_exhausted=return_last."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         def mock_prepare_tasks(
             agent_config, data, provider, output_directory=None, batch_name=None
         ):
             """Mock task preparation."""
-            from agent_actions.llm.batch.core.batch_models import (
+            from agent_actions.llm_invocation.batch.core.batch_models import (
                 PreparedBatchTasks,
                 BatchTaskPreparationStats,
             )
@@ -487,17 +487,17 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_with_retry_both_metadata_present(self):
         """When both retry and reprompt enabled, both metadata should be present."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
+        from agent_actions.core.types import RecoveryMetadata, RetryMetadata
 
         def mock_prepare_tasks(
             agent_config, data, provider, output_directory=None, batch_name=None
         ):
             """Mock task preparation."""
-            from agent_actions.llm.batch.core.batch_models import (
+            from agent_actions.llm_invocation.batch.core.batch_models import (
                 PreparedBatchTasks,
                 BatchTaskPreparationStats,
             )

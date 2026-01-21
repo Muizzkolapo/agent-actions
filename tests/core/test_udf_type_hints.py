@@ -8,14 +8,14 @@ import dataclasses
 import pytest
 from typing import Dict, List, Optional, TypedDict
 
-from agent_actions.utils.udf_management.udf_registry import (
+from agent_actions.utilities.udf_management.udf_registry import (
     udf_tool,
     get_udf_metadata,
     clear_registry,
 )
-from agent_actions.utils.udf_management.tooling import execute_user_defined_function
+from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.udf_management.type_conversion import HAS_PYDANTIC, clear_schema_cache
+from agent_actions.utilities.udf_management.type_conversion import HAS_PYDANTIC, clear_schema_cache
 
 
 @pytest.fixture(autouse=True)

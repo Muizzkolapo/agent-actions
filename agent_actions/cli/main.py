@@ -23,13 +23,13 @@ from agent_actions.cli.skills import skills  # Skills installation for Claude/Co
 from agent_actions.cli.status import status
 from agent_actions.cli.test import clean_cli as clean
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
-from agent_actions.llm.batch.batch_cli import (
+from agent_actions.llm_invocation.batch.batch_cli import (
     batch,  # CLI command group for batch processing operations
 )
 from agent_actions.logging import LoggerFactory, LoggingConfig
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
-from agent_actions.logging.errors import format_user_error
-from agent_actions.utils.safe_format import format_exception_chain_for_debug
+from agent_actions.shared.user_errors import format_user_error
+from agent_actions.utilities.safe_format import format_exception_chain_for_debug
 
 __version__ = "1.0.0"
 

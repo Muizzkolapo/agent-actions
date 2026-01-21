@@ -5,8 +5,8 @@ Extract output schemas from agent configurations.
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from agent_actions.tooling.docs.scanner import ProjectScanner
-from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.docs.scanner import ProjectScanner
+from agent_actions.response_processing.schema_loader import SchemaLoader
 
 from .data_flow_graph import InputSchema, OutputSchema
 

@@ -11,7 +11,7 @@ Total tests for Gemini:
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.llm.providers.batch_client_base import BatchResult
+from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 
@@ -65,7 +65,7 @@ class TestGeminiBatchClient(BaseBatchClientTests):
                         "agent_actions.llm_invocation.providers.gemini.batch_client.types",
                         mock_types_module,
                     ):
-                        from agent_actions.llm.providers.gemini.batch_client import (
+                        from agent_actions.llm_invocation.providers.gemini.batch_client import (
                             GeminiBatchClient,
                         )
 

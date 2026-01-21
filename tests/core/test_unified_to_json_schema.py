@@ -1,7 +1,7 @@
 """Unit tests for unified_to_json_schema converter."""
 
 import pytest
-from agent_actions.utils.udf_management.type_conversion import unified_to_json_schema
+from agent_actions.utilities.udf_management.type_conversion import unified_to_json_schema
 
 
 class TestUnifiedToJsonSchema:

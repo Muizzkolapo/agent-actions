@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.orchestration.agent_runner import AgentRunner
 
 # Mock Logger
 logging.basicConfig(level=logging.DEBUG)

@@ -1,7 +1,7 @@
 """Unit tests for SchemaFieldValidator."""
 
 import pytest
-from agent_actions.input.preprocessing.field_resolution.schema_field_validator import (
+from agent_actions.preprocessing.field_resolution.schema_field_validator import (
     SchemaFieldValidator,
     SchemaFieldValidationResult,
 )

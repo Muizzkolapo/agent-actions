@@ -12,7 +12,7 @@ from agent_actions.validation.preflight.vendor_compatibility_validator import (
 )
 
 # Static type checking
-from agent_actions.validation.static_analysis import (
+from agent_actions.validation.static_analyzer import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
     StaticValidationResult,

@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import tempfile
 import shutil
 
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.orchestration.agent_runner import AgentRunner
 from agent_actions.errors import DependencyError
 
 
