@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
 
-from agent_actions.input.preprocessing.filtering.service import get_filter_service
+from agent_actions.input.preprocessing.filtering.service import FilterService, get_filter_service
 from agent_actions.utils.field_management.manager import FieldManager
 
 logger = logging.getLogger(__name__)

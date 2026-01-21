@@ -10,7 +10,7 @@ from agent_actions.processing.recovery.validation import (
     reprompt_validation,
     _VALIDATION_REGISTRY,
 )
-from agent_actions.llm.providers.batch_client_base import BatchResult
+from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
 
 
@@ -42,7 +42,7 @@ class TestBatchRepromptIntegration:
         3. Verify resubmitted batch task has feedback in user_content
         4. Verify final result has reprompt metadata
         """
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -148,7 +148,7 @@ class TestBatchRepromptIntegration:
 
         # Mock BatchTaskPreparator.prepare_tasks
         with patch(
-            "agent_actions.llm_invocation.batch.processing.batch_task_preparator.BatchTaskPreparator"
+            "agent_actions.llm.batch.processing.batch_task_preparator.BatchTaskPreparator"
         ) as mock_preparator_class:
             mock_preparator_instance = Mock()
             mock_preparator_instance.prepare_tasks = Mock(side_effect=mock_prepare_tasks)
@@ -190,7 +190,7 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_all_pass_validation_no_resubmit(self):
         """When all records pass validation, no reprompt batch should be submitted."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
 
@@ -254,7 +254,7 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_partial_failure_only_failed_resubmitted(self):
         """Only records that fail validation should be resubmitted."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -353,7 +353,7 @@ class TestBatchRepromptIntegration:
 
         # Mock BatchTaskPreparator
         with patch(
-            "agent_actions.llm_invocation.batch.processing.batch_task_preparator.BatchTaskPreparator"
+            "agent_actions.llm.batch.processing.batch_task_preparator.BatchTaskPreparator"
         ) as mock_preparator_class:
             mock_preparator_instance = Mock()
             mock_preparator_instance.prepare_tasks = Mock(side_effect=mock_prepare_tasks)
@@ -382,7 +382,7 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_exhausted_returns_last_response(self):
         """When reprompt exhausts attempts with on_exhausted=return_last."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -455,7 +455,7 @@ class TestBatchRepromptIntegration:
 
         # Mock BatchTaskPreparator
         with patch(
-            "agent_actions.llm_invocation.batch.processing.batch_task_preparator.BatchTaskPreparator"
+            "agent_actions.llm.batch.processing.batch_task_preparator.BatchTaskPreparator"
         ) as mock_preparator_class:
             mock_preparator_instance = Mock()
             mock_preparator_instance.prepare_tasks = Mock(side_effect=mock_prepare_tasks)
@@ -487,7 +487,7 @@ class TestBatchRepromptIntegration:
 
     def test_batch_reprompt_with_retry_both_metadata_present(self):
         """When both retry and reprompt enabled, both metadata should be present."""
-        from agent_actions.llm.batch.services.batch_processing_service import (
+        from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
@@ -566,7 +566,7 @@ class TestBatchRepromptIntegration:
 
         # Mock BatchTaskPreparator
         with patch(
-            "agent_actions.llm_invocation.batch.processing.batch_task_preparator.BatchTaskPreparator"
+            "agent_actions.llm.batch.processing.batch_task_preparator.BatchTaskPreparator"
         ) as mock_preparator_class:
             mock_preparator_instance = Mock()
             mock_preparator_instance.prepare_tasks = Mock(side_effect=mock_prepare_tasks)

@@ -4,7 +4,7 @@ LLM Context Builder - Mode-specific implementations for batch and realtime.
 
 from typing import Dict, Any, Optional
 from agent_actions.prompt.context.scope import ContextScopeProcessor
-from agent_actions.input.preprocessing.transformation.data_transformer import DataTransformer
+from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 
 
 class LLMContextBuilder:

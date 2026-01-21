@@ -1,13 +1,8 @@
 """Configuration validation utilities for field chunking."""
 
-from typing import TYPE_CHECKING, Dict, Any, List
+from typing import Dict, Any, List
 
-if TYPE_CHECKING:
-    from agent_actions.input.preprocessing.chunking.field_chunking import FieldChunkingValidationError
-else:
-
-    class FieldChunkingValidationError(ValueError):
-        """Raised when field chunking configuration is invalid."""
+from agent_actions.input.preprocessing.chunking.errors import FieldChunkingValidationError
 
 
 class ConfigValidator:

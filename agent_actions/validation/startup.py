@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import ValidationError
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.llm.realtime.config_handler import ConfigManager
+from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.config.environment import EnvironmentConfig
 
 logger = logging.getLogger(__name__)

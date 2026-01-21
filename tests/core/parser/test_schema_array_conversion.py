@@ -7,7 +7,7 @@ are properly converted to the unified format and compile correctly for all vendo
 
 import pytest
 import logging
-from agent_actions.output.response.schema_change import (
+from agent_actions.output.response.schema import (
     compile_unified_schema,
     _convert_json_schema_to_unified,
 )

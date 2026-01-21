@@ -17,13 +17,13 @@ from agent_actions.errors import (
     FunctionNotFoundError,
     UDFLoadError,
 )
-from agent_actions.input.loaders.udf_loader import (
+from agent_actions.input.loaders.udf import (
     discover_udfs,
     validate_udf_references,
 )
-from agent_actions.llm.realtime.config_handler import ConfigManager
+from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.logging.errors import format_user_error
-from agent_actions.utils.udf_management.udf_registry import (
+from agent_actions.utils.udf_management.registry import (
     clear_registry,
     UDF_REGISTRY,
 )

@@ -5,8 +5,8 @@ import sys
 from pathlib import Path
 import tempfile
 import shutil
-from agent_actions.input.loaders.udf_loader import discover_udfs, validate_udf_references
-from agent_actions.utils.udf_management.udf_registry import (
+from agent_actions.input.loaders.udf import discover_udfs, validate_udf_references
+from agent_actions.utils.udf_management.registry import (
     udf_tool,
     clear_registry,
     UDF_REGISTRY,

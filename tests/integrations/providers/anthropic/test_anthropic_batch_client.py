@@ -12,7 +12,7 @@ Total tests for Anthropic:
 import pytest
 from unittest.mock import Mock, patch
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
-from agent_actions.llm.providers.batch_client_base import BatchResult
+from agent_actions.llm.providers.batch_base import BatchResult
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 

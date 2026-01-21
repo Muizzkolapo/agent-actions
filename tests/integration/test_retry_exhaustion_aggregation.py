@@ -495,7 +495,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with on_exhausted='raise' should raise exception.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )
@@ -552,7 +552,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with on_exhausted='return_last' should write exhausted record.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )
@@ -623,7 +623,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with mixed SUCCESS and EXHAUSTED should include both.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.input.preprocessing.staging.initial_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )

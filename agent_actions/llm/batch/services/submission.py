@@ -10,16 +10,16 @@ from typing import Optional, Dict, Any, Tuple, List, Callable, Union
 
 from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.infrastructure.batch_context_manager import (
+from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
 )
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.infrastructure.batch_registry_manager import (
+from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.processing.batch_task_preparator import BatchTaskPreparator
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.processing.batch_passthrough_builder import (
     BatchPassthroughBuilder,
 )

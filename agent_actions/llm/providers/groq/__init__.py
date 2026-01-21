@@ -1,4 +1,5 @@
 """Groq client module."""
+# pyright: reportImportCycles=false
 
 from .client import GroqClient
 

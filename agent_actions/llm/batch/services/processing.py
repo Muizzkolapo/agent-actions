@@ -13,27 +13,27 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Set
 
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
-from agent_actions.output.file_writer import FileWriter
+from agent_actions.output.writer import FileWriter
 from agent_actions.utils.path_utils import ensure_directory_exists, create_side_output_directory
 from agent_actions.utils.module_loader import ensure_path_importable, load_module_from_path
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.infrastructure.batch_context_manager import (
+from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
 )
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.infrastructure.batch_registry_manager import (
+from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.batch.processing.batch_result_processor import (
+from agent_actions.llm.batch.processing.result_processor import (
     BatchResultProcessor,
 )
-from agent_actions.llm.batch.processing.batch_side_output_handler import (
+from agent_actions.llm.batch.processing.side_output import (
     BatchSideOutputHandler,
 )
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
-from agent_actions.llm.providers.batch_client_base import BaseBatchClient, BatchResult
+from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.errors import ProcessingError
 
 logger = logging.getLogger(__name__)
@@ -463,7 +463,7 @@ class BatchProcessingService:
         Returns:
             List of batch results
         """
-        from agent_actions.llm.batch.processing.batch_result_reconciler import (
+        from agent_actions.llm.batch.processing.reconciler import (
             BatchResultReconciler,
         )
 
@@ -510,7 +510,7 @@ class BatchProcessingService:
             Tuple of (consolidated batch results, per-record recovery metadata for exhausted records)
             The dict maps custom_id -> RecoveryMetadata for records that never succeeded.
         """
-        from agent_actions.llm.batch.processing.batch_result_reconciler import (
+        from agent_actions.llm.batch.processing.reconciler import (
             BatchResultReconciler,
         )
 
@@ -664,7 +664,7 @@ class BatchProcessingService:
         Returns:
             List of batch results from retry batch
         """
-        from agent_actions.llm.batch.processing.batch_task_preparator import (
+        from agent_actions.llm.batch.processing.preparator import (
             BatchTaskPreparator,
         )
 
@@ -789,7 +789,7 @@ class BatchProcessingService:
 
         from agent_actions.processing.recovery.validation import get_validation_function
         from agent_actions.processing.types import RepromptMetadata
-        from agent_actions.llm.batch.processing.batch_task_preparator import (
+        from agent_actions.llm.batch.processing.preparator import (
             BatchTaskPreparator,
         )
         from agent_actions.utils.tools_resolver import resolve_tools_path

@@ -8,7 +8,7 @@ import dataclasses
 import pytest
 from typing import Dict, List, Optional, TypedDict
 
-from agent_actions.utils.udf_management.udf_registry import (
+from agent_actions.utils.udf_management.registry import (
     udf_tool,
     get_udf_metadata,
     clear_registry,

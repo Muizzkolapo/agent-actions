@@ -53,8 +53,8 @@ class MockBatchService:
             ensure_directory_exists,
             create_side_output_directory,
         )
-        from agent_actions.output.file_writer import FileWriter
-        from agent_actions.llm.batch.processing.batch_side_output_handler import (
+        from agent_actions.output.writer import FileWriter
+        from agent_actions.llm.batch.processing.side_output import (
             BatchSideOutputHandler,
         )
 

@@ -11,7 +11,7 @@ import sys
 sys.path.append(os.getcwd())
 
 from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
-from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+from agent_actions.input.preprocessing.staging.initial_pipeline import (
     process_initial_stage,
     InitialStageContext,
 )

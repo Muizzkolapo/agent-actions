@@ -114,7 +114,7 @@ def execute_user_defined_function(
         SchemaValidationError: If output validation fails
         AgentActionsException: If execution fails
     """
-    from agent_actions.utils.udf_management.udf_registry import get_udf_metadata
+    from agent_actions.utils.udf_management.registry import get_udf_metadata
 
     metadata = get_udf_metadata(udf_name)
     udf = metadata["function"]

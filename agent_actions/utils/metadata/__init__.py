@@ -19,8 +19,8 @@ Example:
     >>> item["metadata"] = metadata.to_dict()
 """
 
-from .metadata_types import ResponseMetadata, UnifiedMetadata
-from .metadata_extractor import MetadataExtractor, MetadataTimer
+from .types import ResponseMetadata, UnifiedMetadata
+from .extractor import MetadataExtractor, MetadataTimer
 
 __all__ = [
     "ResponseMetadata",

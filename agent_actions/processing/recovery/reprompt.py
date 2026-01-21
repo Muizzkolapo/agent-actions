@@ -10,7 +10,7 @@ from typing import Callable, Any, Optional, Tuple, Dict
 import logging
 import json
 
-from .reprompt_validation import get_validation_function
+from .validation import get_validation_function
 
 logger = logging.getLogger(__name__)
 

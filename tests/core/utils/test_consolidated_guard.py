@@ -95,7 +95,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_conditional_clause(self):
         """Test that skip behavior routes to conditional_clause."""
-        from agent_actions.output.response.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",
@@ -116,7 +116,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_filter_behavior_to_guard(self):
         """Test that filter behavior routes to guard config."""
-        from agent_actions.output.response.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",
@@ -140,7 +140,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_guard(self):
         """Test that SQL conditions with skip behavior route to guard config with skip behavior."""
-        from agent_actions.output.response.action_expander import ActionExpander
+        from agent_actions.output.response.expander import ActionExpander
 
         action = {
             "name": "test_action",

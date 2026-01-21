@@ -342,7 +342,7 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
         """Prepare and compile schema for provider (resolves schema references from registry)."""
-        from agent_actions.output.response.schema_change import prepare_schema_unified
+        from agent_actions.output.response.schema import prepare_schema_unified
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
         vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
@@ -363,7 +363,7 @@ class BatchTaskPreparator:
         if self.filter_service:
             return self.filter_service
         # Fall back to global filter service
-        from agent_actions.input.preprocessing.filtering.filter_service import get_filter_service
+        from agent_actions.input.preprocessing.filtering.service import get_filter_service
 
         return get_filter_service()
 

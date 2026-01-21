@@ -100,7 +100,7 @@ Remove index prefix from directory names (`node_13_validate_answer_1/` → `vali
 - [ ] Line 76: Update `PathType.TARGET` template
 
 ### Task 4.5: Update SourceDataLoader
-- [ ] File: `agent_actions/input_loading/extractors_source_data_loader.py`
+- [ ] File: `agent_actions/input_loading/loaders.source_data.py`
 - [ ] Lines 65-89: Update path parsing logic
 
 ### Task 4.6: Update BatchSourceHandler
@@ -178,7 +178,7 @@ Remove index prefix from directory names (`node_13_validate_answer_1/` → `vali
 11. `agent_actions/utilities/id_generation/id_generator.py`
 12. `agent_actions/utilities/lineage/lineage_builder.py`
 13. `agent_actions/state_management/path_manager.py`
-14. `agent_actions/input_loading/extractors_source_data_loader.py`
+14. `agent_actions/input_loading/loaders.source_data.py`
 15. `agent_actions/llm_invocation/batch/infrastructure/batch_source_handler.py`
 16. `agent_actions/skills/agent-actions-workflow/scripts/analyze_field_flow.py`
 

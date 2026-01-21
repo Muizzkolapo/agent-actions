@@ -1,14 +1,9 @@
 """Fallback strategies for handling edge cases in field chunking."""
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple
 
-if TYPE_CHECKING:
-    from agent_actions.input.preprocessing.chunking.field_chunking import FieldChunkingError
-else:
-
-    class FieldChunkingError(Exception):
-        """Raised when field chunking operations fail."""
+from agent_actions.input.preprocessing.chunking.errors import FieldChunkingError
 
 
 class FallbackStrategy(ABC):

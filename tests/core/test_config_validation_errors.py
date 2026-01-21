@@ -2,7 +2,7 @@
 
 import pytest
 import os
-from agent_actions.output.response.action_expander import ActionExpander
+from agent_actions.output.response.expander import ActionExpander
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.errors import ConfigValidationError, ConfigurationError  # New modular pattern!
 

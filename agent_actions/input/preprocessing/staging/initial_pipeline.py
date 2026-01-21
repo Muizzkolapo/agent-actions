@@ -506,8 +506,8 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     """Prepare data for batch mode processing."""
     local_batch_id = f"batch_{uuid.uuid4().hex}"
     node_id = f"node_{ctx.idx}_{uuid.uuid4()}"
-    from agent_actions.input.loaders.tabular_loader import TabularLoader
-    from agent_actions.input.loaders.xml_loader import XmlLoader
+    from agent_actions.input.loaders.tabular import TabularLoader
+    from agent_actions.input.loaders.xml import XmlLoader
 
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
@@ -569,9 +569,9 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     Prepare data for realtime mode processing using direct loaders.
     Replaces StagingContentLoader usage.
     """
-    from agent_actions.input.loaders.json_loader import JsonLoader
-    from agent_actions.input.loaders.tabular_loader import TabularLoader
-    from agent_actions.input.loaders.xml_loader import XmlLoader
+    from agent_actions.input.loaders.json import JsonLoader
+    from agent_actions.input.loaders.tabular import TabularLoader
+    from agent_actions.input.loaders.xml import XmlLoader
 
     json_loader = JsonLoader(ctx.agent_config, ctx.agent_name)
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)

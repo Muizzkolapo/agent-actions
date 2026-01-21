@@ -13,7 +13,7 @@ from agent_actions.workflow.runner import AgentRunner
 from agent_actions.config.di.application import ApplicationContainer
 from agent_actions.config.environment import EnvironmentConfig
 
-from .startup_validator import StartupValidationError, validate_startup
+from agent_actions.validation.startup import StartupValidationError, validate_startup
 
 logger = logging.getLogger(__name__)
 
@@ -122,4 +122,3 @@ def create_agent_runner(
         default_path=default_path,
     ) as container:
         return container.get_agent_runner(use_tools)
-

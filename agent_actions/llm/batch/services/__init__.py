@@ -1,12 +1,12 @@
 """Batch services: focused service classes for batch operations."""
 
-from agent_actions.llm.batch.services.batch_submission_service import (
+from agent_actions.llm.batch.services.submission import (
     BatchSubmissionService,
 )
-from agent_actions.llm.batch.services.batch_retrieval_service import (
+from agent_actions.llm.batch.services.retrieval import (
     BatchRetrievalService,
 )
-from agent_actions.llm.batch.services.batch_processing_service import (
+from agent_actions.llm.batch.services.processing import (
     BatchProcessingService,
 )
 

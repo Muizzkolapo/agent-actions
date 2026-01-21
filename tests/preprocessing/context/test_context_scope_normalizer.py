@@ -8,7 +8,7 @@ Verifies that:
 """
 
 import pytest
-from agent_actions.input.context.context_scope_normalizer import (
+from agent_actions.input.context.normalizer import (
     DIRECTIVE_REGISTRY,
     normalize_context_scope,
     normalize_all_agent_configs,

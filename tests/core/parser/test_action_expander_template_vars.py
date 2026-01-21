@@ -1,7 +1,7 @@
 """Tests for ActionExpander template variable replacement (${param} and ${param-1})."""
 
 import pytest
-from agent_actions.output.response.action_expander import ActionExpander
+from agent_actions.output.response.expander import ActionExpander
 
 
 class TestTemplateVariableReplacement:

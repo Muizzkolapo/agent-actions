@@ -9,16 +9,16 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 
-from agent_actions.llm.batch.infrastructure.batch_context_manager import (
+from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
 )
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.infrastructure.batch_registry_manager import (
+from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.providers.batch_client_base import BaseBatchClient, BatchResult
+from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.utils.path_utils import ensure_directory_exists
 from agent_actions.errors import ExternalServiceError
 
@@ -156,7 +156,7 @@ class BatchRetrievalService:
         Returns:
             List of batch results
         """
-        from agent_actions.llm.batch.processing.batch_result_reconciler import (
+        from agent_actions.llm.batch.processing.reconciler import (
             BatchResultReconciler,
         )
 

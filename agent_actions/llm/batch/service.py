@@ -110,7 +110,7 @@ class BatchService:
     def _get_submission_service(self):
         """Lazy-initialize submission service."""
         if self._submission_service is None:
-            from agent_actions.llm.batch.services.batch_submission_service import (
+            from agent_actions.llm.batch.services.submission import (
                 BatchSubmissionService,
             )
 
@@ -126,7 +126,7 @@ class BatchService:
     def _get_retrieval_service(self):
         """Lazy-initialize retrieval service."""
         if self._retrieval_service is None:
-            from agent_actions.llm.batch.services.batch_retrieval_service import (
+            from agent_actions.llm.batch.services.retrieval import (
                 BatchRetrievalService,
             )
 
@@ -140,7 +140,7 @@ class BatchService:
     def _get_processing_service(self):
         """Lazy-initialize processing service."""
         if self._processing_service is None:
-            from agent_actions.llm.batch.services.batch_processing_service import (
+            from agent_actions.llm.batch.services.processing import (
                 BatchProcessingService,
             )
 

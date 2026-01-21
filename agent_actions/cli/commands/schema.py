@@ -101,7 +101,7 @@ class SchemaCommand:
         # Get UDF registry (always try to load for tool schemas)
         udf_registry: Dict[str, Any] = {}
         try:
-            from agent_actions.utils.udf_management.udf_registry import UDF_REGISTRY
+            from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY
         except ImportError:

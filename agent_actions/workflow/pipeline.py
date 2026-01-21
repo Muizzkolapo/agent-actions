@@ -313,7 +313,7 @@ class ProcessingPipeline:
             # which encapsulates standard path knowledge and validation logic.
             # This is more robust than ad-hoc path traversal.
             from agent_actions.config.paths import PathManager
-            from agent_actions.input.loaders.extractors_source_data_loader import SourceDataLoader
+            from agent_actions.input.loaders.source_data import SourceDataLoader
 
             # Initialize PathManager. We allow it to auto-discover project root if needed.
             path_manager = PathManager()

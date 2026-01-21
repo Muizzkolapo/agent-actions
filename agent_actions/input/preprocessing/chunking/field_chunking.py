@@ -6,6 +6,10 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List
 
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
+from agent_actions.input.preprocessing.chunking.errors import (
+    FieldChunkingError,
+    FieldChunkingValidationError,
+)
 from agent_actions.input.preprocessing.chunking.strategies.chunking_strategies import (
     ChunkingStrategy,
     TiktokenChunkingStrategy,
@@ -26,14 +30,6 @@ from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies i
     EnhancedMetadataStrategy,
 )
 from agent_actions.input.preprocessing.chunking.strategies.validation import ConfigValidator
-
-
-class FieldChunkingValidationError(ValueError):
-    """Raised when field chunking configuration is invalid."""
-
-
-class FieldChunkingError(Exception):
-    """Raised when field chunking operations fail."""
 
 
 @dataclass

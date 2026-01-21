@@ -392,7 +392,7 @@ class RecordProcessor:
                 source_guid,
             )
             return None
-        from agent_actions.input.preprocessing.transformation.data_transformer import (
+        from agent_actions.input.preprocessing.transformation.transformer import (
             DataTransformer,
         )
 

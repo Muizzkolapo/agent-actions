@@ -8,7 +8,7 @@ ensuring consistent output structure across all processing pipelines.
 import time
 from typing import Any, Dict, Optional
 
-from .metadata_types import ResponseMetadata, UnifiedMetadata
+from .types import ResponseMetadata, UnifiedMetadata
 
 
 class MetadataExtractor:

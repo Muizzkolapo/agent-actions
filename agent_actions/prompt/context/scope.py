@@ -548,7 +548,7 @@ class ContextScopeProcessor:
         Uses HistoricalNodeDataLoader with HistoricalDataRequest.
         Returns content dict or None if not found.
         """
-        from agent_actions.input.context.historical_node_loader import (
+        from agent_actions.input.context.historical import (
             HistoricalNodeDataLoader,
             HistoricalDataRequest,
         )
@@ -750,7 +750,7 @@ class ContextScopeProcessor:
         - context_scope.passthrough: ["dep.field2"] -> Also loaded (needed for output)
         - Undeclared fields never enter memory
         """
-        from agent_actions.input.context.historical_node_loader import (
+        from agent_actions.input.context.historical import (
             HistoricalNodeDataLoader,
         )
 

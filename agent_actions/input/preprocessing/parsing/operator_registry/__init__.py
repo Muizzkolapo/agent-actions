@@ -1,6 +1,5 @@
-"""
-Operator registry for WHERE clause processing.
-"""
+"""Operator registry for WHERE clause processing."""
+# pyright: reportImportCycles=false
 
 # Base classes and types
 from .base import (

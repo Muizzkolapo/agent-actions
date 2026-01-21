@@ -153,7 +153,7 @@ def mock_registry_manager(tmp_path):
     Returns:
         BatchRegistryManager instance for testing.
     """
-    from agent_actions.llm.batch.infrastructure.batch_registry_manager import (
+    from agent_actions.llm.batch.infrastructure.registry import (
         BatchRegistryManager,
     )
 
