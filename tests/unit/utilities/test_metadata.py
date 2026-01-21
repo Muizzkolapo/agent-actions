@@ -11,7 +11,7 @@ import pytest
 import time
 from typing import Dict, Any
 
-from agent_actions.utilities.metadata import (
+from agent_actions.utils.metadata import (
     ResponseMetadata,
     UnifiedMetadata,
     MetadataExtractor,

@@ -59,7 +59,10 @@ python scripts/restructure/migrate.py --update-imports
 The migration map is aligned to the current repository state:
 
 - **Correlation IDs:** `utilities/correlation/version_id_generator.py` migrates to `utils/correlation/version_id.py`.
+- **Version correlator:** `orchestration/version_correlator.py` migrates to `workflow/managers/loop.py`.
 - **Chunking:** `preprocessing/chunking/field_chunking.py` and the `preprocessing/chunking/strategies/*` files are explicitly mapped.
+- **LLM config:** `llm_invocation/config/vendor_config.py` migrates to `llm/config/vendor.py`.
+- **CLI clean command:** `cli/test.py` migrates to `cli/commands/clean.py`.
 - **No shims/fallbacks:** The script expects real source files and produces a clean move/update. Missing files are treated as map errors and should be fixed, not bypassed.
 
 ---
@@ -75,6 +78,25 @@ Before running a real migration:
 2. Confirm **no** "Source not found" lines appear.
 3. Confirm import rewrites are non-zero and plausible.
 4. Only then run the real migration.
+
+### Dry-Run on an Already-Migrated Repo
+
+If the repo has already been migrated, a full dry run will report many
+`Source not found` lines because the *old* paths no longer exist. That is
+expected and not an error by itself.
+
+Use this decision guide:
+
+- **If the repo is pre-migration:** any `Source not found` indicates a missing
+  mapping or an incorrect path in `FILE_MIGRATIONS`. Fix the map and re-run.
+- **If the repo is post-migration:** focus on *collisions* and any unexpected
+  "Would move" operations. Those indicate the map still references live files
+  and could cause unintended changes.
+- For **import-only verification**, run:
+  ```bash
+  python scripts/restructure/migrate.py --update-imports --dry-run
+  ```
+  This keeps the check scoped to import rewrites without trying to move files.
 
 ---
 

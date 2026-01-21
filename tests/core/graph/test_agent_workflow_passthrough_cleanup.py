@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 import json
 from rich.console import Console
-from agent_actions.orchestration.agent_workflow import AgentWorkflow
+from agent_actions.workflow.coordinator import AgentWorkflow
 
 
 class TestAgentWorkflowPassthroughCleanup:

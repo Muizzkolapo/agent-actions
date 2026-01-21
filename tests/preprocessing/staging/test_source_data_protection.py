@@ -9,7 +9,7 @@ import json
 import pytest
 import tempfile
 from pathlib import Path
-from agent_actions.preprocessing.staging.initial_stage_pipeline import _should_save_source_items
+from agent_actions.input.preprocessing.staging.initial_stage_pipeline import _should_save_source_items
 
 
 class TestShouldSaveSourceItems:

@@ -9,7 +9,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,
 )
-from agent_actions.utilities.constants import JSON_MODE_KEY
+from agent_actions.utils.constants import JSON_MODE_KEY
 
 
 class GranularityAndOutputFieldValidator(BaseAgentEntryValidator):

@@ -23,10 +23,10 @@ FileUDFResult:
 import pytest
 from typing import Dict, List, Optional
 
-from agent_actions.utilities.lineage.lineage_builder import LineageBuilder
-from agent_actions.utilities.field_management.field_manager import FieldManager
-from agent_actions.utilities.id_generation.id_generator import IDGenerator
-from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
+from agent_actions.utils.lineage.lineage_builder import LineageBuilder
+from agent_actions.utils.field_management.field_manager import FieldManager
+from agent_actions.utils.id_generation.id_generator import IDGenerator
+from agent_actions.utils.udf_management.udf_registry import FileUDFResult
 
 
 def process_file_level_tool_fixed(

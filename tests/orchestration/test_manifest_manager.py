@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_actions.orchestration.manifest_manager import (
+from agent_actions.workflow.managers.manifest import (
     ManifestManager,
     DuplicateActionError,
     MANIFEST_FILENAME,

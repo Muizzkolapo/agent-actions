@@ -10,14 +10,14 @@ import sys
 # Ensure we can import from root
 sys.path.append(os.getcwd())
 
-from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
-from agent_actions.preprocessing.staging.initial_stage_pipeline import (
+from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
+from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
     process_initial_stage,
     InitialStageContext,
 )
-from agent_actions.orchestration.dependency_injection import ProcessorFactory
-from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingResult, ProcessingStatus
+from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 
 
 class TestRefactor(unittest.TestCase):

@@ -46,7 +46,7 @@ class AgentActionsError(Exception):
     def __str__(self) -> str:
         """Return string representation including context if available."""
         try:
-            from agent_actions.utilities.safe_format import format_exception_context
+            from agent_actions.utils.safe_format import format_exception_context
 
             base_msg = super().__str__()
 

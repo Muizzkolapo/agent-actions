@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.validation.static_analyzer import (
+from agent_actions.validation.static_analysis import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
     StaticValidationResult,
@@ -239,7 +239,7 @@ class TestWorkflowStaticAnalyzer:
         analyzer._build_graph()
 
         node = analyzer.graph.get_node("my_tool")
-        from agent_actions.validation.static_analyzer import AgentKind
+        from agent_actions.validation.static_analysis import AgentKind
 
         assert node.agent_kind == AgentKind.TOOL
 
@@ -317,7 +317,7 @@ class TestStaticValidationResult:
 
     def test_is_valid_with_errors(self):
         """Test is_valid is False when errors exist."""
-        from agent_actions.validation.static_analyzer import StaticTypeError, FieldLocation
+        from agent_actions.validation.static_analysis import StaticTypeError, FieldLocation
 
         result = StaticValidationResult()
         result.add_error(
@@ -333,7 +333,7 @@ class TestStaticValidationResult:
 
     def test_format_report(self):
         """Test format_report returns readable string."""
-        from agent_actions.validation.static_analyzer import (
+        from agent_actions.validation.static_analysis import (
             StaticTypeError,
             StaticTypeWarning,
             FieldLocation,

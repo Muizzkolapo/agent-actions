@@ -11,7 +11,7 @@ Tests cover:
 
 import pytest
 
-from agent_actions.preprocessing.field_resolution import (
+from agent_actions.input.preprocessing.field_resolution import (
     FieldReferenceResolver,
     ReferenceParser,
     ParsedReference,

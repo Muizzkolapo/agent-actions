@@ -6,7 +6,7 @@ import pytest
 from pathlib import Path
 from typing import Dict, List, Any
 from unittest.mock import MagicMock, patch
-from agent_actions.orchestration.version_correlator import VersionOutputCorrelator
+from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 
 class TestVersionOutputCorrelator:

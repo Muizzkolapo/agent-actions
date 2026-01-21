@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.validation.static_analyzer import SchemaExtractor
+from agent_actions.validation.static_analysis import SchemaExtractor
 
 
 class TestSchemaExtractor:
