@@ -17,7 +17,7 @@ from agent_actions.errors import (
     TemplateRenderingError,
     AgentExecutionError,
 )
-from agent_actions.logging.errors import format_user_error
+from agent_actions.shared.user_errors import format_user_error
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=AgentActionsException)

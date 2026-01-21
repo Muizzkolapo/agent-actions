@@ -9,7 +9,7 @@ import pytest
 from unittest.mock import MagicMock, patch, Mock
 from pathlib import Path
 
-from agent_actions.processing.types import (
+from agent_actions.core.types import (
     ProcessingResult,
     ProcessingStatus,
     ProcessingContext,
@@ -18,8 +18,8 @@ from agent_actions.processing.types import (
     RetryMetadata,
 )
 from agent_actions.errors import AgentActionsException
-from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
-from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.orchestration.processing_pipeline import ProcessingPipeline, PipelineConfig
+from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 
 class TestProcessingPipelineExhaustedHandling:
@@ -495,7 +495,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with on_exhausted='raise' should raise exception.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )
@@ -552,7 +552,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with on_exhausted='return_last' should write exhausted record.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )
@@ -623,7 +623,7 @@ class TestStagingLoaderExhaustedHandling:
         """
         First-stage processing with mixed SUCCESS and EXHAUSTED should include both.
         """
-        from agent_actions.input.preprocessing.staging.initial_stage_pipeline import (
+        from agent_actions.preprocessing.staging.initial_stage_pipeline import (
             _process_realtime_mode_with_record_processor,
             InitialStageContext,
         )

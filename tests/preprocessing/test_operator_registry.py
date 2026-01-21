@@ -7,7 +7,7 @@ including built-in operators, custom operators, and operator evaluation.
 
 import pytest
 import re
-from agent_actions.input.preprocessing.parsing.operator_registry import (
+from agent_actions.preprocessing.parsing.operator_registry import (
     OperatorRegistry,
     get_global_registry,
     EqualOperator,

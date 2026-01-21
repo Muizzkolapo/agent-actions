@@ -1,7 +1,7 @@
 """Tests for guard expression parser."""
 
 import pytest
-from agent_actions.output.response.guard_parser import (
+from agent_actions.response_processing.guard_parser import (
     GuardParser,
     GuardType,
     GuardExpression,

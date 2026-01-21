@@ -9,10 +9,10 @@ import threading
 import time
 from typing import List, Set
 from concurrent.futures import ThreadPoolExecutor
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.field_management import FieldManager
-from agent_actions.utils.lineage import LineageBuilder
-from agent_actions.utils.correlation import VersionIdGenerator
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import VersionIdGenerator
 
 
 def get_demo_session_id() -> str:

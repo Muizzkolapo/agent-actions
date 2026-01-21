@@ -6,9 +6,9 @@ Tests the full reprompt flow through RecordProcessor with validation UDFs.
 
 import pytest
 from unittest.mock import Mock, patch, call
-from agent_actions.processing.processor import RecordProcessor
-from agent_actions.processing.types import ProcessingContext, ProcessingMode
-from agent_actions.processing.recovery.validation import (
+from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.core.types import ProcessingContext, ProcessingMode
+from agent_actions.core.reprompt_validation import (
     reprompt_validation,
     _VALIDATION_REGISTRY,
 )

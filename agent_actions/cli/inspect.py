@@ -18,8 +18,8 @@ from rich.tree import Tree
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.errors import FileLoadError
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
-from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 
 
 class BaseInspectCommand:
@@ -111,7 +111,7 @@ class DependenciesCommand(BaseInspectCommand):
 
     def _analyze_dependencies(self, workflow: AgentWorkflow) -> Dict[str, Any]:
         """Analyze dependencies for all actions."""
-        from agent_actions.prompt.context.scope import (
+        from agent_actions.preprocessing.context.context_scope_processor import (
             ContextScopeProcessor,
         )
 

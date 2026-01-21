@@ -12,14 +12,14 @@ from typing import Optional, List
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors
-from agent_actions.config.init import ProjectInitializer
+from agent_actions.configuration.init import ProjectInitializer
 from agent_actions.errors import (
     ValidationError,
     FileSystemError,
     ConfigurationError,
 )  # New modular pattern!
 from agent_actions.validation.init_validator import InitCommandArgs
-from agent_actions.validation.project import ProjectValidator
+from agent_actions.validation.project_validator import ProjectValidator
 
 
 class InitCommand:

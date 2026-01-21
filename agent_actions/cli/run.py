@@ -14,10 +14,10 @@ import click
 
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
-from agent_actions.tooling.docs.run_tracker import RunTracker
+from agent_actions.docs.run_tracker import RunTracker
 from agent_actions.errors import FileLoadError  # New modular pattern!
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
-from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
 from agent_actions.validation.preflight import VendorCompatibilityValidator
@@ -151,7 +151,7 @@ class RunCommand:
     def _run_static_analysis(self, agent_configs: dict) -> tuple[list, list]:
         """Run static type checking on field references."""
         click.echo("\nRunning static type checking...")
-        from agent_actions.validation.static_analysis import WorkflowStaticAnalyzer
+        from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
 
         workflow_config = {
             "actions": [{**config, "name": name} for name, config in agent_configs.items()]

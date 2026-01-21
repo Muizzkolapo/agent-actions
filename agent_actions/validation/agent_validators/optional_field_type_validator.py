@@ -6,7 +6,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult,
 )
-from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.utilities.constants import JSON_MODE_KEY
 
 
 class OptionalFieldTypeValidator(BaseAgentEntryValidator):

@@ -8,7 +8,7 @@ workflow discovery.
 import pytest
 import tempfile
 from pathlib import Path
-from agent_actions.workflow.workspace_index import WorkspaceIndex
+from agent_actions.orchestration.workspace_index import WorkspaceIndex
 
 
 class TestWorkspaceIndex:

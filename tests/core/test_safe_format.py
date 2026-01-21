@@ -4,7 +4,7 @@ Tests for safe_format module error handling utilities.
 
 import pytest
 from unittest.mock import Mock
-from agent_actions.utils.safe_format import (
+from agent_actions.utilities.safe_format import (
     safe_format_error,
     extract_root_cause,
     get_error_chain,

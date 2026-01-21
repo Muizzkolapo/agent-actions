@@ -1,0 +1,33 @@
+/* ============================================
+   Responsive Overrides
+   ============================================ */
+
+/* Large Screens (1440px+) */
+@media (min-width: 1440px) {
+    .sidebar {
+        width: 280px !important;
+    }
+
+    .main-content {
+        margin-left: 280px !important;
+    }
+
+    h1 {
+        font-size: 2.25rem !important;      /* 36px on larger screens */
+    }
+}
+
+/* Mobile Screens (max 768px) */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 1.75rem !important;      /* 28px on mobile */
+    }
+
+    .stat-card .stat-value {
+        font-size: 2rem !important;         /* Smaller on mobile */
+    }
+
+    .stats-cards {
+        gap: 12px !important;
+    }
+}
