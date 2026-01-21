@@ -401,7 +401,6 @@ FILE_MIGRATIONS = {
     "validation/__init__.py": "validation/__init__.py",
     # Validation subdirs (keep structure)
     "validation/preflight/__init__.py": "validation/preflight/__init__.py",
-    "validation/static_analyzer/workflow_static_analyzer.py": "validation/static_analysis/analyzer.py",
     "validation/static_analyzer/__init__.py": "validation/static_analysis/__init__.py",
     "validation/agent_validators/": "validation/agent/",  # Directory copy
     "validation/orchestration/": "validation/orchestration/",  # Keep
