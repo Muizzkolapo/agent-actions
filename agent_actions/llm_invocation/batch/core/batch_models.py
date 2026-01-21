@@ -29,6 +29,7 @@ class BatchJobEntry:
     timestamp: str
     provider: str
     record_count: Optional[int] = None
+    workflow_session_id: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "BatchJobEntry":
