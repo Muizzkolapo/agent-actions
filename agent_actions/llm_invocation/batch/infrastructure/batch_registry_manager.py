@@ -135,6 +135,7 @@ class BatchRegistryManager:
                         timestamp=entry.timestamp,
                         provider=entry.provider,
                         record_count=entry.record_count,
+                        workflow_session_id=entry.workflow_session_id,
                     )
                     self._cache[file_name] = updated_entry
                     self._persist_registry(self._cache)
@@ -225,6 +226,7 @@ class BatchRegistryManager:
                                 timestamp=entry.timestamp,
                                 provider=entry.provider,
                                 record_count=entry.record_count,
+                                workflow_session_id=entry.workflow_session_id,
                             )
                             self._cache[file_name] = updated_entry
                             cache_modified = True

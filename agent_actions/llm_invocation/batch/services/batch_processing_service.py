@@ -114,6 +114,7 @@ class BatchProcessingService:
                 if file_name
                 else {}
             )
+            agent_config = self._apply_workflow_session_id(agent_config, entry)
 
             # Retrieve and process results
             batch_results = self._retrieve_results(
@@ -313,6 +314,7 @@ class BatchProcessingService:
         context_map = self._context_manager.load_batch_context_map(
             output_directory, file_name or "default"
         )
+        agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
         # Use retry-aware retrieval if agent_config has retry enabled
@@ -416,6 +418,27 @@ class BatchProcessingService:
             agent_config=agent_config,
             exhausted_recovery=exhausted_recovery,
         )
+
+    @staticmethod
+    def _apply_workflow_session_id(
+        agent_config: Optional[Dict[str, Any]],
+        entry: Optional[BatchJobEntry],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Preserve the workflow session ID used at batch submission time.
+
+        Ensures deterministic version correlation across resumed batch processing.
+        """
+        if not agent_config or not entry or not entry.workflow_session_id:
+            return agent_config
+
+        existing_session_id = agent_config.get("workflow_session_id")
+        if existing_session_id == entry.workflow_session_id:
+            return agent_config
+
+        updated_config = agent_config.copy()
+        updated_config["workflow_session_id"] = entry.workflow_session_id
+        return updated_config
 
     def _retrieve_results(
         self,

@@ -266,6 +266,7 @@ class BatchSubmissionService:
                     timestamp=datetime.now().isoformat(),
                     provider=provider_type,
                     record_count=len(tasks),
+                    workflow_session_id=agent_config.get("workflow_session_id"),
                 )
                 manager.save_batch_job(batch_name or "default", entry)
 
