@@ -208,6 +208,103 @@ class TestWriteBatchOutput:
         assert written_data == main_output
 
 
+class TestApplyWorkflowSessionId:
+    """Tests for _apply_workflow_session_id helper method."""
+
+    def test_returns_none_when_agent_config_missing(self):
+        """Should return None when agent_config is None."""
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="batch-123",
+            status="completed",
+            timestamp="2024-01-01",
+            provider="openai",
+            workflow_session_id="session-123",
+        )
+
+        result = BatchProcessingService._apply_workflow_session_id(None, entry)
+
+        assert result is None
+
+    def test_returns_agent_config_when_entry_missing(self):
+        """Should return agent_config when entry is None."""
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+            BatchProcessingService,
+        )
+
+        agent_config = {"workflow_session_id": "session-123", "other": "config"}
+
+        result = BatchProcessingService._apply_workflow_session_id(agent_config, None)
+
+        assert result is agent_config
+
+    def test_returns_agent_config_when_entry_session_missing(self):
+        """Should return agent_config when entry has no workflow_session_id."""
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="batch-123",
+            status="completed",
+            timestamp="2024-01-01",
+            provider="openai",
+            workflow_session_id=None,
+        )
+        agent_config = {"workflow_session_id": "session-123", "other": "config"}
+
+        result = BatchProcessingService._apply_workflow_session_id(agent_config, entry)
+
+        assert result is agent_config
+
+    def test_preserves_entry_session_id(self):
+        """Should overwrite agent_config session ID with entry session ID."""
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="batch-123",
+            status="completed",
+            timestamp="2024-01-01",
+            provider="openai",
+            workflow_session_id="original-session-id",
+        )
+        agent_config = {"workflow_session_id": "different-session-id", "other": "config"}
+
+        result = BatchProcessingService._apply_workflow_session_id(agent_config, entry)
+
+        assert result["workflow_session_id"] == "original-session-id"
+        assert result["other"] == "config"
+        assert agent_config["workflow_session_id"] == "different-session-id"
+
+    def test_returns_same_config_when_session_ids_match(self):
+        """Should return original config when session IDs already match."""
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="batch-123",
+            status="completed",
+            timestamp="2024-01-01",
+            provider="openai",
+            workflow_session_id="session-123",
+        )
+        agent_config = {"workflow_session_id": "session-123", "other": "config"}
+
+        result = BatchProcessingService._apply_workflow_session_id(agent_config, entry)
+
+        assert result is agent_config
+
+
 class TestProcessAllBatchResults:
     """Tests for process_all_batch_results method."""
 
