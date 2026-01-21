@@ -12,9 +12,9 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 from unittest.mock import Mock, patch
-from agent_actions.core.record_processor import RecordProcessor
-from agent_actions.core.types import ProcessingContext, ProcessingMode
-from agent_actions.core.reprompt_validation import reprompt_validation, _VALIDATION_REGISTRY
+from agent_actions.processing.processor import RecordProcessor
+from agent_actions.processing.types import ProcessingContext, ProcessingMode
+from agent_actions.processing.recovery.validation import reprompt_validation, _VALIDATION_REGISTRY
 from agent_actions.errors import NetworkError, RateLimitError
 
 # Configure logging
