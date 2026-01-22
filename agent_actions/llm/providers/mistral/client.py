@@ -9,9 +9,13 @@ consistent retry handling across all providers.
 """
 
 import logging
+import uuid
+from datetime import datetime
 from textwrap import dedent
+
 from mistralai import Mistral
 from mistralai import models as mistral_models
+
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.mixins import (
@@ -21,19 +25,29 @@ from agent_actions.llm.providers.mixins import (
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.usage_tracker import set_last_usage
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    LLMRequestEvent,
+    LLMResponseEvent,
+    LLMErrorEvent,
+    RateLimitEvent,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _wrap_mistral_error(e: Exception, model_name: str) -> Exception:
+def _wrap_mistral_error(
+    e: Exception, model_name: str, request_id: str = ""
+) -> Exception:
     """Wrap Mistral SDK errors into unified agent-actions error types.
 
     This enables the central retry engine to handle transient errors
-    consistently across all providers.
+    consistently across all providers. Also fires appropriate LLM events.
 
     Args:
         e: The Mistral SDK exception
         model_name: Model name for context
+        request_id: Request ID for correlation
 
     Returns:
         Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
@@ -44,13 +58,47 @@ def _wrap_mistral_error(e: Exception, model_name: str) -> Exception:
     if isinstance(e, mistral_models.SDKError):
         status_code = getattr(e, "status_code", None)
         if status_code == 429:
+            fire_event(
+                RateLimitEvent(
+                    provider="mistral",
+                    retry_after=0.0,
+                    request_id=request_id,
+                )
+            )
             return RateLimitError(f"Mistral rate limit: {e}", context=context, cause=e)
         if status_code in (502, 503, 504):
+            fire_event(
+                LLMErrorEvent(
+                    provider="mistral",
+                    model=model_name,
+                    error_type="ServerError",
+                    error_message=str(e),
+                    request_id=request_id,
+                )
+            )
             return NetworkError(f"Mistral server error: {e}", context=context, cause=e)
+        fire_event(
+            LLMErrorEvent(
+                provider="mistral",
+                model=model_name,
+                error_type="SDKError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return VendorAPIError(f"Mistral API error: {e}", context=context, cause=e)
 
     # Connection errors
     if isinstance(e, (ConnectionError, TimeoutError)):
+        fire_event(
+            LLMErrorEvent(
+                provider="mistral",
+                model=model_name,
+                error_type=type(e).__name__,
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Mistral connection error: {e}", context=context, cause=e)
 
     # Unknown error, re-raise as-is
@@ -63,6 +111,20 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         model_name = agent_config[MODEL_NAME_KEY]
+
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="mistral",
+                model=model_name,
+                request_id=request_id,
+            )
+        )
+
+        start_time = datetime.now()
         try:
             client = Mistral(api_key=api_key)
             context_data_str = StringProcessor.process_as_string(context_data)
@@ -72,33 +134,78 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             chat_response = client.chat.complete(
                 model=model_name, response_format={"type": "json_object"}, messages=messages
             )
-            # Extract token usage
-            if chat_response.usage:
-                set_last_usage(
-                    {
-                        "input_tokens": chat_response.usage.prompt_tokens,
-                        "output_tokens": chat_response.usage.completion_tokens,
-                        "total_tokens": chat_response.usage.total_tokens,
-                    }
-                )
-            response_content = chat_response.choices[0].message.content
-
-            return MistralClient.parse_json_response(
-                response_content=response_content,
-                vendor_name="Mistral",
-                operation="call_json",
-                model_name=model_name,
-            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except mistral_models.SDKError as e:
-            raise _wrap_mistral_error(e, model_name) from e
+            raise _wrap_mistral_error(e, model_name, request_id) from e
         except Exception as e:
+            fire_event(
+                LLMErrorEvent(
+                    provider="mistral",
+                    model=model_name,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    request_id=request_id,
+                )
+            )
             MistralClient.handle_generic_error(e, "Mistral", "call_json", model_name)
+
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Extract token usage
+        prompt_tokens = chat_response.usage.prompt_tokens if chat_response.usage else 0
+        completion_tokens = chat_response.usage.completion_tokens if chat_response.usage else 0
+        total_tokens = chat_response.usage.total_tokens if chat_response.usage else 0
+
+        if chat_response.usage:
+            set_last_usage(
+                {
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="mistral",
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
+
+        response_content = chat_response.choices[0].message.content
+
+        return MistralClient.parse_json_response(
+            response_content=response_content,
+            vendor_name="Mistral",
+            operation="call_json",
+            model_name=model_name,
+        )
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
         model_name = agent_config[MODEL_NAME_KEY]
+
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="mistral",
+                model=model_name,
+                request_id=request_id,
+            )
+        )
+
+        start_time = datetime.now()
         try:
             client = Mistral(api_key=api_key)
             context_data_str = StringProcessor.process_as_string(context_data)
@@ -106,31 +213,20 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             prompt_dedent = dedent(prompt)
             messages = [{"role": "user", "content": prompt_dedent}]
             chat_response = client.chat.complete(model=model_name, messages=messages)
-            # Extract token usage
-            if chat_response.usage:
-                set_last_usage(
-                    {
-                        "input_tokens": chat_response.usage.prompt_tokens,
-                        "output_tokens": chat_response.usage.completion_tokens,
-                        "total_tokens": chat_response.usage.total_tokens,
-                    }
-                )
-            response_output = chat_response.choices[0].message.content
-
-            logger.debug(
-                "Mistral non-JSON response retrieved successfully",
-                extra={
-                    "operation": "mistral_call_non_json",
-                    "model": model_name,
-                    "response_length": len(response_output) if response_output else 0,
-                },
-            )
-            return [response_output]
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except mistral_models.SDKError as e:
-            raise _wrap_mistral_error(e, model_name) from e
+            raise _wrap_mistral_error(e, model_name, request_id) from e
         except Exception as e:
+            fire_event(
+                LLMErrorEvent(
+                    provider="mistral",
+                    model=model_name,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    request_id=request_id,
+                )
+            )
             logger.exception(
                 "Mistral non-JSON API call failed",
                 extra={
@@ -138,6 +234,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     "model": model_name,
                     "error": str(e),
                     "error_type": type(e).__name__,
+                    "request_id": request_id,
                 },
             )
             raise VendorAPIError(
@@ -146,3 +243,46 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 operation="call_non_json",
                 cause=e,
             ) from e
+
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Extract token usage
+        prompt_tokens = chat_response.usage.prompt_tokens if chat_response.usage else 0
+        completion_tokens = chat_response.usage.completion_tokens if chat_response.usage else 0
+        total_tokens = chat_response.usage.total_tokens if chat_response.usage else 0
+
+        if chat_response.usage:
+            set_last_usage(
+                {
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="mistral",
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
+
+        response_output = chat_response.choices[0].message.content
+
+        logger.debug(
+            "Mistral non-JSON response retrieved successfully",
+            extra={
+                "operation": "mistral_call_non_json",
+                "model": model_name,
+                "response_length": len(response_output) if response_output else 0,
+                "request_id": request_id,
+            },
+        )
+        return [response_output]
