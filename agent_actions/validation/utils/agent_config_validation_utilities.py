@@ -47,7 +47,6 @@ class AgentConfigValidationUtilities:
         SCHEMA_KEY,
         "tools",
         CHUNK_CONFIG_KEY,
-        "few_shot",
         "conditional_clause",
         "is_operational",
         "ephemeral",

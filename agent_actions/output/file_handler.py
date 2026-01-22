@@ -73,29 +73,20 @@ class FileHandler:
     @staticmethod
     def get_agent_paths(agent_name):
         """
-        Returns the agent configuration directory, IO directory, and sample output path.
+        Returns the agent configuration directory and IO directory.
 
         Parameters:
             agent_name (str): The name of the agent.
 
         Returns:
-            tuple: (agent_config_dir, io_dir, few_shot_samples_path)
+            tuple: (agent_config_dir, io_dir)
         """
         current_dir = Path.cwd()
         agent_config_dir = FileHandler.find_specific_folder(
             str(current_dir), agent_name, "agent_config"
         )
         io_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, "agent_io")
-
-        few_shot_samples_path = None
-        if io_dir:
-            potential_path = Path(io_dir) / "few_shot_samples"
-            if potential_path.exists():
-                few_shot_samples_path = str(potential_path)
-            else:
-                logger.warning("Few shot samples folder not found at %s", potential_path)
-
-        return agent_config_dir, io_dir, few_shot_samples_path
+        return agent_config_dir, io_dir
 
     @staticmethod
     def find_config_file(base_dir, filename):

@@ -113,7 +113,6 @@ class ActionConfig(BaseModel):
         default=None, description="Condition for action execution"
     )
     policy: Optional[str] = Field(default=None, description="Execution policy")
-    few_shot: Optional[int] = Field(default=None, description="Number of few-shot examples")
     versions: Optional[VersionConfig] = Field(default=None, description="Version configuration")
     version_consumption: Optional[VersionConsumptionConfig] = Field(
         default=None, description="Version output consumption configuration"

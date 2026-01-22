@@ -9,7 +9,6 @@ defaults:
   granularity: file           # Override project default
   # chunk_size should inherit from project: 800
   # vendor should inherit from project: openai
-  # few_shot should inherit from project: 2
 
 actions:
   - name: action_with_project_inheritance
@@ -18,7 +17,7 @@ actions:
     prompt: "Extract using hierarchy: project < workflow < action"
     schema:
       extracted_data: string
-    # Should get: model=gpt-4o-mini-workflow, vendor=openai, chunk_size=800, few_shot=2, json_mode=true
+    # Should get: model=gpt-4o-mini-workflow, vendor=openai, chunk_size=800, json_mode=true
 
   - name: action_with_overrides
     intent: Action overriding all levels
@@ -26,11 +25,10 @@ actions:
     model: claude-3-sonnet      # Override workflow default
     vendor: anthropic           # Override project default
     json_mode: false           # Override workflow default
-    few_shot: 5                # Override project default
     prompt: "Process with action-level overrides"
     schema:
       processed_data: string
-    # Should get: model=claude-3-sonnet, vendor=anthropic, json_mode=false, few_shot=5
+    # Should get: model=claude-3-sonnet, vendor=anthropic, json_mode=false
 
 plan:
   - action_with_project_inheritance

@@ -93,20 +93,18 @@ class TestActionExpanderHierarchy:
         assert result["api_key"] == "ACTION_KEY"
 
     def test_other_fields_inherit_correctly(self):
-        """Test that other fields like json_mode, few_shot inherit properly."""
+        """Test that other fields like json_mode inherit properly."""
         defaults = {
             "model_vendor": "openai",
             "model_name": "gpt-4",
             "api_key": "DEFAULT_KEY",
             "json_mode": True,
             "granularity": "record",
-            "few_shot": 3,
         }
-        action = {"name": "test_action", "intent": "Test", "few_shot": 5}
+        action = {"name": "test_action", "intent": "Test"}
         agent = {"agent_type": "test_action", "name": "test_action"}
         result = ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
         assert result["model_vendor"] == "openai"
         assert result["model_name"] == "gpt-4"
         assert result.get("json_mode") == True
         assert result.get("granularity") == "Record"
-        assert result.get("few_shot") == 5

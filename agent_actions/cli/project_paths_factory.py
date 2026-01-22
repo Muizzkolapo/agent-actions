@@ -75,7 +75,7 @@ class ProjectPathsFactory:
         self.path_manager = path_manager or PathManager()
 
     @staticmethod
-    def get_agent_paths(agent_name: str) -> Tuple[Path, Path, Path]:
+    def get_agent_paths(agent_name: str) -> Tuple[Path, Path]:
         """
         Get the agent paths using the FileHandler.
 
@@ -83,15 +83,13 @@ class ProjectPathsFactory:
             agent_name: Name of the agent.
 
         Returns:
-            Tuple of (agent_config_dir, io_dir, unknown_path).
+            Tuple of (agent_config_dir, io_dir).
 
         Raises:
             ValidationError: If getting agent paths fails.
         """
         try:
-            agent_config_dir_str, io_dir_str, unknown_path_str = FileHandler.get_agent_paths(
-                agent_name
-            )
+            agent_config_dir_str, io_dir_str = FileHandler.get_agent_paths(agent_name)
 
             # Check if required paths are None and provide helpful error message
             if agent_config_dir_str is None:
@@ -121,7 +119,7 @@ class ProjectPathsFactory:
                     },
                 )
 
-            return (Path(agent_config_dir_str), Path(io_dir_str), Path(unknown_path_str or ""))
+            return (Path(agent_config_dir_str), Path(io_dir_str))
         except ValidationError:
             # Re-raise ValidationError with its original context
             raise
@@ -158,7 +156,7 @@ class ProjectPathsFactory:
             rendered_workflows_dir = factory.path_manager.get_standard_path(
                 PathType.RENDERED_WORKFLOWS
             )
-            agent_config_dir, io_dir, _ = cls.get_agent_paths(agent_name)
+            agent_config_dir, io_dir = cls.get_agent_paths(agent_name)
             current_dir = resolve_absolute_path(project_root)
             default_config_path = project_root / "agent_actions.yml"
             paths = ProjectPaths(

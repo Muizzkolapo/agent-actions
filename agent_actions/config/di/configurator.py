@@ -67,10 +67,7 @@ class DIConfigurator:
         """Register utility services."""
         from agent_actions.logging.factory import LoggerFactory
         from agent_actions.prompt.handler import PromptLoader
-        from agent_actions.prompt.enricher import SampleEnricher
-
         container.register_singleton(PromptLoader, PromptLoader)
-        container.register_singleton(SampleEnricher, SampleEnricher)
         container.register_singleton(LoggerFactory, LoggerFactory)
 
     @staticmethod
