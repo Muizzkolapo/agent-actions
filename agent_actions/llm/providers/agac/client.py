@@ -7,10 +7,17 @@ without real API calls. Generates realistic data based on schema and prompts.
 
 import json
 import logging
+import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    LLMRequestEvent,
+    LLMResponseEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +115,20 @@ class AgacClient(BaseClient):
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event (mock provider)
+        fire_event(
+            LLMRequestEvent(
+                provider="agac",
+                model="agac-mock",
+                request_id=request_id,
+            )
+        )
+
+        start_time = datetime.now()
+
         logger.info(
             "AgacClient.call_json: id=%s, attempt=%d, schema=%s, prompt_len=%d",
             identifier,
@@ -139,6 +160,22 @@ class AgacClient(BaseClient):
             }
             logger.debug("No schema provided, using generic response")
 
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Fire LLM response event (mock provider - no real tokens)
+        fire_event(
+            LLMResponseEvent(
+                provider="agac",
+                model="agac-mock",
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
+
         return [fake_data]
 
     @staticmethod
@@ -164,6 +201,20 @@ class AgacClient(BaseClient):
         attempt = AgacClient._get_attempt_count(identifier)
         prompt = AgacClient._extract_prompt(prompt_config)
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event (mock provider)
+        fire_event(
+            LLMRequestEvent(
+                provider="agac",
+                model="agac-mock",
+                request_id=request_id,
+            )
+        )
+
+        start_time = datetime.now()
+
         logger.info(
             "AgacClient.call_non_json: id=%s, attempt=%d, prompt_len=%d",
             identifier,
@@ -175,6 +226,22 @@ class AgacClient(BaseClient):
 
         # Generate text response based on prompt
         content = FakeDataGenerator.generate_text_response(prompt, attempt)
+
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Fire LLM response event (mock provider - no real tokens)
+        fire_event(
+            LLMResponseEvent(
+                provider="agac",
+                model="agac-mock",
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         return [{output_field: content}]
 

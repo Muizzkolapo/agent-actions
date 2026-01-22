@@ -11,6 +11,8 @@ SDK errors are wrapped into unified agent-actions error types.
 import json
 import logging
 import os
+import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ollama import Client, ResponseError
@@ -22,16 +24,28 @@ from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    LLMRequestEvent,
+    LLMResponseEvent,
+    LLMErrorEvent,
+    RateLimitEvent,
+)
 
 logger = logging.getLogger(__name__)
 
 
-def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
+def _wrap_ollama_error(
+    e: Exception, model_name: str, request_id: str = ""
+) -> Exception:
     """Wrap Ollama errors into unified agent-actions error types.
+
+    Also fires appropriate LLM events.
 
     Args:
         e: The Ollama exception
         model_name: Model name for context
+        request_id: Request ID for correlation
 
     Returns:
         Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
@@ -40,21 +54,73 @@ def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
 
     # Connection errors (Ollama uses httpx)
     if isinstance(e, httpx.ConnectError):
+        fire_event(
+            LLMErrorEvent(
+                provider="ollama",
+                model=model_name,
+                error_type="ConnectError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Ollama connection error: {e}", context=context, cause=e)
 
     if isinstance(e, httpx.TimeoutException):
+        fire_event(
+            LLMErrorEvent(
+                provider="ollama",
+                model=model_name,
+                error_type="TimeoutException",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Ollama timeout: {e}", context=context, cause=e)
 
     if isinstance(e, httpx.HTTPStatusError):
         status_code = e.response.status_code
         if status_code == 429:
+            fire_event(
+                RateLimitEvent(
+                    provider="ollama",
+                    retry_after=0.0,
+                    request_id=request_id,
+                )
+            )
             return RateLimitError(f"Ollama rate limit: {e}", context=context, cause=e)
         if status_code in (502, 503, 504):
+            fire_event(
+                LLMErrorEvent(
+                    provider="ollama",
+                    model=model_name,
+                    error_type="ServerError",
+                    error_message=str(e),
+                    request_id=request_id,
+                )
+            )
             return NetworkError(f"Ollama server error: {e}", context=context, cause=e)
+        fire_event(
+            LLMErrorEvent(
+                provider="ollama",
+                model=model_name,
+                error_type="HTTPStatusError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return VendorAPIError(f"Ollama HTTP error: {e}", context=context, cause=e)
 
     # Ollama ResponseError
     if isinstance(e, ResponseError):
+        fire_event(
+            LLMErrorEvent(
+                provider="ollama",
+                model=model_name,
+                error_type="ResponseError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return VendorAPIError(f"Ollama error: {e}", context=context, cause=e)
 
     # Unknown error, re-raise as-is
@@ -153,8 +219,21 @@ class OllamaClient(BaseClient):
             "Schema after extraction: type=%s, value=%s", type(ollama_schema), ollama_schema
         )
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="ollama",
+                model=model,
+                request_id=request_id,
+            )
+        )
+
         logger.debug("Calling Ollama with JSON mode, schema=%s", bool(ollama_schema))
 
+        start_time = datetime.now()
         try:
             response = OllamaClient._get_client(agent_config).chat(
                 model=model,
@@ -168,7 +247,28 @@ class OllamaClient(BaseClient):
             httpx.HTTPStatusError,
             ResponseError,
         ) as e:
-            raise _wrap_ollama_error(e, model) from e
+            raise _wrap_ollama_error(e, model, request_id) from e
+
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Ollama doesn't provide token counts in the same way, use 0 as default
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="ollama",
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         # Failure injection AFTER successful call - simulates "got nothing back"
         maybe_inject_online_failure(model)
@@ -184,7 +284,7 @@ class OllamaClient(BaseClient):
                 return [{"response": parsed}]
             except json.JSONDecodeError as e:
                 # Return raw content with error info
-                logger.debug("JSON parse failed: %s", e)
+                logger.debug("JSON parse failed: %s, request_id=%s", e, request_id)
                 return [{"raw_response": content, "_parse_error": str(e)}]
 
         if isinstance(content, dict):
@@ -221,6 +321,19 @@ class OllamaClient(BaseClient):
         )
         messages = OllamaClient._prep_messages(prompt_config, ctx_str)
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="ollama",
+                model=model,
+                request_id=request_id,
+            )
+        )
+
+        start_time = datetime.now()
         try:
             response = OllamaClient._get_client(agent_config).chat(
                 model=model, messages=messages, stream=False
@@ -231,7 +344,28 @@ class OllamaClient(BaseClient):
             httpx.HTTPStatusError,
             ResponseError,
         ) as e:
-            raise _wrap_ollama_error(e, model) from e
+            raise _wrap_ollama_error(e, model, request_id) from e
+
+        duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Ollama doesn't provide token counts in the same way, use 0 as default
+        prompt_tokens = 0
+        completion_tokens = 0
+        total_tokens = 0
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="ollama",
+                model=model,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         # Failure injection AFTER successful call - simulates "got nothing back"
         maybe_inject_online_failure(model)
