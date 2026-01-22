@@ -80,3 +80,4 @@ agent_actions/classify_*/
 agent_actions/extract_*/
 agent_actions/flatten_*/
 **/combined_scraped.json
+docs.agent-actions/
