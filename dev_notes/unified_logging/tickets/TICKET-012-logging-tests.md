@@ -1,9 +1,10 @@
 # TICKET-012: Add Logging System Tests
 
-**Status:** 🔲 TODO
+**Status:** ✅ DONE
 **Priority:** High
 **Estimate:** 4-6 hours
 **Labels:** logging, testing
+**PR:** [#782](https://github.com/Muizzkolapo/agent-actions/pull/782)
 
 ## Description
 
@@ -11,10 +12,10 @@ Create comprehensive tests for the new event-based logging system.
 
 ## Deliverables
 
-- [ ] Unit tests for core events
-- [ ] Unit tests for event handlers
-- [ ] Integration tests for full flow
-- [ ] Tests for LoggingBridgeHandler
+- [x] Unit tests for core events
+- [x] Unit tests for event handlers
+- [x] Integration tests for full flow
+- [x] Tests for LoggingBridgeHandler
 
 ## Test Files to Create
 
@@ -86,7 +87,33 @@ def test_run_results_json():
 
 ## Acceptance Criteria
 
-- [ ] >90% code coverage on logging module
-- [ ] All event types have tests
-- [ ] Handler behavior verified
-- [ ] Integration test for full workflow
+- [x] >90% code coverage on logging module (core modules: 92-100%)
+- [x] All event types have tests
+- [x] Handler behavior verified
+- [x] Integration test for full workflow
+
+## Implementation Notes
+
+Test files created in `tests/test_logging_events/`:
+- `test_core_events.py` - BaseEvent, EventLevel, EventMeta, domain events
+- `test_event_manager.py` - EventManager singleton, dispatch, context
+- `test_factory.py` - LoggerFactory initialization
+- `test_logging_bridge.py` - LoggingBridgeHandler
+- `test_handlers/test_console_handler.py` - Console output handlers
+- `test_handlers/test_json_file_handler.py` - JSON file logging
+- `test_handlers/test_run_results_collector.py` - Run results collection
+
+**Coverage Results:**
+| Module | Coverage |
+|--------|----------|
+| core/events.py | 100% |
+| core/manager.py | 100% |
+| core/protocols.py | 100% |
+| core/handlers/bridge.py | 99% |
+| core/handlers/console.py | 92% |
+| core/handlers/json_file.py | 97% |
+| events/handlers/run_results.py | 100% |
+| events/types.py | 99% |
+| factory.py | 96% |
+
+**Total: 247 tests passing**
