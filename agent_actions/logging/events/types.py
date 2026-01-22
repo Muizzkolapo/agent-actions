@@ -370,6 +370,7 @@ class LLMRequestEvent(BaseEvent):
     model: str = ""
     agent_name: str = ""
     prompt_tokens: int = 0
+    request_id: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -380,6 +381,7 @@ class LLMRequestEvent(BaseEvent):
             "model": self.model,
             "agent_name": self.agent_name,
             "prompt_tokens": self.prompt_tokens,
+            "request_id": self.request_id,
         }
 
     @property
@@ -394,9 +396,11 @@ class LLMResponseEvent(BaseEvent):
     provider: str = ""
     model: str = ""
     agent_name: str = ""
+    prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     latency_ms: float = 0.0
+    request_id: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -406,9 +410,11 @@ class LLMResponseEvent(BaseEvent):
             "provider": self.provider,
             "model": self.model,
             "agent_name": self.agent_name,
+            "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
             "latency_ms": self.latency_ms,
+            "request_id": self.request_id,
         }
 
     @property
@@ -426,6 +432,7 @@ class LLMErrorEvent(BaseEvent):
     error_message: str = ""
     error_type: str = ""
     retry_count: int = 0
+    request_id: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
@@ -438,6 +445,7 @@ class LLMErrorEvent(BaseEvent):
             "error_message": self.error_message,
             "error_type": self.error_type,
             "retry_count": self.retry_count,
+            "request_id": self.request_id,
         }
 
     @property
@@ -452,6 +460,7 @@ class RateLimitEvent(BaseEvent):
     provider: str = ""
     retry_after: float = 0.0
     agent_name: str = ""
+    request_id: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
@@ -461,6 +470,7 @@ class RateLimitEvent(BaseEvent):
             "provider": self.provider,
             "retry_after": self.retry_after,
             "agent_name": self.agent_name,
+            "request_id": self.request_id,
         }
 
     @property

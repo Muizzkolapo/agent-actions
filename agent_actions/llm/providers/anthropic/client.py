@@ -9,6 +9,7 @@ consistent retry handling across all providers.
 """
 
 import logging
+import uuid
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
@@ -20,6 +21,13 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError, ConfigurationError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    LLMRequestEvent,
+    LLMResponseEvent,
+    LLMErrorEvent,
+    RateLimitEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +52,18 @@ def _extract_retry_after(e: Exception) -> Optional[float]:
         return None
 
 
-def _wrap_anthropic_error(e: Exception, model_name: str) -> Exception:
+def _wrap_anthropic_error(
+    e: Exception, model_name: str, request_id: str = ""
+) -> Exception:
     """Wrap Anthropic SDK errors into unified agent-actions error types.
 
     This enables the central retry engine to handle transient errors
-    consistently across all providers.
+    consistently across all providers. Also fires appropriate LLM events.
 
     Args:
         e: The Anthropic SDK exception
         model_name: Model name for context
+        request_id: Request ID for correlation
 
     Returns:
         Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
@@ -60,19 +71,63 @@ def _wrap_anthropic_error(e: Exception, model_name: str) -> Exception:
     context = {"vendor": "anthropic", "model": model_name}
 
     if isinstance(e, anthropic.RateLimitError):
-        context["retry_after"] = _extract_retry_after(e)
+        retry_after = _extract_retry_after(e)
+        context["retry_after"] = retry_after
+        fire_event(
+            RateLimitEvent(
+                provider="anthropic",
+                retry_after=retry_after or 0.0,
+                request_id=request_id,
+            )
+        )
         return RateLimitError(f"Anthropic rate limit: {e}", context=context, cause=e)
 
     if isinstance(e, anthropic.APIConnectionError):
+        fire_event(
+            LLMErrorEvent(
+                provider="anthropic",
+                model=model_name,
+                error_type="APIConnectionError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Anthropic connection error: {e}", context=context, cause=e)
 
     if isinstance(e, anthropic.APITimeoutError):
+        fire_event(
+            LLMErrorEvent(
+                provider="anthropic",
+                model=model_name,
+                error_type="APITimeoutError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Anthropic timeout: {e}", context=context, cause=e)
 
     if isinstance(e, anthropic.InternalServerError):
+        fire_event(
+            LLMErrorEvent(
+                provider="anthropic",
+                model=model_name,
+                error_type="InternalServerError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"Anthropic server error: {e}", context=context, cause=e)
 
     if isinstance(e, anthropic.APIError):
+        fire_event(
+            LLMErrorEvent(
+                provider="anthropic",
+                model=model_name,
+                error_type="APIError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return VendorAPIError(f"Anthropic API error: {e}", context=context, cause=e)
 
     return e
@@ -150,6 +205,9 @@ class AnthropicClient(BaseClient):
 
         api_args = AnthropicClient._build_api_args(model_name, prompt_dedent, schema)
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
         logger.debug(
             "Anthropic API request",
             extra={
@@ -158,17 +216,46 @@ class AnthropicClient(BaseClient):
                 "mode": "json",
                 "max_tokens": 1024,
                 "has_tools": schema is not None,
+                "request_id": request_id,
             },
+        )
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="anthropic",
+                model=model_name,
+                request_id=request_id,
+            )
         )
 
         start_time = datetime.now()
         try:
             response = client.messages.create(**api_args)
         except anthropic.APIError as e:
-            raise _wrap_anthropic_error(e, model_name) from e
+            raise _wrap_anthropic_error(e, model_name, request_id) from e
         duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
+
+        # Extract token usage
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+        total_tokens = input_tokens + output_tokens
 
         AnthropicClient._extract_and_store_usage(response)
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="anthropic",
+                model=model_name,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         logger.debug(
             "Anthropic API response",
@@ -178,13 +265,26 @@ class AnthropicClient(BaseClient):
                 "duration": duration,
                 "stop_reason": response.stop_reason,
                 "usage": {
-                    "input_tokens": response.usage.input_tokens if response.usage else None,
-                    "output_tokens": response.usage.output_tokens if response.usage else None,
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
                 },
+                "request_id": request_id,
             },
         )
 
-        return AnthropicClient._extract_response_content(response, model_name)
+        try:
+            return AnthropicClient._extract_response_content(response, model_name)
+        except VendorAPIError as e:
+            fire_event(
+                LLMErrorEvent(
+                    provider="anthropic",
+                    model=model_name,
+                    error_type="ContentExtractionError",
+                    error_message=str(e),
+                    request_id=request_id,
+                )
+            )
+            raise
 
     @staticmethod
     def call_non_json(

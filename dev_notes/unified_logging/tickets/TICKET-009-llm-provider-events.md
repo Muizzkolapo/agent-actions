@@ -1,9 +1,10 @@
 # TICKET-009: Add LLM Provider Events
 
-**Status:** 🔲 TODO
+**Status:** ✅ DONE
 **Priority:** High
 **Estimate:** 2-3 hours
 **Labels:** logging, llm, instrumentation
+**PR:** https://github.com/Muizzkolapo/agent-actions/pull/778
 
 ## Description
 
@@ -11,10 +12,10 @@ Instrument LLM provider classes to fire events for API requests, responses, and 
 
 ## Deliverables
 
-- [ ] Fire `LLMRequestEvent` before API calls
-- [ ] Fire `LLMResponseEvent` after successful calls
-- [ ] Fire `LLMErrorEvent` on API errors
-- [ ] Fire `RateLimitEvent` when rate limited
+- [x] Fire `LLMRequestEvent` before API calls
+- [x] Fire `LLMResponseEvent` after successful calls
+- [x] Fire `LLMErrorEvent` on API errors
+- [x] Fire `RateLimitEvent` when rate limited
 
 ## Files to Modify
 
@@ -82,7 +83,7 @@ fire_event(RateLimitEvent(
 
 ## Acceptance Criteria
 
-- [ ] All LLM calls fire request/response events
-- [ ] Token counts are accurate
-- [ ] Errors are properly captured
-- [ ] Events appear in JSON logs
+- [x] All LLM calls fire request/response events
+- [x] Token counts are accurate
+- [x] Errors are properly captured
+- [x] Events appear in JSON logs
