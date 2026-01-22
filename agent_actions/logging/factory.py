@@ -1,326 +1,264 @@
-"""Logger factory for centralized logging configuration."""
+"""
+Logger factory for centralized logging configuration.
+
+This module provides a unified logging system that routes ALL logging
+through the event system. Python's standard logging (logger.info(), etc.)
+is automatically bridged to events.
+
+Architecture:
+    Application Code
+           │
+           ├── logger.info("msg")  ──┐
+           │                         │
+           └── fire_event(Event)  ───┼──► EventManager
+                                     │         │
+                                     │    ┌────┴────┐
+                                     │    │         │
+                                     ▼    ▼         ▼
+                              Console  JSON File  run_results.json
+"""
 
 from __future__ import annotations
 
 import logging
-import sys
-from logging.handlers import RotatingFileHandler
+import uuid
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from agent_actions.logging.config import HandlerConfig, LoggingConfig
-from agent_actions.logging.filters import ContextInjectingFilter, RedactingFilter
-from agent_actions.logging.formatters import HumanFormatter, JSONFormatter, SimpleFormatter
+from agent_actions.logging.config import LoggingConfig
+
+if TYPE_CHECKING:
+    from agent_actions.logging.core import EventManager
+    from agent_actions.logging.events.handlers import RunResultsCollector
 
 
 class LoggerFactory:
-    """Factory for creating and configuring loggers.
+    """
+    Centralized logging factory using event-based architecture.
 
-    This class provides centralized logging configuration for the Agent Actions
-    framework. It ensures all loggers share consistent configuration including
-    formatters, filters, and handlers.
+    All logging flows through the EventManager:
+    - Python logging (logger.info()) → LoggingBridgeHandler → Events
+    - Direct events (fire_event()) → Events
+    - Events → Handlers (Console, JSON, run_results.json)
 
     Example:
         >>> LoggerFactory.initialize()
         >>> logger = LoggerFactory.get_logger('my_module')
-        >>> logger.info('Hello world')  # Logs with context injection
+        >>> logger.info('Hello world')  # → Becomes an event
 
-    The factory is a singleton - calling initialize() multiple times will
-    only configure logging once unless force=True is passed.
+    Or use events directly:
+        >>> from agent_actions.logging import fire_event
+        >>> from agent_actions.logging.events import WorkflowStartEvent
+        >>> fire_event(WorkflowStartEvent(workflow_name="test"))
     """
 
     _initialized: bool = False
     _config: Optional[LoggingConfig] = None
     _root_logger_name: str = "agent_actions"
+    _event_manager: Optional["EventManager"] = None
+    _run_results_collector: Optional["RunResultsCollector"] = None
 
     @classmethod
     def initialize(
         cls,
         config: Optional[LoggingConfig] = None,
+        output_dir: Optional[str | Path] = None,
+        workflow_name: str = "",
+        invocation_id: Optional[str] = None,
+        verbose: bool = False,
+        quiet: bool = False,
         force: bool = False,
-    ) -> None:
-        """Initialize the logging system with configuration.
+    ) -> "EventManager":
+        """
+        Initialize the unified logging system.
+
+        This sets up:
+        - EventManager as the central dispatcher
+        - LoggingBridgeHandler to convert Python logging to events
+        - ConsoleEventHandler for user-facing output
+        - JSONFileHandler for debug logs
+        - RunResultsCollector for run_results.json artifact
 
         Args:
             config: LoggingConfig instance. If None, uses defaults from environment.
-            force: If True, reinitialize even if already initialized.
+            output_dir: Directory for run_results.json and event logs
+            workflow_name: Name of the workflow being executed
+            invocation_id: Unique ID for this invocation (generated if not provided)
+            verbose: Show DEBUG level events on console
+            quiet: Only show WARN and ERROR events on console
+            force: Reinitialize even if already initialized
+
+        Returns:
+            The initialized EventManager instance
         """
         if cls._initialized and not force:
-            return
+            return cls._event_manager  # type: ignore
 
+        # Load config
         cls._config = config or LoggingConfig.from_environment()
+
+        # Determine log levels from config and flags
+        if verbose or cls._config.default_level == "DEBUG":
+            console_level_str = "DEBUG"
+        elif quiet:
+            console_level_str = "WARN"
+        else:
+            console_level_str = cls._config.default_level
+
+        # Import event system components
+        from agent_actions.logging.core import (
+            ConsoleEventHandler,
+            EventLevel,
+            EventManager,
+            JSONFileHandler,
+        )
+        from agent_actions.logging.core.handlers import LoggingBridgeHandler
+        from agent_actions.logging.events import AgentActionsFormatter
+        from agent_actions.logging.events.handlers import RunResultsCollector
+
+        # Get or create event manager
+        manager = EventManager.get()
+        cls._event_manager = manager
+
+        # Generate invocation ID if not provided
+        if not invocation_id:
+            invocation_id = str(uuid.uuid4())[:8]
+
+        # Set context
+        manager.set_context(
+            invocation_id=invocation_id,
+            workflow_name=workflow_name,
+        )
+
+        # Map string level to EventLevel
+        level_map = {
+            "DEBUG": EventLevel.DEBUG,
+            "INFO": EventLevel.INFO,
+            "WARN": EventLevel.WARN,
+            "WARNING": EventLevel.WARN,
+            "ERROR": EventLevel.ERROR,
+        }
+        console_level = level_map.get(console_level_str.upper(), EventLevel.INFO)
+
+        # Create formatter for agent-actions specific events
+        formatter = AgentActionsFormatter(show_timestamp=True, use_color=True)
+
+        # Register console handler (user-facing)
+        # Shows workflow/agent/batch events by default, all in verbose mode
+        if verbose:
+            categories = None  # Show all categories in verbose mode
+        else:
+            categories = {"workflow", "agent", "batch"}
+
+        console_handler = ConsoleEventHandler(
+            min_level=console_level,
+            show_timestamp=True,
+            formatter=formatter.format,
+            categories=categories,
+        )
+        manager.register(console_handler)
+
+        # Register JSON file handler for debug logs
+        if output_dir:
+            output_path = Path(output_dir)
+            log_file = output_path / "target" / "events.json"
+            json_handler = JSONFileHandler(
+                file_path=log_file,
+                min_level=EventLevel.DEBUG,
+                buffer_size=5,
+            )
+            manager.register(json_handler)
+        elif cls._config.file_handler_enabled:
+            # Use configured log file path
+            log_file_path = cls._get_log_file_path()
+            if log_file_path:
+                json_handler = JSONFileHandler(
+                    file_path=log_file_path,
+                    min_level=EventLevel.DEBUG,
+                    buffer_size=10,
+                )
+                manager.register(json_handler)
+
+        # Register run results collector
+        run_results = RunResultsCollector(
+            output_dir=output_dir,
+            workflow_name=workflow_name,
+        )
+        manager.register(run_results)
+        cls._run_results_collector = run_results
+
+        # Setup Python logging bridge
+        # This converts all logger.* calls to events
+        cls._setup_logging_bridge()
+
+        # Mark as initialized
+        manager.initialize()
+        cls._initialized = True
+
+        return manager
+
+    @classmethod
+    def _setup_logging_bridge(cls) -> None:
+        """
+        Setup Python logging to route through events.
+
+        Attaches LoggingBridgeHandler to the root agent_actions logger,
+        converting all logging calls to events.
+        """
+        from agent_actions.logging.core.handlers import LoggingBridgeHandler
 
         # Get root logger for agent_actions
         root_logger = logging.getLogger(cls._root_logger_name)
 
-        # Set root logger level to most permissive of console and file
-        # This ensures handlers can filter independently
-        min_level = cls._config.default_level
-        if cls._config.file_handler_enabled and cls._config.file_log_level:
-            # Convert level names to numbers for comparison
-            console_level_num = getattr(logging, cls._config.default_level)
-            file_level_num = getattr(logging, cls._config.file_log_level)
-            # Lower number = more permissive (DEBUG=10, INFO=20, etc.)
-            min_level_num = min(console_level_num, file_level_num)
-            # Convert back to name
-            min_level = logging.getLevelName(min_level_num)
-
-        root_logger.setLevel(getattr(logging, min_level))
-
-        # Clear existing handlers to avoid duplicates
+        # Clear existing handlers
         root_logger.handlers.clear()
 
-        # Clear any existing filters on root logger
-        for f in root_logger.filters[:]:
-            root_logger.removeFilter(f)
+        # Set level to DEBUG so bridge receives everything
+        # The event handlers will filter by level
+        root_logger.setLevel(logging.DEBUG)
 
-        # Configure handlers from config
-        # Note: Filters are added to handlers (not logger) because Python's logging
-        # doesn't inherit filters through the logger hierarchy
-        if cls._config.handlers:
-            for handler_config in cls._config.handlers:
-                handler = cls._create_handler(handler_config)
-                cls._add_filters_to_handler(handler)
-                root_logger.addHandler(handler)
-        else:
-            # Add default console handler if none configured
-            handler = cls._create_default_handler()
-            cls._add_filters_to_handler(handler)
-            root_logger.addHandler(handler)
+        # Add the bridge handler
+        bridge = LoggingBridgeHandler(level=logging.DEBUG)
+        root_logger.addHandler(bridge)
 
-        # Add file handler if enabled (independent of config.handlers)
-        if cls._config.file_handler_enabled:
-            file_handler = cls._create_file_handler()
-            if file_handler:
-                cls._add_filters_to_handler(file_handler)
-                root_logger.addHandler(file_handler)
-
-        # Configure module-specific levels
-        for module, level in cls._config.module_levels.items():
-            module_logger = logging.getLogger(module)
-            module_logger.setLevel(getattr(logging, level))
-
-        # Prevent propagation to root logger to avoid duplicate messages
+        # Prevent propagation to avoid duplicate messages
         root_logger.propagate = False
-
-        cls._initialized = True
-
-    @classmethod
-    def _create_handler(cls, config: HandlerConfig) -> logging.Handler:
-        """Create a handler from configuration.
-
-        Args:
-            config: HandlerConfig specifying handler type and settings.
-
-        Returns:
-            Configured logging.Handler instance.
-        """
-        # Create the handler based on type
-        if config.type == "console":
-            handler = logging.StreamHandler()
-        elif config.type == "file":
-            if config.file_path is None:
-                raise ValueError("file_path is required for file handler")
-            handler = RotatingFileHandler(
-                config.file_path,
-                maxBytes=config.max_bytes,
-                backupCount=config.backup_count,
-            )
-        elif config.type == "json":
-            handler = logging.StreamHandler()
-        else:
-            raise ValueError(f"Unknown handler type: {config.type}")
-
-        # Set handler level
-        handler.setLevel(getattr(logging, config.level))
-
-        # Set formatter based on format config
-        if config.format == "json" or config.type == "json":
-            formatter = JSONFormatter(
-                include_source_location=cls._config.include_source_location
-                if cls._config
-                else False,
-            )
-        elif config.type == "file":
-            # Use simple formatter for file output (no colors)
-            formatter = SimpleFormatter(
-                include_timestamp=cls._config.include_timestamps if cls._config else True,
-            )
-        else:
-            # Console handler - use config setting for source location
-            formatter = HumanFormatter(
-                use_colors=True,
-                include_source_location=cls._config.include_source_location
-                if cls._config
-                else False,
-            )
-
-        handler.setFormatter(formatter)
-
-        return handler
-
-    @classmethod
-    def _create_default_handler(cls) -> logging.Handler:
-        """Create the default console handler.
-
-        Returns:
-            Console handler with human-readable formatting.
-        """
-        handler = logging.StreamHandler()
-        handler.setLevel(logging.DEBUG)  # Let logger level control filtering
-
-        formatter = HumanFormatter(
-            use_colors=True,
-            include_source_location=False,
-        )
-        handler.setFormatter(formatter)
-
-        return handler
-
-    @classmethod
-    def _get_project_root(cls) -> Optional[Path]:
-        """Find the project config directory.
-
-        Walks up the directory tree looking for agent_actions.yml.
-        Returns the directory containing the config file (where logs should go).
-
-        Returns:
-            Path to directory containing agent_actions.yml, or None if not found.
-        """
-        # Start from current working directory
-        current = Path.cwd()
-
-        # Walk up the directory tree looking for agent_actions.yml
-        for parent in [current] + list(current.parents):
-            if (parent / "agent_actions.yml").exists():
-                return parent
-
-        return None
 
     @classmethod
     def _get_log_file_path(cls) -> Optional[Path]:
-        """Determine the log file path based on configuration and environment.
-
-        Priority order:
-        1. config.log_file_path (if set)
-        2. <agent_actions.yml_dir>/logs/agent_actions.log (if in project)
-        3. ~/.agent-actions/logs/agent_actions.log (fallback)
-
-        The logs folder is placed at the same level as agent_actions.yml.
-
-        Returns:
-            Path to log file, or None if file logging is disabled.
-        """
-        if not cls._config or not cls._config.file_handler_enabled:
+        """Determine the log file path."""
+        if not cls._config:
             return None
 
-        # Check if path is explicitly configured
         if cls._config.log_file_path:
-            path = Path(cls._config.log_file_path)
-            # If relative path, resolve relative to project root (or cwd)
-            if not path.is_absolute():
-                project_root = cls._get_project_root()
-                if project_root:
-                    path = project_root / path
-                else:
-                    path = Path.cwd() / path
-            return path
+            return Path(cls._config.log_file_path)
 
-        # Try to use project root
+        # Try project root
         project_root = cls._get_project_root()
         if project_root:
-            return project_root / "logs" / "agent_actions.log"
+            return project_root / "logs" / "events.json"
 
         # Fallback to home directory
-        return Path.home() / ".agent-actions" / "logs" / "agent_actions.log"
+        return Path.home() / ".agent-actions" / "logs" / "events.json"
 
     @classmethod
-    def _create_file_handler(cls) -> Optional[RotatingFileHandler]:
-        """Create a rotating file handler for logging.
-
-        Creates log directory if needed and configures rotation based on
-        config.file_max_bytes and config.file_backup_count.
-
-        Returns:
-            RotatingFileHandler instance, or None if creation failed.
-        """
-        if not cls._config or not cls._config.file_handler_enabled:
-            return None
-
-        try:
-            log_file_path = cls._get_log_file_path()
-            if not log_file_path:
-                return None
-
-            # Create log directory if it doesn't exist
-            log_file_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Create rotating file handler
-            handler = RotatingFileHandler(
-                filename=str(log_file_path),
-                maxBytes=cls._config.file_max_bytes,
-                backupCount=cls._config.file_backup_count,
-                encoding="utf-8",
-            )
-
-            # Set handler level
-            handler.setLevel(getattr(logging, cls._config.file_log_level))
-
-            # Set formatter (no colors for file output)
-            # Use config setting for source location
-            if cls._config.file_format == "json":
-                formatter = JSONFormatter(
-                    include_source_location=cls._config.include_source_location
-                )
-            else:
-                formatter = HumanFormatter(
-                    use_colors=False,
-                    include_source_location=cls._config.include_source_location,
-                )
-
-            handler.setFormatter(formatter)
-
-            # Log success to stderr only in DEBUG mode
-            # (not to the logging system to avoid recursion)
-            if cls._config and cls._config.default_level == "DEBUG":
-                print(f"Logging to file: {log_file_path}", file=sys.stderr)
-
-            return handler
-
-        except (OSError, IOError, ValueError) as e:
-            # Log warning to stderr and continue without file handler
-            print(
-                f"Warning: Failed to create file handler: {e}. "
-                "Continuing with console logging only.",
-                file=sys.stderr,
-            )
-            return None
-
-    @classmethod
-    def _add_filters_to_handler(cls, handler: logging.Handler) -> None:
-        """Add context injection and redacting filters to a handler.
-
-        Args:
-            handler: The handler to add filters to.
-        """
-        # Add context injection filter first
-        handler.addFilter(ContextInjectingFilter())
-
-        # Add redacting filter if patterns are configured
-        if cls._config and cls._config.redact_patterns:
-            handler.addFilter(RedactingFilter(patterns=cls._config.redact_patterns))
+    def _get_project_root(cls) -> Optional[Path]:
+        """Find the project root directory."""
+        current = Path.cwd()
+        for parent in [current] + list(current.parents):
+            if (parent / "agent_actions.yml").exists():
+                return parent
+        return None
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
-        """Get a logger with the given name.
+        """
+        Get a logger with the given name.
 
-        The logger will be configured with context injection and consistent
-        formatting. If initialize() hasn't been called, it will be called
-        with default configuration.
+        The logger's output will flow through the event system.
 
         Args:
-            name: Logger name. Will be prefixed with 'agent_actions.' if not
-                  already under that namespace.
+            name: Logger name. Will be prefixed with 'agent_actions.' if needed.
 
         Returns:
             Configured logging.Logger instance.
@@ -336,12 +274,7 @@ class LoggerFactory:
 
     @classmethod
     def set_level(cls, level: str, logger_name: Optional[str] = None) -> None:
-        """Set log level for a logger.
-
-        Args:
-            level: Log level name (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-            logger_name: Logger name to set level for. If None, sets root level.
-        """
+        """Set log level for a logger."""
         if not cls._initialized:
             cls.initialize()
 
@@ -356,45 +289,61 @@ class LoggerFactory:
 
     @classmethod
     def set_debug(cls, debug: bool = True) -> None:
-        """Enable or disable debug logging globally.
-
-        Args:
-            debug: If True, set level to DEBUG. If False, set to INFO.
-        """
+        """Enable or disable debug logging globally."""
         level = "DEBUG" if debug else "INFO"
         cls.set_level(level)
 
     @classmethod
     def get_config(cls) -> Optional[LoggingConfig]:
-        """Get the current logging configuration.
-
-        Returns:
-            Current LoggingConfig or None if not initialized.
-        """
+        """Get the current logging configuration."""
         return cls._config
 
     @classmethod
     def is_initialized(cls) -> bool:
-        """Check if the factory has been initialized.
-
-        Returns:
-            True if initialize() has been called.
-        """
+        """Check if the factory has been initialized."""
         return cls._initialized
 
     @classmethod
     def reset(cls) -> None:
-        """Reset the factory state.
-
-        This clears the initialized flag and config, useful for testing.
-        Note: This does not remove handlers from existing loggers.
-        """
+        """Reset the factory state (for testing)."""
         cls._initialized = False
         cls._config = None
+        cls._event_manager = None
+        cls._run_results_collector = None
 
         # Clear handlers from root logger
         root_logger = logging.getLogger(cls._root_logger_name)
         root_logger.handlers.clear()
-        # Clear filters
         for f in root_logger.filters[:]:
             root_logger.removeFilter(f)
+
+        # Reset event manager
+        from agent_actions.logging.core import EventManager
+        EventManager.reset()
+
+    @classmethod
+    def get_event_manager(cls) -> Optional["EventManager"]:
+        """Get the current EventManager instance."""
+        return cls._event_manager
+
+    @classmethod
+    def get_run_results_collector(cls) -> Optional["RunResultsCollector"]:
+        """Get the RunResultsCollector instance."""
+        return cls._run_results_collector
+
+    @classmethod
+    def set_context(cls, **kwargs) -> None:
+        """Set shared context values for all events."""
+        if cls._event_manager:
+            cls._event_manager.set_context(**kwargs)
+
+    @classmethod
+    def flush(cls) -> None:
+        """Flush all event handlers."""
+        if cls._event_manager:
+            cls._event_manager.flush()
+
+    # Backwards compatibility aliases
+    initialize_events = initialize
+    set_event_context = set_context
+    flush_events = flush
