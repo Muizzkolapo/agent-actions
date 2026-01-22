@@ -380,14 +380,16 @@ class BatchProcessingService:
 
         # Calculate completion statistics
         elapsed_time = time.time() - start_time
+        total_count = len(batch_results)
         successful_count = sum(1 for r in batch_results if r.success)
-        failed_count = len(batch_results) - successful_count
+        failed_count = total_count - successful_count
 
         # Fire batch complete event (B003)
         fire_event(
             BatchCompleteEvent(
                 batch_id=batch_id,
                 agent_name=file_name or "default",
+                total=total_count,
                 completed=successful_count,
                 failed=failed_count,
                 elapsed_time=elapsed_time,

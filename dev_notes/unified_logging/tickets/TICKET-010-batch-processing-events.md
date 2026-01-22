@@ -52,6 +52,7 @@ fire_event(BatchProgressEvent(
 fire_event(BatchCompleteEvent(
     batch_id="batch_abc123",
     agent_name="test_agent",
+    total=100,
     completed=98,
     failed=2,
     elapsed_time=3600.5,
@@ -85,7 +86,7 @@ Fire progress events at these intervals:
 
 ### BatchCompleteEvent (B003)
 - Fired in `BatchProcessingService._process_single_batch_file()` after processing completes
-- Includes batch_id, agent_name, completed count, failed count, and elapsed_time
+- Includes batch_id, agent_name, total count, completed count, failed count, and elapsed_time
 
 ### Correlation
 - Events automatically receive `invocation_id` from EventManager context
