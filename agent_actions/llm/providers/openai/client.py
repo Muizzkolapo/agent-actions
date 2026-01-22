@@ -10,6 +10,7 @@ consistent retry handling across all providers.
 
 import json
 import logging
+import uuid
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
@@ -21,6 +22,13 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    LLMRequestEvent,
+    LLMResponseEvent,
+    LLMErrorEvent,
+    RateLimitEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +53,18 @@ def _extract_retry_after(e: Exception) -> Optional[float]:
         return None
 
 
-def _wrap_openai_error(e: Exception, model_name: str) -> Exception:
+def _wrap_openai_error(
+    e: Exception, model_name: str, request_id: str = ""
+) -> Exception:
     """Wrap OpenAI SDK errors into unified agent-actions error types.
 
     This enables the central retry engine to handle transient errors
-    consistently across all providers.
+    consistently across all providers. Also fires appropriate LLM events.
 
     Args:
         e: The OpenAI SDK exception
         model_name: Model name for context
+        request_id: Request ID for correlation
 
     Returns:
         Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
@@ -61,19 +72,63 @@ def _wrap_openai_error(e: Exception, model_name: str) -> Exception:
     context = {"vendor": "openai", "model": model_name}
 
     if isinstance(e, openai.RateLimitError):
-        context["retry_after"] = _extract_retry_after(e)
+        retry_after = _extract_retry_after(e)
+        context["retry_after"] = retry_after
+        fire_event(
+            RateLimitEvent(
+                provider="openai",
+                retry_after=retry_after or 0.0,
+                request_id=request_id,
+            )
+        )
         return RateLimitError(f"OpenAI rate limit: {e}", context=context, cause=e)
 
     if isinstance(e, openai.APIConnectionError):
+        fire_event(
+            LLMErrorEvent(
+                provider="openai",
+                model=model_name,
+                error_type="APIConnectionError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"OpenAI connection error: {e}", context=context, cause=e)
 
     if isinstance(e, openai.APITimeoutError):
+        fire_event(
+            LLMErrorEvent(
+                provider="openai",
+                model=model_name,
+                error_type="APITimeoutError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"OpenAI timeout: {e}", context=context, cause=e)
 
     if isinstance(e, openai.InternalServerError):
+        fire_event(
+            LLMErrorEvent(
+                provider="openai",
+                model=model_name,
+                error_type="InternalServerError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return NetworkError(f"OpenAI server error: {e}", context=context, cause=e)
 
     if isinstance(e, openai.APIError):
+        fire_event(
+            LLMErrorEvent(
+                provider="openai",
+                model=model_name,
+                error_type="APIError",
+                error_message=str(e),
+                request_id=request_id,
+            )
+        )
         return VendorAPIError(f"OpenAI API error: {e}", context=context, cause=e)
 
     return e
@@ -98,6 +153,9 @@ class OpenAIClient(BaseClient):
             {"role": "system", "content": dedent(prompt)}
         ]
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
         # Log API request at DEBUG level
         logger.debug(
             "OpenAI API request",
@@ -107,7 +165,17 @@ class OpenAIClient(BaseClient):
                 "mode": "json",
                 "message_count": len(messages),
                 "has_schema": schema is not None,
+                "request_id": request_id,
             },
+        )
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="openai",
+                model=model_name,
+                request_id=request_id,
+            )
         )
 
         start_time = datetime.now()
@@ -118,18 +186,35 @@ class OpenAIClient(BaseClient):
                 response_format={"type": "json_schema", "json_schema": schema},
             )
         except openai.APIError as e:
-            raise _wrap_openai_error(e, model_name) from e
+            raise _wrap_openai_error(e, model_name, request_id) from e
         duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
 
         # Extract token usage and store in thread-local
-        usage_data = None
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+        total_tokens = response.usage.total_tokens if response.usage else 0
+
         if response.usage:
             usage_data = {
-                "input_tokens": response.usage.prompt_tokens,
-                "output_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+                "total_tokens": total_tokens,
             }
             set_last_usage(usage_data)
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="openai",
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         # Log API response at DEBUG level
         logger.debug(
@@ -140,19 +225,25 @@ class OpenAIClient(BaseClient):
                 "duration": duration,
                 "finish_reason": response.choices[0].finish_reason if response.choices else None,
                 "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
-                    "completion_tokens": (
-                        response.usage.completion_tokens if response.usage else None
-                    ),
-                    "total_tokens": response.usage.total_tokens if response.usage else None,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                 },
+                "request_id": request_id,
             },
         )
         response_message = response.choices[0].message
         response_content: Optional[str] = response_message.content
         if response_content is None:
-            from agent_actions.errors import VendorAPIError  # New modular pattern!
-
+            fire_event(
+                LLMErrorEvent(
+                    provider="openai",
+                    model=model_name,
+                    error_type="EmptyResponse",
+                    error_message="Empty response content from OpenAI API",
+                    request_id=request_id,
+                )
+            )
             raise VendorAPIError(
                 "Empty response content from OpenAI API",
                 context={
@@ -182,6 +273,9 @@ class OpenAIClient(BaseClient):
             {"role": "user", "content": dedent(prompt)}
         ]
 
+        # Generate request ID for correlation
+        request_id = str(uuid.uuid4())
+
         # Log API request at DEBUG level
         logger.debug(
             "OpenAI API request",
@@ -190,25 +284,52 @@ class OpenAIClient(BaseClient):
                 "model": model_name,
                 "mode": "non_json",
                 "message_count": len(messages),
+                "request_id": request_id,
             },
+        )
+
+        # Fire LLM request event
+        fire_event(
+            LLMRequestEvent(
+                provider="openai",
+                model=model_name,
+                request_id=request_id,
+            )
         )
 
         start_time = datetime.now()
         try:
             response = client.chat.completions.create(model=model_name, messages=messages)
         except openai.APIError as e:
-            raise _wrap_openai_error(e, model_name) from e
+            raise _wrap_openai_error(e, model_name, request_id) from e
         duration = (datetime.now() - start_time).total_seconds()
+        latency_ms = duration * 1000
 
         # Extract token usage and store in thread-local
-        usage_data = None
+        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
+        completion_tokens = response.usage.completion_tokens if response.usage else 0
+        total_tokens = response.usage.total_tokens if response.usage else 0
+
         if response.usage:
             usage_data = {
-                "input_tokens": response.usage.prompt_tokens,
-                "output_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                "input_tokens": prompt_tokens,
+                "output_tokens": completion_tokens,
+                "total_tokens": total_tokens,
             }
             set_last_usage(usage_data)
+
+        # Fire LLM response event
+        fire_event(
+            LLMResponseEvent(
+                provider="openai",
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_ms=latency_ms,
+                request_id=request_id,
+            )
+        )
 
         # Log API response at DEBUG level
         logger.debug(
@@ -219,18 +340,26 @@ class OpenAIClient(BaseClient):
                 "duration": duration,
                 "finish_reason": response.choices[0].finish_reason if response.choices else None,
                 "usage": {
-                    "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
-                    "completion_tokens": (
-                        response.usage.completion_tokens if response.usage else None
-                    ),
-                    "total_tokens": response.usage.total_tokens if response.usage else None,
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                 },
+                "request_id": request_id,
             },
         )
         response_message = response.choices[0].message
         output_field: str = agent_config.get("output_field", "raw_response")
         content: Optional[str] = response_message.content
         if content is None:
+            fire_event(
+                LLMErrorEvent(
+                    provider="openai",
+                    model=model_name,
+                    error_type="EmptyResponse",
+                    error_message="Empty response content from OpenAI API",
+                    request_id=request_id,
+                )
+            )
             raise VendorAPIError(
                 "Empty response content from OpenAI API",
                 context={
