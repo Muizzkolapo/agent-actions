@@ -54,9 +54,7 @@ class TestGeminiBatchClient(BaseBatchClientTests):
                 "google.genai.types": mock_types_module,
             },
         ):
-            with patch(
-                "agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True
-            ):
+            with patch("agent_actions.llm.providers.gemini.batch_client.GEMINI_AVAILABLE", True):
                 with patch(
                     "agent_actions.llm.providers.gemini.batch_client.genai",
                     mock_genai_module,

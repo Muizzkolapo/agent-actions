@@ -124,7 +124,11 @@ class AgentActionsFormatter:
         mode = event.data.get("execution_mode", "sequential")
 
         mode_str = f" [{mode}]" if mode != "sequential" else ""
-        return f"{ts}Running workflow [bold]{name}[/bold] ({count} agents){mode_str}" if self.use_color else f"{ts}Running workflow {name} ({count} agents){mode_str}"
+        return (
+            f"{ts}Running workflow [bold]{name}[/bold] ({count} agents){mode_str}"
+            if self.use_color
+            else f"{ts}Running workflow {name} ({count} agents){mode_str}"
+        )
 
     def _format_workflow_complete(self, event: BaseEvent) -> str:
         """Format WorkflowCompleteEvent."""

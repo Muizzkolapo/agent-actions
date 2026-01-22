@@ -36,9 +36,7 @@ from agent_actions.logging.events import (
 logger = logging.getLogger(__name__)
 
 
-def _wrap_cohere_error(
-    e: Exception, model_name: str, request_id: str = ""
-) -> Exception:
+def _wrap_cohere_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
     """Wrap Cohere SDK errors into unified agent-actions error types.
 
     This enables the central retry engine to handle transient errors

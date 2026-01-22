@@ -37,9 +37,7 @@ from agent_actions.logging.events import (
 logger = logging.getLogger(__name__)
 
 
-def _wrap_groq_error(
-    e: Exception, model_name: str, request_id: str = ""
-) -> Exception:
+def _wrap_groq_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
     """Wrap Groq SDK errors into unified agent-actions error types.
 
     Groq uses an OpenAI-compatible SDK, so error types are similar.

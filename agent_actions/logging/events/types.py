@@ -170,7 +170,9 @@ class AgentCompleteEvent(BaseEvent):
         self.category = EventCategories.AGENT
         idx_str = f"{self.agent_index + 1}/{self.total_agents}"
         total_tokens = self.tokens.get("total_tokens", 0)
-        self.message = f"{idx_str} OK {self.agent_name} in {self.execution_time:.2f}s ({total_tokens} tokens)"
+        self.message = (
+            f"{idx_str} OK {self.agent_name} in {self.execution_time:.2f}s ({total_tokens} tokens)"
+        )
         self.data = {
             "agent_name": self.agent_name,
             "agent_index": self.agent_index,
@@ -287,7 +289,9 @@ class BatchSubmittedEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"Batch {self.batch_id} submitted: {self.request_count} requests to {self.provider}"
+        self.message = (
+            f"Batch {self.batch_id} submitted: {self.request_count} requests to {self.provider}"
+        )
         self.data = {
             "batch_id": self.batch_id,
             "agent_name": self.agent_name,
@@ -377,7 +381,9 @@ class LLMRequestEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.LLM
-        self.message = f"LLM request to {self.provider}/{self.model} ({self.prompt_tokens} prompt tokens)"
+        self.message = (
+            f"LLM request to {self.provider}/{self.model} ({self.prompt_tokens} prompt tokens)"
+        )
         self.data = {
             "provider": self.provider,
             "model": self.model,

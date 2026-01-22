@@ -35,9 +35,7 @@ from agent_actions.logging.events import (
 logger = logging.getLogger(__name__)
 
 
-def _wrap_ollama_error(
-    e: Exception, model_name: str, request_id: str = ""
-) -> Exception:
+def _wrap_ollama_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
     """Wrap Ollama errors into unified agent-actions error types.
 
     Also fires appropriate LLM events.

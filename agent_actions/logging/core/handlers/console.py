@@ -155,9 +155,7 @@ class ConsoleEventHandler:
             EventLevel.WARN: ("[yellow]WARN[/yellow]", "WARN"),
             EventLevel.ERROR: ("[red]ERROR[/red]", "ERROR"),
         }
-        rich_level, plain_level = level_indicators.get(
-            event.level, ("[blue]INFO[/blue]", "INFO")
-        )
+        rich_level, plain_level = level_indicators.get(event.level, ("[blue]INFO[/blue]", "INFO"))
         parts.append(rich_level if self._use_rich else plain_level)
 
         # Message
