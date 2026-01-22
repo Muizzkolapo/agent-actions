@@ -42,11 +42,17 @@ class ConfigValidator(BaseValidator):
             if count > 1:
                 self.add_error(
                     f"Duplicate agent configuration file: "
-                    f"{resolved_full_path} (found {count} times)."
+                    f"{resolved_full_path} (found {count} times).",
+                    field="config_path",
+                    value=resolved_full_path,
                 )
         except (OSError, ValueError, TypeError) as e:
             logger.exception("Error checking agent file uniqueness for %s: %s", full_path_str, e)
-            self.add_error(f"Error checking agent file uniqueness for {full_path_str}: {e}")
+            self.add_error(
+                f"Error checking agent file uniqueness for {full_path_str}: {e}",
+                field="config_path",
+                value=full_path_str,
+            )
 
     def _collect_agent_config_files(self, project_dir_str: str) -> Dict[str, List[str]]:
         """
@@ -104,13 +110,19 @@ class ConfigValidator(BaseValidator):
             if conflicts:
                 self.add_error(
                     f"Agent name '{agent_name_to_check}' is not unique. "
-                    f"Also defined in: {', '.join(conflicts)}."
+                    f"Also defined in: {', '.join(conflicts)}.",
+                    field="agent_name",
+                    value=agent_name_to_check,
                 )
         except (OSError, ValueError, TypeError) as e:
             logger.exception(
                 "Error checking agent name uniqueness for '%s': %s", agent_name_to_check, e
             )
-            self.add_error(f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}")
+            self.add_error(
+                f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}",
+                field="agent_name",
+                value=agent_name_to_check,
+            )
 
     def _validate_single_agent_entry_logic(
         self, entry: Dict[str, Any], cfg_ctx_name: str, proj_root: Optional[Path] = None
@@ -182,11 +194,16 @@ class ConfigValidator(BaseValidator):
         if not isinstance(agent_cfg_list, list):
             self.add_error(
                 f"Agent configuration for '{agent_name_ctx}' must be a list, "
-                f"but found {type(agent_cfg_list).__name__}."
+                f"but found {type(agent_cfg_list).__name__}.",
+                field="agent_config_data",
+                value=type(agent_cfg_list).__name__,
             )
             return
         if not agent_cfg_list:
-            self.add_warning(f"Agent configuration list for '{agent_name_ctx}' is empty.")
+            self.add_warning(
+                f"Agent configuration list for '{agent_name_ctx}' is empty.",
+                field="agent_config_data",
+            )
             return
         for entry in agent_cfg_list:
             self._validate_single_agent_entry_logic(entry, agent_name_ctx, proj_root)
@@ -212,7 +229,9 @@ class ConfigValidator(BaseValidator):
             missing = deps - available_agents
             if missing:
                 self.add_error(
-                    f"Agent '{agent_name}' has missing dependencies: {', '.join(sorted(missing))}."
+                    f"Agent '{agent_name}' has missing dependencies: {', '.join(sorted(missing))}.",
+                    field="dependencies",
+                    value=list(missing),
                 )
 
     def _build_agent_sets(
@@ -241,15 +260,27 @@ class ConfigValidator(BaseValidator):
     ) -> None:
         """Validate a single dependency for an agent."""
         if not isinstance(dep, str):
-            self.add_error(f"Agent '{agent_name}' has a non-string dependency: {dep}.")
+            self.add_error(
+                f"Agent '{agent_name}' has a non-string dependency: {dep}.",
+                field="dependencies",
+                value=dep,
+            )
             return
         dep_lc = dep.lower()
         if dep_lc not in all_agents:
-            self.add_error(f"Active agent '{agent_name}' depends on a non-existent agent '{dep}'.")
+            self.add_error(
+                f"Active agent '{agent_name}' depends on a non-existent agent '{dep}'.",
+                field="dependencies",
+                value=dep,
+            )
         elif dep_lc not in active_agents:
             dep_cfg_ci = _ci_dict(agent_cfgs_map.get(dep, {}))
             if not dep_cfg_ci.get("is_operational", True):
-                self.add_error(f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.")
+                self.add_error(
+                    f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.",
+                    field="dependencies",
+                    value=dep,
+                )
 
     def _validate_agent_dependencies(
         self,
@@ -265,7 +296,11 @@ class ConfigValidator(BaseValidator):
             return
         deps = cfg_ci.get("dependencies", [])
         if not isinstance(deps, list):
-            self.add_error(f"Agent '{agent_name}' has a 'dependencies' field that is not a list.")
+            self.add_error(
+                f"Agent '{agent_name}' has a 'dependencies' field that is not a list.",
+                field="dependencies",
+                value=type(deps).__name__,
+            )
             return
         for dep in deps:
             self._validate_single_dependency(
@@ -306,7 +341,11 @@ class ConfigValidator(BaseValidator):
                 elif neighbor in stack:
                     cycle_idx = stack.index(neighbor)
                     cycle = " -> ".join(stack[cycle_idx:] + [neighbor])
-                    self.add_error(f"Circular dependency detected: {cycle}.")
+                    self.add_error(
+                        f"Circular dependency detected: {cycle}.",
+                        field="dependencies",
+                        value=cycle,
+                    )
                     return True
             stack.pop()
             return False
@@ -317,15 +356,20 @@ class ConfigValidator(BaseValidator):
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """Run validation based on the operation key in data."""
-        self.clear_errors()
-        self.clear_warnings()
-        if not isinstance(data, dict):
-            self.add_error("Validation input 'data' must be a dictionary.")
-            return False
-        operation = data.get("operation")
+        operation = data.get("operation", "") if isinstance(data, dict) else ""
+        agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
+        target = f"config:{agent_name}" if agent_name else f"config:{operation}"
+
+        if not self._prepare_validation(data, target=target):
+            return self._complete_validation()
+
         if not operation:
-            self.add_error("An 'operation' must be specified in the input 'data'.")
-            return False
+            self.add_error(
+                "An 'operation' must be specified in the input 'data'.",
+                field="operation",
+            )
+            return self._complete_validation()
+
         proj_dir = data.get("project_dir")
         project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
         operation_map = {
@@ -334,10 +378,14 @@ class ConfigValidator(BaseValidator):
         }
         handler = operation_map.get(operation)
         if handler is None:
-            self.add_error(f"Unknown operation: {operation}")
+            self.add_error(
+                f"Unknown operation: {operation}",
+                field="operation",
+                value=operation,
+            )
         else:
             handler(data, project_root_path)
-        return not self.has_errors()
+        return self._complete_validation()
 
     def _validate_config_file_access(self, cfg_file: Path) -> bool:
         """Validate config file exists and is accessible.
@@ -346,13 +394,25 @@ class ConfigValidator(BaseValidator):
             True if file is accessible, False otherwise (errors added to self).
         """
         if not self._ensure_path_exists(cfg_file):
-            self.add_error(f"Config file does not exist: {cfg_file}")
+            self.add_error(
+                f"Config file does not exist: {cfg_file}",
+                field="config_path",
+                value=str(cfg_file),
+            )
             return False
         if not self._is_file(cfg_file):
-            self.add_error(f"Config path is not a file: {cfg_file}")
+            self.add_error(
+                f"Config path is not a file: {cfg_file}",
+                field="config_path",
+                value=str(cfg_file),
+            )
             return False
         if not os.access(cfg_file, os.R_OK):
-            self.add_error(f"Config file not readable: {cfg_file}")
+            self.add_error(
+                f"Config file not readable: {cfg_file}",
+                field="config_path",
+                value=str(cfg_file),
+            )
             return False
         return True
 
@@ -367,7 +427,9 @@ class ConfigValidator(BaseValidator):
         if not (isinstance(cfg_path, str) and isinstance(agent_name, str) and project_root_path):
             self.add_error(
                 "For 'validate_agent_config_file_meta', provide "
-                "'config_path' (str), 'agent_name' (str), and 'project_dir'."
+                "'config_path' (str), 'agent_name' (str), and 'project_dir'.",
+                field="operation",
+                value="validate_agent_config_file_meta",
             )
             return
         cfg_file = Path(cfg_path)
@@ -386,7 +448,9 @@ class ConfigValidator(BaseValidator):
         if cfg_list is None or not isinstance(ctx_name, str):
             self.add_error(
                 "For 'validate_agent_entries', provide "
-                "'agent_config_data' and 'agent_name_context'."
+                "'agent_config_data' and 'agent_name_context'.",
+                field="operation",
+                value="validate_agent_entries",
             )
             return
         self._validate_agent_entries_list_logic(cfg_list, ctx_name, project_root_path)

@@ -10,4 +10,5 @@ class FieldChunkingError(Exception):
 class FieldChunkingValidationError(ValueError):
     """Raised when field chunking configuration is invalid."""
 
+
 __all__ = ["FieldChunkingError", "FieldChunkingValidationError"]

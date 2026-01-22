@@ -567,7 +567,9 @@ class ContextScopeProcessor:
         return HistoricalNodeDataLoader.load_historical_node_data(request)
 
     @staticmethod
-    def _detect_version_namespaces(input_data: Dict[str, Any], input_sources: List[str]) -> List[str]:
+    def _detect_version_namespaces(
+        input_data: Dict[str, Any], input_sources: List[str]
+    ) -> List[str]:
         """
         Detect if input_data contains nested version namespaces from version_consumption merge.
 

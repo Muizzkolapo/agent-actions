@@ -319,6 +319,7 @@ class LoggerFactory:
 
         # Reset event manager
         from agent_actions.logging.core import EventManager
+
         EventManager.reset()
 
     @classmethod

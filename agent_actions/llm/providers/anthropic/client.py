@@ -52,9 +52,7 @@ def _extract_retry_after(e: Exception) -> Optional[float]:
         return None
 
 
-def _wrap_anthropic_error(
-    e: Exception, model_name: str, request_id: str = ""
-) -> Exception:
+def _wrap_anthropic_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
     """Wrap Anthropic SDK errors into unified agent-actions error types.
 
     This enables the central retry engine to handle transient errors

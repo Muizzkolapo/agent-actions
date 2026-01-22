@@ -62,4 +62,3 @@ def create_agent_runner(
     """
     with application_container_context(config) as container:
         return container.get_agent_runner(use_tools)
-

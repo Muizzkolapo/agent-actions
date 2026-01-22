@@ -200,13 +200,19 @@ class AgentExecutor:
             # Fire skip event
             duration = (datetime.now() - start_time).total_seconds()
             # Get total agents count from agent_runner if available
-            total_agents = len(self.deps.agent_runner.execution_order) if hasattr(self.deps.agent_runner, 'execution_order') else 0
-            fire_event(AgentSkipEvent(
-                agent_name=agent_name,
-                agent_index=agent_idx,
-                total_agents=total_agents,
-                skip_reason="WHERE clause condition not met",
-            ))
+            total_agents = (
+                len(self.deps.agent_runner.execution_order)
+                if hasattr(self.deps.agent_runner, "execution_order")
+                else 0
+            )
+            fire_event(
+                AgentSkipEvent(
+                    agent_name=agent_name,
+                    agent_index=agent_idx,
+                    total_agents=total_agents,
+                    skip_reason="WHERE clause condition not met",
+                )
+            )
 
             # Track action skip
             if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
@@ -284,13 +290,19 @@ class AgentExecutor:
             # Fire skip event
             duration = (datetime.now() - start_time).total_seconds()
             # Get total agents count from agent_runner if available
-            total_agents = len(self.deps.agent_runner.execution_order) if hasattr(self.deps.agent_runner, 'execution_order') else 0
-            fire_event(AgentSkipEvent(
-                agent_name=agent_name,
-                agent_index=agent_idx,
-                total_agents=total_agents,
-                skip_reason="WHERE clause condition not met",
-            ))
+            total_agents = (
+                len(self.deps.agent_runner.execution_order)
+                if hasattr(self.deps.agent_runner, "execution_order")
+                else 0
+            )
+            fire_event(
+                AgentSkipEvent(
+                    agent_name=agent_name,
+                    agent_index=agent_idx,
+                    total_agents=total_agents,
+                    skip_reason="WHERE clause condition not met",
+                )
+            )
 
             # Track action skip
             if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
@@ -377,14 +389,16 @@ class AgentExecutor:
         if batch_status == "completed":
             self.deps.state_manager.update_status(agent_name, "completed")
             # Fire batch complete event
-            fire_event(BatchCompleteEvent(
-                batch_id=agent_config.get("batch_id", ""),
-                agent_name=agent_name,
-                total=1,
-                completed=1,
-                failed=0,
-                elapsed_time=duration,
-            ))
+            fire_event(
+                BatchCompleteEvent(
+                    batch_id=agent_config.get("batch_id", ""),
+                    agent_name=agent_name,
+                    total=1,
+                    completed=1,
+                    failed=0,
+                    elapsed_time=duration,
+                )
+            )
             return AgentExecutionResult(
                 success=True,
                 output_folder=output_folder,
@@ -395,26 +409,30 @@ class AgentExecutor:
         if batch_status == "in_progress":
             self.deps.state_manager.update_status(agent_name, "batch_submitted")
             # Fire batch submitted event (still in progress)
-            fire_event(BatchSubmittedEvent(
-                batch_id=agent_config.get("batch_id", ""),
-                agent_name=agent_name,
-                request_count=0,  # Unknown at this point
-                provider=agent_config.get("model_vendor", ""),
-            ))
+            fire_event(
+                BatchSubmittedEvent(
+                    batch_id=agent_config.get("batch_id", ""),
+                    agent_name=agent_name,
+                    request_count=0,  # Unknown at this point
+                    provider=agent_config.get("model_vendor", ""),
+                )
+            )
             return AgentExecutionResult(
                 success=True, status="batch_submitted", metrics=ExecutionMetrics(duration=duration)
             )
 
         self.deps.state_manager.update_status(agent_name, "failed")
         # Fire batch complete with failure
-        fire_event(BatchCompleteEvent(
-            batch_id=agent_config.get("batch_id", ""),
-            agent_name=agent_name,
-            total=1,
-            completed=0,
-            failed=1,
-            elapsed_time=duration,
-        ))
+        fire_event(
+            BatchCompleteEvent(
+                batch_id=agent_config.get("batch_id", ""),
+                agent_name=agent_name,
+                total=1,
+                completed=0,
+                failed=1,
+                elapsed_time=duration,
+            )
+        )
         error = Exception(f"Batch job for {agent_name} failed")
         return AgentExecutionResult(
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)

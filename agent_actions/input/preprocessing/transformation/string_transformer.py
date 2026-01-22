@@ -15,6 +15,7 @@ from agent_actions.utils.module_loader import ensure_path_importable
 # Optional dependencies
 try:
     import spacy  # type: ignore[reportMissingImports]
+
     HAS_SPACY = True
 except ImportError:
     HAS_SPACY = False

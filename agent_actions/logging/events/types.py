@@ -28,6 +28,34 @@ class EventCategories:
     VALIDATION = "validation"
 
 
+def _safe_value_repr(value: Any, max_length: int = 100) -> str:
+    """Safely convert a value to a string representation for logging.
+
+    Handles complex objects that may not serialize well to JSON by using repr()
+    and truncating if necessary.
+
+    Args:
+        value: The value to convert
+        max_length: Maximum length of the resulting string
+
+    Returns:
+        A string representation of the value, truncated if necessary
+    """
+    if value is None:
+        return ""
+    try:
+        # Try simple str first for common types
+        if isinstance(value, (str, int, float, bool)):
+            result = str(value)
+        else:
+            result = repr(value)
+        if len(result) > max_length:
+            return result[: max_length - 3] + "..."
+        return result
+    except Exception:
+        return "<unserializable>"
+
+
 # =============================================================================
 # Workflow Events (W prefix)
 # =============================================================================
@@ -170,7 +198,9 @@ class AgentCompleteEvent(BaseEvent):
         self.category = EventCategories.AGENT
         idx_str = f"{self.agent_index + 1}/{self.total_agents}"
         total_tokens = self.tokens.get("total_tokens", 0)
-        self.message = f"{idx_str} OK {self.agent_name} in {self.execution_time:.2f}s ({total_tokens} tokens)"
+        self.message = (
+            f"{idx_str} OK {self.agent_name} in {self.execution_time:.2f}s ({total_tokens} tokens)"
+        )
         self.data = {
             "agent_name": self.agent_name,
             "agent_index": self.agent_index,
@@ -287,7 +317,9 @@ class BatchSubmittedEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"Batch {self.batch_id} submitted: {self.request_count} requests to {self.provider}"
+        self.message = (
+            f"Batch {self.batch_id} submitted: {self.request_count} requests to {self.provider}"
+        )
         self.data = {
             "batch_id": self.batch_id,
             "agent_name": self.agent_name,
@@ -377,7 +409,9 @@ class LLMRequestEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.LLM
-        self.message = f"LLM request to {self.provider}/{self.model} ({self.prompt_tokens} prompt tokens)"
+        self.message = (
+            f"LLM request to {self.provider}/{self.model} ({self.prompt_tokens} prompt tokens)"
+        )
         self.data = {
             "provider": self.provider,
             "model": self.model,
@@ -490,15 +524,15 @@ class ValidationStartEvent(BaseEvent):
     """Fired when validation begins."""
 
     target: str = ""
-    validation_type: str = ""
+    validator: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.VALIDATION
-        self.message = f"Validating {self.target} ({self.validation_type})"
+        self.message = f"Validating {self.target} ({self.validator})"
         self.data = {
             "target": self.target,
-            "validation_type": self.validation_type,
+            "validator": self.validator,
         }
 
     @property
@@ -511,18 +545,28 @@ class ValidationCompleteEvent(BaseEvent):
     """Fired when validation completes successfully."""
 
     target: str = ""
-    validation_type: str = ""
-    warnings: int = 0
+    validator: str = ""
+    elapsed_time: float = 0.0
+    warning_count: int = 0
+    error_count: int = 0
 
     def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
+        self.level = EventLevel.DEBUG if self.error_count == 0 else EventLevel.ERROR
         self.category = EventCategories.VALIDATION
-        warn_str = f" ({self.warnings} warnings)" if self.warnings > 0 else ""
-        self.message = f"Validation passed: {self.target}{warn_str}"
+        status_parts = []
+        if self.warning_count > 0:
+            status_parts.append(f"{self.warning_count} warnings")
+        if self.error_count > 0:
+            status_parts.append(f"{self.error_count} errors")
+        status_str = f" ({', '.join(status_parts)})" if status_parts else ""
+        result = "passed" if self.error_count == 0 else "failed"
+        self.message = f"Validation {result}: {self.target} in {self.elapsed_time:.2f}s{status_str}"
         self.data = {
             "target": self.target,
-            "validation_type": self.validation_type,
-            "warnings": self.warnings,
+            "validator": self.validator,
+            "elapsed_time": self.elapsed_time,
+            "warning_count": self.warning_count,
+            "error_count": self.error_count,
         }
 
     @property
@@ -535,20 +579,22 @@ class ValidationErrorEvent(BaseEvent):
     """Fired when validation finds an error."""
 
     target: str = ""
-    error_message: str = ""
     field: str = ""
-    suggestion: str = ""
+    error: str = ""
+    value: Any = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
         self.category = EventCategories.VALIDATION
-        field_str = f" ({self.field})" if self.field else ""
-        self.message = f"Validation error in {self.target}{field_str}: {self.error_message}"
+        location = f"{self.target}.{self.field}" if self.field else self.target
+        value_repr = _safe_value_repr(self.value)
+        value_str = f' (got: "{value_repr}")' if value_repr else ""
+        self.message = f"VALIDATION ERROR in {location}: {self.error}{value_str}"
         self.data = {
             "target": self.target,
-            "error_message": self.error_message,
             "field": self.field,
-            "suggestion": self.suggestion,
+            "error": self.error,
+            "value": value_repr if value_repr else None,
         }
 
     @property
@@ -561,18 +607,22 @@ class ValidationWarningEvent(BaseEvent):
     """Fired when validation finds a warning (non-fatal issue)."""
 
     target: str = ""
-    warning_message: str = ""
     field: str = ""
+    warning: str = ""
+    value: Any = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.VALIDATION
-        field_str = f" ({self.field})" if self.field else ""
-        self.message = f"Validation warning in {self.target}{field_str}: {self.warning_message}"
+        location = f"{self.target}.{self.field}" if self.field else self.target
+        value_repr = _safe_value_repr(self.value)
+        value_str = f" (value: {value_repr})" if value_repr else ""
+        self.message = f"VALIDATION WARNING in {location}: {self.warning}{value_str}"
         self.data = {
             "target": self.target,
-            "warning_message": self.warning_message,
             "field": self.field,
+            "warning": self.warning,
+            "value": value_repr if value_repr else None,
         }
 
     @property

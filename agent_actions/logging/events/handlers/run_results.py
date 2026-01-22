@@ -179,7 +179,9 @@ class RunResultsCollector:
         # Build output structure
         output = {
             "metadata": self._metadata,
-            "results": [r.to_dict() for r in sorted(self._results.values(), key=lambda x: x.agent_index)],
+            "results": [
+                r.to_dict() for r in sorted(self._results.values(), key=lambda x: x.agent_index)
+            ],
             "elapsed_time": self._metadata["elapsed_time"],
             "tokens": self._total_tokens,
         }
@@ -194,20 +196,32 @@ class RunResultsCollector:
         self._metadata["workflow_name"] = event.data.get("workflow_name", "")
         self._metadata["agent_count"] = event.data.get("agent_count", 0)
         self._metadata["execution_mode"] = event.data.get("execution_mode", "sequential")
-        self._metadata["started_at"] = event.meta.timestamp.isoformat() if event.meta.timestamp else datetime.now(timezone.utc).isoformat()
+        self._metadata["started_at"] = (
+            event.meta.timestamp.isoformat()
+            if event.meta.timestamp
+            else datetime.now(timezone.utc).isoformat()
+        )
         self._metadata["status"] = "running"
         self.workflow_name = self._metadata["workflow_name"]
 
     def _handle_workflow_complete(self, event: BaseEvent) -> None:
         """Handle WorkflowCompleteEvent."""
-        self._metadata["completed_at"] = event.meta.timestamp.isoformat() if event.meta.timestamp else datetime.now(timezone.utc).isoformat()
+        self._metadata["completed_at"] = (
+            event.meta.timestamp.isoformat()
+            if event.meta.timestamp
+            else datetime.now(timezone.utc).isoformat()
+        )
         self._metadata["elapsed_time"] = event.data.get("elapsed_time", 0.0)
         self._metadata["status"] = "success"
         self.flush()
 
     def _handle_workflow_failed(self, event: BaseEvent) -> None:
         """Handle WorkflowFailedEvent."""
-        self._metadata["completed_at"] = event.meta.timestamp.isoformat() if event.meta.timestamp else datetime.now(timezone.utc).isoformat()
+        self._metadata["completed_at"] = (
+            event.meta.timestamp.isoformat()
+            if event.meta.timestamp
+            else datetime.now(timezone.utc).isoformat()
+        )
         self._metadata["elapsed_time"] = event.data.get("elapsed_time", 0.0)
         self._metadata["status"] = "error"
         self._metadata["error"] = {

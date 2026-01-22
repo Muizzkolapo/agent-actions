@@ -385,13 +385,15 @@ class AgentWorkflow:
         mode = "async" if is_async else "sequential"
 
         # Fire workflow start event
-        fire_event(WorkflowStartEvent(
-            workflow_name=self.agent_name,
-            agent_count=len(self.execution_order),
-            execution_mode=mode,
-            run_upstream=self.config.run_upstream,
-            run_downstream=self.config.run_downstream,
-        ))
+        fire_event(
+            WorkflowStartEvent(
+                workflow_name=self.agent_name,
+                agent_count=len(self.execution_order),
+                execution_mode=mode,
+                run_upstream=self.config.run_upstream,
+                run_downstream=self.config.run_downstream,
+            )
+        )
 
         logger.info(
             "Workflow started (%s)",
@@ -566,12 +568,14 @@ class AgentWorkflow:
         start_time = datetime.now()
 
         # Fire agent start event
-        fire_event(AgentStartEvent(
-            agent_name=agent_name,
-            agent_index=idx,
-            total_agents=total_agents,
-            agent_type=agent_config.get("type", ""),
-        ))
+        fire_event(
+            AgentStartEvent(
+                agent_name=agent_name,
+                agent_index=idx,
+                total_agents=total_agents,
+                agent_type=agent_config.get("type", ""),
+            )
+        )
 
         # Check if already completed
         if self.services.core.state_manager.is_completed(agent_name):
@@ -618,12 +622,14 @@ class AgentWorkflow:
     def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, start_time: datetime):
         """Log skipped agent."""
         # Fire agent skip event
-        fire_event(AgentSkipEvent(
-            agent_name=agent_name,
-            agent_index=idx,
-            total_agents=total_agents,
-            skip_reason="already completed",
-        ))
+        fire_event(
+            AgentSkipEvent(
+                agent_name=agent_name,
+                agent_index=idx,
+                total_agents=total_agents,
+                skip_reason="already completed",
+            )
+        )
 
     def _get_status_display(self, status: str) -> tuple:
         """Get status display color and suffix."""
@@ -641,24 +647,28 @@ class AgentWorkflow:
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
-            fire_event(AgentCompleteEvent(
-                agent_name=params.agent_name,
-                agent_index=params.idx,
-                total_agents=params.total_agents,
-                execution_time=params.duration,
-                output_path=params.result.output_folder or "",
-                tokens=tokens,
-            ))
+            fire_event(
+                AgentCompleteEvent(
+                    agent_name=params.agent_name,
+                    agent_index=params.idx,
+                    total_agents=params.total_agents,
+                    execution_time=params.duration,
+                    output_path=params.result.output_folder or "",
+                    tokens=tokens,
+                )
+            )
         else:
             # Fire agent failed event
-            fire_event(AgentFailedEvent(
-                agent_name=params.agent_name,
-                agent_index=params.idx,
-                total_agents=params.total_agents,
-                error_message=str(params.result.error) if params.result.error else "",
-                error_type=type(params.result.error).__name__ if params.result.error else "",
-                execution_time=params.duration,
-            ))
+            fire_event(
+                AgentFailedEvent(
+                    agent_name=params.agent_name,
+                    agent_index=params.idx,
+                    total_agents=params.total_agents,
+                    error_message=str(params.result.error) if params.result.error else "",
+                    error_type=type(params.result.error).__name__ if params.result.error else "",
+                    execution_time=params.duration,
+                )
+            )
 
     def _finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""
@@ -677,13 +687,15 @@ class AgentWorkflow:
                 failed += 1
 
         # Fire workflow complete event
-        fire_event(WorkflowCompleteEvent(
-            workflow_name=self.agent_name,
-            elapsed_time=elapsed_time,
-            agents_completed=completed,
-            agents_skipped=skipped,
-            agents_failed=failed,
-        ))
+        fire_event(
+            WorkflowCompleteEvent(
+                workflow_name=self.agent_name,
+                elapsed_time=elapsed_time,
+                agents_completed=completed,
+                agents_skipped=skipped,
+                agents_failed=failed,
+            )
+        )
 
         # Mark workflow as completed in manifest
         if self.services.support.manifest_manager:
@@ -694,13 +706,15 @@ class AgentWorkflow:
         self.state.failed = True
 
         # Fire workflow failed event
-        fire_event(WorkflowFailedEvent(
-            workflow_name=self.agent_name,
-            error_message=str(error),
-            error_type=type(error).__name__,
-            elapsed_time=elapsed_time,
-            failed_agent=CorrelationContext.get_agent_name() or "",
-        ))
+        fire_event(
+            WorkflowFailedEvent(
+                workflow_name=self.agent_name,
+                error_message=str(error),
+                error_type=type(error).__name__,
+                elapsed_time=elapsed_time,
+                failed_agent=CorrelationContext.get_agent_name() or "",
+            )
+        )
 
         # Mark workflow as failed in manifest
         if self.services.support.manifest_manager:
