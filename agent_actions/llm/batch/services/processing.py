@@ -788,7 +788,10 @@ class BatchProcessingService:
             # - 60 seconds have passed since last event
             should_fire_progress = (
                 total_items > 0
-                and (current_pct - last_progress_pct >= 10 or time_since_last_progress >= progress_interval)
+                and (
+                    current_pct - last_progress_pct >= 10
+                    or time_since_last_progress >= progress_interval
+                )
                 and completed > 0
             )
 
