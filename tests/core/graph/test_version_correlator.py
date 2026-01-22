@@ -189,18 +189,24 @@ class TestVersionOutputCorrelator:
             correlated_data = json.load(f)
         assert len(correlated_data) == 3
         record1 = next((r for r in correlated_data if r["source_guid"] == "guid-1"))
-        # Fields are now prefixed with agent name
-        assert "distractor_1_field_1" in record1["content"]
-        assert "distractor_2_field_2" in record1["content"]
-        assert "distractor_3_field_3" in record1["content"]
+        # Version namespaces are now nested, not prefixed
+        assert "distractor_1" in record1["content"]
+        assert "distractor_2" in record1["content"]
+        assert "distractor_3" in record1["content"]
+        assert record1["content"]["distractor_1"]["field_1"] == "value1"
+        assert record1["content"]["distractor_2"]["field_2"] == "value1"
+        assert record1["content"]["distractor_3"]["field_3"] == "value1"
         record2 = next((r for r in correlated_data if r["source_guid"] == "guid-2"))
-        assert "distractor_1_field_1" in record2["content"]
-        assert "distractor_2_field_2" in record2["content"]
-        assert "distractor_3_field_3" not in record2["content"]
+        assert "distractor_1" in record2["content"]
+        assert "distractor_2" in record2["content"]
+        assert "distractor_3" not in record2["content"]
+        assert record2["content"]["distractor_1"]["field_1"] == "value2"
+        assert record2["content"]["distractor_2"]["field_2"] == "value2"
         record3 = next((r for r in correlated_data if r["source_guid"] == "guid-3"))
-        assert "distractor_1_field_1" in record3["content"]
-        assert "distractor_2_field_2" not in record3["content"]
-        assert "distractor_3_field_3" not in record3["content"]
+        assert "distractor_1" in record3["content"]
+        assert "distractor_2" not in record3["content"]
+        assert "distractor_3" not in record3["content"]
+        assert record3["content"]["distractor_1"]["field_1"] == "value3"
 
     def test_multiple_file_correlation(self, correlator, temp_agent_folder):
         """Test correlation when loop agents produce multiple files."""
@@ -238,9 +244,11 @@ class TestVersionOutputCorrelator:
             with open(output_file, "r") as f:
                 data = json.load(f)
                 assert len(data) == 1
-                # Fields are now prefixed with agent name
-                assert "processor_1_loop1_data" in data[0]["content"]
-                assert "processor_2_loop2_data" in data[0]["content"]
+                # Version namespaces are now nested, not prefixed
+                assert "processor_1" in data[0]["content"]
+                assert "processor_2" in data[0]["content"]
+                assert data[0]["content"]["processor_1"]["loop1_data"] == f"data_from_{filename}"
+                assert data[0]["content"]["processor_2"]["loop2_data"] == f"data_from_{filename}"
 
     def test_find_agent_index(self, correlator, temp_agent_folder):
         """Test finding agent by checking directory existence."""

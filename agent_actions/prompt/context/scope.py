@@ -567,6 +567,66 @@ class ContextScopeProcessor:
         return HistoricalNodeDataLoader.load_historical_node_data(request)
 
     @staticmethod
+    def _detect_version_namespaces(input_data: Dict[str, Any], input_sources: List[str]) -> List[str]:
+        """
+        Detect if input_data contains nested version namespaces from version_consumption merge.
+
+        Version namespaces are created when upstream actions use version_consumption with merge pattern.
+        They have the pattern: action_name_N where N is a digit.
+
+        Args:
+            input_data: Content data that may contain nested version namespaces
+            input_sources: List of input source names to check against
+
+        Returns:
+            List of detected version namespace names (e.g., ["action_1", "action_2", "action_3"])
+
+        Example:
+            input_data = {
+                "generate_answer_1": {"answer": "..."},
+                "generate_answer_2": {"answer": "..."},
+                "some_field": "value"
+            }
+            input_sources = ["generate_answer_1", "generate_answer_2"]
+
+            Returns: ["generate_answer_1", "generate_answer_2"]
+        """
+        if not input_data or not isinstance(input_data, dict):
+            return []
+
+        version_namespaces = []
+
+        # Check if any keys in input_data match version iteration pattern
+        for key in input_data.keys():
+            # Check if this key looks like a version iteration: ends with _N where N is digit
+            if "_" in key:
+                parts = key.rsplit("_", 1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    # Check if this matches any input source or is a variant of an input source
+                    if key in input_sources:
+                        # Direct match - this is a version namespace
+                        version_namespaces.append(key)
+                        logger.debug(
+                            f"[VERSION DETECT] '{key}' matches input source - treating as version namespace"
+                        )
+                    else:
+                        # Check if the base name (without _N) is referenced in input sources
+                        base_name = parts[0]
+                        # Check if any input source is a version of this base
+                        has_version_siblings = any(
+                            src.startswith(f"{base_name}_") and src.rsplit("_", 1)[1].isdigit()
+                            for src in input_sources
+                        )
+                        if has_version_siblings:
+                            version_namespaces.append(key)
+                            logger.debug(
+                                f"[VERSION DETECT] '{key}' has version siblings in input_sources - "
+                                f"treating as version namespace"
+                            )
+
+        return version_namespaces
+
+    @staticmethod
     def _extract_allowed_fields_per_dependency(
         dependencies: List[str], context_scope: Optional[Dict], action_name: str = "unknown"
     ) -> Dict[str, Optional[List[str]]]:
@@ -799,28 +859,75 @@ class ContextScopeProcessor:
                     all_deps_for_fields, context_scope, agent_name
                 )
 
-                for input_source_name in input_sources:
-                    allowed_fields = allowed_fields_map.get(input_source_name)
+                # Check if input_data contains nested version namespaces from version_consumption
+                # This happens when upstream action used version_consumption with merge pattern
+                # Structure: {version_1: {fields}, version_2: {fields}, ...}
+                version_namespaces_detected = ContextScopeProcessor._detect_version_namespaces(
+                    input_data, input_sources
+                )
 
-                    if allowed_fields is None:
-                        # Wildcard: Load all fields
-                        field_context[input_source_name] = input_data
-                        logger.debug(
-                            f"[INPUT SOURCE] Loaded '{input_source_name}' with ALL {len(input_data)} fields "
-                            f"from current_item (wildcard)"
-                        )
-                    else:
-                        # Specific fields: Filter
-                        filtered_data = {
-                            field: input_data[field]
-                            for field in allowed_fields
-                            if field in input_data
-                        }
-                        field_context[input_source_name] = filtered_data
-                        logger.debug(
-                            f"[INPUT SOURCE] Loaded '{input_source_name}' with {len(filtered_data)} fields "
-                            f"from current_item: {list(filtered_data.keys())}"
-                        )
+                if version_namespaces_detected:
+                    # Split nested version namespaces into separate top-level namespaces
+                    logger.debug(
+                        f"[VERSION NAMESPACES] Detected nested version namespaces in input_data: "
+                        f"{version_namespaces_detected}"
+                    )
+
+                    for version_name, version_data in input_data.items():
+                        if not isinstance(version_data, dict):
+                            # Not a version namespace, skip
+                            continue
+
+                        if version_name not in version_namespaces_detected:
+                            # Not a detected version namespace, skip
+                            continue
+
+                        # Add as separate namespace in field_context
+                        allowed_fields = allowed_fields_map.get(version_name)
+
+                        if allowed_fields is None:
+                            # Wildcard: Load all fields
+                            field_context[version_name] = version_data
+                            logger.debug(
+                                f"[VERSION NAMESPACE] Loaded '{version_name}' with ALL "
+                                f"{len(version_data)} fields (wildcard)"
+                            )
+                        else:
+                            # Specific fields: Filter
+                            filtered_data = {
+                                field: version_data[field]
+                                for field in allowed_fields
+                                if field in version_data
+                            }
+                            field_context[version_name] = filtered_data
+                            logger.debug(
+                                f"[VERSION NAMESPACE] Loaded '{version_name}' with "
+                                f"{len(filtered_data)} fields: {list(filtered_data.keys())}"
+                            )
+                else:
+                    # No version namespaces detected - use original behavior
+                    for input_source_name in input_sources:
+                        allowed_fields = allowed_fields_map.get(input_source_name)
+
+                        if allowed_fields is None:
+                            # Wildcard: Load all fields
+                            field_context[input_source_name] = input_data
+                            logger.debug(
+                                f"[INPUT SOURCE] Loaded '{input_source_name}' with ALL {len(input_data)} fields "
+                                f"from current_item (wildcard)"
+                            )
+                        else:
+                            # Specific fields: Filter
+                            filtered_data = {
+                                field: input_data[field]
+                                for field in allowed_fields
+                                if field in input_data
+                            }
+                            field_context[input_source_name] = filtered_data
+                            logger.debug(
+                                f"[INPUT SOURCE] Loaded '{input_source_name}' with {len(filtered_data)} fields "
+                                f"from current_item: {list(filtered_data.keys())}"
+                            )
 
             # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
             if context_sources:

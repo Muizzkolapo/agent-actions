@@ -634,6 +634,36 @@ class TestConfigurationErrorHandling:
 
         assert "not in context_scope" in str(exc_info.value)
 
+    def test_template_variable_error_is_reraised(self):
+        """Test that TemplateVariableError is re-raised immediately (code bug, not data error)."""
+        from agent_actions.errors.operations import TemplateVariableError
+        from jinja2 import UndefinedError
+
+        class FailingProcessor(RecordProcessor):
+            def process(self, item, context):
+                raise TemplateVariableError(
+                    missing_variables=["page_content"],
+                    available_variables=["source", "loop"],
+                    agent_name="test_action",
+                    mode="batch",
+                    cause=UndefinedError("'page_content' is undefined"),
+                )
+
+        processor = FailingProcessor(agent_config={}, agent_name="test_action")
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="test_action",
+            agent_indices={"test_action": 0},
+            is_first_stage=False,
+            mode=ProcessingMode.BATCH,
+        )
+
+        # TemplateVariableError should be re-raised, not caught
+        with pytest.raises(TemplateVariableError) as exc_info:
+            processor.process_batch([{"data": "test"}], context)
+
+        assert "page_content" in str(exc_info.value)
+
     def test_other_exceptions_create_failed_results(self):
         """Test that non-ConfigurationError exceptions create failed results."""
 
