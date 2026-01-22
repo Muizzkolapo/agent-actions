@@ -188,13 +188,13 @@ actions:
 
 See [Seed Data](./seed-data.md) for complete documentation.
 
-## Field Prefix Patterns for Loop Consumption
+## Version Namespaces for Loop Consumption
 
-When consuming outputs from version actions, you need a way to reference all version iterations without explicitly listing each one. Field prefix patterns solve this by matching all fields that start with a specific prefix.
+When consuming outputs from version actions, you need a way to reference all version iterations without explicitly listing each one. Version namespaces solve this by creating nested structures for each iteration.
 
-### What Are Field Prefix Patterns?
+### What Are Version Namespaces?
 
-A field prefix pattern is a reference ending with `_` (underscore) that matches all fields starting with that prefix:
+Version namespaces are nested structures created for each version iteration during merge. Instead of flat prefixed fields, each version gets its own namespace:
 
 ```yaml
 context_scope:

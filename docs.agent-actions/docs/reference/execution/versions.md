@@ -130,23 +130,29 @@ actions:
    {"questions": ["Q3a", "Q3b"]}
    ```
 
-3. **Field Prefixing**: Outputs are merged with agent name prefixes to avoid collisions
+3. **Nested Namespaces**: Outputs are merged as nested namespaces to avoid collisions
    ```json
    // Merged output for flatten_questions
    {
-     "extract_raw_qa_1_questions": ["Q1a", "Q1b"],
-     "extract_raw_qa_2_questions": ["Q2a", "Q2b"],
-     "extract_raw_qa_3_questions": ["Q3a", "Q3b"]
+     "extract_raw_qa_1": {
+       "questions": ["Q1a", "Q1b"]
+     },
+     "extract_raw_qa_2": {
+       "questions": ["Q2a", "Q2b"]
+     },
+     "extract_raw_qa_3": {
+       "questions": ["Q3a", "Q3b"]
+     }
    }
    ```
 
-4. **Field Access**: In prompts, access prefixed fields
+4. **Field Access**: In prompts, access fields via version namespace
    ```yaml
    - name: flatten_questions
      prompt: |
-       Strategy 1 questions: {{ extract_raw_qa_1_questions }}
-       Strategy 2 questions: {{ extract_raw_qa_2_questions }}
-       Strategy 3 questions: {{ extract_raw_qa_3_questions }}
+       Strategy 1 questions: {{ extract_raw_qa_1.questions }}
+       Strategy 2 questions: {{ extract_raw_qa_2.questions }}
+       Strategy 3 questions: {{ extract_raw_qa_3.questions }}
 
        Combine and deduplicate these questions.
    ```
@@ -159,11 +165,11 @@ When using `context_scope` with version consumption, use field prefix patterns f
 context_scope:
   observe:
     - extract_raw_qa.*  # In config: wildcard reference
-    # After expansion: extract_raw_qa_  (field prefix pattern)
-    # Matches: extract_raw_qa_1_questions, extract_raw_qa_2_questions, etc.
+    # After expansion: extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3 (as separate namespaces)
+    # Access fields via: extract_raw_qa_1.questions, extract_raw_qa_2.questions, etc.
 ```
 
-The system automatically converts wildcard version references (`extract_raw_qa.*`) to field prefix patterns (`extract_raw_qa_`) during workflow initialization. This ensures that all prefixed fields from version iterations are accessible.
+The system automatically expands wildcard version references (`extract_raw_qa.*`) to individual version namespaces during workflow initialization. This ensures that all fields from version iterations are accessible via their version namespace.
 
 ## Execution Modes
 
@@ -279,9 +285,9 @@ Compare outputs from different models:
     pattern: merge
   prompt: |
     Compare these analyses:
-    Model 1 (OpenAI): {{ model_comparison_1_analysis }}
-    Model 2 (Anthropic): {{ model_comparison_2_analysis }}
-    Model 3 (Google): {{ model_comparison_3_analysis }}
+    Model 1 (OpenAI): {{ model_comparison_1.analysis }}
+    Model 2 (Anthropic): {{ model_comparison_2.analysis }}
+    Model 3 (Google): {{ model_comparison_3.analysis }}
 
     Select the best analysis.
 ```
@@ -363,9 +369,12 @@ When you reference a loop base name in `context_scope`, the system automatically
 
 # After expansion:
 # dependencies: [extract_variants_1, extract_variants_2, extract_variants_3]
-# context_scope:
-#   observe:
-#     - extract_variants_  # Field prefix pattern (matches all prefixed fields)
+# Each version becomes its own namespace in field_context:
+# field_context = {
+#   "extract_variants_1": {...},
+#   "extract_variants_2": {...},
+#   "extract_variants_3": {...}
+# }
 ```
 
 ### Specific Version Iteration
@@ -545,10 +554,10 @@ Loop consumption increases token usage (all outputs in context):
 # Be selective about what to observe
 context_scope:
   observe:
-    - extract_variants_1_summary  # Specific fields only
-    - extract_variants_2_summary
-    - extract_variants_3_summary
-  # Instead of: extract_variants.* (all fields)
+    - extract_variants_1.summary  # Specific fields only
+    - extract_variants_2.summary
+    - extract_variants_3.summary
+  # Instead of: extract_variants.* (all fields from all versions)
 ```
 
 ### Execution Time

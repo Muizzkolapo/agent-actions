@@ -369,24 +369,27 @@ class VersionOutputCorrelator:
         """
         Merge content from multiple version agent records using merge pattern.
 
-        Prefixes each field with the agent name to avoid collisions:
+        Creates nested namespaces for each version iteration:
         - extract_raw_qa_1 output: {"questions": [...]}
         - extract_raw_qa_2 output: {"questions": [...]}
-        - Merged: {"extract_raw_qa_1_questions": [...], "extract_raw_qa_2_questions": [...]}
+        - Merged: {
+            "extract_raw_qa_1": {"questions": [...]},
+            "extract_raw_qa_2": {"questions": [...]}
+          }
+
+        This allows template access via: {{ extract_raw_qa_1.questions }}
 
         Args:
             agent_records: Dict mapping version agent names to their records
 
         Returns:
-            Merged content dictionary with prefixed field names
+            Merged content dictionary with nested version namespaces
         """
         merged_content = {}
         for agent_name, record in agent_records.items():
             content = record.get("content", {})
-            # Prefix each field with agent name to avoid collisions
-            for field_name, field_value in content.items():
-                prefixed_field = f"{agent_name}_{field_name}"
-                merged_content[prefixed_field] = field_value
+            # Create nested namespace for each version iteration
+            merged_content[agent_name] = content
         return merged_content
 
     def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:
