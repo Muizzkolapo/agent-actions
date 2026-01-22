@@ -23,10 +23,19 @@ from agent_actions.logging.core.events import BaseEvent, EventLevel
 
 @pytest.fixture(autouse=True)
 def reset_factory():
-    """Reset LoggerFactory and EventManager before and after each test."""
+    """Reset LoggerFactory and EventManager before and after each test.
+
+    Also clears handlers from the agent_actions logger to ensure test isolation,
+    since logging.getLogger() returns the same logger instance across tests.
+    """
     LoggerFactory.reset()
+    # Clear any handlers from the root agent_actions logger for test isolation
+    root_logger = logging.getLogger("agent_actions")
+    root_logger.handlers.clear()
     yield
     LoggerFactory.reset()
+    # Clear handlers again after test
+    root_logger.handlers.clear()
 
 
 @pytest.fixture
@@ -107,8 +116,10 @@ class TestLoggerFactoryInitialize:
 
         manager = LoggerFactory.get_event_manager()
         inv_id = manager.get_context("invocation_id")
-        assert inv_id is not None
-        assert len(inv_id) == 8
+        assert inv_id is not None, "Generated invocation_id should not be None"
+        # Invocation ID is 8 characters: first 8 hex chars of a UUID4
+        # (uuid4().hex[:8] produces an 8-character hexadecimal string)
+        assert len(inv_id) == 8, f"Expected 8-char invocation_id, got {len(inv_id)}: '{inv_id}'"
 
     def test_initialize_verbose_mode(self):
         """Test initialization with verbose=True."""

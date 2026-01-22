@@ -85,30 +85,32 @@ class TestJSONFileHandlerAccepts:
     def test_accepts_all_levels_with_debug(self, temp_log_file):
         """Test that all levels are accepted with DEBUG min level."""
         handler = JSONFileHandler(temp_log_file, min_level=EventLevel.DEBUG)
+        try:
+            debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
+            info_event = BaseEvent(level=EventLevel.INFO, message="info")
+            warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
+            error_event = BaseEvent(level=EventLevel.ERROR, message="error")
 
-        debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
-        info_event = BaseEvent(level=EventLevel.INFO, message="info")
-        warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
-        error_event = BaseEvent(level=EventLevel.ERROR, message="error")
-
-        assert handler.accepts(debug_event)
-        assert handler.accepts(info_event)
-        assert handler.accepts(warn_event)
-        assert handler.accepts(error_event)
-        handler.close()
+            assert handler.accepts(debug_event)
+            assert handler.accepts(info_event)
+            assert handler.accepts(warn_event)
+            assert handler.accepts(error_event)
+        finally:
+            handler.close()
 
     def test_rejects_below_min_level(self, temp_log_file):
         """Test that events below min level are rejected."""
         handler = JSONFileHandler(temp_log_file, min_level=EventLevel.WARN)
+        try:
+            debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
+            info_event = BaseEvent(level=EventLevel.INFO, message="info")
+            warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
 
-        debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
-        info_event = BaseEvent(level=EventLevel.INFO, message="info")
-        warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
-
-        assert not handler.accepts(debug_event)
-        assert not handler.accepts(info_event)
-        assert handler.accepts(warn_event)
-        handler.close()
+            assert not handler.accepts(debug_event)
+            assert not handler.accepts(info_event)
+            assert handler.accepts(warn_event)
+        finally:
+            handler.close()
 
 
 class TestJSONFileHandlerWrite:
@@ -303,36 +305,42 @@ class TestJSONFileHandlerRotation:
 
     def test_rotation_on_max_size(self, temp_log_file):
         """Test that file rotates when max size is reached."""
-        # Very small max size to trigger rotation
+        # Very small max size (100 bytes) to trigger rotation
+        # Each event serializes to ~120+ bytes, so rotation should occur after first event
         handler = JSONFileHandler(temp_log_file, buffer_size=1, max_file_size=100)
+        try:
+            # Write events that exceed max_file_size to trigger rotation
+            # Using consistent message size for deterministic behavior
+            message = "x" * 80  # Fixed-size message to ensure predictable event size
+            for i in range(5):
+                event = BaseEvent(message=f"{i}-{message}")
+                handler.handle(event)
+        finally:
+            handler.close()
 
-        # Write enough to exceed max size
-        for i in range(10):
-            event = BaseEvent(message=f"message {i} with some extra content to fill space")
-            handler.handle(event)
-
-        handler.close()
-
-        # Check that rotated file exists
+        # Check that at least one rotated file exists (rotation should have occurred)
         rotated_files = list(temp_log_file.parent.glob("test.*.json"))
-        assert len(rotated_files) >= 1
+        assert len(rotated_files) >= 1, (
+            f"Expected at least 1 rotated file, found {len(rotated_files)}. "
+            f"Files in directory: {list(temp_log_file.parent.iterdir())}"
+        )
 
     def test_rotation_renames_file(self, temp_log_file):
         """Test that rotation renames file with timestamp."""
         handler = JSONFileHandler(temp_log_file, buffer_size=1, max_file_size=50)
-
-        # Write enough to trigger rotation
-        for i in range(5):
-            event = BaseEvent(message=f"message {i}")
-            handler.handle(event)
-
-        handler.close()
+        try:
+            # Write enough to trigger rotation
+            for i in range(5):
+                event = BaseEvent(message=f"message {i}")
+                handler.handle(event)
+        finally:
+            handler.close()
 
         # Rotated files should have timestamp in name
         rotated_files = list(temp_log_file.parent.glob("test.*.json"))
         for f in rotated_files:
             # Should match pattern like test.20240115_103045.json
-            assert "test." in f.name
+            assert "test." in f.name, f"Rotated file {f.name} should contain 'test.'"
 
 
 class TestJSONFileHandlerThreadSafety:

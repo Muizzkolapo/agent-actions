@@ -77,9 +77,11 @@ class TestEventManagerSingleton:
         for t in threads:
             t.join()
 
-        assert len(errors) == 0
-        assert len(instances) == 10
-        assert all(i is instances[0] for i in instances)
+        assert len(errors) == 0, f"Expected no errors, got: {errors}"
+        assert len(instances) == 10, f"Expected 10 instances from threads, got {len(instances)}"
+        assert all(i is instances[0] for i in instances), (
+            "All instances should be the same singleton object"
+        )
 
     def test_reset_creates_new_instance(self):
         """Test that reset() creates a new singleton instance."""
