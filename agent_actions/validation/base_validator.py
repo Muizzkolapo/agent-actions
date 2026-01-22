@@ -5,9 +5,18 @@ Provides common validation infrastructure including error/warning collection
 and utility methods for path validation.
 """
 
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, List, Dict, Optional
+
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ValidationCompleteEvent,
+    ValidationErrorEvent,
+    ValidationStartEvent,
+    ValidationWarningEvent,
+)
 
 
 class BaseValidator(ABC):
@@ -20,10 +29,24 @@ class BaseValidator(ABC):
     implement the `validate` method to perform their specific checks.
     """
 
-    def __init__(self) -> None:
-        """Initializes the validator with empty error and warning lists."""
+    def __init__(self, fire_events: bool = True) -> None:
+        """Initializes the validator with empty error and warning lists.
+
+        Args:
+            fire_events: Whether to fire validation events. Defaults to True.
+                         Set to False to disable event firing (useful for testing
+                         or when validation is called from within other validators).
+        """
         self._errors: List[str] = []
         self._warnings: List[str] = []
+        self._validation_target: str = ""
+        self._validation_start_time: float = 0.0
+        self._fire_events: bool = fire_events
+
+    @property
+    def validator_name(self) -> str:
+        """Return the validator name for event logging."""
+        return self.__class__.__name__
 
     @abstractmethod
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
@@ -47,13 +70,31 @@ class BaseValidator(ABC):
         """
         raise NotImplementedError("Subclasses must implement validate()")
 
-    def add_error(self, message: str) -> None:
-        """Adds a validation error message to the internal list."""
+    def add_error(self, message: str, field: str = "", value: Any = None) -> None:
+        """Adds a validation error message to the internal list and fires an event."""
         self._errors.append(message)
+        if self._fire_events:
+            fire_event(
+                ValidationErrorEvent(
+                    target=self._validation_target or self.validator_name,
+                    field=field,
+                    error=message,
+                    value=value,
+                )
+            )
 
-    def add_warning(self, message: str) -> None:
-        """Adds a validation warning message to the internal list."""
+    def add_warning(self, message: str, field: str = "", value: Any = None) -> None:
+        """Adds a validation warning message to the internal list and fires an event."""
         self._warnings.append(message)
+        if self._fire_events:
+            fire_event(
+                ValidationWarningEvent(
+                    target=self._validation_target or self.validator_name,
+                    field=field,
+                    warning=message,
+                    value=value,
+                )
+            )
 
     def get_errors(self) -> List[str]:
         """Returns a list of all validation errors recorded."""
@@ -80,7 +121,7 @@ class BaseValidator(ABC):
         """
         return bool(self._errors)
 
-    def _prepare_validation(self, data: Any) -> bool:
+    def _prepare_validation(self, data: Any, target: str = "") -> bool:
         """
         Common validation preparation: clear errors/warnings and check dict type.
 
@@ -88,6 +129,7 @@ class BaseValidator(ABC):
 
         Args:
             data: Data to validate (should be a dict)
+            target: Target name for validation events
 
         Returns:
             bool: True if data is a dict and validation can proceed,
@@ -95,10 +137,44 @@ class BaseValidator(ABC):
         """
         self.clear_errors()
         self.clear_warnings()
+        self._validation_target = target or self.validator_name
+        self._validation_start_time = time.time()
+
+        if self._fire_events:
+            fire_event(
+                ValidationStartEvent(
+                    target=self._validation_target,
+                    validator=self.validator_name,
+                )
+            )
+
         if not isinstance(data, dict):
             self.add_error("Validation data must be a dictionary.")
             return False
         return True
+
+    def _complete_validation(self) -> bool:
+        """
+        Complete validation and fire the completion event.
+
+        Returns:
+            bool: True if validation passed (no errors), False otherwise.
+        """
+        elapsed_time = time.time() - self._validation_start_time
+        has_errors = self.has_errors()
+
+        if self._fire_events:
+            fire_event(
+                ValidationCompleteEvent(
+                    target=self._validation_target,
+                    validator=self.validator_name,
+                    elapsed_time=elapsed_time,
+                    warning_count=len(self._warnings),
+                    error_count=len(self._errors),
+                )
+            )
+
+        return not has_errors
 
     # --- Static Utility Helper Methods ---
     @staticmethod

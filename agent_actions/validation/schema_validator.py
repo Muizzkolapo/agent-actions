@@ -73,37 +73,58 @@ class SchemaValidator(BaseValidator):
         if agent_name:
             display_name += f" for agent '{agent_name}'"
         if not self._ensure_path_exists(file_path):
-            self.add_error(f"Schema file '{file_path.name}' not found at path: {file_path}.")
+            self.add_error(
+                f"Schema file '{file_path.name}' not found at path: {file_path}.",
+                field=schema_name,
+                value=str(file_path),
+            )
             return
         if not self._is_file(file_path):
-            self.add_error(f"Schema path '{file_path}' exists but is not a file.")
+            self.add_error(
+                f"Schema path '{file_path}' exists but is not a file.",
+                field=schema_name,
+                value=str(file_path),
+            )
             return
         if not os.access(file_path, os.R_OK):
-            self.add_error(f"Schema file '{file_path.name}' is not readable.")
+            self.add_error(
+                f"Schema file '{file_path.name}' is not readable.",
+                field=schema_name,
+                value=str(file_path),
+            )
             return
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 schema_data = json.load(f)
         except json.JSONDecodeError as e:
-            self.add_error(f"Invalid JSON in {display_name} (file: {file_path.name}): {e}.")
+            self.add_error(
+                f"Invalid JSON in {display_name} (file: {file_path.name}): {e}.",
+                field=schema_name,
+            )
             return
         except (OSError, ValueError) as e:
-            self.add_error(f"Could not read or parse {display_name} (file: {file_path.name}): {e}.")
+            self.add_error(
+                f"Could not read or parse {display_name} (file: {file_path.name}): {e}.",
+                field=schema_name,
+            )
             return
         if not self._is_valid_json_schema_structure(schema_data):
             self.add_error(
                 f"{display_name} (file: {file_path.name}) does not appear to be "
                 f"a valid JSON Schema document. It should have properties like "
-                f"'type', 'properties', etc."
+                f"'type', 'properties', etc.",
+                field=schema_name,
             )
         try:
             self._validate_against_meta_schema_static(schema_data)
         except jsonschema.exceptions.ValidationError as e:
             error_path = " -> ".join(map(str, e.path))
             context_msg = f" (at path: '{error_path}')" if e.path else ""
+            field_name = error_path if error_path else schema_name
             self.add_error(
                 f"{display_name} (file: {file_path.name}) is not a valid "
-                f"JSON Schema: {e.message}{context_msg}."
+                f"JSON Schema: {e.message}{context_msg}.",
+                field=field_name,
             )
         except (OSError, ValueError, TypeError) as e:
             logger.exception(
@@ -117,11 +138,15 @@ class SchemaValidator(BaseValidator):
             )
             self.add_error(
                 f"Unexpected error during meta-schema validation for "
-                f"{display_name} (file: {file_path.name}): {e}"
+                f"{display_name} (file: {file_path.name}): {e}",
+                field=schema_name,
             )
         common_issues = self._check_common_schema_issues_static(schema_data, schema_name)
         for issue in common_issues:
-            self.add_error(f"Issue in {display_name} (file: {file_path.name}): {issue}.")
+            self.add_error(
+                f"Issue in {display_name} (file: {file_path.name}): {issue}.",
+                field=schema_name,
+            )
         logger.debug("Successfully processed schema file: %s", file_path.name)
 
     @staticmethod
@@ -251,28 +276,48 @@ class SchemaValidator(BaseValidator):
         Returns:
             bool: True if all schema validations pass, False otherwise.
         """
-        if not self._prepare_validation(data):
-            return False
-        agent_name = data.get("agent_name")
+        agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
+        target = f"schema:{agent_name}" if agent_name else "schema"
+
+        if not self._prepare_validation(data, target=target):
+            return self._complete_validation()
+
         schema_dir = data.get("schema_dir")
         schema_files_to_validate = data.get("schema_files")
         if not isinstance(agent_name, str) or not agent_name:
-            self.add_error("Data field 'agent_name' (string) is required.")
+            self.add_error(
+                "Data field 'agent_name' (string) is required.",
+                field="agent_name",
+            )
         if not isinstance(schema_dir, Path):
-            self.add_error("Data field 'schema_dir' (Path object) is required.")
+            self.add_error(
+                "Data field 'schema_dir' (Path object) is required.",
+                field="schema_dir",
+            )
         if schema_files_to_validate is not None and (
             not isinstance(schema_files_to_validate, list)
             or not all(isinstance(f, str) for f in schema_files_to_validate)
         ):
-            self.add_error("Data field 'schema_files' must be a list of strings if provided.")
+            self.add_error(
+                "Data field 'schema_files' must be a list of strings if provided.",
+                field="schema_files",
+            )
         if self.has_errors():
-            return False
+            return self._complete_validation()
         if not self._ensure_path_exists(schema_dir):
-            self.add_error(f"Schema directory does not exist: {schema_dir}")
-            return False
+            self.add_error(
+                f"Schema directory does not exist: {schema_dir}",
+                field="schema_dir",
+                value=str(schema_dir),
+            )
+            return self._complete_validation()
         if not self._is_directory(schema_dir):
-            self.add_error(f"Schema path is not a directory: {schema_dir}")
-            return False
+            self.add_error(
+                f"Schema path is not a directory: {schema_dir}",
+                field="schema_dir",
+                value=str(schema_dir),
+            )
+            return self._complete_validation()
         logger.debug(
             "Starting schema validation for agent '%s' in directory: %s", agent_name, schema_dir
         )
@@ -282,13 +327,14 @@ class SchemaValidator(BaseValidator):
             files_to_process = list(schema_dir.glob("*.json"))
             if not files_to_process:
                 self.add_warning(
-                    f"No .json schema files found in {schema_dir} for agent '{agent_name}'."
+                    f"No .json schema files found in {schema_dir} for agent '{agent_name}'.",
+                    field="schema_files",
                 )
-                return True
+                return self._complete_validation()
         for file_path in files_to_process:
             self._process_schema_file(file_path, file_path.name, agent_name)
         logger.debug("Schema validation complete for agent '%s'.", agent_name)
-        return not self.has_errors()
+        return self._complete_validation()
 
     def _check_type_compatibility(
         self,
