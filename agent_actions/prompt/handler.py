@@ -1,12 +1,10 @@
 """Module for loading and managing prompts from markdown files."""
 
 import re
-import json
-import random
 import logging
 from collections import Counter
 from pathlib import Path
-from typing import Any, List
+from typing import List
 from agent_actions.output.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
@@ -124,39 +122,3 @@ class PromptLoader:
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
         PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)
         return PromptLoader.extract_prompt(content, prompt_key)
-
-    @staticmethod
-    def load_few_shot_samples(
-        few_shot_samples_path: str, agent_type: str, sample_count: int = 3
-    ) -> List[Any]:
-        """
-        Load random sample objects from JSON files in the sample output directory.
-
-        Parameters:
-            few_shot_samples_path (str): Base path to the sample output directory.
-            agent_type (str): The type of the agent to load samples for.
-            sample_count (int): Number of random sample objects to load.
-
-        Returns:
-            List[Any]: List of randomly selected sample objects.
-        """
-        if not few_shot_samples_path:
-            logger.warning("Few shot samples path is not set; returning no samples.")
-            return []
-        agent_samples_path = Path(few_shot_samples_path) / agent_type
-        if not agent_samples_path.exists():
-            return []
-        sample_files = list(agent_samples_path.glob("*.json"))
-        all_samples: List[Any] = []
-        for sample_file in sample_files:
-            try:
-                data = json.loads(sample_file.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    all_samples.extend(data)
-                elif isinstance(data, dict):
-                    all_samples.append(data)
-            except Exception as e:
-                raise ValueError(f"Error reading sample file '{sample_file}': {e}") from e
-        if sample_count > 0 and all_samples:
-            return random.sample(all_samples, min(sample_count, len(all_samples)))
-        return []

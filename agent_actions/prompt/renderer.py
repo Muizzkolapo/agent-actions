@@ -320,7 +320,6 @@ class ConfigRenderingService:
             "dependencies": [],
             "granularity": action.get("granularity", "record"),
             "run_mode": "online",
-            "few_shot": action.get("few_shot", 0),
             "json_mode": action.get("json_mode", True),
         }
 

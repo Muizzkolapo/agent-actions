@@ -18,7 +18,6 @@ class AgentEntryDict(TypedDict, total=False):
     schema_name: Optional[str]
     chunk_config: Dict[str, Any]
     is_operational: bool
-    few_shot: int
     conditional_clause: Optional[str]
     where_clause: Optional[Dict[str, Any]]
     skip_if: Optional[str]

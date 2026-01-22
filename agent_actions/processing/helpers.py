@@ -144,7 +144,7 @@ def run_dynamic_agent(
         agent_name: Name of the agent being executed
         context: Original data context for guard evaluation and tools/UDFs.
                  May be flat dict or nested structure with 'content' key.
-        formatted_prompt: Formatted prompt for the agent (already has few-shot samples)
+        formatted_prompt: Formatted prompt for the agent
         tools_path: Optional path to tool functions
         tool_args: Optional tool arguments
         source_content: Optional source content

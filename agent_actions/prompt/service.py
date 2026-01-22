@@ -12,7 +12,6 @@ from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 from agent_actions.errors import TemplateVariableError
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.prompt.prompt_utils import PromptUtils
-from agent_actions.prompt.enricher import SampleEnricher
 from agent_actions.prompt.context.scope import ContextScopeProcessor
 from agent_actions.prompt.context.builder import LLMContextBuilder
 from agent_actions.prompt.context.static_loader import (
@@ -68,7 +67,7 @@ class PromptPreparationResult:
 
     Attributes:
         formatted_prompt: Fully rendered prompt ready for LLM (with field references replaced,
-                         function outputs injected, and few-shot samples appended)
+                         function outputs injected)
         llm_context: Full context dict for LLM (JSON serializable), includes:
                     - Base content (row_content in batch, processed_context in realtime)
                     - Fields from context_scope.observe
@@ -199,7 +198,7 @@ class PromptPreparationService:
         4. Build LLM context (mode-specific)
         5. Replace field references ({action.field})
         6. Inject function outputs (batch mode only)
-        7. Append few-shot samples
+        7. Finalize formatted prompt
 
         Args:
             request: PromptPreparationRequest with all parameters
@@ -315,11 +314,7 @@ class PromptPreparationService:
             )
             logger.debug("Injected function outputs for dispatch_task()")
 
-        # Step 7: Append few-shot samples
-        formatted_prompt = SampleEnricher.append_few_shot_samples(
-            formatted_prompt, request.agent_config, request.agent_name
-        )
-        logger.debug("Appended few-shot samples")
+        # Step 7: Finalize formatted prompt
 
         # Build metadata for debugging
         metadata = {

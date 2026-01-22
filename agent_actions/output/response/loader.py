@@ -32,7 +32,7 @@ class SchemaLoader:
             set: Set of schema names, or empty set if an error occurs
         """
         try:
-            agent_config_dir, _, _ = FileHandler.get_agent_paths(agent_name)
+            agent_config_dir, _ = FileHandler.get_agent_paths(agent_name)
             agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
             current_dir = Path.cwd()
             template_dir = current_dir / "templates"

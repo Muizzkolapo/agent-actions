@@ -575,7 +575,6 @@ def _init_fields():
         ConfigField("is_operational", default=True, type_hint=bool),
         ConfigField("json_mode", default=True, type_hint=bool),
         ConfigField("prompt_debug", default=False, type_hint=bool),
-        ConfigField("few_shot", default=0, type_hint=int),
         ConfigField("output_field", default="raw_response"),
         ConfigField("side_output", default=False, type_hint=bool),
         ConfigField("reprompt", default=False, type_hint=bool),

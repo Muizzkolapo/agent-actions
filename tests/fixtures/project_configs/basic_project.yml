@@ -9,6 +9,5 @@ default_agent_config:
   run_mode: online
   json_mode: false
   granularity: record
-  few_shot: 2
 
 tool_path: "project_tools/"

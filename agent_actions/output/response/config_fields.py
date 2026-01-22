@@ -26,7 +26,6 @@ SIMPLE_CONFIG_FIELDS = {
     # LLM configuration
     "json_mode": True,  # Default: True (JSON-based system)
     "prompt_debug": False,  # Default: False (no debug output)
-    "few_shot": 0,  # Default: 0 (no few-shot examples)
     "output_field": "raw_response",  # Default: 'raw_response' (for non-JSON vendors like Ollama)
     # Tool configuration
     "side_output": False,  # Default: False (tool-specific conditional output)
@@ -70,7 +69,6 @@ def inherit_simple_fields(
                 'is_operational': True,       # From hardcoded default
                 'json_mode': True,            # From action (overrides default)
                 'prompt_debug': False,        # From hardcoded default
-                'few_shot': 0                 # From hardcoded default
             }
     """
     for field, default_value in SIMPLE_CONFIG_FIELDS.items():

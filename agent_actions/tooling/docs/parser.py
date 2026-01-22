@@ -162,7 +162,6 @@ class WorkflowParser:
             action["drops"] = action_data.get("drops", [])  # Fields excluded from prompt
             action["observe"] = action_data.get("observe", [])  # Pass-through fields
             action["policy"] = action_data.get("policy")  # Execution policy
-            action["few_shot"] = action_data.get("few_shot")  # Few-shot example count
             action["prompt"] = action_data.get("prompt")  # Prompt reference
             action["idempotency_key"] = action_data.get("idempotency_key")
 
