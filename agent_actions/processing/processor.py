@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.errors.operations import TemplateVariableError
 from .enrichment import EnrichmentPipeline
 from .recovery.retry import RetryService, create_retry_service_from_config
 from .types import (
@@ -238,6 +239,10 @@ class RecordProcessor:
             except ConfigurationError:
                 # ConfigurationError indicates a fundamental workflow misconfiguration
                 # Re-raise immediately to fail the workflow - these cannot be recovered
+                raise
+            except TemplateVariableError:
+                # TemplateVariableError indicates a code bug (undefined template variables)
+                # Re-raise immediately to fail the workflow - these are not data errors
                 raise
             except Exception as e:
                 # Create failed result instead of propagating exception

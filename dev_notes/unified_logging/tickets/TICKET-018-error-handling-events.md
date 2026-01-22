@@ -17,8 +17,41 @@ Add comprehensive error event instrumentation across the codebase. Many error ha
 - [ ] Add guard/filter evaluation error events
 - [ ] Add retry/recovery error events
 - [ ] Fix executor error event gap (CRITICAL)
+- [x] Fix processor error event gap (CRITICAL) - TemplateVariableError now re-raises
 
-## Critical Gap: Executor Error Handling
+## Critical Gap 1: Processor Template Error Handling (FIXED)
+
+**File:** `agent_actions/processing/processor.py` (lines 239-248)
+
+**Issue:** Processor caught TemplateVariableError as generic Exception and swallowed it, allowing workflow to report success despite template errors.
+
+**Fix Applied (2026-01-22):**
+```python
+except ConfigurationError:
+    # Re-raise immediately to fail the workflow
+    raise
+except TemplateVariableError:
+    # Template errors are code bugs, not data errors
+    # Re-raise immediately to fail the workflow
+    raise
+except Exception as e:
+    # Only catch transient/data errors here
+    ...
+```
+
+**Remaining Work:** Add event firing before re-raise:
+```python
+except TemplateVariableError as e:
+    # TODO: Add event firing (TICKET-018)
+    fire_event(TemplateRenderingFailedEvent(
+        agent_name=context.agent_name,
+        missing_variables=e.missing_variables,
+        error_message=str(e),
+    ))
+    raise
+```
+
+## Critical Gap 2: Executor Error Handling
 
 **File:** `agent_actions/workflow/executor.py` (lines 533-571, 683-721)
 
@@ -37,6 +70,53 @@ except (OSError, IOError, ValueError, TypeError, KeyError, RuntimeError, Attribu
     ))
 
     raise
+```
+
+## Template Rendering Error Events
+
+### Files to modify:
+- `agent_actions/processing/processor.py` (lines 243-248) - PARTIAL: Re-raise added, event firing needed
+- `agent_actions/prompt/service.py` - May have other template rendering errors
+
+### Event types:
+
+```python
+class TemplateRenderingFailedEvent(ErrorLevel, BaseEvent):
+    """T001 - Template rendering failed due to undefined variables"""
+    def __init__(self, agent_name: str, missing_variables: List[str], error_message: str):
+        super().__init__(
+            message=f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}",
+            category="template",
+            data={
+                "agent_name": agent_name,
+                "missing_variables": missing_variables,
+                "error_message": error_message,
+            },
+        )
+
+class TemplateSyntaxError(ErrorLevel, BaseEvent):
+    """T002 - Template syntax error"""
+    def __init__(self, agent_name: str, error: str):
+        super().__init__(
+            message=f"Template syntax error in '{agent_name}': {error}",
+            category="template",
+            data={"agent_name": agent_name, "error": error},
+        )
+```
+
+### Example (processor.py:243-248):
+```python
+except TemplateVariableError as e:
+    logger.error(f"[{context.agent_name}] Template error: {str(e)}")
+
+    # ADD THIS:
+    fire_event(TemplateRenderingFailedEvent(
+        agent_name=context.agent_name,
+        missing_variables=e.missing_variables,
+        error_message=str(e),
+    ))
+
+    raise  # Already added - re-raises to fail workflow
 ```
 
 ## LLM Error Events
@@ -205,15 +285,19 @@ class RecoveryError(ErrorLevel, BaseEvent):
 
 ## Priority Order
 
-1. **CRITICAL**: Fix executor.py AgentFailedEvent gap
-2. **HIGH**: LLM error events (JSON parse, connection, server)
-3. **HIGH**: Batch processing error events
-4. **MEDIUM**: Data loading/parsing errors
-5. **MEDIUM**: Guard evaluation errors
-6. **MEDIUM**: Retry/recovery errors
+1. ~~**CRITICAL**: Fix processor.py TemplateVariableError gap~~ ✅ FIXED (2026-01-22)
+2. **CRITICAL**: Fix executor.py AgentFailedEvent gap
+3. **HIGH**: Add template rendering event firing (processor.py)
+4. **HIGH**: LLM error events (JSON parse, connection, server)
+5. **HIGH**: Batch processing error events
+6. **MEDIUM**: Data loading/parsing errors
+7. **MEDIUM**: Guard evaluation errors
+8. **MEDIUM**: Retry/recovery errors
 
 ## Acceptance Criteria
 
+- [x] Processor re-raises TemplateVariableError (fails workflow)
+- [ ] Processor fires TemplateRenderingFailedEvent before re-raise
 - [ ] Executor fires AgentFailedEvent on exceptions
 - [ ] All LLM errors fire events before logging/wrapping
 - [ ] Batch errors have event visibility
@@ -221,3 +305,4 @@ class RecoveryError(ErrorLevel, BaseEvent):
 - [ ] Guard evaluation failures fire events
 - [ ] Retry exhaustion fires events
 - [ ] Tests verify event firing for all error paths
+- [ ] Tests verify template errors fail workflow (not swallowed)
