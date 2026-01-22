@@ -8,7 +8,9 @@ import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List, Callable, Union
 
+from agent_actions.logging import fire_event
 from agent_actions.logging.context import CorrelationContext
+from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
@@ -244,17 +246,14 @@ class BatchSubmissionService:
             # Set batch_id in correlation context
             CorrelationContext.set_batch(batch_id)
 
-            # Log submission
-            logger.info(
-                "Batch job submitted",
-                extra={
-                    "operation": "submit_batch_job",
-                    "batch_id": batch_id,
-                    "batch_name": batch_name,
-                    "batch_size": len(tasks),
-                    "provider": provider_type,
-                    "initial_status": initial_status,
-                },
+            # Fire batch submitted event (B001)
+            fire_event(
+                BatchSubmittedEvent(
+                    batch_id=batch_id,
+                    agent_name=batch_name or "default",
+                    request_count=len(tasks),
+                    provider=provider_type,
+                )
             )
 
             # Save to registry

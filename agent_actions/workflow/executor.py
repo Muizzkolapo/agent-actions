@@ -380,6 +380,7 @@ class AgentExecutor:
             fire_event(BatchCompleteEvent(
                 batch_id=agent_config.get("batch_id", ""),
                 agent_name=agent_name,
+                total=1,
                 completed=1,
                 failed=0,
                 elapsed_time=duration,
@@ -409,6 +410,7 @@ class AgentExecutor:
         fire_event(BatchCompleteEvent(
             batch_id=agent_config.get("batch_id", ""),
             agent_name=agent_name,
+            total=1,
             completed=0,
             failed=1,
             elapsed_time=duration,

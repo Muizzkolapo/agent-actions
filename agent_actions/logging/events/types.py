@@ -333,6 +333,7 @@ class BatchCompleteEvent(BaseEvent):
 
     batch_id: str = ""
     agent_name: str = ""
+    total: int = 0
     completed: int = 0
     failed: int = 0
     elapsed_time: float = 0.0
@@ -346,6 +347,7 @@ class BatchCompleteEvent(BaseEvent):
         self.data = {
             "batch_id": self.batch_id,
             "agent_name": self.agent_name,
+            "total": self.total,
             "completed": self.completed,
             "failed": self.failed,
             "elapsed_time": self.elapsed_time,

@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Set
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import BatchProgressEvent, BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 from agent_actions.output.writer import FileWriter
 from agent_actions.utils.path_utils import ensure_directory_exists, create_side_output_directory
@@ -311,6 +313,8 @@ class BatchProcessingService:
         Returns:
             Output file path if successful, None if no results
         """
+        start_time = time.time()
+
         context_map = self._context_manager.load_batch_context_map(
             output_directory, file_name or "default"
         )
@@ -374,18 +378,22 @@ class BatchProcessingService:
         output_file = self._determine_output_path(output_directory, file_name, batch_id)
         self._write_batch_output(output_file, main_output, side_output_data, output_directory)
 
-        # Log completion
-        logger.info(
-            "Batch job completed and processed",
-            extra={
-                "operation": "process_batch_results",
-                "batch_id": batch_id,
-                "file_name": file_name,
-                "results_count": len(batch_results),
-                "main_output_count": (len(main_output) if isinstance(main_output, list) else 1),
-                "side_output_count": len(side_output_data) if side_output_data else 0,
-                "output_file": str(output_file),
-            },
+        # Calculate completion statistics
+        elapsed_time = time.time() - start_time
+        total_count = len(batch_results)
+        successful_count = sum(1 for r in batch_results if r.success)
+        failed_count = total_count - successful_count
+
+        # Fire batch complete event (B003)
+        fire_event(
+            BatchCompleteEvent(
+                batch_id=batch_id,
+                agent_name=file_name or "default",
+                total=total_count,
+                completed=successful_count,
+                failed=failed_count,
+                elapsed_time=elapsed_time,
+            )
         )
 
         return str(output_file)
@@ -711,7 +719,9 @@ class BatchProcessingService:
             )
 
             # Wait for completion (simple polling)
-            status = self._wait_for_batch_completion(provider, retry_batch_id)
+            status = self._wait_for_batch_completion(
+                provider, retry_batch_id, total_items=len(prepared.tasks)
+            )
             if status != BatchStatus.COMPLETED:
                 logger.warning(
                     "Retry batch %s did not complete successfully: %s",
@@ -733,21 +743,72 @@ class BatchProcessingService:
         batch_id: str,
         timeout_seconds: int = 3600,
         poll_interval: int = 30,
+        total_items: int = 0,
     ) -> BatchStatus:
         """Wait for batch to complete with polling.
+
+        Fires BatchProgressEvent at intervals:
+        - Every 10% completion
+        - Every 60 seconds (whichever comes first)
 
         Args:
             provider: Batch API client
             batch_id: Batch job ID
             timeout_seconds: Maximum time to wait (default 1 hour)
             poll_interval: Seconds between status checks
+            total_items: Total items in batch (for progress tracking)
 
         Returns:
             Final batch status
         """
         start_time = time.time()
+        last_progress_time = start_time
+        last_progress_pct = 0
+        progress_interval = 60  # Fire progress event at least every 60 seconds
+
         while (time.time() - start_time) < timeout_seconds:
             status = provider.check_status(batch_id)
+
+            # Try to get progress info from provider if available
+            completed = 0
+            failed = 0
+            if hasattr(provider, "get_batch_progress"):
+                try:
+                    progress = provider.get_batch_progress(batch_id)
+                    completed = progress.get("completed", 0)
+                    failed = progress.get("failed", 0)
+                except Exception:
+                    pass  # Progress tracking is optional
+
+            # Calculate progress percentage
+            current_pct = (completed / total_items * 100) if total_items > 0 else 0
+            current_time = time.time()
+            time_since_last_progress = current_time - last_progress_time
+
+            # Fire progress event if:
+            # - Progress increased by 10% or more
+            # - 60 seconds have passed since last event
+            should_fire_progress = (
+                total_items > 0
+                and (
+                    current_pct - last_progress_pct >= 10
+                    or time_since_last_progress >= progress_interval
+                )
+                and completed > 0
+            )
+
+            if should_fire_progress:
+                fire_event(
+                    BatchProgressEvent(
+                        batch_id=batch_id,
+                        completed=completed,
+                        total=total_items,
+                        failed=failed,
+                    )
+                )
+                last_progress_time = current_time
+                last_progress_pct = current_pct
+
             if status in (BatchStatus.COMPLETED, BatchStatus.FAILED, BatchStatus.CANCELLED):
                 return status
             logger.debug("Retry batch %s status: %s, waiting...", batch_id, status)
@@ -997,7 +1058,9 @@ class BatchProcessingService:
                 )
 
                 # Wait for completion
-                final_status = self._wait_for_batch_completion(provider, batch_id)
+                final_status = self._wait_for_batch_completion(
+                    provider, batch_id, total_items=len(result.tasks)
+                )
 
                 if final_status != BatchStatus.COMPLETED:
                     logger.error(
