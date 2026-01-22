@@ -1,0 +1,459 @@
+{
+  // ========================================
+  // CODING ASSISTANT INFORMATION & CONTEXT
+  // ========================================
+  // For future AI assistants working on this documentation project:
+  //
+  // KEY CONTEXT:
+  // - Agent Actions is positioned as platform infrastructure (NOT single-use tool)
+  // - Documentation uses "dbt-style" approach: schema-first, component reusability, best practices
+  // - Avoid analogies like "Airflow for AI" or "dbt for AI" - let product stand on own merits
+  //
+  // CONFIDENTIALITY CONSTRAINTS:
+  // - NEVER mention "QANALabs" or any specific customer names
+  // - Use generic terms: "enterprise customer", "production example", "real-world implementation"
+  // - All examples derived from enterprise_structure_reference.md (anonymized)
+  //
+  // CURRENT STRUCTURE PHILOSOPHY:
+  // - Keep user-friendly structure vs over-engineering
+  // - Current docs/ organization is COMPLETE and working
+  // - Only add complexity when content volume justifies it
+  // - Platform positioning successfully achieved in docs/platform/
+  //
+  // POSITIONING PRINCIPLES:
+  // - Multi-agent coordination pain point → Agent Actions solution
+  // - YAML-native, schema-validated, deterministic execution
+  // - Component reusability across multiple workflows
+  // - "If building 2+ agents that need coordination, you need Agent Actions"
+  //
+  // TECHNICAL APPROACH:
+  // - Focus on platform patterns, not business logic
+  // - Use generic examples (content_generation vs quiz_generation)
+  // - Emphasize DAG workflows, schema validation, component sharing
+  //
+  // STATUS: Documentation foundation complete. Next priorities in plan below.
+  // ========================================
+
+  // ========================================
+  // Agent Actions Documentation Plan
+  // Platform-focused documentation based on enterprise real-world usage
+  // Positioning: Infrastructure platform for building AI workflows
+  // ========================================
+
+  "positioning": {
+    "tagline": "Build, deploy, and scale AI agent workflows with YAML-native infrastructure",
+    "elevator_pitch": "Agent Actions is a platform for creating deterministic, schema-validated AI agent pipelines. Like Airflow orchestrates data workflows, Agent Actions orchestrates AI agent workflows.",
+    "target_audience": [
+      "AI Engineers building production agent systems",
+      "Data Scientists creating repeatable AI pipelines",
+      "MLOps teams scaling AI workflows",
+      "Platform teams building AI infrastructure"
+    ]
+  },
+
+  // ========================================
+  // CORE VALUE PROPOSITIONS
+  // ========================================
+
+  "core_value_props": {
+    "platform_not_tool": "Infrastructure for building multiple AI workflows, not a single-use solution",
+    "reusable_components": "Shared schemas, prompts, tools, and templates across workflows",
+    "deterministic_execution": "Same inputs always produce same outputs (unlike autonomous agents)",
+    "yaml_native": "Declarative workflow definition without complex Python abstractions",
+    "enterprise_ready": "Batch processing, custom tools, monitoring, and extensibility"
+  },
+
+  // ========================================
+  // DOCUMENTATION STRUCTURE
+  // ========================================
+
+  "documentation_structure": {
+    "getting_started": {
+      "path": "docs/getting-started.md",
+      "purpose": "Quick platform overview and first workflow",
+      "status": "complete",
+      "existing_file": true,
+      "content": [
+        "What is Agent Actions (platform overview)",
+        "Installing the CLI and setting up first project",
+        "Creating your first agent workflow",
+        "Running and monitoring workflows",
+        "Understanding the project structure"
+      ]
+    },
+
+    "docs_homepage": {
+      "path": "docs/index.md",
+      "purpose": "Main documentation landing page",
+      "status": "complete",
+      "existing_file": true,
+      "content": [
+        "Agent Actions overview and value proposition",
+        "Quick navigation to key documentation sections",
+        "Platform positioning content"
+      ]
+    },
+
+    "installation": {
+      "path": "docs/installation.md",
+      "purpose": "Installation instructions",
+      "status": "complete",
+      "existing_file": true,
+      "content": [
+        "Installation steps and requirements"
+      ]
+    },
+
+    "platform_concepts": {
+      "path": "docs/platform/",
+      "purpose": "Core platform understanding and organization",
+      "status": "complete",
+      "pages": {
+        "index.md": {"description": "Platform overview and architecture", "status": "complete", "existing_file": true},
+        "project-structure.md": {"description": "How to organize agent_actions.yml, workflows, schemas, tools", "status": "complete", "existing_file": true}
+      },
+      "future_expansion": {
+        "workflow-lifecycle.md": {"description": "From definition to deployment and execution", "priority": "medium"},
+        "agent-dag-patterns.md": {"description": "Common DAG patterns and best practices", "priority": "medium"},
+        "component-library.md": {"description": "Building reusable components across workflows", "priority": "low"}
+      }
+    },
+
+    "core_concepts": {
+      "path": "docs/core-concepts/",
+      "purpose": "Fundamental concepts for understanding Agent Actions",
+      "status": "complete",
+      "pages": {
+        "index.md": {"description": "Core concepts overview", "status": "complete", "existing_file": true},
+        "agents.md": {"description": "Agent fundamentals and types", "status": "complete", "existing_file": true},
+        "workflows.md": {"description": "Workflow fundamentals and YAML structure", "status": "complete", "existing_file": true},
+        "schemas.md": {"description": "JSON schema validation and design", "status": "complete", "existing_file": true}
+      }
+    },
+
+    "future_sections": {
+      "note": "These sections will be created when content volume justifies separate organization",
+      "planned_sections": {
+        "workflows": {
+          "purpose": "Advanced workflow creation and management",
+          "priority": "high",
+          "planned_pages": ["creating-workflows.md", "agent-types.md", "dependencies.md", "batch-processing.md"]
+        },
+        "components": {
+          "purpose": "Reusable components and platform extensibility",
+          "priority": "medium",
+          "planned_pages": ["prompts.md", "tools.md", "templates.md", "interceptors.md"]
+        },
+        "agents": {
+          "purpose": "Detailed agent type documentation",
+          "priority": "medium",
+          "planned_pages": ["extractors.md", "generators.md", "transformers.md", "validators.md"]
+        }
+      }
+    },
+
+    "configuration": {
+      "path": "docs/configuration/",
+      "purpose": "Platform configuration and management",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "Configuration overview", "status": "not_started"},
+        "agent-actions-yml.md": {"description": "Main project configuration file", "status": "not_started"},
+        "environment-config.md": {"description": "Environment variables and secrets", "status": "not_started"},
+        "model-providers.md": {"description": "OpenAI, Anthropic, Google, Ollama integration", "status": "not_started"},
+        "runtime-settings.md": {"description": "Execution modes, debugging, and performance", "status": "not_started"},
+        "deployment-config.md": {"description": "Production deployment configuration", "status": "not_started"}
+      }
+    },
+
+    "examples": {
+      "path": "docs/examples/",
+      "purpose": "Real-world examples like qanalabs workflows",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "Examples overview and learning path", "status": "not_started"},
+        "quiz-generation-platform.md": {"description": "Complex multi-stage pipeline (based on qanalabs)", "status": "not_started"},
+        "content-extraction.md": {"description": "Document processing and fact extraction", "status": "not_started"},
+        "data-validation.md": {"description": "Quality assurance workflows", "status": "not_started"},
+        "parallel-processing.md": {"description": "High-throughput batch processing", "status": "not_started"},
+        "custom-tool-integration.md": {"description": "Extending platform with Python tools", "status": "not_started"},
+        "multi-workflow-project.md": {"description": "Managing multiple workflows in one project", "status": "not_started"}
+      }
+    },
+
+    "cli_reference": {
+      "path": "docs/cli/",
+      "purpose": "Command-line interface documentation",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "CLI overview and installation", "status": "not_started"},
+        "init.md": {"description": "Creating new projects", "status": "not_started"},
+        "run.md": {"description": "Running workflows and batch jobs", "status": "not_started"},
+        "compile.md": {"description": "Compiling and validating workflows", "status": "not_started"},
+        "status.md": {"description": "Monitoring and debugging", "status": "not_started"},
+        "deploy.md": {"description": "Deployment commands", "status": "not_started"},
+        "config.md": {"description": "Configuration management", "status": "not_started"}
+      }
+    },
+
+    "api_reference": {
+      "path": "docs/api/",
+      "purpose": "Complete API documentation",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "API overview", "status": "not_started"},
+        "core.md": {"description": "Core platform APIs", "status": "not_started"},
+        "agents.md": {"description": "Agent class references", "status": "not_started"},
+        "workflows.md": {"description": "Workflow APIs", "status": "not_started"},
+        "tools.md": {"description": "Tool development APIs", "status": "not_started"},
+        "schemas.md": {"description": "Schema validation APIs", "status": "not_started"},
+        "runtime.md": {"description": "Runtime and execution APIs", "status": "not_started"}
+      }
+    },
+
+    "deployment": {
+      "path": "docs/deployment/",
+      "purpose": "Production deployment and operations",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "Deployment overview", "status": "not_started"},
+        "production-setup.md": {"description": "Production configuration and best practices", "status": "not_started"},
+        "docker.md": {"description": "Containerized deployment", "status": "not_started"},
+        "kubernetes.md": {"description": "Kubernetes deployment patterns", "status": "not_started"},
+        "monitoring.md": {"description": "Monitoring and observability", "status": "not_started"},
+        "scaling.md": {"description": "Scaling strategies for high-throughput", "status": "not_started"},
+        "troubleshooting.md": {"description": "Common issues and debugging", "status": "not_started"}
+      }
+    },
+
+    "extending": {
+      "path": "docs/extending/",
+      "purpose": "Platform extensibility and customization",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "Extensibility overview", "status": "not_started"},
+        "custom-tools.md": {"description": "Building Python tools (like qanalabs tools/)", "status": "not_started"},
+        "custom-agents.md": {"description": "Creating new agent types", "status": "not_started"},
+        "custom-providers.md": {"description": "Adding new model providers", "status": "not_started"},
+        "plugins.md": {"description": "Plugin system and third-party integrations", "status": "not_started"},
+        "interceptors.md": {"description": "Custom validation and processing logic", "status": "not_started"}
+      }
+    },
+
+    "migration": {
+      "path": "docs/migration/",
+      "purpose": "Migration guides and comparisons",
+      "status": "not_started",
+      "pages": {
+        "index.md": {"description": "Migration overview", "status": "not_started"},
+        "from-langchain.md": {"description": "Migrating from LangChain workflows", "status": "not_started"},
+        "from-crewai.md": {"description": "Migrating from CrewAI autonomous agents", "status": "not_started"},
+        "version-upgrades.md": {"description": "Version upgrade guides", "status": "not_started"},
+        "breaking-changes.md": {"description": "Breaking changes and migration paths", "status": "not_started"}
+      }
+    }
+  },
+
+  // ========================================
+  // DOCUSAURUS FEATURES & CONFIGURATION
+  // ========================================
+
+  "docusaurus_features": {
+    "sidebar_structure": {
+      "Getting Started": ["getting-started"],
+      "Platform Concepts": ["platform/index", "platform/project-structure", "platform/workflow-lifecycle", "platform/agent-dag-patterns", "platform/component-library"],
+      "Building Workflows": ["workflows/index", "workflows/creating-workflows", "workflows/agent-types", "workflows/dependencies", "workflows/batch-processing", "workflows/conditional-logic", "workflows/workflow-templates"],
+      "Components": ["components/index", "components/schemas", "components/prompts", "components/tools", "components/templates", "components/interceptors", "components/artifacts"],
+      "Agent Types": ["agents/index", "agents/extractors", "agents/generators", "agents/transformers", "agents/validators", "agents/custom-agents", "agents/tool-agents"],
+      "Configuration": ["configuration/index", "configuration/agent-actions-yml", "configuration/environment-config", "configuration/model-providers", "configuration/runtime-settings", "configuration/deployment-config"],
+      "Examples": ["examples/index", "examples/quiz-generation-platform", "examples/content-extraction", "examples/data-validation", "examples/parallel-processing", "examples/custom-tool-integration", "examples/multi-workflow-project"],
+      "CLI Reference": ["cli/index", "cli/init", "cli/run", "cli/compile", "cli/status", "cli/deploy", "cli/config"],
+      "API Reference": ["api/index", "api/core", "api/agents", "api/workflows", "api/tools", "api/schemas", "api/runtime"],
+      "Deployment": ["deployment/index", "deployment/production-setup", "deployment/docker", "deployment/kubernetes", "deployment/monitoring", "deployment/scaling", "deployment/troubleshooting"],
+      "Extending": ["extending/index", "extending/custom-tools", "extending/custom-agents", "extending/custom-providers", "extending/plugins", "extending/interceptors"],
+      "Migration": ["migration/index", "migration/from-langchain", "migration/from-crewai", "migration/version-upgrades", "migration/breaking-changes"]
+    },
+    "homepage_features": [
+      {
+        "title": "YAML-Native Workflows",
+        "description": "Define deterministic AI agent pipelines with simple YAML configuration, no complex Python abstractions needed."
+      },
+      {
+        "title": "Reusable Components",
+        "description": "Build once, use everywhere. Share schemas, prompts, tools, and templates across multiple workflows."
+      },
+      {
+        "title": "Enterprise Ready",
+        "description": "Batch processing, custom tool integration, monitoring, and extensibility for production AI systems."
+      }
+    ]
+  },
+
+  // ========================================
+  // KEY EXAMPLES TO CREATE
+  // ========================================
+
+  "key_examples_to_create": {
+    "qanalabs_quiz_platform": {
+      "description": "Full recreation of qanalabs quiz generation platform showing 15-agent pipeline",
+      "status": "not_started",
+      "files": [
+        "examples/quiz-generation-platform.md",
+        "examples/code/quiz-platform/agent_actions.yml",
+        "examples/code/quiz-platform/workflows/quiz_gen.yml",
+        "examples/code/quiz-platform/schemas/",
+        "examples/code/quiz-platform/tools/",
+        "examples/code/quiz-platform/prompts/"
+      ]
+    },
+    "simple_content_pipeline": {
+      "description": "Simple 3-agent content extraction and validation pipeline",
+      "status": "not_started",
+      "files": [
+        "examples/content-extraction.md",
+        "examples/code/content-pipeline/"
+      ]
+    },
+    "custom_tool_integration": {
+      "description": "How to build custom Python tools like qanalabs tools/ directory",
+      "status": "not_started",
+      "files": [
+        "extending/custom-tools.md",
+        "examples/custom-tool-integration.md"
+      ]
+    }
+  },
+
+  // ========================================
+  // CONTENT MIGRATION STRATEGY
+  // ========================================
+
+  "content_migration_strategy": {
+    "from_comparison_md": {
+      "use_for": [
+        "Platform positioning in docs/platform/index.md",
+        "Migration guides showing advantages over LangChain/CrewAI",
+        "Introduction content emphasizing deterministic execution"
+      ]
+    },
+    "from_qanalabs_sample": {
+      "use_for": [
+        "Real-world examples in docs/examples/",
+        "Complex workflow patterns in docs/workflows/",
+        "Custom tool examples in docs/extending/",
+        "Project structure examples in docs/platform/"
+      ],
+      "IMPORTANT_CONSTRAINT": "Enterprise customer provided this confidentially - NEVER mention customer by name in documentation. Use generic names like 'Enterprise Customer', 'Production Example', 'Real-World Implementation', etc.",
+      "REFERENCE_PRESERVED": "All critical structural insights extracted and saved in enterprise_structure_reference.md for future documentation development"
+    },
+    "from_existing_markdown_docs": {
+      "use_for": [
+        "Technical implementation details",
+        "API reference content",
+        "Configuration options",
+        "Agent type documentation"
+      ]
+    }
+  },
+
+  // ========================================
+  // IMMEDIATE PRIORITIES
+  // ========================================
+
+  "immediate_priorities": {
+    "high": [
+      {
+        "task": "Platform overview (docs/platform/index.md) - establish platform positioning",
+        "status": "not_started"
+      },
+      {
+        "task": "Project structure (docs/platform/project-structure.md) - based on qanalabs structure",
+        "status": "not_started"
+      },
+      {
+        "task": "Quiz generation example (docs/examples/quiz-generation-platform.md) - showcase complex workflow",
+        "status": "not_started"
+      },
+      {
+        "task": "Getting started with platform mindset",
+        "status": "not_started"
+      }
+    ],
+    "medium": [
+      {
+        "task": "Component system documentation",
+        "status": "not_started"
+      },
+      {
+        "task": "Workflow creation guides",
+        "status": "not_started"
+      },
+      {
+        "task": "Custom tool development",
+        "status": "not_started"
+      },
+      {
+        "task": "CLI reference",
+        "status": "not_started"
+      }
+    ],
+    "low": [
+      {
+        "task": "Complete API reference",
+        "status": "not_started"
+      },
+      {
+        "task": "Advanced deployment patterns",
+        "status": "not_started"
+      },
+      {
+        "task": "Migration guides",
+        "status": "not_started"
+      }
+    ]
+  },
+
+  // ========================================
+  // STATUS DEFINITIONS & TRACKING
+  // ========================================
+
+  "status_definitions": {
+    "not_started": "Documentation page has not been created yet",
+    "in_progress": "Documentation page is being written or updated",
+    "draft": "Initial content created but needs review and refinement",
+    "review": "Content complete, needs technical review",
+    "complete": "Documentation page is finished and published",
+    "partial": "Some content exists but section needs restructuring/completion"
+  },
+
+  // ========================================
+  // CURRENT DOCUMENTATION SUMMARY
+  // ========================================
+
+  "current_documentation_summary": {
+    "total_files_created": 9,
+    "completed_sections": [
+      "Platform (2/2 pages) - Platform overview and project structure",
+      "Core Concepts (4/4 pages) - Agents, workflows, schemas, overview",
+      "Getting Started (3/3 pages) - Homepage, installation, getting started"
+    ],
+    "completed_pages": [
+      "docs/index.md - Main documentation homepage",
+      "docs/getting-started.md - Getting started guide",
+      "docs/installation.md - Installation instructions",
+      "docs/platform/index.md - Platform overview and positioning",
+      "docs/platform/project-structure.md - Project organization guide",
+      "docs/core-concepts/index.md - Core concepts overview",
+      "docs/core-concepts/agents.md - Agent fundamentals",
+      "docs/core-concepts/workflows.md - Workflow concepts",
+      "docs/core-concepts/schemas.md - Schema documentation"
+    ],
+    "current_structure_status": "COMPLETE",
+    "structure_note": "Current user-friendly structure is complete and working. Future expansion planned based on content growth.",
+    "next_priority_options": [
+      "docs/examples/ - Real-world implementation examples",
+      "docs/configuration/ - Configuration and deployment guides",
+      "Future sections (workflows/, components/, agents/) when content volume justifies"
+    ]
+  }
+}

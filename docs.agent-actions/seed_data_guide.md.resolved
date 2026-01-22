@@ -1,0 +1,77 @@
+# Seed Data Configuration Guide
+
+This guide explains how to configure **Seed Data** (static reference data) in your agent workflows, utilizing the **Dual-Level Resolution** system.
+
+## Overview
+
+Seed data allows you to inject static files (JSON, CSV, YAML, Text) into your agent's context. The system supports two scopes for seed data:
+
+1.  **Workflow-Level** (Priority): Data specific to a single workflow.
+2.  **Project-Level** (Global): Data shared across all workflows in the project.
+
+## Configuration Syntax
+
+To use seed data, define it in your `agent_config.yaml` within the [context_scope](file:///Users/muizz/Documents/codeshop/agent-actions/agent_actions/utilities/context_scope/context_scope_processor.py#91-173) section using the `$file:` prefix.
+
+```yaml
+context_scope:
+  seed_data:
+    # Key name becomes the variable name in your prompt (e.g., {{ seed.book_catalog }})
+    book_catalog: $file:book_catalog.json
+    
+    # You can load multiple files
+    error_codes: $file:error_codes.csv
+```
+
+## Setup & Resolution Priority
+
+The system automatically resolves the file location based on the following priority order:
+
+### 1. Workflow-Level (Highest Priority)
+Use this for data that is unique to a specific workflow or should override the global default.
+
+*   **Location**: Create a [seed_data/](file:///Users/muizz/Documents/codeshop/agent-actions/agent_actions/prompt_generation/prompt_preparation_service.py#419-470) folder in the same directory as your workflow's `agent_config/`.
+*   **Behavior**: If the file exists here, it is loaded immediately.
+
+**Structure:**
+```text
+agent_workflow/
+  └── my_specific_workflow/
+      ├── agent_config/
+      │   └── agent_config.yaml
+      └── seed_data/            <-- Put specific files here
+          └── book_catalog.json
+```
+
+### 2. Project-Level (Global Fallback)
+Use this for shared reference data that is common across many agents (e.g., global glossaries, error code lists).
+
+*   **Location**: Create a [seed_data/](file:///Users/muizz/Documents/codeshop/agent-actions/agent_actions/prompt_generation/prompt_preparation_service.py#419-470) folder at the **Project Root** (sibling to [agent_actions/](file:///Users/muizz/Documents/codeshop/agent-actions/agent_actions) directory).
+*   **Behavior**: If the file is NOT found at the workflow level, the system searches here.
+
+**Structure:**
+```text
+Project Root/
+  ├── agent_actions/            <-- Core package
+  ├── agent_workflow/
+  └── seed_data/                <-- Put global files here
+      └── book_catalog.json
+```
+
+## Example Scenario
+
+**Scenario**: You have a global `book_catalog.json` but want to test a modified version for one specific workflow.
+
+1.  Keep the main file in **Project Root** `seed_data/book_catalog.json`.
+2.  Place the modified file in **Workflow** `.../my_workflow/seed_data/book_catalog.json`.
+3.  The workflow agent will automatically load the **Workflow** version.
+4.  All other agents will continue to load the **Project** version.
+
+## Usage in Prompts
+
+In your prompt templates, access the data using the [seed](file:///Users/muizz/Documents/codeshop/agent-actions/agent_actions/prompt_generation/prompt_preparation_service.py#419-470) namespace:
+
+```jinja2
+Here is the catalog for reference:
+{{ seed.book_catalog | tojson }}
+```

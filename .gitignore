@@ -39,7 +39,6 @@ agent_actions.egg-info/
 # Ignore build directory
 build/
 dist/
-docs.agent-actions/
 
 # Ignore test coverage files
 .coverage
