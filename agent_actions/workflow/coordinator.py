@@ -16,7 +16,16 @@ from agent_actions.config.factory import create_agent_runner
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.llm.realtime.config import ConfigManager
-from agent_actions.logging import CorrelationContext
+from agent_actions.logging import CorrelationContext, fire_event
+from agent_actions.logging.events import (
+    WorkflowStartEvent,
+    WorkflowCompleteEvent,
+    WorkflowFailedEvent,
+    AgentStartEvent,
+    AgentCompleteEvent,
+    AgentSkipEvent,
+    AgentFailedEvent,
+)
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
     LevelExecutionParams,
@@ -373,7 +382,17 @@ class AgentWorkflow:
         separator = f"====== {time_str} | {corr_id} ======"
         logger.info(separator)
 
-        mode = "async" if is_async else "sync"
+        mode = "async" if is_async else "sequential"
+
+        # Fire workflow start event
+        fire_event(WorkflowStartEvent(
+            workflow_name=self.agent_name,
+            agent_count=len(self.execution_order),
+            execution_mode=mode,
+            run_upstream=self.config.run_upstream,
+            run_downstream=self.config.run_downstream,
+        ))
+
         logger.info(
             "Workflow started (%s)",
             mode,
@@ -457,20 +476,8 @@ class AgentWorkflow:
                     return
 
             # Workflow complete
-            self._finalize_workflow()
-
-            # Log successful completion
             duration = (datetime.now() - workflow_start).total_seconds()
-            logger.info(
-                "Workflow completed successfully (async)",
-                extra={
-                    "operation": "workflow_complete_async",
-                    "workflow_name": self.agent_name,
-                    "duration": duration,
-                    "agent_count": len(self.execution_order),
-                    "success": True,
-                },
-            )
+            self._finalize_workflow(elapsed_time=duration)
 
             # Execute downstream workflows if requested
             downstream_success = self._resolve_downstream_workflows()
@@ -483,18 +490,7 @@ class AgentWorkflow:
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
-            logger.exception(
-                "Workflow failed (async)",
-                extra={
-                    "operation": "workflow_failed_async",
-                    "workflow_name": self.agent_name,
-                    "duration": duration,
-                    "agent_count": len(self.execution_order),
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
-            self._handle_workflow_error(e)
+            self._handle_workflow_error(e, elapsed_time=duration)
             raise
         finally:
             # Restore previous context
@@ -533,20 +529,8 @@ class AgentWorkflow:
 
             # Check if workflow is complete
             if self.services.core.state_manager.is_workflow_complete():
-                self._finalize_workflow()
-
-                # Log successful completion
                 duration = (datetime.now() - workflow_start).total_seconds()
-                logger.info(
-                    "Workflow completed successfully",
-                    extra={
-                        "operation": "workflow_complete",
-                        "workflow_name": self.agent_name,
-                        "duration": duration,
-                        "agent_count": len(self.execution_order),
-                        "success": True,
-                    },
-                )
+                self._finalize_workflow(elapsed_time=duration)
 
                 # Execute downstream workflows if requested
                 downstream_success = self._resolve_downstream_workflows()
@@ -562,19 +546,7 @@ class AgentWorkflow:
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
-            logger.debug(
-                "Workflow failed",
-                extra={
-                    "operation": "workflow_failed",
-                    "workflow_name": self.agent_name,
-                    "duration": duration,
-                    "agent_count": len(self.execution_order),
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            self._handle_workflow_error(e)
+            self._handle_workflow_error(e, elapsed_time=duration)
             raise
         finally:
             # Restore previous context
@@ -593,10 +565,13 @@ class AgentWorkflow:
         agent_config = self.agent_configs[agent_name]
         start_time = datetime.now()
 
-        self.console.print(
-            f"{start_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} "
-            f"START agent: [bold]{agent_name}[/bold]..."
-        )
+        # Fire agent start event
+        fire_event(AgentStartEvent(
+            agent_name=agent_name,
+            agent_index=idx,
+            total_agents=total_agents,
+            agent_type=agent_config.get("type", ""),
+        ))
 
         # Check if already completed
         if self.services.core.state_manager.is_completed(agent_name):
@@ -642,12 +617,13 @@ class AgentWorkflow:
 
     def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, start_time: datetime):
         """Log skipped agent."""
-        end_time = datetime.now()
-        duration = (end_time - start_time).total_seconds()
-        self.console.print(
-            f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} "
-            f"[yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s"
-        )
+        # Fire agent skip event
+        fire_event(AgentSkipEvent(
+            agent_name=agent_name,
+            agent_index=idx,
+            total_agents=total_agents,
+            skip_reason="already completed",
+        ))
 
     def _get_status_display(self, status: str) -> tuple:
         """Get status display color and suffix."""
@@ -659,54 +635,76 @@ class AgentWorkflow:
         return status_map.get(status, ("[yellow]UNKNOWN[/yellow]", ""))
 
     def _log_agent_result(self, params: AgentLogParams):
-        """Log agent execution result."""
-        status_color, suffix = self._get_status_display(params.result.status)
+        """Log agent execution result via event system."""
+        if params.result.success:
+            # Fire agent complete event
+            tokens = {}
+            if hasattr(params.result, "tokens") and params.result.tokens:
+                tokens = params.result.tokens
+            fire_event(AgentCompleteEvent(
+                agent_name=params.agent_name,
+                agent_index=params.idx,
+                total_agents=params.total_agents,
+                execution_time=params.duration,
+                output_path=params.result.output_folder or "",
+                tokens=tokens,
+            ))
+        else:
+            # Fire agent failed event
+            fire_event(AgentFailedEvent(
+                agent_name=params.agent_name,
+                agent_index=params.idx,
+                total_agents=params.total_agents,
+                error_message=str(params.result.error) if params.result.error else "",
+                error_type=type(params.result.error).__name__ if params.result.error else "",
+                execution_time=params.duration,
+            ))
 
-        self.console.print(
-            f"{params.end_time.strftime('%H:%M:%S')} | {params.idx + 1}/{params.total_agents} "
-            f"{status_color} [bold]{params.agent_name}[/bold]{suffix} in {params.duration:.2f}s"
-        )
-
-    def _finalize_workflow(self):
+    def _finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""
-        self.console.print("\n[bold]Workflow Summary:[/bold]")
+        # Count agent statuses
+        completed = 0
+        skipped = 0
+        failed = 0
 
         for agent_name in self.execution_order:
             status = self.services.core.state_manager.get_status(agent_name)
-            color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
-            self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
+            if status == "completed":
+                completed += 1
+            elif status == "skipped":
+                skipped += 1
+            elif status == "failed":
+                failed += 1
+
+        # Fire workflow complete event
+        fire_event(WorkflowCompleteEvent(
+            workflow_name=self.agent_name,
+            elapsed_time=elapsed_time,
+            agents_completed=completed,
+            agents_skipped=skipped,
+            agents_failed=failed,
+        ))
 
         # Mark workflow as completed in manifest
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_completed()
 
-        self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
-        self.console.print("Done.")
-
-    def _handle_workflow_error(self, error: Exception):
+    def _handle_workflow_error(self, error: Exception, elapsed_time: float = 0.0):
         """Handle workflow execution error with structured output."""
-        from agent_actions.errors.preflight import PreFlightValidationError
-
         self.state.failed = True
+
+        # Fire workflow failed event
+        fire_event(WorkflowFailedEvent(
+            workflow_name=self.agent_name,
+            error_message=str(error),
+            error_type=type(error).__name__,
+            elapsed_time=elapsed_time,
+            failed_agent=CorrelationContext.get_agent_name() or "",
+        ))
 
         # Mark workflow as failed in manifest
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_failed(str(error))
-
-        # Print structured error header
-        self.console.print("\n❌ [bold red]Workflow failed[/bold red]")
-        self.console.print("")
-
-        # Use PreFlightValidationError's format_user_message if available
-        if isinstance(error, PreFlightValidationError):
-            formatted = error.format_user_message()
-        else:
-            # Use str() which now produces cleaner output
-            formatted = str(error)
-
-        # Print with indentation for readability
-        for line in formatted.split("\n"):
-            self.console.print(f"  {line}")
 
         # Mark running agent as failed
         self.services.core.state_manager.mark_running_as_failed()

@@ -16,6 +16,7 @@ from agent_actions.cli.cli_decorators import requires_project, handles_user_erro
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.errors import FileLoadError  # New modular pattern!
+from agent_actions.logging import LoggerFactory
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
@@ -273,6 +274,15 @@ class RunCommand:
         workflow.services.core.agent_executor.run_tracker = tracker
         workflow.services.core.agent_executor.run_id = run_id
 
+        # Initialize unified logging system (event-based, dbt-style output)
+        agent_folder = workflow.services.core.agent_runner.get_agent_folder(self.agent_name)
+        LoggerFactory.initialize(
+            output_dir=agent_folder,
+            workflow_name=self.agent_name,
+            invocation_id=run_id,
+            force=True,  # Reinitialize for each workflow run
+        )
+
         click.echo("Starting workflow execution...")
 
         # Track execution state
@@ -311,6 +321,12 @@ class RunCommand:
                 click.echo(
                     f"Warning: Could not finalize workflow run tracking: {track_error}", err=True
                 )
+
+            # Flush event handlers to ensure all output is written
+            try:
+                LoggerFactory.flush()
+            except Exception:
+                pass  # Don't fail if event flushing fails
 
 
 @click.command()

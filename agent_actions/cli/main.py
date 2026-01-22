@@ -106,8 +106,8 @@ class CLI:
         """
         Configure logging based on command-line arguments.
 
-        Uses LoggerFactory for centralized logging configuration with
-        correlation context, structured formatting, and credential redaction.
+        Uses the unified LoggerFactory which routes all logging through
+        the event system for consistent dbt-style output.
 
         Args:
             argv: Command-line arguments
@@ -115,32 +115,20 @@ class CLI:
         debug_mode = "--debug" in argv
         verbose_mode = "--verbose" in argv or "-v" in argv
 
-        # Determine log level
-        if debug_mode:
-            level = "DEBUG"
-        elif verbose_mode:
-            level = "INFO"
-        else:
-            level = "INFO"  # Default to INFO (not CRITICAL)
-
-        # Determine source location setting (only in debug mode)
-        include_source = debug_mode
-
-        # Initialize LoggerFactory with configuration
-        # This respects AGENT_ACTIONS_LOG_LEVEL env var if set
+        # Initialize unified logging system
+        # Workflow-specific settings (output_dir, workflow_name) will be
+        # set by the run command when a workflow is executed
         config = LoggingConfig.from_environment()
-        if debug_mode or verbose_mode:
-            # CLI flags override environment - update both default and handler levels
-            config.default_level = level
-            for handler in config.handlers:
-                handler.level = level
-
-        # Set source location based on debug mode
         if debug_mode:
-            config.include_source_location = include_source
-            config.file_log_level = "DEBUG"
+            config.default_level = "DEBUG"
+        elif verbose_mode:
+            config.default_level = "INFO"
 
-        LoggerFactory.initialize(config=config, force=True)
+        LoggerFactory.initialize(
+            config=config,
+            verbose=debug_mode or verbose_mode,
+            force=True,
+        )
         self.logger = LoggerFactory.get_logger("cli")
 
     def _show_version_and_exit(self) -> int:
