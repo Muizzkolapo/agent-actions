@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from rich.console import Console
 
@@ -16,7 +17,7 @@ from agent_actions.config.factory import create_agent_runner
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.llm.realtime.config import ConfigManager
-from agent_actions.logging import CorrelationContext, fire_event
+from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import (
     WorkflowStartEvent,
     WorkflowCompleteEvent,
@@ -376,7 +377,7 @@ class AgentWorkflow:
 
     def _log_workflow_start(self, workflow_start: datetime, is_async: bool = False):
         """Log workflow start with session separator."""
-        correlation_id = CorrelationContext.get_correlation_id()
+        correlation_id = get_manager().get_context("correlation_id")
         time_str = workflow_start.strftime("%H:%M:%S.%f")[:-3]
         corr_id = correlation_id[:8] if correlation_id else "unknown"
         separator = f"====== {time_str} | {corr_id} ======"
@@ -407,30 +408,23 @@ class AgentWorkflow:
 
     def _resolve_upstream_and_initialize(self) -> Optional[bool]:
         """
-        Initialize correlation context and resolve upstream dependencies.
+        Initialize event context and resolve upstream dependencies.
 
         Returns:
             True if should continue, False if upstream has pending batches,
             None if exception occurred (caller should re-raise)
         """
-        previous_context = CorrelationContext.get_context()
-        try:
-            CorrelationContext.start_workflow(self.agent_name)
-            should_continue = self._resolve_upstream_workflows()
-            if not should_continue:
-                # Upstream has pending batch jobs, exit gracefully
-                if previous_context:
-                    CorrelationContext.set_context(previous_context)
-                else:
-                    CorrelationContext.clear_context()
-                return False
-            return True
-        except Exception:
-            if previous_context:
-                CorrelationContext.set_context(previous_context)
-            else:
-                CorrelationContext.clear_context()
-            raise
+        # Set workflow context with correlation ID
+        get_manager().set_context(
+            workflow_name=self.agent_name,
+            correlation_id=str(uuid4())[:8]
+        )
+
+        should_continue = self._resolve_upstream_workflows()
+        if not should_continue:
+            # Upstream has pending batch jobs, exit gracefully
+            return False
+        return True
 
     async def async_run(self, concurrency_limit: int = 5):
         """
@@ -439,98 +433,50 @@ class AgentWorkflow:
         Args:
             concurrency_limit: Maximum concurrent agents within a level (default 5)
         """
-        # Initialize correlation context and resolve upstream
+        # Initialize event context and resolve upstream
         should_continue = self._resolve_upstream_and_initialize()
         if should_continue is False:
             return None
 
-        previous_context = CorrelationContext.get_context()
         workflow_start = datetime.now()
         self._log_workflow_start(workflow_start, is_async=True)
 
-        try:
-            levels = self.services.core.action_level_orchestrator.compute_execution_levels()
-            self.services.core.action_level_orchestrator.log_execution_levels(
-                levels, self.agent_indices
-            )
-
-            # Execute each level
-            for level_idx, level_agents in enumerate(levels):
-                # Set agent context for each agent in the level
-                for agent_name in level_agents:
-                    if agent_name in self.agent_indices:
-                        CorrelationContext.set_agent(agent_name, self.agent_indices[agent_name])
-
-                orchestrator = self.services.core.action_level_orchestrator
-                level_complete = await orchestrator.execute_level_async(
-                    LevelExecutionParams(
-                        level_idx=level_idx,
-                        level_agents=level_agents,
-                        agent_indices=self.agent_indices,
-                        state_manager=self.services.core.state_manager,
-                        agent_executor=self.services.core.agent_executor,
-                        concurrency_limit=concurrency_limit,
-                    )
+        # Use context manager to save/restore context
+        manager = get_manager()
+        with manager.context():
+            try:
+                levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+                self.services.core.action_level_orchestrator.log_execution_levels(
+                    levels, self.agent_indices
                 )
 
-                # If batch jobs pending, stop workflow
-                if not level_complete:
-                    return
+                # Execute each level
+                for level_idx, level_agents in enumerate(levels):
+                    # Set agent context for each agent in the level
+                    for agent_name in level_agents:
+                        if agent_name in self.agent_indices:
+                            manager.set_context(
+                                agent_name=agent_name,
+                                agent_index=self.agent_indices[agent_name]
+                            )
 
-            # Workflow complete
-            duration = (datetime.now() - workflow_start).total_seconds()
-            self._finalize_workflow(elapsed_time=duration)
+                    orchestrator = self.services.core.action_level_orchestrator
+                    level_complete = await orchestrator.execute_level_async(
+                        LevelExecutionParams(
+                            level_idx=level_idx,
+                            level_agents=level_agents,
+                            agent_indices=self.agent_indices,
+                            state_manager=self.services.core.state_manager,
+                            agent_executor=self.services.core.agent_executor,
+                            concurrency_limit=concurrency_limit,
+                        )
+                    )
 
-            # Execute downstream workflows if requested
-            downstream_success = self._resolve_downstream_workflows()
-            if not downstream_success:
-                # Downstream has pending batch jobs
-                return None
+                    # If batch jobs pending, stop workflow
+                    if not level_complete:
+                        return
 
-            # Return success tuple to distinguish from batch pending (None)
-            return ("success", {})
-
-        except Exception as e:
-            duration = (datetime.now() - workflow_start).total_seconds()
-            self._handle_workflow_error(e, elapsed_time=duration)
-            raise
-        finally:
-            # Restore previous context
-            if previous_context:
-                CorrelationContext.set_context(previous_context)
-            else:
-                CorrelationContext.clear_context()
-
-    def run(self):
-        """Execute workflow sequentially."""
-        # Initialize correlation context and resolve upstream
-        should_continue = self._resolve_upstream_and_initialize()
-        if should_continue is False:
-            return None
-
-        previous_context = CorrelationContext.get_context()
-        workflow_start = datetime.now()
-        self._log_workflow_start(workflow_start, is_async=False)
-
-        return self._run_workflow_with_context(previous_context, workflow_start)
-
-    def _run_workflow_with_context(self, previous_context, workflow_start):
-        """Execute workflow with retry tracking context active."""
-        try:
-            total_agents = len(self.execution_order)
-            self.console.print(f"Found {total_agents} agents to run.")
-
-            for idx, agent_name in enumerate(self.execution_order):
-                # Set agent context for correlation
-                CorrelationContext.set_agent(agent_name, idx)
-
-                should_stop = self._run_single_agent(idx, agent_name, total_agents)
-                if should_stop:
-                    # Batch submitted or workflow needs to stop
-                    break
-
-            # Check if workflow is complete
-            if self.services.core.state_manager.is_workflow_complete():
+                # Workflow complete
                 duration = (datetime.now() - workflow_start).total_seconds()
                 self._finalize_workflow(elapsed_time=duration)
 
@@ -543,19 +489,62 @@ class AgentWorkflow:
                 # Return success tuple to distinguish from batch pending (None)
                 return ("success", {})
 
-            # Workflow incomplete (batch jobs pending or stopped early)
+            except Exception as e:
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self._handle_workflow_error(e, elapsed_time=duration)
+                raise
+
+    def run(self):
+        """Execute workflow sequentially."""
+        # Initialize event context and resolve upstream
+        should_continue = self._resolve_upstream_and_initialize()
+        if should_continue is False:
             return None
 
-        except Exception as e:
-            duration = (datetime.now() - workflow_start).total_seconds()
-            self._handle_workflow_error(e, elapsed_time=duration)
-            raise
-        finally:
-            # Restore previous context
-            if previous_context:
-                CorrelationContext.set_context(previous_context)
-            else:
-                CorrelationContext.clear_context()
+        workflow_start = datetime.now()
+        self._log_workflow_start(workflow_start, is_async=False)
+
+        return self._run_workflow_with_context(workflow_start)
+
+    def _run_workflow_with_context(self, workflow_start):
+        """Execute workflow with retry tracking context active."""
+        # Use context manager to save/restore context
+        manager = get_manager()
+        with manager.context():
+            try:
+                total_agents = len(self.execution_order)
+                self.console.print(f"Found {total_agents} agents to run.")
+
+                for idx, agent_name in enumerate(self.execution_order):
+                    # Set agent context
+                    manager.set_context(agent_name=agent_name, agent_index=idx)
+
+                    should_stop = self._run_single_agent(idx, agent_name, total_agents)
+                    if should_stop:
+                        # Batch submitted or workflow needs to stop
+                        break
+
+                # Check if workflow is complete
+                if self.services.core.state_manager.is_workflow_complete():
+                    duration = (datetime.now() - workflow_start).total_seconds()
+                    self._finalize_workflow(elapsed_time=duration)
+
+                    # Execute downstream workflows if requested
+                    downstream_success = self._resolve_downstream_workflows()
+                    if not downstream_success:
+                        # Downstream has pending batch jobs
+                        return None
+
+                    # Return success tuple to distinguish from batch pending (None)
+                    return ("success", {})
+
+                # Workflow incomplete (batch jobs pending or stopped early)
+                return None
+
+            except Exception as e:
+                duration = (datetime.now() - workflow_start).total_seconds()
+                self._handle_workflow_error(e, elapsed_time=duration)
+                raise
 
     def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
         """
@@ -712,7 +701,7 @@ class AgentWorkflow:
                 error_message=str(error),
                 error_type=type(error).__name__,
                 elapsed_time=elapsed_time,
-                failed_agent=CorrelationContext.get_agent_name() or "",
+                failed_agent=get_manager().get_context("agent_name") or "",
             )
         )
 

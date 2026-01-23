@@ -22,7 +22,9 @@ from agent_actions.input.loaders.udf import (
     validate_udf_references,
 )
 from agent_actions.llm.realtime.config import ConfigManager
+from agent_actions.logging.core import fire_event
 from agent_actions.logging.errors import format_user_error
+from agent_actions.logging.events import ValidationStartEvent, ValidationCompleteEvent
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     UDF_REGISTRY,
@@ -98,7 +100,7 @@ class ValidateUDFsCommand:
     def execute(self) -> None:
         """Execute the validate-udfs command with formatted CLI output."""
         try:
-            self.console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
+            fire_event(ValidationStartEvent(target="UDFs", validator="validate-udfs"))
             result = self.validate()
             if not result["valid"]:
                 error = result["error"]
@@ -112,7 +114,12 @@ class ValidateUDFsCommand:
                 return
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            self.console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]\n")
+            fire_event(ValidationCompleteEvent(
+                target="UDFs",
+                validator="validate-udfs",
+                error_count=0,
+                warning_count=0
+            ))
             self.console.print("[green]✅ All UDF references valid[/green]")
             self.console.print("[green]✅ No duplicate function names[/green]")
             self.console.print("\n[bold]Summary:[/bold]")

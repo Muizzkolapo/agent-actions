@@ -10,6 +10,14 @@ from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 from rich.console import Console
 from agent_actions.errors import ProcessingError
+from agent_actions.logging.core import fire_event
+from agent_actions.logging.events import (
+    BatchProcessingCompleteEvent,
+    BatchResultsProcessedEvent,
+    BatchErrorEvent,
+    BatchPassthroughEvent,
+    BatchStatusEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,21 +64,17 @@ class BatchLifecycleManager:
 
         # Case 1: All batches completed
         if registry_status == "completed":
-            self.console.print("[green]All batch jobs are completed. Processing results...[/green]")
+            fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
-            self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
+            fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
             return (output_directory, "completed")
 
         # Case 2: Batches in progress or partial failure
         if registry_status in ["in_progress", "partial_failed"]:
             if self.batch_service.are_all_batch_jobs_completed(output_directory):
-                self.console.print(
-                    "[green]All batch jobs are now completed. Processing results...[/green]"
-                )
+                fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
-                self.console.print(
-                    f"[green]✅ Processed all batch results for {agent_name}[/green]"
-                )
+                fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
                 return (output_directory, "completed")
             return (None, "in_progress")
 
@@ -78,12 +82,13 @@ class BatchLifecycleManager:
         if registry_status == "no_batches":
             passthrough_marker = Path(output_directory) / ".passthrough_processed"
             if passthrough_marker.exists():
-                self.console.print(
-                    f"[green]All items filtered by conditional clause - "
-                    f"passthrough data processed for {agent_name}[/green]"
-                )
+                fire_event(BatchPassthroughEvent(agent_name=agent_name))
                 return (output_directory, "completed")
-            self.console.print(f"[yellow]No batch jobs found for {agent_name}[/yellow]")
+            fire_event(BatchStatusEvent(
+                agent_name=agent_name,
+                status_message=f"No batch jobs found for {agent_name}",
+                status_type="warning"
+            ))
             return (None, "failed")
 
         # Case 4: Failed status
@@ -111,15 +116,19 @@ class BatchLifecycleManager:
             if not processed_files:
                 raise ProcessingError("No batch results were successfully processed")
 
-        except ProcessingError:
-            self.console.print(
-                f"[red]Error: Could not process batch results for {agent_name}[/red]"
-            )
+        except ProcessingError as e:
+            fire_event(BatchErrorEvent(
+                agent_name=agent_name,
+                error_message="Could not process batch results",
+                error_type="ProcessingError"
+            ))
             raise
         except Exception as e:
-            self.console.print(
-                f"[red]Error: Could not process batch results for {agent_name}: {e}[/red]"
-            )
+            fire_event(BatchErrorEvent(
+                agent_name=agent_name,
+                error_message=f"Could not process batch results: {str(e)}",
+                error_type=type(e).__name__
+            ))
             raise
 
     def check_batch_submission(

@@ -11,18 +11,6 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
 @dataclass
-class HandlerConfig:
-    """Configuration for a single log handler."""
-
-    type: Literal["console", "file", "json"]
-    level: LogLevel = "INFO"
-    format: Literal["human", "json"] = "human"
-    file_path: Optional[Path] = None
-    max_bytes: int = 10_000_000  # 10MB
-    backup_count: int = 5
-
-
-@dataclass
 class FileHandlerSettings:
     """File handler configuration settings."""
 
@@ -39,7 +27,6 @@ class LoggingConfig:
     """Central logging configuration."""
 
     default_level: LogLevel = "INFO"
-    handlers: List[HandlerConfig] = field(default_factory=list)
     module_levels: Dict[str, LogLevel] = field(default_factory=dict)
     include_timestamps: bool = True
     include_source_location: bool = False
@@ -54,37 +41,6 @@ class LoggingConfig:
     )
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
 
-    # Legacy properties for backward compatibility
-    @property
-    def file_handler_enabled(self) -> bool:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.enabled
-
-    @property
-    def log_file_path(self) -> Optional[str]:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.path
-
-    @property
-    def file_log_level(self) -> LogLevel:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.level
-
-    @property
-    def file_max_bytes(self) -> int:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.max_bytes
-
-    @property
-    def file_backup_count(self) -> int:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.backup_count
-
-    @property
-    def file_format(self) -> Literal["human", "json"]:
-        """Legacy property for backward compatibility."""
-        return self.file_handler.format
-
     @classmethod
     def from_project_config(cls, config: dict) -> LoggingConfig:
         """Create LoggingConfig from project configuration.
@@ -96,20 +52,6 @@ class LoggingConfig:
             LoggingConfig instance with values from config or defaults.
         """
         logging_config = config.get("logging", {})
-
-        handlers = []
-        for handler_dict in logging_config.get("handlers", []):
-            file_path = handler_dict.get("file_path")
-            handlers.append(
-                HandlerConfig(
-                    type=handler_dict.get("type", "console"),
-                    level=handler_dict.get("level", "INFO"),
-                    format=handler_dict.get("format", "human"),
-                    file_path=Path(file_path) if file_path else None,
-                    max_bytes=handler_dict.get("max_bytes", 10_000_000),
-                    backup_count=handler_dict.get("backup_count", 5),
-                )
-            )
 
         # Parse file handler configuration from YAML
         file_config = logging_config.get("file", {})
@@ -124,7 +66,6 @@ class LoggingConfig:
 
         return cls(
             default_level=logging_config.get("level", "INFO"),
-            handlers=handlers,
             module_levels=logging_config.get("module_levels", {}),
             include_timestamps=logging_config.get("include_timestamps", True),
             include_source_location=logging_config.get("include_source_location", True),
@@ -173,14 +114,6 @@ class LoggingConfig:
         if log_format not in ("human", "json"):
             log_format = "human"
 
-        handlers = [
-            HandlerConfig(
-                type="console",
-                level=level,
-                format=log_format,
-            )
-        ]
-
         # File handler configuration from environment
         file_enabled = os.environ.get("AGENT_ACTIONS_NO_LOG_FILE", "0") != "1"
 
@@ -198,7 +131,6 @@ class LoggingConfig:
 
         return cls(
             default_level=level,
-            handlers=handlers,
             include_source_location=include_source,
             file_handler=file_settings,
         )

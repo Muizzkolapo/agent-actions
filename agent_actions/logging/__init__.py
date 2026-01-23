@@ -24,11 +24,10 @@ Usage:
     fire_event(WorkflowStartEvent(workflow_name="my_workflow", agent_count=5))
 """
 
-from agent_actions.logging.config import HandlerConfig, LoggingConfig, LogLevel
-from agent_actions.logging.context import CorrelationContext, ExecutionContext
+from agent_actions.logging.config import LoggingConfig, LogLevel
 from agent_actions.logging.factory import LoggerFactory
-from agent_actions.logging.filters import ContextInjectingFilter, RedactingFilter
-from agent_actions.logging.formatters import HumanFormatter, JSONFormatter, SimpleFormatter
+from agent_actions.logging.filters import RedactingFilter
+from agent_actions.logging.formatters import JSONFormatter
 
 # Event system exports
 from agent_actions.logging.core import (
@@ -44,18 +43,11 @@ __all__ = [
     "LoggerFactory",
     # Configuration
     "LoggingConfig",
-    "HandlerConfig",
     "LogLevel",
-    # Context
-    "CorrelationContext",
-    "ExecutionContext",
     # Filters
-    "ContextInjectingFilter",
     "RedactingFilter",
     # Formatters
     "JSONFormatter",
-    "HumanFormatter",
-    "SimpleFormatter",
     # Event System
     "EventManager",
     "BaseEvent",

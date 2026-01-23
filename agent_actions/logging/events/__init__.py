@@ -21,6 +21,11 @@ from agent_actions.logging.events.types import (
     BatchSubmittedEvent,
     BatchProgressEvent,
     BatchCompleteEvent,
+    BatchProcessingCompleteEvent,
+    BatchResultsProcessedEvent,
+    BatchErrorEvent,
+    BatchPassthroughEvent,
+    BatchStatusEvent,
     # LLM events
     LLMRequestEvent,
     LLMResponseEvent,
@@ -51,6 +56,11 @@ __all__ = [
     "BatchSubmittedEvent",
     "BatchProgressEvent",
     "BatchCompleteEvent",
+    "BatchProcessingCompleteEvent",
+    "BatchResultsProcessedEvent",
+    "BatchErrorEvent",
+    "BatchPassthroughEvent",
+    "BatchStatusEvent",
     # LLM
     "LLMRequestEvent",
     "LLMResponseEvent",

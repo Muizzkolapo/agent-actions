@@ -8,8 +8,9 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
+from uuid import uuid4
 
-from agent_actions.logging import CorrelationContext
+from agent_actions.logging import get_manager
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.workspace_index import WorkspaceIndex
 
@@ -342,25 +343,18 @@ class WorkflowDependencyOrchestrator:
         if not run_upstream:
             return True
 
-        previous_context = CorrelationContext.get_context()
-        try:
-            CorrelationContext.start_workflow(self.current_workflow)
+        # Use context manager to save/restore context
+        manager = get_manager()
+        with manager.context(
+            workflow_name=self.current_workflow,
+            correlation_id=str(uuid4())[:8]
+        ):
             should_continue = self.resolve_upstream_workflows(
                 agent_configs, user_code_path, default_path, use_tools
             )
             if not should_continue:
-                if previous_context:
-                    CorrelationContext.set_context(previous_context)
-                else:
-                    CorrelationContext.clear_context()
                 return False
             return True
-        except Exception:
-            if previous_context:
-                CorrelationContext.set_context(previous_context)
-            else:
-                CorrelationContext.clear_context()
-            raise
 
 
 __all__ = ["WorkflowDependencyOrchestrator"]

@@ -391,6 +391,120 @@ class BatchCompleteEvent(BaseEvent):
         return "B003"
 
 
+@dataclass
+class BatchProcessingCompleteEvent(BaseEvent):
+    """Fired when all batch jobs for an agent are completed."""
+
+    agent_name: str = ""
+    total_jobs: int = 0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.BATCH
+        self.message = f"All batch jobs completed for {self.agent_name}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "total_jobs": self.total_jobs,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B004"
+
+
+@dataclass
+class BatchResultsProcessedEvent(BaseEvent):
+    """Fired when batch results have been processed."""
+
+    agent_name: str = ""
+    results_count: int = 0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.BATCH
+        self.message = f"Processed all batch results for {self.agent_name}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "results_count": self.results_count,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B005"
+
+
+@dataclass
+class BatchErrorEvent(BaseEvent):
+    """Fired when a batch processing error occurs."""
+
+    agent_name: str = ""
+    error_message: str = ""
+    error_type: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.BATCH
+        self.message = f"Batch error for {self.agent_name}: {self.error_message}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "error_message": self.error_message,
+            "error_type": self.error_type,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B006"
+
+
+@dataclass
+class BatchPassthroughEvent(BaseEvent):
+    """Fired when all items were filtered and passthrough data was processed."""
+
+    agent_name: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.INFO
+        self.category = EventCategories.BATCH
+        self.message = (
+            f"All items filtered by conditional clause - passthrough data processed for {self.agent_name}"
+        )
+        self.data = {
+            "agent_name": self.agent_name,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B007"
+
+
+@dataclass
+class BatchStatusEvent(BaseEvent):
+    """Fired to report batch status."""
+
+    agent_name: str = ""
+    status_message: str = ""
+    status_type: str = "info"  # info, warning, error
+
+    def __post_init__(self) -> None:
+        level_map = {
+            "info": EventLevel.INFO,
+            "warning": EventLevel.WARN,
+            "error": EventLevel.ERROR,
+        }
+        self.level = level_map.get(self.status_type, EventLevel.INFO)
+        self.category = EventCategories.BATCH
+        self.message = self.status_message or f"Batch status for {self.agent_name}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "status_message": self.status_message,
+            "status_type": self.status_type,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B008"
+
+
 # =============================================================================
 # LLM Events (L prefix)
 # =============================================================================
