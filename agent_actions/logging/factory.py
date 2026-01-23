@@ -168,7 +168,7 @@ class LoggerFactory:
                 buffer_size=5,
             )
             manager.register(json_handler)
-        elif cls._config.file_handler_enabled:
+        elif cls._config.file_handler.enabled:
             # Use configured log file path
             log_file_path = cls._get_log_file_path()
             if log_file_path:
@@ -230,8 +230,8 @@ class LoggerFactory:
         if not cls._config:
             return None
 
-        if cls._config.log_file_path:
-            return Path(cls._config.log_file_path)
+        if cls._config.file_handler.path:
+            return Path(cls._config.file_handler.path)
 
         # Try project root
         project_root = cls._get_project_root()

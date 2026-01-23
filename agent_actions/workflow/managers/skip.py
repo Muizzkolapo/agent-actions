@@ -14,6 +14,8 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
     FilterItemRequest,
 )
+from agent_actions.logging.core import fire_event
+from agent_actions.logging.events import AgentSkipEvent
 
 logger = logging.getLogger(__name__)
 
@@ -85,14 +87,10 @@ class SkipConditionStrategy(SkipStrategy):
             should_skip = not filter_result.matched
 
             if should_skip:
-                self.console.print(
-                    f"[yellow]🔍 Agent {agent_name} SKIPPED: "
-                    f"skip_condition evaluated to True[/yellow]"
-                )
-            else:
-                self.console.print(
-                    f"[green]✓ Agent {agent_name} passed skip_condition check[/green]"
-                )
+                fire_event(AgentSkipEvent(
+                    agent_name=agent_name,
+                    skip_reason="skip_condition evaluated to True"
+                ))
 
             return should_skip
 
@@ -132,9 +130,10 @@ class GuardStrategy(SkipStrategy):
             )
             return False
 
-        self.console.print(
-            f"[red]→ Agent {agent_name} SKIPPED due to error and passthrough_on_error=False[/red]"
-        )
+        fire_event(AgentSkipEvent(
+            agent_name=agent_name,
+            skip_reason="error occurred and passthrough_on_error=False"
+        ))
         return True
 
     def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
@@ -184,9 +183,10 @@ class GuardStrategy(SkipStrategy):
 
             # Handle filter result
             if not filter_result.matched:
-                self.console.print(
-                    f"[yellow]🚫 Agent {agent_name} SKIPPED: guard condition not met[/yellow]"
-                )
+                fire_event(AgentSkipEvent(
+                    agent_name=agent_name,
+                    skip_reason="guard condition not met"
+                ))
                 logger.debug(
                     "Guard details: %s",
                     guard_clause,
@@ -199,11 +199,6 @@ class GuardStrategy(SkipStrategy):
                 )
                 return True
 
-            exec_time = filter_result.execution_time
-            self.console.print(
-                f"[green]✓ Agent {agent_name} passed guard check "
-                f"(execution time: {exec_time:.3f}s)[/green]"
-            )
             return False
 
         except (ValueError, KeyError, TypeError, AttributeError) as e:
@@ -243,13 +238,10 @@ class LegacySkipIfStrategy(SkipStrategy):
             should_skip = filter_result.matched
 
             if should_skip:
-                self.console.print(
-                    f"[yellow]🔍 Agent {agent_name} SKIPPED: legacy skip_if condition[/yellow]"
-                )
-            else:
-                self.console.print(
-                    f"[green]✓ Agent {agent_name} passed legacy skip_if check[/green]"
-                )
+                fire_event(AgentSkipEvent(
+                    agent_name=agent_name,
+                    skip_reason="legacy skip_if condition matched"
+                ))
 
             return should_skip
 

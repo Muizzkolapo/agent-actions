@@ -16,6 +16,8 @@ from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     AgentSkipEvent,
+    AgentCompleteEvent,
+    AgentFailedEvent,
     BatchSubmittedEvent,
     BatchCompleteEvent,
 )
@@ -639,7 +641,7 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(params.agent_name, params.agent_idx)
             if batch_status == "batch_submitted":
                 self.deps.state_manager.update_status(params.agent_name, "batch_submitted")
-                self.console.print(f"  [yellow]→ {params.agent_name}: batch submitted[/yellow]")
+                fire_event(BatchSubmittedEvent(agent_name=params.agent_name))
                 logger.info(
                     "Agent batch submitted (async)",
                     extra={
@@ -659,7 +661,7 @@ class AgentExecutor:
 
             # Normal completion
             self.deps.state_manager.update_status(params.agent_name, "completed")
-            self.console.print(f"  [green]✓ {params.agent_name} ({duration:.2f}s)[/green]")
+            fire_event(AgentCompleteEvent(agent_name=params.agent_name, duration=duration))
             logger.info(
                 "Agent completed successfully (async)",
                 extra={
@@ -722,7 +724,7 @@ class AgentExecutor:
                     "error_type": type(e).__name__,
                 },
             )
-            self.console.print(f"  [red]✗ {params.agent_name} failed: {e}[/red]")
+            fire_event(AgentFailedEvent(agent_name=params.agent_name, error=str(e)))
             self.deps.state_manager.update_status(params.agent_name, "failed")
 
             # Track action failure

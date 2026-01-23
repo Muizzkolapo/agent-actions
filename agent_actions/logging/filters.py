@@ -6,60 +6,7 @@ import logging
 import re
 from typing import List, Pattern
 
-from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm.providers.client_base import BaseClient
-
-
-class ContextInjectingFilter(logging.Filter):
-    """Injects execution context into log records.
-
-    This filter adds correlation context fields to every log record,
-    enabling log correlation across workflow executions.
-
-    Attributes added to log records:
-        correlation_id: Unique identifier for the workflow execution
-        workflow_name: Name of the currently executing workflow
-        agent_name: Name of the currently executing agent
-        agent_index: Index of the agent in the workflow
-        batch_id: Identifier for batch operations
-        item_id: Identifier for individual item processing
-    """
-
-    def __repr__(self) -> str:
-        """Return string representation of filter."""
-        return f"{self.__class__.__name__}()"
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Add context fields to log record.
-
-        Args:
-            record: The log record to modify.
-
-        Returns:
-            True to allow the record to be logged.
-        """
-        ctx = CorrelationContext.get_context()
-
-        if ctx:
-            record.correlation_id = ctx.correlation_id
-            record.workflow_name = ctx.workflow_name or ""
-            record.agent_name = ctx.agent_name or ""
-            record.agent_index = ctx.agent_index if ctx.agent_index is not None else -1
-            record.batch_id = ctx.batch_id or ""
-            record.item_id = ctx.item_id or ""
-            # Add any extra context
-            for key, value in ctx.extra.items():
-                if not hasattr(record, key):
-                    setattr(record, key, value)
-        else:
-            record.correlation_id = ""
-            record.workflow_name = ""
-            record.agent_name = ""
-            record.agent_index = -1
-            record.batch_id = ""
-            record.item_id = ""
-
-        return True
 
 
 class RedactingFilter(logging.Filter):
