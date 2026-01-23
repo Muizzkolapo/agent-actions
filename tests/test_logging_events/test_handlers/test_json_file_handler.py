@@ -361,9 +361,7 @@ class TestJSONFileHandlerThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [
-            threading.Thread(target=write_events, args=(i,)) for i in range(5)
-        ]
+        threads = [threading.Thread(target=write_events, args=(i,)) for i in range(5)]
 
         for t in threads:
             t.start()

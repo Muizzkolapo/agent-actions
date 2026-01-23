@@ -116,9 +116,7 @@ class TestRunResultsCollectorInit:
 
     def test_init_with_workflow_name(self, temp_output_dir):
         """Test initialization with workflow name."""
-        collector = RunResultsCollector(
-            output_dir=temp_output_dir, workflow_name="my_workflow"
-        )
+        collector = RunResultsCollector(output_dir=temp_output_dir, workflow_name="my_workflow")
         assert collector.workflow_name == "my_workflow"
         assert collector._metadata["workflow_name"] == "my_workflow"
 
@@ -379,9 +377,7 @@ class TestTokenAccumulation:
             ]
         ):
             collector.handle(AgentStartEvent(agent_name=name, agent_index=i))
-            collector.handle(
-                AgentCompleteEvent(agent_name=name, agent_index=i, tokens=tokens)
-            )
+            collector.handle(AgentCompleteEvent(agent_name=name, agent_index=i, tokens=tokens))
 
         assert collector._total_tokens["prompt_tokens"] == 600
         assert collector._total_tokens["completion_tokens"] == 300
@@ -424,9 +420,7 @@ class TestFlushAndOutput:
 
     def test_output_structure(self, collector, temp_output_dir):
         """Test the structure of run_results.json."""
-        collector.handle(
-            WorkflowStartEvent(workflow_name="my_workflow", agent_count=2)
-        )
+        collector.handle(WorkflowStartEvent(workflow_name="my_workflow", agent_count=2))
         collector.handle(AgentStartEvent(agent_name="agent1", agent_index=0))
         collector.handle(
             AgentCompleteEvent(
@@ -436,9 +430,7 @@ class TestFlushAndOutput:
                 tokens={"total_tokens": 100},
             )
         )
-        collector.handle(
-            AgentSkipEvent(agent_name="agent2", agent_index=1, skip_reason="cached")
-        )
+        collector.handle(AgentSkipEvent(agent_name="agent2", agent_index=1, skip_reason="cached"))
         collector.handle(
             WorkflowCompleteEvent(
                 workflow_name="my_workflow",
@@ -519,9 +511,7 @@ class TestGetSummary:
 
         collector.handle(AgentStartEvent(agent_name="failed1", agent_index=4))
         collector.handle(
-            AgentFailedEvent(
-                agent_name="failed1", agent_index=4, error_message="Error"
-            )
+            AgentFailedEvent(agent_name="failed1", agent_index=4, error_message="Error")
         )
 
         summary = collector.get_summary()
@@ -546,9 +536,7 @@ class TestUniqueIdGeneration:
     def test_unique_id_updates_with_workflow(self, collector):
         """Test that unique_id uses workflow name from start event."""
         # Handle workflow start which sets the workflow_name
-        collector.handle(
-            WorkflowStartEvent(workflow_name="actual_workflow", agent_count=1)
-        )
+        collector.handle(WorkflowStartEvent(workflow_name="actual_workflow", agent_count=1))
         collector.handle(AgentStartEvent(agent_name="agent", agent_index=0))
 
         result = collector._results["agent"]
