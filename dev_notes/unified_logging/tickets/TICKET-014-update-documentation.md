@@ -1,6 +1,6 @@
 # TICKET-014: Update Logging Documentation
 
-**Status:** 🔲 TODO
+**Status:** ✅ DONE
 **Priority:** Medium
 **Estimate:** 2-3 hours
 **Labels:** logging, documentation
@@ -11,10 +11,10 @@ Update all documentation to reflect the new event-based logging system.
 
 ## Deliverables
 
-- [ ] Update README logging section
-- [ ] Update developer guide
-- [ ] Add logging architecture doc
-- [ ] Update API documentation
+- [x] Update README logging section
+- [x] Update developer guide
+- [x] Add logging architecture doc
+- [x] Update API documentation
 
 ## Documentation Updates
 
@@ -80,7 +80,54 @@ After each run:
 
 ## Acceptance Criteria
 
-- [ ] All docs reference new system
-- [ ] No references to old logging
-- [ ] Examples are accurate
-- [ ] API reference complete
+- [x] All docs reference new system
+- [x] No references to old logging
+- [x] Examples are accurate
+- [x] API reference complete
+
+## Implementation Summary
+
+### Files Updated
+
+1. **README.md** - Added comprehensive "Logging and Observability" section:
+   - Configuration options (--verbose, --quiet)
+   - Output artifacts locations (run_results.json, events.json)
+   - Event-based system overview
+
+2. **CONTRIBUTING.md** - Added "Event-Based Logging System" section:
+   - System architecture diagram
+   - How to add new event types
+   - How to create event handlers
+   - Testing events and handlers
+   - Context propagation
+   - Event guidelines
+
+3. **docs.agent-actions/docs/reference/architecture/logging.md** (NEW) - Comprehensive architecture documentation:
+   - System overview and architecture diagram
+   - Core components (EventManager, Event Types, Handlers)
+   - Event flow (initialization, emission, enrichment, dispatch, output)
+   - Context propagation
+   - Testing guidelines
+   - Configuration options
+   - Best practices
+   - Migration guide from legacy logging
+
+4. **docs.agent-actions/docs/reference/api/logging.md** (NEW) - Complete API reference:
+   - Public API (fire_event, get_manager, LoggerFactory)
+   - EventManager methods
+   - All event classes with examples
+   - Event handler classes
+   - Configuration classes
+   - Constants (EventLevel, EventCategory)
+   - Usage examples
+
+### Artifact Paths Verified
+
+Confirmed actual artifact paths:
+- `{workflow}/agent_io/target/run_results.json` - Execution summary
+- `{workflow}/agent_io/target/events.json` - Full event log (NDJSON)
+- `logs/agent_actions.log` - Application logs (if configured)
+
+### Note on --quiet Flag
+
+The --quiet flag is supported in LoggerFactory.initialize() but not yet exposed in the CLI. This will be added in TICKET-015.
