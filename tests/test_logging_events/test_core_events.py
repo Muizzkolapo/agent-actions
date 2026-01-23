@@ -680,7 +680,9 @@ class TestEventSerialization:
         for event in events:
             code = event.code
             assert code is not None, f"Event {type(event).__name__} should have a code"
-            assert len(code) == 4, f"Event {type(event).__name__} code should be 4 chars, got {code}"
+            assert len(code) == 4, (
+                f"Event {type(event).__name__} code should be 4 chars, got {code}"
+            )
             assert code[0].isalpha(), f"Event {type(event).__name__} code should start with letter"
             assert code[1:].isdigit(), f"Event {type(event).__name__} code should have 3 digits"
 

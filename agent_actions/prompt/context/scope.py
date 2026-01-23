@@ -338,6 +338,18 @@ class ContextScopeProcessor:
         return action_data.get(field_name)
 
     @staticmethod
+    def extract_action_fields(field_context: Dict, action_name: str) -> Optional[Dict]:
+        """Return all fields for an action if present and dict-like, otherwise None."""
+        if not isinstance(field_context, dict):
+            return None
+
+        action_data = field_context.get(action_name)
+        if not isinstance(action_data, dict):
+            return None
+
+        return action_data
+
+    @staticmethod
     def apply_context_scope(
         field_context: Dict, context_scope: Dict, static_data: Optional[Dict] = None
     ) -> Tuple[Dict, Dict, Dict]:
@@ -393,14 +405,21 @@ class ContextScopeProcessor:
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
-                # Extract value from original field_context (before drop removed it)
-                value = ContextScopeProcessor.extract_field_value(
-                    field_context, action_name, field_name
-                )
+                if field_name == "*":
+                    action_fields = ContextScopeProcessor.extract_action_fields(
+                        field_context, action_name
+                    )
+                    if action_fields:
+                        llm_context.update(action_fields)
+                else:
+                    # Extract value from original field_context (before drop removed it)
+                    value = ContextScopeProcessor.extract_field_value(
+                        field_context, action_name, field_name
+                    )
 
-                if value is not None:
-                    # Add to llm_context (flat dict with field names as keys)
-                    llm_context[field_name] = value
+                    if value is not None:
+                        # Add to llm_context (flat dict with field names as keys)
+                        llm_context[field_name] = value
 
                     # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -413,14 +432,21 @@ class ContextScopeProcessor:
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
-                # Extract value from original field_context
-                value = ContextScopeProcessor.extract_field_value(
-                    field_context, action_name, field_name
-                )
+                if field_name == "*":
+                    action_fields = ContextScopeProcessor.extract_action_fields(
+                        field_context, action_name
+                    )
+                    if action_fields:
+                        passthrough_fields.update(action_fields)
+                else:
+                    # Extract value from original field_context
+                    value = ContextScopeProcessor.extract_field_value(
+                        field_context, action_name, field_name
+                    )
 
-                if value is not None:
-                    # Add to passthrough_fields (flat dict with field names as keys)
-                    passthrough_fields[field_name] = value
+                    if value is not None:
+                        # Add to passthrough_fields (flat dict with field names as keys)
+                        passthrough_fields[field_name] = value
 
             except ValueError:
                 # Invalid reference, skip silently

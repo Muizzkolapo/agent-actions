@@ -157,6 +157,93 @@ class TestContextScopeProcessor:
         unchanged = ContextScopeProcessor.merge_passthrough_fields(structured_response, {})
         assert unchanged == structured_response
 
+    def test_apply_context_scope_observe_wildcard(self):
+        """Test wildcard expansion for observe directive in apply_context_scope."""
+        field_context = {
+            "action_a": {"field1": "value1", "field2": "value2", "field3": "value3"},
+            "action_b": {"other_field": "other_value"},
+        }
+        context_scope = {"observe": ["action_a.*"]}
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        # All fields from action_a should be in llm_context
+        assert llm_context["field1"] == "value1"
+        assert llm_context["field2"] == "value2"
+        assert llm_context["field3"] == "value3"
+
+        # Fields from action_b should NOT be in llm_context
+        assert "other_field" not in llm_context
+
+        # passthrough_fields should be empty
+        assert passthrough_fields == {}
+
+        # prompt_context should still have all original data
+        assert prompt_context["action_a"]["field1"] == "value1"
+        assert prompt_context["action_b"]["other_field"] == "other_value"
+
+    def test_apply_context_scope_passthrough_wildcard(self):
+        """Test wildcard expansion for passthrough directive in apply_context_scope."""
+        field_context = {
+            "action_a": {"field1": "value1", "field2": "value2"},
+            "action_b": {"other_field": "other_value"},
+        }
+        context_scope = {"passthrough": ["action_a.*"]}
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        # All fields from action_a should be in passthrough_fields
+        assert passthrough_fields["field1"] == "value1"
+        assert passthrough_fields["field2"] == "value2"
+
+        # Fields from action_b should NOT be in passthrough_fields
+        assert "other_field" not in passthrough_fields
+
+        # llm_context should be empty
+        assert llm_context == {}
+
+    def test_apply_context_scope_mixed_wildcard_and_specific(self):
+        """Test mixing wildcard and specific field references."""
+        field_context = {
+            "action_a": {"field1": "value1", "field2": "value2"},
+            "action_b": {"field3": "value3", "field4": "value4"},
+        }
+        context_scope = {
+            "observe": ["action_a.*"],  # Wildcard for action_a
+            "passthrough": ["action_b.field3"],  # Specific field for action_b
+        }
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        # action_a fields should be in llm_context (wildcard)
+        assert llm_context["field1"] == "value1"
+        assert llm_context["field2"] == "value2"
+
+        # Only field3 from action_b should be in passthrough_fields (specific)
+        assert passthrough_fields["field3"] == "value3"
+        assert "field4" not in passthrough_fields
+
+    def test_apply_context_scope_wildcard_nonexistent_action(self):
+        """Test wildcard on non-existent action returns empty."""
+        field_context = {
+            "action_a": {"field1": "value1"},
+        }
+        context_scope = {"observe": ["nonexistent_action.*"]}
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        # llm_context should be empty since action doesn't exist
+        assert llm_context == {}
+        assert passthrough_fields == {}
+
     def test_realtime_mode_progressive_exposure_wildcard(self):
         """Test realtime mode with wildcard (all fields from dependency)."""
         contents = {
