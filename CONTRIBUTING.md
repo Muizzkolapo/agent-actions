@@ -81,6 +81,172 @@ We use multiple tools to catch logging issues:
 2. **AST Checker** (`task lint:logging`) - Detects `{var}` without f-prefix
 3. **Pre-commit hooks** - Runs both on every commit
 
+## Event-Based Logging System
+
+agent-actions uses an event-driven architecture inspired by dbt for user-facing output and observability.
+
+### System Architecture
+
+```
+Application Code
+       │
+       ├── logger.info("msg")  ──┐
+       │                         │
+       └── fire_event(Event)  ───┼──► EventManager
+                                 │         │
+                                 │    ┌────┴────┐
+                                 │    │         │
+                                 ▼    ▼         ▼
+                          Console  JSON File  run_results.json
+```
+
+All logging flows through the EventManager:
+- Python logging (`logger.info()`) → LoggingBridgeHandler → Events
+- Direct events (`fire_event()`) → Events
+- Events → Handlers (Console, JSON, run_results.json)
+
+### Adding New Event Types
+
+Create event classes in `agent_actions/logging/events/types.py`:
+
+```python
+from agent_actions.logging.events.base import BaseEvent, EventCategory
+
+@dataclass
+class MyCustomEvent(BaseEvent):
+    """Emitted when custom action occurs."""
+
+    category: EventCategory = EventCategory.SYSTEM
+    event_type: str = "custom_action"
+
+    # Event-specific data
+    action_name: str = ""
+    result: str = ""
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Add event-specific data to the data dict
+        self.data.update({
+            "action_name": self.action_name,
+            "result": self.result,
+        })
+```
+
+Then emit the event:
+
+```python
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import MyCustomEvent
+
+fire_event(MyCustomEvent(
+    message="Custom action completed",
+    action_name="my_action",
+    result="success",
+))
+```
+
+### Event Categories
+
+Events are organized by category:
+
+- **workflow** - Workflow lifecycle (start, complete, error)
+- **agent** - Agent execution (start, complete, skip, error)
+- **batch** - Batch job operations (submit, complete, error)
+- **validation** - Validation events (start, pass, fail, warning)
+- **progress** - Progress updates
+- **system** - System-level events
+
+### Creating Event Handlers
+
+Implement custom handlers by extending the base handler:
+
+```python
+from agent_actions.logging.core.handlers import EventHandler
+
+class MyHandler(EventHandler):
+    def accepts(self, event: BaseEvent) -> bool:
+        """Return True for events this handler should process."""
+        return event.category == "workflow"
+
+    def handle(self, event: BaseEvent) -> None:
+        """Process the event."""
+        print(f"Workflow event: {event.message}")
+
+    def flush(self) -> None:
+        """Flush any buffered data."""
+        pass
+```
+
+Register handlers with the EventManager:
+
+```python
+from agent_actions.logging import get_manager
+
+manager = get_manager()
+manager.register(MyHandler())
+```
+
+### Testing Events
+
+Test event emission and handling:
+
+```python
+from agent_actions.logging.core import EventManager
+from agent_actions.logging.events import WorkflowStartEvent
+
+def test_workflow_event():
+    manager = EventManager.get()
+
+    # Create mock handler
+    events_received = []
+
+    def mock_handler(event):
+        events_received.append(event)
+
+    # Register handler
+    manager.register_function(mock_handler)
+
+    # Fire event
+    fire_event(WorkflowStartEvent(
+        message="Test workflow",
+        workflow_name="test",
+    ))
+
+    # Verify
+    assert len(events_received) == 1
+    assert events_received[0].workflow_name == "test"
+```
+
+### Context Propagation
+
+Events automatically inherit context from the CorrelationContext:
+
+```python
+from agent_actions.logging import get_manager
+
+# Set context (automatically propagates to all events)
+manager = get_manager()
+with manager.context(
+    workflow_name="my_workflow",
+    correlation_id="abc123",
+):
+    fire_event(AgentStartEvent(
+        message="Starting agent",
+        agent_name="extract_data",
+    ))
+    # Event will have workflow_name and correlation_id populated
+```
+
+### Event Guidelines
+
+1. **Use typed events** - Create specific event classes, don't use BaseEvent directly
+2. **Clear messages** - Event messages should be human-readable and actionable
+3. **Structured data** - Put machine-readable data in the `data` dict
+4. **Categories matter** - Use correct category for proper filtering
+5. **Test handlers** - Write tests for custom handlers
+
+See `agent_actions/logging/events/types.py` for all available event types.
+
 ## Testing
 
 ```bash

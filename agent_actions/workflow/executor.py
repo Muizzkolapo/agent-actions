@@ -661,7 +661,17 @@ class AgentExecutor:
 
             # Normal completion
             self.deps.state_manager.update_status(params.agent_name, "completed")
-            fire_event(AgentCompleteEvent(agent_name=params.agent_name, duration=duration))
+
+            # Retrieve token usage from thread-local storage
+            tokens = get_last_usage()
+
+            fire_event(
+                AgentCompleteEvent(
+                    agent_name=params.agent_name,
+                    execution_time=duration,
+                    tokens=tokens or {},
+                )
+            )
             logger.info(
                 "Agent completed successfully (async)",
                 extra={
@@ -673,9 +683,6 @@ class AgentExecutor:
                     "is_last_agent": params.is_last_agent,
                 },
             )
-
-            # Retrieve token usage from thread-local storage
-            tokens = get_last_usage()
 
             # Track action success
             if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
@@ -724,7 +731,13 @@ class AgentExecutor:
                     "error_type": type(e).__name__,
                 },
             )
-            fire_event(AgentFailedEvent(agent_name=params.agent_name, error=str(e)))
+            fire_event(
+                AgentFailedEvent(
+                    agent_name=params.agent_name,
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                )
+            )
             self.deps.state_manager.update_status(params.agent_name, "failed")
 
             # Track action failure

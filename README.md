@@ -158,6 +158,60 @@ This catches schema errors, circular dependencies, template issues, missing UDFs
 | `agac list-udfs` | List available UDFs |
 | `agac validate-udfs` | Validate UDF implementations |
 
+## Logging and Observability
+
+agent-actions uses an event-based logging system inspired by dbt, providing both user-friendly CLI output and detailed structured logs for debugging.
+
+### Execution Output
+
+During workflow execution, you'll see real-time progress with:
+- Action start/completion with timing
+- Token usage per action
+- Validation results
+- Error messages with context
+
+### Controlling Verbosity
+
+```bash
+# Show debug information (all events)
+agac run --verbose
+
+# Show only warnings and errors
+agac run --quiet  # Coming in next release
+
+# Default: Show workflow progress and action results
+agac run
+```
+
+### Output Artifacts
+
+After each workflow run, agent-actions generates artifacts in your workflow directory:
+
+```
+my-workflow/
+└── agent_io/
+    └── target/
+        ├── run_results.json    # Execution summary (status, timing, tokens)
+        └── events.json         # Full event log (NDJSON format)
+```
+
+**`run_results.json`** contains:
+- Workflow metadata (invocation ID, execution mode, timing)
+- Per-action results (status, execution time, token usage, output folders)
+- Total token counts across all actions
+
+**`events.json`** contains:
+- Detailed event stream (workflow, agent, batch, validation events)
+- Complete execution trace with timestamps and correlation IDs
+- Useful for debugging, analytics, and integration with external tools
+
+### Application Logs
+
+General application logs (if enabled) are written to:
+- `logs/agent_actions.log` - Application-level logs (JSON format)
+
+See the [Logging Architecture](https://muizzkolapo.github.io/docs.agent-actions/reference/architecture/logging) documentation for implementation details.
+
 ## Documentation
 
 - [Getting Started](https://muizzkolapo.github.io/docs.agent-actions/getting-started) - Installation and first workflow
