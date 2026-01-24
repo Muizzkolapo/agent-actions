@@ -52,6 +52,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import CacheHitEvent, CacheInvalidationEvent
+
 logger = logging.getLogger(__name__)
 
 # Public API
@@ -108,6 +111,10 @@ def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -
     with _LOCK:
         # Check cache first (faster than sys.path lookup)
         if path_str in _PATH_CACHE:
+            fire_event(CacheHitEvent(
+                cache_type="module_path",
+                key=path_str
+            ))
             return False
 
         # Add to sys.path if not already present
@@ -211,8 +218,15 @@ def clear_path_cache() -> None:
         Only clears the internal cache tracking what was added.
     """
     with _LOCK:
+        entries_removed = len(_PATH_CACHE)
         _PATH_CACHE.clear()
         logger.debug("Cleared path cache")
+
+        fire_event(CacheInvalidationEvent(
+            cache_type="module_path",
+            entries_removed=entries_removed,
+            reason="manual clear"
+        ))
 
 
 # ==============================================================================
@@ -267,6 +281,10 @@ def load_module_from_path(
         # Check cache first
         if cache and cache_key in _MODULE_CACHE:
             logger.debug("Returning cached module: %s", module_name)
+            fire_event(CacheHitEvent(
+                cache_type="module",
+                key=module_name
+            ))
             return _MODULE_CACHE[cache_key]
 
         module = None
@@ -347,8 +365,15 @@ def clear_module_cache() -> None:
         Only clears the internal cache tracking what was loaded.
     """
     with _LOCK:
+        entries_removed = len(_MODULE_CACHE)
         _MODULE_CACHE.clear()
         logger.debug("Cleared module cache")
+
+        fire_event(CacheInvalidationEvent(
+            cache_type="module",
+            entries_removed=entries_removed,
+            reason="manual clear"
+        ))
 
 
 # ==============================================================================

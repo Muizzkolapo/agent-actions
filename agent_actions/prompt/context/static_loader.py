@@ -13,6 +13,13 @@ from typing import Any, Dict, Optional
 import yaml
 
 from agent_actions.errors import FileSystemError  # New modular pattern!
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import (
+    CacheHitEvent,
+    CacheMissEvent,
+    CacheInvalidationEvent,
+    CacheStatsEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +81,19 @@ class StaticDataLoader:
                 cache_key = str(resolved_path)
                 if cache_key in self._cache:
                     logger.debug("Cache hit for field '%s': %s", field_name, cache_key)
+                    fire_event(CacheHitEvent(
+                        cache_type="static_data",
+                        key=field_name
+                    ))
                     loaded_data[field_name] = self._cache[cache_key]
                 else:
                     # Load and cache
                     logger.debug("Loading file for field '%s': %s", field_name, resolved_path)
+                    fire_event(CacheMissEvent(
+                        cache_type="static_data",
+                        key=field_name,
+                        reason="file not in cache"
+                    ))
                     data = self._load_file(resolved_path, field_name)
                     self._cache[cache_key] = data
                     loaded_data[field_name] = data
@@ -329,6 +345,13 @@ class StaticDataLoader:
         self._cache.clear()
         logger.debug("Cache cleared (%s files removed)", num_files)
 
+        # Fire cache invalidation event
+        fire_event(CacheInvalidationEvent(
+            cache_type="static_data",
+            entries_removed=num_files,
+            reason="manual clear"
+        ))
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics for debugging."""
         import sys
@@ -336,9 +359,21 @@ class StaticDataLoader:
         # Estimate cache size
         total_size = sum(sys.getsizeof(value) for value in self._cache.values())
 
-        return {
+        stats = {
             "cached_files": len(self._cache),
             "cached_file_paths": list(self._cache.keys()),
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / 1024 / 1024, 2),
         }
+
+        # Fire cache stats event
+        # Note: This cache doesn't track hit/miss counts, so we use 0
+        fire_event(CacheStatsEvent(
+            cache_type="static_data",
+            hit_count=0,
+            miss_count=0,
+            total_entries=len(self._cache),
+            size_bytes=total_size
+        ))
+
+        return stats

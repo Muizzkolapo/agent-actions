@@ -9,6 +9,8 @@ import sys
 from typing import Any, Dict, List, Tuple, Type, Union, get_origin, get_args
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent, CacheInvalidationEvent
 
 # Import for type checking
 if sys.version_info >= (3, 10):
@@ -124,8 +126,22 @@ def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
     """
     # Check cache first
     if type_hint in _schema_cache:
+        # Fire cache hit event
+        type_name = getattr(type_hint, "__name__", str(type_hint))
+        fire_event(CacheHitEvent(
+            cache_type="schema_type",
+            key=type_name
+        ))
         # Return a copy to prevent mutation of cached value
         return _deep_copy_schema(_schema_cache[type_hint])
+
+    # Fire cache miss event
+    type_name = getattr(type_hint, "__name__", str(type_hint))
+    fire_event(CacheMissEvent(
+        cache_type="schema_type",
+        key=type_name,
+        reason="type not in cache"
+    ))
 
     # Detection order (most specific to least):
     # 1. Pydantic (has model_json_schema - unique to v2)
@@ -392,4 +408,11 @@ def unified_to_json_schema(unified_schema: Dict[str, Any]) -> Dict[str, Any]:
 
 def clear_schema_cache() -> None:
     """Clear the type schema cache. Useful for testing."""
+    entries_removed = len(_schema_cache)
     _schema_cache.clear()
+
+    fire_event(CacheInvalidationEvent(
+        cache_type="schema_type",
+        entries_removed=entries_removed,
+        reason="manual clear"
+    ))
