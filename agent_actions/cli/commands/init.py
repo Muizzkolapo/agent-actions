@@ -196,12 +196,16 @@ class InitCommand:
             "available_templates": self._get_available_templates(),
             "force": self.args.force,
         }
-        fire_event(ProjectValidationEvent(validation_step="project_structure", result="validating"))
+        fire_event(
+            ProjectValidationEvent(validation_target="project_structure", result="validating")
+        )
         if not validator.validate(validation_data):
             errors = validator.get_errors()
-            fire_event(ProjectValidationEvent(validation_step="project_structure", result="failed"))
+            fire_event(
+                ProjectValidationEvent(validation_target="project_structure", result="failed")
+            )
             raise ValidationError("Project validation failed", context={"errors": errors})
-        fire_event(ProjectValidationEvent(validation_step="project_structure", result="passed"))
+        fire_event(ProjectValidationEvent(validation_target="project_structure", result="passed"))
 
         self._create_project_directory()
         fire_event(ProjectDirectoryCreatedEvent(directory_path=str(self.project_dir)))

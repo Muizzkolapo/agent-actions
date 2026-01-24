@@ -49,8 +49,8 @@ def initialize_application(
     logger.info("Initializing Agent Actions application...")
     if not skip_validation:
         try:
-            fire_event(StartupValidationStartEvent())
             start_time = datetime.now()
+            fire_event(StartupValidationStartEvent())
             env_config = validate_startup(constructor_path, default_path)
             elapsed_time = (datetime.now() - start_time).total_seconds()
             fire_event(StartupValidationCompleteEvent(elapsed_time=elapsed_time))

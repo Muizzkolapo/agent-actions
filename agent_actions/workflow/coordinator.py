@@ -324,17 +324,20 @@ class AgentWorkflow:
 
     def _discover_udfs(self):
         """Discover user-defined functions from configured paths."""
+        total_udfs = 0
         if self.config.paths.user_code_path:
-            self._discover_udfs_from_path(self.config.paths.user_code_path, is_primary=True)
+            total_udfs = self._discover_udfs_from_path(
+                self.config.paths.user_code_path, is_primary=True
+            )
         elif self.config.manager.tool_path:
-            total_udfs = 0
             for path in self.config.manager.tool_path:
                 count = self._discover_udfs_from_path(path, is_primary=False)
                 total_udfs += count
-            if total_udfs > 0:
-                self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
-                # Fire UDF discovery complete event with total count
-                fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
+
+        # Fire UDF discovery complete event once with total count
+        if total_udfs > 0:
+            self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
+            fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
     def _discover_udfs_from_path(self, path: str, is_primary: bool) -> int:
         """Discover UDFs from a specific path."""
@@ -347,18 +350,11 @@ class AgentWorkflow:
             # Use centralized path management (thread-safe, cached)
             ensure_path_importable(abs_path)
 
-            if not is_primary:
-                self.console.print(f"[cyan]🔍 Discovering UDFs in {abs_path}...[/cyan]")
-            else:
-                self.console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
+            self.console.print(f"[cyan]🔍 Discovering UDFs in {abs_path}...[/cyan]")
 
             registry = discover_udfs(abs_path)
 
-            if is_primary:
-                self.console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]")
-                # Fire discovery complete event for primary path
-                fire_event(UDFDiscoveryCompleteEvent(total_udfs=len(registry)))
-
+            # Don't fire complete event here - it's fired once in _discover_udfs()
             return len(registry)
 
         return 0

@@ -22,7 +22,7 @@ Event Code Prefixes:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 
@@ -1380,16 +1380,24 @@ class ConfigLoadEvent(BaseEvent):
 
 @dataclass
 class ConfigLoadCompleteEvent(BaseEvent):
-    """Fired when all configurations are loaded."""
+    """Fired when all configurations are loaded.
+
+    NOTE: This event is defined but not yet instrumented. Reserved for future use.
+    See TICKET-019 for instrumentation plan.
+    """
 
     config_count: int = 0
+    elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.CONFIGURATION
-        self.message = f"All configurations loaded ({self.config_count} files)"
+        self.message = (
+            f"All configurations loaded ({self.config_count} files) in {self.elapsed_time:.2f}s"
+        )
         self.data = {
             "config_count": self.config_count,
+            "elapsed_time": self.elapsed_time,
         }
 
     @property
@@ -1399,18 +1407,22 @@ class ConfigLoadCompleteEvent(BaseEvent):
 
 @dataclass
 class ConfigValidationEvent(BaseEvent):
-    """Fired when configuration validation occurs."""
+    """Fired when configuration validation occurs.
 
-    config_type: str = ""
-    validation_result: str = ""
+    NOTE: This event is defined but not yet instrumented. Reserved for future use.
+    See TICKET-019 for instrumentation plan.
+    """
+
+    validation_target: str = ""
+    result: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.CONFIGURATION
-        self.message = f"Config validation for {self.config_type}: {self.validation_result}"
+        self.message = f"Config validation for {self.validation_target}: {self.result}"
         self.data = {
-            "config_type": self.config_type,
-            "validation_result": self.validation_result,
+            "validation_target": self.validation_target,
+            "result": self.result,
         }
 
     @property
@@ -1420,6 +1432,9 @@ class ConfigValidationEvent(BaseEvent):
 
 # =============================================================================
 # Environment Variable Events (E prefix)
+# NOTE: These events are defined but not yet instrumented (deferred as LOW priority).
+#       Environment variables are already visible via configuration logging.
+#       See TICKET-019 for details.
 # =============================================================================
 
 
@@ -1498,15 +1513,19 @@ class CLIInitStartEvent(BaseEvent):
 
 @dataclass
 class CLIArgumentParsingEvent(BaseEvent):
-    """Fired when CLI arguments are parsed."""
+    """Fired before CLI arguments are parsed.
+
+    Contains raw argv before Click processes the arguments. The args field
+    contains the raw command-line arguments, not the parsed result.
+    """
 
     command: str = ""
-    args: dict[str, Any] = field(default_factory=dict)
+    args: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.INITIALIZATION
-        self.message = f"CLI command: {self.command}"
+        self.message = f"CLI invoked with command: {self.command}"
         self.data = {
             "command": self.command,
             "args": self.args,
@@ -1522,13 +1541,17 @@ class CLIInitCompleteEvent(BaseEvent):
     """Fired when CLI initialization completes."""
 
     command: str = ""
+    elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.INITIALIZATION
-        self.message = f"CLI initialization complete for '{self.command}'"
+        self.message = (
+            f"CLI initialization complete for '{self.command}' in {self.elapsed_time:.2f}s"
+        )
         self.data = {
             "command": self.command,
+            "elapsed_time": self.elapsed_time,
         }
 
     @property
@@ -1661,15 +1684,15 @@ class ProjectInitializationStartEvent(BaseEvent):
 class ProjectValidationEvent(BaseEvent):
     """Fired during project validation."""
 
-    validation_step: str = ""
+    validation_target: str = ""
     result: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.INITIALIZATION
-        self.message = f"Project validation ({self.validation_step}): {self.result}"
+        self.message = f"Project validation ({self.validation_target}): {self.result}"
         self.data = {
-            "validation_step": self.validation_step,
+            "validation_target": self.validation_target,
             "result": self.result,
         }
 
@@ -1768,13 +1791,17 @@ class UDFDiscoveryCompleteEvent(BaseEvent):
     """Fired when UDF discovery completes."""
 
     total_udfs: int = 0
+    elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.PLUGIN
-        self.message = f"UDF discovery complete: {self.total_udfs} UDFs found"
+        self.message = (
+            f"UDF discovery complete: {self.total_udfs} UDFs found in {self.elapsed_time:.2f}s"
+        )
         self.data = {
             "total_udfs": self.total_udfs,
+            "elapsed_time": self.elapsed_time,
         }
 
     @property
