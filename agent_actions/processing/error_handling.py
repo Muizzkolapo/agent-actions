@@ -18,6 +18,8 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
 from agent_actions.errors import ProcessingError as ProcessorError  # New modular pattern!
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
 
 T = TypeVar("T", bound=ProcessorError)
 
@@ -95,6 +97,25 @@ class ProcessorErrorHandlerMixin:
             "traceback": traceback.format_exc(),
         }
         self.logger.error(json.dumps(log_entry, default=str))
+
+        # Fire appropriate data error event
+        file_path = context_kwargs.get("file_path", "unknown")
+        error_name = error.__class__.__name__
+        if error_name in ("JSONDecodeError", "YAMLError", "XMLSyntaxError", "CSVError"):
+            # Parse error - malformed data format
+            format_type = "json" if "JSON" in error_name else "yaml" if "YAML" in error_name else "xml" if "XML" in error_name else "csv"
+            fire_event(DataParsingErrorEvent(
+                file_path=str(file_path) if file_path else "unknown",
+                format=format_type,
+                error=str(error),
+            ))
+        else:
+            # Loading error - file access or other issues
+            fire_event(DataLoadingErrorEvent(
+                file_path=str(file_path) if file_path else "unknown",
+                error=str(error),
+            ))
+
         if reraise:
             if error_type:
                 raise error_type(f"{operation} failed: {str(error)}") from error

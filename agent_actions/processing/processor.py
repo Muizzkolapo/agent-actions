@@ -6,6 +6,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.operations import TemplateVariableError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import TemplateRenderingFailedEvent
 from .enrichment import EnrichmentPipeline
 from .recovery.retry import RetryService, create_retry_service_from_config
 from .types import (
@@ -240,9 +242,14 @@ class RecordProcessor:
                 # ConfigurationError indicates a fundamental workflow misconfiguration
                 # Re-raise immediately to fail the workflow - these cannot be recovered
                 raise
-            except TemplateVariableError:
+            except TemplateVariableError as e:
                 # TemplateVariableError indicates a code bug (undefined template variables)
                 # Re-raise immediately to fail the workflow - these are not data errors
+                fire_event(TemplateRenderingFailedEvent(
+                    agent_name=context.agent_name,
+                    missing_variables=e.missing_variables,
+                    error_message=str(e),
+                ))
                 raise
             except Exception as e:
                 # Create failed result instead of propagating exception

@@ -10,6 +10,11 @@ Event Code Prefixes:
     B - Batch processing events
     L - LLM interaction events
     V - Validation events
+    C - Cache events
+    T - Template rendering events
+    D - Data loading/parsing events
+    G - Guard evaluation events
+    R - Recovery/retry events
 """
 
 from dataclasses import dataclass, field
@@ -27,6 +32,10 @@ class EventCategories:
     LLM = "llm"
     VALIDATION = "validation"
     CACHE = "cache"
+    TEMPLATE = "template"
+    DATA = "data"
+    GUARD = "guard"
+    RECOVERY = "recovery"
 
 
 def _safe_value_repr(value: Any, max_length: int = 100) -> str:
@@ -898,3 +907,409 @@ class CacheStatsEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "C006"
+
+
+# =============================================================================
+# Template Rendering Events (T prefix)
+# =============================================================================
+
+
+@dataclass
+class TemplateRenderingFailedEvent(BaseEvent):
+    """Fired when template rendering fails due to undefined variables."""
+
+    agent_name: str = ""
+    missing_variables: list = field(default_factory=list)
+    error_message: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.TEMPLATE
+        vars_str = ", ".join(self.missing_variables) if self.missing_variables else "unknown"
+        self.message = f"Template for '{self.agent_name}' references undefined variables: {vars_str}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "missing_variables": self.missing_variables,
+            "error_message": self.error_message,
+        }
+
+    @property
+    def code(self) -> str:
+        return "T001"
+
+
+@dataclass
+class TemplateSyntaxErrorEvent(BaseEvent):
+    """Fired when template has syntax errors."""
+
+    agent_name: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.TEMPLATE
+        self.message = f"Template syntax error in '{self.agent_name}': {self.error}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "T002"
+
+
+# =============================================================================
+# LLM Error Events (L prefix - L005 onwards, L001-L004 are normal LLM events)
+# =============================================================================
+
+
+@dataclass
+class LLMJSONParseErrorEvent(BaseEvent):
+    """Fired when LLM returns unparseable JSON."""
+
+    provider: str = ""
+    model: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.LLM
+        self.message = f"{self.provider}/{self.model} returned invalid JSON: {self.error}"
+        self.data = {
+            "provider": self.provider,
+            "model": self.model,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "L005"
+
+
+@dataclass
+class LLMConnectionErrorEvent(BaseEvent):
+    """Fired when LLM connection/timeout error occurs."""
+
+    provider: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.LLM
+        self.message = f"{self.provider} connection error: {self.error}"
+        self.data = {
+            "provider": self.provider,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "L006"
+
+
+@dataclass
+class LLMServerErrorEvent(BaseEvent):
+    """Fired when LLM server error (5xx) occurs."""
+
+    provider: str = ""
+    status_code: int = 0
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.LLM
+        self.message = f"{self.provider} server error ({self.status_code}): {self.error}"
+        self.data = {
+            "provider": self.provider,
+            "status_code": self.status_code,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "L007"
+
+
+# =============================================================================
+# Batch Error Events (B prefix - B004 onwards, B001-B003 are normal batch events)
+# =============================================================================
+
+
+@dataclass
+class BatchSubmissionFailedEvent(BaseEvent):
+    """Fired when batch submission fails."""
+
+    batch_id: str = ""
+    provider: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.BATCH
+        self.message = f"Batch submission failed ({self.provider}): {self.error}"
+        self.data = {
+            "batch_id": self.batch_id,
+            "provider": self.provider,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B004"
+
+
+@dataclass
+class BatchStatusCheckFailedEvent(BaseEvent):
+    """Fired when batch status check fails."""
+
+    batch_id: str = ""
+    provider: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.BATCH
+        self.message = f"Failed to check batch status for {self.batch_id}: {self.error}"
+        self.data = {
+            "batch_id": self.batch_id,
+            "provider": self.provider,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B005"
+
+
+@dataclass
+class BatchResultProcessingFailedEvent(BaseEvent):
+    """Fired when batch result processing fails."""
+
+    batch_id: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.BATCH
+        self.message = f"Failed to process batch results for {self.batch_id}: {self.error}"
+        self.data = {
+            "batch_id": self.batch_id,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B006"
+
+
+@dataclass
+class BatchPartialFailureEvent(BaseEvent):
+    """Fired when some batch items fail."""
+
+    batch_id: str = ""
+    failed_count: int = 0
+    total_count: int = 0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.BATCH
+        self.message = f"Batch {self.batch_id} partial failure: {self.failed_count}/{self.total_count} items failed"
+        self.data = {
+            "batch_id": self.batch_id,
+            "failed_count": self.failed_count,
+            "total_count": self.total_count,
+        }
+
+    @property
+    def code(self) -> str:
+        return "B007"
+
+
+# =============================================================================
+# Data Loading/Parsing Events (D prefix)
+# =============================================================================
+
+
+@dataclass
+class DataParsingErrorEvent(BaseEvent):
+    """Fired when data parsing fails."""
+
+    file_path: str = ""
+    format: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.DATA
+        self.message = f"Failed to parse {self.format} from {self.file_path}: {self.error}"
+        self.data = {
+            "file_path": self.file_path,
+            "format": self.format,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "D001"
+
+
+@dataclass
+class DataLoadingErrorEvent(BaseEvent):
+    """Fired when data loading fails."""
+
+    file_path: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.DATA
+        self.message = f"Failed to load data from {self.file_path}: {self.error}"
+        self.data = {
+            "file_path": self.file_path,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "D002"
+
+
+@dataclass
+class DataValidationErrorEvent(BaseEvent):
+    """Fired when data validation fails."""
+
+    file_path: str = ""
+    validation_error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.DATA
+        self.message = f"Data validation failed for {self.file_path}: {self.validation_error}"
+        self.data = {
+            "file_path": self.file_path,
+            "validation_error": self.validation_error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "D003"
+
+
+# =============================================================================
+# Guard Evaluation Events (G prefix)
+# =============================================================================
+
+
+@dataclass
+class GuardEvaluationTimeoutEvent(BaseEvent):
+    """Fired when guard evaluation times out."""
+
+    guard_clause: str = ""
+    timeout_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.GUARD
+        self.message = f"Guard evaluation timed out after {self.timeout_seconds}s: {self.guard_clause}"
+        self.data = {
+            "guard_clause": self.guard_clause,
+            "timeout_seconds": self.timeout_seconds,
+        }
+
+    @property
+    def code(self) -> str:
+        return "G001"
+
+
+@dataclass
+class GuardEvaluationErrorEvent(BaseEvent):
+    """Fired when guard evaluation fails with error."""
+
+    guard_clause: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.GUARD
+        self.message = f"Guard evaluation failed: {self.error}"
+        self.data = {
+            "guard_clause": self.guard_clause,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "G002"
+
+
+# =============================================================================
+# Recovery/Retry Events (R prefix)
+# =============================================================================
+
+
+@dataclass
+class RetryExhaustedEvent(BaseEvent):
+    """Fired when retries are exhausted."""
+
+    attempt: int = 0
+    reason: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.RECOVERY
+        self.message = f"Retry exhausted after {self.attempt} attempts: {self.reason}"
+        self.data = {
+            "attempt": self.attempt,
+            "reason": self.reason,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R001"
+
+
+@dataclass
+class RepromptValidationFailedEvent(BaseEvent):
+    """Fired when reprompt validation fails."""
+
+    agent_name: str = ""
+    attempt: int = 0
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.RECOVERY
+        self.message = f"Reprompt validation failed for '{self.agent_name}' (attempt {self.attempt}): {self.error}"
+        self.data = {
+            "agent_name": self.agent_name,
+            "attempt": self.attempt,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R002"
+
+
+@dataclass
+class RecoveryErrorEvent(BaseEvent):
+    """Fired when recovery mechanism itself fails."""
+
+    recovery_type: str = ""
+    error: str = ""
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.ERROR
+        self.category = EventCategories.RECOVERY
+        self.message = f"Recovery mechanism failed ({self.recovery_type}): {self.error}"
+        self.data = {
+            "recovery_type": self.recovery_type,
+            "error": self.error,
+        }
+
+    @property
+    def code(self) -> str:
+        return "R003"

@@ -33,6 +33,7 @@ from agent_actions.logging.events import (
     LLMErrorEvent,
     RateLimitEvent,
 )
+from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,11 @@ class GroqClient(BaseClient):
                     "request_id": request_id,
                 },
             )
+            fire_event(LLMJSONParseErrorEvent(
+                provider="groq",
+                model=model_name,
+                error=str(e),
+            ))
             return [{"raw_response": response_temp, "_parse_error": str(e)}]
 
     @staticmethod
