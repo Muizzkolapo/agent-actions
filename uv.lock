@@ -13,6 +13,7 @@ name = "agent-actions"
 version = "2.0.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiofiles" },
     { name = "anthropic" },
     { name = "beautifulsoup4" },
     { name = "cohere" },
@@ -36,6 +37,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pygls" },
+    { name = "pyparsing" },
     { name = "pypdf2" },
     { name = "python-docx" },
     { name = "python-dotenv" },
@@ -85,6 +87,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "aiofiles", specifier = ">=24.0.0" },
     { name = "anthropic", specifier = ">=0.30.0" },
     { name = "beautifulsoup4", specifier = ">=4.12.3" },
     { name = "cohere", specifier = ">=5.0.0" },
@@ -112,6 +115,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.8.0" },
     { name = "pydantic-settings", specifier = ">=2.4.0" },
     { name = "pygls", specifier = ">=2.0.0" },
+    { name = "pyparsing", specifier = ">=3.1.1" },
     { name = "pypdf2", specifier = ">=3.0.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
@@ -148,6 +152,15 @@ dev = [
     { name = "types-pyyaml", specifier = ">=6.0.12" },
     { name = "types-requests", specifier = ">=2.31.0" },
     { name = "vulture", specifier = ">=2.11" },
+]
+
+[[package]]
+name = "aiofiles"
+version = "25.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/c3/534eac40372d8ee36ef40df62ec129bee4fdb5ad9706e58a29be53b2c970/aiofiles-25.1.0.tar.gz", hash = "sha256:a8d728f0a29de45dc521f18f07297428d56992a742f0cd2701ba86e44d23d5b2", size = 46354, upload-time = "2025-10-09T20:51:04.358Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl", hash = "sha256:abe311e527c862958650f9438e859c1fa7568a141b22abcd015e120e86a85695", size = 14668, upload-time = "2025-10-09T20:51:03.174Z" },
 ]
 
 [[package]]
