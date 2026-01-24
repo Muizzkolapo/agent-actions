@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union
 
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import CacheHitEvent, CacheInvalidationEvent
+from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent, CacheInvalidationEvent
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,13 @@ def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -
                 key=path_str
             ))
             return False
+
+        # Cache miss - path not in cache
+        fire_event(CacheMissEvent(
+            cache_type="module_path",
+            key=path_str,
+            reason="path not in cache"
+        ))
 
         # Add to sys.path if not already present
         if path_str not in sys.path:
@@ -286,6 +293,13 @@ def load_module_from_path(
                 key=module_name
             ))
             return _MODULE_CACHE[cache_key]
+
+        # Cache miss - need to load module
+        fire_event(CacheMissEvent(
+            cache_type="module",
+            key=module_name,
+            reason="module not in cache"
+        ))
 
         module = None
 

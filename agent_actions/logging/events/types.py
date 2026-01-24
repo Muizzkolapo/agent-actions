@@ -13,7 +13,7 @@ Event Code Prefixes:
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Optional
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 
@@ -756,7 +756,7 @@ class CacheHitEvent(BaseEvent):
 
     cache_type: str = ""
     key: str = ""
-    hit_rate: float | None = None
+    hit_rate: Optional[float] = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -874,7 +874,7 @@ class CacheStatsEvent(BaseEvent):
     hit_count: int = 0
     miss_count: int = 0
     total_entries: int = 0
-    size_bytes: int | None = None
+    size_bytes: Optional[int] = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG

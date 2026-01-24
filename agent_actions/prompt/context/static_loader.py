@@ -18,7 +18,6 @@ from agent_actions.logging.events.types import (
     CacheHitEvent,
     CacheMissEvent,
     CacheInvalidationEvent,
-    CacheStatsEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -359,21 +358,9 @@ class StaticDataLoader:
         # Estimate cache size
         total_size = sum(sys.getsizeof(value) for value in self._cache.values())
 
-        stats = {
+        return {
             "cached_files": len(self._cache),
             "cached_file_paths": list(self._cache.keys()),
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / 1024 / 1024, 2),
         }
-
-        # Fire cache stats event
-        # Note: This cache doesn't track hit/miss counts, so we use 0
-        fire_event(CacheStatsEvent(
-            cache_type="static_data",
-            hit_count=0,
-            miss_count=0,
-            total_entries=len(self._cache),
-            size_bytes=total_size
-        ))
-
-        return stats
