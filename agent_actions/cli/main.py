@@ -57,7 +57,8 @@ class CLI:
             help="Enable debug mode with verbose logging and source file/line references",
         )
         @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
-        def group(debug: bool, verbose: bool) -> None:
+        @click.option("-q", "--quiet", is_flag=True, help="Show only warnings and errors")
+        def group(debug: bool, verbose: bool, quiet: bool) -> None:
             """Agent Actions CLI tool for managing and running agent workflows."""
 
         return group
@@ -114,6 +115,7 @@ class CLI:
         """
         debug_mode = "--debug" in argv
         verbose_mode = "--verbose" in argv or "-v" in argv
+        quiet_mode = "--quiet" in argv or "-q" in argv
 
         # Initialize unified logging system
         # Workflow-specific settings (output_dir, workflow_name) will be
@@ -123,10 +125,13 @@ class CLI:
             config.default_level = "DEBUG"
         elif verbose_mode:
             config.default_level = "INFO"
+        elif quiet_mode:
+            config.default_level = "WARN"
 
         LoggerFactory.initialize(
             config=config,
             verbose=debug_mode or verbose_mode,
+            quiet=quiet_mode,
             force=True,
         )
         self.logger = LoggerFactory.get_logger("cli")
