@@ -10,6 +10,10 @@ from typing import Optional, Dict, Any, Tuple, List, Callable, Union
 
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
+from agent_actions.logging.events.types import (
+    BatchStatusCheckFailedEvent,
+    BatchSubmissionFailedEvent,
+)
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
@@ -116,6 +120,13 @@ class BatchSubmissionService:
         except Exception as e:
             vendor = (
                 getattr(provider, "vendor_type", "unknown") if provider is not None else "unknown"
+            )
+            fire_event(
+                BatchStatusCheckFailedEvent(
+                    batch_id=batch_id,
+                    provider=vendor,
+                    error=str(e),
+                )
             )
             raise ExternalServiceError(vendor, f"Failed to check batch status: {e}", cause=e) from e
 
@@ -237,6 +248,7 @@ class BatchSubmissionService:
                 "Missing required field 'model_vendor' for batch processing.",
             )
         provider_type = provider_type.lower()
+        batch_id = "unknown"  # Initialize for error handling
 
         try:
             provider = self._client_resolver.get_for_config(agent_config)
@@ -273,6 +285,13 @@ class BatchSubmissionService:
         except ConfigValidationError:
             raise
         except Exception as e:
+            fire_event(
+                BatchSubmissionFailedEvent(
+                    batch_id=batch_id,
+                    provider=provider_type,
+                    error=str(e),
+                )
+            )
             raise ExternalServiceError(
                 provider_type, f"Failed to submit batch job: {e}", cause=e
             ) from e

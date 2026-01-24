@@ -128,20 +128,13 @@ def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
     if type_hint in _schema_cache:
         # Fire cache hit event
         type_name = getattr(type_hint, "__name__", str(type_hint))
-        fire_event(CacheHitEvent(
-            cache_type="schema_type",
-            key=type_name
-        ))
+        fire_event(CacheHitEvent(cache_type="schema_type", key=type_name))
         # Return a copy to prevent mutation of cached value
         return _deep_copy_schema(_schema_cache[type_hint])
 
     # Fire cache miss event
     type_name = getattr(type_hint, "__name__", str(type_hint))
-    fire_event(CacheMissEvent(
-        cache_type="schema_type",
-        key=type_name,
-        reason="type not in cache"
-    ))
+    fire_event(CacheMissEvent(cache_type="schema_type", key=type_name, reason="type not in cache"))
 
     # Detection order (most specific to least):
     # 1. Pydantic (has model_json_schema - unique to v2)
@@ -411,8 +404,8 @@ def clear_schema_cache() -> None:
     entries_removed = len(_schema_cache)
     _schema_cache.clear()
 
-    fire_event(CacheInvalidationEvent(
-        cache_type="schema_type",
-        entries_removed=entries_removed,
-        reason="manual clear"
-    ))
+    fire_event(
+        CacheInvalidationEvent(
+            cache_type="schema_type", entries_removed=entries_removed, reason="manual clear"
+        )
+    )

@@ -31,6 +31,7 @@ from agent_actions.logging.events import (
     LLMErrorEvent,
     RateLimitEvent,
 )
+from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +284,13 @@ class OllamaClient(BaseClient):
             except json.JSONDecodeError as e:
                 # Return raw content with error info
                 logger.debug("JSON parse failed: %s, request_id=%s", e, request_id)
+                fire_event(
+                    LLMJSONParseErrorEvent(
+                        provider="ollama",
+                        model=model,
+                        error=str(e),
+                    )
+                )
                 return [{"raw_response": content, "_parse_error": str(e)}]
 
         if isinstance(content, dict):

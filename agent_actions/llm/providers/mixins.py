@@ -9,6 +9,8 @@ import json
 import logging
 from typing import Any, Union, Dict, List, Optional
 from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,13 @@ class JSONResponseMixin:
                     "error": str(e),
                     "line": e.lineno if hasattr(e, "lineno") else None,
                 },
+            )
+            fire_event(
+                LLMJSONParseErrorEvent(
+                    provider=vendor_name.lower(),
+                    model=model_name,
+                    error=str(e),
+                )
             )
             return [{"raw_response": response_content, "_parse_error": str(e)}]
 

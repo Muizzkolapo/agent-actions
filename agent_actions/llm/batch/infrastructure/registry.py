@@ -89,10 +89,7 @@ class BatchRegistryManager:
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
 
             # Fire cache update event
-            fire_event(CacheUpdateEvent(
-                cache_type="batch_registry",
-                key=file_name
-            ))
+            fire_event(CacheUpdateEvent(cache_type="batch_registry", key=file_name))
 
     def get_batch_job(self, file_name: str) -> Optional[BatchJobEntry]:
         """
@@ -110,16 +107,13 @@ class BatchRegistryManager:
 
             # Fire cache event
             if entry is not None:
-                fire_event(CacheHitEvent(
-                    cache_type="batch_registry",
-                    key=file_name
-                ))
+                fire_event(CacheHitEvent(cache_type="batch_registry", key=file_name))
             else:
-                fire_event(CacheMissEvent(
-                    cache_type="batch_registry",
-                    key=file_name,
-                    reason="file_name not in cache"
-                ))
+                fire_event(
+                    CacheMissEvent(
+                        cache_type="batch_registry", key=file_name, reason="file_name not in cache"
+                    )
+                )
 
             return entry
 
@@ -137,17 +131,18 @@ class BatchRegistryManager:
             self._ensure_cache_loaded()
             for entry in self._cache.values():
                 if entry.batch_id == batch_id:
-                    fire_event(CacheHitEvent(
-                        cache_type="batch_registry",
-                        key=f"batch_id:{batch_id}"
-                    ))
+                    fire_event(
+                        CacheHitEvent(cache_type="batch_registry", key=f"batch_id:{batch_id}")
+                    )
                     return entry
 
-            fire_event(CacheMissEvent(
-                cache_type="batch_registry",
-                key=f"batch_id:{batch_id}",
-                reason="batch_id not found"
-            ))
+            fire_event(
+                CacheMissEvent(
+                    cache_type="batch_registry",
+                    key=f"batch_id:{batch_id}",
+                    reason="batch_id not found",
+                )
+            )
             return None
 
     def update_status(self, batch_id: str, new_status: str) -> bool:
@@ -298,11 +293,13 @@ class BatchRegistryManager:
             logger.debug("Registry cache invalidated")
 
             # Fire cache invalidation event
-            fire_event(CacheInvalidationEvent(
-                cache_type="batch_registry",
-                entries_removed=entries_removed,
-                reason="manual invalidation"
-            ))
+            fire_event(
+                CacheInvalidationEvent(
+                    cache_type="batch_registry",
+                    entries_removed=entries_removed,
+                    reason="manual invalidation",
+                )
+            )
 
     # ============================================================
     # PRIVATE METHODS - Internal implementation
@@ -322,11 +319,11 @@ class BatchRegistryManager:
         """
         if not self._registry_path.exists():
             logger.debug("Registry file does not exist: %s", self._registry_path)
-            fire_event(CacheLoadEvent(
-                cache_type="batch_registry",
-                entries_loaded=0,
-                source="disk (file not found)"
-            ))
+            fire_event(
+                CacheLoadEvent(
+                    cache_type="batch_registry", entries_loaded=0, source="disk (file not found)"
+                )
+            )
             return {}
 
         try:
@@ -344,29 +341,27 @@ class BatchRegistryManager:
                     continue
 
             logger.debug("Loaded %d entries from registry", len(registry))
-            fire_event(CacheLoadEvent(
-                cache_type="batch_registry",
-                entries_loaded=len(registry),
-                source="disk"
-            ))
+            fire_event(
+                CacheLoadEvent(
+                    cache_type="batch_registry", entries_loaded=len(registry), source="disk"
+                )
+            )
             return registry
 
         except json.JSONDecodeError as e:
             logger.error("Corrupted registry file %s: %s", self._registry_path, e)
-            fire_event(CacheLoadEvent(
-                cache_type="batch_registry",
-                entries_loaded=0,
-                source="disk (corrupted file)"
-            ))
+            fire_event(
+                CacheLoadEvent(
+                    cache_type="batch_registry", entries_loaded=0, source="disk (corrupted file)"
+                )
+            )
             return {}
         except Exception as e:
             # Catch all exceptions to gracefully handle file system errors
             logger.error("Failed to load registry from %s: %s", self._registry_path, e)
-            fire_event(CacheLoadEvent(
-                cache_type="batch_registry",
-                entries_loaded=0,
-                source="disk (error)"
-            ))
+            fire_event(
+                CacheLoadEvent(cache_type="batch_registry", entries_loaded=0, source="disk (error)")
+            )
             return {}
 
     def _persist_registry(self, registry: Dict[str, BatchJobEntry]) -> None:

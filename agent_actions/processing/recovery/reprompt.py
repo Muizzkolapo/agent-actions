@@ -10,6 +10,8 @@ from typing import Callable, Any, Optional, Tuple, Dict
 import logging
 import json
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import RepromptValidationFailedEvent
 from .validation import get_validation_function
 
 logger = logging.getLogger(__name__)
@@ -176,6 +178,13 @@ class RepromptService:
         logger.error(
             f"[{context}] Reprompt exhausted after {attempts} attempts "
             f"(validation: {self.validation_name})"
+        )
+        fire_event(
+            RepromptValidationFailedEvent(
+                agent_name=context or "unknown",
+                attempt=attempts,
+                error=f"Validation '{self.validation_name}' failed after {attempts} attempts",
+            )
         )
 
         if exhausted_behavior == "raise":

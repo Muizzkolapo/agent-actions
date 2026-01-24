@@ -10,6 +10,7 @@ patterns across all processor modules.
 # No-else-raise: Code clarity - explicit error handling paths
 # Too-many-arguments: Error context requires all these parameters
 # Unused-argument: Interface consistency
+import csv
 import json
 import logging
 import traceback
@@ -17,7 +18,13 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
+from xml.etree import ElementTree as ET
+
+import yaml
+
 from agent_actions.errors import ProcessingError as ProcessorError  # New modular pattern!
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
 
 T = TypeVar("T", bound=ProcessorError)
 
@@ -95,6 +102,43 @@ class ProcessorErrorHandlerMixin:
             "traceback": traceback.format_exc(),
         }
         self.logger.error(json.dumps(log_entry, default=str))
+
+        # Fire appropriate data error event
+        file_path = context_kwargs.get("file_path", "unknown")
+
+        # Mapping of error types to format names
+        parse_error_map = {
+            json.JSONDecodeError: "json",
+            yaml.YAMLError: "yaml",
+            ET.ParseError: "xml",
+            csv.Error: "csv",
+        }
+
+        # Check if this is a parse error
+        format_type = None
+        for error_class, fmt in parse_error_map.items():
+            if isinstance(error, error_class):
+                format_type = fmt
+                break
+
+        if format_type:
+            # Parse error - malformed data format
+            fire_event(
+                DataParsingErrorEvent(
+                    file_path=str(file_path) if file_path else "unknown",
+                    format=format_type,
+                    error=str(error),
+                )
+            )
+        else:
+            # Loading error - file access or other issues
+            fire_event(
+                DataLoadingErrorEvent(
+                    file_path=str(file_path) if file_path else "unknown",
+                    error=str(error),
+                )
+            )
+
         if reraise:
             if error_type:
                 raise error_type(f"{operation} failed: {str(error)}") from error

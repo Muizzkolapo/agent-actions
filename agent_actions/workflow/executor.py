@@ -575,6 +575,13 @@ class AgentExecutor:
                 },
                 exc_info=True,
             )
+            fire_event(
+                AgentFailedEvent(
+                    agent_name=params.agent_name,
+                    error_message=str(e),
+                    error_type=type(e).__name__,
+                )
+            )
             self.deps.state_manager.update_status(params.agent_name, "failed")
 
             # Track action failure

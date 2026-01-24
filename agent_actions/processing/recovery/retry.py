@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple, TypeVar
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import RetryExhaustedEvent
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +177,14 @@ class RetryService:
                             log_context,
                             reason,
                             str(e),
+                        )
+                        fire_event(
+                            RetryExhaustedEvent(
+                                attempt=attempt,
+                                max_attempts=self.max_attempts,
+                                reason=reason,
+                                error=str(e),
+                            )
                         )
                 else:
                     # Non-retriable error - don't retry, re-raise immediately
