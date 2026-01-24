@@ -8,6 +8,8 @@ from typing import Dict, Any
 from pathlib import Path
 import yaml
 from agent_actions.errors import ConfigValidationError  # New modular pattern!
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
 
 
 def load_project_config(project_root: Path) -> Dict[str, Any]:
@@ -38,9 +40,12 @@ def load_project_config(project_root: Path) -> Dict[str, Any]:
 
     for config_file in config_files:
         if config_file.exists():
+            fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
             try:
                 with open(config_file, "r", encoding="utf-8") as f:
-                    return yaml.safe_load(f) or {}
+                    config = yaml.safe_load(f) or {}
+                fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
+                return config
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
                     "path_config_yaml",

@@ -26,7 +26,12 @@ from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 from agent_actions.llm.batch.batch_cli import (
     batch,  # CLI command group for batch processing operations
 )
-from agent_actions.logging import LoggerFactory, LoggingConfig
+from agent_actions.logging import LoggerFactory, LoggingConfig, fire_event
+from agent_actions.logging.events import (
+    CLIInitStartEvent,
+    CLIInitCompleteEvent,
+    CLIArgumentParsingEvent,
+)
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
 from agent_actions.logging.errors import format_user_error
 from agent_actions.utils.safe_format import format_exception_chain_for_debug
@@ -39,12 +44,14 @@ class CLI:
 
     def __init__(self) -> None:
         """Initialize the CLI application."""
+        fire_event(CLIInitStartEvent())
         # Use standard logger initially; will be replaced with LoggerFactory logger
         # after _configure_logging is called
         self.logger = logging.getLogger(__name__)
         self.click_group = self._create_click_group()
         self._register_commands()
         self._register_signal_handlers()
+        fire_event(CLIInitCompleteEvent(command="agent-actions"))
 
     def _create_click_group(self) -> click.Group:
         """Create the main click group with global options."""
@@ -160,6 +167,9 @@ class CLI:
             self.logger.info(
                 "Starting agent-actions CLI", extra={"version": __version__, "cli_args": argv}
             )
+            # Fire CLI argument parsing event
+            command = argv[0] if argv else "agent-actions"
+            fire_event(CLIArgumentParsingEvent(command=command, args={"argv": list(argv)}))
             self.click_group.main(argv, standalone_mode=False)
             self.logger.info("CLI execution completed successfully")
             return 0

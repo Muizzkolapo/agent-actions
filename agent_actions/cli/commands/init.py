@@ -6,6 +6,7 @@ which handles creating new Agent Actions projects.
 """
 
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
@@ -20,6 +21,13 @@ from agent_actions.errors import (
 )  # New modular pattern!
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project import ProjectValidator
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ProjectInitializationStartEvent,
+    ProjectValidationEvent,
+    ProjectDirectoryCreatedEvent,
+    ProjectInitializedEvent,
+)
 
 
 class InitCommand:
@@ -174,6 +182,10 @@ class InitCommand:
         Raises:
             Various exceptions depending on what fails.
         """
+        # Fire project initialization start event
+        start_time = datetime.now()
+        fire_event(ProjectInitializationStartEvent(project_path=str(self.project_dir)))
+
         # Use ProjectValidator.validate() with data dict
         validator = ProjectValidator()
         validation_data = {
@@ -184,11 +196,28 @@ class InitCommand:
             "available_templates": self._get_available_templates(),
             "force": self.args.force,
         }
+        fire_event(
+            ProjectValidationEvent(validation_target="project_structure", result="validating")
+        )
         if not validator.validate(validation_data):
             errors = validator.get_errors()
+            fire_event(
+                ProjectValidationEvent(validation_target="project_structure", result="failed")
+            )
             raise ValidationError("Project validation failed", context={"errors": errors})
+        fire_event(ProjectValidationEvent(validation_target="project_structure", result="passed"))
+
         self._create_project_directory()
+        fire_event(ProjectDirectoryCreatedEvent(directory_path=str(self.project_dir)))
+
         self._initialize_project()
+
+        # Fire project initialization complete event
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        fire_event(
+            ProjectInitializedEvent(project_path=str(self.project_dir), elapsed_time=elapsed_time)
+        )
+
         click.echo(f"Successfully initialized project: {self.args.project_name}")
         click.echo(f"Project created at: {self.project_dir}")
         click.echo("\nNext steps:")

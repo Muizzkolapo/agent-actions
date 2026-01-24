@@ -17,6 +17,8 @@ from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.input.context.normalizer import normalize_all_agent_configs
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +40,14 @@ class ConfigManager:
         self.pipeline_config: Optional[PipelineConfig] = None
 
     def load_configs(self):
+        fire_event(ConfigLoadStartEvent(config_file=str(self.constructor_path)))
         try:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
             loaded_config = yaml.safe_load(config_data)
             self.user_config = loaded_config
+            fire_event(
+                ConfigLoadEvent(config_file=str(self.constructor_path), config_type="workflow")
+            )
         except (TemplateRenderingError, ConfigurationError) as e:
             raise ConfigurationError(
                 "Error rendering or loading user config",
@@ -68,11 +74,15 @@ class ConfigManager:
             )
         # Load default config only if path is provided
         if self.default_path:
+            fire_event(ConfigLoadStartEvent(config_file=str(self.default_path)))
             try:
                 default_config_data = render_pipeline_with_templates(
                     self.default_path, self.template_dir
                 )
                 self.default_config = yaml.safe_load(default_config_data)
+                fire_event(
+                    ConfigLoadEvent(config_file=str(self.default_path), config_type="default")
+                )
             except (TemplateRenderingError, ConfigurationError) as e:
                 raise ConfigurationError(
                     "Error rendering or loading default config",
