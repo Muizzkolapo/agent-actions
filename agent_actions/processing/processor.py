@@ -7,7 +7,16 @@ from typing import Any, Dict, List, Optional, Tuple
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import TemplateRenderingFailedEvent
+from agent_actions.logging.events.types import (
+    TemplateRenderingFailedEvent,
+    RecordProcessingStartedEvent,
+    RecordFilteredEvent,
+    RecordTransformedEvent,
+    RecordProcessingCompleteEvent,
+    BatchProcessingStartedEvent,
+    BatchProcessingProgressEvent,
+    BatchProcessingCompleteEvent,
+)
 from .enrichment import EnrichmentPipeline
 from .recovery.retry import RetryService, create_retry_service_from_config
 from .types import (
@@ -144,6 +153,15 @@ class RecordProcessor:
         input_record = item if isinstance(item, dict) else None
         content, source_guid, source_snapshot = self._normalize_input(item, context)
 
+        # Fire RP001: Record processing started
+        fire_event(
+            RecordProcessingStartedEvent(
+                agent_name=context.agent_name,
+                record_index=context.record_index,
+                source_guid=source_guid,
+            )
+        )
+
         # Step 2: Early guard evaluation (FIRST guard check)
         # Evaluates guards on input content to avoid expensive operations
         # if record should be filtered/skipped early
@@ -184,11 +202,29 @@ class RecordProcessor:
                         source_snapshot=source_snapshot,  # Preserve for source saving
                         input_record=input_record,
                     )
+                # Fire RP002: Record filtered (LLM layer guard)
+                fire_event(
+                    RecordFilteredEvent(
+                        agent_name=context.agent_name,
+                        record_index=context.record_index,
+                        source_guid=source_guid,
+                        filter_reason="llm_layer_guard_filter",
+                    )
+                )
                 return ProcessingResult.filtered(
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,  # Preserve for source saving
                     input_record=input_record,
                 )
+            # Fire RP002: Record filtered (LLM layer guard skip)
+            fire_event(
+                RecordFilteredEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index,
+                    source_guid=source_guid,
+                    filter_reason="llm_layer_guard_skip",
+                )
+            )
             return ProcessingResult.skipped(
                 passthrough_data=response,
                 reason="guard_skip",
@@ -203,6 +239,19 @@ class RecordProcessor:
             response, content, source_guid, passthrough_fields, context
         )
 
+        # Fire RP003: Record transformed
+        input_size = 1 if not isinstance(response, list) else len(response)
+        output_size = len(transformed) if isinstance(transformed, list) else 1
+        fire_event(
+            RecordTransformedEvent(
+                agent_name=context.agent_name,
+                record_index=context.record_index,
+                source_guid=source_guid,
+                input_size=input_size,
+                output_size=output_size,
+            )
+        )
+
         # Step 8: Create success result (with recovery metadata if retry occurred)
         result = ProcessingResult.success(
             data=transformed,
@@ -215,7 +264,19 @@ class RecordProcessor:
         )
 
         # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
-        return self.enrichment_pipeline.enrich(result, context)
+        enriched_result = self.enrichment_pipeline.enrich(result, context)
+
+        # Fire RP004: Record processing complete
+        fire_event(
+            RecordProcessingCompleteEvent(
+                agent_name=context.agent_name,
+                record_index=context.record_index,
+                source_guid=source_guid,
+                status=enriched_result.status.value,
+            )
+        )
+
+        return enriched_result
 
     def process_batch(self, items: List[Any], context: ProcessingContext) -> List[ProcessingResult]:
         """
@@ -232,12 +293,47 @@ class RecordProcessor:
         Returns:
             List of ProcessingResults (includes both successes and failures)
         """
+        # CRITICAL: Capture start_time BEFORE firing start event (learned from TICKET-019 P0)
+        from datetime import datetime, timezone
+
+        start_time = datetime.now(timezone.utc)
+
+        # Fire BP001: Batch processing started
+        fire_event(
+            BatchProcessingStartedEvent(
+                agent_name=context.agent_name,
+                batch_size=len(items),
+            )
+        )
+
         results = []
+        successes = 0
+        failures = 0
+
         for idx, item in enumerate(items):
             try:
                 item_context = self._create_item_context(context, idx, item)
                 result = self.process(item, item_context)
                 results.append(result)
+
+                # Track success/failure
+                if result.status == ProcessingStatus.SUCCESS:
+                    successes += 1
+                elif result.status == ProcessingStatus.FAILED:
+                    failures += 1
+
+                # Fire BP002: Batch processing progress (every 10 records or at end)
+                if (idx + 1) % 10 == 0 or (idx + 1) == len(items):
+                    fire_event(
+                        BatchProcessingProgressEvent(
+                            agent_name=context.agent_name,
+                            processed=idx + 1,
+                            total=len(items),
+                            successes=successes,
+                            failures=failures,
+                        )
+                    )
+
             except ConfigurationError:
                 # ConfigurationError indicates a fundamental workflow misconfiguration
                 # Re-raise immediately to fail the workflow - these cannot be recovered
@@ -280,6 +376,18 @@ class RecordProcessor:
                     input_record=input_record,
                 )
                 results.append(failed_result)
+                failures += 1
+
+        # Fire BP003: Batch processing complete
+        elapsed_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+        fire_event(
+            BatchProcessingCompleteEvent(
+                agent_name=context.agent_name,
+                total_records=len(items),
+                elapsed_time=elapsed_time,
+            )
+        )
+
         return results
 
     # Private helper methods
@@ -380,8 +488,26 @@ class RecordProcessor:
             return None
 
         if behavior == "filter":
+            # Fire RP002: Record filtered
+            fire_event(
+                RecordFilteredEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index if hasattr(context, "record_index") else 0,
+                    source_guid=source_guid,
+                    filter_reason="guard_filter",
+                )
+            )
             return ProcessingResult.filtered(source_guid=source_guid)
 
+        # Fire RP002: Record filtered (skip)
+        fire_event(
+            RecordFilteredEvent(
+                agent_name=context.agent_name,
+                record_index=context.record_index if hasattr(context, "record_index") else 0,
+                source_guid=source_guid,
+                filter_reason=f"guard_{behavior}",
+            )
+        )
         return ProcessingResult.skipped(
             passthrough_data=content,
             reason=f"guard_{behavior}",

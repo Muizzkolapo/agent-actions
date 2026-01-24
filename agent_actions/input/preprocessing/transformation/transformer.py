@@ -3,6 +3,12 @@
 import copy
 from typing import Any, Dict, List, Optional
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    DataNormalizedEvent,
+    DataNormalizationStartedEvent,
+)
+
 
 class DataTransformer:
     """Utility class for data transformations."""
@@ -18,18 +24,38 @@ class DataTransformer:
         Returns:
             list: The data as a list
         """
+        # Fire normalization started event
+        data_type = type(data).__name__
+        fire_event(
+            DataNormalizationStartedEvent(
+                data_type=data_type,
+            )
+        )
+
+        # Normalize data
         if data is None:
-            return []
-        if isinstance(data, list):
-            return data
-        if isinstance(data, (str, dict, int, float, bool)):
-            return [data]
-        # Handle other iterables (tuples, sets, etc.)
-        try:
-            return list(data)
-        except (TypeError, ValueError):
-            # If conversion fails, wrap in list
-            return [data]
+            result = []
+        elif isinstance(data, list):
+            result = data
+        elif isinstance(data, (str, dict, int, float, bool)):
+            result = [data]
+        else:
+            # Handle other iterables (tuples, sets, etc.)
+            try:
+                result = list(data)
+            except (TypeError, ValueError):
+                # If conversion fails, wrap in list
+                result = [data]
+
+        # Fire normalized event
+        fire_event(
+            DataNormalizedEvent(
+                data_type=data_type,
+                item_count=len(result),
+            )
+        )
+
+        return result
 
     @staticmethod
     def remove_schema_objects(data: Dict[str, Any], keys_to_remove: List[str]) -> Dict[str, Any]:

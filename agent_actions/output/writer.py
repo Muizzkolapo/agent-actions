@@ -7,6 +7,11 @@ import csv
 from pathlib import Path
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    FileWriteStartedEvent,
+    FileWriteCompleteEvent,
+)
 
 
 class FileWriter(ProcessorErrorHandlerMixin):
@@ -33,6 +38,14 @@ class FileWriter(ProcessorErrorHandlerMixin):
             AgentActionsException: If file type is unsupported
         """
         try:
+            # Fire event before writing
+            fire_event(
+                FileWriteStartedEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                )
+            )
+
             with open(self.file_path, "w", encoding="utf-8") as file:
                 if self.file_type == ".json":
                     json.dump(data, file, indent=4)
@@ -49,6 +62,18 @@ class FileWriter(ProcessorErrorHandlerMixin):
                         f"Unsupported file type for staging: {self.file_type} "
                         f"for file {self.file_path}"
                     )
+
+            # Get file size after writing
+            bytes_written = Path(self.file_path).stat().st_size
+
+            # Fire event after writing
+            fire_event(
+                FileWriteCompleteEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                    bytes_written=bytes_written,
+                )
+            )
         except IOError as e:
             self.handle_file_error(e, "write_staging", self.file_path, file_type=self.file_type)
         except Exception as e:
@@ -70,9 +95,29 @@ class FileWriter(ProcessorErrorHandlerMixin):
             data: Data to write as JSON
         """
         try:
+            # Fire event before writing
+            fire_event(
+                FileWriteStartedEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                )
+            )
+
             Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.file_path, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=4)
+
+            # Get file size after writing
+            bytes_written = Path(self.file_path).stat().st_size
+
+            # Fire event after writing
+            fire_event(
+                FileWriteCompleteEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                    bytes_written=bytes_written,
+                )
+            )
         except IOError as e:
             self.handle_file_error(e, "write_target", self.file_path, file_type=self.file_type)
         except Exception as e:
@@ -92,8 +137,28 @@ class FileWriter(ProcessorErrorHandlerMixin):
             data: Data to write as JSON
         """
         try:
+            # Fire event before writing
+            fire_event(
+                FileWriteStartedEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                )
+            )
+
             with open(self.file_path, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=4)
+
+            # Get file size after writing
+            bytes_written = Path(self.file_path).stat().st_size
+
+            # Fire event after writing
+            fire_event(
+                FileWriteCompleteEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                    bytes_written=bytes_written,
+                )
+            )
         except IOError as e:
             self.handle_file_error(e, "write_source", self.file_path, file_type=self.file_type)
         except Exception as e:

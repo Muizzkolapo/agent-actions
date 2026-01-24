@@ -6,6 +6,13 @@ from typing import Any, Dict, List
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.errors import AgentActionsException
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ResultCollectionStartedEvent,
+    ResultCollectedEvent,
+    ResultCollectionCompleteEvent,
+    ExhaustedRecordEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,14 @@ class ResultCollector:
         Raises:
             AgentActionsException: If on_exhausted=raise and records exhausted retries.
         """
+        # Fire RC001: Result collection started
+        fire_event(
+            ResultCollectionStartedEvent(
+                agent_name=agent_name,
+                total_results=len(results),
+            )
+        )
+
         # Check on_exhausted config for raise behavior
         exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
 

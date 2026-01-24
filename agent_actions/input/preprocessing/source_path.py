@@ -5,6 +5,11 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
 from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    FileWriteStartedEvent,
+    FileWriteCompleteEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,9 +170,29 @@ class SourcePathManager:
             if not updated:
                 source_data.append(content_entry)
 
+            # Fire event before writing
+            fire_event(
+                FileWriteStartedEvent(
+                    file_path=str(source_path),
+                    file_type=".json",
+                )
+            )
+
             # Save updated content
             with open(source_path, "w", encoding="utf-8") as file:
                 json.dump(source_data, file, indent=2)
+
+            # Get file size after writing
+            bytes_written = source_path.stat().st_size if source_path.exists() else 0
+
+            # Fire event after writing
+            fire_event(
+                FileWriteCompleteEvent(
+                    file_path=str(source_path),
+                    file_type=".json",
+                    bytes_written=bytes_written,
+                )
+            )
 
             ServiceLogger.log_operation_success(
                 logger, "save source content", source_guid=source_guid

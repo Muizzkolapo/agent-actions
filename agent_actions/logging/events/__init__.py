@@ -92,6 +92,40 @@ from agent_actions.logging.events.types import (
     UDFDiscoveredEvent,
     UDFDiscoveryCompleteEvent,
     ProcessorRegistrationEvent,
+    # File I/O events
+    SourceDataSavingEvent,
+    SourceDataSavedEvent,
+    SchemaLoadingStartedEvent,
+    SchemaLoadedEvent,
+    FileWriteStartedEvent,
+    FileWriteCompleteEvent,
+    # Schema operation events
+    SchemaConstructionStartedEvent,
+    SchemaConstructionCompleteEvent,
+    # Data validation events
+    DataValidationStartedEvent,
+    DataValidationPassedEvent,
+    DataValidationFailedEvent,
+    # Data transformation events
+    EnrichmentPipelineStartedEvent,
+    EnricherExecutedEvent,
+    EnrichmentPipelineCompleteEvent,
+    DataNormalizationStartedEvent,
+    DataNormalizedEvent,
+    # Record Processing Pipeline events
+    RecordProcessingStartedEvent,
+    RecordFilteredEvent,
+    RecordTransformedEvent,
+    RecordProcessingCompleteEvent,
+    # Batch Processing events (data processing)
+    BatchProcessingStartedEvent,
+    BatchProcessingProgressEvent,
+    BatchProcessingCompleteEvent,
+    # Result Collection events
+    ResultCollectionStartedEvent,
+    ResultCollectedEvent,
+    ResultCollectionCompleteEvent,
+    ExhaustedRecordEvent,
     # Event categories
     EventCategories,
 )
@@ -183,6 +217,40 @@ __all__ = [
     "UDFDiscoveredEvent",
     "UDFDiscoveryCompleteEvent",
     "ProcessorRegistrationEvent",
+    # File I/O
+    "SourceDataSavingEvent",
+    "SourceDataSavedEvent",
+    "SchemaLoadingStartedEvent",
+    "SchemaLoadedEvent",
+    "FileWriteStartedEvent",
+    "FileWriteCompleteEvent",
+    # Schema Operations
+    "SchemaConstructionStartedEvent",
+    "SchemaConstructionCompleteEvent",
+    # Data Validation
+    "DataValidationStartedEvent",
+    "DataValidationPassedEvent",
+    "DataValidationFailedEvent",
+    # Data Transformation
+    "EnrichmentPipelineStartedEvent",
+    "EnricherExecutedEvent",
+    "EnrichmentPipelineCompleteEvent",
+    "DataNormalizationStartedEvent",
+    "DataNormalizedEvent",
+    # Record Processing Pipeline
+    "RecordProcessingStartedEvent",
+    "RecordFilteredEvent",
+    "RecordTransformedEvent",
+    "RecordProcessingCompleteEvent",
+    # Batch Processing (data processing)
+    "BatchProcessingStartedEvent",
+    "BatchProcessingProgressEvent",
+    "BatchProcessingCompleteEvent",
+    # Result Collection
+    "ResultCollectionStartedEvent",
+    "ResultCollectedEvent",
+    "ResultCollectionCompleteEvent",
+    "ExhaustedRecordEvent",
     # Categories
     "EventCategories",
     # Formatter
