@@ -141,4 +141,4 @@ Options:
 - The `--verbose` flag was already implemented, only `--quiet` was added
 - LoggerFactory.initialize() already had support for the quiet parameter
 - All flags are global options available to all subcommands
-- Flags are mutually exclusive in practice (quiet overrides verbose if both provided)
+- More verbose flags take precedence when multiple are provided (debug > verbose > default > quiet)
