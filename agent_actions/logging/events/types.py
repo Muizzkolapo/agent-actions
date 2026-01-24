@@ -2037,7 +2037,7 @@ class DataValidationStartedEvent(BaseEvent):
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA_PROCESSING
+        self.category = EventCategories.VALIDATION
         self.message = f"Data validation started: {self.validator_type} on {self.target}"
         self.data = {
             "validator_type": self.validator_type,
@@ -2058,7 +2058,7 @@ class DataValidationPassedEvent(BaseEvent):
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA_PROCESSING
+        self.category = EventCategories.VALIDATION
         self.message = f"Data validation passed: {self.validator_type} ({self.item_count} items)"
         self.data = {
             "validator_type": self.validator_type,
@@ -2079,7 +2079,7 @@ class DataValidationFailedEvent(BaseEvent):
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
-        self.category = EventCategories.DATA_PROCESSING
+        self.category = EventCategories.VALIDATION
         error_summary = f"{len(self.errors)} error(s)" if self.errors else "validation failed"
         self.message = f"Data validation failed: {self.validator_type} - {error_summary}"
         self.data = {
@@ -2143,13 +2143,15 @@ class EnrichmentPipelineCompleteEvent(BaseEvent):
     """Fired when enrichment pipeline completes."""
 
     enricher_count: int = 0
+    elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"Enrichment pipeline complete ({self.enricher_count} enrichers)"
+        self.message = f"Enrichment pipeline complete ({self.enricher_count} enrichers in {self.elapsed_time:.3f}s)"
         self.data = {
             "enricher_count": self.enricher_count,
+            "elapsed_time": self.elapsed_time,
         }
 
     @property

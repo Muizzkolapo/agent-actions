@@ -3,12 +3,6 @@
 import copy
 from typing import Any, Dict, List, Optional
 
-from agent_actions.logging import fire_event
-from agent_actions.logging.events import (
-    DataNormalizedEvent,
-    DataNormalizationStartedEvent,
-)
-
 
 class DataTransformer:
     """Utility class for data transformations."""
@@ -23,15 +17,12 @@ class DataTransformer:
 
         Returns:
             list: The data as a list
-        """
-        # Fire normalization started event
-        data_type = type(data).__name__
-        fire_event(
-            DataNormalizationStartedEvent(
-                data_type=data_type,
-            )
-        )
 
+        Note:
+            Events removed from this method (DT004, DT005) - it's a hot path utility
+            called hundreds of times per batch. Event instrumentation would create
+            excessive log spam even at DEBUG level.
+        """
         # Normalize data
         if data is None:
             result = []
@@ -46,14 +37,6 @@ class DataTransformer:
             except (TypeError, ValueError):
                 # If conversion fails, wrap in list
                 result = [data]
-
-        # Fire normalized event
-        fire_event(
-            DataNormalizedEvent(
-                data_type=data_type,
-                item_count=len(result),
-            )
-        )
 
         return result
 

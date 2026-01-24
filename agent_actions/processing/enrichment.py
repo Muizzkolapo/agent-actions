@@ -239,6 +239,11 @@ class EnrichmentPipeline:
         Returns:
             Enriched ProcessingResult
         """
+        # Capture start time before firing event
+        from datetime import datetime
+
+        start_time = datetime.now()
+
         # Fire pipeline started event
         fire_event(
             EnrichmentPipelineStartedEvent(
@@ -266,10 +271,12 @@ class EnrichmentPipeline:
                 )
                 raise
 
-        # Fire pipeline complete event
+        # Fire pipeline complete event with timing
+        elapsed_time = (datetime.now() - start_time).total_seconds()
         fire_event(
             EnrichmentPipelineCompleteEvent(
                 enricher_count=len(self.enrichers),
+                elapsed_time=elapsed_time,
             )
         )
 

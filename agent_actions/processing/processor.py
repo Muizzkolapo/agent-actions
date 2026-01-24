@@ -202,7 +202,7 @@ class RecordProcessor:
                         source_snapshot=source_snapshot,  # Preserve for source saving
                         input_record=input_record,
                     )
-                # Fire RP002: Record filtered (LLM layer guard)
+                # Fire RP002: Record filtered (LLM layer guard filter)
                 fire_event(
                     RecordFilteredEvent(
                         agent_name=context.agent_name,
@@ -216,23 +216,25 @@ class RecordProcessor:
                     source_snapshot=source_snapshot,  # Preserve for source saving
                     input_record=input_record,
                 )
-            # Fire RP002: Record filtered (LLM layer guard skip)
-            fire_event(
-                RecordFilteredEvent(
-                    agent_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid,
-                    filter_reason="llm_layer_guard_skip",
+            else:
+                # response is not None - guard caused skip rather than filter
+                # Fire RP002: Record filtered (LLM layer guard skip)
+                fire_event(
+                    RecordFilteredEvent(
+                        agent_name=context.agent_name,
+                        record_index=context.record_index,
+                        source_guid=source_guid,
+                        filter_reason="llm_layer_guard_skip",
+                    )
                 )
-            )
-            return ProcessingResult.skipped(
-                passthrough_data=response,
-                reason="guard_skip",
-                source_guid=source_guid,
-                passthrough_fields=passthrough_fields,
-                source_snapshot=source_snapshot,
-                input_record=input_record,
-            )
+                return ProcessingResult.skipped(
+                    passthrough_data=response,
+                    reason="guard_skip",
+                    source_guid=source_guid,
+                    passthrough_fields=passthrough_fields,
+                    source_snapshot=source_snapshot,
+                    input_record=input_record,
+                )
 
         # Step 7: Transform response
         transformed = self._transform_response(
