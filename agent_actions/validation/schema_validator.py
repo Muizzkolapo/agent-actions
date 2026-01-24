@@ -13,6 +13,12 @@ from typing import Any, Dict, List, Optional, Set, Union
 
 import jsonschema
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    DataValidationFailedEvent,
+    DataValidationPassedEvent,
+    DataValidationStartedEvent,
+)
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -279,8 +285,24 @@ class SchemaValidator(BaseValidator):
         agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
         target = f"schema:{agent_name}" if agent_name else "schema"
 
+        # Fire validation started event
+        fire_event(
+            DataValidationStartedEvent(
+                validator_type="SchemaValidator",
+                target=target,
+            )
+        )
+
         if not self._prepare_validation(data, target=target):
-            return self._complete_validation()
+            result = self._complete_validation()
+            # Fire validation failed event
+            fire_event(
+                DataValidationFailedEvent(
+                    validator_type="SchemaValidator",
+                    errors=[str(e) for e in self.get_errors()],
+                )
+            )
+            return result
 
         schema_dir = data.get("schema_dir")
         schema_files_to_validate = data.get("schema_files")
@@ -303,21 +325,42 @@ class SchemaValidator(BaseValidator):
                 field="schema_files",
             )
         if self.has_errors():
-            return self._complete_validation()
+            result = self._complete_validation()
+            fire_event(
+                DataValidationFailedEvent(
+                    validator_type="SchemaValidator",
+                    errors=[str(e) for e in self.get_errors()],
+                )
+            )
+            return result
         if not self._ensure_path_exists(schema_dir):
             self.add_error(
                 f"Schema directory does not exist: {schema_dir}",
                 field="schema_dir",
                 value=str(schema_dir),
             )
-            return self._complete_validation()
+            result = self._complete_validation()
+            fire_event(
+                DataValidationFailedEvent(
+                    validator_type="SchemaValidator",
+                    errors=[str(e) for e in self.get_errors()],
+                )
+            )
+            return result
         if not self._is_directory(schema_dir):
             self.add_error(
                 f"Schema path is not a directory: {schema_dir}",
                 field="schema_dir",
                 value=str(schema_dir),
             )
-            return self._complete_validation()
+            result = self._complete_validation()
+            fire_event(
+                DataValidationFailedEvent(
+                    validator_type="SchemaValidator",
+                    errors=[str(e) for e in self.get_errors()],
+                )
+            )
+            return result
         logger.debug(
             "Starting schema validation for agent '%s' in directory: %s", agent_name, schema_dir
         )
@@ -330,11 +373,38 @@ class SchemaValidator(BaseValidator):
                     f"No .json schema files found in {schema_dir} for agent '{agent_name}'.",
                     field="schema_files",
                 )
-                return self._complete_validation()
+                result = self._complete_validation()
+                # No files means validation passed (with warning)
+                fire_event(
+                    DataValidationPassedEvent(
+                        validator_type="SchemaValidator",
+                        item_count=0,
+                    )
+                )
+                return result
         for file_path in files_to_process:
             self._process_schema_file(file_path, file_path.name, agent_name)
         logger.debug("Schema validation complete for agent '%s'.", agent_name)
-        return self._complete_validation()
+
+        result = self._complete_validation()
+
+        # Fire validation result event
+        if result:
+            fire_event(
+                DataValidationPassedEvent(
+                    validator_type="SchemaValidator",
+                    item_count=len(files_to_process),
+                )
+            )
+        else:
+            fire_event(
+                DataValidationFailedEvent(
+                    validator_type="SchemaValidator",
+                    errors=[str(e) for e in self.get_errors()],
+                )
+            )
+
+        return result
 
     def _check_type_compatibility(
         self,

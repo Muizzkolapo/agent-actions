@@ -6,6 +6,13 @@ from typing import Any, Dict, List
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.errors import AgentActionsException
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ResultCollectionStartedEvent,
+    ResultCollectedEvent,
+    ResultCollectionCompleteEvent,
+    ExhaustedRecordEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,14 @@ class ResultCollector:
         Raises:
             AgentActionsException: If on_exhausted=raise and records exhausted retries.
         """
+        # Fire RC001: Result collection started
+        fire_event(
+            ResultCollectionStartedEvent(
+                agent_name=agent_name,
+                total_results=len(results),
+            )
+        )
+
         # Check on_exhausted config for raise behavior
         exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
 
@@ -68,8 +83,16 @@ class ResultCollector:
 
         output: List[Dict[str, Any]] = []
 
-        for result in results:
+        # Track statistics for RC003
+        success_count = 0
+        skipped_count = 0
+        filtered_count = 0
+        failed_count = 0
+        exhausted_count = 0
+
+        for idx, result in enumerate(results):
             if result.status == ProcessingStatus.SUCCESS:
+                success_count += 1
                 data = result.data or []
                 if data:
                     output.extend(data)
@@ -78,7 +101,16 @@ class ResultCollector:
                     result.source_guid,
                     len(data),
                 )
+                # Fire RC002: Result collected
+                fire_event(
+                    ResultCollectedEvent(
+                        agent_name=agent_name,
+                        result_index=idx,
+                        status="success",
+                    )
+                )
             elif result.status == ProcessingStatus.SKIPPED:
+                skipped_count += 1
                 data = result.data or []
                 if data:
                     output.extend(data)
@@ -87,7 +119,16 @@ class ResultCollector:
                     result.source_guid,
                     len(data),
                 )
+                # Fire RC002: Result collected
+                fire_event(
+                    ResultCollectedEvent(
+                        agent_name=agent_name,
+                        result_index=idx,
+                        status="skipped",
+                    )
+                )
             elif result.status == ProcessingStatus.EXHAUSTED:
+                exhausted_count += 1
                 if result.recovery_metadata and result.recovery_metadata.retry:
                     # First stage uses source_snapshot, downstream uses input_record
                     if is_first_stage:
@@ -107,16 +148,55 @@ class ResultCollector:
                         result.source_guid,
                         result.recovery_metadata.retry.attempts,
                     )
+                    # Fire RC004: Exhausted record event
+                    fire_event(
+                        ExhaustedRecordEvent(
+                            agent_name=agent_name,
+                            record_index=idx,
+                            source_guid=result.source_guid,
+                            reason=f"exhausted_after_{result.recovery_metadata.retry.attempts}_attempts",
+                        )
+                    )
                 else:
                     logger.debug(
                         "Skipped EXHAUSTED result without retry metadata source_guid=%s",
                         result.source_guid,
                     )
             elif result.status == ProcessingStatus.FAILED:
+                failed_count += 1
                 logger.error("Processing failed: %s", result.error)
+                # Fire RC002: Result collected
+                fire_event(
+                    ResultCollectedEvent(
+                        agent_name=agent_name,
+                        result_index=idx,
+                        status="failed",
+                    )
+                )
             elif result.status == ProcessingStatus.FILTERED:
+                filtered_count += 1
                 logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
+                # Fire RC002: Result collected
+                fire_event(
+                    ResultCollectedEvent(
+                        agent_name=agent_name,
+                        result_index=idx,
+                        status="filtered",
+                    )
+                )
             else:
                 logger.debug("Unhandled result status=%s", result.status)
+
+        # Fire RC003: Result collection complete with statistics
+        fire_event(
+            ResultCollectionCompleteEvent(
+                agent_name=agent_name,
+                total_success=success_count,
+                total_skipped=skipped_count,
+                total_filtered=filtered_count,
+                total_failed=failed_count,
+                total_exhausted=exhausted_count,
+            )
+        )
 
         return output

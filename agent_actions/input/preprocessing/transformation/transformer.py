@@ -17,19 +17,28 @@ class DataTransformer:
 
         Returns:
             list: The data as a list
+
+        Note:
+            Events removed from this method (DT004, DT005) - it's a hot path utility
+            called hundreds of times per batch. Event instrumentation would create
+            excessive log spam even at DEBUG level.
         """
+        # Normalize data
         if data is None:
-            return []
-        if isinstance(data, list):
-            return data
-        if isinstance(data, (str, dict, int, float, bool)):
-            return [data]
-        # Handle other iterables (tuples, sets, etc.)
-        try:
-            return list(data)
-        except (TypeError, ValueError):
-            # If conversion fails, wrap in list
-            return [data]
+            result = []
+        elif isinstance(data, list):
+            result = data
+        elif isinstance(data, (str, dict, int, float, bool)):
+            result = [data]
+        else:
+            # Handle other iterables (tuples, sets, etc.)
+            try:
+                result = list(data)
+            except (TypeError, ValueError):
+                # If conversion fails, wrap in list
+                result = [data]
+
+        return result
 
     @staticmethod
     def remove_schema_objects(data: Dict[str, Any], keys_to_remove: List[str]) -> Dict[str, Any]:

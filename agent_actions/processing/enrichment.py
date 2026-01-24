@@ -3,6 +3,13 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    EnrichmentPipelineCompleteEvent,
+    EnrichmentPipelineStartedEvent,
+    EnricherExecutedEvent,
+)
+
 from .types import ProcessingContext, ProcessingResult, ProcessingStatus
 
 
@@ -232,6 +239,45 @@ class EnrichmentPipeline:
         Returns:
             Enriched ProcessingResult
         """
+        # Capture start time before firing event
+        from datetime import datetime
+
+        start_time = datetime.now()
+
+        # Fire pipeline started event
+        fire_event(
+            EnrichmentPipelineStartedEvent(
+                enricher_count=len(self.enrichers),
+            )
+        )
+
+        # Execute enrichers
         for enricher in self.enrichers:
-            result = enricher.enrich(result, context)
+            enricher_name = enricher.__class__.__name__
+            try:
+                result = enricher.enrich(result, context)
+                fire_event(
+                    EnricherExecutedEvent(
+                        enricher_name=enricher_name,
+                        status="success",
+                    )
+                )
+            except Exception:
+                fire_event(
+                    EnricherExecutedEvent(
+                        enricher_name=enricher_name,
+                        status="failed",
+                    )
+                )
+                raise
+
+        # Fire pipeline complete event with timing
+        elapsed_time = (datetime.now() - start_time).total_seconds()
+        fire_event(
+            EnrichmentPipelineCompleteEvent(
+                enricher_count=len(self.enrichers),
+                elapsed_time=elapsed_time,
+            )
+        )
+
         return result

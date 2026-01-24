@@ -11,6 +11,13 @@ from typing import Dict, Callable, Tuple
 import logging
 import threading
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    DataValidationFailedEvent,
+    DataValidationPassedEvent,
+    DataValidationStartedEvent,
+)
+
 logger = logging.getLogger(__name__)
 
 # Global registry: UDF name -> (function, message)
@@ -49,11 +56,49 @@ def reprompt_validation(feedback_message: str):
 
     def decorator(func: Callable[[dict], bool]) -> Callable[[dict], bool]:
         func_name = func.__name__
+
+        # Create wrapper that fires events
+        def wrapped_func(response: dict) -> bool:
+            # Fire validation started event
+            fire_event(
+                DataValidationStartedEvent(
+                    validator_type=f"RepromptValidation:{func_name}",
+                    target="LLM response",
+                )
+            )
+
+            # Execute validation
+            try:
+                result = func(response)
+                if result:
+                    fire_event(
+                        DataValidationPassedEvent(
+                            validator_type=f"RepromptValidation:{func_name}",
+                            item_count=1,
+                        )
+                    )
+                else:
+                    fire_event(
+                        DataValidationFailedEvent(
+                            validator_type=f"RepromptValidation:{func_name}",
+                            errors=[feedback_message],
+                        )
+                    )
+                return result
+            except Exception as e:
+                fire_event(
+                    DataValidationFailedEvent(
+                        validator_type=f"RepromptValidation:{func_name}",
+                        errors=[str(e)],
+                    )
+                )
+                raise
+
         # Thread-safe registration
         with _REGISTRY_LOCK:
-            _VALIDATION_REGISTRY[func_name] = (func, feedback_message)
+            _VALIDATION_REGISTRY[func_name] = (wrapped_func, feedback_message)
             logger.debug(f"Registered reprompt validation: {func_name}")
-        return func
+        return wrapped_func
 
     return decorator
 

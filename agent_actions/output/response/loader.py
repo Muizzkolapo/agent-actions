@@ -11,6 +11,13 @@ from pathlib import Path
 
 import yaml
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    SchemaLoadingStartedEvent,
+    SchemaLoadedEvent,
+    SchemaConstructionStartedEvent,
+    SchemaConstructionCompleteEvent,
+)
 from agent_actions.output.file_handler import FileHandler
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
@@ -78,8 +85,29 @@ class SchemaLoader:
                 f"Ensure the schema file exists in the schema/ directory."
             )
 
+        # Fire event before loading
+        fire_event(
+            SchemaLoadingStartedEvent(
+                schema_name=schema_name,
+                schema_path=str(schema_file),
+            )
+        )
+
         with open(schema_file, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+            schema_data = yaml.safe_load(f)
+
+        # Count fields in schema
+        field_count = len(schema_data.get("fields", [])) if isinstance(schema_data, dict) else 0
+
+        # Fire event after loading
+        fire_event(
+            SchemaLoadedEvent(
+                schema_name=schema_name,
+                field_count=field_count,
+            )
+        )
+
+        return schema_data
 
     @staticmethod
     def validate_schemas_exist(
@@ -123,6 +151,13 @@ class SchemaLoader:
         Returns:
             dict: A unified schema in the standard format
         """
+        # Fire event before schema construction
+        fire_event(
+            SchemaConstructionStartedEvent(
+                schema_type="dict",
+            )
+        )
+
         fields = []
         for field_name, field_type in schema_dict.items():
             is_required = field_type.endswith("!")
@@ -157,6 +192,15 @@ class SchemaLoader:
                 field_def = {"id": field_name, "type": field_type, "required": is_required}
             fields.append(field_def)
         unified_schema = {"name": "InlineSchema", "fields": fields}
+
+        # Fire event after schema construction
+        fire_event(
+            SchemaConstructionCompleteEvent(
+                schema_type="dict",
+                field_count=len(fields),
+            )
+        )
+
         return unified_schema
 
     @staticmethod

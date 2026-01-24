@@ -8,6 +8,12 @@ from enum import Enum
 from typing import List, Dict, Union
 from pathlib import Path
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    SourceDataSavingEvent,
+    SourceDataSavedEvent,
+)
+
 logger = logging.getLogger(__name__)
 
 # Conditional import for file locking (optional dependency)
@@ -115,11 +121,31 @@ class UnifiedSourceDataSaver:
             self.enable_locking,
         )
 
+        # Fire event before saving
+        fire_event(
+            SourceDataSavingEvent(
+                file_path=str(source_file),
+                item_count=len(items),
+            )
+        )
+
         # Save with or without locking
         if self.enable_locking:
             self._save_with_lock(source_file, items)
         else:
             self._save_without_lock(source_file, items)
+
+        # Get file size after saving
+        bytes_written = source_file.stat().st_size if source_file.exists() else 0
+
+        # Fire event after saving
+        fire_event(
+            SourceDataSavedEvent(
+                file_path=str(source_file),
+                item_count=len(items),
+                bytes_written=bytes_written,
+            )
+        )
 
         logger.info("Saved %d source items to %s", len(items), source_file)
 
