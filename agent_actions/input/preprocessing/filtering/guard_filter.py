@@ -10,7 +10,10 @@ from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import GuardEvaluationTimeoutEvent, GuardEvaluationErrorEvent
+from agent_actions.logging.events.types import (
+    GuardEvaluationTimeoutEvent,
+    GuardEvaluationErrorEvent,
+)
 from agent_actions.utils.dict import get_nested_value
 from ..parsing.parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
 
@@ -136,10 +139,12 @@ class GuardFilter:
             error_msg = f"Guard condition evaluation timed out after {timeout} seconds"
             logger.warning(error_msg)
 
-            fire_event(GuardEvaluationTimeoutEvent(
-                guard_clause=request.condition,
-                timeout_seconds=timeout,
-            ))
+            fire_event(
+                GuardEvaluationTimeoutEvent(
+                    guard_clause=request.condition,
+                    timeout_seconds=timeout,
+                )
+            )
 
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
@@ -151,10 +156,12 @@ class GuardFilter:
             error_msg = f"Error evaluating guard condition: {str(e)}"
             logger.debug(error_msg, exc_info=True)
 
-            fire_event(GuardEvaluationErrorEvent(
-                guard_clause=request.condition,
-                error=str(e),
-            ))
+            fire_event(
+                GuardEvaluationErrorEvent(
+                    guard_clause=request.condition,
+                    error=str(e),
+                )
+            )
 
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)

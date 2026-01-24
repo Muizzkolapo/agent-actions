@@ -230,11 +230,13 @@ class GroqClient(BaseClient):
                     "request_id": request_id,
                 },
             )
-            fire_event(LLMJSONParseErrorEvent(
-                provider="groq",
-                model=model_name,
-                error=str(e),
-            ))
+            fire_event(
+                LLMJSONParseErrorEvent(
+                    provider="groq",
+                    model=model_name,
+                    error=str(e),
+                )
+            )
             return [{"raw_response": response_temp, "_parse_error": str(e)}]
 
     @staticmethod

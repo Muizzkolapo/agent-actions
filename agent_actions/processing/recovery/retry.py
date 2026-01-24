@@ -178,11 +178,14 @@ class RetryService:
                             reason,
                             str(e),
                         )
-                        fire_event(RetryExhaustedEvent(
-                            attempt=attempt,
-                            reason=reason,
-                            error=str(e),
-                        ))
+                        fire_event(
+                            RetryExhaustedEvent(
+                                attempt=attempt,
+                                max_attempts=self.max_attempts,
+                                reason=reason,
+                                error=str(e),
+                            )
+                        )
                 else:
                     # Non-retriable error - don't retry, re-raise immediately
                     logger.error(

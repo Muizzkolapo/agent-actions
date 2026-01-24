@@ -99,18 +99,15 @@ class BatchClientResolver:
 
         # Check cache
         if client_type in self._client_cache:
-            fire_event(CacheHitEvent(
-                cache_type="batch_client",
-                key=f"config:{client_type}"
-            ))
+            fire_event(CacheHitEvent(cache_type="batch_client", key=f"config:{client_type}"))
             return self._client_cache[client_type]
 
         # Cache miss - need to create new client
-        fire_event(CacheMissEvent(
-            cache_type="batch_client",
-            key=f"config:{client_type}",
-            reason="client not cached"
-        ))
+        fire_event(
+            CacheMissEvent(
+                cache_type="batch_client", key=f"config:{client_type}", reason="client not cached"
+            )
+        )
 
         # Create new client
         try:
@@ -167,18 +164,17 @@ class BatchClientResolver:
         if client_type:
             # Check cache
             if client_type in self._client_cache:
-                fire_event(CacheHitEvent(
-                    cache_type="batch_client",
-                    key=f"batch_id:{batch_id}"
-                ))
+                fire_event(CacheHitEvent(cache_type="batch_client", key=f"batch_id:{batch_id}"))
                 return self._client_cache[client_type]
 
             # Cache miss - create new client
-            fire_event(CacheMissEvent(
-                cache_type="batch_client",
-                key=f"batch_id:{batch_id}",
-                reason="client not cached"
-            ))
+            fire_event(
+                CacheMissEvent(
+                    cache_type="batch_client",
+                    key=f"batch_id:{batch_id}",
+                    reason="client not cached",
+                )
+            )
             return BatchClientFactory.create_client(client_type)
 
         # Fallback to default client if available

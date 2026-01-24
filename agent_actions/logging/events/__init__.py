@@ -26,16 +26,44 @@ from agent_actions.logging.events.types import (
     BatchErrorEvent,
     BatchPassthroughEvent,
     BatchStatusEvent,
+    BatchSubmissionFailedEvent,
+    BatchStatusCheckFailedEvent,
+    BatchResultProcessingFailedEvent,
+    BatchPartialFailureEvent,
     # LLM events
     LLMRequestEvent,
     LLMResponseEvent,
     LLMErrorEvent,
     RateLimitEvent,
+    LLMJSONParseErrorEvent,
+    LLMConnectionErrorEvent,
+    LLMServerErrorEvent,
     # Validation events
     ValidationStartEvent,
     ValidationCompleteEvent,
     ValidationErrorEvent,
     ValidationWarningEvent,
+    # Cache events
+    CacheHitEvent,
+    CacheMissEvent,
+    CacheInvalidationEvent,
+    CacheLoadEvent,
+    CacheUpdateEvent,
+    CacheStatsEvent,
+    # Template events
+    TemplateRenderingFailedEvent,
+    TemplateSyntaxErrorEvent,
+    # Data events
+    DataParsingErrorEvent,
+    DataLoadingErrorEvent,
+    DataValidationErrorEvent,
+    # Guard events
+    GuardEvaluationTimeoutEvent,
+    GuardEvaluationErrorEvent,
+    # Recovery events
+    RetryExhaustedEvent,
+    RepromptValidationFailedEvent,
+    RecoveryErrorEvent,
     # Event categories
     EventCategories,
 )
@@ -61,16 +89,44 @@ __all__ = [
     "BatchErrorEvent",
     "BatchPassthroughEvent",
     "BatchStatusEvent",
+    "BatchSubmissionFailedEvent",
+    "BatchStatusCheckFailedEvent",
+    "BatchResultProcessingFailedEvent",
+    "BatchPartialFailureEvent",
     # LLM
     "LLMRequestEvent",
     "LLMResponseEvent",
     "LLMErrorEvent",
     "RateLimitEvent",
+    "LLMJSONParseErrorEvent",
+    "LLMConnectionErrorEvent",
+    "LLMServerErrorEvent",
     # Validation
     "ValidationStartEvent",
     "ValidationCompleteEvent",
     "ValidationErrorEvent",
     "ValidationWarningEvent",
+    # Cache
+    "CacheHitEvent",
+    "CacheMissEvent",
+    "CacheInvalidationEvent",
+    "CacheLoadEvent",
+    "CacheUpdateEvent",
+    "CacheStatsEvent",
+    # Template
+    "TemplateRenderingFailedEvent",
+    "TemplateSyntaxErrorEvent",
+    # Data
+    "DataParsingErrorEvent",
+    "DataLoadingErrorEvent",
+    "DataValidationErrorEvent",
+    # Guard
+    "GuardEvaluationTimeoutEvent",
+    "GuardEvaluationErrorEvent",
+    # Recovery
+    "RetryExhaustedEvent",
+    "RepromptValidationFailedEvent",
+    "RecoveryErrorEvent",
     # Categories
     "EventCategories",
     # Formatter

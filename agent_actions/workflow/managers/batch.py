@@ -84,11 +84,13 @@ class BatchLifecycleManager:
             if passthrough_marker.exists():
                 fire_event(BatchPassthroughEvent(agent_name=agent_name))
                 return (output_directory, "completed")
-            fire_event(BatchStatusEvent(
-                agent_name=agent_name,
-                status_message=f"No batch jobs found for {agent_name}",
-                status_type="warning"
-            ))
+            fire_event(
+                BatchStatusEvent(
+                    agent_name=agent_name,
+                    status_message=f"No batch jobs found for {agent_name}",
+                    status_type="warning",
+                )
+            )
             return (None, "failed")
 
         # Case 4: Failed status
@@ -117,18 +119,22 @@ class BatchLifecycleManager:
                 raise ProcessingError("No batch results were successfully processed")
 
         except ProcessingError as e:
-            fire_event(BatchErrorEvent(
-                agent_name=agent_name,
-                error_message="Could not process batch results",
-                error_type="ProcessingError"
-            ))
+            fire_event(
+                BatchErrorEvent(
+                    agent_name=agent_name,
+                    error_message="Could not process batch results",
+                    error_type="ProcessingError",
+                )
+            )
             raise
         except Exception as e:
-            fire_event(BatchErrorEvent(
-                agent_name=agent_name,
-                error_message=f"Could not process batch results: {str(e)}",
-                error_type=type(e).__name__
-            ))
+            fire_event(
+                BatchErrorEvent(
+                    agent_name=agent_name,
+                    error_message=f"Could not process batch results: {str(e)}",
+                    error_type=type(e).__name__,
+                )
+            )
             raise
 
     def check_batch_submission(

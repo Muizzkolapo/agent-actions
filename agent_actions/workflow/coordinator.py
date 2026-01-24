@@ -415,10 +415,7 @@ class AgentWorkflow:
             None if exception occurred (caller should re-raise)
         """
         # Set workflow context with correlation ID
-        get_manager().set_context(
-            workflow_name=self.agent_name,
-            correlation_id=str(uuid4())[:8]
-        )
+        get_manager().set_context(workflow_name=self.agent_name, correlation_id=str(uuid4())[:8])
 
         should_continue = self._resolve_upstream_workflows()
         if not should_continue:
@@ -456,8 +453,7 @@ class AgentWorkflow:
                     for agent_name in level_agents:
                         if agent_name in self.agent_indices:
                             manager.set_context(
-                                agent_name=agent_name,
-                                agent_index=self.agent_indices[agent_name]
+                                agent_name=agent_name, agent_index=self.agent_indices[agent_name]
                             )
 
                     orchestrator = self.services.core.action_level_orchestrator

@@ -345,10 +345,7 @@ class WorkflowDependencyOrchestrator:
 
         # Use context manager to save/restore context
         manager = get_manager()
-        with manager.context(
-            workflow_name=self.current_workflow,
-            correlation_id=str(uuid4())[:8]
-        ):
+        with manager.context(workflow_name=self.current_workflow, correlation_id=str(uuid4())[:8]):
             should_continue = self.resolve_upstream_workflows(
                 agent_configs, user_code_path, default_path, use_tools
             )

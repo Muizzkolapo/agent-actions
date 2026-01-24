@@ -80,19 +80,16 @@ class StaticDataLoader:
                 cache_key = str(resolved_path)
                 if cache_key in self._cache:
                     logger.debug("Cache hit for field '%s': %s", field_name, cache_key)
-                    fire_event(CacheHitEvent(
-                        cache_type="static_data",
-                        key=field_name
-                    ))
+                    fire_event(CacheHitEvent(cache_type="static_data", key=field_name))
                     loaded_data[field_name] = self._cache[cache_key]
                 else:
                     # Load and cache
                     logger.debug("Loading file for field '%s': %s", field_name, resolved_path)
-                    fire_event(CacheMissEvent(
-                        cache_type="static_data",
-                        key=field_name,
-                        reason="file not in cache"
-                    ))
+                    fire_event(
+                        CacheMissEvent(
+                            cache_type="static_data", key=field_name, reason="file not in cache"
+                        )
+                    )
                     data = self._load_file(resolved_path, field_name)
                     self._cache[cache_key] = data
                     loaded_data[field_name] = data
@@ -345,11 +342,11 @@ class StaticDataLoader:
         logger.debug("Cache cleared (%s files removed)", num_files)
 
         # Fire cache invalidation event
-        fire_event(CacheInvalidationEvent(
-            cache_type="static_data",
-            entries_removed=num_files,
-            reason="manual clear"
-        ))
+        fire_event(
+            CacheInvalidationEvent(
+                cache_type="static_data", entries_removed=num_files, reason="manual clear"
+            )
+        )
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics for debugging."""

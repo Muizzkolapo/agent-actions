@@ -245,11 +245,13 @@ class RecordProcessor:
             except TemplateVariableError as e:
                 # TemplateVariableError indicates a code bug (undefined template variables)
                 # Re-raise immediately to fail the workflow - these are not data errors
-                fire_event(TemplateRenderingFailedEvent(
-                    agent_name=context.agent_name,
-                    missing_variables=e.missing_variables,
-                    error_message=str(e),
-                ))
+                fire_event(
+                    TemplateRenderingFailedEvent(
+                        agent_name=context.agent_name,
+                        missing_variables=e.missing_variables,
+                        error_message=str(e),
+                    )
+                )
                 raise
             except Exception as e:
                 # Create failed result instead of propagating exception

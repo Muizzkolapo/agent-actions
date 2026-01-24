@@ -77,11 +77,13 @@ class JSONResponseMixin:
                     "line": e.lineno if hasattr(e, "lineno") else None,
                 },
             )
-            fire_event(LLMJSONParseErrorEvent(
-                provider=vendor_name.lower(),
-                model=model_name,
-                error=str(e),
-            ))
+            fire_event(
+                LLMJSONParseErrorEvent(
+                    provider=vendor_name.lower(),
+                    model=model_name,
+                    error=str(e),
+                )
+            )
             return [{"raw_response": response_content, "_parse_error": str(e)}]
 
 

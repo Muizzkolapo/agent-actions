@@ -179,11 +179,13 @@ class RepromptService:
             f"[{context}] Reprompt exhausted after {attempts} attempts "
             f"(validation: {self.validation_name})"
         )
-        fire_event(RepromptValidationFailedEvent(
-            agent_name=context or "unknown",
-            attempt=attempts,
-            error=f"Validation '{self.validation_name}' failed after {attempts} attempts",
-        ))
+        fire_event(
+            RepromptValidationFailedEvent(
+                agent_name=context or "unknown",
+                attempt=attempts,
+                error=f"Validation '{self.validation_name}' failed after {attempts} attempts",
+            )
+        )
 
         if exhausted_behavior == "raise":
             raise RuntimeError(

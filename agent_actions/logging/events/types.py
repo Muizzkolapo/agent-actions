@@ -18,7 +18,7 @@ Event Code Prefixes:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 
@@ -475,9 +475,7 @@ class BatchPassthroughEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = (
-            f"All items filtered by conditional clause - passthrough data processed for {self.agent_name}"
-        )
+        self.message = f"All items filtered by conditional clause - passthrough data processed for {self.agent_name}"
         self.data = {
             "agent_name": self.agent_name,
         }
@@ -819,7 +817,9 @@ class CacheInvalidationEvent(BaseEvent):
         self.level = EventLevel.INFO
         self.category = EventCategories.CACHE
         reason_str = f" - {self.reason}" if self.reason else ""
-        self.message = f"Cache invalidated: {self.cache_type} ({self.entries_removed} entries){reason_str}"
+        self.message = (
+            f"Cache invalidated: {self.cache_type} ({self.entries_removed} entries){reason_str}"
+        )
         self.data = {
             "cache_type": self.cache_type,
             "entries_removed": self.entries_removed,
@@ -842,7 +842,9 @@ class CacheLoadEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.CACHE
-        self.message = f"Cache loaded: {self.cache_type} ({self.entries_loaded} entries from {self.source})"
+        self.message = (
+            f"Cache loaded: {self.cache_type} ({self.entries_loaded} entries from {self.source})"
+        )
         self.data = {
             "cache_type": self.cache_type,
             "entries_loaded": self.entries_loaded,
@@ -919,14 +921,16 @@ class TemplateRenderingFailedEvent(BaseEvent):
     """Fired when template rendering fails due to undefined variables."""
 
     agent_name: str = ""
-    missing_variables: list = field(default_factory=list)
+    missing_variables: List[str] = field(default_factory=list)
     error_message: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
         self.category = EventCategories.TEMPLATE
         vars_str = ", ".join(self.missing_variables) if self.missing_variables else "unknown"
-        self.message = f"Template for '{self.agent_name}' references undefined variables: {vars_str}"
+        self.message = (
+            f"Template for '{self.agent_name}' references undefined variables: {vars_str}"
+        )
         self.data = {
             "agent_name": self.agent_name,
             "missing_variables": self.missing_variables,
@@ -1211,7 +1215,9 @@ class GuardEvaluationTimeoutEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.GUARD
-        self.message = f"Guard evaluation timed out after {self.timeout_seconds}s: {self.guard_clause}"
+        self.message = (
+            f"Guard evaluation timed out after {self.timeout_seconds}s: {self.guard_clause}"
+        )
         self.data = {
             "guard_clause": self.guard_clause,
             "timeout_seconds": self.timeout_seconds,
@@ -1253,15 +1259,19 @@ class RetryExhaustedEvent(BaseEvent):
     """Fired when retries are exhausted."""
 
     attempt: int = 0
+    max_attempts: int = 0
     reason: str = ""
     error: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.RECOVERY
-        self.message = f"Retry exhausted after {self.attempt} attempts: {self.reason}"
+        self.message = (
+            f"Retry exhausted after {self.attempt}/{self.max_attempts} attempts: {self.reason}"
+        )
         self.data = {
             "attempt": self.attempt,
+            "max_attempts": self.max_attempts,
             "reason": self.reason,
             "error": self.error,
         }

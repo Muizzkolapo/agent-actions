@@ -87,10 +87,11 @@ class SkipConditionStrategy(SkipStrategy):
             should_skip = not filter_result.matched
 
             if should_skip:
-                fire_event(AgentSkipEvent(
-                    agent_name=agent_name,
-                    skip_reason="skip_condition evaluated to True"
-                ))
+                fire_event(
+                    AgentSkipEvent(
+                        agent_name=agent_name, skip_reason="skip_condition evaluated to True"
+                    )
+                )
 
             return should_skip
 
@@ -130,10 +131,11 @@ class GuardStrategy(SkipStrategy):
             )
             return False
 
-        fire_event(AgentSkipEvent(
-            agent_name=agent_name,
-            skip_reason="error occurred and passthrough_on_error=False"
-        ))
+        fire_event(
+            AgentSkipEvent(
+                agent_name=agent_name, skip_reason="error occurred and passthrough_on_error=False"
+            )
+        )
         return True
 
     def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
@@ -183,10 +185,9 @@ class GuardStrategy(SkipStrategy):
 
             # Handle filter result
             if not filter_result.matched:
-                fire_event(AgentSkipEvent(
-                    agent_name=agent_name,
-                    skip_reason="guard condition not met"
-                ))
+                fire_event(
+                    AgentSkipEvent(agent_name=agent_name, skip_reason="guard condition not met")
+                )
                 logger.debug(
                     "Guard details: %s",
                     guard_clause,
@@ -238,10 +239,11 @@ class LegacySkipIfStrategy(SkipStrategy):
             should_skip = filter_result.matched
 
             if should_skip:
-                fire_event(AgentSkipEvent(
-                    agent_name=agent_name,
-                    skip_reason="legacy skip_if condition matched"
-                ))
+                fire_event(
+                    AgentSkipEvent(
+                        agent_name=agent_name, skip_reason="legacy skip_if condition matched"
+                    )
+                )
 
             return should_skip
 

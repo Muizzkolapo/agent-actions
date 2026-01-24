@@ -114,12 +114,11 @@ class ValidateUDFsCommand:
                 return
             registry = result["registry"]
             impl_refs = result["impl_refs"]
-            fire_event(ValidationCompleteEvent(
-                target="UDFs",
-                validator="validate-udfs",
-                error_count=0,
-                warning_count=0
-            ))
+            fire_event(
+                ValidationCompleteEvent(
+                    target="UDFs", validator="validate-udfs", error_count=0, warning_count=0
+                )
+            )
             self.console.print("[green]✅ All UDF references valid[/green]")
             self.console.print("[green]✅ No duplicate function names[/green]")
             self.console.print("\n[bold]Summary:[/bold]")
