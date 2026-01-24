@@ -64,6 +64,34 @@ from agent_actions.logging.events.types import (
     RetryExhaustedEvent,
     RepromptValidationFailedEvent,
     RecoveryErrorEvent,
+    # Configuration events
+    ConfigLoadStartEvent,
+    ConfigLoadEvent,
+    ConfigLoadCompleteEvent,
+    ConfigValidationEvent,
+    # Environment events
+    EnvironmentLoadStartEvent,
+    EnvironmentVariableDetectedEvent,
+    EnvironmentLoadCompleteEvent,
+    # Initialization events (CLI, System, Project)
+    CLIInitStartEvent,
+    CLIArgumentParsingEvent,
+    CLIInitCompleteEvent,
+    ApplicationInitializationStartEvent,
+    StartupValidationStartEvent,
+    StartupValidationCompleteEvent,
+    DIContainerInitializationEvent,
+    WorkflowInitializationStartEvent,
+    WorkflowServicesInitializationStartEvent,
+    ProjectInitializationStartEvent,
+    ProjectValidationEvent,
+    ProjectDirectoryCreatedEvent,
+    ProjectInitializedEvent,
+    # Plugin/UDF events
+    UDFDiscoveryStartEvent,
+    UDFDiscoveredEvent,
+    UDFDiscoveryCompleteEvent,
+    ProcessorRegistrationEvent,
     # Event categories
     EventCategories,
 )
@@ -127,6 +155,34 @@ __all__ = [
     "RetryExhaustedEvent",
     "RepromptValidationFailedEvent",
     "RecoveryErrorEvent",
+    # Configuration
+    "ConfigLoadStartEvent",
+    "ConfigLoadEvent",
+    "ConfigLoadCompleteEvent",
+    "ConfigValidationEvent",
+    # Environment
+    "EnvironmentLoadStartEvent",
+    "EnvironmentVariableDetectedEvent",
+    "EnvironmentLoadCompleteEvent",
+    # Initialization (CLI, System, Project)
+    "CLIInitStartEvent",
+    "CLIArgumentParsingEvent",
+    "CLIInitCompleteEvent",
+    "ApplicationInitializationStartEvent",
+    "StartupValidationStartEvent",
+    "StartupValidationCompleteEvent",
+    "DIContainerInitializationEvent",
+    "WorkflowInitializationStartEvent",
+    "WorkflowServicesInitializationStartEvent",
+    "ProjectInitializationStartEvent",
+    "ProjectValidationEvent",
+    "ProjectDirectoryCreatedEvent",
+    "ProjectInitializedEvent",
+    # Plugin/UDF
+    "UDFDiscoveryStartEvent",
+    "UDFDiscoveredEvent",
+    "UDFDiscoveryCompleteEvent",
+    "ProcessorRegistrationEvent",
     # Categories
     "EventCategories",
     # Formatter

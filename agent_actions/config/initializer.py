@@ -7,6 +7,7 @@ including environment config and dependency injection setup.
 
 import logging
 from contextlib import contextmanager
+from datetime import datetime
 from typing import Any, Dict, Optional
 
 from agent_actions.workflow.runner import AgentRunner
@@ -14,6 +15,13 @@ from agent_actions.config.di.application import ApplicationContainer
 from agent_actions.config.environment import EnvironmentConfig
 
 from agent_actions.validation.startup import StartupValidationError, validate_startup
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ApplicationInitializationStartEvent,
+    StartupValidationStartEvent,
+    StartupValidationCompleteEvent,
+    DIContainerInitializationEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +45,15 @@ def initialize_application(
     Raises:
         StartupValidationError: If validation fails
     """
+    fire_event(ApplicationInitializationStartEvent())
     logger.info("Initializing Agent Actions application...")
     if not skip_validation:
         try:
+            fire_event(StartupValidationStartEvent())
+            start_time = datetime.now()
             env_config = validate_startup(constructor_path, default_path)
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            fire_event(StartupValidationCompleteEvent(elapsed_time=elapsed_time))
             logger.info("Application initialization completed successfully")
             return env_config
         except StartupValidationError as e:
@@ -91,6 +104,7 @@ def application_container_context(
         container = ApplicationContainer.create_for_environment("development")
     else:
         container = ApplicationContainer(config)
+    fire_event(DIContainerInitializationEvent())
     try:
         yield container
     finally:

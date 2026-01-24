@@ -26,6 +26,10 @@ from agent_actions.logging.events import (
     AgentCompleteEvent,
     AgentSkipEvent,
     AgentFailedEvent,
+    WorkflowInitializationStartEvent,
+    WorkflowServicesInitializationStartEvent,
+    UDFDiscoveryStartEvent,
+    UDFDiscoveryCompleteEvent,
 )
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
@@ -72,6 +76,13 @@ class AgentWorkflow:
 
     def __init__(self, config: WorkflowConfig):
         """Initialize workflow with configuration and dependencies."""
+        # Fire workflow initialization event
+        fire_event(
+            WorkflowInitializationStartEvent(
+                workflow_name=config.manager.agent_name if config.manager else "unknown"
+            )
+        )
+
         # Store configuration
         self.config = config
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
@@ -155,6 +166,9 @@ class AgentWorkflow:
 
     def _initialize_services(self) -> WorkflowServices:
         """Initialize all workflow services."""
+        # Fire workflow services initialization event
+        fire_event(WorkflowServicesInitializationStartEvent(workflow_name=self.agent_name))
+
         # Create agent runner
         agent_runner = create_agent_runner(
             use_tools=self.config.use_tools,
@@ -319,12 +333,17 @@ class AgentWorkflow:
                 total_udfs += count
             if total_udfs > 0:
                 self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
+                # Fire UDF discovery complete event with total count
+                fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
     def _discover_udfs_from_path(self, path: str, is_primary: bool) -> int:
         """Discover UDFs from a specific path."""
         abs_path = Path(path).absolute()
 
         if abs_path.exists() and abs_path.is_dir():
+            # Fire UDF discovery start event
+            fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
+
             # Use centralized path management (thread-safe, cached)
             ensure_path_importable(abs_path)
 
@@ -337,6 +356,8 @@ class AgentWorkflow:
 
             if is_primary:
                 self.console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]")
+                # Fire discovery complete event for primary path
+                fire_event(UDFDiscoveryCompleteEvent(total_udfs=len(registry)))
 
             return len(registry)
 
