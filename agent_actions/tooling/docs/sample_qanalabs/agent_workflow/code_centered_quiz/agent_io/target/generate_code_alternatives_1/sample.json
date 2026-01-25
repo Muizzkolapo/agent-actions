@@ -1,0 +1,122 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test is_even(model, column_name) %}\n\nwith validation as (\n  select\n    {{ column_name }} as even_field\n  from {{ model }}\n),\n\nvalidation_errors as (\n  select\n    even_field\n  from validation\n  -- if this is true, then even_field is actually odd!\n  where (CAST(even_field AS INTEGER) % 2) = 1\n)\n\nselect *\nfrom validation_errors\n\n{% endtest %}\n",
+            "issue_type_1": "performance",
+            "issue_description_1": "Casting the tested column to INTEGER inside the WHERE clause can prevent the database from using indexes or columnar optimizations and forces a full table scan; on very large tables this will be significantly slower than testing a native integer column or restricting the test to recent/partitioned data, as noted in the docs."
+        },
+        "target_id": "b6625f88-722a-4d47-a18e-741eeecadf07",
+        "node_id": "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6"
+        ],
+        "parent_target_id": "33c3ef12-5ff0-459c-bb3e-01cf053b2af3",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_17db8d9f1a4fb7e4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "macros:\n  - name: test_not_empty_string\n    description: \"Checks that there is not an empty string.\"\n    arguments:\n      - name: model\n        type: string\n        description: \"Model Name\"\n      - name: column_name\n        type: string\n        description: \"Column name that should not be an empty string\"\n      - name: run_full\n        type: boolean\n        description: \"If true, run against the full table (defaults to true)\"\n",
+            "issue_type_1": "performance",
+            "issue_description_1": "This documentation adds a run_full argument that defaults to running the full table, encouraging full-table scans; it fails to advise sampling/filtered checks for large tables as recommended in the docs, which can lead to long runtimes and higher cost on big datasets."
+        },
+        "target_id": "b6e8cdff-2ed3-432b-91a2-0cf7bc93b90e",
+        "node_id": "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e"
+        ],
+        "parent_target_id": "ade93c09-c446-4904-84d8-6eb944cff0bf",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_e2782e9cd568cdd4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "Alternative 1 (Performance):\n{% test relationships(model, column_name, field, to) %}\nwith parent as (\n  select\n    {{ field }} as id\n  from {{ to }}\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child c\nwhere id is not null\n  and not exists (select 1 from parent p where p.id = c.id)\n{% endtest %}\n\nAlternative 2 (Security/Reliability):\n{% test relationships(model, column_name, field, to) %}\nwith parent as (\n  select\n    {{ field }} as id\n  from analytics.dim_customers\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child\nwhere id is not null\n  and id not in (select id from parent)\n{% endtest %}\n\nAlternative 3 (Readability/Maintainability):\n{% test relationships(model, column_name, field, to) %}\nselect *\nfrom (\n  select {{ column_name }} as fk\n  from {{ model }}\n) t\nwhere fk is not null\n  and fk not in (select {{ field }} from {{ to }})\n{% endtest %}\n",
+            "issue_type_1": "performance; security/reliability; readability/maintainability",
+            "issue_description_1": "Alternative 1 uses a correlated NOT EXISTS subquery which can force row-by-row evaluation and higher compute cost on very large tables compared with a set-based LEFT JOIN, leading to poor performance; Alternative 2 hardcodes a fully qualified parent table (analytics.dim_customers), reducing portability and causing failures or permission issues across environments instead of using the templated {{ to }} relation; Alternative 3 collapses the logic into an inline subquery with a generic alias and repeated templated expressions, which is harder to read and maintain and increases the chance of copy-paste or templating mistakes."
+        },
+        "target_id": "965b9cb8-f8cd-4c41-9047-3090ae760de3",
+        "node_id": "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de"
+        ],
+        "parent_target_id": "0e32daf0-34b4-4709-a97e-0b9007f4b928",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_34b469e83090420f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where (cast({{ column_name }} as integer) % 2) = 1\n\n{% endtest %}",
+            "issue_type_1": "performance",
+            "issue_description_1": "Casting the tested column inside the WHERE forces per-row evaluation and can prevent index usage or partition pruning, leading to full-table scans on millions of rows. It can also produce runtime errors for non-numeric values; the docs recommend ensuring the column is numeric or narrowing the test (e.g., partitions or counts) to reduce cost."
+        },
+        "target_id": "ad3c9670-2691-4831-9922-ba9155f7694c",
+        "node_id": "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e"
+        ],
+        "parent_target_id": "c6d5a321-85ce-49d7-a010-cdd63b3d3adb",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_b801135cbd600e7f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test unique(model, column_name) %}\n\nSELECT\n  lower(a.{{ column_name }}) AS violating_value,\n  COUNT(*) AS occurrences\nFROM {{ model }} a\nJOIN {{ model }} b\n  ON lower(a.{{ column_name }}) = lower(b.{{ column_name }})\n  AND coalesce(a.is_deleted, false) = false\n  AND coalesce(b.is_deleted, false) = false\n  AND a.id <> b.id\nWHERE a.{{ column_name }} IS NOT NULL\nGROUP BY 1\nHAVING COUNT(*) > 0\n\n{% endtest %}",
+            "issue_type_1": "performance",
+            "issue_description_1": "Uses a self-join on the entire table (O(n^2) comparisons) and lower() in the join, which will be very slow on large tables and likely prevents index usage; the docs warn that GROUP BY can be expensive and suggest partitioning or indexing to mitigate cost."
+        },
+        "target_id": "4fef9d58-13ed-476b-ab47-595239d8f811",
+        "node_id": "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0"
+        ],
+        "parent_target_id": "faabf237-94b9-4035-9d1a-ed385354c9b5",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_c64ecbeb338b9317"
+    }
+]

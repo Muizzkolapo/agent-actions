@@ -1,0 +1,10 @@
+{
+  "combined_scraped_sample.json": {
+    "batch_id": "batch_6976027b1f708190ae325d83fd886a2a",
+    "status": "validating",
+    "timestamp": "2026-01-25T11:46:03.399616",
+    "provider": "openai",
+    "record_count": 17,
+    "workflow_session_id": "workflow_1769341558_55bc6ec8"
+  }
+}

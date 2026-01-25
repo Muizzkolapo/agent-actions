@@ -1,0 +1,155 @@
+/* ============================================
+   Navigation Component
+   ============================================ */
+
+/* Sidebar Navigation Container */
+.sidebar-nav {
+    padding: var(--space-2) var(--space-3);
+}
+
+/* Navigation Section */
+.nav-section {
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+}
+
+/* Add separator line between sections */
+.nav-section:not(:last-child) {
+    border-bottom: none;
+}
+
+.nav-section.collapsed .nav-list {
+    display: none;
+}
+
+/* Navigation Header */
+.nav-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: var(--space-1);
+    padding: var(--space-1) 0;
+}
+
+.nav-header svg {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-header.clickable {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+}
+
+.nav-header.clickable:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.nav-header .count {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.125rem var(--space-2);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+/* Door Icon Animation */
+.door-icon {
+    transition: all 0.3s ease;
+    margin-left: auto;
+}
+
+.door-icon .door-panel {
+    transform-origin: left center;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When section is expanded (not collapsed), door is open */
+.nav-section:not(.collapsed) .door-icon .door-panel {
+    transform: perspective(100px) rotateY(-60deg);
+    opacity: 0.05;
+}
+
+/* When section is collapsed, door is closed */
+.nav-section.collapsed .door-icon .door-panel {
+    transform: perspective(100px) rotateY(0deg);
+    opacity: 0.1;
+}
+
+.door-icon .door-knob {
+    transition: transform 0.3s ease;
+}
+
+.nav-section:not(.collapsed) .door-icon .door-knob {
+    transform: translateX(-2px);
+}
+
+/* Navigation List */
+.nav-list {
+    list-style: none;
+}
+
+.nav-list li {
+    margin-bottom: var(--space-1);
+}
+
+/* Navigation Links */
+.nav-link {
+    display: block;
+    padding: 6px 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.nav-link.active {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--teal-500) 100%);
+    color: #ffffff;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(1, 124, 238, 0.3);
+}
+
+/* Collapsed Sidebar States */
+.sidebar.collapsed .nav-header {
+    justify-content: center;
+    padding: var(--space-2);
+}
+
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: var(--space-2);
+}
+
+.sidebar.collapsed .nav-list {
+    display: none;
+}
+
+.sidebar.collapsed .nav-section {
+    margin-bottom: var(--space-1);
+}
+
+.sidebar.collapsed .sidebar-nav {
+    padding: var(--space-1);
+}
+
+.sidebar.collapsed .nav-header span,
+.sidebar.collapsed .count {
+    display: none;
+}

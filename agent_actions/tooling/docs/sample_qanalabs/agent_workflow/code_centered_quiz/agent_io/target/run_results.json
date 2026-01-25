@@ -1,0 +1,19 @@
+{
+  "metadata": {
+    "invocation_id": "run_code_centered_quiz_034",
+    "workflow_name": "code_centered_quiz",
+    "agent_count": 15,
+    "execution_mode": "async",
+    "started_at": "2026-01-24T16:38:58.594662+00:00",
+    "completed_at": "2026-01-24T16:51:27.100966+00:00",
+    "elapsed_time": 748.506548,
+    "status": "success"
+  },
+  "results": [],
+  "elapsed_time": 748.506548,
+  "tokens": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}

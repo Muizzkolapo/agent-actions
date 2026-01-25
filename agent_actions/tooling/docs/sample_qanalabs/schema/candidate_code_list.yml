@@ -1,0 +1,20 @@
+name: candidate_code_list
+type: array
+items:
+  type: object
+  properties:
+    code:
+      type: string
+      description: "A reperesentative code snippet from doc"
+      maxLength: 150  
+    code_explanation:
+      type: string
+      description: "what does the code do and its comntext"
+    technical_level:
+      type: string
+      description: "Technical level of the fact"
+      enum: ["configuration", "implementation", "constraint","procedure","integration"]
+  required:
+    - code
+    - code_explanation
+    - technical_level

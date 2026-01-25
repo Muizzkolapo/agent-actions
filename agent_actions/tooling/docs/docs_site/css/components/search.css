@@ -1,0 +1,237 @@
+/* ============================================
+   Search Component
+   ============================================ */
+
+/* Filter Search (in filter bar) */
+.filter-search {
+    position: relative;
+    flex: 0 1 320px;
+    max-width: 400px;
+}
+
+.filter-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #5f6368;
+    pointer-events: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 1;
+}
+
+/* Icon background circle for better visual appeal */
+.filter-search-icon::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: -1;
+}
+
+.filter-search:hover .filter-search-icon {
+    color: #1a73e8;
+}
+
+.filter-search:hover .filter-search-icon::before {
+    opacity: 1;
+}
+
+.filter-search-input:focus ~ .filter-search-icon {
+    color: #1a73e8;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.filter-search-input:focus ~ .filter-search-icon::before {
+    opacity: 1;
+    background: linear-gradient(135deg, #e8f0fe 0%, #d2e3fc 100%);
+}
+
+.filter-search-input {
+    width: 100%;
+    height: 40px;                         /* Enhanced from 36px to match filter buttons */
+    padding: 0 12px 0 42px;              /* Increased left padding for better icon spacing */
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;                   /* Enhanced from 6px - more rounded */
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    color: #202124;
+    background: #ffffff;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);  /* Subtle shadow */
+}
+
+.filter-search-input:hover {
+    border-color: #c0c0c0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    background: #fafbfc;
+}
+
+.filter-search-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+}
+
+.filter-search-input::placeholder {
+    color: #9aa0a6;
+    transition: color 0.2s ease;
+}
+
+.filter-search-input:focus::placeholder {
+    color: #c0c0c0;
+}
+
+/* Enhanced Search Box (with clear button) */
+.search-box-enhanced {
+    position: relative;
+    flex: 0 1 320px;
+    max-width: 400px;
+}
+
+/* Style for both class-based and direct SVG children */
+.search-box-enhanced-icon,
+.search-box-enhanced > svg:first-child {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #5f6368;
+    pointer-events: none;
+    z-index: 1;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Icon background circle */
+.search-box-enhanced-icon::before,
+.search-box-enhanced > svg:first-child::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f4 100%);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: -1;
+}
+
+.search-box-enhanced:hover .search-box-enhanced-icon,
+.search-box-enhanced:hover > svg:first-child {
+    color: #1a73e8;
+}
+
+.search-box-enhanced:hover .search-box-enhanced-icon::before,
+.search-box-enhanced:hover > svg:first-child::before {
+    opacity: 1;
+}
+
+.search-box-enhanced input:focus ~ .search-box-enhanced-icon,
+.search-box-enhanced input:focus ~ svg:first-child {
+    color: #1a73e8;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.search-box-enhanced input:focus ~ .search-box-enhanced-icon::before,
+.search-box-enhanced input:focus ~ svg:first-child::before {
+    opacity: 1;
+    background: linear-gradient(135deg, #e8f0fe 0%, #d2e3fc 100%);
+}
+
+/* Style for both class-based and direct input children */
+.search-box-enhanced-input,
+.search-box-enhanced > input[type="text"] {
+    width: 100%;
+    height: 40px;
+    padding: 0 36px 0 42px;              /* Space for both search icon and clear button */
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;                   /* More rounded */
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    color: #202124;
+    background: #ffffff;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.search-box-enhanced-input:hover,
+.search-box-enhanced > input[type="text"]:hover {
+    border-color: #c0c0c0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+    background: #fafbfc;
+}
+
+.search-box-enhanced-input:focus,
+.search-box-enhanced > input[type="text"]:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1), 0 2px 4px rgba(0, 0, 0, 0.1);
+    background: #ffffff;
+}
+
+.search-box-enhanced-input::placeholder,
+.search-box-enhanced > input[type="text"]::placeholder {
+    color: #9aa0a6;
+    transition: color 0.2s ease;
+}
+
+.search-box-enhanced-input:focus::placeholder,
+.search-box-enhanced > input[type="text"]:focus::placeholder {
+    color: #c0c0c0;
+}
+
+/* Style for both class-based and generic clear buttons */
+.search-box-enhanced-clear,
+.search-box-enhanced > button,
+.search-box-enhanced > .search-clear-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 6px;
+    cursor: pointer;
+    color: #5f6368;
+    border-radius: 50%;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.search-box-enhanced-clear:hover,
+.search-box-enhanced > button:hover,
+.search-box-enhanced > .search-clear-btn:hover {
+    background: #f1f3f4;
+    color: #202124;
+}
+
+.search-box-enhanced-clear svg,
+.search-box-enhanced > button svg,
+.search-box-enhanced > .search-clear-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .filter-search,
+    .search-box-enhanced {
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+}

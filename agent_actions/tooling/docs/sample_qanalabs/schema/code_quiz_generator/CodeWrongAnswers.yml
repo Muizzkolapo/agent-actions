@@ -1,0 +1,11 @@
+name: CodeWrongAnswers
+fields:
+  - id: wrong_answers
+    type: string
+    items:
+      type: object
+      properties:
+        wrong_answer:
+          type: string
+      required:
+        - wrong_answer

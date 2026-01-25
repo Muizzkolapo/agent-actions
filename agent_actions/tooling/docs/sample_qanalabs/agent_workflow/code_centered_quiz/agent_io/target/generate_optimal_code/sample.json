@@ -1,0 +1,102 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_code": "{% test is_even(model, column_name) %}\n\nwith validation as (\n  select\n    {{ column_name }} as even_field\n  from {{ model }}\n),\n\nvalidation_errors as (\n  select\n    even_field\n  from validation\n  -- if this is true, then even_field is actually odd!\n  where (even_field % 2) = 1\n)\n\nselect *\nfrom validation_errors\n\n{% endtest %}\n"
+        },
+        "target_id": "33c3ef12-5ff0-459c-bb3e-01cf053b2af3",
+        "node_id": "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81"
+        ],
+        "parent_target_id": "33ee4af6-fe4d-47f6-bab0-a602509a2b6a",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_code": "macros:\n  - name: test_not_empty_string\n    description: \"Complementary test to default `not_null` test as it checks that there is not an empty string. It only accepts columns of type string.\"\n    arguments:\n      - name: model\n        type: string\n        description: \"Model Name\"\n      - name: column_name\n        type: string\n        description: \"Column name that should not be an empty string\"\n"
+        },
+        "target_id": "ade93c09-c446-4904-84d8-6eb944cff0bf",
+        "node_id": "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae"
+        ],
+        "parent_target_id": "7d44a057-2312-4336-90a3-b0dee921acc1",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_code": "{% test relationships(model, column_name, field, to) %}\nwith parent as (\n  select\n    {{ field }} as id\n  from {{ to }}\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child\nwhere id is not null\n  and id not in (select id from parent)\n{% endtest %}"
+        },
+        "target_id": "0e32daf0-34b4-4709-a97e-0b9007f4b928",
+        "node_id": "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566"
+        ],
+        "parent_target_id": "310b3be7-a6e6-4f11-a4b6-fdd66bb6a5d7",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_code": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where ({{ column_name }} % 2) = 1\n\n{% endtest %}"
+        },
+        "target_id": "c6d5a321-85ce-49d7-a010-cdd63b3d3adb",
+        "node_id": "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495"
+        ],
+        "parent_target_id": "834bccd2-f541-401b-97f7-7f0006a6195e",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_code": "{% test unique(model, column_name) %}\n-- Project-local override of dbt's builtin `unique` generic test.\n-- This implementation ignores soft-deleted rows and treats emails case-insensitively.\n-- Place this file at: tests/generic/unique.sql\n\nSELECT\n  lower({{ column_name }}) AS violating_value,\n  COUNT(*) AS occurrences\nFROM {{ model }}\nWHERE coalesce(is_deleted, false) = false\n  AND {{ column_name }} IS NOT NULL\nGROUP BY 1\nHAVING COUNT(*) > 1\n{% endtest %}"
+        },
+        "target_id": "faabf237-94b9-4035-9d1a-ed385354c9b5",
+        "node_id": "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78"
+        ],
+        "parent_target_id": "17532174-d19d-4aea-bf66-9bd8c58fa565",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    }
+]

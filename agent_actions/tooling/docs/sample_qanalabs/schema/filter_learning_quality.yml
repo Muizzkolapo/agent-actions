@@ -1,0 +1,14 @@
+name: filter_learning_quality
+description: Schema for voting on question learning quality (flat structure with passthrough)
+fields:
+  - id: vote
+    type: string
+    enum: ["keep", "filter"]
+    description: "Vote decision: keep or filter"
+  - id: learning_quality_score
+    type: integer
+    description: "Quality score from 1-10 for learning effectiveness"
+  - id: vote_reasoning
+    type: string
+    description: "Explanation of the vote decision"
+additionalProperties: true  # Allow passthrough fields

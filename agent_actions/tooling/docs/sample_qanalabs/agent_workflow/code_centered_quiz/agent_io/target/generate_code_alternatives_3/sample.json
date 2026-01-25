@@ -1,0 +1,122 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_3": "{% test is_even(model, column_name) %}\n\nwith a as (\n  select\n    CAST({{ column_name }} AS BIGINT) as f\n  from {{ model }}\n),\n\nb as (\n  select\n    f\n  from a\n  where MOD(f, 2) = 1\n)\n\nselect *\nfrom b\n\n{% endtest %}\n",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses non-descriptive CTE names and redundant casting which reduces clarity and makes the test harder to understand and maintain; it also omits explicit null handling and lacks a documented description/config as recommended in the docs."
+        },
+        "target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "node_id": "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784"
+        ],
+        "parent_target_id": "33c3ef12-5ff0-459c-bb3e-01cf053b2af3",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_17db8d9f1a4fb7e4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_3": "macros:\n  - name: test_not_empty_string\n    description: \"Ensures column is not NULL and not an empty string but the description is repetitive and provides no guidance on data types sampling or performance considerations which makes it hard to reuse safely across large tables\"\n    arguments:\n      - name: model\n        type: string\n        description: \"Model identifier\"\n      - name: column_name\n        type: string\n        description: \"Column to check but name is abbreviated and not descriptive\"\n",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "The macro-level and argument descriptions are vague or repetitive and omit key guidance the docs recommend (type constraints, when to sample, performance notes), making the test harder to understand and reuse across teams and large tables."
+        },
+        "target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "node_id": "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485"
+        ],
+        "parent_target_id": "ade93c09-c446-4904-84d8-6eb944cff0bf",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_e2782e9cd568cdd4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_3": "{% test relationships(model, column_name, field, to) %}\nwith p as (select {{ field }} as i from {{ to }}),\nc as (select {{ column_name }} as i from {{ model }}),\nx as (select c.i from (select i from c) c2 left join (select i from p) p2 on c2.i = p2.i where c2.i is not null and p2.i is null)\nselect * from x\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses terse, non-descriptive aliases and multiple unnecessary nested subqueries, which obscures intent and makes the test hard to read, debug, and extend; this violates the docs' guidance to keep custom test logic clear and well-structured (standard arguments and straightforward CTEs improve maintainability)."
+        },
+        "target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "node_id": "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9"
+        ],
+        "parent_target_id": "0e32daf0-34b4-4709-a97e-0b9007f4b928",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_34b469e83090420f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_3": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where not ((cast({{ column_name }} as integer) % 2) = 0)\n\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses a double-negative WHERE clause and an unnecessary nested cast, which obscures the test's intent and makes the SQL harder to read and maintain; this pattern can hide type-related failures the docs warn about and increases cognitive load for future reviewers."
+        },
+        "target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "node_id": "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325"
+        ],
+        "parent_target_id": "c6d5a321-85ce-49d7-a010-cdd63b3d3adb",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_b801135cbd600e7f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_3": "{% test unique(model, column_name) %}\nSELECT lower(trim({{ column_name }})) AS v,\n       count(*) AS c\nFROM {{ model }}\nWHERE coalesce(is_deleted, false) = false\n  AND {{ column_name }} IS NOT NULL\nGROUP BY lower(trim({{ column_name }}))\nHAVING count(*) > 1\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "The test recomputes the same expression in SELECT and GROUP BY instead of using the alias, making future edits error-prone; additionally there is no accompanying macro documentation/description (as recommended), reducing clarity for maintainers and reviewers when overriding a built-in test."
+        },
+        "target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "node_id": "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41"
+        ],
+        "parent_target_id": "faabf237-94b9-4035-9d1a-ed385354c9b5",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_c64ecbeb338b9317"
+    }
+]

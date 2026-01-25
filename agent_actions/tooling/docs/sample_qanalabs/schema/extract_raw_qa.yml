@@ -1,0 +1,28 @@
+name: extract_raw_qa
+description: Schema for extracted Q&A pairs from documentation
+fields:
+  - id: questions
+    type: array
+    description: "Array of Q&A objects extracted from documentation"
+    items:
+      type: object
+      properties:
+        question_text:
+          type: string
+          description: "The question targeting staff/senior engineer knowledge"
+        answer_text:
+          type: string
+          description: "Comprehensive answer explaining the concept"
+        source_quote:
+          type: string
+          description: "Verbatim quote from source supporting the answer"
+        difficulty_reason:
+          type: string
+          description: "Why this tests senior-level understanding"
+      required:
+        - question_text
+        - answer_text
+        - source_quote
+        - difficulty_reason
+      additionalProperties: false
+additionalProperties: false
