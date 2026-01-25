@@ -12,7 +12,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-header-top">
-                    <a href="#" class="logo" data-view="overview">
+                    <a href="#/" class="logo" data-view="overview">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                             <!-- Lightning bolt for actions/automation -->
                             <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" fill="currentColor" stroke="currentColor" stroke-width="0.5" stroke-linejoin="round"/>
@@ -47,7 +47,7 @@
                         <span>Overview</span>
                     </div>
                     <ul class="nav-list">
-                        <li><a href="#" data-view="overview" class="nav-link active">Project Home</a></li>
+                        <li><a href="#/" data-view="overview" class="nav-link active">Project Home</a></li>
                     </ul>
                 </div>
 
@@ -402,10 +402,10 @@
                 </div>
 
                 <!-- Recent Runs Section -->
-                <div class="section-header">
-                    <h2 class="section-heading">Recent Runs</h2>
-                    <a href="#" class="view-all-link">View all runs →</a>
-                </div>
+                    <div class="section-header">
+                        <h2 class="section-heading">Recent Runs</h2>
+                        <a href="#/runs" class="view-all-link">View all runs →</a>
+                    </div>
 
                 <!-- Filter Bar for Recent Runs -->
                 <div class="filter-bar" id="runs-filter-bar">
@@ -483,8 +483,8 @@
             <!-- Workflow Detail View -->
             <div id="workflow-view" class="content-view">
                 <div class="page-header">
-                    <div class="breadcrumb">
-                        <a href="#" data-breadcrumb="workflows">Workflows</a>
+                <div class="breadcrumb">
+                        <a href="#/workflows" data-breadcrumb="workflows">Workflows</a>
                         <span>/</span>
                         <span id="workflow-name"></span>
                     </div>
@@ -586,9 +586,9 @@
             <div id="action-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
-                        <a href="#" data-breadcrumb="actions">All Actions</a>
+                        <a href="#/actions" data-breadcrumb="actions">All Actions</a>
                         <span>/</span>
                         <span id="action-name"></span>
                     </div>
@@ -604,12 +604,12 @@
             <!-- Prompt Detail View - PromptHub Style -->
             <div id="prompt-view" class="content-view prompt-hub-view">
                 <!-- Breadcrumb -->
-                <nav class="ph-breadcrumb">
-                    <a href="#" data-view="overview">Overview</a>
+                    <nav class="ph-breadcrumb">
+                        <a href="#/" data-view="overview">Overview</a>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="9,18 15,12 9,6"/>
                     </svg>
-                    <a href="#" data-breadcrumb="prompts">Prompts</a>
+                        <a href="#/prompts" data-breadcrumb="prompts">Prompts</a>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="9,18 15,12 9,6"/>
                     </svg>
@@ -702,9 +702,9 @@
             <div id="schema-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
-                        <a href="#" data-breadcrumb="schemas">Schemas</a>
+                        <a href="#/schemas" data-breadcrumb="schemas">Schemas</a>
                         <span>/</span>
                         <span id="schema-name"></span>
                     </div>
@@ -721,7 +721,7 @@
             <div id="workflows-list-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
                         <span>All Workflows</span>
                     </div>
@@ -812,7 +812,7 @@
             <div id="actions-list-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
                         <span id="filter-type-breadcrumb"></span>
                     </div>
@@ -906,7 +906,7 @@
             <div id="prompts-list-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
                         <span>All Prompts</span>
                     </div>
@@ -1001,7 +1001,7 @@
             <div id="schemas-list-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
                         <span>All Schemas</span>
                     </div>
@@ -1096,7 +1096,7 @@
             <div id="runs-list-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
                         <span>All Runs</span>
                     </div>
@@ -1180,9 +1180,9 @@
             <div id="run-detail-view" class="content-view">
                 <div class="page-header">
                     <div class="breadcrumb">
-                        <a href="#" data-view="overview">Overview</a>
+                        <a href="#/" data-view="overview">Overview</a>
                         <span>/</span>
-                        <a href="#" id="run-detail-workflow-link">Workflow</a>
+                        <a href="#/workflows" id="run-detail-workflow-link">Workflow</a>
                         <span>/</span>
                         <span>Run Details</span>
                     </div>

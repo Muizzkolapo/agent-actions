@@ -231,6 +231,8 @@ function initializeApp() {
     renderOverview();
     setupEventListeners();
     setupSearch();
+    setupOverviewLinks();
+    setupWorkflowTabs();
 
     // Initialize keyboard shortcuts
     if (window.KeyboardShortcutManager) {
@@ -259,6 +261,7 @@ window.addEventListener('beforeunload', () => {
 
 function renderSidebar() {
     const workflows = Object.values(catalog.workflows);
+    workflows.sort((a, b) => a.name.localeCompare(b.name));
 
     // Update counts
     document.getElementById('workflow-count').textContent = catalog.stats.total_workflows;
@@ -273,7 +276,8 @@ function renderSidebar() {
     workflows.forEach(workflow => {
         const li = document.createElement('li');
         const link = document.createElement('a');
-        link.href = '#';
+        const workflowUrl = `#/workflows/${encodeURIComponent(workflow.id)}`;
+        link.href = workflowUrl;
         link.className = 'nav-link';
         link.textContent = workflow.name;
         link.dataset.workflow = workflow.id;
@@ -310,7 +314,8 @@ function renderSidebar() {
     Array.from(uniqueActions.values()).forEach(action => {
         const li = document.createElement('li');
         const link = document.createElement('a');
-        link.href = '#';
+        const actionUrl = `#/workflows/${encodeURIComponent(action.workflowId)}/actions/${encodeURIComponent(action.name)}`;
+        link.href = actionUrl;
         link.className = 'nav-link';
         link.textContent = action.name;
         link.addEventListener('click', (e) => {
@@ -331,7 +336,8 @@ function renderSidebar() {
         promptsArray.forEach(prompt => {
             const li = document.createElement('li');
             const link = document.createElement('a');
-            link.href = '#';
+            const promptId = encodeURIComponent(prompt.id || prompt.name);
+            link.href = `#/prompts/${promptId}`;
             link.className = 'nav-link';
             link.innerHTML = `${prompt.name} <span style="font-size: 0.7rem; color: var(--text-muted);">(${prompt.workflow})</span>`;
             link.addEventListener('click', (e) => {
@@ -353,7 +359,8 @@ function renderSidebar() {
         schemasArray.forEach(schema => {
             const li = document.createElement('li');
             const link = document.createElement('a');
-            link.href = '#';
+            const schemaId = encodeURIComponent(schema.id || schema.name);
+            link.href = `#/schemas/${schemaId}`;
             link.className = 'nav-link';
             link.textContent = schema.name;
             link.addEventListener('click', (e) => {
@@ -1774,6 +1781,7 @@ function showWorkflow(workflowId, pushHistory = true) {
     renderWorkflowDetails(workflow);
     renderWorkflowRuns(workflow);
     renderWorkflowTimeline(workflow);
+    activateWorkflowTab(state.currentTab || 'details', { pushHistory: false });
 }
 
 function renderFieldLineage(workflow) {
@@ -2432,6 +2440,7 @@ function showRunDetails(run) {
     // Update workflow breadcrumb link
     const workflowLink = document.getElementById('run-detail-workflow-link');
     workflowLink.textContent = run.workflow_name || run.workflow_id;
+    workflowLink.href = `#/workflows/${encodeURIComponent(run.workflow_id)}`;
     workflowLink.onclick = () => showWorkflow(run.workflow_id);
 
     // Render run details content
@@ -2549,7 +2558,7 @@ function updateActionBreadcrumb(context, workflowId) {
     } else {
         // Default / fallback
         breadcrumbContainer.innerHTML = `
-            <a href="#/overview">Overview</a>
+            <a href="#/" data-view="overview">Overview</a>
             <span>/</span>
             <a href="#/actions">All Actions</a>
             <span>/</span>
@@ -3418,6 +3427,52 @@ function setupSearch() {
             } else {
                 li.style.display = 'none';
             }
+        });
+    });
+}
+
+function setupWorkflowTabs() {
+    const tabButtons = document.querySelectorAll('#workflow-view .tab-button');
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const tabName = button.dataset.tab;
+            if (!tabName) return;
+            activateWorkflowTab(tabName);
+        });
+    });
+}
+
+function activateWorkflowTab(tabName, options = {}) {
+    const { pushHistory = true } = options;
+    const tabButtons = document.querySelectorAll('#workflow-view .tab-button');
+    const tabPanes = document.querySelectorAll('#workflow-view .tab-pane');
+    const pane = document.getElementById(`${tabName}-tab`);
+    if (!pane) return;
+
+    tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabName));
+    tabPanes.forEach(p => p.classList.toggle('active', p.id === pane.id));
+
+    state.currentTab = tabName;
+
+    const workflowId = state.currentWorkflow;
+    const workflow = catalog.workflows[workflowId];
+    if (workflow && tabName === 'field-lineage') {
+        renderFieldLineage(workflow);
+    } else if (workflow && tabName === 'runs') {
+        renderWorkflowRuns(workflow);
+    }
+
+    if (pushHistory && workflowId) {
+        const tabParam = tabName === 'details' ? undefined : tabName;
+        pushHistoryState('workflow', { workflowId, tab: tabParam }, workflow ? workflow.name : 'Workflow');
+    }
+}
+
+function setupOverviewLinks() {
+    document.querySelectorAll('[data-view="overview"]').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            showOverview();
         });
     });
 }
