@@ -8,12 +8,31 @@ from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
 from .indexer import build_index, find_project_root
-from .models import ProjectIndex, ReferenceType
+from .models import Location, ProjectIndex, ReferenceType
 from .resolver import get_reference_at_position, resolve_reference
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+SEMANTIC_TOKEN_TYPES = [
+    "namespace",
+    "type",
+    "function",
+    "variable",
+    "property",
+    "string",
+]
+
+SEMANTIC_TOKEN_TYPE_MAP = {
+    ReferenceType.WORKFLOW: "namespace",
+    ReferenceType.SCHEMA: "type",
+    ReferenceType.TOOL: "function",
+    ReferenceType.ACTION: "variable",
+    ReferenceType.CONTEXT_FIELD: "property",
+    ReferenceType.PROMPT: "string",
+    ReferenceType.SEED_FILE: "string",
+}
 
 
 class AgentActionsLanguageServer(LanguageServer):
@@ -58,7 +77,17 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
                 trigger_characters=["$", ":", ".", "-"],
                 resolve_provider=False,
             ),
+            signature_help_provider=lsp.SignatureHelpOptions(
+                trigger_characters=[":"],
+            ),
             document_symbol_provider=True,
+            document_highlight_provider=True,
+            code_lens_provider=lsp.CodeLensOptions(resolve_provider=False),
+            semantic_tokens_provider=lsp.SemanticTokensOptions(
+                legend=_semantic_tokens_legend(),
+                full=True,
+                range=False,
+            ),
         ),
         server_info=lsp.ServerInfo(
             name="agent-actions-lsp",
@@ -155,9 +184,13 @@ def _build_hover_content(reference, index: ProjectIndex) -> Optional[str]:
             return content
 
     elif reference.type == ReferenceType.SCHEMA:
-        schema_path = index.get_schema(reference.value)
-        if schema_path:
-            return f"**Schema**: `{reference.value}`\n\nFile: `{schema_path}`"
+        schema = index.get_schema_definition(reference.value)
+        if schema:
+            fields_preview = ""
+            if schema.fields:
+                field_lines = "\n".join(f"- `{field}`" for field in schema.fields[:8])
+                fields_preview = f"\n\n**Fields**\n{field_lines}"
+            return f"**Schema**: `{reference.value}`\n\nFile: `{schema.location.file_path}`{fields_preview}"
 
     elif reference.type == ReferenceType.ACTION:
         location = index.get_action(reference.value)
@@ -223,13 +256,34 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
             )
 
     # Action completions (in dependencies)
-    elif "dependencies:" in line or line_before_cursor.strip().startswith("-"):
+    elif _is_in_dependencies_block(lines, params.position.line):
         for name in server.index.actions:
             items.append(
                 lsp.CompletionItem(
                     label=name,
                     kind=lsp.CompletionItemKind.Module,
                     detail="Action",
+                )
+            )
+
+    # Context scope completions
+    elif _is_in_context_scope_block(lines, params.position.line):
+        current_file = Path(params.text_document.uri.replace("file://", ""))
+        items.extend(_build_context_scope_completions(current_file))
+
+    # Guard/reprompt completions
+    elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:
+        current_file = Path(params.text_document.uri.replace("file://", ""))
+        items.extend(_build_guard_completions(current_file))
+
+    # Versions block completions
+    elif _is_in_versions_block(lines, params.position.line):
+        for key in ("param", "range", "mode", "source", "pattern"):
+            items.append(
+                lsp.CompletionItem(
+                    label=key,
+                    kind=lsp.CompletionItemKind.Property,
+                    detail="Versions key",
                 )
             )
 
@@ -251,7 +305,8 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
 
     # Handle YAML workflow files - show actions
     if file_path in server.index.file_actions:
-        for name, location in server.index.file_actions[file_path].items():
+        for name, action_meta in server.index.file_actions[file_path].items():
+            location = action_meta.location
             symbols.append(
                 lsp.DocumentSymbol(
                     name=name,
@@ -327,6 +382,434 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
     # Rebuild full index for now (can optimize later)
     server.index = build_index(server.project_root)
     logger.info("Reindexed project after save")
+    _publish_diagnostics(params.text_document.uri)
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
+def did_open(params: lsp.DidOpenTextDocumentParams):
+    """Handle file open - publish diagnostics."""
+    _publish_diagnostics(params.text_document.uri)
+
+
+@server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT)
+def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.DocumentHighlight]:
+    """Highlight references under cursor."""
+    if not server.index:
+        return []
+
+    file_path = Path(params.text_document.uri.replace("file://", ""))
+    references = server.index.references_by_file.get(file_path, [])
+    target = _find_reference_at_position(references, params.position.line, params.position.character)
+    if not target:
+        return []
+
+    highlights = []
+    for reference in references:
+        if reference.type == target.type and reference.value == target.value:
+            highlights.append(
+                lsp.DocumentHighlight(
+                    range=lsp.Range(
+                        start=lsp.Position(
+                            line=reference.location.line, character=reference.location.column
+                        ),
+                        end=lsp.Position(
+                            line=reference.location.end_line or reference.location.line,
+                            character=reference.location.end_column or reference.location.column,
+                        ),
+                    )
+                )
+            )
+    return highlights
+
+
+@server.feature(lsp.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL)
+def semantic_tokens(params: lsp.SemanticTokensParams) -> lsp.SemanticTokens:
+    """Provide semantic tokens for references in workflow files."""
+    if not server.index:
+        return lsp.SemanticTokens(data=[])
+
+    file_path = Path(params.text_document.uri.replace("file://", ""))
+    references = server.index.references_by_file.get(file_path, [])
+    tokens = _build_semantic_tokens(references)
+    return lsp.SemanticTokens(data=tokens)
+
+
+@server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
+def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
+    """Provide code lenses for guard and versions blocks."""
+    if not server.index:
+        return []
+
+    file_path = Path(params.text_document.uri.replace("file://", ""))
+    actions = server.index.file_actions.get(file_path, {})
+    lenses: list[lsp.CodeLens] = []
+
+    for action in actions.values():
+        if action.versions_line is not None and action.versions_summary:
+            lenses.append(
+                lsp.CodeLens(
+                    range=lsp.Range(
+                        start=lsp.Position(line=action.versions_line, character=0),
+                        end=lsp.Position(line=action.versions_line, character=0),
+                    ),
+                    command=lsp.Command(
+                        title=f"Versions: {action.versions_summary}",
+                        command="agent-actions.showVersionsSummary",
+                        arguments=[action.name],
+                    ),
+                )
+            )
+        if action.guard_line is not None and action.guard_condition:
+            lenses.append(
+                lsp.CodeLens(
+                    range=lsp.Range(
+                        start=lsp.Position(line=action.guard_line, character=0),
+                        end=lsp.Position(line=action.guard_line, character=0),
+                    ),
+                    command=lsp.Command(
+                        title=f"Guard: {action.guard_condition}",
+                        command="agent-actions.showGuardSummary",
+                        arguments=[action.name],
+                    ),
+                )
+            )
+
+    return lenses
+
+
+@server.feature(lsp.TEXT_DOCUMENT_SIGNATURE_HELP)
+def signature_help(params: lsp.SignatureHelpParams) -> Optional[lsp.SignatureHelp]:
+    """Provide signature help for guard/reprompt conditions."""
+    if not server.index:
+        return None
+
+    doc = server.workspace.get_text_document(params.text_document.uri)
+    if not doc:
+        return None
+
+    lines = doc.source.split("\n")
+    if params.position.line >= len(lines):
+        return None
+
+    line = lines[params.position.line]
+    if "condition:" not in line and "validation:" not in line:
+        return None
+
+    current_file = Path(params.text_document.uri.replace("file://", ""))
+    variables = _collect_available_guard_variables(current_file)
+    if not variables:
+        return None
+
+    signature = lsp.SignatureInformation(
+        label="Available variables: " + ", ".join(sorted(variables)),
+        documentation="Variables derived from context_scope.observe and action schemas.",
+    )
+    return lsp.SignatureHelp(signatures=[signature], active_signature=0, active_parameter=0)
+
+
+def _semantic_tokens_legend() -> lsp.SemanticTokensLegend:
+    """Define semantic tokens legend."""
+    return lsp.SemanticTokensLegend(
+        token_types=SEMANTIC_TOKEN_TYPES,
+        token_modifiers=[],
+    )
+
+
+def _build_semantic_tokens(references) -> list[int]:
+    """Build semantic tokens for references."""
+    legend = _semantic_tokens_legend().token_types
+    sorted_refs = sorted(references, key=lambda ref: (ref.location.line, ref.location.column))
+    data = []
+    last_line = 0
+    last_char = 0
+
+    for reference in sorted_refs:
+        token_type_name = SEMANTIC_TOKEN_TYPE_MAP.get(reference.type)
+        if not token_type_name:
+            continue
+        token_type_index = legend.index(token_type_name)
+        line = reference.location.line
+        start_char = reference.location.column
+        length = (reference.location.end_column or start_char) - start_char
+        delta_line = line - last_line
+        delta_start = start_char - last_char if delta_line == 0 else start_char
+        data.extend([delta_line, delta_start, max(length, 1), token_type_index, 0])
+        last_line = line
+        last_char = start_char
+
+    return data
+
+
+def _find_reference_at_position(references, line: int, character: int):
+    """Find the reference that contains the given position."""
+    for reference in references:
+        loc = reference.location
+        end_col = loc.end_column or loc.column
+        if loc.line == line and loc.column <= character <= end_col:
+            return reference
+    return None
+
+
+def _publish_diagnostics(uri: str) -> None:
+    """Publish diagnostics for a file."""
+    if not server.index:
+        return
+
+    doc = server.workspace.get_text_document(uri)
+    if not doc:
+        return
+
+    file_path = Path(uri.replace("file://", ""))
+    diagnostics = _collect_diagnostics(file_path, server.index)
+    server.publish_diagnostics(uri, diagnostics)
+
+
+def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagnostic]:
+    """Collect diagnostics for missing references and workflow issues."""
+    diagnostics: list[lsp.Diagnostic] = []
+    references = index.references_by_file.get(file_path, [])
+    actions = index.file_actions.get(file_path, {})
+
+    for reference in references:
+        if reference.type in {
+            ReferenceType.PROMPT,
+            ReferenceType.TOOL,
+            ReferenceType.SCHEMA,
+            ReferenceType.ACTION,
+            ReferenceType.WORKFLOW,
+            ReferenceType.SEED_FILE,
+        }:
+            resolved = resolve_reference(reference, index, file_path)
+            if not resolved:
+                diagnostics.append(
+                    _build_diagnostic(
+                        reference.location,
+                        f"Unresolved {reference.type.value} reference `{reference.value}`.",
+                        lsp.DiagnosticSeverity.Error,
+                    )
+                )
+
+        if reference.type == ReferenceType.CONTEXT_FIELD:
+            action_name, field = _split_context_reference(reference.value)
+            action_location = index.get_action(action_name, file_path)
+            if not action_location:
+                diagnostics.append(
+                    _build_diagnostic(
+                        reference.location,
+                        f"context_scope reference `{reference.value}` cannot be resolved because "
+                        f"action `{action_name}` is missing.",
+                        lsp.DiagnosticSeverity.Error,
+                    )
+                )
+                continue
+            if field:
+                schema_fields = _get_action_schema_fields(index, file_path, action_name)
+                if schema_fields and field not in schema_fields:
+                    diagnostics.append(
+                        _build_diagnostic(
+                            reference.location,
+                            f"context_scope reference `{reference.value}` cannot be resolved because "
+                            f"`{action_name}` output schema does not declare `{field}`.",
+                            lsp.DiagnosticSeverity.Warning,
+                        )
+                    )
+
+    duplicates = index.duplicate_actions_by_file.get(file_path, set())
+    if duplicates:
+        for action_name in sorted(duplicates):
+            action_meta = actions.get(action_name)
+            if not action_meta:
+                continue
+            diagnostics.append(
+                _build_diagnostic(
+                    action_meta.location,
+                    f"Duplicate action name `{action_name}` defined in this workflow.",
+                    lsp.DiagnosticSeverity.Warning,
+                )
+            )
+
+    for action in actions.values():
+        if action.guard_condition and action.guard_variables:
+            available = _collect_available_guard_variables(file_path)
+            for variable in action.guard_variables:
+                if variable not in available:
+                    diagnostics.append(
+                        _build_diagnostic(
+                            Location(
+                                file_path=file_path,
+                                line=action.guard_line or action.location.line,
+                                column=0,
+                            ),
+                            f"Guard condition references `{variable}` which is not observed "
+                            "in context_scope.",
+                            lsp.DiagnosticSeverity.Warning,
+                        )
+                    )
+        if len(set(action.versions_params)) != len(action.versions_params):
+            diagnostics.append(
+                _build_diagnostic(
+                    Location(
+                        file_path=file_path,
+                        line=action.versions_line or action.location.line,
+                        column=0,
+                    ),
+                    "Duplicate versions.param entries detected.",
+                    lsp.DiagnosticSeverity.Warning,
+                )
+            )
+
+    return diagnostics
+
+
+def _build_diagnostic(
+    location: Location, message: str, severity: lsp.DiagnosticSeverity
+) -> lsp.Diagnostic:
+    """Build an LSP diagnostic from a location."""
+    return lsp.Diagnostic(
+        range=lsp.Range(
+            start=lsp.Position(line=location.line, character=location.column),
+            end=lsp.Position(
+                line=location.end_line or location.line,
+                character=location.end_column or location.column + 1,
+            ),
+        ),
+        message=message,
+        severity=severity,
+    )
+
+
+def _split_context_reference(value: str) -> tuple[str, Optional[str]]:
+    """Split context reference into action name and field."""
+    if "." in value:
+        action_name, field = value.split(".", 1)
+        return action_name, field
+    return value, None
+
+
+def _get_action_schema_fields(index: ProjectIndex, file_path: Path, action_name: str) -> list[str]:
+    """Get fields for an action's schema."""
+    action_meta = index.get_action_metadata(action_name, file_path)
+    if not action_meta or not action_meta.schema_ref:
+        return []
+    schema = index.get_schema_definition(action_meta.schema_ref)
+    if not schema:
+        return []
+    return schema.fields
+
+
+def _is_in_context_scope_block(lines: list[str], line_number: int) -> bool:
+    """Check if a line is inside a context_scope block."""
+    current_indent = len(lines[line_number]) - len(lines[line_number].lstrip())
+    for i in range(line_number, -1, -1):
+        line = lines[i]
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        if line_indent < current_indent and line.strip().startswith("context_scope:"):
+            return True
+        if line_indent < current_indent and line.strip().startswith("-"):
+            continue
+        if line_indent <= current_indent and line.strip().startswith("context_scope:"):
+            return True
+    return False
+
+
+def _is_in_versions_block(lines: list[str], line_number: int) -> bool:
+    """Check if a line is inside a versions block."""
+    current_indent = len(lines[line_number]) - len(lines[line_number].lstrip())
+    for i in range(line_number, -1, -1):
+        line = lines[i]
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        if line_indent < current_indent and line.strip().startswith("versions:"):
+            return True
+        if line_indent <= current_indent and line.strip().startswith("versions:"):
+            return True
+    return False
+
+
+def _is_in_dependencies_block(lines: list[str], line_number: int) -> bool:
+    """Check if a line is inside a dependencies block."""
+    current_indent = len(lines[line_number]) - len(lines[line_number].lstrip())
+    for i in range(line_number, -1, -1):
+        line = lines[i]
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+        if line_indent < current_indent and line.strip().startswith("dependencies:"):
+            return True
+        if line_indent <= current_indent and line.strip().startswith("dependencies:"):
+            return True
+    return False
+
+
+def _build_context_scope_completions(file_path: Path) -> list[lsp.CompletionItem]:
+    """Build completions for context_scope observe/drop blocks."""
+    if not server.index:
+        return []
+    items = []
+    actions = server.index.file_actions.get(file_path, {})
+    for action in actions.values():
+        if action.schema_ref:
+            schema = server.index.get_schema_definition(action.schema_ref)
+            if schema and schema.fields:
+                for field in schema.fields:
+                    items.append(
+                        lsp.CompletionItem(
+                            label=f"{action.name}.{field}",
+                            kind=lsp.CompletionItemKind.Field,
+                            detail=f"Output field from {action.name}",
+                        )
+                    )
+        items.append(
+            lsp.CompletionItem(
+                label=action.name,
+                kind=lsp.CompletionItemKind.Module,
+                detail="Action output",
+            )
+        )
+    return items
+
+
+def _build_guard_completions(file_path: Path) -> list[lsp.CompletionItem]:
+    """Build completions for guard/reprompt conditions."""
+    variables = _collect_available_guard_variables(file_path)
+    return [
+        lsp.CompletionItem(
+            label=variable,
+            kind=lsp.CompletionItemKind.Variable,
+            detail="Context variable",
+        )
+        for variable in sorted(variables)
+    ]
+
+
+def _collect_available_guard_variables(file_path: Path) -> set[str]:
+    """Collect variables available for guard/reprompt conditions."""
+    if not server.index:
+        return set()
+
+    actions = server.index.file_actions.get(file_path, {})
+    variables: set[str] = set()
+    for action in actions.values():
+        for observed in action.context_observe:
+            variables.add(observed)
+            if "." in observed:
+                _, field = observed.split(".", 1)
+                variables.add(field)
+        for passthrough in action.context_passthrough:
+            variables.add(passthrough)
+            if "." in passthrough:
+                _, field = passthrough.split(".", 1)
+                variables.add(field)
+        if action.schema_ref:
+            schema = server.index.get_schema_definition(action.schema_ref)
+            if schema:
+                for field in schema.fields:
+                    variables.add(f"{action.name}.{field}")
+    return variables
+
 
 
 def main():

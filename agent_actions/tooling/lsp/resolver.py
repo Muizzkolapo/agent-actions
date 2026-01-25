@@ -119,6 +119,19 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
                 raw_text=file_match.group(0),
             )
 
+    # 8. Context scope references: - action.field
+    context_match = re.search(r"^\s*-\s*([A-Za-z_][\w\.]*)", current_line)
+    if context_match and _is_in_context_scope_list(lines, line):
+        start = context_match.start(1)
+        end = context_match.end(1)
+        if start <= character <= end:
+            return Reference(
+                type=ReferenceType.CONTEXT_FIELD,
+                value=context_match.group(1),
+                location=Location(file_path=Path(), line=line, column=start),
+                raw_text=context_match.group(1),
+            )
+
     return None
 
 
@@ -146,6 +159,29 @@ def _is_in_dependencies_context(lines: list, current_line: int) -> bool:
     return False
 
 
+def _is_in_context_scope_list(lines: list, current_line: int) -> bool:
+    """Check if current line is within a context_scope observe/drop/passthrough list."""
+    current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
+    list_block_indent = None
+
+    for i in range(current_line - 1, -1, -1):
+        line = lines[i]
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+
+        if list_block_indent is None and line_indent < current_indent:
+            if line.strip().startswith(("observe:", "drop:", "passthrough:")):
+                list_block_indent = line_indent
+                current_indent = line_indent
+                continue
+
+        if list_block_indent is not None and line_indent < list_block_indent:
+            return line.strip().startswith("context_scope:")
+
+    return False
+
+
 def resolve_reference(
     reference: Reference, index: ProjectIndex, current_file: Optional[Path] = None
 ) -> Optional[Location]:
@@ -165,7 +201,7 @@ def resolve_reference(
             return tool.location
 
     elif reference.type == ReferenceType.SCHEMA:
-        schema_path = index.get_schema(reference.value)
+        schema_path = index.get_schema_path(reference.value)
         if schema_path:
             return Location(file_path=schema_path, line=0, column=0)
 
@@ -193,5 +229,9 @@ def resolve_reference(
             workflow_seed = current_file.parent.parent / "seed_data" / reference.value
             if workflow_seed.exists():
                 return Location(file_path=workflow_seed, line=0, column=0)
+
+    elif reference.type == ReferenceType.CONTEXT_FIELD:
+        action_name = reference.value.split(".", 1)[0]
+        return index.get_action(action_name, current_file)
 
     return None
