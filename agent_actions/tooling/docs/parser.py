@@ -102,12 +102,23 @@ class WorkflowParser:
             print(f"  ⚠ Warning: Error reading file - {e}")
             return None
 
+        # Extract workflow defaults
+        defaults = data.get("defaults", {})
+
         workflow = {
             "name": data.get("name", ""),
             "description": data.get("description", ""),
             "path": yaml_path,
             "version": data.get("version", "1.0.0"),
             "actions": {},
+            "defaults": {
+                "model_vendor": defaults.get("model_vendor"),
+                "model_name": defaults.get("model_name"),
+                "json_mode": defaults.get("json_mode"),
+                "granularity": defaults.get("granularity"),
+                "run_mode": defaults.get("run_mode"),
+                "few_shot": defaults.get("few_shot"),
+            },
         }
 
         # Parse actions (flat structure from rendered workflows)
@@ -165,16 +176,36 @@ class WorkflowParser:
             action["prompt"] = action_data.get("prompt")  # Prompt reference
             action["idempotency_key"] = action_data.get("idempotency_key")
 
-            # Loop configuration
+            # Loop configuration (legacy)
             if "loop" in action_data:
                 action["loop"] = action_data["loop"]  # {param, range, mode}
             if "loop_consumption" in action_data:
                 action["loop_consumption"] = action_data["loop_consumption"]
 
+            # Versions configuration (parallel execution)
+            if "versions" in action_data:
+                action["versions"] = action_data["versions"]  # {param, range, mode}
+            if "version_consumption" in action_data:
+                action["version_consumption"] = action_data["version_consumption"]  # {source, pattern}
+
             # Parallel merge configuration (MapReduce pattern)
             # reduce_key specifies field to correlate records from parallel branches
             if "reduce_key" in action_data:
                 action["reduce_key"] = action_data["reduce_key"]
+
+            # Reprompt/retry configuration
+            if "reprompt" in action_data:
+                action["reprompt"] = action_data["reprompt"]  # {validation, max_attempts, on_exhausted}
+
+            # Execution mode configuration
+            if "run_mode" in action_data:
+                action["run_mode"] = action_data["run_mode"]  # batch or online
+            if "json_mode" in action_data:
+                action["json_mode"] = action_data["json_mode"]
+            if "few_shot" in action_data:
+                action["few_shot"] = action_data["few_shot"]
+            if "prompt_debug" in action_data:
+                action["prompt_debug"] = action_data["prompt_debug"]
 
             workflow["actions"][action_name] = action
 

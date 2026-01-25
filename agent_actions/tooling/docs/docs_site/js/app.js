@@ -269,6 +269,11 @@ function renderSidebar() {
     document.getElementById('prompt-count').textContent = catalog.stats.total_prompts || 0;
     document.getElementById('schema-count').textContent = catalog.stats.total_schemas || 0;
 
+    // Set events count (errors + warnings)
+    const eventsCount = (catalog.stats.validation_errors || 0) + (catalog.stats.validation_warnings || 0);
+    const eventsCountEl = document.getElementById('events-count');
+    if (eventsCountEl) eventsCountEl.textContent = eventsCount;
+
     // Render workflows list
     const workflowsList = document.getElementById('workflows-list');
     workflowsList.innerHTML = '';
@@ -386,6 +391,8 @@ function renderSidebar() {
                 showAllPrompts();
             } else if (section === 'schemas') {
                 showAllSchemas();
+            } else if (section === 'events') {
+                showSystemEvents();
             }
         });
     });
@@ -894,6 +901,91 @@ function renderWorkflowTimeline(workflow) {
             </div>
         `;
     }).join('');
+}
+
+function renderWorkflowLogs(workflow) {
+    // Get logs data from catalog
+    const logsData = catalog.logs || {};
+
+    // Update stats
+    const invocationsEl = document.getElementById('logs-total-invocations');
+    const errorsEl = document.getElementById('logs-error-count');
+    const warningsEl = document.getElementById('logs-warning-count');
+
+    if (invocationsEl) {
+        invocationsEl.textContent = (logsData.recent_invocations || []).length;
+    }
+    if (errorsEl) {
+        errorsEl.textContent = (logsData.validation_errors || []).length;
+    }
+    if (warningsEl) {
+        warningsEl.textContent = (logsData.validation_warnings || []).length;
+    }
+
+    // Render recent invocations
+    const invocationsList = document.getElementById('logs-invocations-list');
+    if (invocationsList) {
+        const invocations = logsData.recent_invocations || [];
+        if (invocations.length === 0) {
+            invocationsList.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4);">No recent invocations</div>';
+        } else {
+            invocationsList.innerHTML = invocations.map(inv => {
+                const timestamp = inv.timestamp ? new Date(inv.timestamp).toLocaleString() : 'Unknown';
+                return `
+                    <div style="display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--bg-dark); border-radius: 6px; margin-bottom: var(--space-2);">
+                        <code style="font-size: 0.75rem; color: var(--text-muted);">${inv.invocation_id || 'N/A'}</code>
+                        <span class="badge badge-info" style="font-size: 0.7rem;">${inv.command || 'unknown'}</span>
+                        <span style="color: var(--text-muted); font-size: 0.8rem;">${inv.workflow_name || ''}</span>
+                        <span style="margin-left: auto; color: var(--text-muted); font-size: 0.75rem;">${timestamp}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+    }
+
+    // Render validation errors
+    const errorsList = document.getElementById('logs-errors-list');
+    if (errorsList) {
+        const errors = logsData.validation_errors || [];
+        if (errors.length === 0) {
+            errorsList.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4);">No validation errors</div>';
+        } else {
+            errorsList.innerHTML = errors.slice(0, 50).map(err => `
+                <div style="padding: var(--space-3); background: rgba(239, 68, 68, 0.1); border-left: 3px solid #ef4444; border-radius: 0 6px 6px 0; margin-bottom: var(--space-2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1);">
+                        <span style="color: #ef4444; font-weight: 600; font-size: 0.8rem;">${escapeHtml(err.target || 'Unknown')}</span>
+                        ${err.field ? `<code style="font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(err.field)}</code>` : ''}
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text);">${escapeHtml(err.error || 'Unknown error')}</div>
+                </div>
+            `).join('');
+            if (errors.length > 50) {
+                errorsList.innerHTML += `<div style="color: var(--text-muted); padding: var(--space-3); text-align: center;">... and ${errors.length - 50} more errors</div>`;
+            }
+        }
+    }
+
+    // Render validation warnings
+    const warningsList = document.getElementById('logs-warnings-list');
+    if (warningsList) {
+        const warnings = logsData.validation_warnings || [];
+        if (warnings.length === 0) {
+            warningsList.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4);">No validation warnings</div>';
+        } else {
+            warningsList.innerHTML = warnings.slice(0, 50).map(warn => `
+                <div style="padding: var(--space-3); background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; border-radius: 0 6px 6px 0; margin-bottom: var(--space-2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1);">
+                        <span style="color: #f59e0b; font-weight: 600; font-size: 0.8rem;">${escapeHtml(warn.target || 'Unknown')}</span>
+                        ${warn.field ? `<code style="font-size: 0.7rem; color: var(--text-muted);">${escapeHtml(warn.field)}</code>` : ''}
+                    </div>
+                    <div style="font-size: 0.85rem; color: var(--text);">${escapeHtml(warn.warning || 'Unknown warning')}</div>
+                </div>
+            `).join('');
+            if (warnings.length > 50) {
+                warningsList.innerHTML += `<div style="color: var(--text-muted); padding: var(--space-3); text-align: center;">... and ${warnings.length - 50} more warnings</div>`;
+            }
+        }
+    }
 }
 
 function setupTableSorting(viewId) {
@@ -1455,6 +1547,127 @@ function createSchemaCard(schema) {
 }
 
 // ============================================
+// SYSTEM EVENTS VIEW
+// ============================================
+
+function showSystemEvents(pushHistory = true) {
+    state.currentView = 'events';
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('events', {}, 'System Events');
+    }
+
+    updateNavigation();
+    switchView('events-view');
+    renderSystemEvents();
+}
+
+function renderSystemEvents() {
+    const logsData = catalog.logs || {};
+    const invocations = logsData.recent_invocations || [];
+    const errors = logsData.validation_errors || [];
+    const warnings = logsData.validation_warnings || [];
+
+    // Update stats
+    const invocationsStatEl = document.getElementById('events-stat-invocations');
+    const errorsStatEl = document.getElementById('events-stat-errors');
+    const warningsStatEl = document.getElementById('events-stat-warnings');
+    const successStatEl = document.getElementById('events-stat-success');
+
+    if (invocationsStatEl) invocationsStatEl.textContent = invocations.length;
+    if (errorsStatEl) errorsStatEl.textContent = errors.length;
+    if (warningsStatEl) warningsStatEl.textContent = warnings.length;
+
+    // Count successful workflow runs from runs data
+    let successfulRuns = 0;
+    if (catalog.runs) {
+        Object.values(catalog.runs).forEach(run => {
+            if (run.latest_run && run.latest_run.metadata && run.latest_run.metadata.status === 'success') {
+                successfulRuns++;
+            }
+        });
+    }
+    if (successStatEl) successStatEl.textContent = successfulRuns;
+
+    // Update sidebar count
+    const eventsCountEl = document.getElementById('events-count');
+    if (eventsCountEl) {
+        eventsCountEl.textContent = errors.length + warnings.length;
+    }
+
+    // Render invocations
+    const invocationsContainer = document.getElementById('events-invocations-container');
+    if (invocationsContainer) {
+        if (invocations.length === 0) {
+            invocationsContainer.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4); background: var(--bg-dark); border-radius: 8px;">No CLI invocations recorded</div>';
+        } else {
+            invocationsContainer.innerHTML = `
+                <table class="runs-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Invocation ID</th>
+                            <th>Command</th>
+                            <th>Workflow</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${invocations.map(inv => {
+                            const timestamp = inv.timestamp ? new Date(inv.timestamp).toLocaleString() : 'Unknown';
+                            return `
+                                <tr>
+                                    <td><code style="font-size: 0.8rem;">${escapeHtml(inv.invocation_id || 'N/A')}</code></td>
+                                    <td><span class="badge badge-info">${escapeHtml(inv.command || 'unknown')}</span></td>
+                                    <td>${escapeHtml(inv.workflow_name || '-')}</td>
+                                    <td style="color: var(--text-muted); font-size: 0.85rem;">${timestamp}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+    }
+
+    // Render errors
+    const errorsContainer = document.getElementById('events-errors-container');
+    if (errorsContainer) {
+        if (errors.length === 0) {
+            errorsContainer.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4); background: var(--bg-dark); border-radius: 8px;">No validation errors</div>';
+        } else {
+            errorsContainer.innerHTML = errors.map(err => `
+                <div style="padding: var(--space-3); background: rgba(239, 68, 68, 0.08); border-left: 3px solid #ef4444; border-radius: 0 8px 8px 0; margin-bottom: var(--space-2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1);">
+                        <span style="color: #ef4444; font-weight: 600; font-size: 0.85rem;">${escapeHtml(err.target || 'Unknown')}</span>
+                        ${err.field ? `<code style="font-size: 0.75rem; color: var(--text-muted); background: var(--bg-dark); padding: 2px 6px; border-radius: 4px;">${escapeHtml(err.field)}</code>` : ''}
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text); line-height: 1.5;">${escapeHtml(err.error || 'Unknown error')}</div>
+                </div>
+            `).join('');
+        }
+    }
+
+    // Render warnings
+    const warningsContainer = document.getElementById('events-warnings-container');
+    if (warningsContainer) {
+        if (warnings.length === 0) {
+            warningsContainer.innerHTML = '<div style="color: var(--text-muted); padding: var(--space-4); background: var(--bg-dark); border-radius: 8px;">No validation warnings</div>';
+        } else {
+            warningsContainer.innerHTML = warnings.map(warn => `
+                <div style="padding: var(--space-3); background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; border-radius: 0 8px 8px 0; margin-bottom: var(--space-2);">
+                    <div style="display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-1);">
+                        <span style="color: #f59e0b; font-weight: 600; font-size: 0.85rem;">${escapeHtml(warn.target || 'Unknown')}</span>
+                        ${warn.field ? `<code style="font-size: 0.75rem; color: var(--text-muted); background: var(--bg-dark); padding: 2px 6px; border-radius: 4px;">${escapeHtml(warn.field)}</code>` : ''}
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text); line-height: 1.5;">${escapeHtml(warn.warning || 'Unknown warning')}</div>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+// ============================================
 // ALL RUNS LIST VIEW
 // ============================================
 
@@ -1781,6 +1994,7 @@ function showWorkflow(workflowId, pushHistory = true) {
     renderWorkflowDetails(workflow);
     renderWorkflowRuns(workflow);
     renderWorkflowTimeline(workflow);
+    renderWorkflowLogs(workflow);
     activateWorkflowTab(state.currentTab || 'details', { pushHistory: false });
 }
 
@@ -2022,8 +2236,79 @@ function renderWorkflowDetails(workflow) {
 
     console.log('Action counts:', { actionCount, llmCount, toolCount });
 
+    // Latest run info
+    const latestRun = workflow.latest_run;
+    let latestRunHTML = '';
+    if (latestRun && latestRun.metadata) {
+        const meta = latestRun.metadata;
+        const status = meta.status || 'unknown';
+        const statusColor = status === 'success' ? '#22c55e' : status === 'failed' ? '#ef4444' : '#f59e0b';
+        const elapsedTime = meta.elapsed_time ? `${meta.elapsed_time.toFixed(1)}s` : 'N/A';
+        const startedAt = meta.started_at ? new Date(meta.started_at).toLocaleString() : 'N/A';
+
+        latestRunHTML = `
+        <!-- Latest Run Section -->
+        <div class="detail-card full-width" style="border-left: 4px solid ${statusColor};">
+            <h3>Latest Run <span class="badge" style="background: ${statusColor}; color: white; margin-left: 0.5rem; font-size: 0.7rem;">${status}</span></h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);">
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Invocation ID</div>
+                    <code style="font-size: 0.85rem;">${meta.invocation_id || 'N/A'}</code>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Started At</div>
+                    <div style="font-size: 0.9rem;">${startedAt}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Elapsed Time</div>
+                    <div style="font-size: 1.25rem; font-weight: 600;">${elapsedTime}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Execution Mode</div>
+                    <span class="badge badge-info">${meta.execution_mode || 'async'}</span>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Workflow defaults
+    const defaults = workflow.defaults || {};
+    const hasDefaults = defaults.model_vendor || defaults.model_name || defaults.run_mode || defaults.granularity;
+    let defaultsHTML = '';
+    if (hasDefaults) {
+        defaultsHTML = `
+        <!-- Defaults Section -->
+        <div class="detail-card full-width">
+            <h3>Workflow Defaults</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); margin-top: var(--space-4);">
+                ${defaults.model_vendor ? `<div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Model Vendor</div>
+                    <code>${defaults.model_vendor}</code>
+                </div>` : ''}
+                ${defaults.model_name ? `<div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Model Name</div>
+                    <code>${defaults.model_name}</code>
+                </div>` : ''}
+                ${defaults.run_mode ? `<div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Run Mode</div>
+                    <span class="badge badge-${defaults.run_mode === 'batch' ? 'primary' : 'success'}">${defaults.run_mode}</span>
+                </div>` : ''}
+                ${defaults.granularity ? `<div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Granularity</div>
+                    <span class="badge badge-info">${defaults.granularity}</span>
+                </div>` : ''}
+                ${defaults.json_mode ? `<div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">JSON Mode</div>
+                    <span class="badge badge-info">Enabled</span>
+                </div>` : ''}
+            </div>
+        </div>`;
+    }
+
     // Create a well-structured layout with proper sections
     const detailsHTML = `
+        ${latestRunHTML}
+
         <!-- Overview Section -->
         <div class="detail-card full-width">
             <h3>Overview</h3>
@@ -2046,6 +2331,8 @@ function renderWorkflowDetails(workflow) {
                 </div>
             </div>
         </div>
+
+        ${defaultsHTML}
 
         <!-- Description Section -->
         <div class="detail-card full-width">
@@ -2082,6 +2369,9 @@ function renderWorkflowDetails(workflow) {
     const table = document.createElement('table');
     table.className = 'actions-table';
 
+    // Check if any actions have metrics
+    const hasMetrics = actions.some(a => a.metrics);
+
     // Header
     const thead = document.createElement('thead');
     const headerRow = document.createElement('tr');
@@ -2091,6 +2381,7 @@ function renderWorkflowDetails(workflow) {
         <th>Model/Implementation</th>
         <th>Intent</th>
         <th>Dependencies</th>
+        ${hasMetrics ? '<th style="text-align: right;">Time</th><th style="text-align: center;">Status</th>' : ''}
     `;
     thead.appendChild(headerRow);
     table.appendChild(thead);
@@ -2114,12 +2405,28 @@ function renderWorkflowDetails(workflow) {
             modelInfo = `<code style="font-size: 0.8125rem;">${action.implementation}</code>`;
         }
 
+        // Metrics columns
+        let metricsHTML = '';
+        if (hasMetrics) {
+            const m = action.metrics || {};
+            const execTime = m.execution_time ? `${m.execution_time.toFixed(2)}s` : '-';
+            const successCount = m.success_count || 0;
+            const failedCount = m.failed_count || 0;
+            const statusBadge = failedCount > 0
+                ? `<span style="color: #ef4444; font-size: 0.75rem;">${failedCount} failed</span>`
+                : successCount > 0
+                    ? `<span style="color: #22c55e; font-size: 0.75rem;">${successCount} ok</span>`
+                    : '<span style="color: var(--text-muted); font-size: 0.75rem;">-</span>';
+            metricsHTML = `<td style="text-align: right; font-family: monospace; font-size: 0.8rem;">${execTime}</td><td style="text-align: center;">${statusBadge}</td>`;
+        }
+
         row.innerHTML = `
             <td><strong>${action.name}</strong></td>
             <td><span class="action-badge ${action.type}">${action.type}</span></td>
             <td>${modelInfo}</td>
             <td>${action.intent || '<span style="color: var(--text-subtle);">No description</span>'}</td>
             <td style="color: var(--text-muted);">${depsText}</td>
+            ${metricsHTML}
         `;
         tbody.appendChild(row);
     });
@@ -2128,6 +2435,102 @@ function renderWorkflowDetails(workflow) {
     tableWrapper.appendChild(table);
     actionsSection.appendChild(tableWrapper);
     container.appendChild(actionsSection);
+
+    // Execution Plan section (from manifest)
+    if (workflow.manifest && workflow.manifest.levels && workflow.manifest.levels.length > 0) {
+        const planSection = document.createElement('div');
+        planSection.className = 'detail-card full-width';
+        planSection.style.marginTop = 'var(--space-6)';
+
+        const planHeader = document.createElement('h3');
+        planHeader.textContent = 'Execution Plan';
+        planSection.appendChild(planHeader);
+
+        const planDesc = document.createElement('p');
+        planDesc.style.color = 'var(--text-muted)';
+        planDesc.style.marginTop = 'var(--space-2)';
+        planDesc.style.marginBottom = 'var(--space-4)';
+        planDesc.style.fontSize = '0.85rem';
+        planDesc.textContent = `${workflow.manifest.levels.length} execution levels • Actions at the same level run in parallel`;
+        planSection.appendChild(planDesc);
+
+        const levelsContainer = document.createElement('div');
+        levelsContainer.style.display = 'flex';
+        levelsContainer.style.flexDirection = 'column';
+        levelsContainer.style.gap = 'var(--space-2)';
+
+        workflow.manifest.levels.forEach((level, index) => {
+            const levelRow = document.createElement('div');
+            levelRow.style.display = 'flex';
+            levelRow.style.alignItems = 'center';
+            levelRow.style.gap = 'var(--space-3)';
+
+            // Level indicator
+            const levelLabel = document.createElement('div');
+            levelLabel.style.minWidth = '60px';
+            levelLabel.style.fontSize = '0.75rem';
+            levelLabel.style.color = 'var(--text-muted)';
+            levelLabel.textContent = `Level ${index}`;
+            levelRow.appendChild(levelLabel);
+
+            // Actions in this level
+            const actionsRow = document.createElement('div');
+            actionsRow.style.display = 'flex';
+            actionsRow.style.flexWrap = 'wrap';
+            actionsRow.style.gap = 'var(--space-2)';
+
+            level.forEach(actionName => {
+                const action = workflow.actions[actionName];
+                const actionBadge = document.createElement('span');
+                actionBadge.style.padding = '4px 8px';
+                actionBadge.style.fontSize = '0.75rem';
+                actionBadge.style.borderRadius = '4px';
+                actionBadge.style.cursor = 'pointer';
+                actionBadge.textContent = actionName;
+
+                if (action && action.type === 'llm') {
+                    actionBadge.style.background = 'rgba(124, 58, 237, 0.15)';
+                    actionBadge.style.color = '#a78bfa';
+                    actionBadge.style.border = '1px solid rgba(124, 58, 237, 0.3)';
+                } else {
+                    actionBadge.style.background = 'rgba(5, 150, 105, 0.15)';
+                    actionBadge.style.color = '#34d399';
+                    actionBadge.style.border = '1px solid rgba(5, 150, 105, 0.3)';
+                }
+
+                actionBadge.addEventListener('click', () => showAction(workflow.id, actionName));
+                actionsRow.appendChild(actionBadge);
+            });
+
+            levelRow.appendChild(actionsRow);
+
+            // Parallel indicator
+            if (level.length > 1) {
+                const parallelBadge = document.createElement('span');
+                parallelBadge.style.fontSize = '0.65rem';
+                parallelBadge.style.padding = '2px 6px';
+                parallelBadge.style.borderRadius = '9999px';
+                parallelBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+                parallelBadge.style.color = '#fbbf24';
+                parallelBadge.textContent = `${level.length} parallel`;
+                levelRow.appendChild(parallelBadge);
+            }
+
+            levelsContainer.appendChild(levelRow);
+
+            // Add connector line (except for last level)
+            if (index < workflow.manifest.levels.length - 1) {
+                const connector = document.createElement('div');
+                connector.style.marginLeft = '28px';
+                connector.style.borderLeft = '2px dashed var(--border-color)';
+                connector.style.height = '12px';
+                levelsContainer.appendChild(connector);
+            }
+        });
+
+        planSection.appendChild(levelsContainer);
+        container.appendChild(planSection);
+    }
 }
 
 function renderWorkflowActions(workflow) {
@@ -2819,6 +3222,128 @@ function renderActionDetails(action, workflowsUsingAction) {
         container.appendChild(dependentsSection);
     }
 
+    // Execution Metrics section (from run data)
+    if (action.metrics) {
+        const metricsSection = document.createElement('div');
+        metricsSection.className = 'action-detail-section';
+        const m = action.metrics;
+        const execTime = m.execution_time ? `${m.execution_time.toFixed(3)}s` : 'N/A';
+        const tokens = m.tokens || {};
+        const promptTokens = tokens.prompt_tokens || 0;
+        const completionTokens = tokens.completion_tokens || 0;
+        const totalTokens = promptTokens + completionTokens;
+
+        metricsSection.innerHTML = `
+            <h2>Execution Metrics <span class="badge badge-info" style="font-size: 0.7rem; margin-left: 0.5rem;">Last Run</span></h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); margin-top: var(--space-3);">
+                <div style="padding: var(--space-3); background: var(--bg-dark); border-radius: 8px; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: 600;">${execTime}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Execution Time</div>
+                </div>
+                <div style="padding: var(--space-3); background: var(--bg-dark); border-radius: 8px; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: 600; color: #22c55e;">${m.success_count || 0}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Success</div>
+                </div>
+                <div style="padding: var(--space-3); background: var(--bg-dark); border-radius: 8px; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: 600; color: #ef4444;">${m.failed_count || 0}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Failed</div>
+                </div>
+                <div style="padding: var(--space-3); background: var(--bg-dark); border-radius: 8px; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: 600; color: #f59e0b;">${m.filtered_count || 0}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Filtered</div>
+                </div>
+                ${totalTokens > 0 ? `
+                <div style="padding: var(--space-3); background: var(--bg-dark); border-radius: 8px; text-align: center;">
+                    <div style="font-size: 1.25rem; font-weight: 600; color: #8b5cf6;">${totalTokens.toLocaleString()}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted);">Tokens</div>
+                </div>` : ''}
+            </div>
+        `;
+        container.appendChild(metricsSection);
+    }
+
+    // Versions section (parallel execution config)
+    if (action.versions) {
+        const versionsSection = document.createElement('div');
+        versionsSection.className = 'action-detail-section';
+        const v = action.versions;
+        versionsSection.innerHTML = `
+            <h2>Parallel Execution <span class="badge badge-primary" style="font-size: 0.7rem; margin-left: 0.5rem;">versions</span></h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-top: var(--space-3);">
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Parameter</div>
+                    <code style="font-size: 1rem;">${escapeHtml(v.param || '')}</code>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Range</div>
+                    <code style="font-size: 1rem;">[${(v.range || []).join(', ')}]</code>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Mode</div>
+                    <span class="badge ${v.mode === 'parallel' ? 'badge-success' : 'badge-info'}">${v.mode || 'sequential'}</span>
+                </div>
+            </div>
+        `;
+        container.appendChild(versionsSection);
+    }
+
+    // Version Consumption section (merge pattern)
+    if (action.version_consumption) {
+        const vcSection = document.createElement('div');
+        vcSection.className = 'action-detail-section';
+        const vc = action.version_consumption;
+        vcSection.innerHTML = `
+            <h2>Version Consumption <span class="badge badge-warning" style="font-size: 0.7rem; margin-left: 0.5rem;">merge</span></h2>
+            <div style="margin-top: var(--space-3);">
+                <p><strong>Source:</strong> <code>${escapeHtml(vc.source || '')}</code></p>
+                <p><strong>Pattern:</strong> <span class="badge badge-info">${escapeHtml(vc.pattern || 'merge')}</span></p>
+            </div>
+        `;
+        container.appendChild(vcSection);
+    }
+
+    // Reprompt section (retry config)
+    if (action.reprompt) {
+        const repromptSection = document.createElement('div');
+        repromptSection.className = 'action-detail-section';
+        const r = action.reprompt;
+        repromptSection.innerHTML = `
+            <h2>Retry Configuration <span class="badge badge-warning" style="font-size: 0.7rem; margin-left: 0.5rem;">reprompt</span></h2>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); margin-top: var(--space-3);">
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Validation</div>
+                    <code style="font-size: 0.9rem;">${escapeHtml(r.validation || '')}</code>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">Max Attempts</div>
+                    <span style="font-size: 1.25rem; font-weight: 600;">${r.max_attempts || 1}</span>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: var(--space-1);">On Exhausted</div>
+                    <span class="badge badge-${r.on_exhausted === 'filter' ? 'error' : 'info'}">${escapeHtml(r.on_exhausted || 'fail')}</span>
+                </div>
+            </div>
+        `;
+        container.appendChild(repromptSection);
+    }
+
+    // Execution Modes section
+    const hasModes = action.run_mode || action.json_mode !== undefined || action.few_shot !== undefined || action.prompt_debug !== undefined;
+    if (hasModes) {
+        const modesSection = document.createElement('div');
+        modesSection.className = 'action-detail-section';
+        modesSection.innerHTML = `
+            <h2>Execution Modes</h2>
+            <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3);">
+                ${action.run_mode ? `<span class="badge badge-${action.run_mode === 'batch' ? 'primary' : 'success'}">${action.run_mode}</span>` : ''}
+                ${action.json_mode === true ? '<span class="badge badge-info">JSON Mode</span>' : ''}
+                ${action.few_shot ? `<span class="badge badge-warning">Few-shot: ${action.few_shot}</span>` : ''}
+                ${action.prompt_debug === true ? '<span class="badge badge-error">Debug</span>' : ''}
+            </div>
+        `;
+        container.appendChild(modesSection);
+    }
+
     // Guard section (for actions with conditional execution)
     if (action.guard) {
         const guardSection = document.createElement('div');
@@ -3350,6 +3875,12 @@ function parseInitialHash() {
         showSchema(decodeURIComponent(schemaMatch[1]));
         return;
     }
+
+    // System Events view
+    if (hash === '#/events') {
+        showSystemEvents();
+        return;
+    }
 }
 
 function updateNavigation() {
@@ -3460,6 +3991,8 @@ function activateWorkflowTab(tabName, options = {}) {
         renderFieldLineage(workflow);
     } else if (workflow && tabName === 'runs') {
         renderWorkflowRuns(workflow);
+    } else if (workflow && tabName === 'logs') {
+        renderWorkflowLogs(workflow);
     }
 
     if (pushHistory && workflowId) {

@@ -159,6 +159,262 @@ class ProjectScanner:
 
         return schemas
 
+    def scan_runs(self) -> Dict[str, Any]:
+        """
+        Scan project directory for workflow run data.
+
+        Looks for agent_io/target/run_results.json and events.json files
+        to extract execution metrics and history.
+
+        Returns:
+            Dict mapping workflow names to run data:
+            {
+                'workflow_name': {
+                    'latest_run': {...},
+                    'run_count': N,
+                    'runs': [...]
+                }
+            }
+        """
+        import json
+
+        runs_data = {}
+
+        # Find all agent_io directories
+        for agent_io_dir in self.project_root.rglob("agent_io"):
+            # Skip if inside artefact directory
+            artefact_dir = self.project_root / "artefact"
+            if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:
+                continue
+
+            target_dir = agent_io_dir / "target"
+            if not target_dir.exists():
+                continue
+
+            # Extract workflow name from path (parent of agent_io is workflow dir)
+            workflow_dir = agent_io_dir.parent
+            # Get the workflow name from agent_config if possible
+            agent_config_dir = workflow_dir / "agent_config"
+            workflow_name = None
+            if agent_config_dir.exists():
+                yml_files = list(agent_config_dir.glob("*.yml"))
+                if yml_files:
+                    workflow_name = yml_files[0].stem
+
+            if not workflow_name:
+                workflow_name = workflow_dir.name
+
+            # Load run_results.json for latest run metadata
+            run_results_path = target_dir / "run_results.json"
+            latest_run = None
+            if run_results_path.exists():
+                try:
+                    with open(run_results_path, "r", encoding="utf-8") as f:
+                        latest_run = json.load(f)
+                except (json.JSONDecodeError, IOError):
+                    pass
+
+            # Load events.json for detailed execution data
+            events_path = target_dir / "events.json"
+            action_metrics = {}
+            if events_path.exists():
+                try:
+                    action_metrics = self._extract_action_metrics(events_path)
+                except Exception:
+                    pass
+
+            # Load .manifest.json for execution plan and per-action status
+            manifest_path = target_dir / ".manifest.json"
+            manifest_data = None
+            if manifest_path.exists():
+                try:
+                    with open(manifest_path, "r", encoding="utf-8") as f:
+                        manifest_data = json.load(f)
+                except (json.JSONDecodeError, IOError):
+                    pass
+
+            runs_data[workflow_name] = {
+                "workflow_name": workflow_name,
+                "latest_run": latest_run,
+                "action_metrics": action_metrics,
+                "manifest": manifest_data,
+                "run_results_path": str(run_results_path) if run_results_path.exists() else None,
+                "events_path": str(events_path) if events_path.exists() else None,
+                "manifest_path": str(manifest_path) if manifest_path.exists() else None,
+            }
+
+        return runs_data
+
+    def scan_logs(self) -> Dict[str, Any]:
+        """
+        Scan project directory for global logs.
+
+        Looks for logs/events.json for CLI and validation events.
+
+        Returns:
+            Dict with log data:
+            {
+                'events_path': '/path/to/logs/events.json',
+                'recent_invocations': [...],
+                'validation_errors': [...],
+                'validation_warnings': [...]
+            }
+        """
+        import json
+
+        logs_data = {
+            "events_path": None,
+            "recent_invocations": [],
+            "validation_errors": [],
+            "validation_warnings": [],
+        }
+
+        logs_dir = self.project_root / "logs"
+        if not logs_dir.exists():
+            return logs_data
+
+        events_path = logs_dir / "events.json"
+        if not events_path.exists():
+            return logs_data
+
+        logs_data["events_path"] = str(events_path)
+
+        try:
+            with open(events_path, "r", encoding="utf-8") as f:
+                invocations = {}
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = event.get("event_type")
+                    meta = event.get("meta", {})
+                    data = event.get("data", {})
+
+                    # Track invocations
+                    invocation_id = meta.get("invocation_id")
+                    if invocation_id and invocation_id not in invocations:
+                        invocations[invocation_id] = {
+                            "invocation_id": invocation_id,
+                            "timestamp": meta.get("timestamp"),
+                            "workflow_name": meta.get("workflow_name"),
+                            "command": None,
+                        }
+
+                    # Extract CLI command
+                    if event_type == "CLIArgumentParsingEvent":
+                        if invocation_id and invocation_id in invocations:
+                            invocations[invocation_id]["command"] = data.get("command")
+
+                    # Collect validation errors
+                    if event_type == "ValidationErrorEvent":
+                        logs_data["validation_errors"].append({
+                            "target": data.get("target"),
+                            "error": data.get("error"),
+                            "field": data.get("field"),
+                            "timestamp": meta.get("timestamp"),
+                        })
+
+                    # Collect validation warnings
+                    if event_type == "ValidationWarningEvent":
+                        logs_data["validation_warnings"].append({
+                            "target": data.get("target"),
+                            "warning": data.get("warning"),
+                            "field": data.get("field"),
+                            "timestamp": meta.get("timestamp"),
+                        })
+
+                # Get recent invocations (last 10)
+                logs_data["recent_invocations"] = list(invocations.values())[-10:]
+
+        except IOError:
+            pass
+
+        return logs_data
+
+    def _extract_action_metrics(self, events_path: Path) -> Dict[str, Any]:
+        """
+        Extract per-action metrics from events.json file.
+
+        Returns:
+            Dict mapping action names to metrics:
+            {
+                'action_name': {
+                    'execution_time': 0.5,
+                    'tokens': {'prompt': 100, 'completion': 50},
+                    'record_count': 10,
+                    'success_count': 8,
+                    'failed_count': 2
+                }
+            }
+        """
+        import json
+
+        action_metrics = {}
+
+        try:
+            with open(events_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = event.get("event_type")
+                    meta = event.get("meta", {})
+                    data = event.get("data", {})
+                    agent_name = meta.get("agent_name") or data.get("agent_name")
+
+                    if not agent_name:
+                        continue
+
+                    if agent_name not in action_metrics:
+                        action_metrics[agent_name] = {
+                            "execution_time": None,
+                            "tokens": {},
+                            "record_count": 0,
+                            "success_count": 0,
+                            "failed_count": 0,
+                            "filtered_count": 0,
+                            "skipped_count": 0,
+                        }
+
+                    # Extract from AgentCompleteEvent
+                    if event_type == "AgentCompleteEvent":
+                        action_metrics[agent_name]["execution_time"] = data.get("execution_time")
+                        action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
+                        if data.get("tokens"):
+                            action_metrics[agent_name]["tokens"] = data["tokens"]
+
+                    # Extract from ResultCollectionCompleteEvent
+                    elif event_type == "ResultCollectionCompleteEvent":
+                        action_metrics[agent_name]["success_count"] = data.get("total_success", 0)
+                        action_metrics[agent_name]["failed_count"] = data.get("total_failed", 0)
+                        action_metrics[agent_name]["filtered_count"] = data.get("total_filtered", 0)
+                        action_metrics[agent_name]["skipped_count"] = data.get("total_skipped", 0)
+
+                    # Extract from LLMResponseEvent for token counts
+                    elif event_type == "LLMResponseEvent":
+                        tokens = action_metrics[agent_name]["tokens"]
+                        tokens["prompt_tokens"] = tokens.get("prompt_tokens", 0) + data.get(
+                            "prompt_tokens", 0
+                        )
+                        tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
+                            "completion_tokens", 0
+                        )
+
+        except IOError:
+            pass
+
+        return action_metrics
+
     def scan_tool_functions(self) -> Dict[str, Any]:
         """
         Scan project directory for tool function implementations.
