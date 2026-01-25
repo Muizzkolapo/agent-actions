@@ -1,0 +1,169 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_is_best": false,
+            "validation_reasoning": "The \u201coptimal\u201d code matches the example from the dbt docs and is syntactically correct, but the alternatives are not clearly worse. The stated issues for Alternatives 1\u20133 are largely ungrounded in the provided documentation: the docs do not mention index/partition performance, nor do they warn against casting or prescribe null handling. Alternative 2 is functionally equivalent on integer columns and can even be reasonable when types vary; claiming it violates docs is incorrect. Alternative 3\u2019s critique is subjective (readability/config) and not a correctness issue per the docs. Because the quiz asserts fabricated, doc-attributed drawbacks and treats stylistic choices as \u201cwrong,\u201d it risks teaching incorrect rationale.",
+            "quality_issues": [
+                "issue_description_1 claims performance/index usage drawbacks \u201cas noted in the docs,\u201d but the provided docs do not discuss indexes, partition pruning, or casting performance.",
+                "alternative_1 is not inherently worse than optimal; casting in WHERE may be acceptable or necessary if the column isn\u2019t already integer.",
+                "issue_description_2 says casting/non-null handling violates docs guidance, but the supplied docs give no such guidance; they only show a simple modulo example.",
+                "alternative_2 is functionally equivalent on integer columns and not clearly worse than the optimal option.",
+                "issue_description_3 rejects Alternative 3 for readability and missing description/config, which are optional in the docs; these are style, not correctness.",
+                "All three alternatives are essentially equivalent in logic to the optimal code; the quiz overstates differences and attributes them to the docs."
+            ],
+            "validation_status": "FAIL"
+        },
+        "target_id": "0cabf792-200e-4072-b298-663a97024d9d",
+        "node_id": "validate_code_quality_ef491ad1-0aa6-46a7-95d7-7db0dcae0134",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784",
+            "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2",
+            "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6",
+            "merge_alternatives_3c087cbe-92a2-4f3d-b6d9-511dd1f12717",
+            "validate_code_quality_ef491ad1-0aa6-46a7-95d7-7db0dcae0134"
+        ],
+        "parent_target_id": "228f2def-725b-4e71-8a25-825f6c4a4cef",
+        "root_target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "metadata": {
+            "model": "gpt-5",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_is_best": false,
+            "validation_reasoning": "The \u201coptimal\u201d macro documentation matches the example in the source docs, with the correct test_ prefix and standard argument names, so it is valid. However, Alternative 1 and Alternative 3 are not actually wrong according to the provided documentation: adding additional arguments is explicitly allowed, and the docs do not mandate performance/sampling guidance in descriptions, so their purported issues aren\u2019t grounded in the source. Alternative 2 is correctly identified as wrong because it omits the required test_ prefix for macro documentation and deviates from the standard column_name argument. Additionally, the quiz only shows documentation YAML, not the actual test block implementation, which could mislead learners about what enforces the rule.",
+            "quality_issues": [
+                "Alternative 1 issue is not grounded in the source docs: adding an extra argument (run_full) is allowed, and the docs do not prescribe sampling/performance guidance in macro descriptions.",
+                "Alternative 3 issue is subjective and not supported by the docs: the documentation does not require performance notes, and column_name is the standard argument name (not an abbreviation).",
+                "The quiz focuses solely on macro documentation YAML without showing the corresponding test block implementation, which may confuse students about how the test actually enforces NOT NULL and != '' logic.",
+                "Optimal code is not clearly superior to Alternative 3; the differences are mostly stylistic/wording rather than substantive per the docs."
+            ],
+            "validation_status": "FAIL"
+        },
+        "target_id": "c0704478-f1e6-421a-baef-6067eacd7431",
+        "node_id": "validate_code_quality_589bea89-6cc6-4837-ba24-1ddb8bdb21fb",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485",
+            "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2",
+            "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e",
+            "merge_alternatives_eb99125e-ef95-4fdf-a641-347f2390091b",
+            "validate_code_quality_589bea89-6cc6-4837-ba24-1ddb8bdb21fb"
+        ],
+        "parent_target_id": "377d9dee-f43b-4dab-a5f1-aa90ff75be1a",
+        "root_target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "metadata": {
+            "model": "gpt-5",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_is_best": false,
+            "validation_reasoning": "The \u201coptimal\u201d code matches the documentation\u2019s example for a relationships-style generic test, but it uses an anti-join with NOT IN, which the scenario\u2019s own key considerations advise against for large tables and due to NULL semantics. Alternative 1\u2019s NOT EXISTS anti-join is not inherently worse; on many warehouses it\u2019s optimized equivalently (and is often preferable to NOT IN), so the claimed performance drawback is misleading. The second Alternative 3 (with LEFT JOIN \u2026 IS NULL) implements the recommended anti-join pattern and is functionally superior for NULL-safe checks, even if its style is messy, so marking it \u201cwrong\u201d solely for readability is incorrect. Alternative 2 (hardcoding analytics.dim_customers) rightly reduces portability versus using the templated to argument per docs; the separate alternative that sets config(database='prod_db') raises legitimate operational concerns, but that rationale isn\u2019t grounded in the provided docs (which only demonstrate config for severity). Additionally, naming the custom test relationships would override dbt\u2019s built-in test project-wide, which is risky if not intentional.",
+            "quality_issues": [
+                "Optimal code uses NOT IN anti-join, which can misbehave with NULLs and is discouraged by the scenario\u2019s key considerations for large tables; it is not better than alternatives using NOT EXISTS or LEFT JOIN.",
+                "Alternative 1\u2019s issue description is inaccurate: NOT EXISTS does not necessarily force row-by-row evaluation and is often an appropriate or superior anti-join compared to NOT IN.",
+                "Alternative 3 (the LEFT JOIN variant) is functionally sound and often preferred for NULL-safe anti-joins; marking it wrong solely for readability ignores that it may be the better pattern for this scenario.",
+                "Alternative 2 (config(database='prod_db')) criticism isn\u2019t grounded in the provided docs; the docs show config usage (severity) but don\u2019t address database targeting or security concerns.",
+                "Using the name 'relationships' for a custom test will override dbt\u2019s built-in relationships test (per docs); the quiz doesn\u2019t acknowledge this risk."
+            ],
+            "validation_status": "FAIL"
+        },
+        "target_id": "73059064-18f9-440f-bd9b-16ec5de99730",
+        "node_id": "validate_code_quality_37a5fbd2-0c9b-4510-87ab-84532bc33bca",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9",
+            "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665",
+            "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de",
+            "merge_alternatives_ea6fe885-d8dd-418b-9949-aed7e6d3778f",
+            "validate_code_quality_37a5fbd2-0c9b-4510-87ab-84532bc33bca"
+        ],
+        "parent_target_id": "7bd4245c-e7a6-4045-9ae3-d7d4e4ad2ef1",
+        "root_target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "metadata": {
+            "model": "gpt-5",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_is_best": false,
+            "validation_reasoning": "The optimal code matches the dbt documentation\u2019s own example for a warn_if_odd generic test, so it is correct and syntactically valid. However, the alternatives are not actually wrong per the provided docs: casting to integer still produces a valid test and the documentation does not warn against casting, performance impacts, or index/partition pruning. The issue descriptions for Alternatives 1 and 2 rely on claims not grounded in the source text, and Alternative 3\u2019s issue description is inaccurate (it mentions a \u201cnested cast,\u201d but there is only a single cast). Because the quiz labels equivalent or acceptable variants as wrong and cites unsupported guidance, it risks teaching incorrect rationale even though the optimal code itself is fine.",
+            "quality_issues": [
+                "Alternatives 1 and 2 are functionally valid and not contradicted by the docs; the performance and reliability claims are not grounded in the provided documentation.",
+                "Issue descriptions for Alternatives 1 and 2 assert \u201cthe docs recommend\u2026\u201d guidance that does not appear in the source text.",
+                "Alternative 3\u2019s issue description incorrectly refers to a \u201cnested cast\u201d when only a single cast is present.",
+                "The quiz implies unconditional CAST is uniquely problematic, but the optimal solution without CAST would also error on non-numeric types; this nuance is not addressed and is not supported by the docs."
+            ],
+            "validation_status": "FAIL"
+        },
+        "target_id": "895fb527-52f9-4194-913b-d3943222f051",
+        "node_id": "validate_code_quality_6025d880-06d7-4972-b17e-9310d10f4aa4",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325",
+            "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155",
+            "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e",
+            "merge_alternatives_3755de4c-4904-4415-9a06-864443c9df9c",
+            "validate_code_quality_6025d880-06d7-4972-b17e-9310d10f4aa4"
+        ],
+        "parent_target_id": "f79a7e04-2623-4100-a364-2d1952badca8",
+        "root_target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "metadata": {
+            "model": "gpt-5",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "optimal_is_best": false,
+            "validation_reasoning": "The optimal code is syntactically correct, aligns with dbt\u2019s pattern for overriding a built\u2011in generic test via a test block named unique, and satisfies the scenario requirements (coalesce on is_deleted and case\u2011insensitive comparison). However, Alternative 3 is functionally equivalent for the scenario and not materially worse; its critique is largely stylistic and not grounded in the provided docs, and reusing the expression in GROUP BY is acceptable (aliases often aren\u2019t allowed in GROUP BY depending on the warehouse). The issue description for Alternative 1 incorrectly claims the docs warn about GROUP BY performance and suggest partitioning/indexing\u2014this is not present in the provided source documentation. While Alternative 2\u2019s issues are valid (severity=warn and NULL handling), the presence of an equally viable Alternative 3 and a misattributed doc claim mean the quiz needs revision before teaching. Additionally, overriding unique globally with email-specific logic could have broader project impacts and deserves an explicit caution.",
+            "quality_issues": [
+                "Issue description for Alternative 1 cites documentation about GROUP BY performance and partitioning/indexing that does not exist in the provided source doc.",
+                "Alternative 3 is not actually wrong: repeating the expression in GROUP BY is acceptable and sometimes necessary; the lack of macro documentation applies equally to the optimal code, so this critique is inconsistent.",
+                "The quiz does not highlight the risk that overriding the built-in unique test globally with email-specific logic may affect other unique checks in the project."
+            ],
+            "validation_status": "NEEDS_REVIEW"
+        },
+        "target_id": "1094fa0f-76a9-4fb1-be09-4720cdafb1ab",
+        "node_id": "validate_code_quality_6fb7a05d-8922-4d4b-8000-b253657735e0",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41",
+            "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d",
+            "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0",
+            "merge_alternatives_bcb18f42-14a6-4f06-96e7-c95fb7aded28",
+            "validate_code_quality_6fb7a05d-8922-4d4b-8000-b253657735e0"
+        ],
+        "parent_target_id": "761c86ad-9dbc-490b-9d40-53713ec6814d",
+        "root_target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "metadata": {
+            "model": "gpt-5",
+            "provider": "openai"
+        }
+    }
+]

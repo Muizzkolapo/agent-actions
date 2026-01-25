@@ -1,0 +1,252 @@
+/* ============================================
+   Tables Component
+   ============================================ */
+
+/* Workflows Table - GCP Style */
+.workflows-table-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.workflows-table {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;                   /* Enhanced from 4px */
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+}
+
+.workflows-table thead {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.workflows-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;                     /* Enhanced from 500 */
+    color: #5f6368;
+    text-transform: none;
+    letter-spacing: 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.workflows-table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.1s ease;
+}
+
+.workflows-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.workflows-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.workflows-table td {
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    color: #202124;
+    vertical-align: middle;
+}
+
+.workflows-table td.workflow-name {
+    font-weight: 500;
+    color: #1a73e8;
+    cursor: pointer;
+    font-family: var(--font-mono);
+}
+
+.workflows-table td.workflow-name:hover {
+    text-decoration: underline;
+}
+
+.workflows-table td.workflow-description {
+    color: #5f6368;
+    font-size: 0.8125rem;
+    max-width: 400px;
+}
+
+.workflows-table td.workflow-meta {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: #5f6368;
+}
+
+/* Runs Table */
+.runs-table-container {
+    width: 100%;
+    overflow-x: auto;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+.runs-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.runs-table thead {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.runs-table th {
+    text-align: left;
+    padding: 14px 16px;                   /* Enhanced from 12px */
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5f6368;
+    text-transform: none;
+    letter-spacing: 0;
+    border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
+}
+
+.runs-table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.1s ease;
+}
+
+.runs-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.runs-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.runs-table td {
+    padding: 14px 16px;                   /* Enhanced from 12px */
+    font-size: 0.875rem;
+    color: #202124;
+    vertical-align: middle;
+}
+
+.runs-table td.run-id {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: #1a73e8;
+    cursor: pointer;
+}
+
+.runs-table td.run-id:hover {
+    text-decoration: underline;
+}
+
+.runs-table td.run-workflow {
+    font-weight: 500;
+    color: #202124;
+}
+
+.runs-table td.run-status {
+    font-weight: 500;
+}
+
+.runs-table td.run-duration,
+.runs-table td.run-timestamp {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    color: #5f6368;
+    white-space: nowrap;
+}
+
+/* Actions Table */
+.actions-table {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    border-collapse: separate;
+    border-spacing: 0;
+    overflow: hidden;
+}
+
+.actions-table thead {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.actions-table th {
+    text-align: left;
+    padding: 14px 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #5f6368;
+    text-transform: none;
+    letter-spacing: 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.actions-table tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+    transition: background-color 0.1s ease;
+}
+
+.actions-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.actions-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.actions-table td {
+    padding: 14px 16px;
+    font-size: 0.875rem;
+    color: #202124;
+    vertical-align: middle;
+}
+
+.actions-table td.action-name {
+    font-weight: 500;
+    color: #1a73e8;
+    cursor: pointer;
+    font-family: var(--font-mono);
+}
+
+.actions-table td.action-name:hover {
+    text-decoration: underline;
+}
+
+.actions-table td.action-type {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+}
+
+/* Table Empty State */
+.table-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px 32px;
+    text-align: center;
+    color: #5f6368;
+}
+
+.table-empty-state svg {
+    width: 64px;
+    height: 64px;
+    color: #c0c0c0;
+    margin-bottom: 16px;
+}
+
+.table-empty-state-title {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #202124;
+    margin-bottom: 8px;
+}
+
+.table-empty-state-description {
+    font-size: 0.875rem;
+    color: #5f6368;
+    max-width: 400px;
+}

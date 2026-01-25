@@ -1,0 +1,122 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_2": "{% test is_even(model, column_name) %}\n\nwith validation as (\n  select\n    cast({{ column_name }} as integer) as even_field\n  from {{ model }}\n),\n\nvalidation_errors as (\n  select\n    even_field\n  from validation\n  where (even_field % 2) = 1\n)\n\nselect *\nfrom validation_errors\n\n{% endtest %}\n",
+            "issue_type_2": "reliability",
+            "issue_description_2": "This test force-casts the column to integer without guarding against non-numeric values or NULLs; if the column contains strings or malformed data the CAST can raise a runtime error and cause the test to error out (rather than produce meaningful validation results), violating the docs' guidance to ensure the column type or handle casting/nulls explicitly."
+        },
+        "target_id": "284d8c63-63cf-4826-8a1e-f03d833b2f7a",
+        "node_id": "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2"
+        ],
+        "parent_target_id": "33c3ef12-5ff0-459c-bb3e-01cf053b2af3",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_17db8d9f1a4fb7e4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_2": "macros:\n  - name: not_empty_string\n    description: \"Complementary test to default `not_null` test as it checks that there is not an empty string. It only accepts columns of type string.\"\n    arguments:\n      - name: model\n        type: string\n      - name: column\n        type: any\n",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "The macro name omits the required `test_` prefix so dbt may not associate the documentation with the actual test implementation, leading to unreliable docs and test discovery. The argument is named `column` (not `column_name`) and typed as `any` with no descriptions, which breaks expected argument binding and removes type/validation guarantees, increasing the risk of runtime failures or silent misconfigurations."
+        },
+        "target_id": "04ca240c-3381-4319-857c-f67a86d542b7",
+        "node_id": "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2"
+        ],
+        "parent_target_id": "ade93c09-c446-4904-84d8-6eb944cff0bf",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_e2782e9cd568cdd4"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_2": "{% test relationships(model, column_name, field, to) %}\n{{ config(database='prod_db') }}\nwith parent as (\n  select\n    {{ field }} as id\n  from {{ to }}\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child\nwhere id is not null\n  and id not in (select id from parent)\n{% endtest %}",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "The test forcibly sets the execution database to a production database via config(database='prod_db'), which can cause tests to run against production data, require elevated privileges, and potentially expose or impact live data \u2014 violating the best-practice of controlling test context and least-privilege access."
+        },
+        "target_id": "9555c3ea-fb3b-4b54-b0f7-f4e8f3c30be0",
+        "node_id": "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665"
+        ],
+        "parent_target_id": "0e32daf0-34b4-4709-a97e-0b9007f4b928",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_34b469e83090420f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_2": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where (CAST({{ column_name }} AS INTEGER) % 2) = 1\n\n{% endtest %}",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "Unsafe, unconditional CAST to INTEGER can cause the test to fail with runtime errors when non-numeric values appear in the column (instead of producing a warn result). The docs advise ensuring columns are numeric or using safe casts/guards to avoid runtime failures across SQL dialects."
+        },
+        "target_id": "f9229416-c579-42f2-9379-78fe368937b6",
+        "node_id": "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155"
+        ],
+        "parent_target_id": "c6d5a321-85ce-49d7-a010-cdd63b3d3adb",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_b801135cbd600e7f"
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_2": "{% test unique(model, column_name) %}\n{{ config(severity = 'warn') }}\nSELECT\n  lower({{ column_name }}) AS violating_value,\n  COUNT(*) AS occurrences\nFROM {{ model }}\nWHERE is_deleted = false\n  AND {{ column_name }} IS NOT NULL\nGROUP BY 1\nHAVING COUNT(*) > 1\n{% endtest %}",
+            "issue_type_2": "reliability",
+            "issue_description_2": "This forces the test to run with severity='warn', so duplicate emails will not fail CI and can lead to silent regressions; additionally, replacing coalesce(is_deleted, false) with is_deleted = false incorrectly excludes rows where is_deleted is NULL, altering intended behavior."
+        },
+        "target_id": "31582cdc-60ec-4cd1-a49a-4345cf6e8213",
+        "node_id": "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d"
+        ],
+        "parent_target_id": "faabf237-94b9-4035-9d1a-ed385354c9b5",
+        "root_target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        },
+        "version_correlation_id": "corr_c64ecbeb338b9317"
+    }
+]

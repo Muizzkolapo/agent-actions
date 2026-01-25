@@ -1,0 +1,162 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test is_even(model, column_name) %}\n\nwith validation as (\n  select\n    {{ column_name }} as even_field\n  from {{ model }}\n),\n\nvalidation_errors as (\n  select\n    even_field\n  from validation\n  -- if this is true, then even_field is actually odd!\n  where (CAST(even_field AS INTEGER) % 2) = 1\n)\n\nselect *\nfrom validation_errors\n\n{% endtest %}\n",
+            "issue_type_1": "performance",
+            "issue_description_1": "Casting the tested column to INTEGER inside the WHERE clause can prevent the database from using indexes or columnar optimizations and forces a full table scan; on very large tables this will be significantly slower than testing a native integer column or restricting the test to recent/partitioned data, as noted in the docs.",
+            "alternative_code_2": "{% test is_even(model, column_name) %}\n\nwith validation as (\n  select\n    cast({{ column_name }} as integer) as even_field\n  from {{ model }}\n),\n\nvalidation_errors as (\n  select\n    even_field\n  from validation\n  where (even_field % 2) = 1\n)\n\nselect *\nfrom validation_errors\n\n{% endtest %}\n",
+            "issue_type_2": "reliability",
+            "issue_description_2": "This test force-casts the column to integer without guarding against non-numeric values or NULLs; if the column contains strings or malformed data the CAST can raise a runtime error and cause the test to error out (rather than produce meaningful validation results), violating the docs' guidance to ensure the column type or handle casting/nulls explicitly.",
+            "alternative_code_3": "{% test is_even(model, column_name) %}\n\nwith a as (\n  select\n    CAST({{ column_name }} AS BIGINT) as f\n  from {{ model }}\n),\n\nb as (\n  select\n    f\n  from a\n  where MOD(f, 2) = 1\n)\n\nselect *\nfrom b\n\n{% endtest %}\n",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses non-descriptive CTE names and redundant casting which reduces clarity and makes the test harder to understand and maintain; it also omits explicit null handling and lacks a documented description/config as recommended in the docs."
+        },
+        "target_id": "228f2def-725b-4e71-8a25-825f6c4a4cef",
+        "node_id": "merge_alternatives_3c087cbe-92a2-4f3d-b6d9-511dd1f12717",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784",
+            "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2",
+            "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6",
+            "merge_alternatives_3c087cbe-92a2-4f3d-b6d9-511dd1f12717"
+        ],
+        "parent_target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "root_target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "metadata": {
+            "model": "merge_alternatives",
+            "provider": "tool"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "macros:\n  - name: test_not_empty_string\n    description: \"Checks that there is not an empty string.\"\n    arguments:\n      - name: model\n        type: string\n        description: \"Model Name\"\n      - name: column_name\n        type: string\n        description: \"Column name that should not be an empty string\"\n      - name: run_full\n        type: boolean\n        description: \"If true, run against the full table (defaults to true)\"\n",
+            "issue_type_1": "performance",
+            "issue_description_1": "This documentation adds a run_full argument that defaults to running the full table, encouraging full-table scans; it fails to advise sampling/filtered checks for large tables as recommended in the docs, which can lead to long runtimes and higher cost on big datasets.",
+            "alternative_code_2": "macros:\n  - name: not_empty_string\n    description: \"Complementary test to default `not_null` test as it checks that there is not an empty string. It only accepts columns of type string.\"\n    arguments:\n      - name: model\n        type: string\n      - name: column\n        type: any\n",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "The macro name omits the required `test_` prefix so dbt may not associate the documentation with the actual test implementation, leading to unreliable docs and test discovery. The argument is named `column` (not `column_name`) and typed as `any` with no descriptions, which breaks expected argument binding and removes type/validation guarantees, increasing the risk of runtime failures or silent misconfigurations.",
+            "alternative_code_3": "macros:\n  - name: test_not_empty_string\n    description: \"Ensures column is not NULL and not an empty string but the description is repetitive and provides no guidance on data types sampling or performance considerations which makes it hard to reuse safely across large tables\"\n    arguments:\n      - name: model\n        type: string\n        description: \"Model identifier\"\n      - name: column_name\n        type: string\n        description: \"Column to check but name is abbreviated and not descriptive\"\n",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "The macro-level and argument descriptions are vague or repetitive and omit key guidance the docs recommend (type constraints, when to sample, performance notes), making the test harder to understand and reuse across teams and large tables."
+        },
+        "target_id": "377d9dee-f43b-4dab-a5f1-aa90ff75be1a",
+        "node_id": "merge_alternatives_eb99125e-ef95-4fdf-a641-347f2390091b",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485",
+            "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2",
+            "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e",
+            "merge_alternatives_eb99125e-ef95-4fdf-a641-347f2390091b"
+        ],
+        "parent_target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "root_target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "metadata": {
+            "model": "merge_alternatives",
+            "provider": "tool"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "Alternative 1 (Performance):\n{% test relationships(model, column_name, field, to) %}\nwith parent as (\n  select\n    {{ field }} as id\n  from {{ to }}\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child c\nwhere id is not null\n  and not exists (select 1 from parent p where p.id = c.id)\n{% endtest %}\n\nAlternative 2 (Security/Reliability):\n{% test relationships(model, column_name, field, to) %}\nwith parent as (\n  select\n    {{ field }} as id\n  from analytics.dim_customers\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child\nwhere id is not null\n  and id not in (select id from parent)\n{% endtest %}\n\nAlternative 3 (Readability/Maintainability):\n{% test relationships(model, column_name, field, to) %}\nselect *\nfrom (\n  select {{ column_name }} as fk\n  from {{ model }}\n) t\nwhere fk is not null\n  and fk not in (select {{ field }} from {{ to }})\n{% endtest %}\n",
+            "issue_type_1": "performance; security/reliability; readability/maintainability",
+            "issue_description_1": "Alternative 1 uses a correlated NOT EXISTS subquery which can force row-by-row evaluation and higher compute cost on very large tables compared with a set-based LEFT JOIN, leading to poor performance; Alternative 2 hardcodes a fully qualified parent table (analytics.dim_customers), reducing portability and causing failures or permission issues across environments instead of using the templated {{ to }} relation; Alternative 3 collapses the logic into an inline subquery with a generic alias and repeated templated expressions, which is harder to read and maintain and increases the chance of copy-paste or templating mistakes.",
+            "alternative_code_2": "{% test relationships(model, column_name, field, to) %}\n{{ config(database='prod_db') }}\nwith parent as (\n  select\n    {{ field }} as id\n  from {{ to }}\n),\nchild as (\n  select\n    {{ column_name }} as id\n  from {{ model }}\n)\nselect *\nfrom child\nwhere id is not null\n  and id not in (select id from parent)\n{% endtest %}",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "The test forcibly sets the execution database to a production database via config(database='prod_db'), which can cause tests to run against production data, require elevated privileges, and potentially expose or impact live data \u2014 violating the best-practice of controlling test context and least-privilege access.",
+            "alternative_code_3": "{% test relationships(model, column_name, field, to) %}\nwith p as (select {{ field }} as i from {{ to }}),\nc as (select {{ column_name }} as i from {{ model }}),\nx as (select c.i from (select i from c) c2 left join (select i from p) p2 on c2.i = p2.i where c2.i is not null and p2.i is null)\nselect * from x\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses terse, non-descriptive aliases and multiple unnecessary nested subqueries, which obscures intent and makes the test hard to read, debug, and extend; this violates the docs' guidance to keep custom test logic clear and well-structured (standard arguments and straightforward CTEs improve maintainability)."
+        },
+        "target_id": "7bd4245c-e7a6-4045-9ae3-d7d4e4ad2ef1",
+        "node_id": "merge_alternatives_ea6fe885-d8dd-418b-9949-aed7e6d3778f",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9",
+            "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665",
+            "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de",
+            "merge_alternatives_ea6fe885-d8dd-418b-9949-aed7e6d3778f"
+        ],
+        "parent_target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "root_target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "metadata": {
+            "model": "merge_alternatives",
+            "provider": "tool"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where (cast({{ column_name }} as integer) % 2) = 1\n\n{% endtest %}",
+            "issue_type_1": "performance",
+            "issue_description_1": "Casting the tested column inside the WHERE forces per-row evaluation and can prevent index usage or partition pruning, leading to full-table scans on millions of rows. It can also produce runtime errors for non-numeric values; the docs recommend ensuring the column is numeric or narrowing the test (e.g., partitions or counts) to reduce cost.",
+            "alternative_code_2": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where (CAST({{ column_name }} AS INTEGER) % 2) = 1\n\n{% endtest %}",
+            "issue_type_2": "security/reliability",
+            "issue_description_2": "Unsafe, unconditional CAST to INTEGER can cause the test to fail with runtime errors when non-numeric values appear in the column (instead of producing a warn result). The docs advise ensuring columns are numeric or using safe casts/guards to avoid runtime failures across SQL dialects.",
+            "alternative_code_3": "{% test warn_if_odd(model, column_name) %}\n  {{ config(severity = 'warn') }}\n\n  select *\n  from {{ model }}\n  where not ((cast({{ column_name }} as integer) % 2) = 0)\n\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "Uses a double-negative WHERE clause and an unnecessary nested cast, which obscures the test's intent and makes the SQL harder to read and maintain; this pattern can hide type-related failures the docs warn about and increases cognitive load for future reviewers."
+        },
+        "target_id": "f79a7e04-2623-4100-a364-2d1952badca8",
+        "node_id": "merge_alternatives_3755de4c-4904-4415-9a06-864443c9df9c",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325",
+            "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155",
+            "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e",
+            "merge_alternatives_3755de4c-4904-4415-9a06-864443c9df9c"
+        ],
+        "parent_target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "root_target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "metadata": {
+            "model": "merge_alternatives",
+            "provider": "tool"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "alternative_code_1": "{% test unique(model, column_name) %}\n\nSELECT\n  lower(a.{{ column_name }}) AS violating_value,\n  COUNT(*) AS occurrences\nFROM {{ model }} a\nJOIN {{ model }} b\n  ON lower(a.{{ column_name }}) = lower(b.{{ column_name }})\n  AND coalesce(a.is_deleted, false) = false\n  AND coalesce(b.is_deleted, false) = false\n  AND a.id <> b.id\nWHERE a.{{ column_name }} IS NOT NULL\nGROUP BY 1\nHAVING COUNT(*) > 0\n\n{% endtest %}",
+            "issue_type_1": "performance",
+            "issue_description_1": "Uses a self-join on the entire table (O(n^2) comparisons) and lower() in the join, which will be very slow on large tables and likely prevents index usage; the docs warn that GROUP BY can be expensive and suggest partitioning or indexing to mitigate cost.",
+            "alternative_code_2": "{% test unique(model, column_name) %}\n{{ config(severity = 'warn') }}\nSELECT\n  lower({{ column_name }}) AS violating_value,\n  COUNT(*) AS occurrences\nFROM {{ model }}\nWHERE is_deleted = false\n  AND {{ column_name }} IS NOT NULL\nGROUP BY 1\nHAVING COUNT(*) > 1\n{% endtest %}",
+            "issue_type_2": "reliability",
+            "issue_description_2": "This forces the test to run with severity='warn', so duplicate emails will not fail CI and can lead to silent regressions; additionally, replacing coalesce(is_deleted, false) with is_deleted = false incorrectly excludes rows where is_deleted is NULL, altering intended behavior.",
+            "alternative_code_3": "{% test unique(model, column_name) %}\nSELECT lower(trim({{ column_name }})) AS v,\n       count(*) AS c\nFROM {{ model }}\nWHERE coalesce(is_deleted, false) = false\n  AND {{ column_name }} IS NOT NULL\nGROUP BY lower(trim({{ column_name }}))\nHAVING count(*) > 1\n{% endtest %}",
+            "issue_type_3": "readability/maintainability",
+            "issue_description_3": "The test recomputes the same expression in SELECT and GROUP BY instead of using the alias, making future edits error-prone; additionally there is no accompanying macro documentation/description (as recommended), reducing clarity for maintainers and reviewers when overriding a built-in test."
+        },
+        "target_id": "761c86ad-9dbc-490b-9d40-53713ec6814d",
+        "node_id": "merge_alternatives_bcb18f42-14a6-4f06-96e7-c95fb7aded28",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41",
+            "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d",
+            "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0",
+            "merge_alternatives_bcb18f42-14a6-4f06-96e7-c95fb7aded28"
+        ],
+        "parent_target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "root_target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "metadata": {
+            "model": "merge_alternatives",
+            "provider": "tool"
+        }
+    }
+]

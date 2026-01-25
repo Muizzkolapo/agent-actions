@@ -1,0 +1,132 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "concept_explanation": "Core technical principle: The source documentation explains that reusable data checks in dbt are implemented as \u201cgeneric tests\u201d defined with a Jinja test block. As the docs state, \u201cTo define your own generic tests, simply create a `test` block called `<test_name>`,\u201d and those tests \u201cshould accept one or both of the standard arguments: `model` \u2026 `column_name`.\u201d The canonical behavior is that the test is a SELECT whose result determines pass/fail: \u201cIf this `select` statement returns zero records, then every record in the supplied `model` argument is even! If a nonzero number of records is returned instead \u2026 the test has failed.\u201d Quoting these lines ties the is_even pattern directly to the documented generic-test contract: write a test block, accept the standard arguments, and return failing rows.\n\nImplementation considerations: The docs enumerate two supported locations for generic tests (\"`tests/generic/`\" and \"`macros/`\") because \u201cGeneric tests work a lot like macros,\u201d and they emphasize the standard argument names (`model`, `column_name`) and the signature pattern. For tests that need extra parameters, the docs show including them in the signature (e.g. `relationships(model, column_name, field, to)`) and explain how to supply them from YAML: \u201cWhen calling this test from a `.yml` file, supply the arguments to the test in a dictionary. Note that the standard arguments (`model` and `column_name`) are provided by the context\u2026.\u201d The docs also show you can include a `config()` block in the test to set defaults: \u201cIt is possible to include a `config()` block in a generic test definition. Values set there will set defaults for all specific instances of that generic test.\u201d\n\nWhy some alternatives are problematic (docs-grounded): because a generic test is literally the SQL you write and dbt\u2019s success/failure logic depends on that SQL returning rows or not, any change that causes the SELECT to behave differently (including runtime errors) will change the test outcome. The docs\u2019 core example and explanation\u2014\"If this `select` statement returns zero records \u2026 the test has failed\"\u2014imply that the SQL itself must be written so it reliably executes and returns the intended set of failing rows. If an alternate implementation causes SQL errors or changes which rows are selected (for example by adding unchecked casts that can fail), the test will not produce the documented pass/fail semantics.\n\nBest practices and practical impact: The docs encourage reuse and discoverability\u2014\u201cWith one line of code, you've just created a test! \u2026 using the same generic test definition\u201d\u2014so a single is_even test block can be referenced across many models/sources. They also recommend documenting the test logic in schema YAML: \u201cWhen documenting custom test macros in a `schema.yml` file, add the `test_` prefix to the macro name\u2026 Each argument (like `model`, `column_name`) also includes a description to clarify its purpose.\u201d Finally, you can override built-ins by adding a same-named test block in your project: \u201cTo change the way a built-in generic test works \u2026 add a test block named `<test_name>` to your own project. dbt will favor your version over the global implementation!\u201d Together these points from the docs explain why the single test-block pattern improves maintainability and consistency (write once, reference everywhere), and why you should keep the SQL well-formed and documented so the test returns the intended failing rows and integrates cleanly with dbt\u2019s config/severity model."
+        },
+        "target_id": "3e615158-f993-4f5b-b13d-8a47eaa67805",
+        "node_id": "generate_concept_explanation_36815cac-c376-4239-b471-a94beb2a949f",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784",
+            "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2",
+            "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6",
+            "merge_alternatives_3c087cbe-92a2-4f3d-b6d9-511dd1f12717",
+            "generate_feynman_explanation_23ac8810-5324-42f9-a1e1-79acc70bf5da",
+            "generate_concept_explanation_36815cac-c376-4239-b471-a94beb2a949f"
+        ],
+        "parent_target_id": "47655536-9f15-48a0-9f7d-da48ccb03670",
+        "root_target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "concept_explanation": "Core technical principle: The docs define these checks as reusable \"generic data tests\" implemented as Jinja \"test\" blocks \u2014 in the docs\u2019 words, \"generic data tests are defined as `test` blocks (like macros).\"  They require the standard arguments so they can be applied broadly: \"All generic tests should accept one or both of the standard arguments: `model`... `column_name`.\"  The provided is_even example shows the pattern: write a SQL select that returns only validation_errors, and \"If this `select` statement returns zero records... the test has passed.\" This is the fundamental pattern you must follow when building a not-empty-string test: define a test block, accept the documented standard arguments, and have the SQL return rows only for violations. \n\nImplementation considerations: follow the documented locations and naming conventions. The docs explain that generic tests can live in either \"`tests/generic/`\" or in \"`macros/`\" and that you should \"create a `test` block called `<test_name>`.\" When documenting the test logic, the docs show adding a `macros:` entry in schema.yml and instruct: \"When documenting custom test macros in a `schema.yml` file, add the `test_` prefix to the macro name.\" The example schema.yml demonstrates including a `description` and typed `arguments` (model and column_name) so that \"Each argument (like `model`, `column_name`) also includes a description to clarify its purpose.\" Finally, if you want defaults for specific instances, the docs demonstrate using a `config()` block inside the test SQL (see the warn_if_odd example): \"It is possible to include a `config()` block in a generic test definition. Values set there will set defaults for all specific instances...\" \n\nWhy common alternatives fail (connected to the docs): 1) Omitting the test_ prefix violates the documented naming and documentation binding: the docs explicitly require the `test_` prefix in schema.yml to document the test macro \u2014 omitting it breaks discoverability and the intended doc linkage. 2) Renaming or mistyping standard arguments breaks dbt\u2019s argument binding: the docs state the argument is always named `model` and that column-level tests \"should accept `column_name` as an argument,\" and they remind you that \"standard arguments (`model` and `column_name`) are provided by the context, so you do not need to define them again.\" If you use `column` or a different type, the test will not receive the expected context as shown in the examples. 3) Using ad-hoc defaults via a custom `run_full` argument departs from the documented mechanism for defaults \u2014 the docs show using `config()` for defaults (e.g., severity) \u2014 so prefer the documented `config()` approach rather than inventing control flags that change the test signature and reuse semantics. \n\nBest practices and practical impact (from the docs): design the test as a reusable SQL block that returns only violations so it can be attached \"with one line of code\" to many models (the docs: \"With one line of code, you've just created a test!... using the same generic test definition\"). Document the macro and each argument in schema.yml (the docs\u2019 schema.yml example) so the test is discoverable and understandable in dbt docs. Because tests are executable SQL that return rows for errors (the is_even example and the select-from-validation_errors pattern), keep the WHERE logic focused on violations and use `config()` for cross-instance defaults; following these documented patterns preserves discoverability, consistent argument binding, and expected override behavior (the docs also note: \"To change the way a built-in generic test works... add a test block named `<test_name>` to your own project. dbt will favor your version over the global implementation!\")."
+        },
+        "target_id": "482925ae-41a3-45b5-b981-3c376ebf7017",
+        "node_id": "generate_concept_explanation_aca2cf74-8160-4d6e-8270-25aeb7ffeae8",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485",
+            "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2",
+            "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e",
+            "merge_alternatives_eb99125e-ef95-4fdf-a641-347f2390091b",
+            "generate_feynman_explanation_9192ac39-673e-4f3c-a9c3-d0c9fdf208b3",
+            "generate_concept_explanation_aca2cf74-8160-4d6e-8270-25aeb7ffeae8"
+        ],
+        "parent_target_id": "63c3d258-fcdb-4047-8cfd-1a67bbde6ac6",
+        "root_target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "concept_explanation": "Core technical principle:\nThe docs teach that a reusable relationship check is implemented as a custom generic data test \u2014 i.e., \u201ccreate a `test` block called `<test_name>`\u201d and accept the standard templated arguments. As the docs state, \u201cAll generic tests should accept one or both of the standard arguments: `model` \u2026 `column_name`,\u201d and they illustrate the relationships pattern with the signature: \u201c{% test relationships(model, column_name, field, to) %}\u201d and the CTE-based structure that selects the parent ids from `{{ to }}` and child ids from `{{ model }}`. The intended contract is that dbt supplies the `model` and `column_name` from context, and additional args (like `field` and `to`) are added to the test signature when needed.\n\nImplementation considerations:\nFollow the documented locations and argument patterns: \u201cGeneric tests are defined in SQL files. Those files can live in two places: `tests/generic/` \u2026 or `macros/`,\u201d and \u201cWhen calling this test from a `.yml` file, supply the arguments to the test in a dictionary. Note that the standard arguments (`model` and `column_name`) are provided by the context, so you do not need to define them again.\u201d The docs also show how to include defaults via `config()` in a test: \u201cIt is possible to include a `config()` block in a generic test definition. Values set there will set defaults for all specific instances of that generic test\u2026,\u201d which is appropriate for things like `severity`, but the example uses `config(severity = 'warn')` rather than changing execution context or relation names.\n\nWhy the alternatives fail (doc-grounded reasoning):\nHardcoding a fully-qualified parent relation breaks the templated, portable model the docs describe: generic tests rely on templated relation names (e.g., `{{ to }}` and `{{ model }}`) so one definition can be reused across environments. The docs emphasize that `model` is \u201ctemplated out to its relation name,\u201d and the relationships example explicitly selects from `{{ to }}` \u2014 substituting an environment-specific relation (analytics.dim_customers) defeats that portability. Similarly, the docs present the relationships test with clear CTEs (`parent` and `child`) \u2014 that pattern is intended for clarity and reuse; collapsing logic into nested, terse aliases departs from the illustrated style and makes the test harder to document and maintain. Finally, while the docs show `config()` for default behavior (e.g., severity), their examples use it for metadata/defaults, not to rebind the test to a specific production database; using `config(database='prod_db')` would be outside the documented examples for config usage and would circumvent the templated relation contract the tests rely on.\n\nBest practices and practical impact (maintenance/portability/security):\nThe docs\u2019 repeated themes are reuse, templating, and clarity: define a `test` block that accepts the standard arguments (and any extra args you need), place it in `tests/generic/` or `macros/` if it depends on macro logic, and document it (the docs show adding descriptions under `macros:`). Following that pattern makes tests portable and reusable because dbt supplies `model`/`column_name` from context and you keep the parent relation as `{{ to }}`. The documentation focuses on structure, portability, and defaults (e.g., `config(severity = 'warn')`) rather than on warehouse-specific execution tuning; therefore, for large-volume performance trade-offs you should apply warehouse-specific optimizations outside the generic-test pattern shown, but preserve the documented templating and CTE-based clarity so the test remains maintainable and portable across environments."
+        },
+        "target_id": "bb138ad0-0844-47b8-b38a-8163eb8dd92c",
+        "node_id": "generate_concept_explanation_f1294391-43cc-408e-b357-0312da8da6de",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9",
+            "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665",
+            "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de",
+            "merge_alternatives_ea6fe885-d8dd-418b-9949-aed7e6d3778f",
+            "generate_feynman_explanation_b9e290e7-de3d-47e2-962f-c413299f29a8",
+            "generate_concept_explanation_f1294391-43cc-408e-b357-0312da8da6de"
+        ],
+        "parent_target_id": "36e36234-48e0-41da-8ed8-1583705b43bb",
+        "root_target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "concept_explanation": "Core technical principle: dbt\u2019s reusable check is a \u201cgeneric data test\u201d defined as a test block. As the docs state, \u201cUnder the hood, these generic data tests are defined as `test` blocks (like macros).\u201d To create one you \u201csimply create a `test` block called `<test_name>`,\u201d and the test should accept the standard arguments `model` and `column_name` (the docs define them explicitly: \u201c`model`: The resource on which the test is defined\u2026\u201d, \u201c`column_name`: The column on which the test is defined\u201d). The canonical pattern in the docs is a SQL query that returns failing rows (for example the is_even test uses \u201cwhere (even_field % 2) = 1\u201d), and the doc explains the pass/fail semantics: \u201cIf this `select` statement returns zero records, then every record in the supplied `model` argument is even! If a nonzero number of records is returned instead \u2026 the test has failed.\u201d This is the behavioral model your warn_if_odd test follows exactly.\n\nImplementation considerations: place and signature matter. The docs name the supported locations: generic tests live either in \u201c`tests/generic/`\u201d or in \u201c`macros/`\u201d and explain why you might choose one or the other. If you want a default severity, the docs show how to embed it in the test with a `config()` block: \u201cIt is possible to include a `config()` block in a generic test definition. Values set there will set defaults\u2026\u201d, and their warn example demonstrates `{{ config(severity = 'warn') }}` and notes: \u201cAny time the `warn_if_odd` test is used, it will *always* have warning-level severity, unless the specific test overrides that value.\u201d If your test needs extra parameters, follow the same pattern the docs use for relationships: \u201cIf your custom tests requires more than the standard arguments, include those arguments in the test signature\u2026\u201d and supply them from `.yml` as a dictionary.\n\nWhy alternatives fail (in doc terms): dbt executes the SQL you write as the test, and the docs repeatedly surface that behavior \u2014 generic tests are \u201cdefined in SQL files\u201d and the examples select failing rows (e.g. \u201cselect * from validation_errors\u201d). Because the test is the SQL, keep the logic simple and express intent directly (the docs\u2019 is_even and warn_if_odd examples use the direct predicate `({{ column_name }} % 2) = 1`). Introducing extra, unsafe SQL transformations inside the test (for example complicated or unconditional casts) changes the executed SQL and can introduce execution-time errors or obscure which rows are failing. The docs show the straightforward predicate as the canonical form, and they also emphasize that you can (and should) document and parameterize tests (via `macros:` and argument descriptions) rather than hiding complex logic inline.\n\nBest practices and practical impact: follow the documented reuse and documentation patterns. The docs show that you attach the test by name in the model\u2019s \u201c`tests` property\u201d and that \u201ceach will add a new test to your project, using the same generic test definition,\u201d which makes the pattern highly maintainable across many models/columns. Use `config(severity=...)` in the generic test to set sensible defaults (the docs\u2019 warn_if_odd example demonstrates setting a warning-level default). Because tests are SQL queries that return failing rows (the examples select `*` from a validation_errors CTE), they\u2019re useful for surfacing concrete problem rows to developers; at the same time, that same behavior means you should be deliberate about the scope and complexity of the SQL you write (keep predicates clear and parameters explicit) to avoid unnecessarily expensive or fragile queries. These recommendations are grounded in the documentation\u2019s examples and guidance on where tests live, how they accept arguments, how they return failures, and how to set defaults and document them."
+        },
+        "target_id": "39c4a80a-ca29-48ab-bd53-f8dbb51ce302",
+        "node_id": "generate_concept_explanation_8bc788cc-e982-47e6-bf1f-ef275caddfcf",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325",
+            "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155",
+            "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e",
+            "merge_alternatives_3755de4c-4904-4415-9a06-864443c9df9c",
+            "generate_feynman_explanation_24a8b0ba-e521-47ec-be1b-5168d1af3d1f",
+            "generate_concept_explanation_8bc788cc-e982-47e6-bf1f-ef275caddfcf"
+        ],
+        "parent_target_id": "a9984b44-7c2e-4e20-9583-dd14deb051df",
+        "root_target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "concept_explanation": "Core technical principle: The docs show that generic data tests in dbt are simply SQL \u201ctest\u201d blocks that live in your project and accept standard arguments. As the documentation states, \u201cGeneric tests are defined in SQL files\u201d and you should \u201ccreate a `test` block called `<test_name>`.\u201d These blocks use the standard arguments (`model`, `column_name`) \u2014 the docs say \u201cAll generic tests should accept one or both of the standard arguments: model \u2026 column_name.\u201d The behavioral contract is also explicit: the test body is a SELECT that reports failing rows \u2014 \u201cIf this `select` statement returns zero records, then every record in the supplied `model` argument is even!\u201d (the is_even example demonstrates this pattern). In short: a generic test is a reusable SQL rule (a test block) that dbt runs against a templated relation (`{{ model }}`) and column (`{{ column_name }}`) to surface validation rows when the test fails.\n\nImplementation considerations: follow the documented shape and placement. The docs show two valid locations: \u201c`tests/generic/`: \u2026 a special subfolder named `generic` within your test paths\u201d or `macros/` when you need macro logic. If you need extra parameters, the docs instruct you to \u201cinclude those arguments in the test signature\u201d (see the relationships example that adds `field` and `to`). If you want default behavior like severity, the docs explain \u201cIt is possible to include a `config()` block in a generic test definition. Values set there will set defaults for all specific instances of that generic test\u2026\u201d and illustrate `{{ config(severity = 'warn') }}`. The docs also recommend documenting test macros by adding a description under `macros:` in schema.yml: \u201cYou can add a description to the Jinja macro that provides the core logic for a data test by including the `description` key under the `macros:` section.\u201d\n\nWhy common alternatives are problematic (documentation-backed): the docs present compact, set-based examples (e.g., the is_even test builds a validation CTE and then filters to validation_errors) \u2014 the intended pattern is a single SELECT that returns offending rows. Because the contract is a SELECT over `{{ model }}`, the docs\u2019 examples favor set-based expressions (CTEs, filters, groupings) rather than pairwise comparisons. The docs also call out that defaults set with config() change behavior: their example shows `{{ config(severity = 'warn') }}` and warns implicitly that \u201cAny time the `warn_if_odd` test is used, it will *always* have warning-level severity, unless the specific test overrides that value.\u201d That means forcing a warning-level default on your override changes the semantics of every test instance unless explicitly overridden. Finally, the examples use aliases (the is_even example aliases the selected column as `even_field`) \u2014 following that pattern makes the test logic clearer and easier to maintain than recomputing an expression multiple times.\n\nBest practices and practical impact: the docs make it explicit how to take ownership of built-ins: \u201cTo change the way a built-in generic test works \u2026 you simply add a test block named `<test_name>` to your own project. dbt will favor your version over the global implementation!\u201d That is the sanctioned way to implement your domain rules (for example, case-insensitive email uniqueness and ignoring soft-deleted rows). The docs also instruct you to document your custom test (add `description` and argument docs under `macros:`) so maintainers understand intent and arguments. Practically, because a generic test is just SQL run against the relation you pass in, the performance and correctness consequences are exactly the same as any query you would write against that table: choose set-based constructs and clear aliases (as the examples do) and be deliberate about any `config()` defaults you embed, because those defaults change how every instance of the test behaves unless overridden."
+        },
+        "target_id": "b4f3bb7d-1f14-4a0e-b9f6-13d92959911e",
+        "node_id": "generate_concept_explanation_f64d4b0a-2ee0-415e-b7e4-31992babddbc",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41",
+            "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d",
+            "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0",
+            "merge_alternatives_bcb18f42-14a6-4f06-96e7-c95fb7aded28",
+            "generate_feynman_explanation_fd679bf8-1310-47d2-9a23-42e286fc8979",
+            "generate_concept_explanation_f64d4b0a-2ee0-415e-b7e4-31992babddbc"
+        ],
+        "parent_target_id": "baf24d8f-e7b9-4f89-9366-4f63b8aa4af5",
+        "root_target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    }
+]

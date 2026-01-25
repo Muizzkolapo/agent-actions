@@ -1,0 +1,142 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "question_explanation": "Think of this like a factory inspector who checks every box on a conveyor to make sure its batch sticker is an even number \u2014 if any box has an odd sticker, the inspector raises the alarm. In dbt terms you implement that inspector once as a generic test (a test block that accepts the standard model and column_name arguments) and then reuse it across many models/sources as documented on the dbt Developer Hub.",
+            "answer_reasoning": "The provided is_even generic test follows the dbt pattern of defining a test block that accepts the standard arguments (model, column_name) and returns rows when the check fails, so zero rows means success per the docs. It names clear CTEs (validation and validation_errors), selects the column as even_field, and uses where (even_field % 2) = 1 to identify failures \u2014 avoiding CASTs in the WHERE clause preserves native integer operations and lets the database use indexes/columnar optimizations (a key performance consideration called out in the docs). The test is reusable from tests/generic/ or macros/, can be documented in schema.yml (adding descriptions and argument docs), and can include a config() block to set default severity \u2014 all best practices recommended in the source material. Finally, for very large tables the docs suggest restricting the test to recent/partitioned data or running it as part of incremental checks to reduce cost and runtime, which aligns with deciding where and how often to run this reusable test.",
+            "key_concept_analogy": "One inspector template for every assembly line: write the check once (a generic test), and hang that same inspection rule on many models instead of re-writing it per table.",
+            "memorable_takeaway": "Define a single reusable test block that uses the standard model/column_name arguments, avoids costly casts in predicates, and documents/configures behavior in schema.yml so checks are efficient, maintainable, and consistent."
+        },
+        "target_id": "47655536-9f15-48a0-9f7d-da48ccb03670",
+        "node_id": "generate_feynman_explanation_23ac8810-5324-42f9-a1e1-79acc70bf5da",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_0",
+            "code_usage_scenario_a6cf0f46-4c0c-4317-8bf8-559a85944ac1",
+            "generate_optimal_code_9ec46200-531c-4446-aafe-3b5fa6af1d81",
+            "generate_code_alternatives_3_a3df7278-ea78-4285-9c9e-5081ef8da784",
+            "generate_code_alternatives_2_0fc3414d-cbee-43c0-820d-3a9b346879f2",
+            "generate_code_alternatives_1_4e4ea1ac-5b0d-488e-9c5f-050473ef39b6",
+            "merge_alternatives_3c087cbe-92a2-4f3d-b6d9-511dd1f12717",
+            "generate_feynman_explanation_23ac8810-5324-42f9-a1e1-79acc70bf5da"
+        ],
+        "parent_target_id": "228f2def-725b-4e71-8a25-825f6c4a4cef",
+        "root_target_id": "7164c93a-5152-44db-9a44-1691aae1312d",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "question_explanation": "Think of your dbt project like a factory quality gate that inspects product labels: a generic test is the inspection routine you write once and hang on many production lines. The docs call these routines \u201cgeneric data tests\u201d (defined as test blocks or macros) and explain that a test should accept the standard arguments model and column_name so it can be reused across models and columns. Like a guard who flags any empty labels, the test returns rows only when something is wrong \u2014 zero rows means everything passed.",
+            "answer_reasoning": "The optimal schema.yml entry follows dbt\u2019s documented patterns: it documents a macro named with the required test_ prefix (so dbt will associate the doc with the test implementation), and it declares the standard arguments model and column_name with type string and clear descriptions. The docs explicitly recommend adding a description under macros: to document the macro logic and each argument so users see intent in dbt docs. Using the standard arguments matches the examples (is_even) where model and column_name are supplied by context, and writing the test SQL to SELECT rows that violate NOT NULL AND column != '' mirrors the docs\u2019 validation_errors pattern (a WHERE clause that returns only bad rows). Finally, the docs show you can use config() for defaults (e.g., severity) but avoid adding a default run_full argument that encourages full-table scans; instead, follow the docs\u2019 guidance to consider sampling/filtered checks for very large tables and reserve full checks for CI/scheduled runs to control cost and runtime.",
+            "key_concept_analogy": "A well-documented generic test is like a reusable inspection stencil: you stamp the same stencil across many product lines (models), you label which field to check (column_name), and the stencil\u2019s instructions are written clearly (description and typed arguments) so any inspector (analyst or dbt) knows exactly what to look for and why.",
+            "memorable_takeaway": "Name and document your test with the test_ prefix and the standard model and column_name arguments so it\u2019s discoverable, reusable, and clear in dbt docs."
+        },
+        "target_id": "63c3d258-fcdb-4047-8cfd-1a67bbde6ac6",
+        "node_id": "generate_feynman_explanation_9192ac39-673e-4f3c-a9c3-d0c9fdf208b3",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_1",
+            "code_usage_scenario_39b053b8-2da2-4911-912a-81898edd36db",
+            "generate_optimal_code_f541fc70-882a-4bc4-bff6-1a56c5eca3ae",
+            "generate_code_alternatives_3_c664b6b6-8124-4430-8133-505491e18485",
+            "generate_code_alternatives_2_ab20c123-97b9-4575-a949-9bc700122ad2",
+            "generate_code_alternatives_1_a67797a9-42d7-47e9-aab3-1c26aaad759e",
+            "merge_alternatives_eb99125e-ef95-4fdf-a641-347f2390091b",
+            "generate_feynman_explanation_9192ac39-673e-4f3c-a9c3-d0c9fdf208b3"
+        ],
+        "parent_target_id": "377d9dee-f43b-4dab-a5f1-aa90ff75be1a",
+        "root_target_id": "c9f0ac13-4745-4b9f-b525-2a7ad9cdeacc",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "question_explanation": "Think of this like a bouncer checking a guest list before a big event: the staging table rows are the guests trying to get in, and the canonical dimension table is the master guest list. The dbt docs show how to write a reusable generic test as a test block (a SQL file under tests/generic or macros/) that accepts standard arguments like model, column_name, and extra args (field, to) to verify relationships.",
+            "answer_reasoning": "The optimal code follows the exact pattern in the dbt docs: a test block named relationships(model, column_name, field, to) with clear CTEs (parent and child) and templated relations (from {{ to }} and {{ model }}). Using the documented standard arguments and templated relation names makes the test portable and reusable across environments (you can call it from .yml and dbt supplies model and column_name), and it keeps the logic readable and maintainable by separating parent/child into CTEs. Compared to the alternatives, it avoids hardcoding a fully-qualified parent table (which breaks portability and permissions), avoids messy nesting and terse aliases that obscure intent, and mirrors the docs\u2019 recommended pattern for custom generic tests; for very large tables you should still consider the performance note from your environment (e.g., prefer a LEFT JOIN ... WHERE parent.id IS NULL or hashed keys for scale) and avoid forcing a production database in config() (the docs show config() for defaults like severity but not for locking environments).",
+            "key_concept_analogy": "A generic test is like a reusable guest-list checker: give it the event (model), the guest column (column_name), and the master list (to/field), and it runs the same, predictable check everywhere\u2014no hardcoded addresses, just a template you can reuse.",
+            "memorable_takeaway": "Write generic tests as test blocks that accept the standard, templated arguments (model, column_name, plus any extras) so they stay portable, readable, and reusable across environments."
+        },
+        "target_id": "36e36234-48e0-41da-8ed8-1583705b43bb",
+        "node_id": "generate_feynman_explanation_b9e290e7-de3d-47e2-962f-c413299f29a8",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_2",
+            "code_usage_scenario_5f666cc9-9f46-48c3-91c7-162d25dfd6e0",
+            "generate_optimal_code_70c158e9-de56-46fb-af7a-06b24922b566",
+            "generate_code_alternatives_3_571e2fe2-35b7-40be-8e81-9fbd4132b6b9",
+            "generate_code_alternatives_2_19f3a42e-55fe-48f7-b540-a289388b6665",
+            "generate_code_alternatives_1_39ea6c76-6b9d-4285-9e54-5c0d0fdfd7de",
+            "merge_alternatives_ea6fe885-d8dd-418b-9949-aed7e6d3778f",
+            "generate_feynman_explanation_b9e290e7-de3d-47e2-962f-c413299f29a8"
+        ],
+        "parent_target_id": "7bd4245c-e7a6-4045-9ae3-d7d4e4ad2ef1",
+        "root_target_id": "21f83b8d-cfce-4e2f-8728-85405a733e9d",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "question_explanation": "Imagine a factory line that needs to flag any single (odd) bolts because downstream machines only accept pairs \u2014 you want a quick yellow flag, not to stop the whole line. In dbt terms, a generic data test (a test block that accepts model and column_name) can be reused across many tables to warn when numeric ID columns are odd, just like a reusable scanner on every station.",
+            "answer_reasoning": "The optimal code follows dbt's pattern for custom generic tests: it defines a test block that accepts the standard arguments (model and column_name) and uses config(severity='warn') so every instance defaults to a warning, matching the docs' example of generic tests with default config values. By using the simple predicate where ({{ column_name }} % 2) = 1 (the same style as the docs' is_even example) the test avoids per-row casts that can force full-table scans, preserve index/partition pruning, and reduce runtime risk. The docs warn about SQL dialect differences and casting risks, so this version keeps intent clear and recommends ensuring the column is numeric (or narrowing the scope with partitions/counts) rather than doing an unsafe unconditional CAST inside the WHERE. Finally, because generic tests live in tests/generic/ (or macros/) and reuse the same definition across models, this approach is both efficient and maintainable per the best-practices guidance.",
+            "key_concept_analogy": "Think of the test as a simple metal detector set to beep on odd-numbered screws: a reusable scanner (generic test) that flags problems without tearing down the whole assembly line (no expensive casts/full-table scans).",
+            "memorable_takeaway": "Use simple, reusable generic test blocks (model + column_name) with clear predicates and config defaults\u2014avoid unnecessary casts to keep tests reliable and performant."
+        },
+        "target_id": "a9984b44-7c2e-4e20-9583-dd14deb051df",
+        "node_id": "generate_feynman_explanation_24a8b0ba-e521-47ec-be1b-5168d1af3d1f",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_3",
+            "code_usage_scenario_f4a0b082-64b1-4e03-8379-d371ca4ed44e",
+            "generate_optimal_code_e54a6f44-0aa8-4686-a23a-c7d07d764495",
+            "generate_code_alternatives_3_166c45c9-fc27-4518-8adf-644291e90325",
+            "generate_code_alternatives_2_322c01a0-dfde-40f6-93a5-625dcad8f155",
+            "generate_code_alternatives_1_ce1b64f6-86f1-46f6-9c60-f4c16e26299e",
+            "merge_alternatives_3755de4c-4904-4415-9a06-864443c9df9c",
+            "generate_feynman_explanation_24a8b0ba-e521-47ec-be1b-5168d1af3d1f"
+        ],
+        "parent_target_id": "f79a7e04-2623-4100-a364-2d1952badca8",
+        "root_target_id": "ad556d60-5c19-4809-b5a1-3fd3c18906fe",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    },
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "question_explanation": "Think of the dbt project as a rules book for checking your user roster: generic data tests are reusable rules (defined as test blocks) that you can apply to many tables and columns. In this case the team needs the \"unique email\" rule to ignore soft-deleted rows and compare emails case-insensitively, so they override dbt's built-in unique test with a project-local test in tests/generic/unique.sql.",
+            "answer_reasoning": "The provided implementation follows dbt's documented pattern for custom generic tests: it defines a test block named unique(model, column_name) and uses the standard arguments model and column_name. It applies coalesce(is_deleted, false) = false to correctly ignore soft-deleted rows (and still include rows where is_deleted is NULL), uses lower(column_name) once as an alias to do case-insensitive grouping, and returns rows via GROUP BY/HAVING so the test fails if duplicates exist \u2014 exactly the pattern the docs show for generic tests (SELECT returning validation errors). This is better than alternatives that do an expensive self-join (O(n^2)) or force config(severity='warn') \u2014 the docs explicitly note GROUP BY can be expensive (so consider snapshots/partitions/indexes) and that config() can set defaults but forcing warn risks silent regressions. Finally, placing the file in tests/generic/unique.sql overrides the builtin test per the docs, so the project owns this behavior and should document it (e.g., add descriptions in a schema.yml) and review on dbt upgrades as recommended.",
+            "key_concept_analogy": "Treat the generic test like a single reusable checkpoint in a factory line: you rewire that checkpoint in your local plant (project) to ignore broken-but-removed items (soft-deleted) and to treat labels case-insensitively, and every product that passes the checkpoint is validated the same way.",
+            "memorable_takeaway": "Override built-in generic tests in tests/generic when you need domain rules, but document ownership and watch performance (GROUP BY, indexing, or partition/snapshot strategies) as the docs recommend."
+        },
+        "target_id": "baf24d8f-e7b9-4f89-9366-4f63b8aa4af5",
+        "node_id": "generate_feynman_explanation_fd679bf8-1310-47d2-9a23-42e286fc8979",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+            "flatten_code_28b0a9ac-6950-4c3f-a683-cf649b55f889_4",
+            "code_usage_scenario_1d24fa80-8201-4648-a1aa-f2f60b5d9da2",
+            "generate_optimal_code_367610a5-1e29-4d46-ab50-fb7500a58e78",
+            "generate_code_alternatives_3_4fa1dd71-94cc-4755-b3c4-5bf7b15bff41",
+            "generate_code_alternatives_2_ea3cd592-f163-4bd2-9b57-bc333f59104d",
+            "generate_code_alternatives_1_9ab67826-14d6-4ff6-8597-964b76b8b2a0",
+            "merge_alternatives_bcb18f42-14a6-4f06-96e7-c95fb7aded28",
+            "generate_feynman_explanation_fd679bf8-1310-47d2-9a23-42e286fc8979"
+        ],
+        "parent_target_id": "761c86ad-9dbc-490b-9d40-53713ec6814d",
+        "root_target_id": "0fa54395-46d5-4cad-af24-b1779a3956f2",
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    }
+]

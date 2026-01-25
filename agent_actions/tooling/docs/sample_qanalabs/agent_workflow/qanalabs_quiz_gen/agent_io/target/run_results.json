@@ -1,0 +1,24 @@
+{
+  "metadata": {
+    "invocation_id": "run_qanalabs_quiz_gen_060",
+    "workflow_name": "qanalabs_quiz_gen",
+    "agent_count": 32,
+    "execution_mode": "async",
+    "started_at": "2026-01-25T14:33:37.809380+00:00",
+    "completed_at": "2026-01-25T14:33:37.845273+00:00",
+    "elapsed_time": 0.036196,
+    "status": "error",
+    "error": {
+      "message": "Missing required field: version_correlation_id [Context: source_guid=6021477c-693a-501b-b6aa-dcc11b2a0da9, version_agent=validate_answer_from_source_3, operation=correlate_version_outputs]",
+      "type": "DataValidationError",
+      "failed_agent": "aggregate_validation_votes"
+    }
+  },
+  "results": [],
+  "elapsed_time": 0.036196,
+  "tokens": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}

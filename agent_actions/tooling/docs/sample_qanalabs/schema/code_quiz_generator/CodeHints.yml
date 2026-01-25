@@ -1,0 +1,12 @@
+name: CodeHints
+type: array
+items:
+  type: object
+  properties:
+    placeholder_id:
+      type: string
+    hint:
+      type: string
+  required:
+    - placeholder_id
+    - hint

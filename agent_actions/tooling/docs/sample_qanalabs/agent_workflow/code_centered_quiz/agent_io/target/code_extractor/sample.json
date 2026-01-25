@@ -1,0 +1,43 @@
+[
+    {
+        "source_guid": "26ccf0a2-2e43-5a12-8f83-9f43703ab8b4",
+        "content": {
+            "candidate_code_list": [
+                {
+                    "code": "{{% test is_even(model, column_name) %}}  \n  \nwith validation as (  \n  \n    select  \n        {{{{ column_name }}} as even_field  \n  \n    from {{{{ model }}}  \n  \n),  \n  \nvalidation_errors as (  \n  \n    select  \n        even_field  \n  \n    from validation  \n    -- if this is true, then even_field is actually odd!  \n    where (even_field % 2) = 1  \n  \n)  \n  \nselect *  \nfrom validation_errors  \n  \n{{% endtest %}}  \n",
+                    "code_explanation": "A dbt generic data test (SQL/Jinja) named is_even that validates a column contains only even numbers. It selects rows where the column mod 2 equals 1 (odd) and returns them as validation errors. Use this as a reusable test referenced from model/source/seed/schema YAML.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "code": "macros:  \n  - name: test_not_empty_string  \n    description: Complementary test to default `not_null` test as it checks that there is not an empty string. It only accepts columns of type string.  \n    arguments:  \n      - name: model   \n        type: string  \n        description: Model Name  \n      - name: column_name  \n        type: string  \n        description: Column name that should not be an empty string  \n",
+                    "code_explanation": "A schema.yml documentation snippet for a custom test macro (test_not_empty_string). It documents the macro name, a human-readable description, and argument metadata (model and column_name). Placed under macros: in a YAML file to surface docstrings/argument descriptions in dbt documentation.",
+                    "technical_level": "configuration"
+                },
+                {
+                    "code": "{{% test relationships(model, column_name, field, to) %}}  \n  \nwith parent as (  \n  \n    select  \n        {{{{ field }}} as id  \n  \n    from {{{{ to }}}  \n  \n),  \n  \nchild as (  \n  \n    select  \n        {{{{ column_name }}} as id  \n  \n    from {{{{ model }}}  \n  \n)  \n  \nselect *  \nfrom child  \nwhere id is not null  \n  and id not in (select id from parent)  \n  \n{{% endtest %}}  \n",
+                    "code_explanation": "A dbt generic relationships test that checks referential integrity: it finds child rows whose non-null id does not exist in the parent table. The test accepts extra arguments (field and to) in addition to model and column_name for specifying the parent key and parent relation.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "code": "{{% test warn_if_odd(model, column_name) %}}  \n  \n    {{{{ config(severity = 'warn') }}}  \n  \n    select *  \n    from {{{{ model }}}  \n    where ({{{{ column_name }}} % 2) = 1  \n  \n{{% endtest %}}  \n",
+                    "code_explanation": "A dbt generic test that sets a default config (severity = 'warn') and selects rows where a column is odd. Any rows returned produce a warning-level test result unless overridden when the test is instantiated.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "code": "{{% test unique(model, column_name) %}}  \n  \n    -- whatever SQL you'd like!  \n  \n{{% endtest %}}  \n",
+                    "code_explanation": "An example of overriding dbt's built-in unique generic test by defining a test block named unique in the project's tests/generic folder. dbt will prefer this project-local implementation over the global builtin.",
+                    "technical_level": "implementation"
+                }
+            ]
+        },
+        "target_id": "2f240b5b-077e-43c9-b895-9a0b975001a9",
+        "node_id": "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8",
+        "lineage": [
+            "code_extractor_7e9a4e7d-6e93-4e4e-b417-defff78140c8"
+        ],
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    }
+]

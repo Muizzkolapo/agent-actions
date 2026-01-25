@@ -1,0 +1,36 @@
+name: canonicalize_qa
+description: Schema for canonical deduplicated Q&A pairs
+fields:
+  - id: canonical_questions
+    type: array
+    description: "Array of deduplicated canonical Q&A pairs"
+    items:
+      type: object
+      properties:
+        question_text:
+          type: string
+          description: "The canonical question text (best version from duplicates)"
+        answer_text:
+          type: string
+          description: "The canonical answer text (most comprehensive version)"
+        source_quote:
+          type: string
+          description: "The most relevant source quote"
+        difficulty_reason:
+          type: string
+          description: "Why this tests senior-level understanding"
+        merged_count:
+          type: integer
+          description: "Number of similar questions merged into this canonical version"
+        canonicalize_reasoning:
+          type: string
+          description: "Explanation of why questions were merged or kept unique, and what makes this the canonical version"
+      required:
+        - question_text
+        - answer_text
+        - source_quote
+        - difficulty_reason
+        - merged_count
+        - canonicalize_reasoning
+      additionalProperties: false
+additionalProperties: false

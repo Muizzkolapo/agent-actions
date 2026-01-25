@@ -1,0 +1,110 @@
+name: run_thinkific_gen
+description: "Convert quiz objects to Thinkific-compatible format with HTML formatting"
+version: "3.0.0"
+
+# Global defaults applied to all actions unless overridden
+defaults:
+  granularity: Record
+
+actions:
+  # ============================================================================
+  # STEP 1: FIX CODE SNIPPETS
+  # ============================================================================
+  - name: fix_code_snippets
+    kind: tool
+    impl: fix_code_snippets
+    intent: "Fix double-escaped code snippets in content.code_snippets field"
+    granularity: Record
+    context_scope:
+      observe:
+        - format_code_blocks.*  # All fields from upstream workflow
+
+  # ============================================================================
+  # STEP 2: COMBINE QUIZ FIELDS
+  # ============================================================================
+  - name: combine_quiz_fields
+    kind: tool
+    impl: combine_quiz_fields
+    intent: "Combine all input fields into 7 core quiz fields (without HTML)"
+    granularity: Record
+    dependencies: [fix_code_snippets]
+    context_scope:
+      observe:
+        - fix_code_snippets.*
+
+  # ============================================================================
+  # STEP 3: PREPARE EXPLANATION OPTIONS
+  # ============================================================================
+  - name: prepare_explanation_options
+    kind: tool
+    impl: prepare_explanation_options
+    intent: "Create plain-text versions of code options for explanations (separate from VS Code mockups for quiz)"
+    granularity: Record
+    dependencies: [combine_quiz_fields]
+    context_scope:
+      observe:
+        - combine_quiz_fields.*
+
+  # ============================================================================
+  # STEP 4: FORMAT QUIZ OBJECT
+  # ============================================================================
+  - name: format_quiz_object
+    kind: tool
+    impl: format_quiz_object_with_html
+    intent: "Add HTML formatting to the combined quiz fields"
+    dependencies: [prepare_explanation_options]
+    context_scope:
+      observe:
+        - prepare_explanation_options.*
+
+  # ============================================================================
+  # STEP 5: IMPROVE READABILITY
+  # ============================================================================
+  - name: improve_readability
+    kind: tool
+    impl: improve_text_readability
+    intent: "Break long paragraphs into shorter chunks for better readability"
+    granularity: Record
+    dependencies: [format_quiz_object]
+    context_scope:
+      observe:
+        - format_quiz_object.*
+
+  # ============================================================================
+  # STEP 6: PRETTIFY HTML
+  # ============================================================================
+  - name: prettify_html
+    kind: tool
+    impl: prettify_html_formatting
+    intent: "Prettify HTML formatting for better readability"
+    granularity: Record
+    dependencies: [improve_readability]
+    context_scope:
+      observe:
+        - improve_readability.*
+
+  # ============================================================================
+  # STEP 7: ADD ASTERISK TO CORRECT ANSWER
+  # ============================================================================
+  - name: add_asterisk_to_correct_answer
+    kind: tool
+    impl: add_asterisk_to_correct_answer
+    intent: "Add asterisk marker to correct answer option"
+    granularity: Record
+    dependencies: [prettify_html]
+    context_scope:
+      observe:
+        - prettify_html.*
+
+  # ============================================================================
+  # STEP 8: CONVERT TO THINKIFIC FORMAT
+  # ============================================================================
+  - name: convert_html_json_to_thinkific
+    kind: tool
+    impl: convert_html_json_to_thinkific
+    granularity: File
+    intent: "Convert HTML JSON format to Thinkific-compatible structure"
+    dependencies: [add_asterisk_to_correct_answer]
+    context_scope:
+      observe:
+        - add_asterisk_to_correct_answer.*

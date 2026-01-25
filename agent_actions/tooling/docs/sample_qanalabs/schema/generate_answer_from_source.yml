@@ -1,0 +1,10 @@
+name: generate_answer_from_source
+description: Schema for generating answers from source material
+fields:
+  - id: answer_text
+    type: string
+    description: "Answer to the question based on source material"
+  - id: source_quote
+    type: string
+    description: "Direct quote from source that supports the answer"
+additionalProperties: false
