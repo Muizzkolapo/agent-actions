@@ -97,6 +97,8 @@ class CatalogGenerator:
         prompts_data: Optional[Dict[str, Any]] = None,
         schemas_data: Optional[Dict[str, Any]] = None,
         tool_functions_data: Optional[Dict[str, Any]] = None,
+        runs_data: Optional[Dict[str, Any]] = None,
+        logs_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
@@ -115,13 +117,15 @@ class CatalogGenerator:
             "metadata": {
                 "generated_at": datetime.now().isoformat(),
                 "total_workflows": len(self.workflows_data),
-                "generator_version": "1.0.0",
+                "generator_version": "1.1.0",
             },
             "workflows": {},
             "actions": {},  # Flattened index for faster lookup
             "prompts": prompts_with_refs,
             "schemas": schemas_with_refs,
             "tool_functions": tool_functions_data or {},
+            "runs": runs_data or {},  # Workflow run data and metrics
+            "logs": logs_data or {},  # Global CLI logs and validation events
             "stats": {
                 "total_workflows": 0,
                 "total_actions": 0,
@@ -130,6 +134,9 @@ class CatalogGenerator:
                 "total_prompts": 0,
                 "total_schemas": 0,
                 "total_tool_functions": 0,
+                "total_runs": 0,
+                "validation_errors": 0,
+                "validation_warnings": 0,
             },
         }
 
@@ -181,6 +188,21 @@ class CatalogGenerator:
                         {"workflow": workflow_id, "action": action_name}
                     )
 
+            # Merge action metrics from runs data if available
+            if runs_data and workflow_id in runs_data:
+                workflow_runs = runs_data[workflow_id]
+                action_metrics = workflow_runs.get("action_metrics", {})
+                for action_name, metrics in action_metrics.items():
+                    if action_name in enriched_actions:
+                        enriched_actions[action_name]["metrics"] = metrics
+
+            # Get latest run info and manifest if available
+            latest_run = None
+            manifest = None
+            if runs_data and workflow_id in runs_data:
+                latest_run = runs_data[workflow_id].get("latest_run")
+                manifest = runs_data[workflow_id].get("manifest")
+
             # Create workflow entry
             catalog["workflows"][workflow_id] = {
                 "id": workflow_id,
@@ -188,8 +210,11 @@ class CatalogGenerator:
                 "description": workflow["description"],
                 "path": workflow["path"],
                 "version": workflow["version"],
+                "defaults": workflow.get("defaults", {}),
                 "actions": enriched_actions,
                 "action_count": len(enriched_actions),
+                "latest_run": latest_run,
+                "manifest": manifest,
             }
 
             # Update stats
@@ -212,12 +237,18 @@ class CatalogGenerator:
                 if action.get("prompt") or (action.get("type") == "llm" and action.get("intent")):
                     actions_with_prompts += 1
 
-        # Update global stats for schemas, prompts, and tool functions
+        # Update global stats for schemas, prompts, tool functions, and runs
         catalog["stats"]["total_schemas"] = len(schemas_data) if schemas_data else 0
         catalog["stats"]["total_prompts"] = len(prompts_data) if prompts_data else 0
         catalog["stats"]["total_tool_functions"] = (
             len(tool_functions_data) if tool_functions_data else 0
         )
+        catalog["stats"]["total_runs"] = len(runs_data) if runs_data else 0
+
+        # Update validation stats from logs
+        if logs_data:
+            catalog["stats"]["validation_errors"] = len(logs_data.get("validation_errors", []))
+            catalog["stats"]["validation_warnings"] = len(logs_data.get("validation_warnings", []))
 
         return catalog
 
@@ -269,12 +300,20 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Step 1d: Scan tool functions
     tool_functions_data = scanner.scan_tool_functions()
 
+    # Step 1e: Scan runs data (events, metrics)
+    runs_data = scanner.scan_runs()
+
+    # Step 1f: Scan global logs
+    logs_data = scanner.scan_logs()
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
     catalog = catalog_gen.generate(
         prompts_data=prompts_data,
         schemas_data=schemas_data,
         tool_functions_data=tool_functions_data,
+        runs_data=runs_data,
+        logs_data=logs_data,
     )
 
     # Step 3: Write data files
@@ -300,6 +339,9 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     total_prompts = catalog["stats"]["total_prompts"]
     total_schemas = catalog["stats"]["total_schemas"]
     total_tool_functions = catalog["stats"]["total_tool_functions"]
+    total_runs = catalog["stats"]["total_runs"]
+    validation_errors = catalog["stats"].get("validation_errors", 0)
+    validation_warnings = catalog["stats"].get("validation_warnings", 0)
 
     # Show path relative to CWD if possible, otherwise absolute
     try:
@@ -314,6 +356,10 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
     func_suffix = "s" if total_tool_functions != 1 else ""
     print(f"  Indexed {total_tool_functions} tool function{func_suffix}")
+    if total_runs > 0:
+        print(f"  Loaded {total_runs} workflow run{'s' if total_runs != 1 else ''} with metrics")
+    if validation_errors > 0 or validation_warnings > 0:
+        print(f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}")
     print(f"\nDone. Documentation compiled to {display_path}/")
 
     return True

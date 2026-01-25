@@ -131,6 +131,18 @@
                         <!-- Dynamically populated -->
                     </ul>
                 </div>
+
+                <!-- System Events Section -->
+                <div class="nav-section">
+                    <div class="nav-header clickable" data-section="events" id="events-nav-header">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <!-- Activity/pulse icon -->
+                            <path d="M1 8h3l2-4 2 8 2-4h5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        </svg>
+                        <span>System Events</span>
+                        <span class="count" id="events-count">0</span>
+                    </div>
+                </div>
             </nav>
         </aside>
 
@@ -496,6 +508,7 @@
                     <button class="tab-button active" data-tab="details" aria-label="View details">Details</button>
                     <button class="tab-button" data-tab="field-lineage" aria-label="View lineage">Lineage</button>
                     <button class="tab-button" data-tab="runs" aria-label="View runs">Runs</button>
+                    <button class="tab-button" data-tab="logs" aria-label="View logs">Log Events</button>
                 </div>
 
                 <div class="tab-content">
@@ -578,6 +591,49 @@
                                 <!-- Populated dynamically -->
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Log Events Tab -->
+                    <div id="logs-tab" class="tab-pane">
+                        <!-- Log Stats -->
+                        <div class="runs-metrics-grid">
+                            <div class="metric-card">
+                                <div class="metric-value" id="logs-total-invocations">0</div>
+                                <div class="metric-label">Recent Invocations</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-value" id="logs-error-count" style="color: #ef4444;">0</div>
+                                <div class="metric-label">Validation Errors</div>
+                            </div>
+                            <div class="metric-card">
+                                <div class="metric-value" id="logs-warning-count" style="color: #f59e0b;">0</div>
+                                <div class="metric-label">Validation Warnings</div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Invocations -->
+                        <div class="section-header" style="margin-top: var(--space-6);">
+                            <h3>Recent CLI Invocations</h3>
+                        </div>
+                        <div id="logs-invocations-list" style="margin-top: var(--space-4);">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <!-- Validation Errors -->
+                        <div class="section-header" style="margin-top: var(--space-8);">
+                            <h3>Validation Errors</h3>
+                        </div>
+                        <div id="logs-errors-list" style="margin-top: var(--space-4); max-height: 400px; overflow-y: auto;">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <!-- Validation Warnings -->
+                        <div class="section-header" style="margin-top: var(--space-8);">
+                            <h3>Validation Warnings</h3>
+                        </div>
+                        <div id="logs-warnings-list" style="margin-top: var(--space-4); max-height: 400px; overflow-y: auto;">
+                            <!-- Populated dynamically -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1089,6 +1145,97 @@
 
                 <div class="workflows-grid" id="schemas-list-grid">
                     <!-- Dynamically populated schema cards -->
+                </div>
+            </div>
+
+            <!-- System Events View -->
+            <div id="events-view" class="content-view">
+                <div class="page-header">
+                    <div class="breadcrumb">
+                        <a href="#/" data-view="overview">Overview</a>
+                        <span>/</span>
+                        <span>System Events</span>
+                    </div>
+                    <h2>System Events</h2>
+                    <p class="subtitle">CLI invocations, validation events, and system activity logs</p>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-cards" style="margin-bottom: var(--space-6);">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(59, 130, 246, 0.1);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
+                                <polyline points="4,17 10,11 4,5"></polyline>
+                                <line x1="12" y1="19" x2="20" y2="19"></line>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="events-stat-invocations">0</div>
+                            <div class="stat-label">CLI Invocations</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="events-stat-errors" style="color: #ef4444;">0</div>
+                            <div class="stat-label">Validation Errors</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="events-stat-warnings" style="color: #f59e0b;">0</div>
+                            <div class="stat-label">Validation Warnings</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: rgba(34, 197, 94, 0.1);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="events-stat-success" style="color: #22c55e;">0</div>
+                            <div class="stat-label">Successful Runs</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Invocations Section -->
+                <div class="section-header">
+                    <h3>Recent CLI Invocations</h3>
+                </div>
+                <div id="events-invocations-container" style="margin-top: var(--space-4); margin-bottom: var(--space-8);">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Validation Errors Section -->
+                <div class="section-header">
+                    <h3>Validation Errors</h3>
+                </div>
+                <div id="events-errors-container" style="margin-top: var(--space-4); margin-bottom: var(--space-8); max-height: 500px; overflow-y: auto;">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Validation Warnings Section -->
+                <div class="section-header">
+                    <h3>Validation Warnings</h3>
+                </div>
+                <div id="events-warnings-container" style="margin-top: var(--space-4); max-height: 500px; overflow-y: auto;">
+                    <!-- Populated dynamically -->
                 </div>
             </div>
 
