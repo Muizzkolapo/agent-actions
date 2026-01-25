@@ -108,7 +108,7 @@ def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> No
         # Initialize file actions dict
         index.file_actions[yaml_file] = {}
         index.references_by_file[yaml_file] = []
-        index.duplicate_actions_by_file[yaml_file] = []
+        index.duplicate_actions_by_file[yaml_file] = set()
 
         actions = data.get("actions", []) if isinstance(data, dict) else []
         action_data_map = _build_action_data_map(actions)
@@ -155,7 +155,7 @@ def _index_workflow_lines(
                 end_column=action_match.start(2) + len(action_name),
             )
             if action_name in index.file_actions[yaml_file]:
-                index.duplicate_actions_by_file[yaml_file].append(action_name)
+                index.duplicate_actions_by_file[yaml_file].add(action_name)
             action_meta = ActionMetadata(name=action_name, location=action_location)
             index.file_actions[yaml_file][action_name] = action_meta
             index.actions[action_name] = action_location
@@ -293,11 +293,15 @@ def _index_workflow_lines(
             else:
                 observe_match = re.match(r"^\s*observe:\s*$", line)
                 drop_match = re.match(r"^\s*drop:\s*$", line)
+                passthrough_match = re.match(r"^\s*passthrough:\s*$", line)
                 if observe_match:
                     current_context_list = "observe"
                     context_list_indent = line_indent
                 elif drop_match:
                     current_context_list = "drop"
+                    context_list_indent = line_indent
+                elif passthrough_match:
+                    current_context_list = "passthrough"
                     context_list_indent = line_indent
                 elif current_context_list and context_list_indent is not None:
                     item_match = re.match(r"^\s*-\s*([^\s#]+)", line)
@@ -305,8 +309,10 @@ def _index_workflow_lines(
                         value = item_match.group(1).strip()
                         if current_context_list == "observe":
                             current_action.context_observe.append(value)
-                        else:
+                        elif current_context_list == "drop":
                             current_action.context_drop.append(value)
+                        else:
+                            current_action.context_passthrough.append(value)
                         _add_reference(
                             index,
                             yaml_file,

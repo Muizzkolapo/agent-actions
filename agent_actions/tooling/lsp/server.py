@@ -15,6 +15,25 @@ from .resolver import get_reference_at_position, resolve_reference
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+SEMANTIC_TOKEN_TYPES = [
+    "namespace",
+    "type",
+    "function",
+    "variable",
+    "property",
+    "string",
+]
+
+SEMANTIC_TOKEN_TYPE_MAP = {
+    ReferenceType.WORKFLOW: "namespace",
+    ReferenceType.SCHEMA: "type",
+    ReferenceType.TOOL: "function",
+    ReferenceType.ACTION: "variable",
+    ReferenceType.CONTEXT_FIELD: "property",
+    ReferenceType.PROMPT: "string",
+    ReferenceType.SEED_FILE: "string",
+}
+
 
 class AgentActionsLanguageServer(LanguageServer):
     """Language Server for agent-actions workflows."""
@@ -59,7 +78,7 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
                 resolve_provider=False,
             ),
             signature_help_provider=lsp.SignatureHelpOptions(
-                trigger_characters=[" ", ".", "(", ":", "$"],
+                trigger_characters=[":"],
             ),
             document_symbol_provider=True,
             document_highlight_provider=True,
@@ -491,29 +510,13 @@ def signature_help(params: lsp.SignatureHelpParams) -> Optional[lsp.SignatureHel
 def _semantic_tokens_legend() -> lsp.SemanticTokensLegend:
     """Define semantic tokens legend."""
     return lsp.SemanticTokensLegend(
-        token_types=[
-            "namespace",
-            "type",
-            "function",
-            "variable",
-            "property",
-            "string",
-        ],
+        token_types=SEMANTIC_TOKEN_TYPES,
         token_modifiers=[],
     )
 
 
 def _build_semantic_tokens(references) -> list[int]:
     """Build semantic tokens for references."""
-    token_type_map = {
-        ReferenceType.WORKFLOW: "namespace",
-        ReferenceType.SCHEMA: "type",
-        ReferenceType.TOOL: "function",
-        ReferenceType.ACTION: "variable",
-        ReferenceType.CONTEXT_FIELD: "property",
-        ReferenceType.PROMPT: "string",
-        ReferenceType.SEED_FILE: "string",
-    }
     legend = _semantic_tokens_legend().token_types
     sorted_refs = sorted(references, key=lambda ref: (ref.location.line, ref.location.column))
     data = []
@@ -521,7 +524,7 @@ def _build_semantic_tokens(references) -> list[int]:
     last_char = 0
 
     for reference in sorted_refs:
-        token_type_name = token_type_map.get(reference.type)
+        token_type_name = SEMANTIC_TOKEN_TYPE_MAP.get(reference.type)
         if not token_type_name:
             continue
         token_type_index = legend.index(token_type_name)
@@ -611,9 +614,9 @@ def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagn
                         )
                     )
 
-    duplicates = index.duplicate_actions_by_file.get(file_path, [])
+    duplicates = index.duplicate_actions_by_file.get(file_path, set())
     if duplicates:
-        for action_name in duplicates:
+        for action_name in sorted(duplicates):
             action_meta = actions.get(action_name)
             if not action_meta:
                 continue
@@ -659,7 +662,7 @@ def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagn
 
 
 def _build_diagnostic(
-    location: "Location", message: str, severity: lsp.DiagnosticSeverity
+    location: Location, message: str, severity: lsp.DiagnosticSeverity
 ) -> lsp.Diagnostic:
     """Build an LSP diagnostic from a location."""
     return lsp.Diagnostic(
@@ -794,6 +797,11 @@ def _collect_available_guard_variables(file_path: Path) -> set[str]:
             variables.add(observed)
             if "." in observed:
                 _, field = observed.split(".", 1)
+                variables.add(field)
+        for passthrough in action.context_passthrough:
+            variables.add(passthrough)
+            if "." in passthrough:
+                _, field = passthrough.split(".", 1)
                 variables.add(field)
         if action.schema_ref:
             schema = server.index.get_schema_definition(action.schema_ref)

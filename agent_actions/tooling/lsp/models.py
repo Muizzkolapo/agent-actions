@@ -77,6 +77,7 @@ class ActionMetadata:
     dependencies: List[str] = field(default_factory=list)
     context_observe: List[str] = field(default_factory=list)
     context_drop: List[str] = field(default_factory=list)
+    context_passthrough: List[str] = field(default_factory=list)
     guard_condition: Optional[str] = None
     guard_line: Optional[int] = None
     guard_variables: List[str] = field(default_factory=list)
@@ -138,13 +139,14 @@ class ProjectIndex:
     workflows: Dict[str, Path] = field(default_factory=dict)
 
     # Per-file action index: file_path → {action_name → ActionMetadata}
+    # NOTE: This replaces the previous Location-only entries for richer metadata.
     file_actions: Dict[Path, Dict[str, ActionMetadata]] = field(default_factory=dict)
 
     # Per-file reference list: file_path → [Reference]
     references_by_file: Dict[Path, List[Reference]] = field(default_factory=dict)
 
-    # Per-file duplicate action names: file_path → [duplicate action name]
-    duplicate_actions_by_file: Dict[Path, List[str]] = field(default_factory=dict)
+    # Per-file duplicate action names: file_path → {duplicate action name}
+    duplicate_actions_by_file: Dict[Path, set[str]] = field(default_factory=dict)
 
     def get_action(self, name: str, current_file: Optional[Path] = None) -> Optional[Location]:
         """Get action location, preferring same-file actions."""
@@ -178,6 +180,10 @@ class ProjectIndex:
         return self.tools.get(name)
 
     def get_schema(self, name: str) -> Optional[Path]:
+        """Get schema file path by name (legacy helper)."""
+        return self.get_schema_path(name)
+
+    def get_schema_path(self, name: str) -> Optional[Path]:
         """Get schema file path by name."""
         schema = self.schemas.get(name)
         if schema:
