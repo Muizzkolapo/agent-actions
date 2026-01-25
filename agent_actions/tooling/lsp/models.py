@@ -15,6 +15,7 @@ class ReferenceType(Enum):
     ACTION = "action"  # dependencies: [action_name]
     WORKFLOW = "workflow"  # workflow: workflow_name
     SEED_FILE = "seed_file"  # $file:path/to/file.json
+    CONTEXT_FIELD = "context_field"  # context_scope.observe action.field
 
 
 @dataclass
@@ -65,6 +66,28 @@ class ActionDefinition:
 
 
 @dataclass
+class ActionMetadata:
+    """Detailed action metadata captured from workflow files."""
+
+    name: str
+    location: Location
+    prompt_ref: Optional[str] = None
+    impl_ref: Optional[str] = None
+    schema_ref: Optional[str] = None
+    dependencies: List[str] = field(default_factory=list)
+    context_observe: List[str] = field(default_factory=list)
+    context_drop: List[str] = field(default_factory=list)
+    guard_condition: Optional[str] = None
+    guard_line: Optional[int] = None
+    guard_variables: List[str] = field(default_factory=list)
+    versions_line: Optional[int] = None
+    versions_summary: Optional[str] = None
+    versions_params: List[str] = field(default_factory=list)
+    reprompt_validation: Optional[str] = None
+    reprompt_line: Optional[int] = None
+
+
+@dataclass
 class PromptDefinition:
     """A prompt defined in a prompt store file."""
 
@@ -85,6 +108,15 @@ class ToolDefinition:
 
 
 @dataclass
+class SchemaDefinition:
+    """A schema definition and its fields."""
+
+    name: str
+    location: Location
+    fields: List[str] = field(default_factory=list)
+
+
+@dataclass
 class ProjectIndex:
     """Index of all definitions in an agent-actions project."""
 
@@ -99,24 +131,43 @@ class ProjectIndex:
     # function_name → ToolDefinition
     tools: Dict[str, ToolDefinition] = field(default_factory=dict)
 
-    # schema_name → file_path
-    schemas: Dict[str, Path] = field(default_factory=dict)
+    # schema_name → definition
+    schemas: Dict[str, SchemaDefinition] = field(default_factory=dict)
 
     # workflow_name → directory_path
     workflows: Dict[str, Path] = field(default_factory=dict)
 
-    # Per-file action index: file_path → {action_name → Location}
-    file_actions: Dict[Path, Dict[str, Location]] = field(default_factory=dict)
+    # Per-file action index: file_path → {action_name → ActionMetadata}
+    file_actions: Dict[Path, Dict[str, ActionMetadata]] = field(default_factory=dict)
+
+    # Per-file reference list: file_path → [Reference]
+    references_by_file: Dict[Path, List[Reference]] = field(default_factory=dict)
+
+    # Per-file duplicate action names: file_path → [duplicate action name]
+    duplicate_actions_by_file: Dict[Path, List[str]] = field(default_factory=dict)
 
     def get_action(self, name: str, current_file: Optional[Path] = None) -> Optional[Location]:
         """Get action location, preferring same-file actions."""
         # First check same file
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
-                return self.file_actions[current_file][name]
+                return self.file_actions[current_file][name].location
 
         # Fall back to global
         return self.actions.get(name)
+
+    def get_action_metadata(
+        self, name: str, current_file: Optional[Path] = None
+    ) -> Optional[ActionMetadata]:
+        """Get action metadata, preferring same-file actions."""
+        if current_file and current_file in self.file_actions:
+            if name in self.file_actions[current_file]:
+                return self.file_actions[current_file][name]
+        if current_file:
+            for actions in self.file_actions.values():
+                if name in actions:
+                    return actions[name]
+        return None
 
     def get_prompt(self, ref: str) -> Optional[PromptDefinition]:
         """Get prompt by reference (file.PromptName)."""
@@ -128,6 +179,13 @@ class ProjectIndex:
 
     def get_schema(self, name: str) -> Optional[Path]:
         """Get schema file path by name."""
+        schema = self.schemas.get(name)
+        if schema:
+            return schema.location.file_path
+        return None
+
+    def get_schema_definition(self, name: str) -> Optional[SchemaDefinition]:
+        """Get schema definition by name."""
         return self.schemas.get(name)
 
     def get_workflow(self, name: str) -> Optional[Path]:

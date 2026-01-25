@@ -119,6 +119,19 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
                 raw_text=file_match.group(0),
             )
 
+    # 8. Context scope references: - action.field
+    context_match = re.search(r"^\s*-\s*([A-Za-z_][\w\.]*)", current_line)
+    if context_match and _is_in_context_scope_list(lines, line):
+        start = context_match.start(1)
+        end = context_match.end(1)
+        if start <= character <= end:
+            return Reference(
+                type=ReferenceType.CONTEXT_FIELD,
+                value=context_match.group(1),
+                location=Location(file_path=Path(), line=line, column=start),
+                raw_text=context_match.group(1),
+            )
+
     return None
 
 
@@ -144,6 +157,29 @@ def _is_in_dependencies_context(lines: list, current_line: int) -> bool:
             return True
 
     return False
+
+
+def _is_in_context_scope_list(lines: list, current_line: int) -> bool:
+    """Check if current line is within a context_scope observe/drop list."""
+    current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
+    found_context = False
+
+    for i in range(current_line - 1, -1, -1):
+        line = lines[i]
+        if not line.strip():
+            continue
+        line_indent = len(line) - len(line.lstrip())
+
+        if line_indent < current_indent and line.strip().startswith("context_scope:"):
+            found_context = True
+            break
+        if line_indent < current_indent and line.strip().startswith("-"):
+            continue
+        if line_indent <= current_indent and line.strip().startswith("context_scope:"):
+            found_context = True
+            break
+
+    return found_context
 
 
 def resolve_reference(
@@ -193,5 +229,9 @@ def resolve_reference(
             workflow_seed = current_file.parent.parent / "seed_data" / reference.value
             if workflow_seed.exists():
                 return Location(file_path=workflow_seed, line=0, column=0)
+
+    elif reference.type == ReferenceType.CONTEXT_FIELD:
+        action_name = reference.value.split(".", 1)[0]
+        return index.get_action(action_name, current_file)
 
     return None

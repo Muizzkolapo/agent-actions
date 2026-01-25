@@ -8,7 +8,16 @@ from typing import Optional
 
 from ruamel.yaml import YAML
 
-from .models import Location, ProjectIndex, PromptDefinition, ToolDefinition
+from .models import (
+    ActionMetadata,
+    Location,
+    ProjectIndex,
+    PromptDefinition,
+    Reference,
+    ReferenceType,
+    SchemaDefinition,
+    ToolDefinition,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,53 +102,346 @@ def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> No
         content = yaml_file.read_text()
         lines = content.split("\n")
 
-        # Parse YAML
-        data = yaml.load(content)
-        if not data:
-            return
+        # Parse YAML for structural data (versions summaries)
+        data = yaml.load(content) or {}
 
         # Initialize file actions dict
         index.file_actions[yaml_file] = {}
+        index.references_by_file[yaml_file] = []
+        index.duplicate_actions_by_file[yaml_file] = []
 
-        # Find actions list
-        actions = data.get("actions", [])
-        if not actions:
-            return
+        actions = data.get("actions", []) if isinstance(data, dict) else []
+        action_data_map = _build_action_data_map(actions)
 
-        # Index each action with line numbers
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-
-            name = action.get("name")
-            if not name:
-                continue
-
-            # Find line number by searching for "- name: {name}"
-            line_num = _find_action_line(lines, name)
-
-            location = Location(
-                file_path=yaml_file,
-                line=line_num,
-                column=0,
-            )
-
-            index.actions[name] = location
-            index.file_actions[yaml_file][name] = location
+        _index_workflow_lines(index, yaml_file, lines, action_data_map)
 
     except Exception as e:
         logger.warning(f"Error indexing {yaml_file}: {e}")
 
 
-def _find_action_line(lines: list, action_name: str) -> int:
-    """Find the line number where an action is defined."""
-    pattern = re.compile(rf"^\s*-?\s*name:\s*['\"]?{re.escape(action_name)}['\"]?\s*$")
+def _build_action_data_map(actions: list) -> dict:
+    """Build a map of action name to parsed action data."""
+    action_map = {}
+    for action in actions:
+        if isinstance(action, dict) and action.get("name"):
+            action_map[action["name"]] = action
+    return action_map
+
+
+def _index_workflow_lines(
+    index: ProjectIndex, yaml_file: Path, lines: list[str], action_data_map: dict
+) -> None:
+    """Index action metadata and references from workflow lines."""
+    current_action = None
+    current_action_indent = None
+    dependencies_indent = None
+    context_scope_indent = None
+    context_list_indent = None
+    current_context_list = None
+    guard_indent = None
+    versions_indent = None
+    reprompt_indent = None
 
     for i, line in enumerate(lines):
-        if pattern.match(line) or f"name: {action_name}" in line:
-            return i
+        action_match = re.match(r"^(\s*)-\s*name:\s*['\"]?([^'\"]+)['\"]?\s*$", line)
+        if action_match:
+            action_name = action_match.group(2)
+            action_indent = len(action_match.group(1))
+            action_location = Location(
+                file_path=yaml_file,
+                line=i,
+                column=action_match.start(2),
+                end_line=i,
+                end_column=action_match.start(2) + len(action_name),
+            )
+            if action_name in index.file_actions[yaml_file]:
+                index.duplicate_actions_by_file[yaml_file].append(action_name)
+            action_meta = ActionMetadata(name=action_name, location=action_location)
+            index.file_actions[yaml_file][action_name] = action_meta
+            index.actions[action_name] = action_location
 
-    return 0
+            action_data = action_data_map.get(action_name, {})
+            _populate_versions_summary(action_meta, action_data)
+
+            current_action = action_meta
+            current_action_indent = action_indent
+            dependencies_indent = None
+            context_scope_indent = None
+            context_list_indent = None
+            current_context_list = None
+            guard_indent = None
+            versions_indent = None
+            reprompt_indent = None
+            continue
+
+        if not current_action:
+            continue
+
+        line_indent = len(line) - len(line.lstrip())
+        if line.strip() and current_action_indent is not None and line_indent <= current_action_indent:
+            current_action = None
+            current_action_indent = None
+            dependencies_indent = None
+            context_scope_indent = None
+            context_list_indent = None
+            current_context_list = None
+            guard_indent = None
+            versions_indent = None
+            reprompt_indent = None
+            continue
+
+        # Prompt reference
+        prompt_match = re.search(r"prompt:\s*\$(\w+)\.(\w+)", line)
+        if prompt_match:
+            full_ref = f"{prompt_match.group(1)}.{prompt_match.group(2)}"
+            current_action.prompt_ref = full_ref
+            _add_reference(
+                index,
+                yaml_file,
+                ReferenceType.PROMPT,
+                full_ref,
+                i,
+                prompt_match.start(1) - 1,
+                prompt_match.end(2),
+                prompt_match.group(0),
+            )
+
+        # Tool reference
+        impl_match = re.search(r"impl:\s*(\w+)", line)
+        if impl_match:
+            current_action.impl_ref = impl_match.group(1)
+            _add_reference(
+                index,
+                yaml_file,
+                ReferenceType.TOOL,
+                impl_match.group(1),
+                i,
+                impl_match.start(1),
+                impl_match.end(1),
+                impl_match.group(0),
+            )
+
+        # Schema reference
+        schema_match = re.search(r"schema:\s*(\w+)", line)
+        if schema_match:
+            current_action.schema_ref = schema_match.group(1)
+            _add_reference(
+                index,
+                yaml_file,
+                ReferenceType.SCHEMA,
+                schema_match.group(1),
+                i,
+                schema_match.start(1),
+                schema_match.end(1),
+                schema_match.group(0),
+            )
+
+        # Dependencies block
+        if re.match(r"^\s*dependencies:\s*$", line):
+            dependencies_indent = line_indent
+            continue
+
+        if dependencies_indent is not None:
+            if line.strip() and line_indent <= dependencies_indent:
+                dependencies_indent = None
+            else:
+                dep_match = re.match(r"^\s*-\s*([^\s#]+)", line)
+                if dep_match:
+                    dep_name = dep_match.group(1).strip().strip(",")
+                    current_action.dependencies.append(dep_name)
+                    _add_reference(
+                        index,
+                        yaml_file,
+                        ReferenceType.ACTION,
+                        dep_name,
+                        i,
+                        dep_match.start(1),
+                        dep_match.start(1) + len(dep_name),
+                        dep_name,
+                    )
+
+        deps_list_match = re.search(r"dependencies:\s*\[([^\]]+)\]", line)
+        if deps_list_match:
+            list_content = deps_list_match.group(1)
+            list_start = deps_list_match.start(1)
+            for action_match in re.finditer(r"(\w+)", list_content):
+                dep_name = action_match.group(1)
+                current_action.dependencies.append(dep_name)
+                _add_reference(
+                    index,
+                    yaml_file,
+                    ReferenceType.ACTION,
+                    dep_name,
+                    i,
+                    list_start + action_match.start(1),
+                    list_start + action_match.end(1),
+                    dep_name,
+                )
+
+        # Context scope tracking
+        if re.match(r"^\s*context_scope:\s*$", line):
+            context_scope_indent = line_indent
+            context_list_indent = None
+            current_context_list = None
+            continue
+
+        if context_scope_indent is not None:
+            if line.strip() and line_indent <= context_scope_indent:
+                context_scope_indent = None
+                context_list_indent = None
+                current_context_list = None
+            else:
+                observe_match = re.match(r"^\s*observe:\s*$", line)
+                drop_match = re.match(r"^\s*drop:\s*$", line)
+                if observe_match:
+                    current_context_list = "observe"
+                    context_list_indent = line_indent
+                elif drop_match:
+                    current_context_list = "drop"
+                    context_list_indent = line_indent
+                elif current_context_list and context_list_indent is not None:
+                    item_match = re.match(r"^\s*-\s*([^\s#]+)", line)
+                    if item_match:
+                        value = item_match.group(1).strip()
+                        if current_context_list == "observe":
+                            current_action.context_observe.append(value)
+                        else:
+                            current_action.context_drop.append(value)
+                        _add_reference(
+                            index,
+                            yaml_file,
+                            ReferenceType.CONTEXT_FIELD,
+                            value,
+                            i,
+                            item_match.start(1),
+                            item_match.start(1) + len(value),
+                            value,
+                        )
+
+        # Guard tracking
+        if re.match(r"^\s*guard:\s*$", line):
+            guard_indent = line_indent
+            current_action.guard_line = i
+            continue
+
+        if guard_indent is not None:
+            if line.strip() and line_indent <= guard_indent:
+                guard_indent = None
+            else:
+                condition_match = re.match(r"^\s*condition:\s*(.+)$", line)
+                if condition_match:
+                    condition = condition_match.group(1).strip()
+                    current_action.guard_condition = condition
+                    current_action.guard_variables = _extract_condition_variables(condition)
+
+        # Reprompt tracking
+        if re.match(r"^\s*reprompt:\s*$", line):
+            reprompt_indent = line_indent
+            continue
+
+        if reprompt_indent is not None:
+            if line.strip() and line_indent <= reprompt_indent:
+                reprompt_indent = None
+            else:
+                validation_match = re.match(r"^\s*validation:\s*(.+)$", line)
+                if validation_match:
+                    current_action.reprompt_validation = validation_match.group(1).strip()
+                    current_action.reprompt_line = i
+
+        # Versions tracking
+        if re.match(r"^\s*versions:\s*$", line):
+            versions_indent = line_indent
+            current_action.versions_line = i
+            continue
+
+        if versions_indent is not None and line.strip() and line_indent <= versions_indent:
+            versions_indent = None
+
+        # Seed file references
+        file_match = re.search(r"\$file:([^\s,\}]+)", line)
+        if file_match:
+            _add_reference(
+                index,
+                yaml_file,
+                ReferenceType.SEED_FILE,
+                file_match.group(1),
+                i,
+                file_match.start(1) - 6,
+                file_match.end(1),
+                file_match.group(0),
+            )
+
+
+def _add_reference(
+    index: ProjectIndex,
+    yaml_file: Path,
+    ref_type: ReferenceType,
+    value: str,
+    line: int,
+    start: int,
+    end: int,
+    raw_text: str,
+) -> None:
+    """Add a reference to the index."""
+    index.references_by_file[yaml_file].append(
+        Reference(
+            type=ref_type,
+            value=value,
+            location=Location(
+                file_path=yaml_file,
+                line=line,
+                column=start,
+                end_line=line,
+                end_column=end,
+            ),
+            raw_text=raw_text,
+        )
+    )
+
+
+def _extract_condition_variables(condition: str) -> list[str]:
+    """Extract variable-like tokens from a guard/validation condition."""
+    tokens = re.findall(r"\b[a-zA-Z_][\w\.]*\b", condition)
+    keywords = {"and", "or", "not", "in", "true", "false", "null", "none"}
+    return [token for token in tokens if token.lower() not in keywords]
+
+
+def _populate_versions_summary(action_meta: ActionMetadata, action_data: dict) -> None:
+    """Populate versions summary info from parsed YAML data."""
+    versions = action_data.get("versions")
+    if not versions:
+        return
+    summaries = []
+    params = []
+
+    if isinstance(versions, dict):
+        versions = [versions]
+
+    if isinstance(versions, list):
+        for version in versions:
+            if not isinstance(version, dict):
+                continue
+            param = version.get("param")
+            if param:
+                params.append(param)
+            range_value = version.get("range")
+            mode = version.get("mode")
+            source = version.get("source")
+            parts = []
+            if param:
+                parts.append(f"param `{param}`")
+            if range_value:
+                parts.append(f"range `{range_value}`")
+            if mode:
+                parts.append(f"mode `{mode}`")
+            if source:
+                parts.append(f"source `{source}`")
+            if parts:
+                summaries.append(", ".join(parts))
+
+    action_meta.versions_params = params
+    if summaries:
+        action_meta.versions_summary = "; ".join(summaries)
 
 
 def _index_prompts(index: ProjectIndex, project_root: Path) -> None:
@@ -252,10 +554,48 @@ def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
     if not schema_dir.exists():
         return
 
-    for schema_file in schema_dir.glob("*.yml"):
+    for schema_file in list(schema_dir.glob("*.yml")) + list(schema_dir.glob("*.yaml")):
         schema_name = schema_file.stem
-        index.schemas[schema_name] = schema_file
+        fields = _extract_schema_fields(schema_file)
+        index.schemas[schema_name] = SchemaDefinition(
+            name=schema_name,
+            location=Location(file_path=schema_file, line=0, column=0),
+            fields=fields,
+        )
 
-    for schema_file in schema_dir.glob("*.yaml"):
-        schema_name = schema_file.stem
-        index.schemas[schema_name] = schema_file
+
+def _extract_schema_fields(schema_file: Path) -> list[str]:
+    """Extract schema fields for diagnostics and completions."""
+    try:
+        yaml = YAML()
+        data = yaml.load(schema_file.read_text())
+    except Exception:
+        return []
+
+    if not isinstance(data, dict):
+        return []
+
+    fields: list[str] = []
+    _collect_schema_fields(data, fields)
+    return fields
+
+
+def _collect_schema_fields(data: dict, fields: list[str], prefix: str = "") -> None:
+    """Collect schema fields from properties or field lists."""
+    if not isinstance(data, dict):
+        return
+
+    properties = data.get("properties")
+    if isinstance(properties, dict):
+        for key, value in properties.items():
+            name = f"{prefix}{key}" if not prefix else f"{prefix}.{key}"
+            fields.append(name)
+            if isinstance(value, dict):
+                _collect_schema_fields(value, fields, name)
+
+    field_list = data.get("fields")
+    if isinstance(field_list, list):
+        for item in field_list:
+            if isinstance(item, dict) and "name" in item:
+                name = f"{prefix}{item['name']}" if not prefix else f"{prefix}.{item['name']}"
+                fields.append(name)
