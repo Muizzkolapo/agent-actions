@@ -185,7 +185,7 @@ class BatchService:
             output_directory,
             force,
             source_data,
-            workflow_metadata,
+            workflow_metadata=workflow_metadata,
         )
 
     def check_status(self, batch_id: str, output_directory: str = None) -> BatchStatus:

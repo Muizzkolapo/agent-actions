@@ -154,6 +154,25 @@ class TestPipelineParamsIncludeWorkflowMetadata:
         assert "workflow_metadata" in fields, \
             "ProcessParams should have workflow_metadata field"
 
+    def test_pipeline_config_has_workflow_metadata(self):
+        """Verify PipelineConfig has workflow_metadata field."""
+        from agent_actions.workflow.pipeline import PipelineConfig
+        import dataclasses
+
+        fields = {f.name for f in dataclasses.fields(PipelineConfig)}
+        assert "workflow_metadata" in fields, \
+            "PipelineConfig should have workflow_metadata field"
+
+    def test_create_pipeline_accepts_workflow_metadata(self):
+        """Verify create_processing_pipeline_from_params accepts workflow_metadata."""
+        from agent_actions.workflow.pipeline import create_processing_pipeline_from_params
+        import inspect
+
+        sig = inspect.signature(create_processing_pipeline_from_params)
+        params = list(sig.parameters.keys())
+        assert "workflow_metadata" in params, \
+            "create_processing_pipeline_from_params should accept workflow_metadata"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
