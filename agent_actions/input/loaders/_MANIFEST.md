@@ -1,0 +1,23 @@
+# Loaders Manifest
+
+## Overview
+
+Input loaders convert raw files (JSON, XML, CSV, text, etc.) into structured data
+while providing retry, async, and error-handling helpers used across batch + online
+processing.
+
+## Modules
+
+| Name | Type | Description | Signals |
+|------|------|-------------|---------|
+| `base.py` | Module | Abstract loader base with retry/async helpers plus the `BaseLoader`/`IDataLoader` plumbing for derived loaders. | `config.interfaces`, `processing.error_handling` |
+| `retry` | Function | File operation retry decorator used by `BaseLoader.load_file`/`load_file_async`. | `processing.error_handling` |
+| `BaseLoader` | Class | Generic loader with `load_file(_async)`, `process(_async)`, and `supports_filetype` contracts. | `config.interfaces`, `typing` |
+| `file_reader.py` | Module | Convenience reader for PDFs, DOCX, HTML, Excel, XML, Markdown, and other user-facing file types with rich error handling. | `processors`, `logging` |
+| `json.py` | Module | `JsonLoader` that parses JSON strings/files, validates required arguments, and surfaces structured `DataParseError` diagnostics. | `errors`, `validation`, `json` |
+| `source_data.py` | Module | `SourceDataLoader` that mirrors target paths into the source directory, loads/saves JSON batches, and enforces project-bound paths. | `config.paths`, `errors`, `json` |
+| `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsException`. | `errors`, `logging` |
+| `text.py` | Module | `TextLoader` for plain text/markdown/HTML content with the same fallback/validation pattern as other loaders. | `errors` |
+| `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing discovered modules and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |
+| `xml.py` | Module | `XmlLoader` that parses XML text into `ElementTree` roots, exposes helper for turning elements to dicts, and surfaces parse metadata. | `errors`, `xml` |
+| `yaml.py` | Module | `TemplateYamlLoader` that pre-processes Jinja-like template syntax before safe-loading YAML so legacy templates can still parse. | `yaml`, `errors`, `re` |

@@ -1,27 +1,27 @@
 # Logging Manifest
 
+## Overview
+
+Structured logging helpers for the Agent Actions core—including configuration,
+factories, filters, formatters, and the event-driven error/reporting plumbing.
+
+## Sub-Modules
+
+| Sub-Module | Description |
+|------------|-------------|
+| [core](core/_MANIFEST.md) | Logger manager, event protocols, and handler helpers. |
+| [errors](errors/_MANIFEST.md) | Error logging utilities, transformers, and formatters. |
+| [events](events/_MANIFEST.md) | Event-based logging and telemetry registries. |
+
 ## Modules
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `config.py` | Module | Logging configuration dataclasses. | - |
-| `FileHandlerSettings` | Class | File handler configuration settings. | - |
-| `LoggingConfig` | Class | Central logging configuration. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `from_project_config` | Method | Create LoggingConfig from project configuration. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `from_environment` | Method | Create LoggingConfig from environment variables. | - |
-| `context.py` | Module | DEPRECATED: Re-exports EventManager for backwards compatibility. | - |
-| `factory.py` | Module | Logger factory for centralized logging configuration. | `logging` |
-| `LoggerFactory` | Class | Factory for creating and configuring loggers. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `initialize` | Method | Initialize the logging system with configuration. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_logger` | Method | Get a logger with the given name. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `set_level` | Method | Set log level for a logger. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `set_debug` | Method | Enable or disable debug logging globally. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_config` | Method | Get the current logging configuration. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `is_initialized` | Method | Check if the factory has been initialized. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `reset` | Method | Reset the factory state. | - |
-| `filters.py` | Module | Custom logging filters. | `logging` |
-| `RedactingFilter` | Class | Redacts sensitive information from log records. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `filter` | Method | Redact sensitive patterns from message and extra fields. | - |
-| `formatters.py` | Module | Custom logging formatters. | - |
-| `JSONFormatter` | Class | Formats log records as single-line JSON for log aggregation. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `format` | Method | Format log record as JSON string. | - |
+| `config.py` | Module | Dataclasses that capture project logging, handler, and formatting defaults. | `logging` |
+| `FileHandlerSettings` | Class | File handler configuration used by the factory. | `logging` |
+| `LoggingConfig` | Class | Central logging configuration builder with `from_project_config`/`from_environment`. | `logging` |
+| `context.py` | Module | Legacy shim that re-exports the event manager for backwards compatibility. | `logging` |
+| `factory.py` | Module | `LoggerFactory` that wires together configuration, filters, and handlers. | `logging` |
+| `LoggerFactory` | Class | Manage logger creation, level setting, and debug state. | `logging` |
+| `filters.py` | Module | Custom filters (e.g., `RedactingFilter`) to sanitize sensitive payloads. | `logging` |
+| `formatters.py` | Module | Formatter helpers such as `JSONFormatter` used across services. | `logging` |

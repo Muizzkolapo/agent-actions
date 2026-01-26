@@ -1,0 +1,16 @@
+# LSP Manifest
+
+## Overview
+
+Language Server Protocol helpers that index agent workflows/prompts/tools, resolve
+references, and expose hover/definition/navigation for editors.
+
+## Modules
+
+| Name | Type | Description | Signals |
+|------|------|-------------|---------|
+| `models.py` | Module | Data models (`ProjectIndex`, `ActionMetadata`, `PromptDefinition`, `ReferenceType`, `Location`) describing references, workflows, prompts, schemas, and tools. | `lsprotocol`, `pygls` |
+| `indexer.py` | Module | Scans workflows/prompts/tools/schemas, builds `ProjectIndex`, and records metadata used by navigation and hover. | `ruamel.yaml`, `yaml`, `logging` |
+| `navigator.py` | Module | Graph helpers (`ActionGraph`, `build_action_graph`, `describe_action_relationships`) used for representing dependencies/consumers for a workflow file. | `lsp`, `workflow` |
+| `resolver.py` | Module | Detects references at cursor positions (`get_reference_at_position`) and resolves them to file `Location`s (`resolve_reference`). | `lsprotocol`, `pathlib` |
+| `server.py` | Module | `AgentActionsLanguageServer` setup plus LSP handlers for initialize/definition/hover using the indexer/resolver/navigator. | `pygls`, `lsprotocol` |

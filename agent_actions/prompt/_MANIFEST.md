@@ -1,0 +1,24 @@
+# Prompt Manifest
+
+## Overview
+
+Prompt utilities cover generation, templating, formatting, context scope helpers,
+and service wiring used by CLI commands and runtime agents.
+
+## Sub-Modules
+
+| Sub-Module | Description |
+|------------|-------------|
+| [context](context/_MANIFEST.md) | Builds rich context scopes and static prompt loaders. |
+
+## Modules
+
+| Name | Type | Description | Signals |
+|------|------|-------------|---------|
+| `data_generator.py` | Module | `DataGenerator` that composes prompts with context for workflows. | `cli`, `workflow`, `llm` |
+| `formatter.py` | Module | Template helpers for prompt formatting and escaping. | `prompt_generation` |
+| `handler.py` | Module | `PromptLoader` and prompt builder utilities. | `logging`, `cli` |
+| `prompt_utils.py` | Module | Misc utilities (token counting, template expansion). | `prompt_generation`, `logging` |
+| `render_workflow.py` | Module | Renders workflows into final YAML via templates. | `cli`, `prompt_generation` |
+| `renderer.py` | Module | Rich renderers used by CLI schema/inspect commands. | `cli`, `rich` |
+| `service.py` | Module | `PromptService` used by CLI/tests for retrieving prompt definitions. | `logging`, `prompt_generation` |
