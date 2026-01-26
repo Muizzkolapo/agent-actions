@@ -13,6 +13,7 @@ from uuid import uuid4
 from rich.console import Console
 
 from agent_actions.config.factory import create_agent_runner
+from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.llm.realtime.config import ConfigManager
@@ -90,6 +91,9 @@ class AgentWorkflow:
         if config.manager is None:
             config.manager = ConfigManager(config.paths.constructor_path, config.paths.default_path)
         self._load_configs()
+
+        # Validate schema files exist before proceeding (fail fast)
+        self._validate_schema_files()
 
         # Initialize services
         self.services = self._initialize_services()
@@ -295,6 +299,54 @@ class AgentWorkflow:
             agent_configs=agent_configs,
             child_pipeline=manager.child_pipeline,
         )
+
+    def _validate_schema_files(self) -> None:
+        """
+        Validate that all referenced schema files exist.
+
+        This runs during config validation (before workflow execution) to fail fast
+        with a clear error message instead of failing at runtime with obscure errors.
+
+        Raises:
+            ConfigValidationError: If any referenced schema files are missing
+        """
+        # Use same schema directory as SchemaLoader (cwd/schema)
+        schema_dir = Path.cwd() / "schema"
+
+        # Collect all missing schemas with their action names
+        missing_schemas = []
+
+        for action_name, agent_config in self.agent_configs.items():
+            if agent_config is None:
+                continue
+
+            # Check for schema_name field (the standard way to reference schemas)
+            schema_name = agent_config.get("schema_name")
+            if schema_name:
+                schema_file = schema_dir / f"{schema_name}.yml"
+                if not schema_file.exists():
+                    missing_schemas.append((action_name, schema_name, schema_file))
+
+        # Raise error if any schemas are missing
+        if missing_schemas:
+            error_lines = ["Schema validation failed. The following schema files are missing:"]
+            for action_name, schema_name, schema_file in missing_schemas:
+                error_lines.append(f"  - Action '{action_name}': schema '{schema_name}.yml'")
+                error_lines.append(f"    Expected at: {schema_file}")
+
+            error_lines.append("")
+            error_lines.append("Please ensure all schema files exist in the schema/ directory.")
+
+            raise ConfigValidationError(
+                "\n".join(error_lines),
+                context={
+                    "missing_schemas": [
+                        {"action": a, "schema": s, "path": str(p)}
+                        for a, s, p in missing_schemas
+                    ],
+                    "schema_dir": str(schema_dir),
+                },
+            )
 
     @property
     def agent_name(self) -> str:
