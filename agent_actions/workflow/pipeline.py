@@ -37,6 +37,7 @@ class PipelineConfig:
     agent_name: str
     idx: int
     agent_configs: Optional[Dict[str, Any]] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -50,6 +51,7 @@ class BatchPipelineParams:
     batch_output_directory: str
     batch_agent_configs: Optional[Dict[str, Any]] = None
     source_data: Optional[Any] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -71,6 +73,7 @@ class ProcessParams:
     idx: int
     processor_factory: Optional[ProcessorFactory]
     agent_configs: Optional[Dict[str, Any]] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 class ProcessingPipeline:
@@ -150,6 +153,7 @@ class ProcessingPipeline:
             data,
             params.batch_output_directory,
             source_data=params.source_data,
+            workflow_metadata=params.workflow_metadata,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -206,6 +210,7 @@ class ProcessingPipeline:
                     batch_base_directory=params.paths.base_directory,
                     batch_output_directory=params.paths.output_directory,
                     batch_agent_configs=params.agent_configs,
+                    workflow_metadata=params.workflow_metadata,
                 )
             )
         pipeline = create_processing_pipeline_from_params(
@@ -290,6 +295,7 @@ class ProcessingPipeline:
                 batch_output_directory=output_directory,
                 batch_agent_configs=self.config.agent_configs,
                 source_data=source_data,
+                workflow_metadata=self.config.workflow_metadata,
             )
         )
         return result_path
@@ -511,6 +517,7 @@ def create_processing_pipeline_from_params(
     idx: int,
     processor_factory: ProcessorFactory,
     agent_configs: Optional[Dict[str, Any]] = None,
+    workflow_metadata: Optional[Dict[str, Any]] = None,
 ) -> ProcessingPipeline:
     """
     Factory function for creating a ProcessingPipeline instance from individual parameters.
@@ -521,11 +528,16 @@ def create_processing_pipeline_from_params(
         idx: Index of the agent
         processor_factory: Required factory for creating processors with DI
         agent_configs: Optional dictionary of all agent configurations
+        workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
     Returns:
         ProcessingPipeline instance
     """
     config = PipelineConfig(
-        agent_config=agent_config, agent_name=agent_name, idx=idx, agent_configs=agent_configs
+        agent_config=agent_config,
+        agent_name=agent_name,
+        idx=idx,
+        agent_configs=agent_configs,
+        workflow_metadata=workflow_metadata,
     )
     return ProcessingPipeline(config, processor_factory)
