@@ -143,13 +143,19 @@ class BatchTaskPreparator:
         # 7. Process each data item
         for idx, row in enumerate(data):
             try:
-                # Resolve source item for this row
+                # Resolve source item for this row by source_guid (same as online mode)
+                # This allows many processed records to correctly find their shared source document
                 source_item = None
-                if source_data and idx < len(source_data):
-                    source_item = source_data[idx]
+                if source_data:
+                    source_guid = row.get("source_guid")
+                    if source_guid:
+                        from agent_actions.input.preprocessing.transformation.transformer import (
+                            DataTransformer,
+                        )
 
-                # If no explicit source_data, or out of bounds, fallback logic inside PromptPreparationService (or below)
-                # But here we pass exactly what we have.
+                        source_item = DataTransformer.get_content_by_source_guid(
+                            source_data, source_guid
+                        )
 
                 result = self._process_single_item(
                     row=row,
@@ -415,11 +421,19 @@ class BatchTaskPreparator:
         if output_directory and batch_name:
             file_path_for_history = str(Path(output_directory) / batch_name)
 
-        # Determine source content for validation
+        # Determine source content for validation by source_guid (same as main loop)
         source_content_for_validation = None
-        if source_data and len(source_data) > 0:
-            source_content_for_validation = source_data[0]
-        else:
+        if source_data:
+            source_guid = first_row.get("source_guid")
+            if source_guid:
+                from agent_actions.input.preprocessing.transformation.transformer import (
+                    DataTransformer,
+                )
+
+                source_content_for_validation = DataTransformer.get_content_by_source_guid(
+                    source_data, source_guid
+                )
+        if source_content_for_validation is None:
             source_content_for_validation = row_content
 
         # Use the SAME service as actual task preparation - single source of truth
