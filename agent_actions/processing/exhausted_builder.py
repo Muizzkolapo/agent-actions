@@ -66,10 +66,16 @@ class ExhaustedRecordBuilder:
         if isinstance(original_row, dict):
             if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
-            if original_row.get("parent_target_id"):
-                exhausted_item["parent_target_id"] = original_row["parent_target_id"]
-            if original_row.get("root_target_id"):
-                exhausted_item["root_target_id"] = original_row["root_target_id"]
+            # Ancestry chain propagation (matches LineageBuilder.add_unified_lineage)
+            # parent_target_id = input's target_id (link to immediate parent)
+            if original_row.get("target_id"):
+                exhausted_item["parent_target_id"] = original_row["target_id"]
+                # root_target_id = input's root_target_id (preserve original ancestor)
+                # If no root_target_id on input, the input is the root
+                if original_row.get("root_target_id"):
+                    exhausted_item["root_target_id"] = original_row["root_target_id"]
+                else:
+                    exhausted_item["root_target_id"] = original_row["target_id"]
             if original_row.get("lineage"):
                 exhausted_item["lineage"] = original_row["lineage"] + [node_id]
             else:

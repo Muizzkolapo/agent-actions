@@ -329,8 +329,13 @@ class BatchResultProcessor:
                         "using 'unknown_action' for lineage"
                     )
                 item_node_id = IDGenerator.generate_node_id(action_name)
-                item["node_id"] = item_node_id
-                item["lineage"] = LineageBuilder.build_lineage(original_row, item_node_id)
+                # Use add_unified_lineage to set lineage AND ancestry chain fields
+                # (parent_target_id, root_target_id) for parity with online mode
+                item = LineageBuilder.add_unified_lineage(
+                    obj=item,
+                    node_id=item_node_id,
+                    parent_item=original_row,
+                )
 
             # Target ID (ensure present)
             if "target_id" not in item or not item["target_id"]:
