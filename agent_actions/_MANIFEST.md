@@ -4,25 +4,21 @@
 
 | Sub-Module | Description |
 |------------|-------------|
-| [cli](cli/_MANIFEST.md) | - |
-| [configuration](configuration/_MANIFEST.md) | Workflow configuration schema definitions. |
-| [docs](docs/_MANIFEST.md) | Documentation generation and serving for agent-actions workflows. |
+| [cli](cli/_MANIFEST.md) | Command-line interface for agent-actions. |
+| [config](config/_MANIFEST.md) | Workflow configuration and dependency injection. |
 | [errors](errors/_MANIFEST.md) | Centralized error exports for agent-actions. |
-| [file_io](file_io/_MANIFEST.md) | File I/O operations for agent-actions framework. |
-| [input_loading](input_loading/_MANIFEST.md) | Compatibility module for core.loaders.data_loaders imports. |
+| [input](input/_MANIFEST.md) | Data ingestion utilities (context loaders, preprocessors, and transformers). |
+| [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/realtime execution. |
 | [logging](logging/_MANIFEST.md) | Agent Actions logging infrastructure. |
-| [lsp](lsp/_MANIFEST.md) | Agent Actions LSP - Language Server for agent-actions workflows. |
 | [models](models/_MANIFEST.md) | Unified data models for agent-actions. |
-| [orchestration](orchestration/_MANIFEST.md) | Orchestration module for agent workflow execution. |
-| [preprocessing](preprocessing/_MANIFEST.md) | Preprocessing module for Agent Actions framework. |
-| [prompt_generation](prompt_generation/_MANIFEST.md) | - |
-| [reprompting](reprompting/_MANIFEST.md) | Reprompting system for improving LLM outputs through iterative refinement. |
-| [response_processing](response_processing/_MANIFEST.md) | - |
-| [services](services/_MANIFEST.md) | Services for agent-actions. |
-| [shared](shared/_MANIFEST.md) | - |
-| [state_management](state_management/_MANIFEST.md) | - |
-| [utilities](utilities/_MANIFEST.md) | Core utilities for Agent Actions. |
-| [validation](validation/_MANIFEST.md) | - |
+| [output](output/_MANIFEST.md) | Output serialization, schema loading, and response helpers. |
+| [processing](processing/_MANIFEST.md) | Shared processing helpers (enrichment, error handling, recovery). |
+| [prompt](prompt/_MANIFEST.md) | Prompt rendering, context building, and formatting helpers. |
+| [skills](skills/_MANIFEST.md) | Reusable skills and templates for agent workflows. |
+| [tooling](tooling/_MANIFEST.md) | Documentation generation and IDE tooling (docs site + LSP). |
+| [utils](utils/_MANIFEST.md) | Core utilities for Agent Actions. |
+| [validation](validation/_MANIFEST.md) | Configuration and workflow validation. |
+| [workflow](workflow/_MANIFEST.md) | Workflow orchestration, runners, and schema services. |
 
 ## Modules
 

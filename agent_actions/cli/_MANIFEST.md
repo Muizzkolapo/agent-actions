@@ -4,6 +4,7 @@
 
 | Sub-Module | Description |
 |------------|-------------|
+| [commands](commands/_MANIFEST.md) | CLI command implementations, including low-level runners and utilities. |
 | [renderers](renderers/_MANIFEST.md) | CLI renderers for agent-actions. |
 | [utils](utils/_MANIFEST.md) | - |
 

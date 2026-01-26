@@ -15,7 +15,7 @@ orchestration, prompts, and processing to concrete implementations.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [di](di) | Dependency injection container, registry, and application wiring. |
+| [di](di/_MANIFEST.md) | Dependency injection container, registry, and application wiring. |
 
 ## Modules
 
