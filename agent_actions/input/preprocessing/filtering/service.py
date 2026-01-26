@@ -92,8 +92,8 @@ class FilterService:
             # Modern GuardFilter always returns FilterResult object
             return self._handle_filter_result_object(filter_result, behavior, passthrough_on_error)
 
-        except ValueError as e:
-            logger.warning("Error in guard condition evaluation: %s", e)
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.warning("Guard condition evaluation exception: %s", e)
             return self._handle_evaluation_error(str(e), behavior, passthrough_on_error)
 
     def _evaluate_conditional_clause(
@@ -108,8 +108,8 @@ class FilterService:
                 return FilterStatus(should_include=False, status="skipped")
             return FilterStatus(should_include=True, status="included")
 
-        except ValueError as e:
-            logger.warning("Error in conditional clause evaluation: %s", e)
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            logger.warning("Conditional clause evaluation exception: %s", e)
             # Conditional clauses always passthrough on error (legacy behavior)
             return FilterStatus(should_include=True, status="included", error=str(e))
 

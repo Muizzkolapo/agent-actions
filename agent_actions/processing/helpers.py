@@ -55,7 +55,7 @@ def _evaluate_conditional_clause(
             )
             return (False, "skip")
     except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.debug("Guard: conditional_clause evaluation failed: %s, proceeding", e)
+        logger.warning("Guard: conditional_clause evaluation failed: %s, proceeding", e)
         # Don't skip on UDF errors - proceed with execution
 
     return None
@@ -81,7 +81,7 @@ def _evaluate_guard(agent_config: Dict, context: Any) -> Tuple[bool, Optional[st
         return _process_filter_result(filter_result, behavior, passthrough_on_error, clause)
 
     except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.debug("Guard: guard condition evaluation exception: %s", e)
+        logger.warning("Guard: guard condition evaluation exception: %s", e)
         return (True, None) if passthrough_on_error else (False, behavior)
 
 
