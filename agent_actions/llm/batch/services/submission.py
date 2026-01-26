@@ -70,6 +70,7 @@ class BatchSubmissionService:
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
         source_data: Optional[Any] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Prepare batch tasks from data.
 
@@ -78,6 +79,7 @@ class BatchSubmissionService:
             data: Input data to process
             output_directory: Output directory path
             batch_name: Name for the batch
+            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Returns:
             Tuple of (tasks, context_map)
@@ -90,6 +92,7 @@ class BatchSubmissionService:
             output_directory=output_directory,
             batch_name=batch_name,
             source_data=source_data,
+            workflow_metadata=workflow_metadata,
         )
         logger.debug(
             "Task preparation complete: %d tasks, %d filtered, %d skipped",
@@ -138,6 +141,7 @@ class BatchSubmissionService:
         output_directory: Optional[str] = None,
         force: bool = False,
         source_data: Optional[Any] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Union[str, Dict[str, Any]]:
         """Submit a batch job for processing.
 
@@ -147,6 +151,7 @@ class BatchSubmissionService:
             data: Input data to process
             output_directory: Output directory path
             force: Force new submission even if in-flight batch exists
+            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Returns:
             Batch ID if submitted, or passthrough dict if no tasks
@@ -175,7 +180,7 @@ class BatchSubmissionService:
 
         # Prepare tasks
         tasks, context_map = self.prepare_batch_tasks(
-            agent_config, data, output_directory, batch_name, source_data
+            agent_config, data, output_directory, batch_name, source_data, workflow_metadata
         )
 
         # Handle empty tasks

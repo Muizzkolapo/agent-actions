@@ -571,6 +571,10 @@ class RecordProcessor:
         from agent_actions.prompt.service import (
             PromptPreparationService,
         )
+        from agent_actions.utils.tools_resolver import resolve_tools_path
+
+        # Resolve tools_path for function injection (parity with batch mode)
+        tools_path = resolve_tools_path(context.agent_config)
 
         return PromptPreparationService.prepare_prompt_with_context(
             agent_config=context.agent_config,
@@ -584,6 +588,7 @@ class RecordProcessor:
             workflow_metadata=context.workflow_metadata,
             current_item=current_item,
             file_path=context.file_path,
+            tools_path=tools_path,
         )
 
     def _execute_llm(

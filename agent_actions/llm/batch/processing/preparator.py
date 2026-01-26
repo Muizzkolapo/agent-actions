@@ -77,6 +77,7 @@ class BatchTaskPreparator:
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
         source_data: Optional[List[Any]] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> PreparedBatchTasks:
         """
         Prepare batch tasks from raw data.
@@ -90,6 +91,7 @@ class BatchTaskPreparator:
             provider: Batch provider instance
             output_directory: Output directory path
             batch_name: Batch file name
+            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Returns:
             PreparedBatchTasks with tasks, context_map, and stats
@@ -116,9 +118,9 @@ class BatchTaskPreparator:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 
         # 2.1 Pre-flight validation: check template variables against first data row
-        # 2.1 Pre-flight validation: check template variables against first data row
         self._run_preflight_validation(
-            agent_config, raw_prompt, data, output_directory, batch_name, source_data
+            agent_config, raw_prompt, data, output_directory, batch_name, source_data,
+            workflow_metadata=workflow_metadata,
         )
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -169,6 +171,7 @@ class BatchTaskPreparator:
                     context_map_builder=context_map_builder,
                     stats=stats,
                     source_item=source_item,
+                    workflow_metadata=workflow_metadata,
                 )
 
                 if result:
@@ -203,6 +206,7 @@ class BatchTaskPreparator:
         context_map_builder: Dict[str, Any],
         stats: BatchTaskPreparationStats,
         source_item: Optional[Any] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Process a single data item.
@@ -258,6 +262,7 @@ class BatchTaskPreparator:
             tools_path=tools_path,
             context_map_builder=context_map_builder,
             source_item=source_item,
+            workflow_metadata=workflow_metadata,
         )
 
     def _prepare_single_task(
@@ -271,6 +276,7 @@ class BatchTaskPreparator:
         tools_path: Optional[str],
         context_map_builder: Dict[str, Any],
         source_item: Optional[Any] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Prepare a single batch task using PromptPreparationService."""
         from agent_actions.prompt.service import (
@@ -298,6 +304,7 @@ class BatchTaskPreparator:
             current_item=context_map_builder.get(custom_id),
             file_path=file_path_for_history,
             tools_path=tools_path,
+            workflow_metadata=workflow_metadata,
         )
 
         # Store passthrough_fields for later merging
@@ -381,6 +388,7 @@ class BatchTaskPreparator:
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
         source_data: Optional[List[Any]] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Run pre-flight validation on template and first data row.
 
@@ -394,6 +402,7 @@ class BatchTaskPreparator:
             data: List of data items (uses first row for validation)
             output_directory: Output directory for constructing file paths
             batch_name: Batch file name for constructing file paths
+            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Raises:
             PreFlightValidationError: If validation fails
@@ -447,4 +456,5 @@ class BatchTaskPreparator:
             source_content=source_content_for_validation,  # Use prioritized source
             current_item=first_row,
             file_path=file_path_for_history,
+            workflow_metadata=workflow_metadata,
         )

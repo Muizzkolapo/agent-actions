@@ -50,6 +50,7 @@ class BatchPipelineParams:
     batch_output_directory: str
     batch_agent_configs: Optional[Dict[str, Any]] = None
     source_data: Optional[Any] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -71,6 +72,7 @@ class ProcessParams:
     idx: int
     processor_factory: Optional[ProcessorFactory]
     agent_configs: Optional[Dict[str, Any]] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 class ProcessingPipeline:
@@ -150,6 +152,7 @@ class ProcessingPipeline:
             data,
             params.batch_output_directory,
             source_data=params.source_data,
+            workflow_metadata=params.workflow_metadata,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -206,6 +209,7 @@ class ProcessingPipeline:
                     batch_base_directory=params.paths.base_directory,
                     batch_output_directory=params.paths.output_directory,
                     batch_agent_configs=params.agent_configs,
+                    workflow_metadata=params.workflow_metadata,
                 )
             )
         pipeline = create_processing_pipeline_from_params(

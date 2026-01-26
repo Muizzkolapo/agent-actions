@@ -159,10 +159,12 @@ class BatchService:
     # Delegation methods - one-liner delegations to focused services
     # =========================================================================
 
-    def prepare_batch_tasks(self, agent_config, data, output_directory=None, batch_name=None):
+    def prepare_batch_tasks(
+        self, agent_config, data, output_directory=None, batch_name=None, workflow_metadata=None
+    ):
         """Prepare batch tasks from data (delegates to submission service)."""
         return self._get_submission_service().prepare_batch_tasks(
-            agent_config, data, output_directory, batch_name
+            agent_config, data, output_directory, batch_name, workflow_metadata=workflow_metadata
         )
 
     def submit_batch_job(
@@ -173,10 +175,17 @@ class BatchService:
         output_directory=None,
         force=False,
         source_data: Optional[Any] = None,
+        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Union[str, Dict[str, Any]]:
         """Submit a batch job for processing (delegates to submission service)."""
         return self._get_submission_service().submit_batch_job(
-            agent_config, batch_name, data, output_directory, force, source_data
+            agent_config,
+            batch_name,
+            data,
+            output_directory,
+            force,
+            source_data,
+            workflow_metadata,
         )
 
     def check_status(self, batch_id: str, output_directory: str = None) -> BatchStatus:
