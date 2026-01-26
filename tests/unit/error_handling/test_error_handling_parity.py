@@ -170,8 +170,9 @@ class TestBatchErrorLogging:
         source = inspect.getsource(BatchTaskPreparator.prepare_tasks)
 
         # Task preparation failures ARE system errors (template errors, etc.)
-        assert "logger.error" in source and "Failed to prepare task" in source, \
-            "Preparator should log task failures at ERROR level"
+        # Note: logger.exception() logs at ERROR level with traceback
+        assert "logger.exception" in source and "Failed to prepare task" in source, \
+            "Preparator should log task failures at ERROR level (using logger.exception)"
 
     def test_result_processor_uses_error_level_for_processing_failures(self):
         """Verify BatchResultProcessor logs processing failures at ERROR level."""

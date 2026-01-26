@@ -4,7 +4,6 @@ Agent workflow orchestration.
 
 import hashlib
 import logging
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -339,7 +338,7 @@ class AgentWorkflow:
             self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
             fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
-    def _discover_udfs_from_path(self, path: str, is_primary: bool) -> int:
+    def _discover_udfs_from_path(self, path: str, _is_primary: bool) -> int:
         """Discover UDFs from a specific path."""
         abs_path = Path(path).absolute()
 
@@ -621,7 +620,7 @@ class AgentWorkflow:
 
         raise result.error
 
-    def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, start_time: datetime):
+    def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, _start_time: datetime):
         """Log skipped agent."""
         # Fire agent skip event
         fire_event(

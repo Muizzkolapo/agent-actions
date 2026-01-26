@@ -15,12 +15,12 @@ if TYPE_CHECKING:
 
 # Try to import Rich for colored output
 try:
-    from rich.text import Text
+    from rich.console import Console as _RichConsole  # noqa: F401
 
     RICH_AVAILABLE = True
+    del _RichConsole  # Only needed for availability check
 except ImportError:
     RICH_AVAILABLE = False
-    Text = None  # type: ignore
 
 
 class AgentActionsFormatter:
