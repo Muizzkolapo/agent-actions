@@ -229,8 +229,8 @@ class BatchResultProcessor:
                     ctx.error_count += 1
                     ctx.reconciler.mark_processed(custom_id)
 
-                    # Log processing exception at DEBUG level
-                    logger.debug(
+                    # Log processing exception at ERROR level
+                    logger.error(
                         "Batch result item processing failed",
                         extra={
                             "operation": "process_batch_item",
@@ -253,8 +253,8 @@ class BatchResultProcessor:
                 ctx.error_count += 1
                 ctx.reconciler.mark_processed(custom_id)
 
-                # Log error result at DEBUG level
-                logger.debug(
+                # Log error result at ERROR level
+                logger.error(
                     "Batch result item had error",
                     extra={
                         "operation": "process_batch_item",
@@ -293,10 +293,17 @@ class BatchResultProcessor:
         original_source_guid = ctx.reconciler.get_source_guid(custom_id)
 
         # Step 4: Apply context_scope.passthrough (if configured)
-        if ctx.agent_config and custom_id in ctx.context_map:
-            generated_list = self._apply_context_passthrough(
-                ctx, custom_id, generated_list, original_row
-            )
+        if ctx.agent_config:
+            if custom_id in ctx.context_map:
+                generated_list = self._apply_context_passthrough(
+                    ctx, custom_id, generated_list, original_row
+                )
+            elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
+                # Passthrough configured but custom_id missing from context_map
+                logger.warning(
+                    "custom_id '%s' not found in context_map, skipping passthrough",
+                    custom_id,
+                )
 
         # Step 5: Transform structure (convert to workflow format)
         structured_items = DataTransformer.transform_structure(
