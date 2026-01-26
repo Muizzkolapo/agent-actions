@@ -177,7 +177,7 @@ class BatchTaskPreparator:
 
             except Exception as e:
                 # Catch all exceptions to avoid one bad row stopping entire batch
-                logger.error("Failed to prepare task for row: %s", e, exc_info=True)
+                logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
 
         # 8. Finalize tasks with provider
