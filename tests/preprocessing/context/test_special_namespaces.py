@@ -7,6 +7,7 @@ differently from regular workflow actions.
 
 import pytest
 from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.errors import ConfigurationError
 
 
@@ -14,14 +15,19 @@ class TestSpecialNamespaceConstants:
     """Test special namespace constants."""
 
     def test_special_namespaces_defined(self):
-        """Test that SPECIAL_NAMESPACES constant is defined."""
-        assert hasattr(ContextScopeProcessor, "SPECIAL_NAMESPACES")
-        assert isinstance(ContextScopeProcessor.SPECIAL_NAMESPACES, (set, frozenset))
+        """Test that SPECIAL_NAMESPACES constant is defined in utils.constants."""
+        assert isinstance(SPECIAL_NAMESPACES, (set, frozenset))
 
-    def test_special_namespaces_contains_expected_values(self):
+    def test_special_namespaces_contains_expected_core_values(self):
+        """Test that core special namespaces (source, loop, workflow) are defined."""
+        # Core namespaces that MUST be present
+        core_namespaces = {"source", "loop", "workflow"}
+        assert core_namespaces.issubset(SPECIAL_NAMESPACES)
+
+    def test_special_namespaces_contains_all_expected_values(self):
         """Test that all expected special namespaces are defined."""
-        expected = {"source", "loop", "workflow"}
-        assert ContextScopeProcessor.SPECIAL_NAMESPACES == expected
+        expected = {"source", "loop", "workflow", "seed", "prompt", "schema", "action"}
+        assert SPECIAL_NAMESPACES == expected
 
 
 class TestSpecialNamespaceValidationBypass:

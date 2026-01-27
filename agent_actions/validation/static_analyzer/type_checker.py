@@ -4,6 +4,8 @@ Static type checker for workflow field references.
 
 from typing import List
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement
 from .errors import (
     FieldLocation,
@@ -32,7 +34,7 @@ class StaticTypeChecker:
             print(result.format_report())
     """
 
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "prompt", "schema"})
+    # Use centralized SPECIAL_NAMESPACES from utils.constants
 
     def __init__(self, graph: DataFlowGraph) -> None:
         """Initialize the type checker.
@@ -102,7 +104,7 @@ class StaticTypeChecker:
         )
 
         # Skip special namespaces
-        if source_agent in self.SPECIAL_NAMESPACES:
+        if source_agent in SPECIAL_NAMESPACES:
             return
 
         # Check 1: Source agent exists
@@ -251,7 +253,7 @@ class StaticTypeChecker:
             # Get all referenced agents from requirements
             referenced = set()
             for req in node.input_requirements:
-                if req.source_agent not in self.SPECIAL_NAMESPACES:
+                if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
             # Find unused dependencies
@@ -293,7 +295,7 @@ class StaticTypeChecker:
             # Get all referenced agents
             referenced = set()
             for req in node.input_requirements:
-                if req.source_agent not in self.SPECIAL_NAMESPACES:
+                if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
             # Find referenced but undeclared (implicit dependencies)

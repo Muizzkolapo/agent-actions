@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Set
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 from .data_flow_graph import InputRequirement
 
 
@@ -49,10 +51,7 @@ class ReferenceExtractor:
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
     ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
 
-    # Special namespaces that don't require dependency declaration
-    SPECIAL_NAMESPACES = frozenset(
-        {"source", "loop", "workflow", "seed", "action", "prompt", "schema"}
-    )
+    # Use centralized SPECIAL_NAMESPACES from utils.constants
 
     # Jinja2 builtins to skip
     JINJA_BUILTINS = frozenset(
@@ -393,7 +392,7 @@ class ReferenceExtractor:
         """
         agents: Set[str] = set()
         for req in requirements:
-            if req.source_agent not in self.SPECIAL_NAMESPACES:
+            if req.source_agent not in SPECIAL_NAMESPACES:
                 agents.add(req.source_agent)
         return agents
 

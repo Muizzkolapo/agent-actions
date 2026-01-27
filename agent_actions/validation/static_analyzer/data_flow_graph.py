@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 
 class AgentKind(Enum):
     """Type of agent node."""
@@ -205,8 +207,8 @@ class DataFlowGraph:
         order = graph.topological_sort()  # ['extractor', 'summarizer']
     """
 
+    # Use centralized constant from utils.constants
     # Special namespaces that are always available without explicit dependencies
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "prompt", "schema"})
 
     def __init__(self) -> None:
         self.nodes: Dict[str, DataFlowNode] = {}
@@ -230,7 +232,7 @@ class DataFlowGraph:
 
     def is_special_namespace(self, name: str) -> bool:
         """Check if name is a special namespace (source, loop, etc.)."""
-        return name in self.SPECIAL_NAMESPACES
+        return name in SPECIAL_NAMESPACES
 
     def get_upstream_nodes(self, agent_name: str) -> List[DataFlowNode]:
         """Get all nodes that this agent depends on."""
