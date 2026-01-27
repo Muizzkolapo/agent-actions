@@ -210,3 +210,56 @@ def test_dataclass_definitions_are_parseable():
     assert "batch_manager" in support_fields
     assert "agent_runner" in core_fields
     assert "skip_evaluator" in deps_fields
+
+
+def test_scanner_detects_invalid_attribute_access():
+    """
+    Verify the scanner correctly identifies invalid attribute accesses.
+
+    This tests the detection logic itself by parsing code snippets
+    with known-bad attribute accesses.
+    """
+    import tempfile
+
+    # Create a temporary file with intentionally bad attribute accesses
+    bad_code = '''
+class BadAccessExample:
+    def bad_support_access(self):
+        # This should be manifest_manager, not manifest
+        return self.services.support.nonexistent_field
+
+    def bad_core_access(self):
+        # This should be agent_executor, not executor
+        return self.services.core.fake_service
+
+    def bad_deps_access(self):
+        # This should be batch_manager, not manager
+        return self.deps.invalid_dependency
+'''
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(bad_code)
+        temp_path = Path(f.name)
+
+    try:
+        # Scan the temporary file
+        accesses = list(_find_service_accesses(temp_path.parent))
+        temp_accesses = [a for a in accesses if a.file_path == temp_path]
+
+        # Should find 3 accesses
+        assert len(temp_accesses) == 3, f"Expected 3 accesses, found {len(temp_accesses)}"
+
+        # Verify the detected attributes
+        attrs = {a.attribute for a in temp_accesses}
+        assert "nonexistent_field" in attrs
+        assert "fake_service" in attrs
+        assert "invalid_dependency" in attrs
+
+        # Verify containers are correctly identified
+        containers = {(a.container, a.attribute) for a in temp_accesses}
+        assert ("support", "nonexistent_field") in containers
+        assert ("core", "fake_service") in containers
+        assert ("deps", "invalid_dependency") in containers
+
+    finally:
+        temp_path.unlink()  # Clean up

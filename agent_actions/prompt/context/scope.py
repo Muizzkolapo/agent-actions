@@ -27,9 +27,6 @@ class ContextScopeProcessor:
         workflow: Workflow metadata (name, version, run_id)
     """
 
-    # Use centralized SPECIAL_NAMESPACES from utils.constants
-    # Reserved namespaces that are not workflow actions
-
     @staticmethod
     def parse_field_reference(field_ref: str) -> Tuple[str, str]:
         """
