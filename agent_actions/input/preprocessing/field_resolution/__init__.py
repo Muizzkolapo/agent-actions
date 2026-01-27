@@ -22,10 +22,10 @@ from .context_provider import (
 )
 
 # Validator
-from .validator import (
-    ReferenceValidator,
-    SPECIAL_NAMESPACES,
-)
+from .validator import ReferenceValidator
+
+# Re-export SPECIAL_NAMESPACES from centralized location
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 # Exceptions
 from .exceptions import (

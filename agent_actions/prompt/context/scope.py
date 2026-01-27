@@ -12,6 +12,8 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional
 from copy import deepcopy
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,9 +26,6 @@ class ContextScopeProcessor:
         loop: Current iteration context in versioned actions
         workflow: Workflow metadata (name, version, run_id)
     """
-
-    # Reserved namespaces that are not workflow actions
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow"})
 
     @staticmethod
     def parse_field_reference(field_ref: str) -> Tuple[str, str]:
@@ -296,8 +295,8 @@ class ContextScopeProcessor:
             if dep_action.endswith("_"):
                 continue
 
-            # Skip validation for special reserved namespaces (source, loop, workflow)
-            if dep_action in ContextScopeProcessor.SPECIAL_NAMESPACES:
+            # Skip validation for special reserved namespaces (source, loop, workflow, etc.)
+            if dep_action in SPECIAL_NAMESPACES:
                 continue
 
             if dep_action not in workflow_actions:
@@ -976,7 +975,7 @@ class ContextScopeProcessor:
 
                 for dep_name in context_sources:
                     # Skip special reserved namespaces - they're populated differently
-                    if dep_name in ContextScopeProcessor.SPECIAL_NAMESPACES:
+                    if dep_name in SPECIAL_NAMESPACES:
                         logger.debug(
                             "Skipping special namespace '%s' (handled separately)", dep_name
                         )

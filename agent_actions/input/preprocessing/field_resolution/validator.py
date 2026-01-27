@@ -5,22 +5,13 @@ Validates field references against the workflow dependency graph.
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from .reference_parser import ParsedReference, ReferenceParser
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 from .exceptions import DependencyValidationError
+from .reference_parser import ParsedReference, ReferenceParser
 from .schema_field_validator import SchemaFieldValidator
 
 logger = logging.getLogger(__name__)
-
-
-# Special namespaces that are always allowed (not actual actions)
-SPECIAL_NAMESPACES = frozenset(
-    {
-        "source",  # Source data
-        "loop",  # Loop context
-        "workflow",  # Workflow metadata
-        "seed",  # Static seed data
-    }
-)
 
 
 class ReferenceValidator:

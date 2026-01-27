@@ -20,7 +20,7 @@ from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
 from .type_checker import StaticTypeChecker
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 
 class WorkflowStaticAnalyzer:
@@ -493,7 +493,7 @@ class WorkflowStaticAnalyzer:
         return [
             {"agent": req.source_agent, "field": req.field_path}
             for req in node.input_requirements
-            if req.source_agent not in self.graph.SPECIAL_NAMESPACES
+            if req.source_agent not in SPECIAL_NAMESPACES
         ]
 
     def _build_agent_info(self, node: DataFlowNode) -> Dict[str, Any]:
