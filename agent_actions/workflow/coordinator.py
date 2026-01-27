@@ -390,7 +390,7 @@ class AgentWorkflow:
             self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
             fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
-    def _discover_udfs_from_path(self, path: str, _is_primary: bool) -> int:
+    def _discover_udfs_from_path(self, path: str, is_primary: bool = True) -> int:
         """Discover UDFs from a specific path."""
         abs_path = Path(path).absolute()
 
