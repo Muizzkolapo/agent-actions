@@ -115,3 +115,76 @@ class TestInspectCommandGroup:
         assert "graph" in result.output
         assert "action" in result.output
         assert result.exit_code == 0
+
+
+class TestBaseInspectCommandHelpers:
+    """Unit tests for BaseInspectCommand helper methods."""
+
+    def test_get_action_type_source(self):
+        """Test action type for source actions (no inputs)."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        assert BaseInspectCommand._get_action_type([], []) == "Source"
+
+    def test_get_action_type_transform(self):
+        """Test action type for single-input transform."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        assert BaseInspectCommand._get_action_type(["a"], []) == "Transform"
+
+    def test_get_action_type_transform_with_context(self):
+        """Test action type for transform with context."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        assert BaseInspectCommand._get_action_type(["a"], ["b"]) == "Transform + Context"
+
+    def test_get_action_type_merge(self):
+        """Test action type for merge (multiple inputs)."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        assert BaseInspectCommand._get_action_type(["a", "b"], []) == "Merge"
+
+    def test_get_action_type_merge_with_context(self):
+        """Test action type for merge with context."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        assert BaseInspectCommand._get_action_type(["a", "b"], ["c"]) == "Merge + Context"
+
+    def test_get_output_fields_inline_schema(self):
+        """Test extracting fields from inline schema."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        config = {"schema": {"field1": "string", "field2": "int"}}
+        fields = BaseInspectCommand._get_output_fields(config)
+        assert set(fields) == {"field1", "field2"}
+
+    def test_get_output_fields_properties_schema(self):
+        """Test extracting fields from JSON Schema format."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        config = {"schema": {"properties": {"name": {}, "value": {}}}}
+        fields = BaseInspectCommand._get_output_fields(config)
+        assert set(fields) == {"name", "value"}
+
+    def test_get_output_fields_no_schema(self):
+        """Test empty result when no schema defined."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        config = {}
+        fields = BaseInspectCommand._get_output_fields(config)
+        assert fields == []
+
+    def test_get_input_fields_from_context_scope(self):
+        """Test extracting input fields from context_scope."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        config = {
+            "context_scope": {
+                "observe": ["action1.field1", "action2.*"],
+                "passthrough": ["action3.data"],
+            }
+        }
+        fields = BaseInspectCommand._get_input_fields(config)
+        assert "action1.field1 (observe)" in fields
+        assert "action2.* (observe)" in fields
+        assert "action3.data (passthrough)" in fields

@@ -92,7 +92,12 @@ class BaseInspectCommand:
                 input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
                     action_config, workflow_actions, action_name
                 )
-            except Exception:
+            except Exception as e:
+                # Fall back to explicit deps if inference fails
+                if not self.json_output:
+                    self.console.print(
+                        f"[dim]Warning: Could not infer dependencies for {action_name}: {e}[/dim]"
+                    )
                 input_sources = explicit_deps
                 context_sources = []
 
@@ -166,17 +171,15 @@ class BaseInspectCommand:
 
         return []
 
-    def _get_input_fields(self, action_config: Dict[str, Any], dependency_info: Dict[str, Any]) -> List[str]:
-        """Get input fields from dependencies and context_scope."""
+    @staticmethod
+    def _get_input_fields(action_config: Dict[str, Any]) -> List[str]:
+        """Get input fields from context_scope observe/passthrough."""
         fields = []
-
-        # Fields from context_scope.observe
         ctx = action_config.get("context_scope", {})
         for field_ref in ctx.get("observe", []):
             fields.append(f"{field_ref} (observe)")
         for field_ref in ctx.get("passthrough", []):
             fields.append(f"{field_ref} (passthrough)")
-
         return fields
 
 
