@@ -122,6 +122,63 @@ class BaseInspectCommand:
             return "Merge" if not context_sources else "Merge + Context"
         return "Transform" if not context_sources else "Transform + Context"
 
+    @staticmethod
+    def _get_output_fields(action_config: Dict[str, Any], schema_dir: Optional[Path] = None) -> List[str]:
+        """Extract output field names from action config schema."""
+        import yaml
+
+        # Check inline schema first
+        schema = action_config.get("schema", {})
+        if schema:
+            if isinstance(schema, dict):
+                # Could be {"field": "type"} or {"properties": {...}}
+                if "properties" in schema:
+                    return list(schema["properties"].keys())
+                # Simple format: {"field_name": "string", ...}
+                return list(schema.keys())
+
+        # Check schema_name reference and load from file
+        schema_name = action_config.get("schema_name")
+        if schema_name:
+            # Try to load schema file
+            if schema_dir is None:
+                schema_dir = Path.cwd() / "schema"
+
+            schema_file = schema_dir / f"{schema_name}.yml"
+            if schema_file.exists():
+                try:
+                    with open(schema_file, "r") as f:
+                        schema_data = yaml.safe_load(f)
+                    if schema_data:
+                        # Handle JSON Schema format with properties
+                        if "properties" in schema_data:
+                            return list(schema_data["properties"].keys())
+                        # Handle simple format
+                        if isinstance(schema_data, dict):
+                            # Filter out JSON Schema keywords
+                            keywords = {"type", "description", "required", "$schema", "title", "additionalProperties"}
+                            fields = [k for k in schema_data.keys() if k not in keywords]
+                            if fields:
+                                return fields
+                except Exception:
+                    pass
+            return [f"[schema: {schema_name}]"]
+
+        return []
+
+    def _get_input_fields(self, action_config: Dict[str, Any], dependency_info: Dict[str, Any]) -> List[str]:
+        """Get input fields from dependencies and context_scope."""
+        fields = []
+
+        # Fields from context_scope.observe
+        ctx = action_config.get("context_scope", {})
+        for field_ref in ctx.get("observe", []):
+            fields.append(f"{field_ref} (observe)")
+        for field_ref in ctx.get("passthrough", []):
+            fields.append(f"{field_ref} (passthrough)")
+
+        return fields
+
 
 @click.group(name="inspect")
 def inspect():
@@ -241,12 +298,15 @@ class GraphCommand(BaseInspectCommand):
         execution_order = workflow.execution_order or list(workflow.agent_configs.keys())
 
         if self.json_output:
-            self._output_json(dependency_info, execution_order)
+            self._output_json(workflow, dependency_info, execution_order)
         else:
             self._output_rich(workflow, dependency_info, execution_order)
 
     def _output_json(
-        self, dependency_info: Dict[str, Any], execution_order: List[str]
+        self,
+        workflow: AgentWorkflow,
+        dependency_info: Dict[str, Any],
+        execution_order: List[str],
     ) -> None:
         output = {
             "workflow": self.agent_name,
@@ -258,6 +318,9 @@ class GraphCommand(BaseInspectCommand):
                     ),
                     "input_sources": info["input_sources"],
                     "context_sources": info["context_sources"],
+                    "output_fields": self._get_output_fields(
+                        workflow.agent_configs.get(name, {})
+                    ),
                 }
                 for name, info in dependency_info.items()
             },
@@ -307,8 +370,14 @@ class GraphCommand(BaseInspectCommand):
             for src in info["context_sources"]:
                 node.add(f"[yellow]◇ {src}[/yellow] [dim](context)[/dim]")
 
+            # Output fields
+            output_fields = self._get_output_fields(action_config)
+            if output_fields:
+                outputs_str = ", ".join(output_fields)
+                node.add(f"[magenta]→ {outputs_str}[/magenta]")
+
         self.console.print(tree)
-        self.console.print("\n[dim]← input  ◇ context[/dim]")
+        self.console.print("\n[dim]← input  ◇ context  → output[/dim]")
 
 
 @inspect.command(name="graph")
@@ -376,6 +445,7 @@ class ActionCommand(BaseInspectCommand):
             "input_sources": info["input_sources"],
             "context_sources": info["context_sources"],
             "context_scope": info["context_scope"],
+            "output_fields": self._get_output_fields(action_config),
         }
         click.echo(json_lib.dumps(output, indent=2))
 
@@ -418,20 +488,29 @@ class ActionCommand(BaseInspectCommand):
 
         self.console.print(tree)
 
-        # Context scope
+        # Context scope (input fields)
         ctx = info["context_scope"]
         if ctx["observe"] or ctx["passthrough"]:
             self.console.print()
-            scope_tree = Tree("[bold]Context Scope[/bold]")
+            scope_tree = Tree("[bold]Input Fields (from context_scope)[/bold]")
             if ctx["observe"]:
-                obs = scope_tree.add("observe:")
+                obs = scope_tree.add("[cyan]observe:[/cyan]")
                 for f in ctx["observe"]:
                     obs.add(f"• {f}")
             if ctx["passthrough"]:
-                pas = scope_tree.add("passthrough:")
+                pas = scope_tree.add("[cyan]passthrough:[/cyan]")
                 for f in ctx["passthrough"]:
                     pas.add(f"• {f}")
             self.console.print(scope_tree)
+
+        # Output fields (from schema)
+        output_fields = self._get_output_fields(action_config)
+        if output_fields:
+            self.console.print()
+            out_tree = Tree("[bold]Output Fields (from schema)[/bold]")
+            for f in output_fields:
+                out_tree.add(f"[magenta]• {f}[/magenta]")
+            self.console.print(out_tree)
 
         # Deprecation
         if info["has_primary_dependency"]:
