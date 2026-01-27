@@ -1,7 +1,7 @@
-"""CLI integration tests for the inspect field-flow command.
+"""CLI integration tests for the inspect commands.
 
 Note: Tests that require full project setup are marked with pytest.mark.skip
-because the project structure is complex. The core FieldFlowAnalyzer logic
+because the project structure is complex. The core analysis logic
 is tested in tests/validation/static_analyzer/test_field_flow_analyzer.py
 """
 
@@ -20,56 +20,71 @@ def cli_runner():
     return CliRunner()
 
 
-class TestInspectFieldFlowCommand:
-    """Tests for the inspect field-flow CLI command."""
+class TestInspectDependenciesCommand:
+    """Tests for the inspect dependencies CLI command."""
 
     def test_help_message(self, cli_runner):
         """Test that help message is displayed correctly."""
-        result = cli_runner.invoke(cli, ["inspect", "field-flow", "--help"])
+        result = cli_runner.invoke(cli, ["inspect", "dependencies", "--help"])
 
         assert result.exit_code == 0
-        assert "Trace and visualize data flow" in result.output
+        assert "Analyze workflow dependencies" in result.output
         assert "--agent" in result.output
         assert "--json" in result.output
-        assert "--verbose" in result.output
-        assert "--errors-only" in result.output
-        assert "--field" in result.output
 
-    def test_inspect_group_help(self, cli_runner):
-        """Test that inspect group help is displayed."""
-        result = cli_runner.invoke(cli, ["inspect", "--help"])
-
-        assert result.exit_code == 0
-        assert "field-flow" in result.output
-        assert "Inspect workflow structure" in result.output
-
-    def test_field_flow_requires_agent_option(self, cli_runner):
+    def test_dependencies_requires_agent_option(self, cli_runner):
         """Test that --agent option is required."""
-        result = cli_runner.invoke(cli, ["inspect", "field-flow"])
+        result = cli_runner.invoke(cli, ["inspect", "dependencies"])
 
         assert result.exit_code != 0
         assert "Missing option" in result.output or "required" in result.output.lower()
 
-    def test_field_flow_requires_project(self, cli_runner, tmp_path):
-        """Test command fails gracefully outside project."""
-        os.chdir(tmp_path)  # No agent_actions.yml here
 
-        result = cli_runner.invoke(cli, ["inspect", "field-flow", "-a", "test_workflow"])
+class TestInspectGraphCommand:
+    """Tests for the inspect graph CLI command."""
 
-        # Should fail because not in a project
+    def test_help_message(self, cli_runner):
+        """Test that help message is displayed correctly."""
+        result = cli_runner.invoke(cli, ["inspect", "graph", "--help"])
+
+        assert result.exit_code == 0
+        assert "dependency graph" in result.output.lower()
+        assert "--agent" in result.output
+        assert "--json" in result.output
+
+    def test_graph_requires_agent_option(self, cli_runner):
+        """Test that --agent option is required."""
+        result = cli_runner.invoke(cli, ["inspect", "graph"])
+
         assert result.exit_code != 0
+        assert "Missing option" in result.output or "required" in result.output.lower()
 
-    def test_field_flow_invalid_agent_in_project(self, cli_runner, tmp_path):
-        """Test error handling for non-existent agent within a project."""
-        # Create minimal project marker
-        (tmp_path / "agent_actions.yml").write_text("name: test_project\nversion: 1.0.0\n")
-        os.chdir(tmp_path)
 
-        result = cli_runner.invoke(cli, ["inspect", "field-flow", "-a", "nonexistent_workflow"])
+class TestInspectActionCommand:
+    """Tests for the inspect action CLI command."""
 
-        # Should fail gracefully with helpful error
+    def test_help_message(self, cli_runner):
+        """Test that help message is displayed correctly."""
+        result = cli_runner.invoke(cli, ["inspect", "action", "--help"])
+
+        assert result.exit_code == 0
+        assert "details for a specific action" in result.output.lower()
+        assert "--agent" in result.output
+        assert "--json" in result.output
+
+    def test_action_requires_agent_option(self, cli_runner):
+        """Test that --agent option is required."""
+        result = cli_runner.invoke(cli, ["inspect", "action", "test_action"])
+
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "error" in result.output.lower()
+        assert "Missing option" in result.output or "required" in result.output.lower()
+
+    def test_action_requires_action_name(self, cli_runner):
+        """Test that action name argument is required."""
+        result = cli_runner.invoke(cli, ["inspect", "action", "-a", "test_workflow"])
+
+        assert result.exit_code != 0
+        assert "Missing argument" in result.output or "required" in result.output.lower()
 
 
 class TestInspectCommandGroup:
@@ -82,9 +97,21 @@ class TestInspectCommandGroup:
         # Should show usage/help for the group
         assert result.exit_code == 0 or "Usage:" in result.output
 
-    def test_inspect_field_flow_is_subcommand(self, cli_runner):
-        """Test that field-flow is a subcommand of inspect."""
+    def test_inspect_group_help(self, cli_runner):
+        """Test that inspect group help is displayed."""
         result = cli_runner.invoke(cli, ["inspect", "--help"])
 
-        assert "field-flow" in result.output
+        assert result.exit_code == 0
+        assert "dependencies" in result.output
+        assert "graph" in result.output
+        assert "action" in result.output
+        assert "Inspect workflow structure" in result.output
+
+    def test_inspect_subcommands_available(self, cli_runner):
+        """Test that all subcommands are listed."""
+        result = cli_runner.invoke(cli, ["inspect", "--help"])
+
+        assert "dependencies" in result.output
+        assert "graph" in result.output
+        assert "action" in result.output
         assert result.exit_code == 0

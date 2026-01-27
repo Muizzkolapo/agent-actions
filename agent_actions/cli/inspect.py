@@ -7,7 +7,7 @@ which includes subcommands for analyzing workflow structure and data flow.
 
 import json as json_lib
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import click
 from rich.console import Console
@@ -72,54 +72,14 @@ class BaseInspectCommand:
         )
         return workflow
 
-
-@click.group(name="inspect")
-def inspect():
-    """Inspect workflow structure and data flow."""
-
-
-class DependenciesCommand(BaseInspectCommand):
-    """Implementation of the dependencies inspection command."""
-
-    def __init__(
-        self,
-        agent: str,
-        user_code: Optional[str],
-        json_output: bool,
-        action_filter: Optional[str],
-    ):
-        """Initialize the dependencies command."""
-        super().__init__(agent, user_code, json_output)
-        self.action_filter = action_filter
-
-    def execute(self) -> None:
-        """Execute the dependencies command."""
-        if not self.json_output:
-            self.console.print(f"[cyan]Dependency Analysis: {self.agent_name}[/cyan]\n")
-
-        # Load workflow
-        workflow = self._load_workflow()
-
-        # Analyze dependencies
-        dependency_info = self._analyze_dependencies(workflow)
-
-        # Output based on format
-        if self.json_output:
-            self._output_json(dependency_info)
-        else:
-            self._output_rich(dependency_info, workflow.execution_order)
-
     def _analyze_dependencies(self, workflow: AgentWorkflow) -> Dict[str, Any]:
-        """Analyze dependencies for all actions."""
-        from agent_actions.prompt.context.scope import (
-            ContextScopeProcessor,
-        )
+        """Analyze dependencies for all actions using runtime inference logic."""
+        from agent_actions.prompt.context.scope import ContextScopeProcessor
 
         workflow_actions = list(workflow.agent_configs.keys())
         result = {}
 
         for action_name, action_config in workflow.agent_configs.items():
-            # Get explicit dependencies
             deps_raw = action_config.get("dependencies", [])
             if isinstance(deps_raw, str):
                 explicit_deps = [deps_raw]
@@ -128,226 +88,375 @@ class DependenciesCommand(BaseInspectCommand):
             else:
                 explicit_deps = []
 
-            # Infer dependencies using the same logic as runtime
             try:
                 input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
                     action_config, workflow_actions, action_name
                 )
-            except Exception as e:
+            except Exception:
                 input_sources = explicit_deps
                 context_sources = []
 
-            # Get context_scope details
             context_scope = action_config.get("context_scope", {})
-            observe = context_scope.get("observe", [])
-            passthrough = context_scope.get("passthrough", [])
-
-            # Check for deprecated primary_dependency
             has_primary_dep = "primary_dependency" in action_config
-            primary_dep = action_config.get("primary_dependency") if has_primary_dep else None
 
             result[action_name] = {
                 "explicit_dependencies": explicit_deps,
                 "input_sources": input_sources,
                 "context_sources": context_sources,
                 "context_scope": {
-                    "observe": observe,
-                    "passthrough": passthrough,
+                    "observe": context_scope.get("observe", []),
+                    "passthrough": context_scope.get("passthrough", []),
                 },
                 "has_primary_dependency": has_primary_dep,
-                "primary_dependency": primary_dep,
+                "primary_dependency": action_config.get("primary_dependency"),
             }
 
         return result
 
+    @staticmethod
+    def _get_action_type(input_sources: List[str], context_sources: List[str]) -> str:
+        """Describe the action type based on its dependencies."""
+        if not input_sources:
+            return "Source"
+        if len(input_sources) > 1:
+            return "Merge" if not context_sources else "Merge + Context"
+        return "Transform" if not context_sources else "Transform + Context"
+
+
+@click.group(name="inspect")
+def inspect():
+    """Inspect workflow structure and data flow."""
+
+
+# =============================================================================
+# Dependencies Command
+# =============================================================================
+
+
+class DependenciesCommand(BaseInspectCommand):
+    """Show dependency analysis in table format."""
+
+    def __init__(
+        self,
+        agent: str,
+        user_code: Optional[str],
+        json_output: bool,
+        action_filter: Optional[str],
+    ):
+        super().__init__(agent, user_code, json_output)
+        self.action_filter = action_filter
+
+    def execute(self) -> None:
+        if not self.json_output:
+            self.console.print(f"[cyan]Dependency Analysis: {self.agent_name}[/cyan]\n")
+
+        workflow = self._load_workflow()
+        dependency_info = self._analyze_dependencies(workflow)
+
+        if self.json_output:
+            self._output_json(dependency_info)
+        else:
+            self._output_rich(dependency_info, workflow.execution_order)
+
     def _output_json(self, dependency_info: Dict[str, Any]) -> None:
-        """Output dependencies as JSON."""
-        output = {
-            "workflow": self.agent_name,
-            "actions": dependency_info,
-        }
+        output = {"workflow": self.agent_name, "actions": dependency_info}
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(self, dependency_info: Dict[str, Any], execution_order: list) -> None:
-        """Output dependencies using rich formatting."""
-        # Filter to specific action if requested
         if self.action_filter:
             if self.action_filter not in dependency_info:
                 self.console.print(f"[red]Action '{self.action_filter}' not found[/red]")
-                available = list(dependency_info.keys())
-                self.console.print(f"[dim]Available actions: {', '.join(available)}[/dim]")
+                self.console.print(f"[dim]Available: {', '.join(dependency_info.keys())}[/dim]")
                 return
             dependency_info = {self.action_filter: dependency_info[self.action_filter]}
 
-        # Check for deprecated primary_dependency usage
-        deprecated_actions = [
-            name for name, info in dependency_info.items() if info["has_primary_dependency"]
-        ]
-        if deprecated_actions:
-            self.console.print(
-                "[yellow]⚠️  DEPRECATION WARNING: The following actions use 'primary_dependency':[/yellow]"
-            )
-            for name in deprecated_actions:
+        # Deprecation warnings
+        deprecated = [n for n, i in dependency_info.items() if i["has_primary_dependency"]]
+        if deprecated:
+            self.console.print("[yellow]⚠ Deprecated 'primary_dependency' in:[/yellow]")
+            for name in deprecated:
                 self.console.print(f"  • {name}")
-            self.console.print(
-                "[dim]Use 'dependencies' for input sources; context is auto-inferred from context_scope[/dim]\n"
-            )
+            self.console.print("[dim]Use 'dependencies' instead[/dim]\n")
 
-        # Create table
-        table = Table(title="Dependency Model", show_lines=True, title_style="bold cyan")
-        table.add_column("Action", style="bold white", no_wrap=True)
+        # Table
+        table = Table(title="Dependency Model", show_lines=True)
+        table.add_column("Action", style="bold")
         table.add_column("Input Sources", style="green")
         table.add_column("Context Sources", style="yellow")
-        table.add_column("Type", style="cyan", width=12)
+        table.add_column("Type", style="cyan")
 
-        # Sort by execution order if available
-        actions_to_display = execution_order if execution_order else list(dependency_info.keys())
-
-        for action_name in actions_to_display:
-            if action_name not in dependency_info:
+        order = execution_order if execution_order else list(dependency_info.keys())
+        for name in order:
+            if name not in dependency_info:
                 continue
+            info = dependency_info[name]
+            inputs = info["input_sources"]
+            contexts = info["context_sources"]
 
-            info = dependency_info[action_name]
-            input_sources = info["input_sources"]
-            context_sources = info["context_sources"]
+            input_str = ", ".join(inputs) if inputs else "[dim]source data[/dim]"
+            context_str = ", ".join(contexts) if contexts else "[dim]none[/dim]"
+            action_type = self._get_action_type(inputs, contexts)
 
-            # Format input sources
-            if not input_sources:
-                input_str = "[dim]none (source data)[/dim]"
-                dep_type = "Source"
-            elif len(input_sources) == 1:
-                input_str = input_sources[0]
-                dep_type = "Single Input"
-            else:
-                input_str = "\n".join(f"• {src}" for src in input_sources)
-                dep_type = "Merge"
-
-            # Format context sources
-            if not context_sources:
-                context_str = "[dim]none[/dim]"
-            else:
-                context_str = "\n".join(f"• {src} (auto)" for src in context_sources)
-
-            table.add_row(action_name, input_str, context_str, dep_type)
+            table.add_row(name, input_str, context_str, action_type)
 
         self.console.print(table)
 
-        # Show detailed breakdown if single action
-        if self.action_filter and self.action_filter in dependency_info:
-            self._show_action_detail(self.action_filter, dependency_info[self.action_filter])
-
-    def _show_action_detail(self, action_name: str, info: Dict[str, Any]) -> None:
-        """Show detailed dependency info for a single action."""
-        self.console.print(f"\n[bold]Detailed Dependency Info: {action_name}[/bold]\n")
-
-        tree = Tree(f"[cyan]{action_name}[/cyan]")
-
-        # Input sources
-        if info["input_sources"]:
-            input_branch = tree.add(
-                "[bold green]Input Sources[/bold green] (execution dependencies)"
-            )
-            for src in info["input_sources"]:
-                input_branch.add(f"• {src}")
-            input_branch.add("[dim]→ Determines execution count (one run per input record)[/dim]")
-        else:
-            tree.add(
-                "[bold green]Input Sources[/bold green]: [dim]none (processes source data)[/dim]"
-            )
-
-        # Context sources
-        if info["context_sources"]:
-            context_branch = tree.add(
-                "[bold yellow]Context Sources[/bold yellow] (auto-inferred from context_scope)"
-            )
-            for src in info["context_sources"]:
-                context_branch.add(f"• {src}")
-            context_branch.add("[dim]→ Loaded via historical lineage (same branch as input)[/dim]")
-        else:
-            tree.add("[bold yellow]Context Sources[/bold yellow]: [dim]none[/dim]")
-
-        # Context scope details
-        context_scope = info["context_scope"]
-        if context_scope["observe"] or context_scope["passthrough"]:
-            scope_branch = tree.add("[bold]Context Scope Configuration[/bold]")
-            if context_scope["observe"]:
-                obs_branch = scope_branch.add("observe:")
-                for field in context_scope["observe"]:
-                    obs_branch.add(f"• {field}")
-            if context_scope["passthrough"]:
-                pass_branch = scope_branch.add("passthrough:")
-                for field in context_scope["passthrough"]:
-                    pass_branch.add(f"• {field}")
-
-        # Deprecation warning
-        if info["has_primary_dependency"]:
-            tree.add(
-                f"[yellow]⚠️  Uses deprecated 'primary_dependency': {info['primary_dependency']}[/yellow]"
-            )
-
-        self.console.print(Panel(tree))
-
 
 @inspect.command(name="dependencies")
-@click.option(
-    "-a",
-    "--agent",
-    required=True,
-    help="Agent/workflow configuration name",
-)
-@click.option(
-    "-u",
-    "--user-code",
-    required=False,
-    type=click.Path(exists=True, file_okay=False, dir_okay=True),
-    help="Path to user code directory containing UDFs",
-)
-@click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    help="Output as JSON for programmatic use",
-)
-@click.option(
-    "--action",
-    "action_filter",
-    required=False,
-    help="Show detailed view for a specific action",
-)
+@click.option("-a", "--agent", required=True, help="Workflow name")
+@click.option("-u", "--user-code", required=False, help="Path to user code directory")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.option("--action", "action_filter", required=False, help="Filter to specific action")
 @handles_user_errors("inspect dependencies")
 @requires_project
 def dependencies(
-    agent: str,
-    user_code: Optional[str],
-    json_output: bool,
-    action_filter: Optional[str],
+    agent: str, user_code: Optional[str], json_output: bool, action_filter: Optional[str]
 ) -> None:
     """
     Analyze workflow dependencies and auto-inferred context.
 
-    Shows the simplified dependency model:
-    - Input sources: Actions in 'dependencies' (determines execution count)
-    - Context sources: Auto-inferred from 'context_scope' (historical data)
-
-    This command validates the new dependency model and identifies:
-    - Deprecated 'primary_dependency' usage
-    - Auto-inferred context dependencies
-    - Merge patterns (multiple input sources)
+    Shows input sources (execution dependencies) and context sources
+    (auto-inferred from context_scope) for each action.
 
     Examples:
-        # Analyze entire workflow
         agac inspect dependencies -a my_workflow
-
-        # Detailed view for specific action
-        agac inspect dependencies -a my_workflow --action generate_question
-
-        # JSON output
-        agac inspect dependencies -a my_workflow --json
+        agac inspect dependencies -a my_workflow --action extract_facts
     """
-    command = DependenciesCommand(
-        agent=agent,
-        user_code=user_code,
-        json_output=json_output,
-        action_filter=action_filter,
-    )
-    command.execute()
+    DependenciesCommand(
+        agent=agent, user_code=user_code, json_output=json_output, action_filter=action_filter
+    ).execute()
+
+
+# =============================================================================
+# Graph Command
+# =============================================================================
+
+
+class GraphCommand(BaseInspectCommand):
+    """Show workflow structure as a visual dependency graph."""
+
+    def execute(self) -> None:
+        workflow = self._load_workflow()
+        dependency_info = self._analyze_dependencies(workflow)
+        execution_order = workflow.execution_order or list(workflow.agent_configs.keys())
+
+        if self.json_output:
+            self._output_json(dependency_info, execution_order)
+        else:
+            self._output_rich(workflow, dependency_info, execution_order)
+
+    def _output_json(
+        self, dependency_info: Dict[str, Any], execution_order: List[str]
+    ) -> None:
+        output = {
+            "workflow": self.agent_name,
+            "execution_order": execution_order,
+            "actions": {
+                name: {
+                    "type": self._get_action_type(
+                        info["input_sources"], info["context_sources"]
+                    ),
+                    "input_sources": info["input_sources"],
+                    "context_sources": info["context_sources"],
+                }
+                for name, info in dependency_info.items()
+            },
+        }
+        click.echo(json_lib.dumps(output, indent=2))
+
+    def _output_rich(
+        self,
+        workflow: AgentWorkflow,
+        dependency_info: Dict[str, Any],
+        execution_order: List[str],
+    ) -> None:
+        # Header
+        flow_str = " → ".join(execution_order) if execution_order else "none"
+        self.console.print(f"[bold cyan]Workflow: {self.agent_name}[/bold cyan]")
+        self.console.print(f"[dim]Flow: {flow_str}[/dim]\n")
+
+        # Tree view
+        tree = Tree("[bold]Actions[/bold]")
+
+        for action_name in execution_order:
+            if action_name not in dependency_info:
+                continue
+
+            info = dependency_info[action_name]
+            action_config = workflow.agent_configs.get(action_name, {})
+            action_type = self._get_action_type(
+                info["input_sources"], info["context_sources"]
+            )
+
+            # Action node
+            node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")
+
+            # Kind (if not llm)
+            kind = action_config.get("kind", "llm")
+            if kind != "llm":
+                node.add(f"[dim]kind: {kind}[/dim]")
+
+            # Input sources
+            if info["input_sources"]:
+                for src in info["input_sources"]:
+                    node.add(f"[green]← {src}[/green]")
+            else:
+                node.add("[green]← source data[/green]")
+
+            # Context sources
+            for src in info["context_sources"]:
+                node.add(f"[yellow]◇ {src}[/yellow] [dim](context)[/dim]")
+
+        self.console.print(tree)
+        self.console.print("\n[dim]← input  ◇ context[/dim]")
+
+
+@inspect.command(name="graph")
+@click.option("-a", "--agent", required=True, help="Workflow name")
+@click.option("-u", "--user-code", required=False, help="Path to user code directory")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@handles_user_errors("inspect graph")
+@requires_project
+def graph(agent: str, user_code: Optional[str], json_output: bool) -> None:
+    """
+    Show workflow structure as a dependency graph.
+
+    Displays how actions connect: which actions feed into others
+    and which provide context data.
+
+    Examples:
+        agac inspect graph -a my_workflow
+        agac inspect graph -a my_workflow --json
+    """
+    GraphCommand(agent=agent, user_code=user_code, json_output=json_output).execute()
+
+
+# =============================================================================
+# Action Command
+# =============================================================================
+
+
+class ActionCommand(BaseInspectCommand):
+    """Show detailed information about a single action."""
+
+    def __init__(
+        self,
+        agent: str,
+        user_code: Optional[str],
+        json_output: bool,
+        action_name: str,
+    ):
+        super().__init__(agent, user_code, json_output)
+        self.action_name = action_name
+
+    def execute(self) -> None:
+        workflow = self._load_workflow()
+
+        if self.action_name not in workflow.agent_configs:
+            self.console.print(f"[red]Action '{self.action_name}' not found[/red]")
+            self.console.print(f"[dim]Available: {', '.join(workflow.agent_configs.keys())}[/dim]")
+            return
+
+        action_config = workflow.agent_configs[self.action_name]
+        dependency_info = self._analyze_dependencies(workflow)
+        info = dependency_info[self.action_name]
+
+        if self.json_output:
+            self._output_json(action_config, info)
+        else:
+            self._output_rich(action_config, info)
+
+    def _output_json(self, action_config: Dict[str, Any], info: Dict[str, Any]) -> None:
+        output = {
+            "workflow": self.agent_name,
+            "action": self.action_name,
+            "type": self._get_action_type(info["input_sources"], info["context_sources"]),
+            "kind": action_config.get("kind", "llm"),
+            "model": action_config.get("model_name"),
+            "input_sources": info["input_sources"],
+            "context_sources": info["context_sources"],
+            "context_scope": info["context_scope"],
+        }
+        click.echo(json_lib.dumps(output, indent=2))
+
+    def _output_rich(self, action_config: Dict[str, Any], info: Dict[str, Any]) -> None:
+        action_type = self._get_action_type(info["input_sources"], info["context_sources"])
+
+        # Header
+        self.console.print(f"[bold cyan]Action: {self.action_name}[/bold cyan]")
+        self.console.print(f"[dim]Type: {action_type}[/dim]\n")
+
+        # Config
+        kind = action_config.get("kind", "llm")
+        model = action_config.get("model_name", "default")
+        granularity = action_config.get("granularity", "record")
+
+        config_table = Table(show_header=False, box=None, padding=(0, 2))
+        config_table.add_column(style="bold")
+        config_table.add_column()
+        config_table.add_row("Kind:", kind)
+        config_table.add_row("Model:", model)
+        config_table.add_row("Granularity:", granularity)
+        self.console.print(Panel(config_table, title="Configuration", border_style="dim"))
+
+        # Dependencies
+        tree = Tree("[bold]Dependencies[/bold]")
+
+        if info["input_sources"]:
+            branch = tree.add("[green]Input Sources[/green]")
+            for src in info["input_sources"]:
+                branch.add(f"• {src}")
+        else:
+            tree.add("[green]Input Sources[/green]: [dim]source data[/dim]")
+
+        if info["context_sources"]:
+            branch = tree.add("[yellow]Context Sources[/yellow]")
+            for src in info["context_sources"]:
+                branch.add(f"• {src}")
+        else:
+            tree.add("[yellow]Context Sources[/yellow]: [dim]none[/dim]")
+
+        self.console.print(tree)
+
+        # Context scope
+        ctx = info["context_scope"]
+        if ctx["observe"] or ctx["passthrough"]:
+            self.console.print()
+            scope_tree = Tree("[bold]Context Scope[/bold]")
+            if ctx["observe"]:
+                obs = scope_tree.add("observe:")
+                for f in ctx["observe"]:
+                    obs.add(f"• {f}")
+            if ctx["passthrough"]:
+                pas = scope_tree.add("passthrough:")
+                for f in ctx["passthrough"]:
+                    pas.add(f"• {f}")
+            self.console.print(scope_tree)
+
+        # Deprecation
+        if info["has_primary_dependency"]:
+            self.console.print("\n[yellow]⚠ Uses deprecated 'primary_dependency'[/yellow]")
+
+
+@inspect.command(name="action")
+@click.option("-a", "--agent", required=True, help="Workflow name")
+@click.option("-u", "--user-code", required=False, help="Path to user code directory")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.argument("action_name")
+@handles_user_errors("inspect action")
+@requires_project
+def action(
+    agent: str, user_code: Optional[str], json_output: bool, action_name: str
+) -> None:
+    """
+    Show details for a specific action.
+
+    Displays configuration, dependencies, and context scope.
+
+    Examples:
+        agac inspect action -a my_workflow extract_facts
+        agac inspect action -a my_workflow generate_question --json
+    """
+    ActionCommand(
+        agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
+    ).execute()
