@@ -197,8 +197,8 @@ Guards validate semantic and business logic after schema passes:
 - name: generate_final
   dependencies: score_quality  # Input source
   guard:
-    condition: 'score >= 85'  # Semantic: only high quality
-    on_false: "filter"
+    clause: 'score >= 85'  # Semantic: only high quality
+    behavior: filter
 ```
 
 ### Reject Specific Content
@@ -207,14 +207,14 @@ Guards validate semantic and business logic after schema passes:
 # Filter out responses with unwanted status
 - name: next_action
   guard:
-    condition: 'status != "invalid"'
-    on_false: "filter"
+    clause: 'status != "invalid"'
+    behavior: filter
 
 # Filter based on category
 - name: process_technical
   guard:
-    condition: 'category IN ["technical", "implementation"]'
-    on_false: "filter"
+    clause: 'category IN ["technical", "implementation"]'
+    behavior: filter
 ```
 
 ### Skip vs Filter
@@ -229,13 +229,13 @@ Consider what happens when a guard fails. You have two choices, and they have ve
 ```yaml
 # Filter: Record stops here
 guard:
-  condition: 'quality >= 50'
-  on_false: "filter"
+  clause: 'quality >= 50'
+  behavior: filter
 
 # Skip: Record continues without this action
 guard:
-  condition: 'needs_enhancement == true'
-  on_false: "skip"
+  clause: 'needs_enhancement == true'
+  behavior: skip
 ```
 
 ## Combining All Layers
@@ -261,8 +261,8 @@ actions:
   - name: validate_facts
     dependencies: extract_facts  # Input source
     guard:
-      condition: 'candidate_facts_list != []'
-      on_false: "filter"
+      clause: 'candidate_facts_list != []'
+      behavior: filter
 
   # Step 3: Score quality with schema
   - name: score_quality
@@ -278,8 +278,8 @@ actions:
   - name: generate_output
     dependencies: score_quality  # Input source
     guard:
-      condition: 'score >= 85'
-      on_false: "filter"
+      clause: 'score >= 85'
+      behavior: filter
 ```
 
 ### Pattern: Two-Stage LLM Validation
@@ -315,8 +315,8 @@ actions:
   - name: publish_content
     dependencies: validate_content  # Input source
     guard:
-      condition: 'is_valid == true'
-      on_false: "filter"
+      clause: 'is_valid == true'
+      behavior: filter
 ```
 
 ### Pattern: Enum + Guard for Categories
@@ -346,8 +346,8 @@ properties:
 - name: process_valid
   dependencies: classify_content  # Input source
   guard:
-    condition: 'category != "invalid"'  # Filter "invalid" category
-    on_false: "filter"
+    clause: 'category != "invalid"'  # Filter "invalid" category
+    behavior: filter
 ```
 
 ### Pattern: Numeric Threshold with Reprompt
@@ -384,8 +384,8 @@ properties:
 - name: proceed_if_confident
   dependencies: assess_confidence  # Input source
   guard:
-    condition: 'confidence_score >= 70'
-    on_false: "filter"
+    clause: 'confidence_score >= 70'
+    behavior: filter
 ```
 
 ## Custom Validation with Tool Actions
@@ -412,8 +412,8 @@ actions:
   - name: next_step
     dependencies: custom_validate  # Input source
     guard:
-      condition: 'validation_passed == true'
-      on_false: "filter"
+      clause: 'validation_passed == true'
+      behavior: filter
 ```
 
 ```python
@@ -497,8 +497,8 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
 # Layer 3: Guard for quality
 - name: process
   guard:
-    condition: 'quality >= threshold'
-    on_false: "filter"
+    clause: 'quality >= threshold'
+    behavior: filter
 ```
 
 ### 2. Use Enums for Constrained Values
@@ -553,8 +553,8 @@ This is important: guards prevent downstream work. Place guards as early as poss
 - name: extract  # Cheap
 - name: validate  # Cheap
   guard:
-    condition: 'facts != []'
-    on_false: "filter"
+    clause: 'facts != []'
+    behavior: filter
 - name: expensive_llm_call  # Only runs on valid data
   dependencies: validate  # Input source
 ```

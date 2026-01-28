@@ -140,14 +140,14 @@ actions:
   - name: handle_high_priority
     dependencies: classify  # Input source
     guard:
-      condition: "classify.priority == 'high'"
-      on_false: skip
+      clause: "classify.priority == 'high'"
+      behavior: skip
 
   - name: handle_low_priority
     dependencies: classify  # Input source
     guard:
-      condition: "classify.priority == 'low'"
-      on_false: skip
+      clause: "classify.priority == 'low'"
+      behavior: skip
 ```
 
 The guard evaluates after `classify` completes, routing to the appropriate handler:
@@ -218,7 +218,7 @@ flowchart LR
 
 ```yaml
 defaults:
-  granularity: Record
+  granularity: record
 
 actions:
   - name: process_item
@@ -227,7 +227,7 @@ actions:
 
   - name: aggregate
     dependencies: process_item  # Input source
-    granularity: File
+    granularity: file
     kind: tool
     impl: aggregate_results
 ```

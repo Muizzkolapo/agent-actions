@@ -71,14 +71,14 @@ When using file granularity with tools:
 - name: deduplicate_records
   kind: tool
   impl: deduplicate_by_hash
-  granularity: File
+  granularity: file
 
 # Invalid: Guard with file granularity
 - name: conditional_dedupe
   kind: tool
   impl: deduplicate
-  granularity: File
-  guard:  # ERROR: Guards not supported with File granularity
+  granularity: file
+  guard:  # ERROR: Guards not supported with file granularity
     clause: "status == 'active'"
 ```
 

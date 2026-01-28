@@ -85,8 +85,8 @@ actions:
       Validate these facts: {{ extract_facts.facts }}
     schema: validation_result
     guard:
-      condition: "extract_facts.facts != []"
-      on_false: skip
+      clause: "extract_facts.facts != []"
+      behavior: skip
 ```
 
 Consider what happens when `extract_facts` returns an empty list. The guard on `validate_facts` checks the condition and skips the action entirely—no API call is made. This prevents unnecessary work and saves tokens.
