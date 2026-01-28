@@ -28,7 +28,7 @@ agac run -a my_workflow
 agac run -a my_workflow -u ./user_code --use-tools
 
 # Force parallel execution
-agac run -a my_workflow --parallel
+agac run -a my_workflow --execution-mode parallel
 
 # Run upstream dependencies first
 agac run -a my_workflow --upstream
@@ -48,11 +48,11 @@ agac run -a my_workflow --downstream
 | `--validate-only` / `-v` | Run pre-flight validation only (useful for CI/CD) |
 | `--debug` | Enable debug mode |
 | `--verbose` | Enable verbose output |
-| `--parallel` | Force parallel execution (overrides auto-detection) |
-| `--no-parallel` | Force sequential execution (overrides auto-detection) |
+| `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--upstream` | Execute upstream dependencies first |
 | `--downstream` | Execute downstream agentic workflows after completion |
+| `--static-typing/--no-static-typing` | Enable/disable static type checking (default: enabled) |
 
 ## Parallel Execution
 
@@ -63,13 +63,15 @@ Consider what happens when actions don't depend on each other. Agent Actions aut
 agac run -a my_workflow
 
 # Force parallel execution
-agac run -a my_workflow --parallel
+agac run -a my_workflow --execution-mode parallel
+# Or using short form:
+agac run -a my_workflow -e parallel
 
 # Force sequential execution
-agac run -a my_workflow --no-parallel
+agac run -a my_workflow --execution-mode sequential
 
 # Limit concurrent actions to 10
-agac run -a my_workflow --parallel --concurrency-limit 10
+agac run -a my_workflow -e parallel --concurrency-limit 10
 ```
 
 The diagram below shows how Agent Actions organizes actions into levels. Actions at the same level run in parallel because they don't depend on each other's outputs:
@@ -162,7 +164,7 @@ agac run -a my_workflow --verbose
 agac run -a my_workflow --debug
 
 # Run with parallel execution and custom concurrency limit
-agac run -a my_workflow --parallel --concurrency-limit 10
+agac run -a my_workflow -e parallel --concurrency-limit 10
 
 # Validate only - useful for CI/CD to catch errors before execution
 agac run -a my_workflow --validate-only

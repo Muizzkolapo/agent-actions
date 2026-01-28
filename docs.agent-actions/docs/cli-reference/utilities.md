@@ -50,7 +50,7 @@ You can run this command from any subdirectory within your project.
 Starting a new Agent Actions project from scratch? The `init` command creates a well-organized directory structure with all the standard folders you'll need.
 
 ```bash
-agac init [project-name] [options]
+agac init <project-name> [options]
 ```
 
 This creates:
@@ -69,15 +69,33 @@ Think of this like `npm init` or `git init` - it gives you a working starting po
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `-o, --output-dir` | Directory to create the project in (default: current directory) |
+| `-t, --template` | Template to use for project initialization (default: `default`) |
+| `-f, --force` | Overwrite existing files without prompting |
 | `--debug` | Enable debug mode |
 | `--verbose` / `-v` | Enable verbose output |
+
+**Examples:**
+```bash
+# Create a new project in the current directory
+agac init my_project
+
+# Create a project in a specific directory
+agac init my_project -o ~/projects
+
+# Use a specific template
+agac init my_project -t advanced
+
+# Force overwrite existing files
+agac init my_project -f
+```
 
 ## clean
 
 Over time, your project accumulates cached results, generated documentation, and temporary files. The `clean` command removes these artifacts and returns your project to a fresh state.
 
 ```bash
-agac clean [options]
+agac clean -a <workflow-name> [options]
 ```
 
 Removes:
@@ -85,6 +103,27 @@ Removes:
 - Generated documentation
 - Temporary files
 - Build artifacts
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-a, --agent TEXT` | Agentic workflow name (required) |
+| `-f, --force` | Skip interactive confirmation |
+| `--all` | Remove all directories (staging, target, artifacts) |
+| `--debug` | Enable debug mode |
+| `--verbose` / `-v` | Enable verbose output |
+
+**Examples:**
+```bash
+# Clean artifacts for a specific workflow (with confirmation)
+agac clean -a my_workflow
+
+# Force clean without confirmation
+agac clean -a my_workflow -f
+
+# Remove all directories including staging and target
+agac clean -a my_workflow --all
+```
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.
@@ -114,17 +153,23 @@ You can run this command from any subdirectory within your project.
 
 ## status
 
-Check the execution status of your agentic workflows. This shows which workflows are running, completed, or failed.
+Check the execution status of a specific agentic workflow. This shows which actions are running, completed, or failed.
 
 ```bash
-agac status [options]
+agac status -a <workflow-name> [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `-a, --agent TEXT` | Agentic workflow name (required) |
 | `--debug` | Enable debug mode |
 | `--verbose` / `-v` | Enable verbose output |
+
+**Example:**
+```bash
+agac status -a my_workflow
+```
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.

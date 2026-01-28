@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # @udf_tool Decorator
 
-How do you tell Agent Actions that a Python function should be available as a tool action? The `@udf_tool` decorator handles this registration, along with input/output schema validation.
+How do you tell Agent Actions that a Python function should be available as a tool action? The `@udf_tool` decorator handles this registration, along with optional output schema validation.
 
 UDFs (User-Defined Functions) let you add custom data processing, transformations, and business logic to your agentic workflows. The decorator ensures your functions integrate cleanly with the rest of the execution pipeline.
 
@@ -14,9 +14,13 @@ UDFs (User-Defined Functions) let you add custom data processing, transformation
 UDFs provide:
 
 - **Custom logic** - Implement transformations LLMs can't perform
-- **Type safety** - Input/output schema validation via type hints
+- **Type safety** - Output schema validation via type hints
 - **Integration** - Seamlessly mix with LLM actions in workflows
 - **Granularity control** - Process records individually or in batches
+
+:::info Input Schema
+Input structure is defined by `context_scope` in your workflow YAML, not in the decorator. The decorator only handles output validation.
+:::
 
 ## Syntax
 
@@ -24,26 +28,37 @@ UDFs provide:
 from typing import TypedDict
 from agent_actions import udf_tool
 
-class MyInput(TypedDict):
-    text: str
-    count: int
-
 class MyOutput(TypedDict):
     result: str
 
-@udf_tool(input_type=MyInput, output_type=MyOutput)
-def my_function(data: dict) -> dict:
+@udf_tool(output_type=MyOutput)
+def my_function(data: dict, **kwargs) -> dict:
     """Process data and return result."""
     return {"result": f"Processed: {data['text']}"}
+```
+
+Or without any output validation:
+
+```python
+from agent_actions import udf_tool
+
+@udf_tool()
+def simple_transform(data: dict, **kwargs) -> dict:
+    """Simple transformation without output validation."""
+    data['processed'] = True
+    return data
 ```
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `input_type` | type | Yes | TypedDict, Pydantic model, or dataclass for input schema |
-| `output_type` | type | No | Type for output validation |
+| `output_type` | type | No | TypedDict, Pydantic model, or dataclass for output validation |
+| `output_schema` | str | No | Schema file name for output validation (e.g., `"ValidationResult"`) |
 | `granularity` | Granularity | No | `RECORD` (default) or `FILE` processing |
+
+:::warning Mutually Exclusive
+You cannot specify both `output_type` and `output_schema`. Use one or the other.
 
 ## Directory Structure
 
@@ -75,25 +90,23 @@ Reference UDFs in your agentic workflow YAML by function name:
   granularity: record
 ```
 
-## Input Type Definition
+## Output Type Definition
 
 ### TypedDict (Recommended)
 
-TypedDict works like a schema definition—it tells Agent Actions what fields to expect:
+TypedDict works like a schema definition—it tells Agent Actions what fields to expect in the output:
 
 ```python
 from typing import TypedDict, List, Optional
 
-class QuestionInput(TypedDict, total=False):
-    """Input schema for question processing."""
-    syllabus_alignment_score: int
-    question: str
-    options: List[str]
-    answer: str
-    reasoning: Optional[str]
+class QuestionOutput(TypedDict, total=False):
+    """Output schema for question processing."""
+    question_status: str
+    status_reason: str
+    processed_at: Optional[str]
 ```
 
-The `total=False` makes all fields optional, which is useful when different records might have different fields present.
+The `total=False` makes all fields optional, which is useful when different outputs might have different fields present.
 
 ### Pydantic Model
 
@@ -101,23 +114,31 @@ The `total=False` makes all fields optional, which is useful when different reco
 from pydantic import BaseModel
 from typing import List
 
-class QuestionInput(BaseModel):
-    question: str
-    options: List[str]
-    answer: str
+class QuestionOutput(BaseModel):
+    question_status: str
+    status_reason: str
 ```
 
 ### Dataclass
 
 ```python
 from dataclasses import dataclass
-from typing import List
 
 @dataclass
-class QuestionInput:
-    question: str
-    options: List[str]
-    answer: str
+class QuestionOutput:
+    question_status: str
+    status_reason: str
+```
+
+### External Schema File
+
+You can also reference a schema file by name:
+
+```python
+@udf_tool(output_schema="ValidationResult")
+def validate_data(data: dict, **kwargs) -> dict:
+    # Schema is loaded from schema_dir at execution time
+    return {"valid": True, "errors": []}
 ```
 
 ## Examples
@@ -127,18 +148,17 @@ class QuestionInput:
 Let's explore a typical use case: processing one record at a time to add computed fields:
 
 ```python
-from typing import TypedDict, List
+from typing import TypedDict
 from agent_actions import udf_tool
 
 
-class FilterInput(TypedDict, total=False):
-    syllabus_alignment_score: int
-    question: str
-    options: List[str]
+class FilterOutput(TypedDict, total=False):
+    question_status: str
+    status_reason: str
 
 
-@udf_tool(input_type=FilterInput)
-def filter_questions_by_score(data: dict) -> dict:
+@udf_tool(output_type=FilterOutput)
+def filter_questions_by_score(data: dict, **kwargs) -> dict:
     """
     Mark questions based on alignment score.
 
@@ -171,18 +191,13 @@ Workflow usage:
 Consider what happens when you need to deduplicate facts across all records. You can't do this record-by-record—you need to see everything at once:
 
 ```python
-from typing import TypedDict, List, Dict, Any
+from typing import List, Dict, Any
 from agent_actions import udf_tool
-from agent_actions.configuration.new_format_schema import Granularity
+from agent_actions.config.schema import Granularity
 
 
-class FactInput(TypedDict, total=False):
-    fact: str
-    quote: str
-
-
-@udf_tool(input_type=FactInput, granularity=Granularity.FILE)
-def run_dedup(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+@udf_tool(granularity=Granularity.FILE)
+def run_dedup(data: List[Dict[str, Any]], **kwargs) -> List[Dict[str, Any]]:
     """
     Deduplicate facts across all records.
 
@@ -212,16 +227,12 @@ Workflow usage:
 ### Data Transformation
 
 ```python
-from typing import TypedDict, List, Dict, Any
+from typing import List, Dict, Any
 from agent_actions import udf_tool
 
 
-class FlattenInput(TypedDict, total=False):
-    candidate_facts_list: List[dict]
-
-
-@udf_tool(input_type=FlattenInput)
-def flatten_quotes(data: dict) -> List[Dict[str, Any]]:
+@udf_tool()
+def flatten_quotes(data: dict, **kwargs) -> List[Dict[str, Any]]:
     """
     Flatten nested facts structure.
 
@@ -246,17 +257,13 @@ from typing import TypedDict
 from agent_actions import udf_tool
 
 
-class ProcessInput(TypedDict):
-    text: str
-
-
 class ProcessOutput(TypedDict):
     processed: str
     word_count: int
 
 
-@udf_tool(input_type=ProcessInput, output_type=ProcessOutput)
-def process_text(data: dict) -> dict:
+@udf_tool(output_type=ProcessOutput)
+def process_text(data: dict, **kwargs) -> dict:
     """Process text with validated output."""
     text = data['text']
     return {
@@ -306,19 +313,13 @@ Here's where it gets interesting: with file granularity, how do you track which 
 Use `FileUDFResult` to track which inputs produced which outputs:
 
 ```python
-from typing import TypedDict, List, Dict
-from agent_actions import udf_tool
-from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
-from agent_actions.configuration.new_format_schema import Granularity
+from typing import List, Dict
+from agent_actions import udf_tool, FileUDFResult
+from agent_actions.config.schema import Granularity
 
 
-class DedupInput(TypedDict):
-    fact: str
-    id: str
-
-
-@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
-def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
+@udf_tool(granularity=Granularity.FILE)
+def dedup_with_lineage(data: List[Dict], **kwargs) -> FileUDFResult:
     """Deduplicate with source tracking."""
     seen = {}
     outputs = []
@@ -344,8 +345,8 @@ UDFs are auto-discovered from the `tools/` directory. The function name (case-in
 
 ```python
 # tools/my_tools/process.py
-@udf_tool(input_type=MyInput)
-def process_data(data):  # Referenced as "process_data"
+@udf_tool()
+def process_data(data, **kwargs):  # Referenced as "process_data"
     ...
 ```
 
@@ -373,12 +374,12 @@ class Input1(TypedDict):
 ### 2. Document Expected Input
 
 ```python
-@udf_tool(input_type=MyInput)
-def my_function(data: dict) -> dict:
+@udf_tool()
+def my_function(data: dict, **kwargs) -> dict:
     """
     Process data for downstream consumption.
 
-    Expected input fields:
+    Expected input fields (defined in workflow context_scope):
         - score: Quality score (0-100)
         - text: Content to process
 
@@ -391,8 +392,8 @@ def my_function(data: dict) -> dict:
 ### 3. Handle Missing Fields Gracefully
 
 ```python
-@udf_tool(input_type=MyInput)
-def safe_function(data: dict) -> dict:
+@udf_tool()
+def safe_function(data: dict, **kwargs) -> dict:
     # Use .get() with defaults
     score = data.get('score', 0)
     text = data.get('text', '')
@@ -403,8 +404,8 @@ def safe_function(data: dict) -> dict:
 ### 4. Return Complete Records
 
 ```python
-@udf_tool(input_type=MyInput)
-def augment_data(data: dict) -> dict:
+@udf_tool()
+def augment_data(data: dict, **kwargs) -> dict:
     # Add to existing data, don't replace
     data['new_field'] = 'computed_value'
     return data
@@ -413,8 +414,8 @@ def augment_data(data: dict) -> dict:
 ### 5. Use Logging for Debugging
 
 ```python
-@udf_tool(input_type=MyInput)
-def debuggable_function(data: dict) -> dict:
+@udf_tool()
+def debuggable_function(data: dict, **kwargs) -> dict:
     print(f"Processing record: {data.get('id', 'unknown')}")
     result = process(data)
     print(f"Result: {result.get('status')}")
@@ -425,24 +426,29 @@ def debuggable_function(data: dict) -> dict:
 
 Agent Actions catches configuration problems early. Here are common errors and how to fix them.
 
-### Missing Input Type
+### Both output_type and output_schema Specified
 
 ```
-ConfigurationError: udf_tool requires input_type parameter.
-  Use @udf_tool(input_type=MyType)
+ConfigurationError: Cannot specify both output_schema and output_type for 'my_function'.
+  Use one or the other.
 ```
 
-The input_type parameter is required—it's how Agent Actions validates incoming data:
+Choose either `output_type` (inline type definition) or `output_schema` (external schema file):
 
 ```python
-# Wrong
-@udf_tool
-def my_function(data):
+# Wrong - both specified
+@udf_tool(output_type=MyOutput, output_schema="MyOutput")
+def my_function(data, **kwargs):
     ...
 
-# Correct
-@udf_tool(input_type=MyInput)
-def my_function(data):
+# Correct - use one
+@udf_tool(output_type=MyOutput)
+def my_function(data, **kwargs):
+    ...
+
+# Also correct - use external schema
+@udf_tool(output_schema="MyOutput")
+def my_function(data, **kwargs):
     ...
 ```
 
