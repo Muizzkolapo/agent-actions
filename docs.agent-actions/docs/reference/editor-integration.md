@@ -1,6 +1,6 @@
 ---
 title: Editor Integration
-description: LSP support for VS Code, Neovim, and other editors
+description: LSP support and Workflow Navigator for VS Code, Neovim, and other editors
 sidebar_position: 10
 ---
 
@@ -83,7 +83,7 @@ npm run compile
 npx vsce package --allow-missing-repository
 
 # Install to VS Code
-code --install-extension agent-actions-lsp-0.2.0.vsix
+code --install-extension agent-actions-lsp-0.3.0.vsix
 ```
 
 After installation, reload VS Code (`Cmd+Shift+P` → "Developer: Reload Window").
@@ -118,6 +118,151 @@ code .
 # Option 2: Add the venv bin to PATH in your shell config
 export PATH="$HOME/projects/my-project/.venv/bin:$PATH"
 ```
+
+## VS Code Workflow Navigator
+
+Beyond LSP features, the VS Code extension includes a **Workflow Navigator** that provides real-time visibility into your workflow execution.
+
+```mermaid
+flowchart TB
+    subgraph "Workflow Navigator Features"
+        TREE["Sidebar Tree View"]
+        DAG["DAG Visualization"]
+        LENS["CodeLens Actions"]
+        DEC["File Decorations"]
+        STATUS["Status Bar"]
+    end
+
+    subgraph "Data Sources"
+        CONFIG["agent_config/*.yml"]
+        MANIFEST["agent_io/target/.manifest.json"]
+        RUNTIME["agent_io/.agent_status.json"]
+    end
+
+    CONFIG --> TREE
+    MANIFEST --> TREE
+    RUNTIME --> TREE
+    TREE --> DAG
+    TREE --> LENS
+    TREE --> DEC
+    TREE --> STATUS
+```
+
+### Sidebar Tree View
+
+The Explorer sidebar shows all workflows and actions in execution order:
+
+| Icon | Status | Meaning |
+|------|--------|---------|
+| ✓ (green) | Completed | Action finished successfully |
+| ↻ (yellow, spinning) | Running | Action currently executing |
+| ✗ (red) | Failed | Action encountered an error |
+| ○ (gray) | Pending | Action waiting to run |
+| ⊘ (blue) | Skipped | Action was skipped |
+
+**Features:**
+- Click any action to jump to its definition in the YAML config
+- Expand actions to see output folders
+- Multi-workflow support for projects with multiple workflows
+- Status summary shows completed/total count
+
+### DAG Visualization
+
+View your workflow as an interactive directed acyclic graph:
+
+```
+Keyboard Shortcut: Cmd+Shift+D (Mac) / Ctrl+Shift+D (Windows/Linux)
+Command Palette: "Agent Actions: Show Workflow DAG"
+```
+
+**Features:**
+- Action dependencies shown as directed edges
+- Status-colored nodes (green=completed, yellow=running, red=failed, gray=pending)
+- Click any node to navigate to its config definition
+- Toggle between vertical and horizontal layouts
+- Auto-updates as workflow runs
+
+### CodeLens Actions
+
+In workflow YAML files (`agent_config/*.yml`), each action definition shows inline links:
+
+```yaml
+actions:
+  - name: extract_facts    # 📁 Open Folder | 👁 View Output | ✅ completed
+    prompt: $prompts.Extract_Facts
+    dependencies: [load_data]
+```
+
+| Link | Action |
+|------|--------|
+| 📁 **Open Folder** | Open action output folder in file explorer |
+| 👁 **View Output** | Open first output file for quick preview |
+| Status indicator | Shows current status, click to open DAG |
+
+### File Decorations
+
+Action folders in `agent_io/target/` display badges:
+
+- **Execution order number** (1, 2, 3...) as badge
+- **Status-colored text** matching the action's current state
+
+This helps you quickly identify which output belongs to which action.
+
+### Status Bar
+
+The bottom status bar shows workflow progress at a glance:
+
+```
+$(graph) MyWorkflow: 5/10 | [6] process_results
+```
+
+- **Completed/total** count
+- **Currently running** action name (if any)
+- Click to focus the Workflow Navigator panel
+
+### Keyboard Shortcuts
+
+| Command | Mac | Windows/Linux | Description |
+|---------|-----|---------------|-------------|
+| Show Workflow DAG | `Cmd+Shift+D` | `Ctrl+Shift+D` | Open visual DAG panel |
+| Go to Action | `Cmd+Shift+A` | `Ctrl+Shift+A` | Quick-pick to jump to any action |
+| Refresh Workflow | `Cmd+Shift+R` | `Ctrl+Shift+R` | Manually refresh workflow state |
+
+### Settings
+
+Configure the Workflow Navigator in VS Code settings:
+
+```json
+{
+  "agentActions.pythonPath": "",
+  "agentActions.showStatusBar": true,
+  "agentActions.showCodeLens": true,
+  "agentActions.showFileDecorations": true,
+  "agentActions.dagLayout": "vertical",
+  "agentActions.refreshInterval": 0
+}
+```
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `pythonPath` | `""` | Python interpreter path. Empty = auto-detect from Python extension. |
+| `showStatusBar` | `true` | Show workflow progress in status bar. |
+| `showCodeLens` | `true` | Show action links (Open Folder, View Output) in YAML files. |
+| `showFileDecorations` | `true` | Show execution order badges on action folders. |
+| `dagLayout` | `"vertical"` | DAG direction: `"vertical"` (top-down) or `"horizontal"` (left-right). |
+| `refreshInterval` | `0` | Polling interval in ms. `0` = rely on file watchers only. Set to `2000` for 2-second polling. |
+
+### Data Sources
+
+The Workflow Navigator reads from three sources:
+
+| File | Purpose | When Updated |
+|------|---------|--------------|
+| `agent_config/*.yml` | Workflow structure, action definitions, dependencies | When you edit the workflow |
+| `agent_io/target/.manifest.json` | Execution plan, action levels, output directories | When workflow starts |
+| `agent_io/.agent_status.json` | Live runtime status for each action | During workflow execution |
+
+File watchers automatically refresh the UI when these files change. For more responsive updates during execution, enable polling with `agentActions.refreshInterval`.
 
 ## Neovim Setup
 
@@ -155,7 +300,7 @@ Cursor uses VS Code extensions. Follow the VS Code VSIX installation, then:
 
 1. Open Cursor
 2. Go to Extensions → Install from VSIX
-3. Select `agent-actions-lsp-0.2.0.vsix`
+3. Select `agent-actions-lsp-0.3.0.vsix`
 4. Reload the window
 
 ## Syntax Highlighting
@@ -269,6 +414,28 @@ If Ctrl+Click doesn't work on a reference:
 ### Hover Shows Nothing
 
 The LSP may not have finished indexing. Wait a moment after opening a project, or reload the window.
+
+### Workflow Navigator Not Showing
+
+Ensure your project has:
+- `agent_config/` directory with `.yml` files
+- Actions defined with `- name:` fields
+
+### Status Not Updating
+
+If workflow status isn't refreshing:
+
+1. Check that `agent_io/target/.manifest.json` exists
+2. Try `Cmd+Shift+R` to manually refresh
+3. Enable polling: `"agentActions.refreshInterval": 2000`
+
+### DAG Not Rendering
+
+If the DAG panel shows nothing:
+
+1. Ensure you have at least one workflow with actions
+2. Check that action `dependencies` are correctly defined
+3. Reload the window and try again
 
 ## See Also
 
