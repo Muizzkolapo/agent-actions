@@ -73,6 +73,14 @@ Display the Agent Actions version.
 agac --version
 ```
 
+### `--quiet` / `-q`
+
+Suppress non-essential output. Useful for scripts and CI/CD pipelines where you only want to see errors.
+
+```bash
+agac run -a my_workflow --quiet
+```
+
 ### `-h` / `--help`
 
 Show help message and available commands.
@@ -159,6 +167,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 
 | Command | Description |
 |---------|-------------|
+| [`inspect`](./inspect) | Analyze workflow structure, dependencies, and data flow |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`list-udfs`](./udfs#list-udfs) | List discovered UDFs |
 | [`validate-udfs`](./udfs#validate-udfs) | Validate UDF references |

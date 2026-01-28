@@ -26,16 +26,38 @@ Let's walk through the basic guard structure:
 ```yaml
 - name: my_action
   guard:
-    condition: "expression"
-    on_false: "skip" | "filter"
+    clause: "expression"
+    behavior: "skip" | "filter"
 ```
 
-| Field | Description |
-|-------|-------------|
-| `condition` | Expression evaluated against upstream data |
-| `on_false` | What happens when condition is false: `skip` or `filter` |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `clause` | string | (required) | Expression evaluated against upstream data |
+| `behavior` | string | `filter` | What happens when clause is false: `skip` or `filter` |
+| `scope` | string | `item` | Evaluation scope (reserved for future use) |
+| `passthrough_on_error` | boolean | `true` | If evaluation errors, pass the record through instead of failing |
 
-The `condition` is evaluated before the action runs. If it returns `false`, the `on_false` behavior kicks in.
+The `clause` is evaluated before the action runs. If it returns `false`, the `behavior` kicks in.
+
+### Error Handling with passthrough_on_error
+
+By default, if a guard expression fails to evaluate (e.g., due to a missing field or type error), the record passes through and the action executes. This fail-safe behavior prevents a single bad record from halting your entire workflow.
+
+```yaml
+guard:
+  clause: 'optional_field > 10'
+  behavior: "filter"
+  passthrough_on_error: true  # Default: record continues if evaluation fails
+```
+
+Set `passthrough_on_error: false` for strict mode where evaluation errors stop processing:
+
+```yaml
+guard:
+  clause: 'required_field > 10'
+  behavior: "filter"
+  passthrough_on_error: false  # Evaluation errors will raise exceptions
+```
 
 ## Condition Expressions
 
@@ -43,8 +65,8 @@ The `condition` is evaluated before the action runs. If it returns `false`, the 
 
 ```yaml
 guard:
-  condition: "candidate_facts_list != []"
-  on_false: "filter"
+  clause: "candidate_facts_list != []"
+  behavior: "filter"
 ```
 
 ### Comparison Operators
@@ -63,15 +85,15 @@ guard:
 ```yaml
 # AND condition
 guard:
-  condition: 'score > 85 and status == "valid"'
+  clause: 'score > 85 and status == "valid"'
 
 # OR condition
 guard:
-  condition: 'category == "technical" or category == "implementation"'
+  clause: 'category == "technical" or category == "implementation"'
 
 # NOT condition
 guard:
-  condition: 'not is_duplicate'
+  clause: 'not is_duplicate'
 ```
 
 ### Advanced Operators
@@ -103,13 +125,13 @@ Guards support safe built-in functions:
 ```yaml
 # Using len() function
 guard:
-  condition: 'len(candidate_facts_list) >= 3'
-  on_false: "filter"
+  clause: 'len(candidate_facts_list) >= 3'
+  behavior: "filter"
 
 # Combining functions
 guard:
-  condition: 'len(items) > 0 and max(scores) >= 85'
-  on_false: "skip"
+  clause: 'len(items) > 0 and max(scores) >= 85'
+  behavior: "skip"
 ```
 
 ### Field References
@@ -117,14 +139,14 @@ guard:
 ```yaml
 # Upstream action field
 guard:
-  condition: "extract_facts.count > 0"
+  clause: "extract_facts.count > 0"
 
 # Current context field
 guard:
-  condition: "candidate_facts_list != []"
+  clause: "candidate_facts_list != []"
 ```
 
-## on_false Behaviors
+## behavior Options
 
 Here's where the two options differ significantly:
 
@@ -135,8 +157,8 @@ The action is skipped, but the record continues through the agentic workflow. Th
 ```yaml
 - name: optional_enhancement
   guard:
-    condition: "needs_enhancement == true"
-    on_false: "skip"  # Record continues, this action just doesn't run
+    clause: "needs_enhancement == true"
+    behavior: "skip"  # Record continues, this action just doesn't run
 ```
 
 ### filter
@@ -146,12 +168,12 @@ The record is completely removed from the agentic workflow. It won't be processe
 ```yaml
 - name: validate_facts
   guard:
-    condition: "candidate_facts_list != []"
-    on_false: "filter"  # Record stops here entirely
+    clause: "candidate_facts_list != []"
+    behavior: "filter"  # Record stops here entirely
 ```
 
 :::warning
-Choose carefully between `skip` and `filter`. With `skip`, downstream actions still run but may receive incomplete data. With `filter`, the record is gone - no further processing happens.
+Choose carefully between `"skip"` and `"filter"`. With `"skip"`, downstream actions still run but may receive incomplete data. With `"filter"`, the record is gone - no further processing happens.
 :::
 
 ## Examples
@@ -164,8 +186,8 @@ Let's explore some real-world patterns:
 - name: canonicalize_facts
   dependencies: fact_extractor  # Input source
   guard:
-    condition: 'candidate_facts_list != []'
-    on_false: "filter"
+    clause: 'candidate_facts_list != []'
+    behavior: "filter"
 ```
 
 Records with no extracted facts are removed from the agentic workflow entirely. Why pay for LLM calls on empty data?
@@ -176,8 +198,8 @@ Records with no extracted facts are removed from the agentic workflow entirely. 
 - name: Cluster_Validation_Agent
   dependencies: [group_by_similarity, cluster_list]
   guard:
-    condition: 'num_similar_facts != 1'
-    on_false: "skip"
+    clause: 'num_similar_facts != 1'
+    behavior: "skip"
 ```
 
 Single-fact clusters don't need validation, so the action is skipped but the record continues. The downstream actions still receive the record - they just won't see validation output.
@@ -188,8 +210,8 @@ Single-fact clusters don't need validation, so the action is skipped but the rec
 - name: suggest_distractor_counts
   dependencies: filter_low_quality_questions  # Input source
   guard:
-    condition: 'question_status == "KEEP"'
-    on_false: "filter"
+    clause: 'question_status == "KEEP"'
+    behavior: "filter"
 ```
 
 Only high-quality questions proceed to distractor generation.
@@ -200,8 +222,8 @@ Only high-quality questions proceed to distractor generation.
 - name: review_code_snippets
   dependencies: generate_summary  # Input source
   guard:
-    condition: 'code_snippets != []'
-    on_false: "skip"
+    clause: 'code_snippets != []'
+    behavior: "skip"
 ```
 
 Skip code review if no code snippets were extracted.
@@ -226,8 +248,8 @@ When using `context_scope.observe`, those fields are available in guards:
     observe:
       - group_by_similarity.num_similar_facts
   guard:
-    condition: 'num_similar_facts != 1'  # Available from observe
-    on_false: "skip"
+    clause: 'num_similar_facts != 1'  # Available from observe
+    behavior: "skip"
 ```
 
 ## Decision Flow
@@ -240,7 +262,7 @@ flowchart TD
     B -->|No| C[Execute action]
     B -->|Yes| D{Evaluate condition}
     D -->|True| C
-    D -->|False| E{on_false setting}
+    D -->|False| E{behavior setting}
     E -->|skip| F[Skip action, continue record]
     E -->|filter| G[Remove record from workflow]
     C --> H[Continue to next action]
@@ -257,8 +279,8 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 # Good: Filter early to avoid wasted processing
 - name: first_action
   guard:
-    condition: 'source.content != ""'
-    on_false: "filter"  # Empty content stops here
+    clause: 'source.content != ""'
+    behavior: "filter"  # Empty content stops here
 ```
 
 ### 2. Use skip for Optional Steps
@@ -267,8 +289,8 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 # Good: Skip optional enhancement
 - name: enhance_summary
   guard:
-    condition: 'needs_enhancement == true'
-    on_false: "skip"  # Record continues without enhancement
+    clause: 'needs_enhancement == true'
+    behavior: "skip"  # Record continues without enhancement
 ```
 
 ### 3. Guard After Extraction
@@ -281,8 +303,8 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 - name: validate_facts
   dependencies: extract_facts  # Input source
   guard:
-    condition: 'candidate_facts_list != []'
-    on_false: "filter"  # No facts = no validation needed
+    clause: 'candidate_facts_list != []'
+    behavior: "filter"  # No facts = no validation needed
 ```
 
 ### 4. Quality Gates
@@ -291,8 +313,8 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 # Filter based on quality scores
 - name: generate_final_output
   guard:
-    condition: 'quality_score >= 85'
-    on_false: "filter"
+    clause: 'quality_score >= 85'
+    behavior: "filter"
 ```
 
 ### 5. Chain Guards for Multi-Stage Filtering
@@ -303,18 +325,18 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 
 - name: validate
   guard:
-    condition: 'facts != []'
-    on_false: "filter"
+    clause: 'facts != []'
+    behavior: "filter"
 
 - name: enhance
   guard:
-    condition: 'quality >= 50'
-    on_false: "filter"
+    clause: 'quality >= 50'
+    behavior: "filter"
 
 - name: finalize
   guard:
-    condition: 'quality >= 85'
-    on_false: "filter"
+    clause: 'quality >= 85'
+    behavior: "filter"
 ```
 
 ## Common Patterns
@@ -323,40 +345,40 @@ Notice that both `skip` and `execute` paths lead to the next action, but `filter
 
 ```yaml
 guard:
-  condition: 'items != []'
-  on_false: "filter"
+  clause: 'items != []'
+  behavior: "filter"
 ```
 
 ### Threshold Check
 
 ```yaml
 guard:
-  condition: 'score >= 85'
-  on_false: "filter"
+  clause: 'score >= 85'
+  behavior: "filter"
 ```
 
 ### Status Check
 
 ```yaml
 guard:
-  condition: 'status == "KEEP"'
-  on_false: "filter"
+  clause: 'status == "KEEP"'
+  behavior: "filter"
 ```
 
 ### Boolean Check
 
 ```yaml
 guard:
-  condition: 'should_process == true'
-  on_false: "skip"
+  clause: 'should_process == true'
+  behavior: "skip"
 ```
 
 ### Count Check
 
 ```yaml
 guard:
-  condition: 'count > 1'
-  on_false: "skip"
+  clause: 'count > 1'
+  behavior: "skip"
 ```
 
 ## Error Handling
@@ -404,8 +426,8 @@ For complex filtering logic, consider using a tool action instead:
 # Simple: Use guard
 - name: validate
   guard:
-    condition: 'score >= 85'
-    on_false: "filter"
+    clause: 'score >= 85'
+    behavior: "filter"
 
 # Complex: Use tool action
 - name: filter_by_complex_logic

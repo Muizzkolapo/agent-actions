@@ -288,7 +288,7 @@ Here are some patterns you'll encounter frequently when building agentic workflo
 \{% macro base_defaults() \%\}
 defaults:
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: online
   model_vendor: openai
   model_name: gpt-4o-mini

@@ -95,8 +95,8 @@ actions:
 
     # Conditional
     guard:
-      condition: "source.content != ''"
-      on_false: filter
+      clause: "source.content != ''"
+      behavior: filter
 ```
 
 ### Core Action Fields
@@ -109,6 +109,8 @@ actions:
 | `dependencies` | list | Upstream actions to wait for |
 | `prompt` | string | Inline prompt or `$store.template` reference |
 | `schema` | string | Output validation schema |
+| `drops` | list | Fields to exclude from LLM prompt and final output |
+| `observe` | list | Fields to pass-through from input to output (visible to LLM but not regenerated) |
 
 ### Model Fields
 
@@ -125,9 +127,12 @@ actions:
 | Field | Type | Description |
 |-------|------|-------------|
 | `run_mode` | string | `online` or `batch` — see [Run Modes](../execution/run-modes.md) |
-| `granularity` | string | `Record` or `File` — see [Granularity](../execution/granularity.md) |
+| `granularity` | string | `record` or `file` — see [Granularity](../execution/granularity.md) |
 | `guard` | object | Conditional execution — see [Guards](../execution/guards.md) |
 | `is_operational` | boolean | Enable/disable action (default: true) |
+| `policy` | string | Execution policy |
+| `idempotency_key` | string | Template for idempotency key |
+| `retry` | object | Retry configuration for transport-layer failures |
 
 :::note Granularity Constraints
 - **File granularity** is only supported for tool actions (`kind: tool`)
@@ -139,7 +144,7 @@ actions:
 | Field | Type | Description |
 |-------|------|-------------|
 | `json_mode` | boolean | Enable structured JSON output |
-| `reprompt` | string/object | Retry mode: basic, smart, thorough |
+| `reprompt` | object/false | Reprompt configuration for validation failures (see [Reprompting](../validation/reprompting.md)) |
 | `constraints` | list | Additional validation rules |
 
 ### Tool Action Fields

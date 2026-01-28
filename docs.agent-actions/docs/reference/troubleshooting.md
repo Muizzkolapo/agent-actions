@@ -105,9 +105,9 @@ Prompt expects `{{ source.content }}` but `source` is the wrapper, not individua
 2. **Add preprocessing action** - First action extracts items:
    ```yaml
    - name: extract_items
-     kind: tool
-     impl: extract_items_from_wrapper
-     granularity: file
+    kind: tool
+    impl: extract_items_from_wrapper
+    granularity: file
    ```
 
 3. **Update prompts** - If wrapper is intentional:
@@ -390,7 +390,7 @@ To disable: `reprompt: false`
 
 | Option | Description |
 |--------|-------------|
-| `max_attempts` | Maximum retry attempts (default: 3) |
+| `max_attempts` | Maximum retry attempts (default: 2) |
 | `json_repair` | Attempt JSON repair before retry (default: true) |
 | `use_llm_critique` | Use LLM to analyze failures (default: false) |
 | `critique_after_attempt` | Start LLM critique after N attempts (default: 2) |

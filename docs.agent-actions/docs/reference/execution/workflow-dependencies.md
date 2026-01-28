@@ -100,7 +100,7 @@ actions:
   - name: fix_code_snippets
     kind: tool
     impl: fix_code_snippets
-    granularity: Record
+    granularity: record
     dependencies:
       - workflow: qanalabs_quiz_gen
         action: format_quiz_text  # Specific action from upstream workflow
@@ -373,8 +373,8 @@ agac run -a my_workflow --upstream --downstream
     - workflow: upstream
       action: data_output
   guard:
-    condition: 'data_output != []'
-    on_false: "filter"
+    clause: 'data_output != []'
+    behavior: filter
 ```
 
 ## Error Handling

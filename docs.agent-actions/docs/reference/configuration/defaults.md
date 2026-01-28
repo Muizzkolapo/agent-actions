@@ -25,7 +25,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
 
 actions:
@@ -43,42 +43,35 @@ actions:
 |-------|------|-------------|
 | `model_vendor` | string | LLM provider (openai, anthropic, etc.) |
 | `model_name` | string | Model identifier |
-| `api_key` | string | Environment variable name for API key |
 | `json_mode` | boolean | Enable JSON output mode |
-| `granularity` | string | `Record` or `File` processing |
+| `granularity` | string | `record` or `file` processing |
 | `run_mode` | string | `batch` or `online` execution |
-| `is_operational` | boolean | Enable/disable action |
-| `prompt_debug` | boolean | Show rendered prompts |
-| `few_shot` | integer | Number of few-shot examples |
-| `context_scope` | object | Default context scope settings |
+| `drops` | list | Default fields to exclude from LLM prompt and output |
+| `observe` | list | Default fields to pass-through from input to output |
+
+:::note Schema vs Runtime
+The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
+:::
 
 ## Example from qanalabs
 
 ```yaml
 defaults:
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
   model_vendor: openai
   model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
-  is_operational: false
-  prompt_debug: false
-  few_shot: 0
-  context_scope:
-    seed_data:
-      exam_syllabus: $file:mcp_qanalabs_syllabus.json
 
 actions:
   - name: extract_facts
     prompt: $qanalabs_quiz_gen.Fact_extraction
     schema: candidate_facts_list
-    # Inherits: model_vendor, model_name, json_mode, granularity, run_mode, context_scope
+    # Inherits: model_vendor, model_name, json_mode, granularity, run_mode
 
   - name: score_question_quality
     model_vendor: anthropic
     model_name: claude-3-5-sonnet-20241022
-    api_key: ANTHROPIC_API_KEY
     # Overrides model settings, inherits everything else
 ```
 
@@ -204,14 +197,14 @@ actions:
 
 ```yaml
 defaults:
-  granularity: Record
+  granularity: record
 
 actions:
   - name: per_item_process
-    # Uses Record from defaults
+    # Uses record from defaults
 
   - name: aggregate_results
-    granularity: File  # Override for aggregation
+    granularity: file  # Override for aggregation
     dependencies: per_item_process  # Input source
 ```
 
@@ -221,20 +214,20 @@ Tool actions inherit relevant defaults, but some fields like `run_mode` don't ap
 
 ```yaml
 defaults:
-  granularity: Record
+  granularity: record
   run_mode: batch
 
 actions:
   - name: validate_data
     kind: tool
     impl: validate_function
-    # Inherits granularity: Record
+    # Inherits granularity: record
     # run_mode doesn't apply to tools
 
   - name: aggregate_data
     kind: tool
     impl: aggregate_function
-    granularity: File  # Override for this tool
+    granularity: file  # Override for this tool
 ```
 
 ## Best Practices
@@ -263,7 +256,7 @@ actions:
 # Good: Ensure consistent settings
 defaults:
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
 
 # All actions will use these unless explicitly overridden
@@ -285,17 +278,11 @@ defaults:
   # Model configuration
   model_vendor: openai
   model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
 
   # Processing configuration
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
-
-  # Context configuration
-  context_scope:
-    seed_data:
-      config: $file:workflow_config.json
 ```
 
 ### 5. Environment-Specific Defaults
@@ -333,7 +320,7 @@ ConfigurationError: Action 'my_action' missing required field 'prompt'
 
 ```
 ConfigurationError: Invalid value for 'granularity': 'invalid'
-  Expected: 'Record' or 'File'
+  Expected: 'record' or 'file'
 ```
 
 :::tip

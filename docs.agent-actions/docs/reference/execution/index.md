@@ -60,8 +60,8 @@ Not sure which settings to use? Here's a quick reference:
 |----------------|-----|
 | Lower costs, can wait 24h | `run_mode: batch` |
 | Immediate responses | `run_mode: online` |
-| Per-item transformations | `granularity: Record` |
-| Aggregation/exports | `granularity: File` |
+| Per-item transformations | `granularity: record` |
+| Aggregation/exports | `granularity: file` |
 | Conditional execution | `guard` with conditions |
 | Handle transient failures | `retry: { max_attempts: 3, on_exhausted: return_last }` |
 | Fail on any error | `retry: { max_attempts: 3, on_exhausted: raise }` |

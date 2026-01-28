@@ -52,6 +52,24 @@ Each output file contains:
 | `node_id` | Action that produced this output |
 | `content` | LLM/tool output (schema-validated) |
 | `metadata` | Execution metadata (timestamp, model) |
+| `target_id` | Unique identifier for this output record |
+| `lineage` | Array tracking the processing chain |
+| `chunk_info` | Chunking metadata (only present for chunked records) |
+
+### Metadata Fields
+
+The following fields are considered metadata and are automatically excluded when extracting content data for downstream processing:
+
+- `source_guid`
+- `lineage`
+- `node_id`
+- `metadata`
+- `target_id`
+- `parent_target_id`
+- `root_target_id`
+- `chunk_info`
+
+This means when an action references upstream data, it sees the `content` fields without these metadata wrappers.
 
 ### Content Field
 

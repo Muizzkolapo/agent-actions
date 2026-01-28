@@ -25,7 +25,7 @@ prompt: |
 
 ```yaml
 guard:
-  condition: "extract_facts.count > 0"
+  clause: "extract_facts.count > 0"
 context_scope:
   observe:
     - extract_facts.candidate_facts_list
@@ -164,8 +164,8 @@ Notice that the resolver loads data from disk—this means upstream actions must
 - name: canonicalize_facts
   dependencies: fact_extractor  # Input source
   guard:
-    condition: "candidate_facts_list != []"
-    on_false: "filter"
+    clause: "candidate_facts_list != []"
+    behavior: filter
 ```
 
 ### Context Scope with References

@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'cli-reference/run',
         'cli-reference/batch',
+        'cli-reference/inspect',
         'cli-reference/utilities',
         'cli-reference/udfs',
         'cli-reference/schema',

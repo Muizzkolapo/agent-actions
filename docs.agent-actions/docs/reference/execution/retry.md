@@ -111,7 +111,7 @@ description: "Enrich documents with metadata"
 
 defaults:
   json_mode: true
-  granularity: Record
+  granularity: record
   run_mode: batch
   model_vendor: openai
   model_name: gpt-4o-mini

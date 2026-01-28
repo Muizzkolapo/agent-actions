@@ -231,10 +231,10 @@ Chunking works best when each chunk can be processed independently. If you need 
 ```yaml
 actions:
   - name: process_chunks
-    granularity: Record  # Process each chunk
+    granularity: record  # Process each chunk
 
   - name: aggregate_results
-    granularity: File    # Combine all chunks
+    granularity: file    # Combine all chunks
     dependencies: process_chunks  # Input source
 ```
 

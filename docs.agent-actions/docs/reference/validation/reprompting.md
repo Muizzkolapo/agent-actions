@@ -33,7 +33,7 @@ Reprompt requires explicit configuration—all options must be specified:
 ```yaml
 defaults:
   reprompt:
-    max_attempts: 3
+    max_attempts: 2
     json_repair: true
     use_llm_critique: false
     critique_after_attempt: 2
@@ -51,7 +51,7 @@ defaults:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `max_attempts` | integer | 3 | Maximum retry attempts |
+| `max_attempts` | integer | 2 | Maximum retry attempts |
 | `json_repair` | boolean | true | Attempt JSON repair before retry |
 | `use_llm_critique` | boolean | false | Use LLM to analyze failures |
 | `use_self_reflection` | boolean | false | Include model self-assessment |
@@ -174,7 +174,7 @@ For simple schemas where most errors are JSON formatting issues:
 ```yaml
 defaults:
   reprompt:
-    max_attempts: 3
+    max_attempts: 2
     json_repair: true
     use_llm_critique: false
     critique_after_attempt: 999  # Never use critique
@@ -228,7 +228,7 @@ actions:
 ```yaml
 defaults:
   reprompt:
-    max_attempts: 3
+    max_attempts: 2
     json_repair: true
     use_llm_critique: false
     on_exhausted: return_last
