@@ -208,6 +208,7 @@ export class WorkflowModel implements vscode.Disposable {
     private refreshTimeout: NodeJS.Timeout | undefined;
     private pollingTimer: NodeJS.Timeout | undefined;
     private configListener: vscode.Disposable | undefined;
+    private refreshInProgress = false;
 
     readonly onDidChange = this._onDidChange.event;
 
@@ -303,29 +304,39 @@ export class WorkflowModel implements vscode.Disposable {
      * Refresh all workflow data
      */
     async refresh(): Promise<void> {
-        const configFiles = await vscode.workspace.findFiles(CONFIG_GLOB, '**/node_modules/**');
-        const workflows = new Map<string, WorkflowInfo>();
+        // Prevent concurrent refreshes (race condition guard)
+        if (this.refreshInProgress) {
+            return;
+        }
+        this.refreshInProgress = true;
 
-        for (const configUri of configFiles) {
-            const parsedConfig = await parseWorkflowConfig(configUri);
-            if (!parsedConfig || parsedConfig.actions.length === 0) {
-                continue;
+        try {
+            const configFiles = await vscode.workspace.findFiles(CONFIG_GLOB, '**/node_modules/**');
+            const workflows = new Map<string, WorkflowInfo>();
+
+            for (const configUri of configFiles) {
+                const parsedConfig = await parseWorkflowConfig(configUri);
+                if (!parsedConfig || parsedConfig.actions.length === 0) {
+                    continue;
+                }
+
+                const workflow = await this.buildWorkflow(configUri, parsedConfig);
+                workflows.set(workflow.name, workflow);
             }
 
-            const workflow = await this.buildWorkflow(configUri, parsedConfig);
-            workflows.set(workflow.name, workflow);
+            this.workflows = workflows;
+
+            // Update context for keybindings
+            await vscode.commands.executeCommand(
+                'setContext',
+                'agentActions.isAgentProject',
+                workflows.size > 0
+            );
+
+            this._onDidChange.fire();
+        } finally {
+            this.refreshInProgress = false;
         }
-
-        this.workflows = workflows;
-
-        // Update context for keybindings
-        await vscode.commands.executeCommand(
-            'setContext',
-            'agentActions.isAgentProject',
-            workflows.size > 0
-        );
-
-        this._onDidChange.fire();
     }
 
     /**

@@ -13,7 +13,10 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { WorkflowModel } from '../model/workflowModel';
 
-const ACTION_PATTERN = /^\s*-\s*name:\s*([^\s#]+)/gm;
+/** Factory function to avoid regex state sharing issues */
+function createActionPattern(): RegExp {
+    return /^\s*-\s*name:\s*([^\s#]+)/gm;
+}
 
 export class WorkflowCodeLensProvider implements vscode.CodeLensProvider {
     private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -37,12 +40,10 @@ export class WorkflowCodeLensProvider implements vscode.CodeLensProvider {
 
         const lenses: vscode.CodeLens[] = [];
         const text = document.getText();
-
-        // Reset regex state
-        ACTION_PATTERN.lastIndex = 0;
+        const actionPattern = createActionPattern();
 
         let match: RegExpExecArray | null;
-        while ((match = ACTION_PATTERN.exec(text)) !== null) {
+        while ((match = actionPattern.exec(text)) !== null) {
             const line = document.positionAt(match.index).line;
             const range = new vscode.Range(line, 0, line, 0);
             const actionName = match[1];

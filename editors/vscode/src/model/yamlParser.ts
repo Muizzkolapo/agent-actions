@@ -13,7 +13,10 @@ import * as vscode from 'vscode';
 import { parse } from 'yaml';
 import { ParsedWorkflowConfig, ParsedAction } from './types';
 
-const ACTION_NAME_REGEX = /^\s*-\s*name:\s*([^\s#]+)\s*$/gm;
+/** Factory function to avoid regex state sharing issues */
+function createActionNameRegex(): RegExp {
+    return /^\s*-\s*name:\s*([^\s#]+)\s*$/gm;
+}
 
 /**
  * Parse a workflow config file and extract action information
@@ -149,12 +152,10 @@ function parsePlanEntry(entry: string): { name: string; dependencies: string[] }
  */
 function extractActionLocations(content: string): Map<string, number> {
     const locations = new Map<string, number>();
+    const actionNameRegex = createActionNameRegex();
     let match: RegExpExecArray | null;
 
-    // Reset regex state
-    ACTION_NAME_REGEX.lastIndex = 0;
-
-    while ((match = ACTION_NAME_REGEX.exec(content)) !== null) {
+    while ((match = actionNameRegex.exec(content)) !== null) {
         const actionName = match[1];
         const line = content.slice(0, match.index).split(/\r?\n/).length - 1;
         if (!locations.has(actionName)) {

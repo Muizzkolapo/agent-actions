@@ -35,29 +35,3 @@ export async function readAgentStatus(uri: vscode.Uri): Promise<AgentStatusData 
         return null;
     }
 }
-
-/**
- * Find manifest file in workspace
- */
-export async function findManifestUri(rootPath: string): Promise<vscode.Uri | null> {
-    const manifestPath = vscode.Uri.file(`${rootPath}/agent_io/target/.manifest.json`);
-    try {
-        await vscode.workspace.fs.stat(manifestPath);
-        return manifestPath;
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Find agent status file in workspace
- */
-export async function findAgentStatusUri(rootPath: string): Promise<vscode.Uri | null> {
-    const statusPath = vscode.Uri.file(`${rootPath}/agent_io/.agent_status.json`);
-    try {
-        await vscode.workspace.fs.stat(statusPath);
-        return statusPath;
-    } catch {
-        return null;
-    }
-}

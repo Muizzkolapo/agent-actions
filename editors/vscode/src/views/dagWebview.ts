@@ -16,6 +16,7 @@ import { WorkflowModel } from '../model/workflowModel';
 export class DagWebview implements vscode.Disposable {
     private panel: vscode.WebviewPanel | undefined;
     private readonly disposables: vscode.Disposable[] = [];
+    private currentWorkflowName: string | undefined;
 
     constructor(
         private readonly context: vscode.ExtensionContext,
@@ -73,6 +74,9 @@ export class DagWebview implements vscode.Disposable {
      * Show DAG for a specific workflow
      */
     showWorkflow(workflow: WorkflowInfo): void {
+        // Track which workflow we're showing
+        this.currentWorkflowName = workflow.name;
+
         if (this.panel) {
             this.panel.reveal();
         } else {
@@ -83,11 +87,15 @@ export class DagWebview implements vscode.Disposable {
                 {
                     enableScripts: true,
                     retainContextWhenHidden: true,
+                    localResourceRoots: [
+                        vscode.Uri.joinPath(this.context.extensionUri, 'media')
+                    ],
                 }
             );
 
             this.panel.onDidDispose(() => {
                 this.panel = undefined;
+                this.currentWorkflowName = undefined;
             }, null, this.disposables);
 
             // Handle messages from webview
@@ -97,6 +105,8 @@ export class DagWebview implements vscode.Disposable {
                         const action = this.model.getActionByName(message.actionName);
                         if (action) {
                             vscode.commands.executeCommand('agentActions.openConfig', action);
+                        } else {
+                            vscode.window.showWarningMessage(`Action "${message.actionName}" not found`);
                         }
                     }
                 },
@@ -114,8 +124,12 @@ export class DagWebview implements vscode.Disposable {
             return;
         }
 
+        // Find the workflow we're currently showing (not just the first one)
         const workflows = this.model.getWorkflows();
-        const workflow = workflows[0];
+        const workflow = this.currentWorkflowName
+            ? workflows.find((w) => w.name === this.currentWorkflowName) ?? workflows[0]
+            : workflows[0];
+
         if (!workflow) {
             return;
         }
@@ -125,7 +139,7 @@ export class DagWebview implements vscode.Disposable {
         const direction = layout === 'horizontal' ? 'LR' : 'TD';
 
         const diagram = this.buildMermaidDiagram(workflow.actions, direction);
-        this.panel.webview.html = this.renderHtml(diagram, workflow.name);
+        this.panel.webview.html = this.renderHtml(this.panel.webview, diagram, workflow.name);
     }
 
     private buildMermaidDiagram(actions: ActionInfo[], direction: string): string {
@@ -178,15 +192,20 @@ export class DagWebview implements vscode.Disposable {
         return status;
     }
 
-    private renderHtml(diagram: string, workflowName: string): string {
+    private renderHtml(webview: vscode.Webview, diagram: string, workflowName: string): string {
         const nonce = this.getNonce();
+
+        // Use locally bundled Mermaid for security and offline support
+        const mermaidUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'media', 'mermaid.min.js')
+        );
 
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://cdn.jsdelivr.net 'nonce-${nonce}'; style-src 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}'; style-src 'unsafe-inline';">
     <title>${workflowName} - Workflow DAG</title>
     <style>
         body {
@@ -257,7 +276,7 @@ export class DagWebview implements vscode.Disposable {
     <div class="mermaid">
 ${diagram}
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="${mermaidUri}"></script>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
 
