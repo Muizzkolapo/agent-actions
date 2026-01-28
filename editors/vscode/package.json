@@ -1,18 +1,31 @@
 {
   "name": "agent-actions-lsp",
-  "displayName": "Agent Actions LSP",
-  "description": "Language support for agent-actions workflows",
-  "version": "0.2.0",
+  "displayName": "Agent Actions",
+  "description": "Language support and workflow navigation for Agent Actions projects",
+  "version": "0.3.0",
   "publisher": "agent-actions",
   "engines": {
     "vscode": "^1.75.0"
   },
-  "categories": ["Programming Languages"],
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "agent-actions",
+    "workflow",
+    "dag",
+    "yaml",
+    "data-pipeline"
+  ],
   "activationEvents": [
     "onLanguage:yaml",
     "onLanguage:markdown",
     "workspaceContains:**/agent_actions.yml",
-    "workspaceContains:**/prompt_store/*.md"
+    "workspaceContains:**/agent_config/*.yml",
+    "workspaceContains:**/agent_config/*.yaml",
+    "workspaceContains:**/prompt_store/*.md",
+    "workspaceContains:**/agent_io/target/.manifest.json"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -23,14 +36,176 @@
           "type": "string",
           "default": "",
           "description": "Path to Python interpreter. Leave empty to auto-detect from VS Code Python extension."
+        },
+        "agentActions.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show workflow status in the VS Code status bar."
+        },
+        "agentActions.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens actions above workflow YAML action definitions."
+        },
+        "agentActions.showFileDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show execution order badges in the file explorer for action folders."
+        },
+        "agentActions.dagLayout": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "description": "Layout direction for the workflow DAG visualization."
+        },
+        "agentActions.refreshInterval": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Polling interval in milliseconds for workflow status updates. Set to 0 to disable polling (file watchers still active)."
         }
       }
     },
+    "views": {
+      "explorer": [
+        {
+          "id": "agentActionsWorkflow",
+          "name": "Agent Actions",
+          "icon": "media/icons/agent-actions.svg",
+          "contextualTitle": "Workflow Navigator"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "agentActions.openFolder",
+        "title": "Open Action Folder",
+        "category": "Agent Actions",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "agentActions.openConfig",
+        "title": "Open Action Config",
+        "category": "Agent Actions",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "agentActions.viewOutput",
+        "title": "View Action Output",
+        "category": "Agent Actions",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "agentActions.showDAG",
+        "title": "Show Workflow DAG",
+        "category": "Agent Actions",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "title": "Go to Action...",
+        "category": "Agent Actions",
+        "icon": "$(search)"
+      },
+      {
+        "command": "agentActions.refresh",
+        "title": "Refresh Workflow",
+        "category": "Agent Actions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentActions.showWorkflowTree",
+        "title": "Show Workflow Navigator",
+        "category": "Agent Actions",
+        "icon": "$(list-tree)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentActions.refresh",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.showDAG",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentActions.openFolder",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.openConfig",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentActions.viewOutput",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@3"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "agentActions.showDAG",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.refresh",
+          "when": "agentActions.isAgentProject"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "agentActions.showDAG",
+        "key": "cmd+shift+d",
+        "mac": "cmd+shift+d",
+        "win": "ctrl+shift+d",
+        "linux": "ctrl+shift+d",
+        "when": "agentActions.isAgentProject"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "key": "cmd+shift+a",
+        "mac": "cmd+shift+a",
+        "win": "ctrl+shift+a",
+        "linux": "ctrl+shift+a",
+        "when": "agentActions.isAgentProject"
+      },
+      {
+        "command": "agentActions.refresh",
+        "key": "cmd+shift+r",
+        "mac": "cmd+shift+r",
+        "win": "ctrl+shift+r",
+        "linux": "ctrl+shift+r",
+        "when": "agentActions.isAgentProject"
+      }
+    ],
     "grammars": [
       {
         "scopeName": "markdown.prompt-blocks.injection",
         "path": "./syntaxes/prompt-blocks.tmLanguage.json",
-        "injectTo": ["text.html.markdown"],
+        "injectTo": [
+          "text.html.markdown"
+        ],
         "embeddedLanguages": {
           "meta.embedded.block.prompt": "markdown"
         }
@@ -43,7 +218,8 @@
     "watch": "tsc -watch -p ./"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^9.0.1",
+    "yaml": "^2.5.0"
   },
   "devDependencies": {
     "@types/node": "^18.0.0",
