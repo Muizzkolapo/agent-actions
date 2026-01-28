@@ -24,7 +24,7 @@ interface CommandContext {
  */
 export function registerCommands({ context, model, dagWebview }: CommandContext): void {
     context.subscriptions.push(
-        // Open action folder in file explorer
+        // Open action folder in VS Code Explorer sidebar
         vscode.commands.registerCommand('agentActions.openFolder', openFolder),
 
         // Open action config and navigate to definition
@@ -48,7 +48,7 @@ export function registerCommands({ context, model, dagWebview }: CommandContext)
 }
 
 /**
- * Open folder in system file explorer
+ * Open folder in VS Code's Explorer sidebar (not system file manager)
  */
 async function openFolder(folderPath: string): Promise<void> {
     if (!folderPath) {
@@ -61,9 +61,10 @@ async function openFolder(folderPath: string): Promise<void> {
     try {
         // Check if folder exists
         await vscode.workspace.fs.stat(uri);
-        await vscode.commands.executeCommand('revealFileInOS', uri);
+        // Reveal in VS Code's Explorer sidebar
+        await vscode.commands.executeCommand('revealInExplorer', uri);
     } catch {
-        // Folder doesn't exist yet - show in explorer anyway
+        // Folder doesn't exist yet
         vscode.window.showInformationMessage(`Folder not yet created: ${folderPath}`);
     }
 }
@@ -111,8 +112,8 @@ async function viewOutput(action: ActionInfo): Promise<void> {
             return;
         }
 
-        // No files found, reveal folder
-        await vscode.commands.executeCommand('revealFileInOS', uri);
+        // No files found, reveal folder in VS Code Explorer
+        await vscode.commands.executeCommand('revealInExplorer', uri);
     } catch {
         // Folder doesn't exist
         vscode.window.showInformationMessage(
