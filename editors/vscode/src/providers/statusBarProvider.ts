@@ -14,6 +14,7 @@ import { WorkflowModel } from '../model/workflowModel';
 
 export class WorkflowStatusBar implements vscode.Disposable {
     private readonly statusBarItem: vscode.StatusBarItem;
+    private readonly modelListener: vscode.Disposable;
 
     constructor(private readonly model: WorkflowModel) {
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -23,12 +24,13 @@ export class WorkflowStatusBar implements vscode.Disposable {
         this.statusBarItem.command = 'agentActions.showWorkflowTree';
         this.statusBarItem.tooltip = 'Open Agent Actions Workflow Navigator';
 
-        this.model.onDidChange(() => this.update());
+        this.modelListener = this.model.onDidChange(() => this.update());
         this.update();
     }
 
     dispose(): void {
         this.statusBarItem.dispose();
+        this.modelListener.dispose();
     }
 
     private update(): void {

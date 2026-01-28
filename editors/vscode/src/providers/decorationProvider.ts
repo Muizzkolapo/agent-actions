@@ -25,12 +25,18 @@ const STATUS_COLORS: Record<ActionStatus, vscode.ThemeColor> = {
     skipped: new vscode.ThemeColor('gitDecoration.untrackedResourceForeground'),
 };
 
-export class ActionDecorationProvider implements vscode.FileDecorationProvider {
+export class ActionDecorationProvider implements vscode.FileDecorationProvider, vscode.Disposable {
     private readonly _onDidChangeFileDecorations = new vscode.EventEmitter<vscode.Uri | vscode.Uri[] | undefined>();
     readonly onDidChangeFileDecorations = this._onDidChangeFileDecorations.event;
+    private readonly modelListener: vscode.Disposable;
 
     constructor(private readonly model: WorkflowModel) {
-        this.model.onDidChange(() => this._onDidChangeFileDecorations.fire(undefined));
+        this.modelListener = this.model.onDidChange(() => this._onDidChangeFileDecorations.fire(undefined));
+    }
+
+    dispose(): void {
+        this._onDidChangeFileDecorations.dispose();
+        this.modelListener.dispose();
     }
 
     provideFileDecoration(uri: vscode.Uri): vscode.FileDecoration | undefined {

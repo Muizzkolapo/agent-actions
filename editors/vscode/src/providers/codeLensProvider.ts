@@ -18,12 +18,18 @@ function createActionPattern(): RegExp {
     return /^\s*-\s*name:\s*([^\s#]+)/gm;
 }
 
-export class WorkflowCodeLensProvider implements vscode.CodeLensProvider {
+export class WorkflowCodeLensProvider implements vscode.CodeLensProvider, vscode.Disposable {
     private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
     readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
+    private readonly modelListener: vscode.Disposable;
 
     constructor(private readonly model: WorkflowModel) {
-        this.model.onDidChange(() => this._onDidChangeCodeLenses.fire());
+        this.modelListener = this.model.onDidChange(() => this._onDidChangeCodeLenses.fire());
+    }
+
+    dispose(): void {
+        this._onDidChangeCodeLenses.dispose();
+        this.modelListener.dispose();
     }
 
     provideCodeLenses(document: vscode.TextDocument): vscode.CodeLens[] {

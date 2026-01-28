@@ -29,6 +29,12 @@ const CONFIG_GLOB = '**/agent_config/**/*.{yml,yaml}';
 const MANIFEST_GLOB = '**/agent_io/target/.manifest.json';
 const AGENT_STATUS_GLOB = '**/agent_io/.agent_status.json';
 
+/** Minimum polling interval to prevent excessive refreshes */
+const MIN_POLL_INTERVAL_MS = 1000;
+
+/** Debounce delay for file watcher events */
+const DEBOUNCE_MS = 250;
+
 /**
  * Convert raw status string to ActionStatus enum
  */
@@ -190,10 +196,11 @@ function topoSort(actions: { name: string; dependencies: string[] }[]): string[]
         });
     }
 
-    // Add any remaining actions (handles cycles)
+    // Add any remaining actions (handles cycles) - use Set for O(1) lookup
+    const orderedSet = new Set(ordered);
     const remaining = actions
         .map((a) => a.name)
-        .filter((name) => !ordered.includes(name));
+        .filter((name) => !orderedSet.has(name));
 
     return ordered.concat(remaining);
 }
@@ -209,6 +216,7 @@ export class WorkflowModel implements vscode.Disposable {
     private pollingTimer: NodeJS.Timeout | undefined;
     private configListener: vscode.Disposable | undefined;
     private refreshInProgress = false;
+    private pendingRefresh = false;
 
     readonly onDidChange = this._onDidChange.event;
 
@@ -305,7 +313,9 @@ export class WorkflowModel implements vscode.Disposable {
      */
     async refresh(): Promise<void> {
         // Prevent concurrent refreshes (race condition guard)
+        // Queue a pending refresh if one is already in progress
         if (this.refreshInProgress) {
+            this.pendingRefresh = true;
             return;
         }
         this.refreshInProgress = true;
@@ -336,6 +346,12 @@ export class WorkflowModel implements vscode.Disposable {
             this._onDidChange.fire();
         } finally {
             this.refreshInProgress = false;
+
+            // Process pending refresh if one was queued
+            if (this.pendingRefresh) {
+                this.pendingRefresh = false;
+                void this.refresh();
+            }
         }
     }
 
@@ -346,7 +362,7 @@ export class WorkflowModel implements vscode.Disposable {
         if (this.refreshTimeout) {
             clearTimeout(this.refreshTimeout);
         }
-        this.refreshTimeout = setTimeout(() => void this.refresh(), 250);
+        this.refreshTimeout = setTimeout(() => void this.refresh(), DEBOUNCE_MS);
     }
 
     /**
@@ -359,7 +375,12 @@ export class WorkflowModel implements vscode.Disposable {
         }
 
         const config = vscode.workspace.getConfiguration('agentActions');
-        const interval = config.get<number>('refreshInterval', 0);
+        const configuredInterval = config.get<number>('refreshInterval', 0);
+
+        // Enforce minimum polling interval to prevent excessive refreshes
+        const interval = configuredInterval > 0
+            ? Math.max(configuredInterval, MIN_POLL_INTERVAL_MS)
+            : 0;
 
         if (interval > 0) {
             this.pollingTimer = setInterval(() => void this.refresh(), interval);

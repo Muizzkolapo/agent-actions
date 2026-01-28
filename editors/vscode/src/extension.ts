@@ -105,6 +105,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         clientOptions
     );
 
+    // Add client to disposables to ensure proper cleanup
+    context.subscriptions.push(client);
     client.start();
 
     // ========================================
@@ -126,7 +128,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         treeDataProvider: treeProvider,
         showCollapseAll: true,
     });
-    context.subscriptions.push(treeView);
+    context.subscriptions.push(treeProvider, treeView);
 
     // CodeLens
     const codeLensProvider = new WorkflowCodeLensProvider(workflowModel);
@@ -135,12 +137,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         { scheme: 'file', language: 'yaml', pattern: '**/agent_config/**/*.yaml' },
     ];
     context.subscriptions.push(
+        codeLensProvider,
         vscode.languages.registerCodeLensProvider(codeLensSelector, codeLensProvider)
     );
 
     // File Decorations
     const decorationProvider = new ActionDecorationProvider(workflowModel);
     context.subscriptions.push(
+        decorationProvider,
         vscode.window.registerFileDecorationProvider(decorationProvider)
     );
 

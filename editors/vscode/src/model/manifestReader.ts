@@ -17,7 +17,11 @@ export async function readManifest(uri: vscode.Uri): Promise<ManifestData | null
         const contentBytes = await vscode.workspace.fs.readFile(uri);
         const content = Buffer.from(contentBytes).toString('utf8');
         return JSON.parse(content) as ManifestData;
-    } catch {
+    } catch (error) {
+        // Debug logging for manifest parsing issues (file not found is expected)
+        if (error instanceof Error && !error.message.includes('ENOENT')) {
+            console.debug('[Agent Actions] Failed to read manifest:', uri.fsPath, error.message);
+        }
         return null;
     }
 }
@@ -31,7 +35,11 @@ export async function readAgentStatus(uri: vscode.Uri): Promise<AgentStatusData 
         const contentBytes = await vscode.workspace.fs.readFile(uri);
         const content = Buffer.from(contentBytes).toString('utf8');
         return JSON.parse(content) as AgentStatusData;
-    } catch {
+    } catch (error) {
+        // Debug logging for status parsing issues (file not found is expected)
+        if (error instanceof Error && !error.message.includes('ENOENT')) {
+            console.debug('[Agent Actions] Failed to read agent status:', uri.fsPath, error.message);
+        }
         return null;
     }
 }

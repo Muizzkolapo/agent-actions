@@ -155,12 +155,18 @@ function getStatusLabel(status: ActionStatus): string {
 /**
  * Tree data provider for workflow navigator
  */
-export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode> {
+export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
     private readonly _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+    private readonly modelListener: vscode.Disposable;
 
     constructor(private readonly model: WorkflowModel) {
-        this.model.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+        this.modelListener = this.model.onDidChange(() => this._onDidChangeTreeData.fire(undefined));
+    }
+
+    dispose(): void {
+        this._onDidChangeTreeData.dispose();
+        this.modelListener.dispose();
     }
 
     getTreeItem(element: TreeNode): vscode.TreeItem {

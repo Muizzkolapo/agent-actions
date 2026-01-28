@@ -167,10 +167,12 @@ export class DagWebview implements vscode.Disposable {
             }
         }
 
-        // Add click handlers
+        // Add click handlers using sanitized action names for security
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
-            lines.push(`  click ${nodeId} callback "${action.name}"`);
+            // Use sanitized name in callback to prevent XSS
+            const sanitizedName = this.sanitizeForCallback(action.name);
+            lines.push(`  click ${nodeId} callback "${sanitizedName}"`);
         }
 
         // Add style definitions
@@ -186,6 +188,14 @@ export class DagWebview implements vscode.Disposable {
 
     private sanitizeId(name: string): string {
         return name.replace(/[^a-zA-Z0-9_]/g, '_');
+    }
+
+    /**
+     * Sanitize action name for use in Mermaid callback to prevent XSS
+     */
+    private sanitizeForCallback(name: string): string {
+        // Remove any characters that could break out of the string or execute code
+        return name.replace(/[<>"'`\\]/g, '').replace(/\s+/g, '_');
     }
 
     private getStatusClass(status: ActionStatus): string {
@@ -285,15 +295,19 @@ ${diagram}
             theme: 'dark',
             flowchart: {
                 curve: 'basis',
-                htmlLabels: true,
+                htmlLabels: false,  // Disable HTML labels for security
                 padding: 15
             },
-            securityLevel: 'loose'
+            securityLevel: 'strict'
         });
 
-        // Handle click events
+        // Handle click events - Mermaid will call this via the callback mechanism
+        // With securityLevel: 'strict', we use mermaid's built-in click handler
         window.callback = function(actionName) {
-            vscode.postMessage({ type: 'openAction', actionName });
+            // Validate actionName contains only safe characters
+            if (/^[a-zA-Z0-9_-]+$/.test(actionName)) {
+                vscode.postMessage({ type: 'openAction', actionName });
+            }
         };
     </script>
 </body>
