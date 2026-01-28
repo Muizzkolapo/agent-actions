@@ -75,10 +75,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     const serverOptions: ServerOptions = {
         command: pythonPath,
-        args: ['-m', 'agent_actions.lsp.server', '--stdio'],
+        args: ['-m', 'agent_actions.tooling.lsp.server', '--stdio'],
     };
 
-    console.log(`Starting Agent Actions LSP server with: ${pythonPath} -m agent_actions.lsp.server --stdio`);
+    console.log(`Starting Agent Actions LSP server with: ${pythonPath} -m agent_actions.tooling.lsp.server --stdio`);
 
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
