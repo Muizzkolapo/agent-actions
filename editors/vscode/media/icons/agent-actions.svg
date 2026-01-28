@@ -1,0 +1,16 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background rounded rectangle -->
+  <rect width="128" height="128" rx="24" fill="#1f6feb"/>
+
+  <!-- Graph/workflow icon - three connected nodes -->
+  <circle cx="40" cy="40" r="12" fill="#ffffff"/>
+  <circle cx="88" cy="40" r="12" fill="#ffffff"/>
+  <circle cx="64" cy="88" r="12" fill="#ffffff"/>
+
+  <!-- Connecting lines -->
+  <line x1="40" y1="52" x2="64" y2="76" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <line x1="88" y1="52" x2="64" y2="76" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Arrow indicator on bottom node -->
+  <path d="M58 88 L64 94 L70 88" stroke="#1f6feb" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
