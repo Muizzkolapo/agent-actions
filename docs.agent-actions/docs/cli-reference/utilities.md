@@ -135,20 +135,97 @@ This removes cached batch results. If you haven't retrieved batch results yet, d
 
 ## docs
 
-Generate documentation for your agentic workflows. This creates markdown files describing your actions, their inputs and outputs, and how they connect.
+Generate and serve interactive documentation for your agentic workflows. The `docs` command group provides subcommands for generating data files, serving a documentation site, and running tests.
 
 ```bash
-agac docs [options]
+agac docs <subcommand> [options]
+```
+
+### Subcommands
+
+| Subcommand | Description |
+|------------|-------------|
+| `generate` | Generate documentation data files |
+| `serve` | Start HTTP server to view documentation |
+| `test` | Run Playwright tests to verify documentation |
+| `dev` | Start development environment (coming soon) |
+
+### docs generate
+
+Generate documentation data files by scanning your project for workflows.
+
+```bash
+agac docs generate [options]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--debug` | Enable debug mode |
-| `--verbose` / `-v` | Enable verbose output |
+| `-o, --output` | Output directory for generated files (default: `artefact`) |
+
+**Examples:**
+```bash
+# Generate documentation in default artefact directory
+agac docs generate
+
+# Generate to a custom directory
+agac docs generate --output ./custom-artefact
+```
+
+### docs serve
+
+Start an HTTP server to view the generated documentation.
+
+```bash
+agac docs serve [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-p, --port` | Port to run server on (default: `8000`) |
+| `-a, --artefact` | Path to artefact directory (default: `./artefact`) |
+
+**Examples:**
+```bash
+# Serve documentation on default port
+agac docs serve
+
+# Serve on a custom port
+agac docs serve --port 3000
+
+# Serve from a custom artefact directory
+agac docs serve --artefact ./my-docs
+```
+
+### docs test
+
+Run Playwright tests to verify the documentation site is working correctly.
+
+```bash
+agac docs test [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-t, --test` | Test suite to run: `schemas`, `actions`, or `all` (default: `all`) |
+| `-p, --port` | Port where docs server is running (default: `8890`) |
+
+**Examples:**
+```bash
+# Run all tests
+agac docs test
+
+# Run only schema tests
+agac docs test --test schemas
+
+# Test against a custom port
+agac docs test --port 3000
+```
 
 :::tip Run from Anywhere
-You can run this command from any subdirectory within your project.
+You can run docs commands from any subdirectory within your project.
 :::
 
 ## status

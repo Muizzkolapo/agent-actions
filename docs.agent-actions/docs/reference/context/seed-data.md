@@ -82,16 +82,20 @@ context_scope:
 
 ## Reserved Action Names
 
-Action names cannot use reserved namespaces. The following names are disallowed:
+Action names cannot use reserved namespaces. The following names are disallowed because they're used for built-in functionality and config directives:
 
-- `action`
-- `context_scope`
-- `loop`
-- `prompt`
-- `schema`
-- `seed`
-- `source`
-- `workflow`
+| Reserved Name | Purpose |
+|---------------|---------|
+| `source` | Input data namespace |
+| `loop` | Loop iteration namespace |
+| `workflow` | Workflow metadata namespace |
+| `seed` | Seed data namespace |
+| `prompt` | Prompt template namespace |
+| `schema` | Schema definition namespace |
+| `context_scope` | Config directive (not a runtime namespace) |
+| `action` | Action metadata namespace |
+
+These namespaces (except `context_scope`) are always available in templates without explicit dependency declarations.
 
 ## Example from qanalabs
 

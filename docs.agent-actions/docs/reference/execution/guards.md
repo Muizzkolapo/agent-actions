@@ -30,12 +30,34 @@ Let's walk through the basic guard structure:
     behavior: "skip" | "filter"
 ```
 
-| Field | Description |
-|-------|-------------|
-| `clause` | Expression evaluated against upstream data |
-| `behavior` | What happens when clause is false: `skip` or `filter` |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `clause` | string | (required) | Expression evaluated against upstream data |
+| `behavior` | string | `filter` | What happens when clause is false: `skip` or `filter` |
+| `scope` | string | `item` | Evaluation scope (reserved for future use) |
+| `passthrough_on_error` | boolean | `true` | If evaluation errors, pass the record through instead of failing |
 
 The `clause` is evaluated before the action runs. If it returns `false`, the `behavior` kicks in.
+
+### Error Handling with passthrough_on_error
+
+By default, if a guard expression fails to evaluate (e.g., due to a missing field or type error), the record passes through and the action executes. This fail-safe behavior prevents a single bad record from halting your entire workflow.
+
+```yaml
+guard:
+  clause: 'optional_field > 10'
+  behavior: "filter"
+  passthrough_on_error: true  # Default: record continues if evaluation fails
+```
+
+Set `passthrough_on_error: false` for strict mode where evaluation errors stop processing:
+
+```yaml
+guard:
+  clause: 'required_field > 10'
+  behavior: "filter"
+  passthrough_on_error: false  # Evaluation errors will raise exceptions
+```
 
 ## Condition Expressions
 

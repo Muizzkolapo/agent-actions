@@ -22,7 +22,7 @@ Set granularity in defaults or per-action:
 
 ```yaml
 defaults:
-  granularity: Record  # Default for all actions
+  granularity: record  # Default for all actions
 ```
 
 Or per-action:
@@ -30,7 +30,7 @@ Or per-action:
 ```yaml
 actions:
   - name: aggregate_results
-    granularity: File  # Override for this action
+    granularity: file  # Override for this action
 ```
 
 ## Record Granularity
@@ -39,7 +39,7 @@ Let's start with record granularity - it's the default and most common choice. T
 
 ```yaml
 - name: validate_email
-  granularity: Record  # Default, can be omitted
+  granularity: record  # Default, can be omitted
   kind: tool
   impl: validate_email
 ```
@@ -66,14 +66,14 @@ Let's start with record granularity - it's the default and most common choice. T
   dependencies: extract_raw_qa  # Input source
   kind: tool
   impl: flatten_questions
-  granularity: Record
+  granularity: record
   intent: "Flatten questions array for individual processing"
 
 - name: classify_question_type
   dependencies: flatten_raw_questions  # Input source
   model_vendor: openai
   model_name: gpt-4o-mini
-  granularity: Record
+  granularity: record
   prompt: $qanalabs_quiz_gen.Classify_Question_Type
   schema: question_classification
 ```
@@ -115,7 +115,7 @@ Here's where it differs: file granularity processes all records together. The ac
 
 ```yaml
 - name: deduplicate_facts
-  granularity: File
+  granularity: file
   kind: tool
   impl: deduplicate_by_similarity
 ```
@@ -138,19 +138,19 @@ Here's where it differs: file granularity processes all records together. The ac
 ```yaml
 # Valid: File granularity with tool action
 - name: deduplicate_facts
-  granularity: File
+  granularity: file
   kind: tool
   impl: deduplicate_by_similarity
 
 # Invalid: File granularity with LLM action
 - name: summarize_all
-  granularity: File  # ERROR: File granularity not supported for LLM
+  granularity: file  # ERROR: File granularity not supported for LLM
   model_vendor: openai
   model_name: gpt-4o
 
 # Invalid: File granularity with guard
 - name: filter_and_dedupe
-  granularity: File
+  granularity: file
   kind: tool
   impl: deduplicate
   guard:  # ERROR: Guards not supported with File granularity
@@ -171,7 +171,7 @@ Here's where it differs: file granularity processes all records together. The ac
 - name: convert_html_json_to_thinkific
   kind: tool
   impl: convert_html_json_to_thinkific
-  granularity: File
+  granularity: file
   intent: "Convert HTML JSON format to Thinkific-compatible Excel export"
   dependencies: add_asterisk_to_correct_answer  # Input source
 ```
@@ -273,14 +273,14 @@ Configuration:
 - name: validate_email
   kind: tool
   impl: validate_email
-  granularity: Record
+  granularity: record
 ```
 
 ### File-Level UDF
 
 ```python
 from agent_actions import udf_tool
-from agent_actions.configuration.new_format_schema import Granularity
+from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def deduplicate_facts(records, **kwargs):
@@ -300,7 +300,7 @@ Configuration:
 - name: deduplicate_facts
   kind: tool
   impl: deduplicate_facts
-  granularity: File
+  granularity: file
 ```
 
 ### FileUDFResult for Tracking
@@ -309,7 +309,7 @@ For file-level UDFs that need to track which inputs produced which outputs:
 
 ```python
 from agent_actions import udf_tool, FileUDFResult
-from agent_actions.configuration.new_format_schema import Granularity
+from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def group_by_category(records, **kwargs):
@@ -332,32 +332,32 @@ Agentic workflows commonly mix granularities. Let's explore a typical pattern:
 
 ```yaml
 defaults:
-  granularity: Record
+  granularity: record
 
 actions:
   # Record-level extraction
   - name: extract_facts
-    granularity: Record  # Default
+    granularity: record  # Default
 
   # Record-level validation
   - name: validate_facts
     dependencies: extract_facts  # Input source
-    granularity: Record
+    granularity: record
 
   # File-level deduplication
   - name: deduplicate
     dependencies: validate_facts  # Input source
-    granularity: File
+    granularity: file
 
   # Record-level enrichment (back to per-item)
   - name: enrich_facts
     dependencies: deduplicate  # Input source
-    granularity: Record
+    granularity: record
 
   # File-level export
   - name: export_to_excel
     dependencies: enrich_facts  # Input source
-    granularity: File
+    granularity: file
 ```
 
 ### Flow Diagram
@@ -394,11 +394,11 @@ All records from the record-level action are collected into an array for the fil
 
 ```yaml
 - name: process_items      # Record: produces N results
-  granularity: Record
+  granularity: record
 
 - name: aggregate          # File: receives array of N items
   dependencies: process_items  # Input source
-  granularity: File
+  granularity: file
 ```
 
 ### File → Record
@@ -407,11 +407,11 @@ The output from a file-level action is distributed to record-level processing. I
 
 ```yaml
 - name: deduplicate        # File: produces array of M items
-  granularity: File
+  granularity: file
 
 - name: enrich_each        # Record: processes each of M items
   dependencies: deduplicate  # Input source
-  granularity: Record
+  granularity: record
 ```
 
 ## Best Practices
@@ -421,11 +421,11 @@ The output from a file-level action is distributed to record-level processing. I
 ```yaml
 # Good: Explicit record granularity for per-item work
 - name: validate_item
-  granularity: Record
+  granularity: record
 
 # File only when needed
 - name: aggregate_results
-  granularity: File
+  granularity: file
 ```
 
 ### 2. Use File for Aggregation Only
@@ -433,12 +433,12 @@ The output from a file-level action is distributed to record-level processing. I
 ```yaml
 # Good: File granularity for cross-record operations
 - name: deduplicate
-  granularity: File
+  granularity: file
   impl: remove_duplicates
 
 # Avoid: File granularity for per-item operations
 - name: validate_email  # Should be Record
-  granularity: File
+  granularity: file
 ```
 
 ### 3. Consider Memory for Large Files
@@ -449,7 +449,7 @@ File granularity loads all records into memory. For large datasets, this can be 
 # For large datasets, process in chunks at record level
 # rather than loading everything at file level
 - name: process_large_dataset
-  granularity: Record  # Memory efficient
+  granularity: record  # Memory efficient
 ```
 
 :::warning
@@ -460,7 +460,7 @@ File granularity with thousands of records can cause memory issues. Consider bre
 
 ```yaml
 - name: export_final
-  granularity: File
+  granularity: file
   intent: "Aggregate all processed records into single Excel file"
 ```
 
