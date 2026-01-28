@@ -561,7 +561,9 @@ def _publish_diagnostics(uri: str) -> None:
 
     file_path = Path(uri.replace("file://", ""))
     diagnostics = _collect_diagnostics(file_path, server.index)
-    server.publish_diagnostics(uri, diagnostics)
+    server.text_document_publish_diagnostics(
+        lsp.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics)
+    )
 
 
 def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagnostic]:
