@@ -480,23 +480,24 @@ class TestMatchingAlgorithmPriority:
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
-            # Include node_4 in lineage - this means it's a direct ancestor
+            # Include node_4_seo in lineage - this means it's a direct ancestor
+            # Lineage must match fixture format: node_X_name
             lineage=[
-                "extract_0",
-                "enrich_1",
-                "validate_3",
-                "generate_seo_4",  # In lineage!
-                "score_7",
+                "node_0_extract",
+                "node_1_enrich",
+                "node_3_validate",
+                "node_4_seo",  # In lineage! Matches fixture record's lineage
+                "node_7_score",
             ],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_seo": 4},
             caller_lineage=[
-                "extract_0",
-                "enrich_1",
-                "validate_3",
-                "generate_seo_4",
-                "score_7",
+                "node_0_extract",
+                "node_1_enrich",
+                "node_3_validate",
+                "node_4_seo",
+                "node_7_score",
             ],
             parent_target_id="parent-001",
         )
