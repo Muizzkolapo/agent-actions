@@ -3,6 +3,7 @@
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm.realtime import builder as agent_builder
 from agent_actions.input.preprocessing.filtering.guard_filter import (
@@ -244,8 +245,6 @@ def _validate_llm_output_schema(
 
         if not report.is_compliant:
             if strict_mode:
-                from agent_actions.errors import SchemaValidationError
-
                 raise SchemaValidationError(
                     f"LLM output does not match expected schema for action '{agent_name}'",
                     schema_name=report.schema_name,
@@ -263,12 +262,27 @@ def _validate_llm_output_schema(
                 logger.warning(
                     "Schema validation warning for '%s': %s",
                     agent_name,
-                    ", ".join(report.validation_errors) if report.validation_errors else "Schema mismatch detected",
+                    ", ".join(report.validation_errors)
+                    if report.validation_errors
+                    else "Schema mismatch detected",
                 )
 
     except ImportError:
+        # Module not available - skip validation (acceptable during testing/development)
         logger.debug("Schema output validator not available, skipping validation")
+    except SchemaValidationError:
+        # Re-raise schema validation errors - these should fail loudly
+        raise
     except Exception as e:
+        # Log unexpected errors but don't swallow them in strict mode
+        if agent_config.get(STRICT_SCHEMA_KEY, False):
+            raise SchemaValidationError(
+                f"Schema validation failed unexpectedly for action '{agent_name}': {e}",
+                action_name=agent_name,
+                validation_type="output",
+                hint="Check the schema format and LLM output structure",
+                cause=e,
+            ) from e
         logger.warning("Schema validation failed with error: %s", e)
 
     return response

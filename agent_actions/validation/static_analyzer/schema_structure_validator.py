@@ -31,9 +31,6 @@ class SchemaStructureValidator:
     # Valid JSON Schema types
     VALID_TYPES = {"string", "number", "integer", "boolean", "array", "object", "null"}
 
-    # Valid unified format field types (includes shorthand)
-    VALID_FIELD_TYPES = VALID_TYPES | {"array[string]", "array[number]", "array[object]"}
-
     def validate_schema(
         self,
         schema: Dict[str, Any],

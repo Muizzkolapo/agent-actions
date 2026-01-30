@@ -71,9 +71,10 @@ class SchemaLoader:
                 agent_name,
                 str(e),
             )
+            # Note: schema_name is None here because we're at agent-level, not schema-level
             raise SchemaValidationError(
                 f"Failed to load schemas for agent '{agent_name}': {e}",
-                schema_name=agent_name,
+                schema_name=None,
                 validation_type="schema_loading",
                 action_name=agent_name,
                 hint="Check that the agent configuration file exists and is valid YAML",
@@ -165,9 +166,7 @@ class SchemaLoader:
                     },
                 )
             else:
-                logger.error(
-                    "Multiple schema files missing: %s", ", ".join(missing_files)
-                )
+                logger.error("Multiple schema files missing: %s", ", ".join(missing_files))
                 raise ConfigValidationError(
                     f"Multiple schema files missing: {', '.join(missing_files)}",
                     context={
