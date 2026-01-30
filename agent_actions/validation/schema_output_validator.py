@@ -40,7 +40,9 @@ class SchemaValidationReport:
     extra_fields: List[str] = field(default_factory=list)
 
     # Type analysis
-    type_errors: Dict[str, Tuple[str, str]] = field(default_factory=dict)  # field: (expected, actual)
+    type_errors: Dict[str, Tuple[str, str]] = field(
+        default_factory=dict
+    )  # field: (expected, actual)
 
     # Validation details
     validation_errors: List[str] = field(default_factory=list)
@@ -68,10 +70,14 @@ class SchemaValidationReport:
             lines.append(f"Matched fields ({len(matched)}): {', '.join(sorted(matched))}")
 
         if self.missing_required:
-            lines.append(f"MISSING REQUIRED ({len(self.missing_required)}): {', '.join(self.missing_required)}")
+            lines.append(
+                f"MISSING REQUIRED ({len(self.missing_required)}): {', '.join(self.missing_required)}"
+            )
 
         if self.missing_optional:
-            lines.append(f"Missing optional ({len(self.missing_optional)}): {', '.join(self.missing_optional)}")
+            lines.append(
+                f"Missing optional ({len(self.missing_optional)}): {', '.join(self.missing_optional)}"
+            )
 
         if self.extra_fields:
             lines.append(f"Extra fields ({len(self.extra_fields)}): {', '.join(self.extra_fields)}")
@@ -105,7 +111,9 @@ class SchemaValidationReport:
             "missing_required": self.missing_required,
             "missing_optional": self.missing_optional,
             "extra_fields": self.extra_fields,
-            "type_errors": {k: {"expected": v[0], "actual": v[1]} for k, v in self.type_errors.items()},
+            "type_errors": {
+                k: {"expected": v[0], "actual": v[1]} for k, v in self.type_errors.items()
+            },
             "validation_errors": self.validation_errors,
         }
 
@@ -154,9 +162,13 @@ def validate_output_against_schema(
         validation_errors.append(f"Missing required fields: {', '.join(missing_required)}")
     if type_errors:
         for field_name, (expected, actual) in type_errors.items():
-            validation_errors.append(f"Type mismatch for '{field_name}': expected {expected}, got {actual}")
+            validation_errors.append(
+                f"Type mismatch for '{field_name}': expected {expected}, got {actual}"
+            )
     if strict_mode and extra_fields:
-        validation_errors.append(f"Extra fields not allowed in strict mode: {', '.join(extra_fields)}")
+        validation_errors.append(
+            f"Extra fields not allowed in strict mode: {', '.join(extra_fields)}"
+        )
 
     return SchemaValidationReport(
         action_name=action_name,
