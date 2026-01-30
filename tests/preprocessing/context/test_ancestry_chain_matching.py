@@ -351,7 +351,7 @@ class TestMapReducePattern:
 
 
 class TestBackwardCompatibility:
-    """Tests ensuring backward compatibility with legacy records."""
+    """Tests for records that predate ancestry tracking."""
 
     def test_legacy_record_without_ancestry_does_not_match(self):
         """Records without ancestry fields should not match without lineage or ancestry."""
@@ -378,6 +378,44 @@ class TestBackwardCompatibility:
         )
 
         assert result is None
+
+    def test_legacy_record_via_loader_returns_none(self, tmp_path):
+        """Integration test: legacy records without ancestry return None via full loader."""
+        legacy_records = [
+            {
+                "source_guid": "legacy-001",
+                "target_id": "old-record",
+                "node_id": "legacy_action_abc123",
+                # No parent_target_id
+                # No root_target_id
+                "content": {"legacy_field": "value"},
+            }
+        ]
+
+        # Set up directory structure
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+
+        legacy_dir = target_dir / "legacy_action"
+        legacy_dir.mkdir(parents=True)
+        with open(legacy_dir / "test.json", "w") as f:
+            json.dump(legacy_records, f, indent=2)
+
+        downstream_dir = target_dir / "downstream"
+        downstream_dir.mkdir(parents=True)
+        (downstream_dir / "test.json").write_text("[]")
+
+        request = HistoricalDataRequest(
+            action_name="legacy_action",
+            lineage=["node_0"],
+            source_guid="legacy-001",
+            file_path=str(downstream_dir / "test.json"),
+            agent_indices={"legacy_action": 1},
+        )
+
+        result = HistoricalNodeDataLoader.load_historical_node_data(request)
+
+        assert result is None, "Legacy records without ancestry should not match"
 
     def test_new_record_with_ancestry_still_has_source_guid(self):
         """New records with ancestry should still have source_guid for diagnostics."""

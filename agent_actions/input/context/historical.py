@@ -324,6 +324,7 @@ class HistoricalNodeDataLoader:
         - Direct ancestors: Uses lineage prefix matching
         - Parallel siblings: Uses parent_target_id (Diamond/Fan-in)
         - Map-Reduce: Uses root_target_id
+        - Granularity changes: Requires ancestry fields for disambiguation
 
         Args:
             data: List of records from the target file
