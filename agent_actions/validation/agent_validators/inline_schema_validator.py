@@ -2,6 +2,8 @@
 Validator for inline schema configuration.
 """
 
+from typing import Any, Dict
+
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult,
@@ -10,15 +12,53 @@ from agent_actions.validation.utils.schema_type_validator import SchemaTypeValid
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 
 
+def _is_unified_schema_format(schema: Dict[str, Any]) -> bool:
+    """
+    Check if schema is in unified format (compiled from render step).
+
+    Unified format has 'fields' key with a list value, e.g.:
+    {
+        "name": "my_schema",
+        "fields": [{"id": "field1", "type": "string"}, ...],
+        "description": "...",
+        "required": [...],
+        "additionalProperties": False
+    }
+
+    Or JSON Schema format with 'type' and 'properties':
+    {
+        "type": "object",
+        "properties": {...}
+    }
+
+    Args:
+        schema: Schema dictionary to check
+
+    Returns:
+        True if unified/compiled format, False if inline shorthand format
+    """
+    # Check for fields-based unified format (from render compilation)
+    if "fields" in schema and isinstance(schema.get("fields"), list):
+        return True
+
+    # Check for JSON Schema format (type + properties)
+    if "type" in schema and "properties" in schema:
+        return True
+
+    # Check for JSON Schema array format
+    if schema.get("type") == "array" and "items" in schema:
+        return True
+
+    return False
+
+
 class InlineSchemaValidator(BaseAgentEntryValidator):
     """
     Validates inline schema configuration.
 
-    Checks that inline schemas have:
-    - Dictionary structure
-    - String field names
-    - String field types
-    - Valid type values (delegated to SchemaTypeValidator)
+    Handles two schema formats:
+    1. Inline shorthand: {field_name: type_string} - validated for valid types
+    2. Unified/compiled format: {name: ..., fields: [...]} - already validated during render
 
     Also warns if both 'schema' and 'schema_name' are present.
 
@@ -59,6 +99,20 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
             )
             return AgentEntryValidationResult.with_errors(errors)
 
+        # Skip validation for unified/compiled schema format
+        # These schemas are already validated during the render step
+        if _is_unified_schema_format(inline_schema):
+            # Still check for schema_name conflict
+            if SCHEMA_NAME_KEY in normalized_entry:
+                warnings.append(
+                    f"{desc} has both 'schema' and 'schema_name' defined. "
+                    f"The inline 'schema' will take precedence over 'schema_name'."
+                )
+            if warnings:
+                return AgentEntryValidationResult(errors=[], warnings=warnings)
+            return AgentEntryValidationResult.success()
+
+        # Validate inline shorthand format: {field_name: type_string}
         # Define valid schema types
         valid_types = {"string", "number", "integer", "boolean", "array", "object"}
         valid_array_types = {
