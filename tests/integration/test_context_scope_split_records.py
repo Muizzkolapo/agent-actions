@@ -342,7 +342,7 @@ class TestContextScopeSplitRecordsEdgeCases:
         """
         Test handling when current_item has no lineage.
 
-        Should gracefully handle (possibly returning None or first match).
+        Should gracefully handle and avoid falling back to source_guid.
         """
         # Current item WITHOUT lineage
         current_item = {
@@ -369,8 +369,9 @@ class TestContextScopeSplitRecordsEdgeCases:
             file_path=file_path,
         )
 
-        # May or may not have loaded split_operation (implementation-dependent)
-        # Just verify it doesn't crash
+        assert (
+            "split_operation" not in field_context or field_context.get("split_operation") is None
+        ), "Should not load split_operation without lineage or ancestry matching"
 
     def test_wrong_source_guid_returns_none(
         self,

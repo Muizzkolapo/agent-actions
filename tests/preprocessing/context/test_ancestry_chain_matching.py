@@ -353,8 +353,8 @@ class TestMapReducePattern:
 class TestBackwardCompatibility:
     """Tests ensuring backward compatibility with legacy records."""
 
-    def test_legacy_record_without_ancestry_uses_source_guid(self):
-        """Records without ancestry fields should fall back to source_guid matching."""
+    def test_legacy_record_without_ancestry_does_not_match(self):
+        """Records without ancestry fields should not match without lineage or ancestry."""
         legacy_records = [
             {
                 "source_guid": "legacy-001",
@@ -366,11 +366,18 @@ class TestBackwardCompatibility:
             }
         ]
 
-        # When ancestry matching fails, should fall back to source_guid
-        source_matches = [r for r in legacy_records if r.get("source_guid") == "legacy-001"]
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data=legacy_records,
+            source_guid="legacy-001",
+            _node_id="old_action_abc123",
+            caller_lineage=None,
+            parent_target_id=None,
+            root_target_id=None,
+            is_parallel_sibling=False,
+            action_name="old_action",
+        )
 
-        assert len(source_matches) == 1
-        assert source_matches[0]["content"]["legacy_field"] == "value"
+        assert result is None
 
     def test_new_record_with_ancestry_still_has_source_guid(self):
         """New records with ancestry should still have source_guid for diagnostics."""
@@ -420,7 +427,6 @@ class TestMatchingAlgorithmPriority:
     1. Lineage match (existing behavior)
     2. Parent match (parent_target_id) for parallel siblings
     3. Root match (root_target_id) for Map-Reduce
-    4. Source GUID fallback (legacy)
     """
 
     def test_lineage_match_takes_priority_over_parent(

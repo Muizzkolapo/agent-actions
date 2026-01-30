@@ -319,14 +319,11 @@ class HistoricalNodeDataLoader:
         1. Lineage match (existing behavior) - for direct ancestors
         2. Parent match (parent_target_id) - for parallel siblings (Diamond pattern)
         3. Root match (root_target_id) - for Map-Reduce aggregation
-        4. Source GUID fallback - legacy compatibility
 
         **Scenarios Handled**:
         - Direct ancestors: Uses lineage prefix matching
         - Parallel siblings: Uses parent_target_id (Diamond/Fan-in)
         - Map-Reduce: Uses root_target_id
-        - Granularity changes: Falls back to source_guid
-        - Legacy workflows: Returns first source_guid match
 
         Args:
             data: List of records from the target file
@@ -356,7 +353,6 @@ class HistoricalNodeDataLoader:
         )
 
         matches_found = 0
-        first_source_guid_match = None
         parent_match = None
         root_match = None
 
@@ -386,10 +382,6 @@ class HistoricalNodeDataLoader:
                 record.get("root_target_id"),
             )
 
-            # Store first match as ultimate fallback
-            if first_source_guid_match is None:
-                first_source_guid_match = record
-
             # Strategy 1: Lineage matching (for direct ancestors, not parallel siblings)
             if not is_parallel_sibling and caller_lineage is not None:
                 record_lineage = record.get("lineage")
@@ -411,18 +403,13 @@ class HistoricalNodeDataLoader:
 
         # Return based on priority
         if is_parallel_sibling:
-            # For parallel siblings, prefer ancestry matching over source_guid fallback
+            # For parallel siblings, prefer ancestry matching strategies
             if parent_match:
                 logger.debug("[DEBUG _find_record] Returning parent_target_id match")
                 return parent_match
             if root_match:
                 logger.debug("[DEBUG _find_record] Returning root_target_id match")
                 return root_match
-
-        # Fallback to first source_guid match (legacy behavior)
-        if first_source_guid_match is not None:
-            logger.debug("[DEBUG _find_record] No ancestry match, returning source_guid fallback")
-            return first_source_guid_match
 
         logger.debug(
             "[DEBUG _find_record] No matches found (searched %s records)",
