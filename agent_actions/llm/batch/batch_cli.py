@@ -62,7 +62,8 @@ def retrieve(batch_id: str = None):
         if not args.batch_id:
             click.echo("No batch ID provided and no previous batch job found.")
             return
-    # Use current directory as the output directory (where batch registry lives)
-    # This maintains consistency with the batch registry location
+    # @requires_project changes CWD to project root before this runs.
+    # The batch registry lives at {project_root}/batch/.batch_registry.json,
+    # so "." correctly resolves to the project root where the registry lives.
     result = service.retrieve_results(args.batch_id, ".")
     click.echo(result)
