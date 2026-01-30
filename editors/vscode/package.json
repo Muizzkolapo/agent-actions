@@ -66,6 +66,17 @@
           "default": 0,
           "minimum": 0,
           "description": "Polling interval in milliseconds for workflow status updates. Set to 0 to disable polling (file watchers still active)."
+        },
+        "agentActions.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "description": "Controls the verbosity of Agent Actions logs in the Output panel."
         }
       }
     },

@@ -16,6 +16,7 @@ import {
     LanguageClientOptions,
     ServerOptions,
 } from 'vscode-languageclient/node';
+import { logger, registerLogger } from './utils/logger';
 
 // Model
 import { WorkflowModel } from './model/workflowModel';
@@ -66,7 +67,8 @@ async function getPythonPath(): Promise<string> {
  * Activate the extension
  */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-    console.log('Activating Agent Actions extension...');
+    registerLogger(context);
+    logger.info('Activating Agent Actions extension...');
 
     // ========================================
     // 1. Initialize LSP Client
@@ -78,7 +80,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         args: ['-m', 'agent_actions.tooling.lsp.server', '--stdio'],
     };
 
-    console.log(`Starting Agent Actions LSP server with: ${pythonPath} -m agent_actions.tooling.lsp.server --stdio`);
+    logger.info(`Starting Agent Actions LSP server with: ${pythonPath} -m agent_actions.tooling.lsp.server --stdio`);
 
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
@@ -165,7 +167,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         dagWebview,
     });
 
-    console.log('Agent Actions extension activated with Workflow Navigator');
+    logger.info('Agent Actions extension activated with Workflow Navigator');
 }
 
 /**

@@ -12,6 +12,7 @@
 import * as vscode from 'vscode';
 import { parse } from 'yaml';
 import { ParsedWorkflowConfig, ParsedAction } from './types';
+import { logger } from '../utils/logger';
 
 /** Factory function to avoid regex state sharing issues */
 function createActionNameRegex(): RegExp {
@@ -44,7 +45,7 @@ export async function parseWorkflowConfig(uri: vscode.Uri): Promise<ParsedWorkfl
             actionLocations,
         };
     } catch (error) {
-        console.error('Failed to parse workflow config:', error);
+        logger.error('Failed to parse workflow config.', error);
         return null;
     }
 }
