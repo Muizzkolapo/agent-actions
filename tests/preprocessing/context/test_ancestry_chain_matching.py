@@ -351,10 +351,10 @@ class TestMapReducePattern:
 
 
 class TestBackwardCompatibility:
-    """Tests ensuring backward compatibility with legacy records."""
+    """Tests for records that predate ancestry tracking."""
 
-    def test_legacy_record_without_ancestry_uses_source_guid(self):
-        """Records without ancestry fields should fall back to source_guid matching."""
+    def test_legacy_record_without_ancestry_does_not_match(self):
+        """Records without ancestry fields should not match without lineage or ancestry."""
         legacy_records = [
             {
                 "source_guid": "legacy-001",
@@ -366,11 +366,56 @@ class TestBackwardCompatibility:
             }
         ]
 
-        # When ancestry matching fails, should fall back to source_guid
-        source_matches = [r for r in legacy_records if r.get("source_guid") == "legacy-001"]
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data=legacy_records,
+            source_guid="legacy-001",
+            _node_id="old_action_abc123",
+            caller_lineage=None,
+            parent_target_id=None,
+            root_target_id=None,
+            is_parallel_sibling=False,
+            action_name="old_action",
+        )
 
-        assert len(source_matches) == 1
-        assert source_matches[0]["content"]["legacy_field"] == "value"
+        assert result is None
+
+    def test_legacy_record_via_loader_returns_none(self, tmp_path):
+        """Integration test: legacy records without ancestry return None via full loader."""
+        legacy_records = [
+            {
+                "source_guid": "legacy-001",
+                "target_id": "old-record",
+                "node_id": "legacy_action_abc123",
+                # No parent_target_id
+                # No root_target_id
+                "content": {"legacy_field": "value"},
+            }
+        ]
+
+        # Set up directory structure
+        target_dir = tmp_path / "agent_io" / "target"
+        target_dir.mkdir(parents=True)
+
+        legacy_dir = target_dir / "legacy_action"
+        legacy_dir.mkdir(parents=True)
+        with open(legacy_dir / "test.json", "w") as f:
+            json.dump(legacy_records, f, indent=2)
+
+        downstream_dir = target_dir / "downstream"
+        downstream_dir.mkdir(parents=True)
+        (downstream_dir / "test.json").write_text("[]")
+
+        request = HistoricalDataRequest(
+            action_name="legacy_action",
+            lineage=["node_0"],
+            source_guid="legacy-001",
+            file_path=str(downstream_dir / "test.json"),
+            agent_indices={"legacy_action": 1},
+        )
+
+        result = HistoricalNodeDataLoader.load_historical_node_data(request)
+
+        assert result is None, "Legacy records without ancestry should not match"
 
     def test_new_record_with_ancestry_still_has_source_guid(self):
         """New records with ancestry should still have source_guid for diagnostics."""
@@ -420,7 +465,6 @@ class TestMatchingAlgorithmPriority:
     1. Lineage match (existing behavior)
     2. Parent match (parent_target_id) for parallel siblings
     3. Root match (root_target_id) for Map-Reduce
-    4. Source GUID fallback (legacy)
     """
 
     def test_lineage_match_takes_priority_over_parent(
@@ -436,23 +480,24 @@ class TestMatchingAlgorithmPriority:
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
-            # Include node_4 in lineage - this means it's a direct ancestor
+            # Include node_4_seo in lineage - this means it's a direct ancestor
+            # Lineage must match fixture format: node_X_name
             lineage=[
-                "extract_0",
-                "enrich_1",
-                "validate_3",
-                "generate_seo_4",  # In lineage!
-                "score_7",
+                "node_0_extract",
+                "node_1_enrich",
+                "node_3_validate",
+                "node_4_seo",  # In lineage! Matches fixture record's lineage
+                "node_7_score",
             ],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_seo": 4},
             caller_lineage=[
-                "extract_0",
-                "enrich_1",
-                "validate_3",
-                "generate_seo_4",
-                "score_7",
+                "node_0_extract",
+                "node_1_enrich",
+                "node_3_validate",
+                "node_4_seo",
+                "node_7_score",
             ],
             parent_target_id="parent-001",
         )

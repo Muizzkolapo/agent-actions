@@ -87,3 +87,9 @@ docs.agent-actions/build/
 docs.agent-actions/.docusaurus/
 docs.agent-actions/.cache-loader/
 docs.agent-actions/*.log
+
+# VS Code Extension
+editors/vscode/node_modules/
+editors/vscode/out/
+editors/vscode/package-lock.json
+editors/vscode/*.vsix

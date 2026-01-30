@@ -117,6 +117,22 @@ def dependency_configs_split():
     return {"split_operation": {"idx": 5, "output": ["status", "tags", "priority"]}}
 
 
+@pytest.fixture
+def context_scope_split():
+    """
+    Context scope configuration for split record tests.
+
+    Declares which fields from split_operation should be observed.
+    """
+    return {
+        "observe": [
+            "split_operation.status",
+            "split_operation.tags",
+            "split_operation.priority",
+        ],
+    }
+
+
 class TestContextScopeWithSplitRecords:
     """Integration tests for context scope with split record scenarios."""
 
@@ -137,7 +153,17 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[0]
 
         # Build agent config
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         # Construct file path to current processing location
         # NOTE: Points to downstream node, not historical node
@@ -154,6 +180,7 @@ class TestContextScopeWithSplitRecords:
             dependency_configs=dependency_configs_split,
             current_item=caller,
             file_path=file_path,
+            context_scope=agent_config["context_scope"],
         )
 
         # Assert: Should have loaded split_operation data
@@ -189,7 +216,17 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[1]
 
         # Build agent config
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         # Construct file path to current processing location
         file_path = str(
@@ -205,6 +242,7 @@ class TestContextScopeWithSplitRecords:
             dependency_configs=dependency_configs_split,
             current_item=caller,
             file_path=file_path,
+            context_scope=agent_config["context_scope"],
         )
 
         # Assert: Should have loaded split_operation data
@@ -243,7 +281,17 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[2]
 
         # Build agent config
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         # Construct file path to current processing location
         file_path = str(
@@ -259,6 +307,7 @@ class TestContextScopeWithSplitRecords:
             dependency_configs=dependency_configs_split,
             current_item=caller,
             file_path=file_path,
+            context_scope=agent_config["context_scope"],
         )
 
         # Assert: Should have loaded split_operation data
@@ -287,7 +336,17 @@ class TestContextScopeWithSplitRecords:
         This is a comprehensive test that verifies each branch gets its own
         correct record and they don't all get the same (first) record.
         """
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         file_path = str(
             split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
@@ -306,6 +365,7 @@ class TestContextScopeWithSplitRecords:
                 dependency_configs=dependency_configs_split,
                 current_item=caller,
                 file_path=file_path,
+                context_scope=agent_config["context_scope"],
             )
 
             assert "split_operation" in field_context, (
@@ -342,7 +402,7 @@ class TestContextScopeSplitRecordsEdgeCases:
         """
         Test handling when current_item has no lineage.
 
-        Should gracefully handle (possibly returning None or first match).
+        Should gracefully handle and avoid falling back to source_guid.
         """
         # Current item WITHOUT lineage
         current_item = {
@@ -352,7 +412,17 @@ class TestContextScopeSplitRecordsEdgeCases:
             # NOTE: No lineage field
         }
 
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         file_path = str(
             split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
@@ -367,10 +437,14 @@ class TestContextScopeSplitRecordsEdgeCases:
             dependency_configs=dependency_configs_split,
             current_item=current_item,
             file_path=file_path,
+            context_scope=agent_config["context_scope"],
         )
 
-        # May or may not have loaded split_operation (implementation-dependent)
-        # Just verify it doesn't crash
+        assert (
+            "split_operation" not in field_context
+            or field_context.get("split_operation") is None
+            or field_context.get("split_operation") == {}
+        ), "Should not load split_operation without lineage or ancestry matching"
 
     def test_wrong_source_guid_returns_none(
         self,
@@ -386,7 +460,17 @@ class TestContextScopeSplitRecordsEdgeCases:
         caller = caller_records_data[0].copy()
         caller["source_guid"] = "wrong-guid-999"
 
-        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
+        agent_config = {
+            "idx": 23,
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
+            "context_scope": {
+                "observe": [
+                    "split_operation.status",
+                    "split_operation.tags",
+                    "split_operation.priority",
+                ],
+            },
+        }
 
         file_path = str(
             split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
@@ -400,9 +484,12 @@ class TestContextScopeSplitRecordsEdgeCases:
             dependency_configs=dependency_configs_split,
             current_item=caller,
             file_path=file_path,
+            context_scope=agent_config["context_scope"],
         )
 
         # Should NOT have loaded split_operation (source_guid mismatch)
         assert (
-            "split_operation" not in field_context or field_context.get("split_operation") is None
+            "split_operation" not in field_context
+            or field_context.get("split_operation") is None
+            or field_context.get("split_operation") == {}
         ), "Should not load data when source_guid doesn't match"
