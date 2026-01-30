@@ -47,23 +47,22 @@ def status(batch_id: str = None):
         "If not provided, the last submitted job ID will be used."
     ),
 )
-@click.option(
-    "--output-dir",
-    "-o",
-    default=".",
-    type=click.Path(),
-    help="Directory to save the retrieved results.",
-)
 @handles_user_errors("batch retrieve")
 @requires_project
-def retrieve(batch_id: str = None, output_dir: str = "."):
-    """Retrieves the results of a completed batch job."""
-    args = BatchCommandArgs(batch_id=batch_id, output_dir=output_dir)
+def retrieve(batch_id: str = None):
+    """Retrieves the results of a completed batch job.
+
+    Results are saved to the workflow's configured output directory to maintain
+    consistency with the batch registry.
+    """
+    args = BatchCommandArgs(batch_id=batch_id)
     service = BatchService()
     if not args.batch_id:
         args.batch_id = service._get_last_batch_job_id()
         if not args.batch_id:
             click.echo("No batch ID provided and no previous batch job found.")
             return
-    result = service.retrieve_results(args.batch_id, str(args.output_dir))
+    # Use current directory as the output directory (where batch registry lives)
+    # This maintains consistency with the batch registry location
+    result = service.retrieve_results(args.batch_id, ".")
     click.echo(result)
