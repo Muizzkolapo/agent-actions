@@ -11,7 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from agent_actions.logging import fire_event
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.logging import LoggerFactory, fire_event
 from agent_actions.logging.events import (
     SchemaLoadingStartedEvent,
     SchemaLoadedEvent,
@@ -20,6 +21,8 @@ from agent_actions.logging.events import (
 )
 from agent_actions.output.file_handler import FileHandler
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
+logger = LoggerFactory.get_logger(__name__)
 
 
 class SchemaLoader:
@@ -63,8 +66,19 @@ class SchemaLoader:
 
             return dynamic_schema_names
         except Exception as e:
-            print(f"Error rendering schema for agent '{agent_name}': {str(e)}")
-            return set()
+            logger.error(
+                "Failed to render schema for agent '%s': %s",
+                agent_name,
+                str(e),
+            )
+            raise SchemaValidationError(
+                f"Failed to load schemas for agent '{agent_name}': {e}",
+                schema_name=agent_name,
+                validation_type="schema_loading",
+                action_name=agent_name,
+                hint="Check that the agent configuration file exists and is valid YAML",
+                cause=e,
+            ) from e
 
     @staticmethod
     def load_schema(schema_name: str, schema_dir: Path = None) -> dict:
@@ -142,9 +156,25 @@ class SchemaLoader:
                 missing_files.append(f"{schema_name}.yml")
         if missing_files:
             if len(missing_files) == 1:
-                print(f"Schema file missing: {missing_files[0]}")
+                logger.error("Schema file missing: %s", missing_files[0])
+                raise ConfigValidationError(
+                    f"Schema file missing: {missing_files[0]}",
+                    context={
+                        "agent_name": agent_name,
+                        "missing_schemas": missing_files,
+                    },
+                )
             else:
-                print(f"Multiple schema files missing: {', '.join(missing_files)}")
+                logger.error(
+                    "Multiple schema files missing: %s", ", ".join(missing_files)
+                )
+                raise ConfigValidationError(
+                    f"Multiple schema files missing: {', '.join(missing_files)}",
+                    context={
+                        "agent_name": agent_name,
+                        "missing_schemas": missing_files,
+                    },
+                )
 
     @staticmethod
     def construct_schema_from_dict(schema_dict: dict) -> dict:
@@ -240,5 +270,17 @@ class SchemaLoader:
                 object_schema["required"] = required_fields
             return object_schema
         except (ValueError, SyntaxError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not parse object properties '{properties_str}': {e}")
-            return {"type": "object"}
+            logger.error(
+                "Failed to parse object properties '%s': %s",
+                properties_str,
+                str(e),
+            )
+            raise SchemaValidationError(
+                f"Invalid object properties format: '{properties_str}'",
+                validation_type="structure",
+                hint=(
+                    "Object properties must be valid Python dict or JSON format, "
+                    "e.g., \"{'name': 'string', 'age': 'number'}\""
+                ),
+                cause=e,
+            ) from e
