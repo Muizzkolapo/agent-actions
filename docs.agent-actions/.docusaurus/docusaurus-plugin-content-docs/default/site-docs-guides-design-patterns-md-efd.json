@@ -1,0 +1,29 @@
+{
+  "id": "guides/design-patterns",
+  "title": "Design Patterns",
+  "description": "Agentic workflow patterns for building AI systems",
+  "source": "@site/docs/guides/design-patterns.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/design-patterns",
+  "permalink": "/docs/guides/design-patterns",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/guides/design-patterns.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "title": "Design Patterns",
+    "description": "Agentic workflow patterns for building AI systems",
+    "sidebar_position": 2
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Guides",
+    "permalink": "/docs/guides/"
+  },
+  "next": {
+    "title": "Custom Tools",
+    "permalink": "/docs/guides/custom-tools"
+  }
+}

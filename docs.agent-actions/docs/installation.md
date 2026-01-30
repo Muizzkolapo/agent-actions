@@ -46,9 +46,7 @@ agent-actions 0.1.0
 
 ## Provider Configuration
 
-**How does Agent Actions know which LLM to call?** It reads API keys from your environment. Think of these keys like access badges—each provider has its own badge format, and you need the right one to get through the door.
-
-Set them as environment variables or in a `.env` file.
+Set API keys as environment variables or in a `.env` file.
 
 ### Environment Variables
 
@@ -79,13 +77,13 @@ Agent Actions automatically loads `.env` files from the current directory.
 
 | Provider | Environment Variable | Models |
 |----------|---------------------|--------|
-| OpenAI | `OPENAI_API_KEY` | gpt-4o, gpt-4o-mini, o1, o1-mini |
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4, claude-3-5-sonnet |
-| Google | `GEMINI_API_KEY` | gemini-2.0-flash, gemini-1.5-pro |
-| Groq | `GROQ_API_KEY` | llama-3.3-70b, mixtral-8x7b |
-| Mistral | `MISTRAL_API_KEY` | mistral-large, mistral-medium |
-| Cohere | `COHERE_API_KEY` | command-r-plus |
-| Ollama | (local) | Any Ollama model |
+| OpenAI | `OPENAI_API_KEY` | Any model supported by the OpenAI API |
+| Anthropic | `ANTHROPIC_API_KEY` | Any model supported by the Anthropic API |
+| Google | `GEMINI_API_KEY` | Any model supported by the Gemini API |
+| Groq | `GROQ_API_KEY` | Any model supported by the Groq API |
+| Mistral | `MISTRAL_API_KEY` | Any model supported by the Mistral API |
+| Cohere | `COHERE_API_KEY` | Any model supported by the Cohere API |
+| Ollama | (local) | Any model you've pulled locally |
 
 ## Local Models with Ollama
 
@@ -124,79 +122,9 @@ pip install -e ".[dev]"
 uv sync --dev
 ```
 
-## Shell Completion
-
-Enable tab completion for your shell:
-
-### Bash
-
-```bash
-agac --install-completion bash
-```
-
-### Zsh
-
-```bash
-agac --install-completion zsh
-```
-
-### Fish
-
-```bash
-agac --install-completion fish
-```
-
 ## Next Steps
 
 Now that you have Agent Actions installed, let's build something:
 
-- **[Getting Started](./getting-started/)** - Build your first agentic workflow
-- **[CLI Reference](./cli-reference/)** - Complete command documentation
-
-## Troubleshooting
-
-Here are solutions to common installation issues. If you encounter something not listed here, check the GitHub Issues.
-
-### Python Version Error
-
-```
-ERROR: Requires Python >=3.11
-```
-
-Check your Python version:
-```bash
-python --version
-```
-
-Use pyenv or similar to install Python 3.11+.
-
-### Command Not Found
-
-```
-agac: command not found
-```
-
-Ensure the install location is in your PATH:
-```bash
-# For pip
-python -m agent_actions --help
-
-# For pipx
-pipx ensurepath
-```
-
-### API Key Errors
-
-```
-AuthenticationError: Invalid API key
-```
-
-Verify your API key is set correctly:
-```bash
-echo $OPENAI_API_KEY
-```
-
-### Getting Help
-
-- [GitHub Issues](https://github.com/Muizzkolapo/agent-actions/issues)
-- [Discussions](https://github.com/Muizzkolapo/agent-actions/discussions)
+- **[Tutorials](./tutorials/)** - Build your first agentic workflow
+- **[CLI Reference](./reference/cli/)** - Complete command documentation

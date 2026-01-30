@@ -20,7 +20,7 @@ This is your comprehensive guide to Agent Actions features. Whether you're build
 
 - [Execution](./execution/) — Run modes, guards, granularity
 - [Validation](./validation/) — Pre-flight checks and reprompting
-- [Tools](./tools/) — Python UDFs with `@udf_tool`
+- [Tools](./tools/) — Custom tools with `@udf_tool`
 
 **Understanding the System**
 

@@ -42,7 +42,7 @@ chunk_config:
 | Field | Description |
 |-------|-------------|
 | `default_agent_config` | Default settings inherited by all actions |
-| `tool_path` | Directories to scan for UDF tools |
+| `tool_path` | Directories to scan for custom tools |
 | `chunk_config` | Text chunking for large inputs |
 
 ## Agentic Workflow Configuration
@@ -205,7 +205,7 @@ project/
 ├── # PROJECT-LEVEL (shared across all workflows)
 ├── # ════════════════════════════════════════════════════════
 ├── schema/                     # Output schemas (project-level only)
-├── tools/                      # Python UDFs (shared)
+├── tools/                      # Custom tools (shared)
 ├── prompt_store/               # Shared prompt templates (optional)
 │
 ├── # ════════════════════════════════════════════════════════
@@ -228,7 +228,7 @@ project/
 | Asset | Project Level | Workflow Level | Notes |
 |-------|--------------|----------------|-------|
 | **Schemas** | `schema/` | — | Always project-level; shared across workflows |
-| **Tools (UDFs)** | `tools/` | — | Always project-level; shared across workflows |
+| **Tools** | `tools/` | — | Always project-level; shared across workflows |
 | **Prompts** | `prompt_store/` | `workflow/prompt_store/` | Either or both; searched recursively |
 | **Seed Data** | — | `workflow/seed_data/` | Always workflow-level; domain-specific |
 | **Input/Output** | — | `workflow/agent_io/` | Always workflow-level |

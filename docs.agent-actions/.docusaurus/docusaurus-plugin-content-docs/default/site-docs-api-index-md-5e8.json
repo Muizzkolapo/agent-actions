@@ -1,0 +1,29 @@
+{
+  "id": "api/index",
+  "title": "API Reference",
+  "description": "Python API documentation for Agent Actions",
+  "source": "@site/docs/api/index.md",
+  "sourceDirName": "api",
+  "slug": "/api/",
+  "permalink": "/docs/api/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/api/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "API Reference",
+    "description": "Python API documentation for Agent Actions",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Documentation Site",
+    "permalink": "/docs/reference/documentation-site"
+  },
+  "next": {
+    "title": "Logging API Reference",
+    "permalink": "/docs/api/logging"
+  }
+}

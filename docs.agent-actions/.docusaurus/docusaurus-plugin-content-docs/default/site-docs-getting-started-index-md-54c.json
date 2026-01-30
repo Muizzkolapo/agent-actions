@@ -1,0 +1,29 @@
+{
+  "id": "getting-started/index",
+  "title": "Getting Started",
+  "description": "Create your first Agent Actions agentic workflow",
+  "source": "@site/docs/getting-started/index.md",
+  "sourceDirName": "getting-started",
+  "slug": "/getting-started/",
+  "permalink": "/docs/getting-started/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/getting-started/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Getting Started",
+    "description": "Create your first Agent Actions agentic workflow",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Installation",
+    "permalink": "/docs/installation"
+  },
+  "next": {
+    "title": "Key Concepts",
+    "permalink": "/docs/getting-started/concepts"
+  }
+}

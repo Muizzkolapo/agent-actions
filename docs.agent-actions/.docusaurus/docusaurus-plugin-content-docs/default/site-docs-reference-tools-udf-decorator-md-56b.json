@@ -1,0 +1,28 @@
+{
+  "id": "reference/tools/udf-decorator",
+  "title": "Tool Decorator",
+  "description": "How do you tell Agent Actions that a Python function should be available as a tool action? The @udf_tool decorator handles this registration, along with optional output schema validation.",
+  "source": "@site/docs/reference/tools/udf-decorator.md",
+  "sourceDirName": "reference/tools",
+  "slug": "/reference/tools/udf-decorator",
+  "permalink": "/docs/reference/tools/udf-decorator",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/tools/udf-decorator.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Tool Decorator",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Tool Actions",
+    "permalink": "/docs/reference/tools/"
+  },
+  "next": {
+    "title": "Documentation Site",
+    "permalink": "/docs/reference/documentation-site"
+  }
+}

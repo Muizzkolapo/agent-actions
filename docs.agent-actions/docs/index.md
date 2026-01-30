@@ -7,81 +7,73 @@ slug: /
 
 # Agent Actions
 
-Build production-ready agentic workflows with declarative YAML. No framework boilerplate, no custom Python classes—just configuration that works.
+An agentic workflow engine that runs in your terminal. Define LLM pipelines in YAML, and the engine handles orchestration, validation, and error recovery.
 
-```yaml
-actions:
-  - name: extract_facts
-    model_vendor: openai
-    prompt: "Extract key facts from: {{ source.content }}"
-    schema: facts_schema
+## Get started in 30 seconds
 
-  - name: generate_summary
-    dependencies: extract_facts  # Input source
-    prompt: "Summarize: {{ extract_facts.facts }}"
-```
+**Prerequisites:** Python 3.11+ and an API key from any supported provider (OpenAI, Anthropic, Gemini, Groq, Mistral, Ollama).
+
+**Install Agent Actions:**
 
 ```bash
 pip install agent-actions
+```
+
+**Start using Agent Actions:**
+
+```bash
+cd your-project
 agac run -a my_workflow
 ```
 
-## Why Agent Actions?
+That's it! Continue with [Quickstart (5 minutes)](./tutorials/) →
 
-**What happens when you need to chain multiple LLM calls together?** You quickly discover that reliable AI pipelines require DAG orchestration, schema validation, error recovery, multi-provider support, and batch processing. That's a lot of infrastructure code before you even get to your actual logic.
+See [Installation](./installation.md) for configuration options or [Troubleshooting](./guides/troubleshooting.md) if you hit issues.
 
-Think of Agent Actions like a railway system for your LLM calls. You define the stations (actions) and the tracks between them (dependencies), and Agent Actions handles the scheduling, safety checks, and rerouting when things go wrong. You focus on what each station should do—not on building the railway.
+## What to build
 
-Consider what happens when your agentic workflow runs:
+**[Incident triage](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/incident-management)** — Classify severity, assess impact, assign teams, generate response plans. Parallel evaluators with consensus aggregation.
 
-```mermaid
-flowchart LR
-    YAML[Your YAML Config] --> Engine[Agent Actions Engine]
-    Engine --> Orchestration[DAG Orchestration]
-    Engine --> Validation[Schema Validation]
-    Engine --> Recovery[Auto-Reprompting]
-    Engine --> Batch[Batch Processing]
-    Orchestration & Validation & Recovery & Batch --> Output[Validated Results]
+**[ML pipelines](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/ml-pipeline)** — Data quality checks → feature engineering → parallel model training → evaluation → conditional deployment.
+
+**[Root cause analysis](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/root-cause-analysis)** — Multi-level causal reasoning from symptoms to root causes. Hypothesis generation, validation, and remediation planning.
+
+**[Catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/agent_workflow/book_catalog_enrichment)** — Take raw book/product data, enrich with classifications, marketing copy, SEO keywords, and recommendations.
+
+## What Agent Actions does for you
+
+**Build pipelines from YAML:** Define your workflow in plain YAML. Agent Actions handles DAG orchestration, parallelization, and dependency resolution.
+
+**Validate every output:** Every LLM response is validated against JSON Schema. Invalid outputs trigger automatic reprompting until they conform.
+
+**Mix and match providers:** Chain OpenAI, Anthropic, Gemini, Groq, Mistral, and Ollama in the same workflow. Switch models per-action.
+
+**Catch errors before they cost you:** Pre-flight validation checks your config, variables, and dependency wiring before any API calls are made.
+
+## How it works
+
+Write a YAML config:
+
+```yaml
+actions:
+  - name: extract
+    prompt: "Extract key facts from: {{ source.content }}"
+    schema: facts_schema
+
+  - name: summarize
+    dependencies: extract
+    prompt: "Summarize: {{ extract.facts }}"
 ```
 
-The engine reads your YAML configuration and coordinates four key systems: it orders your actions as a DAG (directed acyclic graph), validates every output against your schemas, automatically reprompts when outputs don't conform, and batches requests for cost efficiency.
+Run it:
 
-## Key Features
+```bash
+agac run -a my_workflow
+```
 
-### Declarative Agentic Workflows
-Define your entire agentic workflow in YAML with Jinja templating. Actions declare dependencies, and the DAG executes automatically.
+## Next steps
 
-### Schema Validation
-Every action output is validated against JSON Schema. Invalid outputs trigger automatic reprompting until they conform. Note that schema validation catches structural errors but cannot verify semantic correctness—a response might match your schema but still contain incorrect information.
-
-### Multi-Provider Support
-Chain OpenAI, Anthropic, Gemini, Groq, Mistral, and Ollama in the same agentic workflow. Switch models per-action or set defaults workflow-wide.
-
-### Batch Processing
-Run large agentic workflows asynchronously with vendor batch APIs. Up to 50% cost savings on compatible models. Batch mode works best for independent records—if your actions need to share state across records, use online mode instead.
-
-### Custom Tools
-Embed Python functions alongside LLM actions using `@udf_tool`. These are auto-discovered and referenced by name in your agentic workflow.
-
-### Pre-flight Validation
-**What if you could catch errors before spending money on API calls?** Agent Actions validates your configuration, checks for missing variables, and verifies dependency wiring before any LLM calls are made. This means typos and wiring errors surface immediately, not after processing thousands of records.
-
-## Get Started
-
-Let's explore what you can build. The links below take you from installation to running your first agentic workflow:
-
-<div className="card-group">
-
-**[Installation](./installation.md)**
-Install the CLI and configure your environment.
-
-**[Quickstart](./getting-started/)**
-Build and run your first agentic workflow in 5 minutes.
-
-**[CLI Reference](./cli-reference/)**
-Complete command documentation.
-
-**[Reference](./reference/)**
-Deep dive into all features.
-
-</div>
+- **[Installation](./installation.md)** — Configure your environment
+- **[Tutorials](./tutorials/)** — Build your first workflow
+- **[Guides](./guides/)** — Task-oriented how-to guides
+- **[Reference](./reference/)** — Full feature documentation

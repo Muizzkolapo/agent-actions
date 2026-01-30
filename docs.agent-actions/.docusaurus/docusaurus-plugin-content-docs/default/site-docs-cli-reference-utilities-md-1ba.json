@@ -1,0 +1,29 @@
+{
+  "id": "cli-reference/utilities",
+  "title": "Utility Commands",
+  "description": "Additional CLI commands for project management",
+  "source": "@site/docs/cli-reference/utilities.md",
+  "sourceDirName": "cli-reference",
+  "slug": "/cli-reference/utilities",
+  "permalink": "/docs/cli-reference/utilities",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/cli-reference/utilities.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "title": "Utility Commands",
+    "description": "Additional CLI commands for project management",
+    "sidebar_position": 4
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "inspect Commands",
+    "permalink": "/docs/cli-reference/inspect"
+  },
+  "next": {
+    "title": "Tool Commands",
+    "permalink": "/docs/cli-reference/tools"
+  }
+}

@@ -1,0 +1,297 @@
+{
+  "docusaurus-plugin-content-docs": {
+    "default": {
+      "path": "/docs",
+      "versions": [
+        {
+          "name": "current",
+          "label": "Next",
+          "isLast": true,
+          "path": "/docs",
+          "mainDocId": "index",
+          "docs": [
+            {
+              "id": "api/index",
+              "path": "/docs/api/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "api/logging",
+              "path": "/docs/api/logging",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "guides/custom-tools",
+              "path": "/docs/guides/custom-tools",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "guides/design-patterns",
+              "path": "/docs/guides/design-patterns",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "guides/editor-setup",
+              "path": "/docs/guides/editor-setup",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "guides/index",
+              "path": "/docs/guides/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "guides/troubleshooting",
+              "path": "/docs/guides/troubleshooting",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "index",
+              "path": "/docs/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "installation",
+              "path": "/docs/installation",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/architecture/index",
+              "path": "/docs/reference/architecture/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/architecture/logging",
+              "path": "/docs/reference/architecture/logging"
+            },
+            {
+              "id": "reference/cli/batch",
+              "path": "/docs/reference/cli/batch",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/index",
+              "path": "/docs/reference/cli/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/inspect",
+              "path": "/docs/reference/cli/inspect",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/run",
+              "path": "/docs/reference/cli/run",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/schema",
+              "path": "/docs/reference/cli/schema",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/skills",
+              "path": "/docs/reference/cli/skills",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/tools",
+              "path": "/docs/reference/cli/tools",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/troubleshooting",
+              "path": "/docs/reference/cli/troubleshooting",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/cli/utilities",
+              "path": "/docs/reference/cli/utilities",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/configuration/defaults",
+              "path": "/docs/reference/configuration/defaults",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/configuration/index",
+              "path": "/docs/reference/configuration/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/configuration/templates",
+              "path": "/docs/reference/configuration/templates",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/context/context-scope",
+              "path": "/docs/reference/context/context-scope",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/context/field-references",
+              "path": "/docs/reference/context/field-references",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/context/index",
+              "path": "/docs/reference/context/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/context/seed-data",
+              "path": "/docs/reference/context/seed-data",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/data-io/chunking",
+              "path": "/docs/reference/data-io/chunking",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/data-io/data-lineage",
+              "path": "/docs/reference/data-io/data-lineage",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/data-io/index",
+              "path": "/docs/reference/data-io/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/data-io/input-formats",
+              "path": "/docs/reference/data-io/input-formats",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/data-io/output-format",
+              "path": "/docs/reference/data-io/output-format",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/documentation-site",
+              "path": "/docs/reference/documentation-site",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/artifacts",
+              "path": "/docs/reference/execution/artifacts",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/context-handling",
+              "path": "/docs/reference/execution/context-handling",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/granularity",
+              "path": "/docs/reference/execution/granularity",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/guards",
+              "path": "/docs/reference/execution/guards",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/index",
+              "path": "/docs/reference/execution/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/retry",
+              "path": "/docs/reference/execution/retry",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/run-modes",
+              "path": "/docs/reference/execution/run-modes",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/versions",
+              "path": "/docs/reference/execution/versions",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/execution/workflow-dependencies",
+              "path": "/docs/reference/execution/workflow-dependencies",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/index",
+              "path": "/docs/reference/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/inspect",
+              "path": "/docs/reference/inspect",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/prompts/dispatch",
+              "path": "/docs/reference/prompts/dispatch",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/prompts/index",
+              "path": "/docs/reference/prompts/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/prompts/prompt-store",
+              "path": "/docs/reference/prompts/prompt-store",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/schemas/index",
+              "path": "/docs/reference/schemas/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/tools/index",
+              "path": "/docs/reference/tools/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/validation/index",
+              "path": "/docs/reference/validation/",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/validation/output-validation",
+              "path": "/docs/reference/validation/output-validation",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "reference/validation/reprompting",
+              "path": "/docs/reference/validation/reprompting",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "tutorials/concepts",
+              "path": "/docs/tutorials/concepts",
+              "sidebar": "docsSidebar"
+            },
+            {
+              "id": "tutorials/index",
+              "path": "/docs/tutorials/",
+              "sidebar": "docsSidebar"
+            }
+          ],
+          "draftIds": [],
+          "sidebars": {
+            "docsSidebar": {
+              "link": {
+                "path": "/docs/",
+                "label": "index"
+              }
+            }
+          }
+        }
+      ],
+      "breadcrumbs": true
+    }
+  }
+}

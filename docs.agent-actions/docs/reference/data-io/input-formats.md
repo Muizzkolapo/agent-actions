@@ -5,7 +5,7 @@ sidebar_position: 2
 
 # Input Formats
 
-What format should your data be in? Agent Actions accepts multiple input formats, so you can work with data in its native form rather than converting everything upfront. Place files in the `agent_io/staging/` directory before running your agentic workflow—this is your starting point for all input data.
+Agent Actions accepts multiple input formats. Place files in `agent_io/staging/` before running your workflow.
 
 ## Supported Formats
 
@@ -19,10 +19,12 @@ What format should your data be in? Agent Actions accepts multiple input formats
 | Text | `.txt` | Plain text documents |
 | Markdown | `.md` | Documentation, formatted text |
 | HTML | `.html` | Web content |
+| PDF | `.pdf` | PDF documents |
+| Word | `.docx` | Word documents |
 
 ## JSON Input
 
-JSON is the most common format for structured data. Each file becomes one record in your agentic workflow:
+Each JSON file becomes one record. A file containing an array creates multiple records (one per element).
 
 ```json
 {
@@ -35,33 +37,15 @@ JSON is the most common format for structured data. Each file becomes one record
 }
 ```
 
-### JSON Arrays
-
-You might wonder: what if you have multiple records in a single file? A file containing an array creates multiple records:
-
-```json
-[
-  {"id": 1, "content": "First document..."},
-  {"id": 2, "content": "Second document..."},
-  {"id": 3, "content": "Third document..."}
-]
-```
-
-Each array element becomes a separate record in the agentic workflow.
-
 ## CSV/Tabular Input
 
-Tabular data works naturally with Agent Actions. Think of each row as a record flowing through your agentic workflow:
+Each row becomes a separate record. Header row defines field names.
 
 ```csv
 id,title,content,category
 1,First Doc,Content here...,technical
 2,Second Doc,More content...,general
 ```
-
-- Each row becomes a separate record
-- Header row defines field names
-- Fields are accessible by column name
 
 ## Accessing Source Data
 
@@ -98,43 +82,9 @@ prompt: |
 
 ## Best Practices
 
-### 1. Use Consistent Structure
-
-Here is an important limitation to keep in mind: all input files should have the same field structure. If fields are inconsistent, your prompts may fail when referencing missing fields:
-
-```json
-// Good: Consistent structure
-{"id": "doc1", "content": "...", "category": "tech"}
-{"id": "doc2", "content": "...", "category": "general"}
-
-// Avoid: Inconsistent fields
-{"id": "doc1", "text": "..."}
-{"id": "doc2", "content": "...", "type": "..."}
-```
-
-### 2. Include Metadata
-
-Add metadata fields for tracking:
-
-```json
-{
-  "id": "unique_identifier",
-  "content": "main content",
-  "metadata": {
-    "source": "origin_system",
-    "timestamp": "2024-01-15T10:30:00Z",
-    "version": "1.0"
-  }
-}
-```
-
-### 3. Validate Before Running
-
-Consider what happens when your input data has issues: the agentic workflow might fail partway through, wasting API calls. Catch problems early by validating before execution:
-
-```bash
-agac run -a my_workflow --validate-only
-```
+1. **Use consistent structure**: All input files should have the same field structure
+2. **Include metadata**: Add tracking fields like `id`, `source`, `timestamp`
+3. **Validate before running**: Catch problems early with `agac run -a my_workflow --validate-only`
 
 ## See Also
 

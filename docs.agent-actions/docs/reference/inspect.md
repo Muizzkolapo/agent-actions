@@ -102,7 +102,7 @@ agac inspect field-flow -a my_workflow --json
 | Option | Description |
 |--------|-------------|
 | `-a, --agent` | Workflow name, optionally with action (e.g., `my_workflow.action`) |
-| `-u, --user-code` | Path to user code directory containing UDFs |
+| `-u, --user-code` | Path to user code directory containing tools |
 | `--json` | Output as JSON for programmatic use |
 | `-v, --verbose` | Show detailed field lineage information |
 | `--errors-only` | Show only validation errors |
@@ -276,7 +276,7 @@ agac inspect conflicts -a my_workflow --include-info
 | Option | Description |
 |--------|-------------|
 | `-a, --agent` | Agent/workflow configuration name |
-| `-u, --user-code` | Path to user code directory containing UDFs |
+| `-u, --user-code` | Path to user code directory containing tools |
 | `--json` | Output as JSON for programmatic use |
 | `--filter-action` | Filter conflicts to those affecting a specific action |
 | `--include-info` | Include INFO-level conflicts (drop-recreate patterns) |
@@ -585,4 +585,4 @@ Use `--include-info` occasionally to review intentional drop-recreate patterns. 
 
 - [Validation](./validation/) - Pre-flight validation for agentic workflows
 - [Context Scoping](./context/) - How `observe`, `passthrough`, and `drop` control data flow
-- [Troubleshooting](./troubleshooting) - Common issues and solutions
+- [Troubleshooting](../guides/troubleshooting) - Common issues and solutions

@@ -1,0 +1,28 @@
+{
+  "id": "reference/execution/index",
+  "title": "Execution",
+  "description": "The execution layer orchestrates LLM calls, data transformations, and validated outputs based on your workflow configuration.",
+  "source": "@site/docs/reference/execution/index.md",
+  "sourceDirName": "reference/execution",
+  "slug": "/reference/execution/",
+  "permalink": "/docs/reference/execution/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/execution/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Execution",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Schema System",
+    "permalink": "/docs/reference/schemas/"
+  },
+  "next": {
+    "title": "Guards",
+    "permalink": "/docs/reference/execution/guards"
+  }
+}

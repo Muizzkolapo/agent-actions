@@ -401,4 +401,4 @@ Without `SKIP_JSON_REPAIR_IN_CLIENT=true`, malformed JSON gets repaired immediat
 
 - [Retry & Error Handling](../execution/retry.md) - Handling transient errors
 - [Output Validation](./output-validation.md) - Schema validation details
-- [Troubleshooting](../troubleshooting.md) - Common error solutions
+- [Troubleshooting](../../guides/troubleshooting.md) - Common error solutions

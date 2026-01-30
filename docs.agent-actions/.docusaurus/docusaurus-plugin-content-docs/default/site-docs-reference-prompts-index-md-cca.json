@@ -1,0 +1,28 @@
+{
+  "id": "reference/prompts/index",
+  "title": "Prompt System",
+  "description": "The prompt system provides centralized management of reusable prompts as Markdown files with Jinja2 templating.",
+  "source": "@site/docs/reference/prompts/index.md",
+  "sourceDirName": "reference/prompts",
+  "slug": "/reference/prompts/",
+  "permalink": "/docs/reference/prompts/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/prompts/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Prompt System",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Chunking",
+    "permalink": "/docs/reference/data-io/chunking"
+  },
+  "next": {
+    "title": "Prompt Store",
+    "permalink": "/docs/reference/prompts/prompt-store"
+  }
+}

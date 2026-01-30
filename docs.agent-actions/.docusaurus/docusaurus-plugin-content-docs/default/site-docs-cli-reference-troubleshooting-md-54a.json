@@ -1,0 +1,29 @@
+{
+  "id": "cli-reference/troubleshooting",
+  "title": "Troubleshooting",
+  "description": "Error messages, logging, and debugging tips",
+  "source": "@site/docs/cli-reference/troubleshooting.md",
+  "sourceDirName": "cli-reference",
+  "slug": "/cli-reference/troubleshooting",
+  "permalink": "/docs/cli-reference/troubleshooting",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/cli-reference/troubleshooting.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 7,
+  "frontMatter": {
+    "title": "Troubleshooting",
+    "description": "Error messages, logging, and debugging tips",
+    "sidebar_position": 7
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "skills Command",
+    "permalink": "/docs/cli-reference/skills"
+  },
+  "next": {
+    "title": "Reference",
+    "permalink": "/docs/reference/"
+  }
+}

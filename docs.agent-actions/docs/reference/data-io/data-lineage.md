@@ -13,12 +13,16 @@ Every record in Agent Actions carries lineage metadata:
 
 ```json
 {
-  "source_guid": "file-001-hash",
+  "source_guid": "cbbd09ca-2503-591c-b712-4c378c101b9d",
   "target_id": "550e8400-e29b-41d4-a716-446655440003",
   "parent_target_id": "550e8400-e29b-41d4-a716-446655440001",
   "root_target_id": "550e8400-e29b-41d4-a716-446655440000",
-  "node_id": "node_5_abc123",
-  "lineage": ["node_0_def456", "node_1_ghi789", "node_5_abc123"],
+  "node_id": "merge_abc12345-6789-0abc-def0-123456789abc",
+  "lineage": [
+    "extract_def45678-1234-5678-9abc-def012345678",
+    "validate_ghi78901-2345-6789-abcd-ef0123456789",
+    "merge_abc12345-6789-0abc-def0-123456789abc"
+  ],
   "content": { ... }
 }
 ```
@@ -38,23 +42,6 @@ Every record in Agent Actions carries lineage metadata:
 ### Record Lifecycle
 
 When a record flows through an action, the ancestry chain propagates automatically:
-
-```mermaid
-flowchart LR
-    subgraph Input["INPUT RECORD"]
-        I["target_id: T_in<br/>parent_target_id: P_in<br/>root_target_id: R_in"]
-    end
-
-    subgraph Action["ACTION"]
-        A["Creates output"]
-    end
-
-    subgraph Output["OUTPUT RECORD"]
-        O["target_id: NEW UUID<br/>parent_target_id: T_in<br/>root_target_id: R_in"]
-    end
-
-    Input --> Action --> Output
-```
 
 **Propagation Rules:**
 1. `target_id` = new UUID (unique for each output)
@@ -77,7 +64,7 @@ The first record is its own root—`root_target_id` equals `target_id`.
 
 ## Parallel Branch Merge (Diamond Pattern)
 
-The most common use case: multiple actions process the same data in parallel, then a downstream action needs **all** their outputs.
+Multiple actions process the same data in parallel, then a downstream action needs **all** their outputs.
 
 ```yaml
 actions:
@@ -85,29 +72,16 @@ actions:
     dependencies: []
 
   - name: generate_seo
-    dependencies: validate  # Input source
+    dependencies: validate
 
   - name: generate_recommendations
-    dependencies: validate  # Input source
+    dependencies: validate
 
   - name: assess_reading_level
-    dependencies: validate  # Input source
+    dependencies: validate
 
   - name: score_quality
-    dependencies: [generate_seo, generate_recommendations, assess_reading_level]  # Merge pattern
-```
-
-```mermaid
-flowchart TD
-    V["validate<br/>target_id: V1"] --> SEO["generate_seo<br/>parent_target_id: V1"]
-    V --> RECS["generate_recommendations<br/>parent_target_id: V1"]
-    V --> LEVEL["assess_reading_level<br/>parent_target_id: V1"]
-
-    SEO --> SCORE["score_quality<br/>Matches ALL siblings via parent_target_id"]
-    RECS --> SCORE
-    LEVEL --> SCORE
-
-    style SCORE fill:#90EE90
+    dependencies: [generate_seo, generate_recommendations, assess_reading_level]
 ```
 
 **How matching works:** All three parallel branches share the same `parent_target_id` (the `validate` action's `target_id`). When `score_quality` runs, it queries for records with that `parent_target_id` and finds all siblings.
@@ -137,28 +111,11 @@ actions:
     granularity: splits
 
   - name: process_chunk
-    dependencies: chunk_document  # Input source
+    dependencies: chunk_document
 
   - name: aggregate_results
-    dependencies: process_chunk  # Input source
+    dependencies: process_chunk
     granularity: collect
-```
-
-```mermaid
-flowchart TD
-    DOC["document<br/>target_id: D1<br/>root_target_id: D1"] --> C1["chunk_1<br/>parent: D1<br/>root: D1"]
-    DOC --> C2["chunk_2<br/>parent: D1<br/>root: D1"]
-    DOC --> C3["chunk_3<br/>parent: D1<br/>root: D1"]
-
-    C1 --> P1["process<br/>root: D1"]
-    C2 --> P2["process<br/>root: D1"]
-    C3 --> P3["process<br/>root: D1"]
-
-    P1 --> AGG["aggregate<br/>Query: root=D1<br/>Gets ALL chunks"]
-    P2 --> AGG
-    P3 --> AGG
-
-    style AGG fill:#87CEEB
 ```
 
 **How matching works:** All chunks preserve the original document's `root_target_id`. The aggregate action queries by `root_target_id` to collect all descendants.
@@ -172,15 +129,15 @@ actions:
   - name: prepare
 
   - name: gpt4_answer
-    dependencies: prepare  # Input source
+    dependencies: prepare
     model_vendor: openai
 
   - name: claude_answer
-    dependencies: prepare  # Input source
+    dependencies: prepare
     model_vendor: anthropic
 
   - name: gemini_answer
-    dependencies: prepare  # Input source
+    dependencies: prepare
     model_vendor: google
 
   - name: best_answer
@@ -198,29 +155,17 @@ actions:
   - name: classify
 
   - name: fast_path
-    dependencies: classify  # Input source
+    dependencies: classify
     guard:
       condition: "classify.complexity == 'low'"
 
   - name: slow_path
-    dependencies: classify  # Input source
+    dependencies: classify
     guard:
       condition: "classify.complexity == 'high'"
 
   - name: combine
     dependencies: [fast_path, slow_path]
-```
-
-```mermaid
-flowchart TD
-    C["classify<br/>target: C1<br/>complexity: low"] --> FAST["fast_path<br/>parent: C1<br/>Runs"]
-    C --> SLOW["slow_path<br/>parent: C1<br/>Skipped"]
-
-    FAST --> COMBINE["combine<br/>Gets: fast_path<br/>slow_path = null"]
-    SLOW -.->|"No output"| COMBINE
-
-    style FAST fill:#90EE90
-    style SLOW fill:#ffcccc
 ```
 
 **Handling missing branches:** The merge action receives `null` for skipped branches. Your template should handle this gracefully:
@@ -239,29 +184,14 @@ When loading historical data, Agent Actions uses this priority:
 1. **Lineage match** — Dependency's node_id is in current record's lineage (sequential chain)
 2. **Parent match** — Records share the same `parent_target_id` (parallel siblings)
 3. **Root match** — Records share the same `root_target_id` (Map-Reduce descendants)
-4. **Source GUID fallback** — Legacy behavior for backward compatibility
-
-```mermaid
-flowchart TD
-    Start["Load dependency data"] --> L{"Lineage<br/>match?"}
-    L -->|Yes| Done["Return data"]
-    L -->|No| P{"Parent<br/>match?"}
-    P -->|Yes| Done
-    P -->|No| R{"Root<br/>match?"}
-    R -->|Yes| Done
-    R -->|No| S["Source GUID<br/>fallback"]
-    S --> Done
-
-    style Done fill:#90EE90
-```
 
 ## Debugging Lineage
 
 ### Inspect Record Ancestry
 
 ```bash
-jq '{source_guid, target_id, parent_target_id, root_target_id, lineage}' \
-  agent_io/target/node_5_merge/data.json
+jq '.[0] | {source_guid, target_id, parent_target_id, root_target_id, lineage}' \
+  agent_io/target/merge/data.json
 ```
 
 ### Verify Sibling Relationships
@@ -270,9 +200,9 @@ Check that parallel branches share the same parent:
 
 ```bash
 # All three should have the same parent_target_id
-jq '.parent_target_id' agent_io/target/node_3_branch_a/*.json
-jq '.parent_target_id' agent_io/target/node_3_branch_b/*.json
-jq '.parent_target_id' agent_io/target/node_3_branch_c/*.json
+jq '.[].parent_target_id' agent_io/target/branch_a/*.json
+jq '.[].parent_target_id' agent_io/target/branch_b/*.json
+jq '.[].parent_target_id' agent_io/target/branch_c/*.json
 ```
 
 ### Trace Root Ancestry
@@ -280,20 +210,12 @@ jq '.parent_target_id' agent_io/target/node_3_branch_c/*.json
 For Map-Reduce, verify all chunks trace back to the same root:
 
 ```bash
-jq '.root_target_id' agent_io/target/node_2_process_chunk/*.json | sort -u
+jq '.[].root_target_id' agent_io/target/process_chunk/*.json | sort -u
 # Should output exactly one UUID
 ```
 
-## Backward Compatibility
-
-Workflows created before ancestry tracking continue to work:
-
-- Missing ancestry fields trigger **source GUID fallback**
-- No migration required for existing workflows
-- New workflows automatically get ancestry tracking
-
 ## See Also
 
-- [Common Patterns](../../getting-started/patterns.md) — Workflow patterns enabled by ancestry
+- [Design Patterns](../../guides/design-patterns.md) — Workflow patterns enabled by ancestry
 - [Output Format](./output-format.md) — Complete output structure
 - [Context Scope](../context/context-scope.md) — Controlling data visibility between actions

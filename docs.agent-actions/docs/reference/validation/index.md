@@ -161,4 +161,4 @@ The "Available fields" hint is particularly useful—it shows you exactly what f
 ## Learn More
 
 - **[Reprompting](./reprompting.md)** - Automatic retry with presets (basic, smart, thorough)
-- **[Troubleshooting](../troubleshooting.md)** - Debug errors, trace data lineage, common fixes
+- **[Troubleshooting](../../guides/troubleshooting.md)** - Debug errors, trace data lineage, common fixes

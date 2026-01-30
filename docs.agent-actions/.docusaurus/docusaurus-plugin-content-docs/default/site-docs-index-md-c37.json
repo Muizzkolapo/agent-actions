@@ -1,0 +1,26 @@
+{
+  "id": "index",
+  "title": "Agent Actions",
+  "description": "Build production-ready agentic workflows with declarative YAML",
+  "source": "@site/docs/index.md",
+  "sourceDirName": ".",
+  "slug": "/",
+  "permalink": "/docs/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Agent Actions",
+    "description": "Build production-ready agentic workflows with declarative YAML",
+    "sidebar_position": 1,
+    "slug": "/"
+  },
+  "sidebar": "docsSidebar",
+  "next": {
+    "title": "Installation",
+    "permalink": "/docs/installation"
+  }
+}

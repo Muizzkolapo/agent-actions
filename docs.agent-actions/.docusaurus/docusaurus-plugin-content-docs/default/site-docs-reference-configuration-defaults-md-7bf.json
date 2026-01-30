@@ -1,0 +1,28 @@
+{
+  "id": "reference/configuration/defaults",
+  "title": "Defaults",
+  "description": "What happens when you have 20 actions that all use the same model? Do you really need to specify model_vendor: openai twenty times? The defaults block solves this problem—it defines configuration values inherited by all actions in an agentic workflow. Actions can override any default value, enabling DRY (Don't Repeat Yourself) configuration.",
+  "source": "@site/docs/reference/configuration/defaults.md",
+  "sourceDirName": "reference/configuration",
+  "slug": "/reference/configuration/defaults",
+  "permalink": "/docs/reference/configuration/defaults",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/configuration/defaults.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "title": "Defaults",
+    "sidebar_position": 2
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Agentic Workflow Templates",
+    "permalink": "/docs/reference/configuration/templates"
+  },
+  "next": {
+    "title": "Context System",
+    "permalink": "/docs/reference/context/"
+  }
+}
