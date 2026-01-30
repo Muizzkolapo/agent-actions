@@ -67,25 +67,34 @@ let configChangeDisposable: vscode.Disposable | undefined;
  * Gets or creates the output channel (lazy initialization).
  * This avoids creating the channel at module load time, which can cause
  * issues if the module is imported before VS Code is fully initialized.
+ * Returns undefined if VS Code APIs are not available.
  */
-function getOutputChannel(): vscode.OutputChannel {
+function getOutputChannel(): vscode.OutputChannel | undefined {
     if (!outputChannel) {
-        outputChannel = vscode.window.createOutputChannel('Agent Actions');
+        try {
+            outputChannel = vscode.window.createOutputChannel('Agent Actions');
+        } catch {
+            // VS Code not ready - fall through to return undefined
+        }
     }
     return outputChannel;
 }
 
 /**
  * Reads the configured log level from VS Code settings.
- * Returns 'info' if the configured value is invalid.
+ * Returns 'info' if the configured value is invalid or VS Code is not ready.
  */
 function getConfiguredLogLevel(): LogLevel {
-    const config = vscode.workspace.getConfiguration('agentActions');
-    const level = config.get<string>('logLevel', 'info');
+    try {
+        const config = vscode.workspace.getConfiguration('agentActions');
+        const level = config.get<string>('logLevel', 'info');
 
-    // Validate the configured level
-    if (level in LOG_LEVEL_PRIORITY) {
-        return level as LogLevel;
+        // Validate the configured level
+        if (level in LOG_LEVEL_PRIORITY) {
+            return level as LogLevel;
+        }
+    } catch {
+        // VS Code workspace not ready - use default
     }
 
     return 'info';
@@ -98,9 +107,9 @@ function syncLogLevelFromConfig(): void {
     const previousLevel = currentLogLevel;
     currentLogLevel = getConfiguredLogLevel();
 
-    // Log level changes at debug level (won't show if level increased)
+    // Log level changes at info level so users see confirmation
     if (previousLevel !== currentLogLevel && currentLogLevel !== 'off') {
-        writeLog('debug', `Log level changed: ${previousLevel} → ${currentLogLevel}`);
+        writeLog('info', `Log level changed: ${previousLevel} → ${currentLogLevel}`);
     }
 }
 
@@ -114,14 +123,20 @@ function shouldLog(level: OutputLogLevel): boolean {
 
 /**
  * Formats a timestamp for log entries.
- * Uses ISO format truncated to seconds for readability.
+ * Uses compact ISO format (date + time) for cross-day debugging.
  */
 function formatTimestamp(): string {
-    return new Date().toISOString().slice(11, 19);
+    // Format: MM-DD HH:MM:SS (compact but includes date for multi-day debugging)
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const time = now.toISOString().slice(11, 19);
+    return `${month}-${day} ${time}`;
 }
 
 /**
  * Writes a formatted log entry to the output channel.
+ * Falls back to console if OutputChannel is unavailable.
  */
 function writeLog(level: OutputLogLevel, message: string, context?: unknown): void {
     if (!shouldLog(level)) {
@@ -131,8 +146,16 @@ function writeLog(level: OutputLogLevel, message: string, context?: unknown): vo
     const timestamp = formatTimestamp();
     const levelTag = level.toUpperCase().padEnd(5);
     const contextSuffix = context !== undefined ? ` ${formatContext(context)}` : '';
+    const logLine = `[${timestamp}] [${levelTag}] ${message}${contextSuffix}`;
 
-    getOutputChannel().appendLine(`[${timestamp}] [${levelTag}] ${message}${contextSuffix}`);
+    const channel = getOutputChannel();
+    if (channel) {
+        channel.appendLine(logLine);
+    } else {
+        // Fallback to console if OutputChannel unavailable
+        const consoleFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+        consoleFn(`[Agent Actions] ${logLine}`);
+    }
 }
 
 // ============================================================================
@@ -161,9 +184,9 @@ export function formatError(error: unknown): string {
     }
 
     if (error instanceof Error) {
-        // Include stack trace for better debugging (truncated for readability)
+        // Include stack trace for better debugging (8 lines for async traces)
         if (error.stack) {
-            const stackLines = error.stack.split('\n').slice(0, 4);
+            const stackLines = error.stack.split('\n').slice(0, 8);
             return stackLines.join('\n');
         }
         return error.message;
@@ -248,7 +271,7 @@ export const logger = {
      * Useful after logging important messages the user should see immediately.
      */
     show(): void {
-        getOutputChannel().show(true);
+        getOutputChannel()?.show(true);
     },
 
     /**
@@ -256,7 +279,7 @@ export const logger = {
      * Useful for starting fresh logging sessions.
      */
     clear(): void {
-        getOutputChannel().clear();
+        getOutputChannel()?.clear();
     },
 } as const;
 
@@ -321,8 +344,12 @@ export function disposeLogger(): void {
  * the configured value if settings change or the extension reloads.
  *
  * @param level - The log level to set
+ * @throws Error if an invalid log level is provided
  */
 export function setLogLevel(level: LogLevel): void {
+    if (!(level in LOG_LEVEL_PRIORITY)) {
+        throw new Error(`Invalid log level: ${level}. Valid levels: ${Object.keys(LOG_LEVEL_PRIORITY).join(', ')}`);
+    }
     currentLogLevel = level;
 }
 
