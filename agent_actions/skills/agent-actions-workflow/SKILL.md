@@ -190,9 +190,9 @@ version_consumption:     # ← Correct keyword
   pattern: merge
 ```
 
-### 3. Version Template Variables - KNOWN LIMITATION
+### 3. Version Template Variables
 
-**Template variables (`{{ i }}`, `{{ loop.length }}`) only work with inline prompts, NOT prompt store references.**
+**Template variables (`{{ i }}`, `{{ loop.length }}`) work with both inline prompts AND prompt store references.**
 
 **Works (inline prompt):**
 ```yaml
@@ -203,15 +203,15 @@ version_consumption:     # ← Correct keyword
     You are classifier {{ i }} of {{ loop.length }}.
 ```
 
-**DOES NOT WORK (prompt store reference):**
+**Also works (prompt store reference):**
 ```yaml
 - name: classify
   versions:
     range: [1, 3]
-  prompt: $workflow.Classify_Prompt  # ← {{ i }} will be undefined!
+  prompt: $workflow.Classify_Prompt  # ← {{ i }} works here too!
 ```
 
-**Available version variables (inline prompts only):**
+**Available version variables:**
 | Variable | Description |
 |----------|-------------|
 | `{{ i }}` | Current iteration value (1, 2, 3...) |
@@ -220,7 +220,7 @@ version_consumption:     # ← Correct keyword
 | `{{ loop.first }}` | True on first iteration |
 | `{{ loop.last }}` | True on last iteration |
 
-**Terminology confusion:** YAML uses `versions:` but template helpers use `loop.` prefix.
+**Terminology note:** YAML uses `versions:` but template helpers use `loop.` prefix.
 
 ### 4. Prompts Must Reference Available Fields
 
@@ -526,7 +526,7 @@ See: **[Dynamic Content Injection](references/dynamic-content-injection.md)**
 | Missing passthrough | Add `passthrough: [upstream.*]` to forward fields |
 | Using `loop:` keyword | Use `versions:` (not `loop:`) |
 | Using `loop_consumption:` | Use `version_consumption:` |
-| Version vars in prompt store | Only works with inline prompts, not `$workflow.Prompt` |
+| ~~Version vars in prompt store~~ | ~~Fixed: Now works with both inline and prompt store references~~ |
 | Schema without `name` field | Add `name:`, `description:`, `fields:` structure |
 | Referencing non-existent fields | Check actual output with `cat agent_io/target/<action>/*.json` |
 | Wrong field namespace after passthrough | Fields become `current_action.field`, not `original_action.field` |
