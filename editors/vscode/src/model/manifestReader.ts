@@ -21,7 +21,7 @@ export async function readManifest(uri: vscode.Uri): Promise<ManifestData | null
     } catch (error) {
         // Debug logging for manifest parsing issues (file not found is expected)
         if (error instanceof Error && !error.message.includes('ENOENT')) {
-            logger.debug(`Failed to read manifest: ${uri.fsPath}`, error);
+            logger.debug('Failed to read manifest', { path: uri.fsPath, error });
         }
         return null;
     }
@@ -39,7 +39,7 @@ export async function readAgentStatus(uri: vscode.Uri): Promise<AgentStatusData 
     } catch (error) {
         // Debug logging for status parsing issues (file not found is expected)
         if (error instanceof Error && !error.message.includes('ENOENT')) {
-            logger.debug(`Failed to read agent status: ${uri.fsPath}`, error);
+            logger.debug('Failed to read agent status', { path: uri.fsPath, error });
         }
         return null;
     }

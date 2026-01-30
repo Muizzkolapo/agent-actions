@@ -45,7 +45,7 @@ export async function parseWorkflowConfig(uri: vscode.Uri): Promise<ParsedWorkfl
             actionLocations,
         };
     } catch (error) {
-        logger.error('Failed to parse workflow config.', error);
+        logger.error('Failed to parse workflow config', error);
         return null;
     }
 }

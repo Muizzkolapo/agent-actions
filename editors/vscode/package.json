@@ -73,9 +73,17 @@
             "debug",
             "info",
             "warn",
-            "error"
+            "error",
+            "off"
           ],
           "default": "info",
+          "enumDescriptions": [
+            "Show all messages including verbose debugging information",
+            "Show informational messages, warnings, and errors",
+            "Show only warnings and errors",
+            "Show only errors",
+            "Disable all logging"
+          ],
           "description": "Controls the verbosity of Agent Actions logs in the Output panel."
         }
       }
