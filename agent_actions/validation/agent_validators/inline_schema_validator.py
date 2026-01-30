@@ -2,54 +2,13 @@
 Validator for inline schema configuration.
 """
 
-from typing import Any, Dict
-
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
-
-
-def _is_unified_schema_format(schema: Dict[str, Any]) -> bool:
-    """
-    Check if schema is in unified format (compiled from render step).
-
-    Unified format has 'fields' key with a list value, e.g.:
-    {
-        "name": "my_schema",
-        "fields": [{"id": "field1", "type": "string"}, ...],
-        "description": "...",
-        "required": [...],
-        "additionalProperties": False
-    }
-
-    Or JSON Schema format with 'type' and 'properties':
-    {
-        "type": "object",
-        "properties": {...}
-    }
-
-    Args:
-        schema: Schema dictionary to check
-
-    Returns:
-        True if unified/compiled format, False if inline shorthand format
-    """
-    # Check for fields-based unified format (from render compilation)
-    if "fields" in schema and isinstance(schema.get("fields"), list):
-        return True
-
-    # Check for JSON Schema format (type + properties)
-    if "type" in schema and "properties" in schema:
-        return True
-
-    # Check for JSON Schema array format
-    if schema.get("type") == "array" and "items" in schema:
-        return True
-
-    return False
+from agent_actions.utils.schema_utils import is_compiled_schema
 
 
 class InlineSchemaValidator(BaseAgentEntryValidator):
@@ -101,7 +60,7 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
 
         # Skip validation for unified/compiled schema format
         # These schemas are already validated during the render step
-        if _is_unified_schema_format(inline_schema):
+        if is_compiled_schema(inline_schema):
             # Still check for schema_name conflict
             if SCHEMA_NAME_KEY in normalized_entry:
                 warnings.append(

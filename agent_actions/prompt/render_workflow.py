@@ -269,7 +269,10 @@ def _is_inline_schema_dict(schema_value: Any) -> bool:
 
 
 def _compile_action_schemas(
-    action: Dict[str, Any], schema_dir: Optional[Path] = None
+    action: Dict[str, Any],
+    schema_dir: Optional[Path] = None,
+    strict: bool = False,
+    errors: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Compile schemas for a single action, inlining named schemas and expanding inline ones.
@@ -283,10 +286,14 @@ def _compile_action_schemas(
     Args:
         action: Action configuration dict
         schema_dir: Optional schema directory
+        strict: If True, collect errors instead of logging warnings
+        errors: List to collect error messages (used with strict mode)
 
     Returns:
         Action with compiled schema (modified in place and returned)
     """
+    action_name = action.get("name", "unknown")
+
     # Handle schema_name: "foo" -> load and inline
     schema_name = action.get("schema_name")
     if schema_name and isinstance(schema_name, str):
@@ -294,9 +301,13 @@ def _compile_action_schemas(
             loaded_schema = _load_named_schema(schema_name, schema_dir)
             action["schema"] = loaded_schema
             del action["schema_name"]
-            logger.debug(f"Inlined named schema '{schema_name}' for action '{action.get('name')}'")
-        except ConfigurationError:
-            logger.warning(f"Could not load schema '{schema_name}' for inlining")
+            logger.debug(f"Inlined named schema '{schema_name}' for action '{action_name}'")
+        except ConfigurationError as e:
+            error_msg = f"Action '{action_name}': Could not load schema '{schema_name}' - {e}"
+            if strict and errors is not None:
+                errors.append(error_msg)
+            else:
+                logger.warning(f"Could not load schema '{schema_name}' for inlining")
 
     # Handle schema: "foo" (string reference) -> load and inline
     schema_value = action.get("schema")
@@ -304,15 +315,19 @@ def _compile_action_schemas(
         try:
             loaded_schema = _load_named_schema(schema_value, schema_dir)
             action["schema"] = loaded_schema
-            logger.debug(f"Inlined schema reference '{schema_value}' for action '{action.get('name')}'")
-        except ConfigurationError:
-            logger.warning(f"Could not load schema '{schema_value}' for inlining")
+            logger.debug(f"Inlined schema reference '{schema_value}' for action '{action_name}'")
+        except ConfigurationError as e:
+            error_msg = f"Action '{action_name}': Could not load schema '{schema_value}' - {e}"
+            if strict and errors is not None:
+                errors.append(error_msg)
+            else:
+                logger.warning(f"Could not load schema '{schema_value}' for inlining")
 
     # Handle schema: {field: type} (inline dict) -> expand to unified format
     schema_value = action.get("schema")
     if schema_value and _is_inline_schema_dict(schema_value):
         action["schema"] = _expand_inline_schema(schema_value)
-        logger.debug(f"Expanded inline schema for action '{action.get('name')}'")
+        logger.debug(f"Expanded inline schema for action '{action_name}'")
 
     # Also handle output_schema if present (legacy support)
     output_schema = action.get("output_schema")
@@ -322,7 +337,11 @@ def _compile_action_schemas(
     return action
 
 
-def _compile_workflow_schemas(data: Dict[str, Any], schema_dir: Optional[Path] = None) -> None:
+def _compile_workflow_schemas(
+    data: Dict[str, Any],
+    schema_dir: Optional[Path] = None,
+    strict: bool = False,
+) -> None:
     """
     Compile all schemas in a workflow configuration.
 
@@ -331,11 +350,28 @@ def _compile_workflow_schemas(data: Dict[str, Any], schema_dir: Optional[Path] =
     Args:
         data: Workflow configuration dict (modified in place)
         schema_dir: Optional schema directory
+        strict: If True, raise ConfigurationError on any schema load failure
+
+    Raises:
+        ConfigurationError: If strict=True and any schema fails to load
     """
+    errors: List[str] = []
+
     # Compile schemas in actions list
     actions = data.get("actions", [])
     for action in actions:
-        _compile_action_schemas(action, schema_dir)
+        _compile_action_schemas(action, schema_dir, strict=strict, errors=errors)
+
+    # Raise aggregated errors in strict mode
+    if strict and errors:
+        raise ConfigurationError(
+            f"Schema compilation failed with {len(errors)} error(s)",
+            context={
+                "errors": errors,
+                "operation": "compile_workflow_schemas",
+                "hint": "Ensure all referenced schema files exist in the schema/ directory",
+            },
+        )
 
     # Compile schemas in defaults if present
     defaults = data.get("defaults", {})
@@ -514,6 +550,7 @@ def render_pipeline_with_templates(
     templates_folder: Union[str, Path],
     schema_dir: Optional[Path] = None,
     compile_schemas: bool = True,
+    strict: bool = False,
 ) -> str:
     """
     Render and compile a YAML pipeline configuration.
@@ -530,13 +567,16 @@ def render_pipeline_with_templates(
         templates_folder: Path to folder containing Jinja2 templates
         schema_dir: Optional schema directory. Defaults to cwd/schema.
         compile_schemas: Whether to compile/inline schemas (default: True)
+        strict: If True, raise errors on schema load failures instead of warnings.
+                Use strict=True in CI/CD or production to catch missing schemas early.
 
     Returns:
         Fully compiled YAML content as string, ready for execution
 
     Raises:
         TemplateRenderingError: If template rendering fails
-        ConfigurationError: If YAML parsing or configuration fails
+        ConfigurationError: If YAML parsing or configuration fails, or if strict=True
+                           and any schema fails to load
     """
     env = Environment(loader=FileSystemLoader(str(templates_folder)))
     env.globals["load_prompt"] = PromptLoader.load_prompt
@@ -585,6 +625,6 @@ def render_pipeline_with_templates(
 
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
-        _compile_workflow_schemas(data, schema_dir)
+        _compile_workflow_schemas(data, schema_dir, strict=strict)
 
     return yaml.dump(data, sort_keys=False)

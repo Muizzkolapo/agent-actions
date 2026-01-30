@@ -12,7 +12,7 @@ from typing import Optional, Sequence, List
 
 import click
 
-from agent_actions.cli.compile import render
+from agent_actions.cli.compile import render, compile
 from agent_actions.cli.docs import docs  # Documentation generation and serving
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect  # Workflow inspection commands
@@ -74,6 +74,7 @@ class CLI:
         """Register all available commands with the CLI."""
         self.logger.debug("Registering CLI commands")
         self.click_group.add_command(clean)
+        self.click_group.add_command(compile)  # Alias for render (dbt-style)
         self.click_group.add_command(init)
         self.click_group.add_command(inspect)
         self.click_group.add_command(render)

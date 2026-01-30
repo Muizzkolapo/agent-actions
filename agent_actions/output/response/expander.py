@@ -14,6 +14,7 @@ from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
 from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.schema_utils import is_compiled_schema
 from agent_actions.utils.udf_management import get_udf_metadata
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
@@ -161,18 +162,6 @@ class ActionExpander:
         return merged
 
     @staticmethod
-    def _is_compiled_schema(schema_value: Any) -> bool:
-        """
-        Check if a schema is already in compiled (unified) format.
-
-        Compiled schemas have 'fields' key with a list of field definitions,
-        as produced by the render step's schema compilation.
-        """
-        if not isinstance(schema_value, dict):
-            return False
-        return "fields" in schema_value and isinstance(schema_value.get("fields"), list)
-
-    @staticmethod
     def _process_schema_config(
         agent: AgentEntryDict, action: Dict[str, Any], template_replacer
     ) -> None:
@@ -185,7 +174,7 @@ class ActionExpander:
         schema_value = action.get("schema") or action.get("output_schema")
         if schema_value:
             # If already compiled (unified format from render step), use directly
-            if ActionExpander._is_compiled_schema(schema_value):
+            if is_compiled_schema(schema_value):
                 agent["schema"] = schema_value
             else:
                 # Apply template replacement for non-compiled schemas
