@@ -19,6 +19,7 @@ from .data_flow_graph import (
 from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
+from .schema_structure_validator import SchemaStructureValidator
 from .type_checker import StaticTypeChecker
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
@@ -99,6 +100,10 @@ class WorkflowStaticAnalyzer:
 
         # Step 2c: Validate context_scope field references
         for error in self._check_context_scope_fields():
+            result.add_error(error)
+
+        # Step 2d: Validate schema structures (pre-flight check)
+        for error in self._check_schema_structures():
             result.add_error(error)
 
         # Step 3: Check for unused dependencies (add as warnings)
@@ -247,6 +252,44 @@ class WorkflowStaticAnalyzer:
                                 hint=f"Check the output schema of '{dep_name}' for available fields.",
                             )
                         )
+
+        return errors
+
+    def _check_schema_structures(self) -> List[StaticTypeError]:
+        """Validate schema definitions for structural correctness.
+
+        Pre-flight validation that catches schema issues before LLM execution:
+        - Empty or invalid schema structures
+        - Missing required field definitions
+        - Invalid type specifications
+        - Array schemas without items definition
+
+        Returns:
+            List of StaticTypeError for invalid schema structures
+        """
+        errors: List[StaticTypeError] = []
+        validator = SchemaStructureValidator()
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_name = action.get("name", "unknown")
+
+            # Check inline schema
+            schema = action.get("schema")
+            if schema and isinstance(schema, dict):
+                schema_errors = validator.validate_schema(schema, action_name, "schema")
+                errors.extend(schema_errors)
+
+            # Check output_schema if present
+            output_schema = action.get("output_schema")
+            if output_schema and isinstance(output_schema, dict):
+                schema_errors = validator.validate_schema(
+                    output_schema, action_name, "output_schema"
+                )
+                errors.extend(schema_errors)
 
         return errors
 

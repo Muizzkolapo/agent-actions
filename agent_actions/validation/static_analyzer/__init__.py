@@ -21,6 +21,7 @@ from .errors import (
 )
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
+from .schema_structure_validator import SchemaStructureValidator
 from .type_checker import StaticTypeChecker
 from .workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
@@ -63,6 +64,8 @@ __all__ = [
     "ReferenceExtractor",
     # Type checker
     "StaticTypeChecker",
+    # Schema structure validator
+    "SchemaStructureValidator",
     # Field flow analyzer
     "FieldFlowAnalyzer",
     "FieldLineage",

@@ -5,7 +5,7 @@ Schema compilation and transformation utilities for multi-vendor support.
 from typing import Tuple, Dict, Any, Optional, Union
 import json
 import logging
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.output.response.loader import SchemaLoader
@@ -48,26 +48,17 @@ def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, An
 
     logger.debug("Converting array-type schema: %s", schema_name)
 
-    # Validation: Check if items is valid
+    # Validation: Check if items is valid - fail fast instead of silent fallback
     if not items or not isinstance(items, dict):
-        logger.warning(
-            "Array schema '%s' has empty or invalid 'items'. Creating fallback structure.",
-            schema_name,
+        raise SchemaValidationError(
+            f"Array schema '{schema_name}' has empty or invalid 'items' definition",
+            schema_name=schema_name,
+            validation_type="structure",
+            hint=(
+                "Array schemas must have an 'items' definition specifying the element type. "
+                "Example: items: {type: object, properties: {...}} or items: {type: string}"
+            ),
         )
-        # Create a minimal valid fallback
-        fields = [
-            {
-                "id": schema_name,
-                "type": "array",
-                "required": json_schema.get("required", True),
-                "items": {"type": "object", "properties": {}, "required": []},
-            }
-        ]
-        return {
-            "name": schema_name,
-            "description": json_schema.get("description", ""),
-            "fields": fields,
-        }
 
     # Check if array is required (default to True for backward compatibility)
     is_required = json_schema.get("required", True)

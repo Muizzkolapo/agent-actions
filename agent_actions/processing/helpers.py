@@ -3,6 +3,7 @@
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm.realtime import builder as agent_builder
 from agent_actions.input.preprocessing.filtering.guard_filter import (
@@ -10,6 +11,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterItemRequest,
 )
 from agent_actions.utils.transformation import PassthroughTransformer
+from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +195,97 @@ def run_dynamic_agent(
     # transform_with_observe() using the same pathway as observe directive
     # (via DataTransformer.update_schema_objects)
 
+    # Validate LLM output against schema if enabled
+    response = _validate_llm_output_schema(response, agent_config, agent_name)
+
     return (response, True)
+
+
+def _validate_llm_output_schema(
+    response: Any,
+    agent_config: Dict,
+    agent_name: str,
+) -> Any:
+    """Validate LLM output against expected schema if schema is defined.
+
+    When strict_schema is enabled, raises SchemaValidationError if:
+    - Required fields are missing
+    - Extra fields are present (not in schema)
+    - Field types don't match
+
+    Args:
+        response: The LLM response to validate
+        agent_config: Agent configuration with schema and strict_schema settings
+        agent_name: Name of the agent for error reporting
+
+    Returns:
+        The original response (validation is informational unless strict_schema is True)
+
+    Raises:
+        SchemaValidationError: If strict_schema is True and validation fails
+    """
+    schema = agent_config.get(SCHEMA_KEY)
+    if not schema or not isinstance(schema, dict):
+        return response
+
+    strict_mode = agent_config.get(STRICT_SCHEMA_KEY, False)
+
+    try:
+        from agent_actions.validation.schema_output_validator import (
+            validate_output_against_schema,
+            SchemaValidationReport,
+        )
+
+        report = validate_output_against_schema(
+            response,
+            schema,
+            agent_name,
+            strict_mode=strict_mode,
+        )
+
+        if not report.is_compliant:
+            if strict_mode:
+                raise SchemaValidationError(
+                    f"LLM output does not match expected schema for action '{agent_name}'",
+                    schema_name=report.schema_name,
+                    validation_type="output",
+                    action_name=agent_name,
+                    expected_fields=list(report.expected_fields),
+                    actual_fields=list(report.actual_fields),
+                    missing_fields=report.missing_required,
+                    extra_fields=report.extra_fields,
+                    type_errors=report.type_errors,
+                    hint="Enable strict_schema: false to allow schema mismatches, or update the prompt to match expected schema",
+                )
+            else:
+                # Log warning but don't fail
+                logger.warning(
+                    "Schema validation warning for '%s': %s",
+                    agent_name,
+                    ", ".join(report.validation_errors)
+                    if report.validation_errors
+                    else "Schema mismatch detected",
+                )
+
+    except ImportError:
+        # Module not available - skip validation (acceptable during testing/development)
+        logger.debug("Schema output validator not available, skipping validation")
+    except SchemaValidationError:
+        # Re-raise schema validation errors - these should fail loudly
+        raise
+    except Exception as e:
+        # Log unexpected errors but don't swallow them in strict mode
+        if agent_config.get(STRICT_SCHEMA_KEY, False):
+            raise SchemaValidationError(
+                f"Schema validation failed unexpectedly for action '{agent_name}': {e}",
+                action_name=agent_name,
+                validation_type="output",
+                hint="Check the schema format and LLM output structure",
+                cause=e,
+            ) from e
+        logger.warning("Schema validation failed with error: %s", e)
+
+    return response
 
 
 def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
