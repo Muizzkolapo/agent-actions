@@ -73,23 +73,30 @@ missing_references=['source.page_content']
 ## Directory Structure
 
 ```
-agent_workflow/
-└── my_workflow/
-    ├── agent_config/
-    │   └── my_workflow.yml
-    └── agent_io/
-        ├── staging/             # INPUT: Place your files here
-        │   └── data.json
-        ├── source/              # METADATA: Framework adds tracking fields
-        │   └── data.json        # (auto-generated from staging/)
-        └── target/              # OUTPUT: Node results
-            ├── node_0_action_name/
-            │   └── data.json
-            ├── node_1_action_name/
-            │   └── data.json
-            └── final_workflow_output/
-                └── data.json
+project/
+├── agent_actions.yml            # Project configuration
+├── agent_workflow/
+│   └── my_workflow/             # Directory name must match workflow name!
+│       ├── agent_config/
+│       │   └── my_workflow.yml  # YAML filename must match workflow name!
+│       ├── agent_io/
+│       │   ├── staging/         # INPUT: Place your files here
+│       │   │   └── data.json
+│       │   ├── source/          # METADATA: Framework adds tracking fields
+│       │   │   └── data.json    # (auto-generated from staging/)
+│       │   └── target/          # OUTPUT: Node results
+│       │       ├── node_0_action_name/
+│       │       │   └── data.json
+│       │       └── final_action/
+│       │           └── data.json
+│       └── seed_data/           # Reference data for grounded retrieval
+├── prompt_store/                # Prompt templates
+├── schema/                      # Output schemas
+└── tools/
+    └── my_workflow/             # UDFs organized by workflow
 ```
+
+**CRITICAL:** Use underscores in names (not hyphens): `incident_triage`, not `incident-triage`
 
 ### Data Flow: staging/ → source/ → target/
 

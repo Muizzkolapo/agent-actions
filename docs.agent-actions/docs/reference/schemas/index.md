@@ -124,6 +124,10 @@ actions:
     schema: question_quality_score
 ```
 
+:::tip Schema Compilation
+During the render step, schema references are **inlined** into the workflow. This means `schema: candidate_facts_list` gets replaced with the actual schema content from `schema/candidate_facts_list.yml`. Use `agac render -a workflow_name` to see the compiled output with all schemas inlined.
+:::
+
 ## Inline Schemas
 
 Define schemas directly in workflow YAML for simple cases:

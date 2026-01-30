@@ -1,0 +1,75 @@
+name: versioned_classifier
+description: Test workflow with versioned actions for compiler testing
+version: 1.0.0
+
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+
+actions:
+  - name: extract_details
+    intent: Extract key details from input
+    api_key: OPENAI_API_KEY
+    prompt: |
+      Extract key information from the following text:
+      {{ source.text }}
+
+      Return structured details.
+    schema:
+      type: object
+      properties:
+        summary:
+          type: string
+        key_points:
+          type: array
+          items:
+            type: string
+
+  - name: classify
+    intent: Classify with multiple perspectives
+    api_key: OPENAI_API_KEY
+    dependencies:
+      - extract_details
+    versions:
+      param: classifier_id
+      range: [1, 3]
+      mode: parallel
+    prompt: |
+      You are classifier {{ i }} of {{ version.length }}.
+      {% if version.first %}Be conservative in your assessment.{% endif %}
+      {% if version.last %}Be comprehensive in your assessment.{% endif %}
+
+      Classifier ID: {{ classifier_id }}
+
+      Based on the extracted details:
+      {{ extract_details.summary }}
+
+      Classify the content.
+    schema:
+      type: object
+      properties:
+        category:
+          type: string
+        confidence:
+          type: number
+
+  - name: aggregate
+    intent: Aggregate classifier results
+    api_key: OPENAI_API_KEY
+    dependencies:
+      - classify
+    prompt: |
+      Aggregate the following classifier results and provide final classification.
+      {{ source.aggregation_context }}
+    schema:
+      type: object
+      properties:
+        final_category:
+          type: string
+        consensus_score:
+          type: number
+
+plan:
+  - extract_details
+  - classify
+  - aggregate

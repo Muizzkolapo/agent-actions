@@ -1,45 +1,605 @@
 ---
 name: agent-actions-workflow
-description: Build, debug, and manage agent-actions workflows with YAML configs, UDF tools, and TypedDict schemas. Use when (1) creating new agent-actions workflows, (2) adding/modifying workflow actions, (3) creating UDF tool files with TypedDict schemas, (4) debugging schema validation errors, (5) tracing field flow between nodes, (6) understanding context_scope (observe/passthrough/drop), (7) configuring guards and conditional execution, (8) setting up cross-workflow dependencies, (9) using the agac CLI, (10) configuring retry (transient errors) and reprompt (validation errors).
+description: Build and debug agent-actions LLM workflows. Use when creating workflows, writing UDFs, configuring guards, setting up parallel/versioned actions, or debugging filtered pipelines with empty outputs. CRITICAL - Before creating or modifying ANY action, ALWAYS read the workflow first, understand the action anatomy, check parent outputs, and verify child inputs. Never make changes without understanding the full context. ALWAYS ask clarifying questions about goals, inputs, outputs, and edge cases before writing any code.
 ---
 
 # Agent Actions Workflow Builder
 
-Build production-ready agent-actions workflows with proper typing, context scoping, and tool integration.
+Build production-ready agent-actions workflows with YAML configs, UDF tools, and proper context scoping.
 
-## Quick Start
+## MANDATORY: Pre-Flight Checklist
+
+**BEFORE creating or modifying ANY action, ALWAYS complete this checklist:**
+
+### 0. Ask Clarifying Questions First
+
+**NEVER assume. ALWAYS ask.** Before writing any code, gather information:
+
+**Questions about the ACTION:**
+- What is the goal of this action? What problem does it solve?
+- Is this an LLM action or a UDF tool action?
+- What fields does it need to produce?
+- Are there any conditions for when it should run/skip?
+
+**Questions about INPUTS (Parents):**
+- Which actions provide input to this one?
+- What fields are available from those actions?
+- What is the data structure? (Check `sample.json` if unsure)
+- Could any upstream guards filter out records?
+
+**Questions about OUTPUTS (Children):**
+- What actions will consume this output?
+- What fields do they expect?
+- Will adding this action break any existing dependencies?
+
+**Questions about VALIDATION:**
+- Should this action validate its input?
+- Should downstream actions filter based on this action's output?
+- What happens if validation fails? Filter or skip?
+
+**Questions about EDGE CASES:**
+- What if the input is empty?
+- What if a required field is missing?
+- What if all records get filtered?
+
+**Example dialogue before creating a validation action:**
+```
+Q: What should this validation check?
+Q: What fields from the parent action do we need to validate?
+Q: What should happen when validation fails - filter the record or skip the action?
+Q: What downstream actions need the validation result?
+Q: What threshold should we use (e.g., score >= 8)?
+Q: Should we use a stronger model (gpt-4o) for critical validation?
+```
+
+### 1. Read the Workflow Context
+```bash
+# Read the full workflow config first
+cat agent_workflow/<workflow>/agent_config/<workflow>.yml
+```
+
+### 2. Understand Action Anatomy
+Every action needs these pieces working together:
+
+| Component | Question to Answer |
+|-----------|-------------------|
+| **name** | What is this action called? |
+| **dependencies** | What actions must run BEFORE this one? |
+| **context_scope.observe** | What fields does this action NEED to access? |
+| **schema** (LLM) | What fields does this action PRODUCE? |
+| **impl** (UDF) | What function processes this data? |
+| **guard** | What conditions must be true to run? |
+| **prompt** | What instructions drive the LLM? |
+
+### 3. Map Parent Actions (Upstream)
+Before creating an action, examine its dependencies:
+
+```yaml
+# For each action in dependencies, answer:
+# - What fields does it produce?
+# - What is the data structure?
+# - Are there guards that might filter records?
+```
+
+**Check parent output:**
+```bash
+cat agent_io/target/<parent_action>/sample.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+if data:
+    print('Fields available:', list(data[0].get('content', data[0]).keys()))
+    print('Record count:', len(data))
+"
+```
+
+### 4. Map Child Actions (Downstream)
+Understand what consumes this action's output:
+
+```yaml
+# For each action that depends on THIS action:
+# - What fields does it expect from us?
+# - What context_scope.observe does it use?
+# - Will our output satisfy its needs?
+```
+
+### 5. Holistic View Checklist
+
+Before making changes, confirm:
+
+- [ ] **I asked clarifying questions** - I don't have unresolved assumptions
+- [ ] **I read the full workflow YAML** - I understand the pipeline
+- [ ] **I know what data flows IN** - From dependencies via context_scope
+- [ ] **I know what data flows OUT** - Schema (LLM) or return value (UDF)
+- [ ] **I checked parent outputs** - Verified field names and structure
+- [ ] **I checked child inputs** - My output will satisfy downstream needs
+- [ ] **I understand any guards** - Both on this action and downstream
+- [ ] **If UDF: I handle content wrapper** - `content = data.get('content', data)`
+- [ ] **If UDF: I return a list** - `return [result]`
+
+### Example: Adding a Validation Action
+
+**WRONG approach:** Jump in and write the action.
+
+**RIGHT approach:**
+
+1. **Read workflow** → Understand where validation fits in pipeline
+2. **Check parent** → `merge_alternatives` produces `optimal_code`, `alternative_1`, etc.
+3. **Check child** → `generate_explanation` needs `validation_status` field
+4. **Design action:**
+   ```yaml
+   - name: validate_code_quality
+     dependencies: [merge_alternatives]      # Parent provides code
+     schema:
+       validation_status: string             # Child needs this!
+       validation_reasoning: string
+     context_scope:
+       observe:
+         - merge_alternatives.*              # Access parent fields
+         - generate_optimal_code.optimal_code
+   ```
+5. **Update child** → Add guard: `condition: 'validation_status == "PASS"'`
+
+---
+
+## Critical Lessons Learned
+
+### 1. Schema Files Must Have Proper Structure
+
+**WRONG** (causes "empty schema name" error):
+```yaml
+title: string
+description: string
+```
+
+**CORRECT:**
+```yaml
+name: extract_incident_details
+description: Schema for extracting incident information
+fields:
+  - id: title
+    type: string
+    description: "Brief incident title"
+  - id: description
+    type: string
+    description: "Detailed description"
+required:
+  - title
+  - description
+additionalProperties: false
+```
+
+### 2. Versions Keyword (NOT Loop)
+
+**WRONG:**
+```yaml
+loop:                    # ← NOT a valid keyword
+  param: classifier_id
+  range: [1, 2, 3]
+loop_consumption:        # ← NOT a valid keyword
+  source: classify
+  pattern: merge
+```
+
+**CORRECT:**
+```yaml
+versions:                # ← Correct keyword
+  range: [1, 3]          # ← Inclusive range [start, end]
+  mode: parallel
+version_consumption:     # ← Correct keyword
+  source: classify
+  pattern: merge
+```
+
+### 3. Version Template Variables - KNOWN LIMITATION
+
+**Template variables (`{{ i }}`, `{{ loop.length }}`) only work with inline prompts, NOT prompt store references.**
+
+**Works (inline prompt):**
+```yaml
+- name: classify
+  versions:
+    range: [1, 3]
+  prompt: |
+    You are classifier {{ i }} of {{ loop.length }}.
+```
+
+**DOES NOT WORK (prompt store reference):**
+```yaml
+- name: classify
+  versions:
+    range: [1, 3]
+  prompt: $workflow.Classify_Prompt  # ← {{ i }} will be undefined!
+```
+
+**Available version variables (inline prompts only):**
+| Variable | Description |
+|----------|-------------|
+| `{{ i }}` | Current iteration value (1, 2, 3...) |
+| `{{ idx }}` | Zero-based index (0, 1, 2...) |
+| `{{ loop.length }}` | Total iterations |
+| `{{ loop.first }}` | True on first iteration |
+| `{{ loop.last }}` | True on last iteration |
+
+**Terminology confusion:** YAML uses `versions:` but template helpers use `loop.` prefix.
+
+### 4. Prompts Must Reference Available Fields
+
+**ALWAYS check what fields are actually available in context before writing prompts.**
 
 ```bash
-# Run a workflow
-agac run -a my_workflow
+# Check what fields an action outputs
+cat agent_io/target/<action_name>/incidents.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+if data:
+    print('Fields:', list(data[0].get('content', data[0]).keys()))
+"
+```
 
-# Run with upstream dependencies
-agac run -a my_workflow --upstream
+**Common mistake:** Referencing fields that don't exist or are named differently.
 
-# Validate without executing
-agac run -a my_workflow --validate-only
+```yaml
+# WRONG - field doesn't exist
+{{ assign_response_team.system_impact_level }}
 
-# Debug mode
-agac run -a my_workflow --debug
+# CORRECT - check actual output first
+{{ assign_response_team.affected_systems }}
+```
+
+### 5. Passthrough Merges Fields Into Action Namespace
+
+When using `passthrough`, upstream fields become available under the current action's namespace:
+
+```yaml
+- name: assign_team
+  context_scope:
+    passthrough:
+      - aggregate_severity.*        # These fields...
+      - assess_customer_impact.*    # ...become available as...
+```
+
+Access in downstream prompts as `{{ assign_team.final_severity }}` (not `{{ aggregate_severity.final_severity }}`).
+
+### 6. Check Actual Data Flow
+
+When debugging "undefined variable" errors:
+
+1. **Check the action's context_scope** - What does it observe/passthrough?
+2. **Check the parent action's actual output** - What fields does it really produce?
+3. **Check the schema** - Does it match what the prompt expects?
+
+```bash
+# Debug command: see all fields at each stage
+for dir in agent_io/target/*/; do
+  echo "=== $dir ==="
+  cat "$dir"/*.json 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+if data:
+    print('Fields:', sorted(data[0].get('content', data[0]).keys()))
+" 2>/dev/null || echo "No data"
+done
+```
+
+---
+
+## Quick Reference
+
+```bash
+agac run -a my_workflow              # Run workflow
+agac run -a my_workflow --upstream   # With upstream deps
+agac run -a my_workflow --debug      # Debug mode
 ```
 
 ## Project Structure
 
 ```
 project/
-├── agent_actions.yml           # Project config
+├── agent_actions.yml                  # Project configuration
 ├── agent_workflow/
-│   └── my_workflow/
+│   └── my_workflow/                   # Directory name must match workflow name!
 │       ├── agent_config/
-│       │   └── my_workflow.yml # Workflow definition
+│       │   └── my_workflow.yml        # YAML filename must match workflow name!
 │       ├── agent_io/
-│       │   ├── staging/        # Input data (base data to process)
-│       │   └── target/         # Output per node (created by agac)
-│       └── seed_data/          # Static reference data
-├── prompt_store/               # Prompt templates
-├── schema/                     # Output schemas
-└── tools/                      # Python UDFs
+│       │   ├── staging/               # Input data (place files here)
+│       │   ├── source/                # Auto-generated with metadata
+│       │   └── target/                # Output per action
+│       └── seed_data/                 # Reference data (optional)
+├── prompt_store/                      # Prompt templates
+├── schema/                            # Output schemas (root only!)
+└── tools/
+    └── my_workflow/                   # Tools organized by workflow
 ```
+
+**CRITICAL Naming Convention:**
+- Directory name = YAML filename = `name:` field in YAML (use underscores, not hyphens)
+- Example: `agent_workflow/incident_triage/agent_config/incident_triage.yml` with `name: incident_triage`
+
+## Core Concepts
+
+### Dependencies vs Context Scope
+
+**CRITICAL DISTINCTION:**
+- **`dependencies`** → Controls WHEN action runs (execution order)
+- **`context_scope`** → Controls WHAT data action accesses (via lineage)
+
+```yaml
+- name: generate_answer
+  dependencies: [validate_data]           # Run AFTER validate_data
+  context_scope:
+    observe:
+      - validate_data.*                   # Access validate_data output
+      - source.page_content               # Access original source via lineage
+```
+
+### Action Types
+
+**LLM Action:**
+```yaml
+- name: generate_explanation
+  dependencies: [previous_action]
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  schema: { explanation: string }         # Only LLM-computed fields!
+  prompt: $workflow.Prompt_Name
+  context_scope:
+    observe:
+      - previous_action.*
+```
+
+**Tool Action (UDF):**
+```yaml
+- name: process_data
+  dependencies: [previous_action]
+  kind: tool
+  impl: function_name                     # Must match @udf_tool function
+  granularity: Record                     # Record (default) | File (rare)
+  context_scope:
+    observe:
+      - previous_action.*
+```
+
+### Guards (Conditional Filtering)
+
+```yaml
+guard:
+  condition: 'validation_status == "PASS" and score >= 8'
+  on_false: "filter"    # filter | skip
+```
+
+**⚠️ Guards check INPUT, not OUTPUT.** Place guard on the NEXT action:
+
+```yaml
+- name: validate_data
+  # No guard - this produces validation_status
+
+- name: use_validated
+  dependencies: [validate_data]
+  guard:
+    condition: 'validation_status == "PASS"'  # Checks validate_data OUTPUT
+```
+
+### Versioned Parallel Actions
+
+```yaml
+- name: generate_alternatives
+  versions:
+    param: alt_num
+    range: [1, 2, 3]
+    mode: parallel
+  schema:
+    alternative_${alt_num}: string
+
+- name: merge_alternatives
+  dependencies: [generate_alternatives]
+  version_consumption:
+    source: generate_alternatives
+    pattern: merge
+  context_scope:
+    observe:
+      - generate_alternatives.*           # Wildcard captures ALL versions
+```
+
+### Cross-Workflow Dependencies
+
+```yaml
+dependencies:
+  - workflow: upstream_workflow
+    action: final_action                  # Use ACTION name, not impl name!
+context_scope:
+  observe:
+    - final_action.*
+```
+
+## UDF Essential Pattern
+
+**CRITICAL: Always handle content wrapper and return a list.**
+
+```python
+from typing import Any, Dict, List
+from agent_actions import udf_tool
+
+@udf_tool()
+def my_function(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    # STEP 1: Handle content wrapper (REQUIRED)
+    if 'content' in data:
+        content = data['content']
+    else:
+        content = data
+
+    # STEP 2: Forward fields + add computed
+    result = content.copy()
+    result['computed_field'] = some_calculation(content)
+
+    # STEP 3: Return as LIST (REQUIRED)
+    return [result]
+```
+
+## Quick Debugging
+
+### Check Where Records Were Filtered
+
+```bash
+cd agent_workflow/my_workflow/agent_io/target
+for dir in */; do
+  count=$(cat "$dir/sample.json" 2>/dev/null | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+  echo "$count records - $dir"
+done
+```
+
+**If you see:**
+```
+5 records - validate_quality/
+0 records - generate_output/    ← Guard filtered all!
+```
+
+**Fix options:**
+1. Check why validation failed (see validation output)
+2. Lower threshold or allow more statuses
+3. Temporarily disable guard for testing
+
+## Dynamic Content Injection
+
+**Problem:** You need randomized or computed content in LLM prompts (e.g., different scenario openers per question type).
+
+**Solution:** Use a **tool action** between upstream and LLM actions:
+
+```yaml
+# Step 1: Inject action adds dynamic content
+- name: inject_opener
+  dependencies: [get_authoring_prompt]
+  kind: tool
+  impl: inject_random_opener
+  context_scope:
+    observe:
+      - get_authoring_prompt.quiz_type_used
+    passthrough:
+      - get_authoring_prompt.*    # Forward all upstream fields
+
+# Step 2: LLM action uses injected content
+- name: write_question
+  dependencies: [inject_opener]   # Depends on injector, not upstream
+  context_scope:
+    observe:
+      - inject_opener.*           # Access injected fields
+```
+
+```python
+# UDF for randomization
+import random
+from agent_actions import udf_tool
+
+@udf_tool()
+def inject_random_opener(data: dict) -> dict:
+    content = data.get('content', data)
+    quiz_type = content.get('quiz_type_used', 'general').lower()
+
+    openers = {
+        'debugging': ["During monitoring, you notice", "Your team observes"],
+        'design_review': ["During a design review", "A colleague suggests"],
+    }
+
+    opener = random.choice(openers.get(quiz_type, openers['design_review']))
+    return {"suggested_opener": opener, "quiz_type": quiz_type.upper()}
+```
+
+**In prompt template:**
+```markdown
+**Your opener**: {{ inject_opener.suggested_opener }}
+```
+
+**Why not dispatch_task() in prompts?** It's unreliable - LLMs often output the literal text instead of the function result.
+
+See: **[Dynamic Content Injection](references/dynamic-content-injection.md)**
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Guard on wrong action | Place on NEXT action (guard checks INPUT) |
+| UDF forgot content wrapper | Always: `content = data.get('content', data)` |
+| UDF returns dict | Must return list: `return [result]` (unless using passthrough) |
+| Dependency not in context_scope | Add `action.*` to observe |
+| Cross-workflow uses impl name | Use action name, not impl |
+| Schema in subdirectory | Must be in root `schema/` |
+| dispatch_task() in prompts | Use tool action injection instead |
+| Missing passthrough | Add `passthrough: [upstream.*]` to forward fields |
+| Using `loop:` keyword | Use `versions:` (not `loop:`) |
+| Using `loop_consumption:` | Use `version_consumption:` |
+| Version vars in prompt store | Only works with inline prompts, not `$workflow.Prompt` |
+| Schema without `name` field | Add `name:`, `description:`, `fields:` structure |
+| Referencing non-existent fields | Check actual output with `cat agent_io/target/<action>/*.json` |
+| Wrong field namespace after passthrough | Fields become `current_action.field`, not `original_action.field` |
+
+## Detailed Reference Files
+
+For comprehensive documentation, see:
+
+- **[Action Anatomy](references/action-anatomy.md)** - Complete guide to action structure, components, and data flow
+- **[Workflow Patterns](references/workflow-patterns.md)** - Diamond, ensemble, conditional merge patterns
+- **[UDF Patterns](references/udf-patterns.md)** - Field forwarding, validation aggregation, version consumption
+- **[Dynamic Content Injection](references/dynamic-content-injection.md)** - Randomized prompts, computed values, tool action injection
+- **[Debugging Guide](references/debugging-guide.md)** - Error messages, filtered pipeline debugging, known limitations
+- **[Common Pitfalls](references/common-pitfalls.md)** - Detailed explanations and fixes for frequent mistakes
+
+## Prompt Templates
+
+Define in `prompt_store/workflow_name.md`:
+
+```markdown
+{prompt Extract_Facts}
+Extract from: {{ source.page_content }}
+Previous result: {{ previous_action.field }}
+{end_prompt}
+```
+
+Reference: `prompt: $workflow_name.Extract_Facts`
+
+## Output Grounding with Source Quotes
+
+**Problem:** LLM outputs need to be backed by source material for credibility and verification.
+
+**Solution:** Add explicit `source_quote` fields to schema and prompt instructions.
+
+**Step 1: Add to schema**
+```yaml
+schema: {
+  answer: string,
+  explanation: string,
+  source_quote: string    # Add explicit field
+}
+```
+
+**Step 2: Add to prompt template**
+```markdown
+## GROUNDING REQUIREMENTS
+
+1. Include a **verbatim quote** from the source that supports your answer
+2. The quote must be 15-30 words of continuous text
+3. NO paraphrasing - copy exact text from the documentation
+
+## OUTPUT FORMAT
+
+```json
+{
+  "answer": "...",
+  "explanation": "...",
+  "source_quote": "Exact verbatim quote from source that backs up the answer"
+}
+```
+
+## SOURCE QUOTE REQUIREMENT
+
+The `source_quote` field must contain:
+- A **verbatim quote** from {{ source.page_content }}
+- The quote that **directly supports** the answer
+- NO paraphrasing - copy exact text
+```
+
+**Why this matters:**
+- Forces LLM to ground outputs in source material
+- Enables downstream validation
+- Provides audit trail for generated content
 
 ## Configuration Hierarchy
 
@@ -49,564 +609,17 @@ agent_actions.yml (Project) → workflow.yml defaults → action fields
 
 Higher specificity wins.
 
-## Action Types
-
-### LLM Action (default)
-
-```yaml
-- name: generate_explanation
-  dependencies: previous_action        # Input source (single)
-  intent: "Generate educational explanation"
-  model_vendor: openai
-  model_name: gpt-4o-mini
-  api_key: OPENAI_API_KEY
-  schema: {
-    explanation: string,
-    key_points: array
-  }
-  prompt: $workflow_name.Prompt_Name
-  json_mode: true
-  prompt_debug: true
-```
-
-### Tool Action
-
-```yaml
-- name: process_data
-  dependencies: previous_action        # Input source
-  kind: tool
-  impl: function_name        # Must match @udf_tool function
-  intent: "Process the data"
-  granularity: record        # record | file
-```
-
-## Dependencies Model
-
-**Single Input Source:**
-```yaml
-dependencies: previous_action          # String for single input
-```
-
-**Multiple Inputs (Merge Pattern):**
-```yaml
-dependencies: [action_a, action_b]     # List for merging multiple sources
-reduce_key: parent_id                  # Optional: merge key
-```
-
-**Context Dependencies (Auto-Inferred):**
-
-Actions referenced in `context_scope` but NOT in `dependencies` are automatically treated as context dependencies:
-
-```yaml
-- name: generate_question
-  dependencies: get_prompt             # Input source only
-  context_scope:
-    observe:
-      - get_prompt.*                   # Input (in dependencies)
-      - classify_type.quiz_type        # Context (auto-inferred)
-      - extract_facts.summary          # Context (auto-inferred)
-```
-
-The framework automatically:
-1. Identifies `classify_type` and `extract_facts` from `context_scope`
-2. Treats them as context dependencies (not input sources)
-3. Loads their data via historical lineage matching
-
-**No `primary_dependency` needed** - it's deprecated.
-
-## Context Scope
-
-Control field visibility between actions:
-
-| Directive | In LLM Context | In Output | Use Case |
-|-----------|----------------|-----------|----------|
-| `observe` | Yes | No | LLM needs to see, but drop after |
-| `passthrough` | No | Yes | Forward without LLM seeing |
-| `drop` | No | No | Explicitly remove |
-
-```yaml
-context_scope:
-  observe:
-    - source.raw_content      # LLM sees, dropped after
-  passthrough:
-    - previous.field_a        # Forwarded to output
-  drop:
-    - previous.internal       # Removed
-  seed_data:
-    config: $file:config.json # Static reference data (prompt-only)
-```
-
-See `references/context-scope-guide.md` for complete documentation.
-
-## Guards
-
-Filter or skip records conditionally:
-
-```yaml
-guard:
-  condition: 'status == "KEEP"'
-  on_false: "filter"         # filter | skip
-```
-
-**Operators:** `==`, `!=`, `>`, `<`, `>=`, `<=`, `and`, `or`, `not`, `IN`, `CONTAINS`, `LIKE`, `BETWEEN`, `IS NULL`
-
-**Functions:** `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
-
-```yaml
-# Filter empty arrays
-guard:
-  condition: 'candidate_facts_list != []'
-  on_false: "filter"
-
-# Skip based on count
-guard:
-  condition: 'len(items) >= 3'
-  on_false: "skip"
-```
-
-## Loop Execution
-
-Execute actions multiple times with varying parameters:
-
-```yaml
-- name: generate_distractor
-  loop:
-    param: stage
-    range: [1, 2, 3]
-    mode: parallel  # or sequential
-  schema:
-    distractor_${stage}: string        # Dynamic: distractor_1, distractor_2, etc.
-    explanation_${stage}: string
-  prompt: |
-    Generate distractor {{ loop.stage }} for the question.
-```
-
-**Loop Consumption:** Merge outputs from looped actions:
-
-```yaml
-- name: combine_distractors
-  dependencies: generate_distractor
-  loop_consumption:
-    source: generate_distractor
-    pattern: merge  # Combines all loop outputs
-```
-
 ## Retry & Reprompt
-
-**Retry** handles transient errors (rate limits, network). **Reprompt** handles validation errors (bad JSON, schema violations).
 
 ```yaml
 defaults:
-  # Retry: transient errors
   retry:
     max_attempts: 3
-    on_exhausted: return_last  # return_last | raise
+    on_exhausted: continue
 
-  # Reprompt: validation errors (requires explicit config)
   reprompt:
     max_attempts: 4
-    json_repair: true           # Fix malformed JSON without API call
-    use_llm_critique: true      # Use LLM to analyze failures
-    critique_after_attempt: 2   # Start critique after N attempts
-    on_exhausted: return_last
+    json_repair: true
+    use_llm_critique: true
+    on_exhausted: continue
 ```
-
-To disable: `reprompt: false`
-
-See `references/debugging-guide.md` for reprompt options.
-
-## Cross-Workflow Dependencies
-
-```yaml
-dependencies:
-  - workflow: upstream_workflow
-    action: final_action
-```
-
-Run with: `agac run -a downstream_workflow --upstream`
-
-## Prompt Store
-
-Define prompts in `prompt_store/workflow_name.md`:
-
-```markdown
-{prompt Extract_Facts}
-Extract facts from: {{ source.page_content }}
-
-Using syllabus: {{ seed.exam_syllabus.exam_name }}
-
-{% for skill in seed.exam_syllabus.skills_measured %}
-## {{ skill.skill_area }}
-{% endfor %}
-{end_prompt}
-```
-
-Reference: `prompt: $workflow_name.Extract_Facts`
-
-### Template Variable Prefixes
-
-All context sources use **explicit namespacing** by design:
-
-| Prefix | Source | Example |
-|--------|--------|---------|
-| `source.` | Input data from staging | `{{ source.title }}`, `{{ source.content }}` |
-| `seed.` | Static reference data | `{{ seed.config.setting }}` |
-| `<action_name>.` | Previous action output | `{{ classify.category }}`, `{{ validate.is_valid }}` |
-
-### Why Explicit Namespacing (Design Principle)
-
-Explicit namespacing is **required by design**, not a limitation:
-
-| Benefit | Description |
-|---------|-------------|
-| **Clarity** | Always know where a field comes from |
-| **No conflicts** | Multiple actions can output same field name |
-| **Self-documenting** | Templates are readable without context |
-| **Safe refactoring** | Rename actions without hidden breakage |
-| **Easy debugging** | Trace fields to their source action |
-
-```jinja2
-{# CORRECT - explicit namespacing #}
-{{ source.title }}                        {# from staging #}
-{{ seed.exam_syllabus.exam_name }}        {# from seed_data #}
-{{ classify_genre.primary_bisac_code }}   {# from classify_genre action #}
-{{ generate_seo.primary_keywords }}       {# from generate_seo action #}
-
-{# WRONG - implicit access not allowed #}
-{{ title }}              {# Ambiguous: staging or action output? #}
-{{ primary_keywords }}   {# Ambiguous: which action? #}
-```
-
-### Avoiding Field Name Conflicts
-
-With explicit namespacing, actions can safely output the same field name:
-
-```yaml
-actions:
-  - name: extract_entities
-    schema: { count: integer }  # entity count
-
-  - name: extract_keywords
-    schema: { count: integer }  # keyword count
-
-  - name: summarize
-    dependencies: [extract_entities, extract_keywords]  # Merge pattern
-    prompt: |
-      Entity count: {{ extract_entities.count }}
-      Keyword count: {{ extract_keywords.count }}
-      {# No ambiguity - each 'count' is namespaced #}
-```
-
-## Workflow Patterns
-
-Use these patterns for common parallel and merge scenarios:
-
-| Pattern | Structure | Use Case |
-|---------|-----------|----------|
-| **Diamond/Fan-in** | split → parallel branches → merge | Enrich from multiple angles, combine results |
-| **Multi-enrichment** | single source → parallel specialists → unified | Extract different aspects independently |
-| **Ensemble/Voting** | same input → multiple LLMs → consensus | Compare model outputs, pick best |
-| **Conditional Merge** | parallel with guards → merge available | Only merge branches that ran |
-
-### Diamond/Fan-in Pattern
-
-Split to parallel branches, merge all results:
-
-```yaml
-actions:
-  - name: validate
-    schema: { title: string, content: string }
-
-  - name: generate_seo
-    dependencies: validate             # Single input
-    schema: { primary_keywords: list }
-
-  - name: generate_recommendations
-    dependencies: validate             # Single input
-    schema: { similar_books: list }
-
-  - name: assess_reading_level
-    dependencies: validate             # Single input
-    schema: { reading_level: string }
-
-  - name: score_quality
-    dependencies: [generate_seo, generate_recommendations, assess_reading_level]  # Merge!
-    # All 3 parallel parents accessible via namespacing:
-    prompt: |
-      SEO: {{ generate_seo.primary_keywords }}
-      Similar: {{ generate_recommendations.similar_books }}
-      Level: {{ assess_reading_level.reading_level }}
-```
-
-### Multi-enrichment Pattern
-
-Multiple specialists extract different aspects:
-
-```yaml
-actions:
-  - name: extract_entities
-    dependencies: prepare              # Single input
-    schema: { entities: list, count: integer }
-
-  - name: extract_sentiment
-    dependencies: prepare              # Single input
-    schema: { sentiment: string, confidence: number }
-
-  - name: extract_topics
-    dependencies: prepare              # Single input
-    schema: { topics: list, count: integer }
-
-  - name: unified_analysis
-    dependencies: [extract_entities, extract_sentiment, extract_topics]  # Merge!
-    prompt: |
-      Entities: {{ extract_entities.entities }}
-      Sentiment: {{ extract_sentiment.sentiment }}
-      Topics: {{ extract_topics.topics }}
-```
-
-### Ensemble/Voting Pattern
-
-Multiple LLMs, pick best answer:
-
-```yaml
-actions:
-  - name: gpt4_answer
-    dependencies: prepare              # Single input
-    model_vendor: openai
-    model_name: gpt-4o
-
-  - name: claude_answer
-    dependencies: prepare              # Single input
-    model_vendor: anthropic
-    model_name: claude-sonnet-4-20250514
-
-  - name: best_answer
-    dependencies: [gpt4_answer, claude_answer]  # Merge!
-    prompt: |
-      Compare and select the best answer:
-      GPT-4: {{ gpt4_answer.response }}
-      Claude: {{ claude_answer.response }}
-```
-
-### Conditional Merge Pattern
-
-Merge only branches that ran (using guards):
-
-```yaml
-actions:
-  - name: classify
-    schema: { complexity: string }
-
-  - name: fast_path
-    dependencies: classify             # Single input
-    guard:
-      condition: 'complexity == "low"'
-      on_false: "skip"
-    schema: { result: string }
-
-  - name: slow_path
-    dependencies: classify             # Single input
-    guard:
-      condition: 'complexity == "high"'
-      on_false: "skip"
-    schema: { result: string }
-
-  - name: combine
-    dependencies: [fast_path, slow_path]  # Merge!
-    # Handle potentially missing branches in prompt:
-    prompt: |
-      {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}
-      {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
-```
-
-### Chained Actions
-
-Sequential dependency access:
-
-```markdown
-{prompt Second_Step}
-## INPUT
-Original data: {{ source.title }}
-Previous result: {{ first_action.processed_field }}
-
-## TASK
-Build on the previous action's output.
-{end_prompt}
-```
-
-## UDF Tool Pattern
-
-UDFs work like LLM actions: `context_scope` defines input, `schema` defines output.
-
-```python
-from agent_actions import udf_tool
-
-@udf_tool()  # No input_type needed - input comes from context_scope
-def my_function(data: dict) -> dict:
-    """Process data and return modified dict."""
-    # Handle content wrapper if present
-    if 'content' in data:
-        content = data['content']
-    else:
-        content = data
-
-    # Copy to avoid mutating input
-    result = content.copy()
-
-    # Add/modify fields
-    result['processed'] = True
-    result['result_value'] = content.get('question', '')[:50]
-
-    return result
-```
-
-```yaml
-# Workflow YAML - context_scope defines what data the UDF receives
-- name: process_data
-  kind: tool
-  impl: my_function
-  context_scope:
-    include:
-      - upstream_action.question
-      - upstream_action.options
-```
-
-### Granularity Options
-
-**Record (default):** Process one record at a time
-```yaml
-- name: filter_questions
-  kind: tool
-  impl: filter_by_score
-  granularity: record
-```
-
-**File:** Process all records at once (for aggregation, dedup, clustering)
-```python
-from agent_actions.configuration.new_format_schema import Granularity
-
-@udf_tool(granularity=Granularity.FILE)
-def run_dedup(data: List[Dict]) -> List[Dict]:
-    seen = set()
-    return [r for r in data if r['fact'] not in seen and not seen.add(r['fact'])]
-```
-
-**Constraints:** FILE granularity only works with `kind: tool`, and guards are not supported.
-
-**Important:** In FILE mode, copy `source_guid` from input to output to maintain lineage chaining:
-```python
-@udf_tool(granularity=Granularity.FILE)
-def flatten(data: List[Dict]) -> List[Dict]:
-    results = []
-    for rec in data:
-        for item in rec.get("items", []):
-            results.append({
-                "source_guid": rec.get("source_guid"),  # Preserve for lineage!
-                **item
-            })
-    return results
-```
-
-### FileUDFResult for Lineage
-
-Track input→output mapping in FILE granularity:
-
-```python
-from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
-
-@udf_tool(granularity=Granularity.FILE)
-def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
-    seen = {}
-    outputs = []
-    source_mapping = {}
-
-    for idx, record in enumerate(data):
-        fact = record['fact']
-        if fact not in seen:
-            seen[fact] = len(outputs)
-            outputs.append(record)
-            source_mapping[len(outputs) - 1] = idx
-
-    return FileUDFResult(
-        outputs=outputs,
-        source_mapping=source_mapping,
-        input_count=len(data)
-    )
-```
-
-### Type Mapping
-
-| JSON | Python | Notes |
-|------|--------|-------|
-| string | `str` | |
-| integer | `int` | |
-| number | `float` | |
-| array | `List[str]` or `List[Any]` | |
-| object | `dict` | For mixed-type dicts |
-| varies | `Any` | When type can change |
-
-See `references/udf-decorator.md` for complete documentation.
-
-## Common Errors
-
-**"X was unexpected"** - Field in data but not in TypedDict
-- Fix: Add field to TypedDict
-
-**"X is not of type Y"** - Type mismatch
-- Fix: Use correct type or `Any`
-
-**Mixed-type dict error:**
-```python
-# BAD
-target_counts: Dict[str, int]  # Fails if values include strings
-
-# GOOD
-target_counts: dict            # Allows any structure
-```
-
-## Debugging
-
-Enable debug mode for detailed tracebacks:
-
-```bash
-agac run -a my_workflow --debug --verbose
-```
-
-Common validation errors and fixes:
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `X is not of type 'string'` | Type mismatch | Convert in UDF or use `dict` |
-| `X was unexpected` | Extra field | Add to TypedDict |
-| `X is a required property` | Missing field | Ensure UDF returns it |
-
-Use reprompting for auto-retry on schema failures:
-
-```yaml
-reprompt:
-  max_attempts: 4
-  json_repair: true
-  use_llm_critique: true
-  critique_after_attempt: 2
-  on_exhausted: return_last
-```
-
-See `references/debugging-guide.md` for complete troubleshooting.
-
-## Resources
-
-**Core References:**
-- `references/yaml-schema.md` - Complete YAML configuration reference
-- `references/context-scope-guide.md` - Context scope deep dive
-- `references/udf-decorator.md` - UDF tool decorator reference
-- `references/cli-reference.md` - CLI commands and options
-
-**Pattern Guides:**
-- `references/debugging-guide.md` - Error types and troubleshooting
-- `references/prompt-patterns.md` - Effective prompt writing patterns
-- `references/data-flow-patterns.md` - Node data flow and tracing
-
-**Scripts:**
-- `scripts/generate_typeddict.py` - Generate TypedDict from JSON
-- `scripts/analyze_field_flow.py` - Trace fields across nodes
-- `scripts/init_workflow.py` - Scaffold new workflow

@@ -15,11 +15,12 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: false
   prompt_debug: false
+  few_shot: 0
 
   # Retry: transient errors (rate limits, network)
   retry:
     max_attempts: 3
-    on_exhausted: return_last  # return_last | raise
+    on_exhausted: continue  # continue | fail
 
   # Reprompt: validation errors (bad JSON, schema violations)
   # reprompt: false  # Uncomment to enable
@@ -28,7 +29,7 @@ defaults:
   #   json_repair: true
   #   use_llm_critique: false
   #   critique_after_attempt: 2
-  #   on_exhausted: return_last
+  #   on_exhausted: continue
 
 actions:
   # ============================================================================

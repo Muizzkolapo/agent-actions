@@ -32,6 +32,9 @@ class SchemaLoader:
         """
         Return the set of schema names used by an agent.
 
+        Note: With render-first architecture, schemas are inlined during compilation.
+        This method extracts schema names from the compiled output for validation purposes.
+
         Args:
             agent_name (str): The name of the agent
 
@@ -47,17 +50,21 @@ class SchemaLoader:
                 agent_config_file, str(template_dir)
             )
             data = yaml.safe_load(rendered_templates)
-            dynamic_schema_names = {
-                step["schema_name"]
-                for key, steps in data.items()
-                if isinstance(steps, list)
-                for step in steps
-                if "schema_name" in step
-            }
+
+            # After compilation, schemas are inlined with their 'name' field preserved
+            dynamic_schema_names = set()
+            actions = data.get("actions", [])
+            for action in actions:
+                if "schema" in action and isinstance(action["schema"], dict):
+                    schema_name = action["schema"].get("name")
+                    # Only collect named schemas (not InlineSchema which is auto-generated)
+                    if schema_name and schema_name != "InlineSchema":
+                        dynamic_schema_names.add(schema_name)
+
             return dynamic_schema_names
         except Exception as e:
             print(f"Error rendering schema for agent '{agent_name}': {str(e)}")
-            return set()  # Return empty set on error
+            return set()
 
     @staticmethod
     def load_schema(schema_name: str, schema_dir: Path = None) -> dict:

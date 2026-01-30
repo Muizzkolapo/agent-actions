@@ -367,6 +367,15 @@ class ProcessingPipeline:
 
         agent_ids = agent_indices
 
+        # Extract version context for versioned agents
+        # This enables {{ i }}, {{ loop.length }}, etc. in Jinja2 templates
+        loop_context = None
+        agent_config = self.config.agent_config
+        if agent_config.get("is_versioned_agent"):
+            version_context = agent_config.get("_version_context")
+            if version_context:
+                loop_context = dict(version_context)  # Copy to avoid mutation
+
         # Create processing context
         context = ProcessingContext(
             agent_config=self.config.agent_config,
@@ -378,6 +387,7 @@ class ProcessingPipeline:
             output_directory=output_directory,
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
+            loop_context=loop_context,
         )
 
         # Process via RecordProcessor

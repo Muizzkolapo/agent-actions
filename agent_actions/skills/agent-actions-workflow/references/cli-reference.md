@@ -99,6 +99,37 @@ agac run -a upstream_workflow --downstream
 agac run -a middle_workflow --upstream --downstream
 ```
 
+## render
+
+Compile and display workflow configuration without executing.
+
+```bash
+agac render -a <workflow-name> [options]
+```
+
+**What it does:**
+- Resolves Jinja2 templates and macros
+- Loads and inlines schemas from `schema/` directory
+- Expands inline schemas to unified format
+- Expands versioned actions
+
+**Examples:**
+
+```bash
+# See compiled workflow
+agac render -a my_workflow
+
+# Use custom templates directory
+agac render -a my_workflow -t ./custom_templates
+```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-a, --agent TEXT` | Workflow name (required) |
+| `-t, --template-dir TEXT` | Templates directory (default: `./templates`) |
+
 ## list-udfs
 
 List all registered UDF tools:

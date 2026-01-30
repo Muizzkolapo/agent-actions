@@ -30,13 +30,68 @@ actions:
 
 ## Template Variables
 
-| Variable | Description |
-|----------|-------------|
-| `{{ i }}` | Current iteration value |
-| `{{ idx }}` | Zero-based index |
-| `{{ loop.length }}` | Total iterations |
-| `{{ loop.first }}` | True on first iteration |
-| `{{ loop.last }}` | True on last iteration |
+Version variables are available in both inline prompts and prompt store references:
+
+| Variable | Type | Description | Example |
+|----------|------|-------------|---------|
+| `{{ i }}` | int | Current iteration value | `1`, `2`, `3` |
+| `{{ idx }}` | int | Zero-based index | `0`, `1`, `2` |
+| `{{ version.length }}` | int | Total iterations | `3` |
+| `{{ version.first }}` | bool | True on first iteration | `true`/`false` |
+| `{{ version.last }}` | bool | True on last iteration | `true`/`false` |
+| `{{ custom_param }}` | int | Custom param value (when `param` is set) | `1`, `2`, `3` |
+
+### Custom Parameter Names
+
+When using a custom `param` name, it's available as a top-level variable:
+
+```yaml
+versions:
+  param: classifier_id
+  range: [1, 3]
+```
+
+```jinja2
+{# Both work: #}
+Classifier {{ classifier_id }}
+Classifier {{ i }}
+```
+
+## Using with Prompt Store
+
+Version variables work with prompt store references, enabling reusable versioned prompts:
+
+```yaml
+# In workflow config
+- name: classify_severity
+  versions:
+    range: [1, 3]
+    mode: parallel
+  prompt: $incident_triage.Classify_Severity
+```
+
+```markdown
+{# In prompt_store/incident_triage.md #}
+
+{prompt Classify_Severity}
+You are classifier {{ i }} of {{ version.length }}.
+
+{% if version.first %}
+Be conservative in your assessment.
+{% elif version.last %}
+Be comprehensive and thorough.
+{% else %}
+Balance precision and recall.
+{% endif %}
+
+Analyze the incident and provide your classification.
+{end_prompt}
+```
+
+This renders as:
+- **Classifier 1**: "You are classifier 1 of 3. Be conservative..."
+- **Classifier 2**: "You are classifier 2 of 3. Balance precision..."
+- **Classifier 3**: "You are classifier 3 of 3. Be comprehensive..."
 
 ## Version Consumption
 

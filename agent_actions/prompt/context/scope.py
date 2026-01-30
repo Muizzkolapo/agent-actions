@@ -1082,10 +1082,23 @@ class ContextScopeProcessor:
                 },
             )
 
-        # 3. LOOP namespace - iteration info
+        # 3. VERSION namespace - iteration info (for version actions)
+        # Provides {{ version.length }}, {{ version.first }}, {{ version.last }}
+        # Also adds top-level {{ i }}, {{ idx }}, and custom param names
         if loop_context:
-            field_context["loop"] = loop_context
-            logger.debug("Added 'loop' namespace")
+            field_context["version"] = loop_context
+            # Add common version variables at top level for convenience
+            # This enables {{ i }} instead of requiring {{ version.i }}
+            if "i" in loop_context:
+                field_context["i"] = loop_context["i"]
+            if "idx" in loop_context:
+                field_context["idx"] = loop_context["idx"]
+            # Add custom param names at top level (e.g., {{ classifier_id }})
+            reserved_keys = {"i", "idx", "length", "first", "last"}
+            for key, value in loop_context.items():
+                if key not in reserved_keys:
+                    field_context[key] = value
+            logger.debug("Added 'version' namespace with version context")
 
         # 4. WORKFLOW namespace - metadata
         if workflow_metadata:
