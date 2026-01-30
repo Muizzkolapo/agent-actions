@@ -155,7 +155,7 @@ class TestContextScopeWithSplitRecords:
         # Build agent config
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -218,7 +218,7 @@ class TestContextScopeWithSplitRecords:
         # Build agent config
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -283,7 +283,7 @@ class TestContextScopeWithSplitRecords:
         # Build agent config
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -338,7 +338,7 @@ class TestContextScopeWithSplitRecords:
         """
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -365,6 +365,7 @@ class TestContextScopeWithSplitRecords:
                 dependency_configs=dependency_configs_split,
                 current_item=caller,
                 file_path=file_path,
+                context_scope=agent_config["context_scope"],
             )
 
             assert "split_operation" in field_context, (
@@ -413,7 +414,7 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -440,7 +441,9 @@ class TestContextScopeSplitRecordsEdgeCases:
         )
 
         assert (
-            "split_operation" not in field_context or field_context.get("split_operation") is None
+            "split_operation" not in field_context
+            or field_context.get("split_operation") is None
+            or field_context.get("split_operation") == {}
         ), "Should not load split_operation without lineage or ancestry matching"
 
     def test_wrong_source_guid_returns_none(
@@ -459,7 +462,7 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         agent_config = {
             "idx": 23,
-            "dependencies": ["split_operation"],
+            "dependencies": [],  # Empty - split_operation is a CONTEXT source, not input
             "context_scope": {
                 "observe": [
                     "split_operation.status",
@@ -486,5 +489,7 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         # Should NOT have loaded split_operation (source_guid mismatch)
         assert (
-            "split_operation" not in field_context or field_context.get("split_operation") is None
+            "split_operation" not in field_context
+            or field_context.get("split_operation") is None
+            or field_context.get("split_operation") == {}
         ), "Should not load data when source_guid doesn't match"
