@@ -1,0 +1,29 @@
+{
+  "id": "guides/index",
+  "title": "Guides",
+  "description": "Task-oriented how-to guides for Agent Actions",
+  "source": "@site/docs/guides/index.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/",
+  "permalink": "/docs/guides/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/guides/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Guides",
+    "description": "Task-oriented how-to guides for Agent Actions",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Key Concepts",
+    "permalink": "/docs/tutorials/concepts"
+  },
+  "next": {
+    "title": "Design Patterns",
+    "permalink": "/docs/guides/design-patterns"
+  }
+}

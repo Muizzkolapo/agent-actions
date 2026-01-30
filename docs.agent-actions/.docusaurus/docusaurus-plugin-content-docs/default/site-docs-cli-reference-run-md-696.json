@@ -1,0 +1,29 @@
+{
+  "id": "cli-reference/run",
+  "title": "run Command",
+  "description": "Execute agentic workflows",
+  "source": "@site/docs/cli-reference/run.md",
+  "sourceDirName": "cli-reference",
+  "slug": "/cli-reference/run",
+  "permalink": "/docs/cli-reference/run",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/cli-reference/run.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "title": "run Command",
+    "description": "Execute agentic workflows",
+    "sidebar_position": 2
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "CLI Reference",
+    "permalink": "/docs/cli-reference/"
+  },
+  "next": {
+    "title": "batch Commands",
+    "permalink": "/docs/cli-reference/batch"
+  }
+}

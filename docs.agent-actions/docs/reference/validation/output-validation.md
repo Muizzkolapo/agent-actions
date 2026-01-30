@@ -418,7 +418,7 @@ actions:
 
 ```python
 # tools/validate_content.py
-@udf()
+@udf_tool()
 def validate_content(content: dict) -> dict:
     """Custom validation logic."""
     issues = []

@@ -1,0 +1,28 @@
+{
+  "id": "reference/context/context-scope",
+  "title": "Context Scope",
+  "description": "Context Scope controls data visibility and flow between actions—what the LLM sees, what passes through to output, and what gets excluded.",
+  "source": "@site/docs/reference/context/context-scope.md",
+  "sourceDirName": "reference/context",
+  "slug": "/reference/context/context-scope",
+  "permalink": "/docs/reference/context/context-scope",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/context/context-scope.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "title": "Context Scope",
+    "sidebar_position": 3
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Field References",
+    "permalink": "/docs/reference/context/field-references"
+  },
+  "next": {
+    "title": "Seed Data",
+    "permalink": "/docs/reference/context/seed-data"
+  }
+}

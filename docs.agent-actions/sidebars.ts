@@ -6,37 +6,31 @@ const sidebars: SidebarsConfig = {
     'installation',
     {
       type: 'category',
-      label: 'Getting Started',
+      label: 'Tutorials',
       collapsed: false,
       collapsible: false,
       link: {
         type: 'doc',
-        id: 'getting-started/index',
+        id: 'tutorials/index',
       },
       items: [
-        'getting-started/concepts',
-        'getting-started/custom-functions',
-        'getting-started/patterns',
+        'tutorials/concepts',
       ],
     },
     {
       type: 'category',
-      label: 'CLI Reference',
+      label: 'Guides',
       collapsed: false,
       collapsible: false,
       link: {
         type: 'doc',
-        id: 'cli-reference/index',
+        id: 'guides/index',
       },
       items: [
-        'cli-reference/run',
-        'cli-reference/batch',
-        'cli-reference/inspect',
-        'cli-reference/utilities',
-        'cli-reference/udfs',
-        'cli-reference/schema',
-        'cli-reference/skills',
-        'cli-reference/troubleshooting',
+        'guides/design-patterns',
+        'guides/custom-tools',
+        'guides/editor-setup',
+        'guides/troubleshooting',
       ],
     },
     {
@@ -49,12 +43,31 @@ const sidebars: SidebarsConfig = {
         id: 'reference/index',
       },
       items: [
-        'reference/architecture/index',
+        {
+          type: 'category',
+          label: 'CLI',
+          collapsed: true,
+          collapsible: true,
+          link: {
+            type: 'doc',
+            id: 'reference/cli/index',
+          },
+          items: [
+            'reference/cli/run',
+            'reference/cli/batch',
+            'reference/cli/inspect',
+            'reference/cli/utilities',
+            'reference/cli/tools',
+            'reference/cli/schema',
+            'reference/cli/skills',
+            'reference/cli/troubleshooting',
+          ],
+        },
         {
           type: 'category',
           label: 'Configuration',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/configuration/index',
@@ -67,8 +80,8 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Context',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/context/index',
@@ -82,8 +95,8 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Data I/O',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/data-io/index',
@@ -98,22 +111,23 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Prompts',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/prompts/index',
           },
           items: [
             'reference/prompts/prompt-store',
+            'reference/prompts/dispatch',
           ],
         },
         'reference/schemas/index',
         {
           type: 'category',
           label: 'Execution',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/execution/index',
@@ -125,13 +139,15 @@ const sidebars: SidebarsConfig = {
             'reference/execution/run-modes',
             'reference/execution/granularity',
             'reference/execution/workflow-dependencies',
+            'reference/execution/retry',
+            'reference/execution/versions',
           ],
         },
         {
           type: 'category',
           label: 'Validation',
-          collapsed: false,
-          collapsible: false,
+          collapsed: true,
+          collapsible: true,
           link: {
             type: 'doc',
             id: 'reference/validation/index',
@@ -141,21 +157,23 @@ const sidebars: SidebarsConfig = {
             'reference/validation/output-validation',
           ],
         },
-        {
-          type: 'category',
-          label: 'Tools',
-          collapsed: false,
-          collapsible: false,
-          link: {
-            type: 'doc',
-            id: 'reference/tools/index',
-          },
-          items: [
-            'reference/tools/udf-decorator',
-          ],
-        },
+        'reference/tools/index',
+        'reference/architecture/index',
+        'reference/inspect',
         'reference/documentation-site',
-        'reference/editor-integration',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'API',
+      collapsed: false,
+      collapsible: false,
+      link: {
+        type: 'doc',
+        id: 'api/index',
+      },
+      items: [
+        'api/logging',
       ],
     },
   ],

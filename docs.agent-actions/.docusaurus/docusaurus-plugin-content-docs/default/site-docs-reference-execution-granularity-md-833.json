@@ -1,0 +1,28 @@
+{
+  "id": "reference/execution/granularity",
+  "title": "Granularity",
+  "description": "Granularity controls whether an action processes one record at a time or the entire dataset.",
+  "source": "@site/docs/reference/execution/granularity.md",
+  "sourceDirName": "reference/execution",
+  "slug": "/reference/execution/granularity",
+  "permalink": "/docs/reference/execution/granularity",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/execution/granularity.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "title": "Granularity",
+    "sidebar_position": 5
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Run Modes",
+    "permalink": "/docs/reference/execution/run-modes"
+  },
+  "next": {
+    "title": "Workflow Dependencies",
+    "permalink": "/docs/reference/execution/workflow-dependencies"
+  }
+}

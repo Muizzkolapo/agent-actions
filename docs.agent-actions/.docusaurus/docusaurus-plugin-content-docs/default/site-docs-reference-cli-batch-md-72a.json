@@ -1,0 +1,29 @@
+{
+  "id": "reference/cli/batch",
+  "title": "batch Commands",
+  "description": "Manage batch processing operations",
+  "source": "@site/docs/reference/cli/batch.md",
+  "sourceDirName": "reference/cli",
+  "slug": "/reference/cli/batch",
+  "permalink": "/docs/reference/cli/batch",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/cli/batch.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 3,
+  "frontMatter": {
+    "title": "batch Commands",
+    "description": "Manage batch processing operations",
+    "sidebar_position": 3
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "run Command",
+    "permalink": "/docs/reference/cli/run"
+  },
+  "next": {
+    "title": "inspect Commands",
+    "permalink": "/docs/reference/cli/inspect"
+  }
+}

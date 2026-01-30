@@ -119,8 +119,16 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Getting Started',
-              to: '/docs/getting-started',
+              label: 'Tutorials',
+              to: '/docs/tutorials',
+            },
+            {
+              label: 'Guides',
+              to: '/docs/guides',
+            },
+            {
+              label: 'Reference',
+              to: '/docs/reference',
             },
           ],
         },
@@ -152,6 +160,23 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
+    },
+    mermaid: {
+      theme: {
+        light: 'neutral',
+        dark: 'dark',
+      },
+      options: {
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontSize: 14,
+        flowchart: {
+          curve: 'basis',
+          padding: 20,
+          nodeSpacing: 50,
+          rankSpacing: 50,
+          htmlLabels: true,
+        },
+      },
     },
   } satisfies Preset.ThemeConfig,
 };

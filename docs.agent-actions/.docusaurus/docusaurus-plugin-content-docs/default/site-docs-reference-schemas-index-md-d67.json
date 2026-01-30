@@ -1,0 +1,28 @@
+{
+  "id": "reference/schemas/index",
+  "title": "Schema System",
+  "description": "What happens when an LLM returns malformed JSON or misses a required field? The Schema System provides output validation for LLM actions. Schemas define the expected structure of action outputs, enabling automatic validation, reprompting on failure, and type-safe data flow between actions.",
+  "source": "@site/docs/reference/schemas/index.md",
+  "sourceDirName": "reference/schemas",
+  "slug": "/reference/schemas/",
+  "permalink": "/docs/reference/schemas/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/schemas/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Schema System",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Dynamic Dispatch",
+    "permalink": "/docs/reference/prompts/dispatch"
+  },
+  "next": {
+    "title": "Execution",
+    "permalink": "/docs/reference/execution/"
+  }
+}

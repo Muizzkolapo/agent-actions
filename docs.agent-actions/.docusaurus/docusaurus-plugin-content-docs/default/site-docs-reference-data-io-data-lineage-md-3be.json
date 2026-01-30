@@ -1,0 +1,28 @@
+{
+  "id": "reference/data-io/data-lineage",
+  "title": "Data Lineage",
+  "description": "How does Agent Actions track data as it flows through parallel branches, merges, and splits? The Ancestry Chain provides complete lineage tracking that enables complex workflow patterns like Diamond, Map-Reduce, and Ensemble voting.",
+  "source": "@site/docs/reference/data-io/data-lineage.md",
+  "sourceDirName": "reference/data-io",
+  "slug": "/reference/data-io/data-lineage",
+  "permalink": "/docs/reference/data-io/data-lineage",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/data-io/data-lineage.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "title": "Data Lineage",
+    "sidebar_position": 4
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Output Format",
+    "permalink": "/docs/reference/data-io/output-format"
+  },
+  "next": {
+    "title": "Chunking",
+    "permalink": "/docs/reference/data-io/chunking"
+  }
+}

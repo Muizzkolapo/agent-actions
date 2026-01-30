@@ -1,0 +1,15 @@
+{
+  "id": "reference/api/logging",
+  "title": "Logging API Reference",
+  "description": "Complete API reference for agent-actions' event-based logging system.",
+  "source": "@site/docs/reference/api/logging.md",
+  "sourceDirName": "reference/api",
+  "slug": "/reference/api/logging",
+  "permalink": "/docs/reference/api/logging",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/api/logging.md",
+  "tags": [],
+  "version": "current",
+  "frontMatter": {}
+}

@@ -1,0 +1,28 @@
+{
+  "id": "reference/tools/index",
+  "title": "Tool Actions",
+  "description": "What happens when you need logic that an LLM can't perform? Deduplicating records, calling an external API, or applying deterministic business rules—these tasks need deterministic logic, not prompts.",
+  "source": "@site/docs/reference/tools/index.md",
+  "sourceDirName": "reference/tools",
+  "slug": "/reference/tools/",
+  "permalink": "/docs/reference/tools/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/tools/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Tool Actions",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Output Validation Pipeline",
+    "permalink": "/docs/reference/validation/output-validation"
+  },
+  "next": {
+    "title": "Architecture",
+    "permalink": "/docs/reference/architecture/"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "reference/validation/reprompting",
+  "title": "Reprompting",
+  "description": "What happens when an LLM returns malformed JSON or misses a required field? Without intervention, your agentic workflow fails. But often, the model just needs a second chance with clearer guidance.",
+  "source": "@site/docs/reference/validation/reprompting.md",
+  "sourceDirName": "reference/validation",
+  "slug": "/reference/validation/reprompting",
+  "permalink": "/docs/reference/validation/reprompting",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/validation/reprompting.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Reprompting",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Validation",
+    "permalink": "/docs/reference/validation/"
+  },
+  "next": {
+    "title": "Output Validation Pipeline",
+    "permalink": "/docs/reference/validation/output-validation"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "reference/data-io/input-formats",
+  "title": "Input Formats",
+  "description": "Agent Actions accepts multiple input formats. Place files in agent_io/staging/ before running your workflow.",
+  "source": "@site/docs/reference/data-io/input-formats.md",
+  "sourceDirName": "reference/data-io",
+  "slug": "/reference/data-io/input-formats",
+  "permalink": "/docs/reference/data-io/input-formats",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/data-io/input-formats.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "title": "Input Formats",
+    "sidebar_position": 2
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Data I/O",
+    "permalink": "/docs/reference/data-io/"
+  },
+  "next": {
+    "title": "Output Format",
+    "permalink": "/docs/reference/data-io/output-format"
+  }
+}

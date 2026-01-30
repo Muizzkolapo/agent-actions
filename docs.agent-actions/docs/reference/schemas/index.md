@@ -173,7 +173,7 @@ What if different records need different output structures? For example, a quiz 
 ```
 
 When this action runs, Agent Actions:
-1. Calls the `select_question_schema` UDF with current context
+1. Calls the `select_question_schema` tool with current context
 2. Uses the returned schema name or definition
 3. Validates the LLM output against that schema
 
@@ -236,7 +236,7 @@ def select_output_schema(input_data: dict) -> dict:
 
 ### Context Available
 
-The dispatch UDF receives all available context:
+The dispatch tool receives all available context:
 
 ```python
 @udf_tool

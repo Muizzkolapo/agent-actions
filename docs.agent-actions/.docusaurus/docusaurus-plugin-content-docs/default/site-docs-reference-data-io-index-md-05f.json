@@ -1,0 +1,28 @@
+{
+  "id": "reference/data-io/index",
+  "title": "Data I/O",
+  "description": "Every agentic workflow needs data to flow in, through, and out. Agent Actions uses a standardized directory structure that makes this flow predictable and traceable.",
+  "source": "@site/docs/reference/data-io/index.md",
+  "sourceDirName": "reference/data-io",
+  "slug": "/reference/data-io/",
+  "permalink": "/docs/reference/data-io/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/data-io/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Data I/O",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Seed Data",
+    "permalink": "/docs/reference/context/seed-data"
+  },
+  "next": {
+    "title": "Input Formats",
+    "permalink": "/docs/reference/data-io/input-formats"
+  }
+}

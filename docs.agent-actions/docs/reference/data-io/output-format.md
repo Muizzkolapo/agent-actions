@@ -11,37 +11,43 @@ Where does your data end up after an agentic workflow runs? Action outputs are w
 
 ```
 agent_io/target/
-├── node_0_extract_facts/
-│   ├── document_1.json
-│   └── document_2.json
-├── node_1_validate_facts/
-│   ├── document_1.json
-│   └── document_2.json
-└── node_2_generate_summary/
-    └── document_1.json
+├── extract_facts/
+│   └── source_file.json
+├── validate_facts/
+│   └── source_file.json
+└── generate_summary/
+    └── source_file.json
 ```
 
-- Each action creates a subdirectory (`node_{index}_{action_name}`)
+- Each action creates a subdirectory named after the action
 - Source filenames are preserved through the pipeline
-- All outputs are JSON
+- All outputs are JSON arrays
 
 ## Output Structure
 
-Each output file contains:
+Each output file contains an array of records:
 
 ```json
-{
-  "source_guid": "document_1",
-  "node_id": "node_0_extract_facts",
-  "content": {
-    "facts": [...],
-    "count": 5
-  },
-  "metadata": {
-    "timestamp": "2024-01-15T10:30:00Z",
-    "model": "gpt-4o-mini"
+[
+  {
+    "source_guid": "cbbd09ca-2503-591c-b712-4c378c101b9d",
+    "node_id": "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154",
+    "target_id": "6059b048-9adc-4497-be79-fe6dd04544eb",
+    "parent_target_id": "64058522-1cc5-4fea-9372-ade1ecc64fc1",
+    "root_target_id": "e1bec28c-c709-4646-845a-2be2bbc8eab1",
+    "content": {
+      "facts": [...],
+      "count": 5
+    },
+    "lineage": [
+      "extract_facts_354c6e1e-4925-403b-9748-52f9386bc154"
+    ],
+    "metadata": {
+      "model": "gpt-4o-mini",
+      "provider": "openai"
+    }
   }
-}
+]
 ```
 
 ### Fields
@@ -49,24 +55,25 @@ Each output file contains:
 | Field | Description |
 |-------|-------------|
 | `source_guid` | Links back to original source file |
-| `node_id` | Action that produced this output |
-| `content` | LLM/tool output (schema-validated) |
-| `metadata` | Execution metadata (timestamp, model) |
+| `node_id` | Action that produced this output (includes run UUID) |
 | `target_id` | Unique identifier for this output record |
+| `parent_target_id` | ID of the upstream record that produced this output |
+| `root_target_id` | ID of the original source record |
+| `content` | LLM/tool output (schema-validated) |
 | `lineage` | Array tracking the processing chain |
-| `chunk_info` | Chunking metadata (only present for chunked records) |
+| `metadata` | Execution metadata (model, provider) |
 
 ### Metadata Fields
 
-The following fields are considered metadata and are automatically excluded when extracting content data for downstream processing:
+The following fields are metadata and are automatically excluded when extracting content for downstream processing:
 
 - `source_guid`
-- `lineage`
 - `node_id`
-- `metadata`
 - `target_id`
 - `parent_target_id`
 - `root_target_id`
+- `lineage`
+- `metadata`
 - `chunk_info`
 
 This means when an action references upstream data, it sees the `content` fields without these metadata wrappers.
@@ -85,44 +92,11 @@ The `content` field contains the action's output, validated against the schema:
 }
 ```
 
-For tool actions, `content` contains the UDF return value.
-
-## Lineage Tracking
-
-How do you trace a result back to its source? Agent Actions maintains lineage throughout the agentic workflow:
-
-```mermaid
-flowchart LR
-    ST[staging/doc_1.json] --> N0[node_0/doc_1.json]
-    N0 --> N1[node_1/doc_1.json]
-    N1 --> N2[node_2/doc_1.json]
-```
-
-Notice how the filename stays consistent at every stage. This design choice has important implications:
-
-- Same filename preserved at each stage
-- `source_guid` links every output to its origin
-- You can trace any result back to its source for debugging or auditing
-
-### Lineage Array
-
-For complex agentic workflows, outputs include a `lineage` array that records every action the data passed through:
-
-```json
-{
-  "source_guid": "doc_1",
-  "lineage": [
-    "node_0_extract",
-    "node_1_validate",
-    "node_2_summarize"
-  ],
-  "content": {...}
-}
-```
+For tool actions, `content` contains the tool return value.
 
 ## Passthrough Fields
 
-Sometimes you need source data to appear directly in the output without being processed. Fields from `context_scope.passthrough` are preserved at the root level of the output:
+Fields from `context_scope.passthrough` are preserved at the root level of the output:
 
 ```yaml
 # Workflow config
@@ -133,7 +107,6 @@ context_scope:
 ```
 
 ```json
-// Output includes passthrough fields
 {
   "source_guid": "doc_1",
   "content": {...},
@@ -147,19 +120,19 @@ context_scope:
 ### Single File
 
 ```bash
-cat agent_io/target/node_0_extract_facts/document_1.json | jq .
+cat agent_io/target/extract_facts/document_1.json | jq .
 ```
 
 ### All Outputs from Action
 
 ```bash
-cat agent_io/target/node_0_extract_facts/*.json | jq -s .
+cat agent_io/target/extract_facts/*.json | jq -s 'add'
 ```
 
 ### Extract Content Only
 
 ```bash
-jq '.content' agent_io/target/node_0_extract_facts/document_1.json
+jq '.[].content' agent_io/target/extract_facts/document_1.json
 ```
 
 ## Clean Outputs
@@ -167,13 +140,14 @@ jq '.content' agent_io/target/node_0_extract_facts/document_1.json
 Remove previous outputs before a fresh run:
 
 ```bash
-agac run -a my_workflow --clean
+agac clean -a my_workflow
 ```
 
-This clears the `target/` directory before execution.
+This removes `source/` and `target/` directories. Use `--all` to also remove `staging/`.
 
 ## See Also
 
 - [Input Formats](./input-formats.md) — How to structure input data
+- [Data Lineage](./data-lineage.md) — Ancestry tracking for parallel branches and merges
 - [Artifacts](../execution/artifacts.md) — Run tracking and detailed output structure
 - [Context Scope](../context/context-scope.md) — Passthrough configuration

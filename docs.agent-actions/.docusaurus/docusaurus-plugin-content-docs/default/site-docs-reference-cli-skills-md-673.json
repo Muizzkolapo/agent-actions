@@ -1,0 +1,29 @@
+{
+  "id": "reference/cli/skills",
+  "title": "skills Command",
+  "description": "Install AI coding assistant skills for Claude Code or OpenAI Codex",
+  "source": "@site/docs/reference/cli/skills.md",
+  "sourceDirName": "reference/cli",
+  "slug": "/reference/cli/skills",
+  "permalink": "/docs/reference/cli/skills",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/cli/skills.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "title": "skills Command",
+    "description": "Install AI coding assistant skills for Claude Code or OpenAI Codex",
+    "sidebar_position": 5
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "schema Command",
+    "permalink": "/docs/reference/cli/schema"
+  },
+  "next": {
+    "title": "Troubleshooting",
+    "permalink": "/docs/reference/cli/troubleshooting"
+  }
+}

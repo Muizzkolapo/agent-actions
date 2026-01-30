@@ -5,23 +5,9 @@ sidebar_position: 1
 
 # Guards
 
-What happens when an action depends on upstream data that might be empty or invalid? Without guards, you'd waste LLM calls on records that can't produce useful results.
-
-Guards solve this by acting as quality checkpoints in your agentic workflow. Think of them like the "if statements" of data pipelines - they evaluate a condition and decide whether an action should run for each record.
-
-## Overview
-
-Guards work like SQL `WHERE` clauses - they filter which records proceed to an action based on conditions you define.
-
-**Why use guards?**
-- **Skip empty data** - Don't process records with no extracted facts
-- **Quality filtering** - Only process high-quality content
-- **Conditional branching** - Execute different actions based on data type
-- **Cost optimization** - Avoid LLM calls for data that won't produce useful results
+Guards evaluate conditions and decide whether an action should run for each record, acting as quality checkpoints in your workflow.
 
 ## Syntax
-
-Let's walk through the basic guard structure:
 
 ```yaml
 - name: my_action
@@ -32,406 +18,117 @@ Let's walk through the basic guard structure:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `clause` | string | (required) | Expression evaluated against upstream data |
-| `behavior` | string | `filter` | What happens when clause is false: `skip` or `filter` |
-| `scope` | string | `item` | Evaluation scope (reserved for future use) |
-| `passthrough_on_error` | boolean | `true` | If evaluation errors, pass the record through instead of failing |
+| `clause` | string | Required | Expression evaluated against upstream data |
+| `behavior` | string | `filter` | Action when clause is false |
+| `passthrough_on_error` | boolean | `true` | Pass record through if evaluation fails |
 
-The `clause` is evaluated before the action runs. If it returns `false`, the `behavior` kicks in.
+## Behavior Options
 
-### Error Handling with passthrough_on_error
-
-By default, if a guard expression fails to evaluate (e.g., due to a missing field or type error), the record passes through and the action executes. This fail-safe behavior prevents a single bad record from halting your entire workflow.
-
-```yaml
-guard:
-  clause: 'optional_field > 10'
-  behavior: "filter"
-  passthrough_on_error: true  # Default: record continues if evaluation fails
-```
-
-Set `passthrough_on_error: false` for strict mode where evaluation errors stop processing:
-
-```yaml
-guard:
-  clause: 'required_field > 10'
-  behavior: "filter"
-  passthrough_on_error: false  # Evaluation errors will raise exceptions
-```
+| Behavior | Description |
+|----------|-------------|
+| `skip` | Action skipped, record continues to downstream actions |
+| `filter` | Record removed from workflow entirely |
 
 ## Condition Expressions
 
-### Simple Field Checks
-
-```yaml
-guard:
-  clause: "candidate_facts_list != []"
-  behavior: "filter"
-```
-
 ### Comparison Operators
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `==` | Equal | `status == "approved"` |
-| `!=` | Not equal | `facts != []` |
-| `>` | Greater than | `score > 85` |
-| `>=` | Greater or equal | `count >= 1` |
-| `<` | Less than | `priority < 3` |
-| `<=` | Less or equal | `retries <= 3` |
-
-### Logical Operators
-
 ```yaml
-# AND condition
 guard:
-  clause: 'score > 85 and status == "valid"'
-
-# OR condition
-guard:
-  clause: 'category == "technical" or category == "implementation"'
-
-# NOT condition
-guard:
-  clause: 'not is_duplicate'
+  clause: "score > 85"
+  clause: "status == 'approved'"
+  clause: "facts != []"
 ```
+
+| Operator | Description |
+|----------|-------------|
+| `==`, `!=` | Equality |
+| `>`, `>=`, `<`, `<=` | Comparison |
+| `and`, `or`, `not` | Logical |
 
 ### Advanced Operators
 
-| Operator | Description | Example |
-|----------|-------------|---------|
-| `IN` | Check membership in list | `status IN ["active", "pending"]` |
-| `NOT IN` | Check non-membership | `category NOT IN ["spam", "invalid"]` |
-| `CONTAINS` | Check if string/list contains | `tags CONTAINS "important"` |
-| `LIKE` | Pattern matching | `name LIKE "prod_*"` |
-| `BETWEEN` | Range check | `score BETWEEN 50 AND 100` |
-| `IS NULL` | Check for null | `description IS NULL` |
-| `IS NOT NULL` | Check not null | `content IS NOT NULL` |
+| Operator | Example |
+|----------|---------|
+| `IN` | `status IN ["active", "pending"]` |
+| `NOT IN` | `category NOT IN ["spam"]` |
+| `CONTAINS` | `tags CONTAINS "important"` |
+| `LIKE` | `name LIKE "prod_*"` |
+| `BETWEEN` | `score BETWEEN 50 AND 100` |
+| `IS NULL` | `description IS NULL` |
 
 ### Built-in Functions
 
-Guards support safe built-in functions:
-
-| Function | Description | Example |
-|----------|-------------|---------|
-| `len()` | Get length | `len(items) > 0` |
-| `str()` | Convert to string | `str(code) == "200"` |
-| `int()` | Convert to integer | `int(score) >= 85` |
-| `float()` | Convert to float | `float(ratio) > 0.5` |
-| `abs()` | Absolute value | `abs(diff) < 10` |
-| `min()` | Minimum value | `min(scores) > 50` |
-| `max()` | Maximum value | `max(scores) <= 100` |
-
 ```yaml
-# Using len() function
 guard:
-  clause: 'len(candidate_facts_list) >= 3'
-  behavior: "filter"
-
-# Combining functions
-guard:
-  clause: 'len(items) > 0 and max(scores) >= 85'
-  behavior: "skip"
+  clause: 'len(items) > 0'
+  clause: 'max(scores) >= 85'
 ```
 
-### Field References
-
-```yaml
-# Upstream action field
-guard:
-  clause: "extract_facts.count > 0"
-
-# Current context field
-guard:
-  clause: "candidate_facts_list != []"
-```
-
-## behavior Options
-
-Here's where the two options differ significantly:
-
-### skip
-
-The action is skipped, but the record continues through the agentic workflow. Think of it as an optional step - downstream actions still run, they just won't see output from this action.
-
-```yaml
-- name: optional_enhancement
-  guard:
-    clause: "needs_enhancement == true"
-    behavior: "skip"  # Record continues, this action just doesn't run
-```
-
-### filter
-
-The record is completely removed from the agentic workflow. It won't be processed by this action or any downstream actions. Use this for early exits when a record can't produce useful results.
-
-```yaml
-- name: validate_facts
-  guard:
-    clause: "candidate_facts_list != []"
-    behavior: "filter"  # Record stops here entirely
-```
-
-:::warning
-Choose carefully between `"skip"` and `"filter"`. With `"skip"`, downstream actions still run but may receive incomplete data. With `"filter"`, the record is gone - no further processing happens.
-:::
+Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 
 ## Examples
-
-Let's explore some real-world patterns:
 
 ### Filter Empty Results
 
 ```yaml
 - name: canonicalize_facts
-  dependencies: fact_extractor  # Input source
+  dependencies: fact_extractor
   guard:
     clause: 'candidate_facts_list != []'
     behavior: "filter"
 ```
 
-Records with no extracted facts are removed from the agentic workflow entirely. Why pay for LLM calls on empty data?
-
-### Skip Non-Matching Records
+### Skip Optional Processing
 
 ```yaml
-- name: Cluster_Validation_Agent
-  dependencies: [group_by_similarity, cluster_list]
-  guard:
-    clause: 'num_similar_facts != 1'
-    behavior: "skip"
-```
-
-Single-fact clusters don't need validation, so the action is skipped but the record continues. The downstream actions still receive the record - they just won't see validation output.
-
-### Quality Threshold Filter
-
-```yaml
-- name: suggest_distractor_counts
-  dependencies: filter_low_quality_questions  # Input source
-  guard:
-    clause: 'question_status == "KEEP"'
-    behavior: "filter"
-```
-
-Only high-quality questions proceed to distractor generation.
-
-### Skip When Field Empty
-
-```yaml
-- name: review_code_snippets
-  dependencies: generate_summary  # Input source
-  guard:
-    clause: 'code_snippets != []'
-    behavior: "skip"
-```
-
-Skip code review if no code snippets were extracted.
-
-## Guard Evaluation Context
-
-Guards have access to:
-
-| Source | Syntax | Example |
-|--------|--------|---------|
-| Upstream output | Direct field name | `candidate_facts_list` |
-| Specific action | `action.field` | `extract_facts.count` |
-| Context scope observed | Direct field name | `num_similar_facts` |
-
-### Context from Observe
-
-When using `context_scope.observe`, those fields are available in guards:
-
-```yaml
-- name: Cluster_Validation_Agent
-  context_scope:
-    observe:
-      - group_by_similarity.num_similar_facts
-  guard:
-    clause: 'num_similar_facts != 1'  # Available from observe
-    behavior: "skip"
-```
-
-## Decision Flow
-
-Consider what happens when a record reaches an action with a guard:
-
-```mermaid
-flowchart TD
-    A[Record arrives at action] --> B{Guard defined?}
-    B -->|No| C[Execute action]
-    B -->|Yes| D{Evaluate condition}
-    D -->|True| C
-    D -->|False| E{behavior setting}
-    E -->|skip| F[Skip action, continue record]
-    E -->|filter| G[Remove record from workflow]
-    C --> H[Continue to next action]
-    F --> H
-```
-
-Notice that both `skip` and `execute` paths lead to the next action, but `filter` removes the record entirely. The filtered record never reaches downstream actions.
-
-## Best Practices
-
-### 1. Use filter for Early Exits
-
-```yaml
-# Good: Filter early to avoid wasted processing
-- name: first_action
-  guard:
-    clause: 'source.content != ""'
-    behavior: "filter"  # Empty content stops here
-```
-
-### 2. Use skip for Optional Steps
-
-```yaml
-# Good: Skip optional enhancement
 - name: enhance_summary
   guard:
     clause: 'needs_enhancement == true'
-    behavior: "skip"  # Record continues without enhancement
+    behavior: "skip"
 ```
 
-### 3. Guard After Extraction
+### Quality Gate
 
 ```yaml
-# Common pattern: Guard after fact extraction
-- name: extract_facts
-  # No guard - always run extraction
-
-- name: validate_facts
-  dependencies: extract_facts  # Input source
-  guard:
-    clause: 'candidate_facts_list != []'
-    behavior: "filter"  # No facts = no validation needed
-```
-
-### 4. Quality Gates
-
-```yaml
-# Filter based on quality scores
 - name: generate_final_output
   guard:
     clause: 'quality_score >= 85'
     behavior: "filter"
 ```
 
-### 5. Chain Guards for Multi-Stage Filtering
+## Context Access
+
+Guards can access:
+
+| Source | Syntax |
+|--------|--------|
+| Direct field | `candidate_facts_list` |
+| Specific action | `extract_facts.count` |
+| Context scope observed | `num_similar_facts` |
 
 ```yaml
-- name: extract
-  # Always runs
-
 - name: validate
+  context_scope:
+    observe:
+      - group_by_similarity.num_similar_facts
   guard:
-    clause: 'facts != []'
-    behavior: "filter"
-
-- name: enhance
-  guard:
-    clause: 'quality >= 50'
-    behavior: "filter"
-
-- name: finalize
-  guard:
-    clause: 'quality >= 85'
-    behavior: "filter"
+    clause: 'num_similar_facts != 1'
+    behavior: "skip"
 ```
-
-## Common Patterns
-
-### Empty Array Check
-
-```yaml
-guard:
-  clause: 'items != []'
-  behavior: "filter"
-```
-
-### Threshold Check
-
-```yaml
-guard:
-  clause: 'score >= 85'
-  behavior: "filter"
-```
-
-### Status Check
-
-```yaml
-guard:
-  clause: 'status == "KEEP"'
-  behavior: "filter"
-```
-
-### Boolean Check
-
-```yaml
-guard:
-  clause: 'should_process == true'
-  behavior: "skip"
-```
-
-### Count Check
-
-```yaml
-guard:
-  clause: 'count > 1'
-  behavior: "skip"
-```
-
-## Error Handling
-
-### Missing Field
-
-```
-GuardEvaluationError: Field 'nonexistent_field' not found in context
-```
-
-Ensure the field exists in upstream output or context_scope.observe.
-
-### Invalid Expression
-
-```
-GuardSyntaxError: Invalid condition expression: 'score >'
-```
-
-Check expression syntax for missing operands or invalid operators.
-
-### Type Mismatch
-
-```
-GuardEvaluationError: Cannot compare string to integer
-```
-
-Ensure compared values are of compatible types.
 
 ## Limitations
 
-Guards work well for simple conditions, but they have constraints:
+- **No external calls** - Guards can't make API requests
+- **Limited functions** - Only built-in functions available
+- **Not supported with File granularity** - Guards evaluate per-record
+- **Single expression** - Complex logic should use tool actions
 
-- **No external calls** - Guards can't make API requests or database queries
-- **Limited functions** - Only built-in functions like `len()`, `max()`, `min()` are available
-- **Single expression** - Complex multi-step logic doesn't fit in a guard
-- **Not supported with File granularity** - Guards evaluate per-record, so they can't be used with File granularity actions (see [Granularity](./granularity.md))
-
-:::warning File Granularity Restriction
-Guards are not supported with File granularity. Since File mode processes all records at once, per-record guards cannot be applied. If you need filtering with File granularity, implement the filtering logic within your UDF function.
+:::warning
+Guards are not supported with File granularity. Implement filtering logic within your tool function instead.
 :::
 
-For complex filtering logic, consider using a tool action instead:
+## See Also
 
-```yaml
-# Simple: Use guard
-- name: validate
-  guard:
-    clause: 'score >= 85'
-    behavior: "filter"
-
-# Complex: Use tool action
-- name: filter_by_complex_logic
-  kind: tool
-  impl: complex_filter_function
-  # Tool can implement sophisticated filtering
-```
+- [Context Scope](../context/context-scope) - Field visibility
+- [Granularity](./granularity) - Record vs file processing

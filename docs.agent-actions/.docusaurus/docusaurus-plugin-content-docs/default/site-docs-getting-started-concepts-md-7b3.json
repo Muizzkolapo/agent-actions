@@ -1,0 +1,29 @@
+{
+  "id": "getting-started/concepts",
+  "title": "Key Concepts",
+  "description": "Understanding agentic workflows, actions, and schema validation",
+  "source": "@site/docs/getting-started/concepts.md",
+  "sourceDirName": "getting-started",
+  "slug": "/getting-started/concepts",
+  "permalink": "/docs/getting-started/concepts",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/getting-started/concepts.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 2,
+  "frontMatter": {
+    "title": "Key Concepts",
+    "description": "Understanding agentic workflows, actions, and schema validation",
+    "sidebar_position": 2
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Getting Started",
+    "permalink": "/docs/getting-started/"
+  },
+  "next": {
+    "title": "Custom Tools",
+    "permalink": "/docs/getting-started/custom-functions"
+  }
+}

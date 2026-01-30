@@ -1,0 +1,29 @@
+{
+  "id": "guides/editor-setup",
+  "title": "Editor Setup",
+  "description": "LSP support and Workflow Navigator for VS Code, Neovim, and other editors",
+  "source": "@site/docs/guides/editor-setup.md",
+  "sourceDirName": "guides",
+  "slug": "/guides/editor-setup",
+  "permalink": "/docs/guides/editor-setup",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/guides/editor-setup.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 4,
+  "frontMatter": {
+    "title": "Editor Setup",
+    "description": "LSP support and Workflow Navigator for VS Code, Neovim, and other editors",
+    "sidebar_position": 4
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Custom Tools",
+    "permalink": "/docs/guides/custom-tools"
+  },
+  "next": {
+    "title": "Troubleshooting",
+    "permalink": "/docs/guides/troubleshooting"
+  }
+}

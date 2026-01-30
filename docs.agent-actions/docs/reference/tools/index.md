@@ -5,18 +5,9 @@ sidebar_position: 1
 
 # Tool Actions
 
-What happens when you need logic that an LLM can't perform? Deduplicating records, calling an external API, or applying deterministic business rules—these tasks need code, not prompts.
+What happens when you need logic that an LLM can't perform? Deduplicating records, calling an external API, or applying deterministic business rules—these tasks need deterministic logic, not prompts.
 
-Tool actions let you execute Python functions alongside LLM actions in your agentic workflow. Think of them as escape hatches: when you need guaranteed, repeatable behavior, you drop into Python.
-
-## Overview
-
-Tool actions provide:
-
-- **Custom logic** - Implement transformations LLMs can't perform
-- **Data processing** - Filter, transform, aggregate data
-- **Integrations** - Connect to external services and APIs
-- **Type safety** - Input/output validation via type hints
+Tool actions let you execute custom Python functions alongside LLM actions in your agentic workflow. When you need guaranteed, repeatable behavior, you use a tool.
 
 ## Quick Example
 
@@ -24,11 +15,11 @@ Tool actions provide:
 from typing import TypedDict
 from agent_actions import udf_tool
 
-class MyInput(TypedDict):
-    text: str
+class MyOutput(TypedDict):
+    result: str
 
-@udf_tool(input_type=MyInput)
-def process_text(data: dict) -> dict:
+@udf_tool(output_type=MyOutput)
+def process_text(data: dict, **kwargs) -> dict:
     return {"result": data["text"].upper()}
 ```
 
@@ -39,50 +30,160 @@ def process_text(data: dict) -> dict:
   granularity: record
 ```
 
-## Granularity
+## @udf_tool Decorator
 
-You might wonder: what if I need to see all records at once to deduplicate them? That's where granularity comes in.
+The `@udf_tool` decorator registers a Python function as a tool action.
+
+### Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `output_type` | type | No | TypedDict, Pydantic model, or dataclass for output validation |
+| `output_schema` | str | No | Schema file name for output validation (e.g., `"ValidationResult"`) |
+| `granularity` | Granularity | No | `RECORD` (default) or `FILE` processing |
+
+:::warning Mutually Exclusive
+You cannot specify both `output_type` and `output_schema`. Use one or the other.
+:::
+
+:::info Input Schema
+Input structure is defined by `context_scope` in your workflow YAML, not in the decorator. The decorator only handles output validation.
+:::
+
+### Minimal Decorator
+
+```python
+from agent_actions import udf_tool
+
+@udf_tool()
+def simple_transform(data: dict, **kwargs) -> dict:
+    data['processed'] = True
+    return data
+```
+
+## Output Type Definitions
+
+### TypedDict (Recommended)
+
+```python
+from typing import TypedDict, Optional
+
+class QuestionOutput(TypedDict, total=False):
+    question_status: str
+    status_reason: str
+    processed_at: Optional[str]
+```
+
+The `total=False` makes all fields optional.
+
+### Pydantic Model
+
+```python
+from pydantic import BaseModel
+
+class QuestionOutput(BaseModel):
+    question_status: str
+    status_reason: str
+```
+
+### Dataclass
+
+```python
+from dataclasses import dataclass
+
+@dataclass
+class QuestionOutput:
+    question_status: str
+    status_reason: str
+```
+
+### External Schema File
+
+```python
+@udf_tool(output_schema="ValidationResult")
+def validate_data(data: dict, **kwargs) -> dict:
+    return {"valid": True, "errors": []}
+```
+
+## Granularity
 
 | Granularity | Processing | Use Case |
 |-------------|------------|----------|
 | `record` | One record at a time | Transformations, filtering |
 | `file` | All records at once | Aggregation, deduplication |
 
-Record granularity is the default and works best for independent transformations. Use file granularity when your logic needs cross-record context.
+### Record Granularity (Default)
+
+```python
+@udf_tool(output_type=FilterOutput)
+def filter_questions_by_score(data: dict, **kwargs) -> dict:
+    score = data.get('syllabus_alignment_score', 0)
+    if score >= 85:
+        data['question_status'] = "KEEP"
+    else:
+        data['question_status'] = "FILTER"
+    return data
+```
+
+### File Granularity
+
+Use when your logic needs cross-record context:
+
+```python
+from agent_actions import udf_tool
+from agent_actions.config.schema import Granularity
+
+@udf_tool(granularity=Granularity.FILE)
+def run_dedup(data: list, **kwargs) -> list:
+    seen = set()
+    unique = []
+    for record in data:
+        fact = record.get('fact', '')
+        if fact not in seen:
+            seen.add(fact)
+            unique.append(record)
+    return unique
+```
 
 :::tip File Granularity is Tool-Only
-File granularity is exclusively supported for tool actions (`kind: tool`). LLM actions must use record granularity.
-
-This makes sense: tools can efficiently process entire arrays in memory, while LLM actions need per-record prompt construction.
+File granularity is exclusively supported for tool actions. LLM actions must use record granularity.
 :::
 
 ### File Granularity Constraints
 
-When using file granularity with tools:
-
-1. **Guards are not supported** - Since file mode processes all records at once, per-record guards don't apply. Implement filtering logic within your UDF instead.
-
-2. **Input is an array** - Your function receives the entire array of records, not a single record.
-
-3. **Output flexibility** - Return an array of any size (N→M transformation), a single aggregated result, or even write to external files.
-
-```yaml
-# Valid: File granularity tool
-- name: deduplicate_records
-  kind: tool
-  impl: deduplicate_by_hash
-  granularity: file
-
-# Invalid: Guard with file granularity
-- name: conditional_dedupe
-  kind: tool
-  impl: deduplicate
-  granularity: file
-  guard:  # ERROR: Guards not supported with file granularity
-    clause: "status == 'active'"
-```
+- **Guards are not supported** - Implement filtering logic within your tool instead
+- **Input is an array** - Your function receives the entire array of records
+- **Output flexibility** - Return an array of any size (N→M transformation)
 
 See [Granularity](../execution/granularity.md) for detailed documentation.
+
+### FileUDFResult for Lineage
+
+Track which input records produced which outputs:
+
+```python
+from agent_actions import udf_tool, FileUDFResult
+from agent_actions.config.schema import Granularity
+
+@udf_tool(granularity=Granularity.FILE)
+def dedup_with_lineage(data: list, **kwargs) -> FileUDFResult:
+    seen = {}
+    outputs = []
+    source_mapping = {}
+
+    for idx, record in enumerate(data):
+        fact = record['fact']
+        if fact not in seen:
+            seen[fact] = len(outputs)
+            outputs.append(record)
+            source_mapping[len(outputs) - 1] = idx
+
+    return FileUDFResult(
+        outputs=outputs,
+        source_mapping=source_mapping,
+        input_count=len(data)
+    )
+```
 
 ## Tool Discovery
 
@@ -115,91 +216,97 @@ project/
     └── ...
 ```
 
-### Naming Conventions
+### Workflow Reference
 
-| Config Field | Must Match |
-|--------------|------------|
-| `impl: function_name` | Function name decorated with `@udf_tool` |
+Reference tools by function name:
 
 ```yaml
-# Workflow config
-- name: my_action
+- name: flatten_the_facts
   kind: tool
-  impl: process_data    # Must match function name
-```
-
-```python
-# tools/transformers.py
-@udf_tool(input_type=MyInput)
-def process_data(data: dict) -> dict:  # Function name matches impl
-    return {"result": data["value"]}
+  impl: flatten_quotes  # Function name (case-insensitive)
+  granularity: record
 ```
 
 ### Discovery Process
-
-Let's walk through how Agent Actions finds your tools:
 
 1. Scans directories in `tool_path` recursively
 2. Loads all Python files (`*.py`), skipping files starting with `_` or `test_`
 3. Executes modules to trigger `@udf_tool` decorator registration
 4. Validates `impl` references in agentic workflow config
 
-This means you can drop a new `.py` file in your tools directory, add the decorator, and it's immediately available—no registration step required.
-
-### Thread Safety and Caching
-
-Tool discovery is **thread-safe** and **cached**. This matters for batch processing where multiple jobs may run concurrently:
-
-- **Thread-safe path management**: Concurrent tool discovery calls are properly synchronized
-- **Path caching**: Directories are only added to `sys.path` once, preventing redundant insertions
-- **Module caching**: Modules are loaded and executed only once, even if discovery is called multiple times
-
-:::info Performance Note
-For large tool directories, the first discovery call may be slower as it traverses the entire directory tree. Subsequent calls are fast due to caching.
+:::info Thread Safety
+Tool discovery is thread-safe and cached. Concurrent discovery calls are properly synchronized, and modules are loaded only once.
 :::
 
-### CLI Commands
+## CLI Commands
 
 ```bash
 # List all discovered tools
-agac list-udfs -u ./tools
+agac list-tools -u ./tools
 
 # Validate tool references in workflow
-agac validate-udfs -a my_workflow -u ./tools
+agac validate-tools -a my_workflow -u ./tools
 ```
 
-### Best Practices
+## Best Practices
 
-**1. One Tool Per File for Complex Logic**
-
-```
-tools/
-├── flatten_quotes.py       # Single complex tool
-├── merge_fields.py
-└── validate_content.py
-```
-
-**2. Related Tools in Same File**
+### Handle Missing Fields
 
 ```python
-# tools/validators.py
-@udf_tool(input_type=EmailInput)
+@udf_tool()
+def safe_function(data: dict, **kwargs) -> dict:
+    score = data.get('score', 0)  # Use .get() with defaults
+    return {'result': score}
+```
+
+### Return Complete Records
+
+```python
+@udf_tool()
+def augment_data(data: dict, **kwargs) -> dict:
+    data['new_field'] = 'computed_value'  # Add to existing, don't replace
+    return data
+```
+
+### Unique Function Names
+
+Tool names must be unique across all files. Prefix with domain if needed:
+
+```python
+@udf_tool()
 def validate_email(data): ...
 
-@udf_tool(input_type=PhoneInput)
+@udf_tool()
 def validate_phone(data): ...
 ```
 
-**3. Unique Function Names**
+## Error Handling
 
-Tool names must be unique across all files. This is a limitation of the discovery system—there's no namespacing. If you have duplicates, Agent Actions catches this at startup:
+### Both output_type and output_schema Specified
 
 ```
-ERROR: Duplicate function name 'process_data'
-  First: tools/transformers.py
-  Second: tools/helpers.py
+ConfigurationError: Cannot specify both output_schema and output_type for 'my_function'.
 ```
 
-## Learn More
+Choose one or the other.
 
-- **[@udf_tool Decorator](./udf-decorator.md)** - Complete decorator documentation
+### Duplicate Function Names
+
+```
+DuplicateFunctionError: Function 'process_data' already registered
+  Existing: module_a.process_data (tools/module_a.py)
+  New: module_b.process_data (tools/module_b.py)
+```
+
+Rename one of the functions.
+
+### Function Not Found
+
+```
+FunctionNotFoundError: Function 'nonexistent_func' not found
+```
+
+Check that:
+1. File is in `tools/` directory
+2. Function has `@udf_tool` decorator
+3. Function name matches workflow `impl`

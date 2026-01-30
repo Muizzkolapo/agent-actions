@@ -1,0 +1,28 @@
+{
+  "id": "reference/execution/versions",
+  "title": "Version Actions",
+  "description": "Version actions generate multiple agent instances from a single configuration, enabling parallel processing with different parameters.",
+  "source": "@site/docs/reference/execution/versions.md",
+  "sourceDirName": "reference/execution",
+  "slug": "/reference/execution/versions",
+  "permalink": "/docs/reference/execution/versions",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/execution/versions.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 7,
+  "frontMatter": {
+    "title": "Version Actions",
+    "sidebar_position": 7
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Retry & Error Handling",
+    "permalink": "/docs/reference/execution/retry"
+  },
+  "next": {
+    "title": "Validation",
+    "permalink": "/docs/reference/validation/"
+  }
+}

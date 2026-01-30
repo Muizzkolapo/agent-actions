@@ -581,6 +581,4 @@ event.meta.workflow_name = self._context["workflow_name"]
 
 ## See Also
 
-- [API Reference](../api/logging.md) - Detailed API documentation
-- [Event Types Reference](../../events/types.md) - All available event types
-- [Handler Development](../../guides/handlers.md) - Creating custom handlers
+- [API Reference](../../api/logging.md) - Detailed API documentation

@@ -1,0 +1,28 @@
+{
+  "id": "reference/configuration/index",
+  "title": "Configuration",
+  "description": "How do you configure an agentic workflow without repeating yourself across dozens of actions? Agent Actions uses a three-level configuration hierarchy that lets you set defaults once and override them where needed. Higher specificity wins—action settings override agentic workflow defaults, which override project defaults.",
+  "source": "@site/docs/reference/configuration/index.md",
+  "sourceDirName": "reference/configuration",
+  "slug": "/reference/configuration/",
+  "permalink": "/docs/reference/configuration/",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/configuration/index.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 1,
+  "frontMatter": {
+    "title": "Configuration",
+    "sidebar_position": 1
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Troubleshooting",
+    "permalink": "/docs/reference/cli/troubleshooting"
+  },
+  "next": {
+    "title": "Agentic Workflow Templates",
+    "permalink": "/docs/reference/configuration/templates"
+  }
+}

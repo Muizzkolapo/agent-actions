@@ -1,0 +1,29 @@
+{
+  "id": "reference/cli/tools",
+  "title": "Tool Commands",
+  "description": "Commands for managing custom tools",
+  "source": "@site/docs/reference/cli/tools.md",
+  "sourceDirName": "reference/cli",
+  "slug": "/reference/cli/tools",
+  "permalink": "/docs/reference/cli/tools",
+  "draft": false,
+  "unlisted": false,
+  "editUrl": "https://github.com/your-org/agent-actions/tree/main/agentaction-docs/docs/reference/cli/tools.md",
+  "tags": [],
+  "version": "current",
+  "sidebarPosition": 5,
+  "frontMatter": {
+    "title": "Tool Commands",
+    "description": "Commands for managing custom tools",
+    "sidebar_position": 5
+  },
+  "sidebar": "docsSidebar",
+  "previous": {
+    "title": "Utility Commands",
+    "permalink": "/docs/reference/cli/utilities"
+  },
+  "next": {
+    "title": "schema Command",
+    "permalink": "/docs/reference/cli/schema"
+  }
+}
