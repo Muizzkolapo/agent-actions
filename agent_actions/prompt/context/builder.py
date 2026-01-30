@@ -31,7 +31,7 @@ class LLMContextBuilder:
 
         This method centralizes the merge and drop logic used by both batch
         and realtime modes. It performs the following operations in order:
-        1. Creates a copy of base_context to avoid mutating the original
+        1. Creates a shallow copy of base_context to avoid mutating the original
         2. Merges additional_context fields (from context_scope.observe)
         3. Applies context_scope.drop rules to remove specified fields
 
@@ -47,9 +47,17 @@ class LLMContextBuilder:
             New dict with merged fields and drops applied. Never mutates inputs.
 
         Note:
-            - Seed field drops operate on a shallow copy to prevent side effects
-            - Non-seed drops use DataTransformer.remove_schema_objects for consistency
-            - Invalid field references are silently skipped for backward compatibility
+            Copy semantics: Only shallow copies are made of base_context and seed.
+            Nested objects (other than seed) are shared references. Callers passing
+            mutable nested structures should copy them first if mutation isolation
+            is required.
+
+            Behavioral note: Non-seed drops use DataTransformer.remove_schema_objects()
+            which creates a new filtered dict. This differs from the original batch
+            implementation that used dict.pop() but is semantically equivalent for
+            return values.
+
+            Invalid field references are silently skipped for backward compatibility.
         """
         # Create a copy to avoid mutating the original base_context
         result_context = base_context.copy() if isinstance(base_context, dict) else {}
