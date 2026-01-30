@@ -8,29 +8,37 @@ from typing import Any, Dict, List, TypedDict
 from agent_actions import udf_tool
 
 
-class {{ToolName}}Output(TypedDict, total=False):
-    """Output schema for {{tool_function_name}} function.
+class {{ToolName}}Input(TypedDict, total=False):
+    """Input schema for {{tool_function_name}} function.
 
-    Defines the structure of data this tool produces.
-    Input structure is defined by context_scope in workflow YAML.
+    Source: node_{{N}}_{{previous_action}} output
+    Destination: node_{{M}}_{{this_action}} output
+
+    This function {{brief description of transformation}}.
     """
     # ─────────────────────────────────────────────────────────────────────────
-    # Output fields (produced by this tool)
+    # Core fields (used in processing)
     # ─────────────────────────────────────────────────────────────────────────
-    output_field: str
-    processed_items: List[str]
+    input_field_1: str
+    input_field_2: List[str]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Metadata fields (passthrough)
+    # ─────────────────────────────────────────────────────────────────────────
+    batch_name: str
+    record_type: str
 
 
-@udf_tool(output_type={{ToolName}}Output)
+@udf_tool(input_type={{ToolName}}Input)
 def {{tool_function_name}}(data: dict) -> dict:
     """
     {{Brief description of what this tool does.}}
 
     Args:
-        data: Input data dict from context_scope (defined in workflow YAML)
+        data: Input data dict from previous action
 
     Returns:
-        Dict matching {{ToolName}}Output schema
+        Modified data dict with new/updated fields
     """
     # Handle content wrapper if present (common pattern)
     if 'content' in data:
@@ -52,7 +60,7 @@ def {{tool_function_name}}(data: dict) -> dict:
     result['output_field'] = input_value.upper()
 
     # Example: Validate and clean data
-    if not result.get('processed_items'):
-        result['processed_items'] = []
+    if not result.get('input_field_2'):
+        result['input_field_2'] = []
 
     return result

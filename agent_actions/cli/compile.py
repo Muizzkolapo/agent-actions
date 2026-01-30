@@ -77,6 +77,13 @@ class RenderCommand:
         )
 
 
+def _execute_render(agent_name: str, template_dir: Optional[str] = None) -> None:
+    """Shared implementation for render/compile commands."""
+    args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
+    command = RenderCommand(args)
+    command.execute()
+
+
 @click.command()
 @click.option(
     "-a", "--agent", "agent_name", required=True, help="Name of the agent to render template for"
@@ -86,21 +93,45 @@ class RenderCommand:
 @requires_project
 def render(agent_name: str, template_dir: Optional[str] = None) -> None:
     """
-    Render Jinja2 templates in agent configuration files.
+    Compile and render workflow configuration (dbt-style).
 
-    This command processes agent configuration files and renders them using Jinja2
-    templates in the template directory. Useful for debugging template issues,
-    verifying macro expansion, and troubleshooting YAML parsing errors.
+    This is the single compilation step for workflows, similar to `dbt compile`.
+    After rendering, the YAML is fully self-contained with:
 
-    The rendered output is always displayed to the console.
+    \b
+    - Jinja2 templates resolved
+    - Prompt references ($prompt_name) loaded
+    - Named schemas inlined from schema/ directory
+    - Inline schemas expanded to unified format
+    - Versioned actions expanded
+
+    Useful for debugging template issues, verifying schema inlining,
+    and troubleshooting YAML parsing errors.
 
     Examples:
-        # Render agent config to console
-        agent-actions render -a my_agent
+        # Render workflow config to console
+        agac render -a my_workflow
 
         # Render with custom templates directory
-        agent-actions render -a my_agent -t custom_templates
+        agac render -a my_workflow -t custom_templates
     """
-    args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
-    command = RenderCommand(args)
-    command.execute()
+    _execute_render(agent_name, template_dir)
+
+
+@click.command()
+@click.option(
+    "-a", "--agent", "agent_name", required=True, help="Name of the workflow to compile"
+)
+@click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
+@handles_user_errors("compile")
+@requires_project
+def compile(agent_name: str, template_dir: Optional[str] = None) -> None:
+    """
+    Alias for 'render' - compile workflow configuration (dbt-style).
+
+    See 'agac render --help' for full documentation.
+
+    Examples:
+        agac compile -a my_workflow
+    """
+    _execute_render(agent_name, template_dir)

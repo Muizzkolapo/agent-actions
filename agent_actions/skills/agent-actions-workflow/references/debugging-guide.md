@@ -1,285 +1,212 @@
-# Debugging & Troubleshooting Guide
+# Debugging Guide
 
-Common errors and how to fix them in agent-actions workflows.
+Comprehensive troubleshooting for agent-actions workflows.
 
-## Error Types
+## Validation Pipeline Overview
 
-### SchemaValidationError
+LLM outputs pass through three validation layers:
 
-Occurs when data fails JSON Schema validation.
+```mermaid
+flowchart TD
+    A[LLM Response] --> B{Layer 1: JSON Valid?}
+    B -->|No| C[JSON Repair]
+    C --> D{Repaired?}
+    D -->|No| E[Reprompt]
+    D -->|Yes| F
+    B -->|Yes| F{Layer 2: Schema Valid?}
+    F -->|No| G{Reprompt Enabled?}
+    G -->|Yes| E
+    G -->|No| H[Action Fails]
+    E --> A
+    F -->|Yes| I{Layer 3: Guard Passes?}
+    I -->|No - filter| J[Record Removed]
+    I -->|No - skip| K[Action Skipped]
+    I -->|Yes| L[Output Accepted]
 
-**Key Context Fields:**
-- `error_path`: Dot-path to problematic field (e.g., `target_word_counts -> correct_answer_words`)
-- `failed_value`: The actual value that failed
-- `schema_constraint`: Expected schema rule
-- `function`: UDF that failed
-- `validation_type`: `input` or `output`
-
-**Example:**
-```
-SchemaValidationError: Input schema validation failed for UDF 'add_answer_text'
-at target_word_counts -> correct_answer_words: 18 is not of type 'string'
-```
-
-### ProcessingError
-
-Wraps lower-level errors with item context.
-
-**Key Context:**
-- `source_guid`: UUID of the data item
-- `agent_name`: Action that failed
-
-### AgentActionsError
-
-Top-level workflow failure wrapper.
-
-**Key Context:**
-- `file_path`: JSON file being processed
-- `agent_name`: Initiating agent
-
-## Common Errors & Fixes
-
-### JSON Parsing Error (Curly Braces in Prompts)
-
-**Symptom:**
-```
-Problem: expected token ':', got '}'
+    style L fill:#90EE90
+    style J fill:#ffcccc
 ```
 
-**Cause:** Curly braces in prompt examples are interpreted as Jinja2 template syntax.
+| Layer | Purpose | Mechanism |
+|-------|---------|-----------|
+| **1. JSON** | Structural integrity | JSON repair + reprompt |
+| **2. Schema** | Type/field validation | Schema constraints + reprompt |
+| **3. Guard** | Semantic validation | Condition expressions |
 
-**Bad prompt:**
-```markdown
-{prompt MyPrompt}
-Example of broken code: `{{{{{{{{ function() }}}}}s`
-{end_prompt}
-```
+## Quick Diagnostics
 
-**Fix:** Avoid curly braces in examples - use alternative characters:
-```markdown
-{prompt MyPrompt}
-Example of broken code: `]]]]]d function(argument)`
-{end_prompt}
-```
-
-**Why:** Prompts use Jinja2 for context (`{{ source.field }}`), so literal `{{` in examples breaks parsing.
-
-### Schema Format Error
-
-**Symptom:**
-```
-Schema validation failed / unexpected token
-```
-
-**Cause:** Using JSON Schema format instead of agent-actions format.
-
-**Wrong:**
-```yaml
-name: my_schema
-type: object
-properties:
-  field_name:
-    type: string
-```
-
-**Correct:**
-```yaml
-name: my_schema
-fields:
-  - id: field_name
-    type: string
-    description: "What this field contains"
-```
-
-### Type Mismatch
-
-**Symptom:**
-```
-18 is not of type 'string'
-```
-
-**Fix:** Convert types in UDF:
-```python
-target_word_counts = {
-    'correct_answer_words': str(value),  # Convert to string
-}
-```
-
-### Array vs String
-
-**Symptom:**
-```
-'Some text...' is not of type 'array'
-```
-
-**Fix:** Normalize in UDF:
-```python
-if isinstance(answer_text, str):
-    answer_text = [answer_text]
-```
-
-### Mixed Dict Types
-
-**Symptom:**
-```
-'greater_than' is not of type 'integer'
-```
-
-**Fix:** Use plain `dict` instead of `Dict[str, int]`:
-```python
-# BAD
-target_word_counts: Dict[str, int]
-
-# GOOD
-target_word_counts: dict
-```
-
-### Dict[str, Any] Causes String-Only Schema
-
-**Symptom:** (During UDF schema validation)
-```
-30 is not of type 'string'
-Failed validating 'type' in schema['properties']['metadata']['additionalProperties']:
-    {'type': 'string'}
-```
-
-**Cause:** `Dict[str, Any]` in TypedDict is incorrectly converted to `additionalProperties: {type: string}`, so all values must be strings.
-
-**Bad:**
-```python
-class MyOutput(TypedDict, total=False):
-    metadata: Dict[str, Any]  # Will only accept string values!
-```
-
-**Fix:** Use nested TypedDict with explicit types:
-```python
-class MetadataOutput(TypedDict, total=False):
-    total_count: int      # int type preserved
-    search_method: str
-
-class MyOutput(TypedDict, total=False):
-    metadata: MetadataOutput  # Proper type handling
-```
-
-See **udf-decorator.md → Nested TypedDicts** for complete examples.
-
-### Missing Required Fields
-
-**Symptom:**
-```
-'field_name' is a required property
-```
-
-**Fix:** Ensure UDF provides all schema-required fields. Use reprompting:
-```yaml
-reprompt:
-  max_attempts: 4
-  json_repair: true
-  use_llm_critique: true
-  critique_after_attempt: 2
-  on_exhausted: return_last
-```
-
-## Debugging Workflow
-
-1. **Check runs.json** for error details:
-   ```bash
-   grep "FAILED" qanalabs/artefact/runs.json
-   ```
-
-2. **Parse error context:**
-   - `error_path` → Which field
-   - `failed_value` → What was received
-   - `schema_constraint` → What was expected
-
-3. **Trace by source_guid:**
-   - Find GUID in error
-   - Check node outputs in `agent_io/target/node_X_*/`
-   - Track data transformation at each stage
-
-4. **Enable prompt debugging:**
-   ```yaml
-   prompt_debug: true
-   ```
-
-## Reprompting System
-
-Auto-retry on schema failures with explicit configuration:
-
-```yaml
-reprompt:
-  max_attempts: 3          # Number of retry attempts
-  json_repair: true        # Try to fix malformed JSON first (no API call)
-  use_llm_critique: false  # Use LLM to analyze failures
-  critique_after_attempt: 2  # Start LLM critique after N attempts
-  on_exhausted: return_last   # return_last | raise
-```
-
-**Options:**
-
-| Option | Description |
-|--------|-------------|
-| `max_attempts` | Maximum retry attempts (default: 3) |
-| `json_repair` | Attempt JSON repair before retry (default: true) |
-| `use_llm_critique` | Use LLM to analyze failures (default: false) |
-| `critique_after_attempt` | Start LLM critique after N attempts (default: 2) |
-| `on_exhausted` | Behavior when exhausted: `return_last` or `raise` |
-
-To disable: `reprompt: false`
-
-## Validation Commands
+### Check Record Counts Per Stage
 
 ```bash
-# Pre-flight validation only
-agac run -a workflow --validate-only
-
-# With static typing
-agac run -a workflow --validate-only --static-typing
-
-# Debug mode (full tracebacks)
-agac run -a workflow --debug
+cd agent_workflow/my_workflow/agent_io/target
+for dir in */; do
+  count=$(cat "$dir/sample.json" 2>/dev/null | python3 -c "import json,sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+  echo "$count records - $dir"
+done
 ```
 
-## Log Analysis
+### Check File Sizes for Empty Outputs
 
-**Log location:** `qanalabs/logs/agent_actions.log`
-
-**Search patterns:**
 ```bash
-# Find schema errors
-grep "SchemaValidationError" logs/agent_actions.log
-
-# Find specific field errors
-grep "answer_text" logs/agent_actions.log
-
-# Find function errors
-grep "function=add_answer_text" logs/agent_actions.log
+# 2 bytes = empty array []
+ls -lh */sample.json | awk '{print $5 " - " $9}'
 ```
 
-## Prevention Best Practices
+### Analyze Validation Results
 
-1. **Validate early:**
-   ```bash
-   agac run -a workflow --validate-only
-   ```
+```bash
+cat validate_code_quality/sample.json | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+print(f'Total: {len(data)} records')
+for i, record in enumerate(data, 1):
+    content = record.get('content', {})
+    status = content.get('validation_status', 'unknown')
+    print(f'  Record {i}: {status}')
+    if status != 'PASS':
+        reasoning = content.get('validation_reasoning', '')[:150]
+        print(f'    Reason: {reasoning}...')
+"
+```
 
-2. **Use guards for quality gates:**
-   ```yaml
-   guard:
-     condition: 'score >= 50'
-     on_false: "filter"
-   ```
+## Common Error Messages
 
-3. **Handle edge cases in UDFs:**
-   ```python
-   value = data.get('field', '')  # Always use .get() with defaults
-   ```
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "X was unexpected" | Field in data not in TypedDict | Add field to TypedDict |
+| "X is not of type Y" | Type mismatch | Use correct type or `Any` |
+| "Duplicate UDF function name" | Same name in multiple dirs | Remove duplicate or rename |
+| "Dependency not in context_scope" | Missing reference | Add `action.*` to observe |
 
-4. **Use appropriate types:**
-   ```python
-   # For polymorphic values
-   answer_text: Union[str, List[str]]
+## Filtered Pipeline Debugging
 
-   # For mixed-type dicts
-   target_counts: dict
-   ```
+When guards filter records and downstream actions have 0 output:
+
+### Symptom
+```
+validate_code_quality: 5 records
+generate_explanation:  0 records  ← All filtered!
+```
+
+### Debugging Steps
+
+1. Check upstream output for field values
+2. Verify guard condition matches data exactly (case-sensitive)
+3. Temporarily disable guard to test flow
+
+### Fix Options
+
+- Fix upstream prompts to produce passing values
+- Lower threshold: `>= 7` instead of `>= 8`
+- Allow multiple statuses: `'status == "PASS" or status == "NEEDS_REVIEW"'`
+
+## Known Tool Limitations
+
+| Issue | Workaround |
+|-------|------------|
+| Manifest shows "pending" after completion | Count records from sample.json |
+| run_results.json empty | Check individual action outputs |
+| Validation at runtime only | Check events.json on "success" |
+
+## Debug Commands
+
+```bash
+# See compiled workflow (schemas inlined, versions expanded)
+agac render -a my_workflow
+
+# Run with debug output
+agac run -a my_workflow --debug --verbose
+
+# Validate without executing
+agac run -a my_workflow --validate-only
+
+# Execute with upstream dependencies
+agac run -a my_workflow --upstream
+```
+
+### Debugging Schema Issues
+
+Use `agac render` to verify schemas are compiled correctly:
+
+```bash
+agac render -a my_workflow | grep -A 10 "schema:"
+```
+
+This shows inlined schemas - if you see `schema_name:` still present, the schema file may be missing.
+
+## Granularity Visualization
+
+### Record Granularity (default)
+Each record processed independently:
+
+```mermaid
+flowchart LR
+    subgraph input["Input (3 records)"]
+        I1[Record 1]
+        I2[Record 2]
+        I3[Record 3]
+    end
+    subgraph action["Record Granularity Action"]
+        A1[Process 1]
+        A2[Process 2]
+        A3[Process 3]
+    end
+    subgraph output["Output (3 results)"]
+        O1[Result 1]
+        O2[Result 2]
+        O3[Result 3]
+    end
+    I1 --> A1 --> O1
+    I2 --> A2 --> O2
+    I3 --> A3 --> O3
+```
+
+### File Granularity
+All records processed at once (for aggregation/dedup):
+
+```mermaid
+flowchart LR
+    subgraph input["Input (3 records)"]
+        I1[Record 1]
+        I2[Record 2]
+        I3[Record 3]
+    end
+    subgraph action["File Granularity Action"]
+        A["Process ALL"]
+    end
+    subgraph output["Output (variable)"]
+        O1[Result 1]
+        O2[Result 2]
+    end
+    I1 --> A
+    I2 --> A
+    I3 --> A
+    A --> O1
+    A --> O2
+
+    style A fill:#87CEEB
+```
+
+**Note:** Guards are NOT supported with File granularity - implement filtering in your UDF.
+
+## Reprompt vs Guard Decision
+
+```mermaid
+flowchart TD
+    Q["Validation Failed"] --> A{Can LLM fix it?}
+    A -->|Yes - structural issue| B["Use Reprompt"]
+    A -->|No - semantic choice| C["Use Guard"]
+
+    B --> D["Costs more tokens<br/>Retries LLM call"]
+    C --> E["Free<br/>Filters record"]
+
+    style B fill:#FFE4B5
+    style C fill:#90EE90
+```
+
+| Use Reprompt | Use Guard |
+|--------------|-----------|
+| Malformed JSON | Valid but unwanted value |
+| Schema violation | Score below threshold |
+| Missing required field | Wrong category |
+| LLM can learn from error | Business logic decision |

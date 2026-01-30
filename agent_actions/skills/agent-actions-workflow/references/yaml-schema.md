@@ -74,6 +74,7 @@ actions:
 | `guard` | object | Conditional execution |
 | `prompt_debug` | boolean | Log rendered prompts |
 | `reprompt` | false/object | Validation retry (requires explicit config) |
+| `few_shot` | integer | Number of few-shot examples |
 | `constraints` | list | Response validation constraints |
 | `loop` | object | Loop execution config |
 | `is_operational` | boolean | Whether action is active (default: true) |
@@ -257,4 +258,21 @@ guard:
 | `boolean` | `{"type": "boolean"}` | true/false |
 | `array` | `{"type": "array"}` | List of items |
 | `object` | `{"type": "object"}` | Key-value pairs |
-| `schema_name` | Reference | Use predefined schema |
+
+**Schema References:**
+```yaml
+schema: my_schema        # References schema/my_schema.yml - gets inlined during render
+```
+
+**Inline Schemas:**
+```yaml
+schema:
+  field1: string
+  field2: number!        # ! marks required
+  tags: array[string]    # Typed arrays
+```
+
+During the render step, all schemas are compiled:
+- Named schemas (`schema: foo`) are loaded from `schema/foo.yml` and inlined
+- Inline schemas (`{field: type}`) are expanded to unified format
+- Use `agac render -a workflow` to see compiled output

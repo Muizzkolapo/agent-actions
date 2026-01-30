@@ -14,6 +14,7 @@ from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
 from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.schema_utils import is_compiled_schema
 from agent_actions.utils.udf_management import get_udf_metadata
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
@@ -164,16 +165,26 @@ class ActionExpander:
     def _process_schema_config(
         agent: AgentEntryDict, action: Dict[str, Any], template_replacer
     ) -> None:
-        """Process schema configuration for an agent."""
+        """
+        Process schema configuration for an agent.
+
+        If the schema is already compiled (from render step), use it directly.
+        Otherwise, apply template replacement and set appropriately.
+        """
         schema_value = action.get("schema") or action.get("output_schema")
         if schema_value:
-            schema_value = template_replacer(schema_value)
-            if isinstance(schema_value, str):
-                agent["schema_name"] = schema_value
-            elif isinstance(schema_value, dict):
+            # If already compiled (unified format from render step), use directly
+            if is_compiled_schema(schema_value):
                 agent["schema"] = schema_value
             else:
-                agent["schema"] = schema_value
+                # Apply template replacement for non-compiled schemas
+                schema_value = template_replacer(schema_value)
+                if isinstance(schema_value, str):
+                    agent["schema_name"] = schema_value
+                elif isinstance(schema_value, dict):
+                    agent["schema"] = schema_value
+                else:
+                    agent["schema"] = schema_value
 
     @staticmethod
     def _process_guard_config(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
@@ -405,6 +416,8 @@ class ActionExpander:
             range_values = version_range
 
         range_values_list = list(range_values)
+        total_versions = len(range_values_list)
+
         for idx, i in enumerate(range_values_list):
             agent: AgentEntryDict = {}
 
@@ -419,6 +432,20 @@ class ActionExpander:
             agent["version_base_name"] = action.get("name", "unknown")
             agent["version_number"] = i
             agent["version_mode"] = version_config.get("mode", "parallel")
+
+            # Compile version context for Jinja2 template rendering
+            # This enables {{ i }}, {{ idx }}, {{ loop.length }}, etc. in prompts
+            version_context: Dict[str, Any] = {
+                "i": i,
+                "idx": idx,
+                "length": total_versions,
+                "first": idx == 0,
+                "last": idx == total_versions - 1,
+            }
+            # Add custom param name if different from default
+            if param_name != "i":
+                version_context[param_name] = i
+            agent["_version_context"] = version_context
 
             # Create agent
             created_agent = ActionExpander._create_agent_from_action(
@@ -524,6 +551,9 @@ class ActionExpander:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
 
+        If actions were already expanded by the render/compile step (indicated by
+        _version_context being present), this function skips re-expansion.
+
         Args:
             action_config: Configuration with actions that may contain loops
 
@@ -544,17 +574,31 @@ class ActionExpander:
             # or we could filter by some other logic. For now, we take all actions.
             is_operational = True
 
+            # Check if this action was already expanded by render step
+            # Pre-expanded actions have _version_context set
+            is_pre_expanded = "_version_context" in action
+
             version_config = action.get("versions")
-            if version_config:
-                # Expand versioned action into multiple agents
+            if version_config and not is_pre_expanded:
+                # Expand versioned action into multiple agents (legacy path)
                 version_agents = ActionExpander._expand_versioned_action(
                     action, version_config, defaults, is_operational
                 )
                 agents.extend(version_agents)
             else:
+                # Either non-versioned action OR pre-expanded versioned action
                 agent: AgentEntryDict = {}
                 agent["agent_type"] = action.get("name", "unknown")
                 agent["name"] = action.get("name")
+
+                # Preserve version context from render step if present
+                if is_pre_expanded:
+                    version_ctx = action["_version_context"]
+                    agent["is_versioned_agent"] = True
+                    agent["version_base_name"] = version_ctx.get("base_name", action.get("name"))
+                    agent["version_number"] = version_ctx.get("i")
+                    agent["version_mode"] = action.get("version_mode", "parallel")
+                    agent["_version_context"] = version_ctx
 
                 # Check for explicit dependencies in action, defaulting to empty list
                 # This is handled inside _create_agent_from_action via inheritance,

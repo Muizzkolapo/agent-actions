@@ -8,17 +8,16 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
 )
 from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
+from agent_actions.utils.schema_utils import is_compiled_schema
 
 
 class InlineSchemaValidator(BaseAgentEntryValidator):
     """
     Validates inline schema configuration.
 
-    Checks that inline schemas have:
-    - Dictionary structure
-    - String field names
-    - String field types
-    - Valid type values (delegated to SchemaTypeValidator)
+    Handles two schema formats:
+    1. Inline shorthand: {field_name: type_string} - validated for valid types
+    2. Unified/compiled format: {name: ..., fields: [...]} - already validated during render
 
     Also warns if both 'schema' and 'schema_name' are present.
 
@@ -59,6 +58,20 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
             )
             return AgentEntryValidationResult.with_errors(errors)
 
+        # Skip validation for unified/compiled schema format
+        # These schemas are already validated during the render step
+        if is_compiled_schema(inline_schema):
+            # Still check for schema_name conflict
+            if SCHEMA_NAME_KEY in normalized_entry:
+                warnings.append(
+                    f"{desc} has both 'schema' and 'schema_name' defined. "
+                    f"The inline 'schema' will take precedence over 'schema_name'."
+                )
+            if warnings:
+                return AgentEntryValidationResult(errors=[], warnings=warnings)
+            return AgentEntryValidationResult.success()
+
+        # Validate inline shorthand format: {field_name: type_string}
         # Define valid schema types
         valid_types = {"string", "number", "integer", "boolean", "array", "object"}
         valid_array_types = {

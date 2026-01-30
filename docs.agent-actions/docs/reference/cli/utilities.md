@@ -10,19 +10,26 @@ Beyond running agentic workflows, `agac` provides commands for project setup, de
 
 ## render
 
-**What does your agentic workflow configuration look like after template expansion?**
+**What does your agentic workflow configuration look like after compilation?**
 
-When your configuration uses Jinja2 templates and macros, the actual YAML that Agent Actions sees might be quite different from what you wrote. The `render` command shows you the final, expanded configuration without executing it.
+The `render` command compiles your workflow configuration and shows you the final, fully-resolved YAML without executing it. This is similar to how `dbt compile` shows compiled SQL before execution.
 
 ```bash
 agac render -a <workflow-name> [options]
 ```
 
-This is particularly helpful when:
+The render step performs full compilation:
+- **Jinja2 template expansion** - Macros and variables are resolved
+- **Prompt resolution** - `$prompt_name` references are loaded from prompt store
+- **Schema inlining** - `schema_name: foo` loads `schema/foo.yml` and inlines it
+- **Inline schema expansion** - Shorthand `{field: type}` expands to unified format
+- **Version expansion** - `versions: {range: [1,3]}` expands to multiple actions
+
+This is helpful when:
 - **Debugging template issues** - See exactly what the templates produce
-- **Verifying macro expansion** - Check if macros expand as expected
+- **Verifying schema resolution** - Confirm schemas are inlined correctly
+- **Inspecting version expansion** - See how versioned actions expand
 - **Troubleshooting YAML parsing errors** - Identify if templates generate invalid YAML
-- **Learning how templates work** - Understand the template-to-config transformation
 
 **Options:**
 | Option | Description |
