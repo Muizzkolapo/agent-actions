@@ -16,6 +16,17 @@ from types import ModuleType
 
 
 def _bootstrap_agent_actions_namespace() -> None:
+    """Bootstrap agent_actions namespace for isolated LSP module testing.
+
+    Why this is necessary:
+    - LSP tests need to import modules in isolation without triggering the full
+      agent_actions import chain (which has heavy dependencies like ML libraries)
+    - The LSP modules (server.py, indexer.py, etc.) are designed to be lightweight
+      and importable without the full framework
+    - This pattern is consistent across all LSP tests (test_resolver.py, test_indexer.py)
+    - Standard imports would pull in transitive dependencies that aren't needed for
+      testing the LSP's parsing and validation logic
+    """
     root = Path(__file__).resolve().parents[4]
     agent_actions_path = root / "agent_actions"
     packages = {
@@ -33,6 +44,12 @@ def _bootstrap_agent_actions_namespace() -> None:
 
 
 def _bootstrap_ruamel_stub() -> None:
+    """Stub ruamel.yaml if not installed (optional dependency for LSP tests).
+
+    The LSP indexer uses ruamel.yaml for YAML parsing with position tracking,
+    but for these diagnostic tests we only need the index structure, not
+    actual YAML parsing. This stub allows tests to run without the dependency.
+    """
     if "ruamel" in sys.modules and "ruamel.yaml" in sys.modules:
         return
 
@@ -173,6 +190,89 @@ class TestSpecialNamespaceValidation:
         ]
         assert context_errors == [], f"Unexpected errors for seed namespace: {context_errors}"
 
+    def test_action_namespace_no_error(self, tmp_path: Path) -> None:
+        """action.* references should NOT report 'action missing' errors.
+
+        The 'action' namespace provides metadata about the current action
+        (action.name, action.id, etc.).
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: log_action_info
+                    context_scope:
+                      observe:
+                        - action.name
+                        - action.id
+            """),
+        )
+
+        index = build_index(tmp_path)
+        diagnostics = _collect_diagnostics(workflow_path, index)
+
+        context_errors = [
+            d for d in diagnostics
+            if "context_scope" in d.message and "'action'" in d.message
+        ]
+        assert context_errors == [], f"Unexpected errors for action namespace: {context_errors}"
+
+    def test_prompt_namespace_no_error(self, tmp_path: Path) -> None:
+        """prompt.* references should NOT report 'action missing' errors.
+
+        The 'prompt' namespace is reserved for prompt-related metadata.
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: use_prompt_data
+                    context_scope:
+                      observe:
+                        - prompt.template
+            """),
+        )
+
+        index = build_index(tmp_path)
+        diagnostics = _collect_diagnostics(workflow_path, index)
+
+        context_errors = [
+            d for d in diagnostics
+            if "context_scope" in d.message and "'prompt'" in d.message
+        ]
+        assert context_errors == [], f"Unexpected errors for prompt namespace: {context_errors}"
+
+    def test_schema_namespace_no_error(self, tmp_path: Path) -> None:
+        """schema.* references should NOT report 'action missing' errors.
+
+        The 'schema' namespace is reserved for schema-related metadata.
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: use_schema_info
+                    context_scope:
+                      observe:
+                        - schema.fields
+            """),
+        )
+
+        index = build_index(tmp_path)
+        diagnostics = _collect_diagnostics(workflow_path, index)
+
+        context_errors = [
+            d for d in diagnostics
+            if "context_scope" in d.message and "'schema'" in d.message
+        ]
+        assert context_errors == [], f"Unexpected errors for schema namespace: {context_errors}"
+
 
 class TestWildcardFieldValidation:
     """Tests for wildcard (*) field handling in context_scope references.
@@ -285,6 +385,99 @@ class TestInvalidReferenceValidation:
             if "nonexistent_action" in d.message and "missing" in d.message
         ]
         assert len(action_errors) == 1, f"Expected error for missing action: {diagnostics}"
+
+    def test_missing_action_with_wildcard_reports_error(self, tmp_path: Path) -> None:
+        """References to non-existent actions with wildcard should report errors.
+
+        Even with .* wildcard, if the action doesn't exist, it should error.
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: consumer
+                    context_scope:
+                      observe:
+                        - nonexistent_action.*
+            """),
+        )
+
+        index = build_index(tmp_path)
+        diagnostics = _collect_diagnostics(workflow_path, index)
+
+        # SHOULD have error for missing action (wildcard doesn't help if action is missing)
+        action_errors = [
+            d for d in diagnostics
+            if "nonexistent_action" in d.message and "missing" in d.message
+        ]
+        assert len(action_errors) == 1, f"Expected error for missing action: {diagnostics}"
+
+
+class TestEdgeCases:
+    """Tests for edge cases in reference parsing and validation."""
+
+    def test_trailing_dot_empty_field(self, tmp_path: Path) -> None:
+        """References with trailing dot (action.) should be handled gracefully.
+
+        The _split_context_reference function splits on '.', so 'action.'
+        would produce action_name='action', field=''. Empty field should
+        not cause crashes.
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: producer
+                    schema: simple_schema
+                  - name: consumer
+                    dependencies: [producer]
+                    context_scope:
+                      observe:
+                        - producer.
+            """),
+        )
+
+        index = build_index(tmp_path)
+        # Should not crash - graceful handling of malformed input
+        diagnostics = _collect_diagnostics(workflow_path, index)
+        # The reference is malformed, so we don't assert specific behavior,
+        # just that it doesn't crash
+        assert isinstance(diagnostics, list)
+
+    def test_action_name_only_no_field(self, tmp_path: Path) -> None:
+        """References without field (just 'action_name') should work.
+
+        Some context_scope references might just be action names without
+        field specifiers.
+        """
+        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
+        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
+        _write_file(
+            workflow_path,
+            dedent("""
+                actions:
+                  - name: producer
+                  - name: consumer
+                    dependencies: [producer]
+                    context_scope:
+                      observe:
+                        - producer
+            """),
+        )
+
+        index = build_index(tmp_path)
+        diagnostics = _collect_diagnostics(workflow_path, index)
+
+        # Should NOT have "action missing" error (the action exists)
+        action_errors = [
+            d for d in diagnostics
+            if "producer" in d.message and "missing" in d.message
+        ]
+        assert action_errors == [], f"Unexpected error for action-only reference: {action_errors}"
 
 
 class TestMixedScenarios:
