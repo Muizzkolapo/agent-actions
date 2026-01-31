@@ -23,6 +23,11 @@ Agent Actions is a framework for building and orchestrating AI agents.
 - **CLI:** Entry points in `agent_actions/cli`.
 - **Docs:** Generated from `agent_actions/docs`.
 
+### Manifest Maintenance
+- **Always update `_MANIFEST.md` files** when making code changes that add, remove, or modify modules, classes, or functions.
+- Each directory has its own `_MANIFEST.md` that documents its contents.
+- Keep manifests in sync with the actual code to maintain accurate navigation.
+
 ### Navigation Strategy
 1.  **Start Here:** Use this file for high-level context.
 2.  **Explore:** Follow the `_MANIFEST.md` link above to traverse the codebase structure.
