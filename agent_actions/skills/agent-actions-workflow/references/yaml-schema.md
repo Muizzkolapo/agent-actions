@@ -187,11 +187,16 @@ Execute actions in parallel or sequential loops:
 
 **Fan-in** - different actions converging:
 ```yaml
+# Default: first dependency is primary (determines execution count)
 - name: generate_report
   dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
-  primary_dependency: analyze_entities  # Optional override
-  context_scope:
-    observe: [analyze_sentiment.*, analyze_entities.*, analyze_topics.*]
+  # analyze_sentiment determines execution count
+  # analyze_entities and analyze_topics are loaded via context (lineage-matched)
+
+# Override: explicit primary_dependency
+- name: generate_report
+  dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
+  primary_dependency: analyze_entities  # Override: analyze_entities is primary
 ```
 
 **Aggregation** - merge and group by key:

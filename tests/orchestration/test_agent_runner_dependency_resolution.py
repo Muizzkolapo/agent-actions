@@ -85,6 +85,56 @@ class TestIsParallelBranches:
             ["classify_text", "classify_image"]
         ) is False
 
+    def test_different_base_names_with_same_numeric_suffix_not_parallel(self):
+        """Different base names with same numeric suffix are NOT parallel (fan-in).
+
+        This is an important edge case: classify_text_1 and classify_image_1
+        both end in _1, but they have different base names (classify_text vs classify_image).
+        This should be detected as fan-in, not parallel branches.
+        """
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify_text_1", "classify_image_1"]
+        ) is False
+
+    def test_mixed_versioned_and_non_versioned_not_parallel(self):
+        """Mix of versioned and non-versioned deps with different base names is fan-in."""
+        # research_1, research_2, research_3 all have base name 'research'
+        # summarize has base name 'summarize'
+        # Different base names = fan-in
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["research_1", "research_2", "research_3", "summarize"]
+        ) is False
+
+
+class TestGetVersionBranches:
+    """Test _get_version_branches() helper method."""
+
+    def test_finds_matching_version_branches(self):
+        """Finds all version branches matching a base name."""
+        deps = ["research_1", "research_2", "summarize", "validate"]
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == ["research_1", "research_2"]
+
+    def test_no_matching_branches_returns_empty(self):
+        """Returns empty list when no versions match."""
+        deps = ["summarize", "validate"]
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == []
+
+    def test_does_not_match_different_base_names(self):
+        """Does not match deps with different base names even if suffix is numeric."""
+        deps = ["classify_text_1", "classify_image_1"]
+        # Looking for 'classify' versions - neither matches because base names differ
+        result = ContextScopeProcessor._get_version_branches("classify", deps)
+        assert result == []
+
+    def test_requires_exact_prefix_match(self):
+        """Version branch must start with exact base_name + underscore."""
+        deps = ["researcher_1", "research_1"]
+        # 'researcher_1' should NOT match 'research' - different base
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == ["research_1"]
+
 
 class TestDependencyPatterns:
     """Test all 4 dependency patterns with clear examples."""
@@ -247,6 +297,38 @@ class TestDependencyPatterns:
         # All directories returned for merging (aggregation pattern)
         assert len(result) == 3
         assert {r.name for r in result} == {"validator_grammar", "validator_accuracy", "validator_style"}
+
+    def test_reduce_key_with_parallel_branches(self, agent_runner, temp_folder):
+        """
+        Edge case: reduce_key with parallel branches
+
+        Config:
+          - name: aggregate_classifications
+            dependencies: [classify_1, classify_2, classify_3]
+            reduce_key: content_id
+
+        Behavior: All outputs are merged (parallel branches merge by default,
+        reduce_key just adds grouping for downstream processing).
+
+        Note: This is valid but rarely used since parallel branches already
+        merge by default. The reduce_key adds grouping by content_id.
+        """
+        for i in range(1, 4):
+            (temp_folder / "target" / f"classify_{i}").mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["classify_1", "classify_2", "classify_3"],
+            {
+                "dependencies": ["classify_1", "classify_2", "classify_3"],
+                "reduce_key": "content_id"
+            },
+            "aggregate_classifications"
+        )
+
+        # All directories returned for merging (reduce_key applies grouping)
+        assert len(result) == 3
+        assert {r.name for r in result} == {"classify_1", "classify_2", "classify_3"}
 
     def test_invalid_primary_dependency_raises_error(self, agent_runner, temp_folder):
         """primary_dependency must be in dependencies list."""

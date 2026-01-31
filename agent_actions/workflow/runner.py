@@ -213,7 +213,9 @@ class AgentRunner:
 
             if has_reduce_key:
                 # Aggregation pattern with reduce_key - merge all dependencies
-                logger.info(
+                # Note: This applies regardless of whether deps are parallel branches
+                # (parallel branches merge by default, reduce_key just adds grouping)
+                logger.debug(
                     f"Action '{agent_name}': Aggregation pattern (reduce_key set). "
                     f"Merging all {len(dependencies)} dependencies: {dependencies}"
                 )
@@ -221,16 +223,14 @@ class AgentRunner:
                 # Fan-in pattern
                 primary_dep = agent_config.get("primary_dependency")
 
-                # Helper to find all version branches matching a base name
-                def get_version_branches(base_name: str, deps: List[str]) -> List[str]:
-                    return [d for d in deps if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()]
-
                 if primary_dep is None:
                     # No explicit primary - use first dependency
                     # But if first dep is a version branch, include ALL sibling branches
                     first_dep = dependencies[0]
                     base_name = ContextScopeProcessor._get_base_name(first_dep)
-                    sibling_branches = get_version_branches(base_name, dependencies)
+                    sibling_branches = ContextScopeProcessor._get_version_branches(
+                        base_name, dependencies
+                    )
 
                     if sibling_branches and first_dep in sibling_branches:
                         input_deps = sibling_branches
@@ -239,7 +239,9 @@ class AgentRunner:
                 elif primary_dep in dependencies:
                     # Explicit primary exists in deps - check if it's versioned
                     base_name = ContextScopeProcessor._get_base_name(primary_dep)
-                    sibling_branches = get_version_branches(base_name, dependencies)
+                    sibling_branches = ContextScopeProcessor._get_version_branches(
+                        base_name, dependencies
+                    )
 
                     if sibling_branches and primary_dep in sibling_branches:
                         input_deps = sibling_branches
@@ -247,7 +249,9 @@ class AgentRunner:
                         input_deps = [primary_dep]
                 else:
                     # Primary is a base name - expand to all version branches
-                    version_branches = get_version_branches(primary_dep, dependencies)
+                    version_branches = ContextScopeProcessor._get_version_branches(
+                        primary_dep, dependencies
+                    )
                     if version_branches:
                         input_deps = version_branches
                     else:
@@ -258,7 +262,7 @@ class AgentRunner:
                         )
 
                 non_primary = [d for d in dependencies if d not in input_deps]
-                logger.info(
+                logger.debug(
                     f"Action '{agent_name}': Fan-in pattern detected. "
                     f"Input sources: {input_deps}. "
                     f"Context sources (loaded via historical loader): {non_primary}"

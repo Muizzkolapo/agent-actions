@@ -181,6 +181,9 @@ class ContextScopeProcessor:
         - ['extract', 'enrich', 'validate'] → False (different actions)
         - ['classify'] → True (single = trivially parallel)
 
+        Note: Different base names with same suffix are NOT parallel:
+        - ['classify_text_1', 'classify_image_1'] → False (different base names)
+
         Args:
             dependencies: List of dependency action names
 
@@ -192,6 +195,30 @@ class ContextScopeProcessor:
 
         base_names = {ContextScopeProcessor._get_base_name(dep) for dep in dependencies}
         return len(base_names) == 1
+
+    @staticmethod
+    def _get_version_branches(base_name: str, dependencies: List[str]) -> List[str]:
+        """
+        Find all dependencies that are version branches of a base name.
+
+        Examples:
+            _get_version_branches('research', ['research_1', 'research_2', 'summarize'])
+            → ['research_1', 'research_2']
+
+            _get_version_branches('classify', ['classify_text_1', 'classify_image_1'])
+            → []  (these have different base names)
+
+        Args:
+            base_name: The base action name to match
+            dependencies: List of dependency action names
+
+        Returns:
+            List of dependencies that are versions of base_name
+        """
+        return [
+            d for d in dependencies
+            if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()
+        ]
 
     @staticmethod
     def infer_dependencies(
@@ -262,17 +289,12 @@ class ContextScopeProcessor:
             # Fan-in detected
             primary_dep = action_config.get("primary_dependency")
 
-            # Helper to find all version branches matching a base name
-            def get_version_branches(base_name: str, deps: List[str]) -> List[str]:
-                """Find all deps that are versions of base_name (e.g., research -> research_1, research_2)."""
-                return [d for d in deps if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()]
-
             if primary_dep is None:
                 # No explicit primary - use first dependency
                 # But if first dep is a version branch, include ALL sibling branches
                 first_dep = all_deps[0]
                 base_name = ContextScopeProcessor._get_base_name(first_dep)
-                sibling_branches = get_version_branches(base_name, all_deps)
+                sibling_branches = ContextScopeProcessor._get_version_branches(base_name, all_deps)
 
                 if sibling_branches and first_dep in sibling_branches:
                     # First dep is a version branch - include all siblings as input
@@ -285,7 +307,7 @@ class ContextScopeProcessor:
             elif primary_dep in all_deps:
                 # Explicit primary exists in deps - check if it's versioned
                 base_name = ContextScopeProcessor._get_base_name(primary_dep)
-                sibling_branches = get_version_branches(base_name, all_deps)
+                sibling_branches = ContextScopeProcessor._get_version_branches(base_name, all_deps)
 
                 if sibling_branches and primary_dep in sibling_branches:
                     # Primary is a version branch - include all siblings
@@ -297,7 +319,7 @@ class ContextScopeProcessor:
                     fan_in_context_sources = [d for d in all_deps if d != primary_dep]
             else:
                 # Primary is a base name - expand to all version branches
-                version_branches = get_version_branches(primary_dep, all_deps)
+                version_branches = ContextScopeProcessor._get_version_branches(primary_dep, all_deps)
                 if version_branches:
                     input_sources = version_branches
                     fan_in_context_sources = [d for d in all_deps if d not in version_branches]
@@ -309,7 +331,7 @@ class ContextScopeProcessor:
                         f"not found in dependencies list {all_deps} (also checked as base name)"
                     )
 
-            logger.info(
+            logger.debug(
                 f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
                 f"Input sources: {input_sources}. "
                 f"Context sources (lineage-matched): {fan_in_context_sources}"
