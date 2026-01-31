@@ -73,7 +73,7 @@ defaults:
 agac batch status --batch-id batch_abc123
 
 # Retrieve completed results
-agac batch retrieve --batch-id batch_abc123 -o ./results
+agac batch retrieve --batch-id batch_abc123
 
 # Retry failed records
 agac batch retry --batch-id batch_abc123

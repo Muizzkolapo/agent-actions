@@ -743,7 +743,7 @@ agac batch status --batch-id batch_abc123
 # Status: completed
 
 # Retrieve results
-agac batch retrieve --batch-id batch_abc123 -o ./results
+agac batch retrieve --batch-id batch_abc123
 
 # Retry failures
 agac batch retry --batch-id batch_abc123
