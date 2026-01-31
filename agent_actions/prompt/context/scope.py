@@ -221,6 +221,71 @@ class ContextScopeProcessor:
         ]
 
     @staticmethod
+    def _resolve_input_sources_for_fan_in(
+        dependencies: List[str],
+        primary_dependency: Optional[str] = None,
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Resolve which dependencies are input sources vs context sources for fan-in pattern.
+
+        This is the shared logic used by both infer_dependencies() and
+        _resolve_dependency_directories() to avoid duplication.
+
+        Args:
+            dependencies: List of all dependency action names
+            primary_dependency: Optional explicit primary override
+
+        Returns:
+            Tuple of (input_sources, context_sources)
+
+        Raises:
+            ValueError: If primary_dependency is invalid (not found in deps or as base name)
+        """
+        if primary_dependency is None:
+            # No explicit primary - use first dependency
+            # But if first dep is a version branch, include ALL sibling branches
+            first_dep = dependencies[0]
+            base_name = ContextScopeProcessor._get_base_name(first_dep)
+            sibling_branches = ContextScopeProcessor._get_version_branches(
+                base_name, dependencies
+            )
+
+            if sibling_branches and first_dep in sibling_branches:
+                # First dep is a version branch - include all siblings as input
+                input_sources = sibling_branches
+            else:
+                # First dep is not versioned - just use it
+                input_sources = [first_dep]
+        elif primary_dependency in dependencies:
+            # Explicit primary exists in deps - check if it's versioned
+            base_name = ContextScopeProcessor._get_base_name(primary_dependency)
+            sibling_branches = ContextScopeProcessor._get_version_branches(
+                base_name, dependencies
+            )
+
+            if sibling_branches and primary_dependency in sibling_branches:
+                # Primary is a version branch - include all siblings
+                input_sources = sibling_branches
+            else:
+                # Primary is not versioned - just use it
+                input_sources = [primary_dependency]
+        else:
+            # Primary is a base name - expand to all version branches
+            version_branches = ContextScopeProcessor._get_version_branches(
+                primary_dependency, dependencies
+            )
+            if version_branches:
+                input_sources = version_branches
+            else:
+                raise ValueError(
+                    f"primary_dependency '{primary_dependency}' not found in "
+                    f"dependencies list {dependencies} (also checked as base name)"
+                )
+
+        context_sources = [d for d in dependencies if d not in input_sources]
+        return input_sources, context_sources
+
+    @staticmethod
     def infer_dependencies(
         action_config: Dict, workflow_actions: List[str], action_name: str = "unknown"
     ) -> Tuple[List[str], List[str]]:
@@ -286,50 +351,20 @@ class ContextScopeProcessor:
         is_parallel = ContextScopeProcessor._is_parallel_branches(all_deps)
 
         if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
-            # Fan-in detected
+            # Fan-in detected - use shared helper
             primary_dep = action_config.get("primary_dependency")
-
-            if primary_dep is None:
-                # No explicit primary - use first dependency
-                # But if first dep is a version branch, include ALL sibling branches
-                first_dep = all_deps[0]
-                base_name = ContextScopeProcessor._get_base_name(first_dep)
-                sibling_branches = ContextScopeProcessor._get_version_branches(base_name, all_deps)
-
-                if sibling_branches and first_dep in sibling_branches:
-                    # First dep is a version branch - include all siblings as input
-                    input_sources = sibling_branches
-                    fan_in_context_sources = [d for d in all_deps if d not in sibling_branches]
-                else:
-                    # First dep is not versioned - just use it
-                    input_sources = [first_dep]
-                    fan_in_context_sources = [d for d in all_deps if d != first_dep]
-            elif primary_dep in all_deps:
-                # Explicit primary exists in deps - check if it's versioned
-                base_name = ContextScopeProcessor._get_base_name(primary_dep)
-                sibling_branches = ContextScopeProcessor._get_version_branches(base_name, all_deps)
-
-                if sibling_branches and primary_dep in sibling_branches:
-                    # Primary is a version branch - include all siblings
-                    input_sources = sibling_branches
-                    fan_in_context_sources = [d for d in all_deps if d not in sibling_branches]
-                else:
-                    # Primary is not versioned - just use it
-                    input_sources = [primary_dep]
-                    fan_in_context_sources = [d for d in all_deps if d != primary_dep]
-            else:
-                # Primary is a base name - expand to all version branches
-                version_branches = ContextScopeProcessor._get_version_branches(primary_dep, all_deps)
-                if version_branches:
-                    input_sources = version_branches
-                    fan_in_context_sources = [d for d in all_deps if d not in version_branches]
-                else:
-                    from agent_actions.errors import ConfigurationError
-
-                    raise ConfigurationError(
-                        f"Action '{action_name}': primary_dependency '{primary_dep}' "
-                        f"not found in dependencies list {all_deps} (also checked as base name)"
+            try:
+                input_sources, fan_in_context_sources = (
+                    ContextScopeProcessor._resolve_input_sources_for_fan_in(
+                        all_deps, primary_dep
                     )
+                )
+            except ValueError as e:
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{action_name}': {e}"
+                ) from e
 
             logger.debug(
                 f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "

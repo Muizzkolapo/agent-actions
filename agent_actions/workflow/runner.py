@@ -220,48 +220,20 @@ class AgentRunner:
                     f"Merging all {len(dependencies)} dependencies: {dependencies}"
                 )
             elif not is_parallel:
-                # Fan-in pattern
+                # Fan-in pattern - use shared helper from ContextScopeProcessor
                 primary_dep = agent_config.get("primary_dependency")
-
-                if primary_dep is None:
-                    # No explicit primary - use first dependency
-                    # But if first dep is a version branch, include ALL sibling branches
-                    first_dep = dependencies[0]
-                    base_name = ContextScopeProcessor._get_base_name(first_dep)
-                    sibling_branches = ContextScopeProcessor._get_version_branches(
-                        base_name, dependencies
-                    )
-
-                    if sibling_branches and first_dep in sibling_branches:
-                        input_deps = sibling_branches
-                    else:
-                        input_deps = [first_dep]
-                elif primary_dep in dependencies:
-                    # Explicit primary exists in deps - check if it's versioned
-                    base_name = ContextScopeProcessor._get_base_name(primary_dep)
-                    sibling_branches = ContextScopeProcessor._get_version_branches(
-                        base_name, dependencies
-                    )
-
-                    if sibling_branches and primary_dep in sibling_branches:
-                        input_deps = sibling_branches
-                    else:
-                        input_deps = [primary_dep]
-                else:
-                    # Primary is a base name - expand to all version branches
-                    version_branches = ContextScopeProcessor._get_version_branches(
-                        primary_dep, dependencies
-                    )
-                    if version_branches:
-                        input_deps = version_branches
-                    else:
-                        raise DependencyError(
-                            f"Action '{agent_name}': primary_dependency '{primary_dep}' "
-                            f"not found in dependencies list {dependencies} (also checked as base name)",
-                            context={"action": agent_name, "dependencies": dependencies},
+                try:
+                    input_deps, non_primary = (
+                        ContextScopeProcessor._resolve_input_sources_for_fan_in(
+                            dependencies, primary_dep
                         )
+                    )
+                except ValueError as e:
+                    raise DependencyError(
+                        f"Action '{agent_name}': {e}",
+                        context={"action": agent_name, "dependencies": dependencies},
+                    ) from e
 
-                non_primary = [d for d in dependencies if d not in input_deps]
                 logger.debug(
                     f"Action '{agent_name}': Fan-in pattern detected. "
                     f"Input sources: {input_deps}. "

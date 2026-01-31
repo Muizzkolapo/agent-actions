@@ -136,6 +136,58 @@ class TestGetVersionBranches:
         assert result == ["research_1"]
 
 
+class TestResolveInputSourcesForFanIn:
+    """Test _resolve_input_sources_for_fan_in() shared helper.
+
+    This helper is used by both infer_dependencies() and _resolve_dependency_directories()
+    to resolve which dependencies are input sources vs context sources for fan-in patterns.
+    """
+
+    def test_no_primary_uses_first_dependency(self):
+        """Without primary_dependency, first dep is the input source."""
+        deps = ["action_a", "action_b", "action_c"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        )
+        assert input_sources == ["action_a"]
+        assert context_sources == ["action_b", "action_c"]
+
+    def test_explicit_primary_selects_that_dependency(self):
+        """With explicit primary_dependency, that dep is the input source."""
+        deps = ["action_a", "action_b", "action_c"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "action_b")
+        )
+        assert input_sources == ["action_b"]
+        assert context_sources == ["action_a", "action_c"]
+
+    def test_versioned_first_dep_includes_all_siblings(self):
+        """When first dep is versioned, all sibling versions become inputs."""
+        deps = ["research_1", "research_2", "research_3", "summarize"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        )
+        assert set(input_sources) == {"research_1", "research_2", "research_3"}
+        assert context_sources == ["summarize"]
+
+    def test_base_name_primary_expands_to_all_versions(self):
+        """Base name as primary_dependency expands to all matching versions."""
+        deps = ["research_1", "research_2", "summarize"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "research")
+        )
+        assert set(input_sources) == {"research_1", "research_2"}
+        assert context_sources == ["summarize"]
+
+    def test_invalid_primary_raises_value_error(self):
+        """Invalid primary_dependency raises ValueError."""
+        deps = ["action_a", "action_b"]
+        with pytest.raises(ValueError) as exc_info:
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "nonexistent")
+        assert "nonexistent" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+
+
 class TestDependencyPatterns:
     """Test all 4 dependency patterns with clear examples."""
 
