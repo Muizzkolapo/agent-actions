@@ -380,7 +380,10 @@ class ContextScopeProcessor:
 
     @staticmethod
     def apply_context_scope(
-        field_context: Dict, context_scope: Dict, static_data: Optional[Dict] = None
+        field_context: Dict,
+        context_scope: Dict,
+        static_data: Optional[Dict] = None,
+        action_name: str = "unknown",
     ) -> Tuple[Dict, Dict, Dict]:
         """
         Apply context_scope rules, returning (prompt_context, llm_context, passthrough_fields).
@@ -388,11 +391,14 @@ class ContextScopeProcessor:
         Adds SEED namespace from static_data parameter (namespace #3 per anatomy_action.md).
         This is the 5th namespace that gets added to field_context before filtering.
 
-        Architecture:
-        - field_context input: {source, {dep_name}, loop, workflow}
-        - Add: {seed} from static_data parameter
-        - Apply context_scope: observe/passthrough/drop
-        - Return: prompt_context, llm_context, passthrough_fields
+        Args:
+            field_context: Input context with {source, {dep_name}, loop, workflow} namespaces
+            context_scope: Dict with observe/passthrough/drop lists
+            static_data: Optional seed data to add under 'seed' namespace
+            action_name: Name of the action for event logging
+
+        Returns:
+            Tuple of (prompt_context, llm_context, passthrough_fields)
         """
         # Deep copy to avoid mutating original field_context
         prompt_context = deepcopy(field_context)
@@ -428,7 +434,7 @@ class ContextScopeProcessor:
 
             except ValueError as e:
                 fire_event(ContextFieldSkippedEvent(
-                    action_name="unknown",
+                    action_name=action_name,
                     field_ref=field_ref,
                     reason=str(e),
                     directive="drop",
@@ -461,7 +467,7 @@ class ContextScopeProcessor:
 
             except ValueError as e:
                 fire_event(ContextFieldSkippedEvent(
-                    action_name="unknown",
+                    action_name=action_name,
                     field_ref=field_ref,
                     reason=str(e),
                     directive="observe",
@@ -492,7 +498,7 @@ class ContextScopeProcessor:
 
             except ValueError as e:
                 fire_event(ContextFieldSkippedEvent(
-                    action_name="unknown",
+                    action_name=action_name,
                     field_ref=field_ref,
                     reason=str(e),
                     directive="passthrough",
@@ -501,7 +507,7 @@ class ContextScopeProcessor:
 
         # Fire event for scope application
         fire_event(ContextScopeAppliedEvent(
-            action_name="unknown",
+            action_name=action_name,
             observe_count=len(observe_refs),
             passthrough_count=len(passthrough_refs),
             drop_count=len(drop_refs),

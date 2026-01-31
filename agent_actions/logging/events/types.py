@@ -2596,7 +2596,12 @@ class ContextScopeAppliedEvent(BaseEvent):
 
 @dataclass
 class ContextTemplateVariablesEvent(BaseEvent):
-    """Fired to report available template variables."""
+    """
+    Fired to report available template variables.
+
+    Note: Reserved for future use. This event is defined but not currently fired.
+    It will be used to emit template variable summaries during context building.
+    """
 
     action_name: str = ""
     namespaces: Dict[str, List[str]] = field(default_factory=dict)
@@ -2651,7 +2656,13 @@ class ContextDependencyInferredEvent(BaseEvent):
 
 @dataclass
 class ContextFieldNotFoundEvent(BaseEvent):
-    """Fired when a referenced field is not found in the available data."""
+    """
+    Fired when a referenced field is not found in the available data.
+
+    This event is fired during template rendering when a variable reference
+    cannot be resolved. It provides debugging information about what fields
+    are available in the namespace.
+    """
 
     action_name: str = ""
     field_ref: str = ""
