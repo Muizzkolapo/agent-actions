@@ -126,6 +126,13 @@ from agent_actions.logging.events.types import (
     ResultCollectedEvent,
     ResultCollectionCompleteEvent,
     ExhaustedRecordEvent,
+    # Context introspection events
+    ContextNamespaceLoadedEvent,
+    ContextFieldSkippedEvent,
+    ContextScopeAppliedEvent,
+    ContextTemplateVariablesEvent,
+    ContextDependencyInferredEvent,
+    ContextFieldNotFoundEvent,
     # Event categories
     EventCategories,
 )
@@ -251,6 +258,13 @@ __all__ = [
     "ResultCollectedEvent",
     "ResultCollectionCompleteEvent",
     "ExhaustedRecordEvent",
+    # Context Introspection
+    "ContextNamespaceLoadedEvent",
+    "ContextFieldSkippedEvent",
+    "ContextScopeAppliedEvent",
+    "ContextTemplateVariablesEvent",
+    "ContextDependencyInferredEvent",
+    "ContextFieldNotFoundEvent",
     # Categories
     "EventCategories",
     # Formatter

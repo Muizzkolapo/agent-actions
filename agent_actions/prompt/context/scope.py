@@ -12,6 +12,13 @@ import logging
 from typing import Dict, List, Tuple, Any, Optional
 from copy import deepcopy
 
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import (
+    ContextFieldSkippedEvent,
+    ContextNamespaceLoadedEvent,
+    ContextScopeAppliedEvent,
+    ContextDependencyInferredEvent,
+)
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 logger = logging.getLogger(__name__)
@@ -92,8 +99,13 @@ class ContextScopeProcessor:
             try:
                 _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                 field_names.append(field_name)
-            except ValueError:
-                # Skip invalid references
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name="unknown",
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="extract_field_names",
+                ))
                 continue
 
         return field_names
@@ -132,8 +144,13 @@ class ContextScopeProcessor:
             try:
                 action_name, _ = ContextScopeProcessor.parse_field_reference(field_ref)
                 referenced_actions.add(action_name)
-            except ValueError:
-                # Invalid reference format, skip
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name="unknown",
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="extract_action_names",
+                ))
                 continue
 
         return referenced_actions
@@ -210,7 +227,13 @@ class ContextScopeProcessor:
                     field_prefix_base_names.add(ref_action)
                 elif ref_field == "*":  # Wildcard pattern
                     wildcard_actions.add(ref_action)
-            except ValueError:
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name=action_name,
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="infer_dependencies",
+                ))
                 continue
 
         # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
@@ -318,6 +341,13 @@ class ContextScopeProcessor:
             f"input_sources={input_sources_expanded}, context_sources={context_sources_expanded}"
         )
 
+        # Fire event for successful inference
+        fire_event(ContextDependencyInferredEvent(
+            action_name=action_name,
+            input_sources=input_sources_expanded,
+            context_sources=context_sources_expanded,
+        ))
+
         return input_sources_expanded, context_sources_expanded
 
     @staticmethod
@@ -387,33 +417,40 @@ class ContextScopeProcessor:
             logger.debug("[SEED_DATA] Added to prompt_context under 'seed' namespace")
 
         # Process DROP: Remove from prompt_context (security)
-        for field_ref in context_scope.get("drop", []):
+        drop_refs = context_scope.get("drop", [])
+        for field_ref in drop_refs:
             try:
-                action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                ns_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
                 # Remove from prompt_context
-                if action_name in prompt_context and isinstance(prompt_context[action_name], dict):
-                    prompt_context[action_name].pop(field_name, None)
+                if ns_name in prompt_context and isinstance(prompt_context[ns_name], dict):
+                    prompt_context[ns_name].pop(field_name, None)
 
-            except ValueError:
-                # Invalid reference, skip silently
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name="unknown",
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="drop",
+                ))
                 continue
 
         # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
-        for field_ref in context_scope.get("observe", []):
+        observe_refs = context_scope.get("observe", [])
+        for field_ref in observe_refs:
             try:
-                action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                ns_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
                 if field_name == "*":
                     action_fields = ContextScopeProcessor.extract_action_fields(
-                        field_context, action_name
+                        field_context, ns_name
                     )
                     if action_fields:
                         llm_context.update(action_fields)
                 else:
                     # Extract value from original field_context (before drop removed it)
                     value = ContextScopeProcessor.extract_field_value(
-                        field_context, action_name, field_name
+                        field_context, ns_name, field_name
                     )
 
                     if value is not None:
@@ -422,34 +459,56 @@ class ContextScopeProcessor:
 
                     # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
-            except ValueError:
-                # Invalid reference, skip silently
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name="unknown",
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="observe",
+                ))
                 continue
 
         # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
-        for field_ref in context_scope.get("passthrough", []):
+        passthrough_refs = context_scope.get("passthrough", [])
+        for field_ref in passthrough_refs:
             try:
-                action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                ns_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
                 if field_name == "*":
                     action_fields = ContextScopeProcessor.extract_action_fields(
-                        field_context, action_name
+                        field_context, ns_name
                     )
                     if action_fields:
                         passthrough_fields.update(action_fields)
                 else:
                     # Extract value from original field_context
                     value = ContextScopeProcessor.extract_field_value(
-                        field_context, action_name, field_name
+                        field_context, ns_name, field_name
                     )
 
                     if value is not None:
                         # Add to passthrough_fields (flat dict with field names as keys)
                         passthrough_fields[field_name] = value
 
-            except ValueError:
-                # Invalid reference, skip silently
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name="unknown",
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="passthrough",
+                ))
                 continue
+
+        # Fire event for scope application
+        fire_event(ContextScopeAppliedEvent(
+            action_name="unknown",
+            observe_count=len(observe_refs),
+            passthrough_count=len(passthrough_refs),
+            drop_count=len(drop_refs),
+            observe_fields=observe_refs,
+            passthrough_fields=passthrough_refs,
+            drop_fields=drop_refs,
+        ))
 
         return (prompt_context, llm_context, passthrough_fields)
 
@@ -715,7 +774,13 @@ class ContextScopeProcessor:
                 # Track field prefix patterns (indicated by '_' field marker)
                 if ref_field == "_":
                     field_prefix_patterns.add(ref_action)
-            except ValueError:
+            except ValueError as e:
+                fire_event(ContextFieldSkippedEvent(
+                    action_name=action_name,
+                    field_ref=field_ref,
+                    reason=str(e),
+                    directive="extract_allowed_fields",
+                ))
                 continue
 
         for dep_name in dependencies:
@@ -747,8 +812,13 @@ class ContextScopeProcessor:
                         # Specific field: dep_name.field_name
                         specific_fields.append(ref_field)
 
-                except ValueError:
-                    # Invalid reference format, skip
+                except ValueError as e:
+                    fire_event(ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="extract_allowed_fields_inner",
+                    ))
                     continue
 
             if wildcard_found:
@@ -855,6 +925,12 @@ class ContextScopeProcessor:
         if source_namespace:
             field_context["source"] = source_namespace
             logger.debug("Added 'source' namespace with %s fields", len(field_context["source"]))
+            fire_event(ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="source",
+                field_count=len(source_namespace),
+                fields=list(source_namespace.keys()),
+            ))
 
         # 2. DEPENDENCY namespaces - separate input sources from context sources
         if agent_config and agent_indices and current_item and file_path:
@@ -1099,11 +1175,23 @@ class ContextScopeProcessor:
                 if key not in reserved_keys:
                     field_context[key] = value
             logger.debug("Added 'version' namespace with version context")
+            fire_event(ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="version",
+                field_count=len(loop_context),
+                fields=list(loop_context.keys()),
+            ))
 
         # 4. WORKFLOW namespace - metadata
         if workflow_metadata:
             field_context["workflow"] = workflow_metadata
             logger.debug("Added 'workflow' namespace")
+            fire_event(ContextNamespaceLoadedEvent(
+                action_name=agent_name,
+                namespace="workflow",
+                field_count=len(workflow_metadata),
+                fields=list(workflow_metadata.keys()),
+            ))
 
         logger.debug(
             f"Built field_context for '{agent_name}' with namespaces: {list(field_context.keys())}"
