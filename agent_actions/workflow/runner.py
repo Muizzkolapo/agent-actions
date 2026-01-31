@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Tuple, Dict, Optional, List
 
 if TYPE_CHECKING:
     from agent_actions.workflow.managers.manifest import ManifestManager
+    from agent_actions.storage.backend import StorageBackend
 from agent_actions.errors import FileSystemError
 from agent_actions.output.file_handler import FileHandler
 from agent_actions.workflow.strategies import (
@@ -76,7 +77,10 @@ class AgentRunner:
     """
 
     def __init__(
-        self, use_tools: bool, processor_factory: Optional[ProcessorFactory] = None
+        self,
+        use_tools: bool,
+        processor_factory: Optional[ProcessorFactory] = None,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> None:
         """
         Initialize the AgentRunner with strategy configurations.
@@ -84,9 +88,11 @@ class AgentRunner:
         Args:
             use_tools (bool): Flag indicating whether to use tools during agent execution.
             processor_factory (Optional[ProcessorFactory]): Factory for creating processors with DI.
+            storage_backend (Optional[StorageBackend]): Storage backend for data persistence.
         """
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
+        self.storage_backend = storage_backend
         self.agent_configs: Optional[Dict[str, Dict]] = None
         self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: Optional[ManifestManager] = None  # Set by AgentWorkflow
@@ -278,7 +284,8 @@ class AgentRunner:
     def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Optional[Path]:
         """Resolve a single dependency directory.
 
-        Tries manifest-based resolution first, then direct path.
+        Tries storage backend first (if available), then manifest-based resolution,
+        then direct path.
 
         Args:
             target_dir: Target directory path
@@ -287,7 +294,27 @@ class AgentRunner:
         Returns:
             Resolved Path or None if not found
         """
-        # Try manifest-based resolution first
+        # Try storage backend first if available
+        if self.storage_backend is not None:
+            try:
+                target_files = self.storage_backend.list_target_files(dep_name)
+                logger.debug(
+                    "Storage backend check for %s: found %d files: %s",
+                    dep_name,
+                    len(target_files),
+                    target_files[:5] if target_files else [],
+                )
+                if target_files:
+                    # Data exists in SQLite - return a virtual path
+                    # The actual data will be loaded from SQLite, not filesystem
+                    virtual_path = target_dir / dep_name
+                    return virtual_path
+            except Exception as e:
+                logger.warning("Storage backend check failed for %s: %s", dep_name, e)
+        else:
+            logger.debug("No storage backend available for dependency check: %s", dep_name)
+
+        # Try manifest-based resolution
         if self.manifest_manager:
             try:
                 dep_path = self.manifest_manager.get_output_directory(dep_name)
@@ -358,14 +385,18 @@ class AgentRunner:
 
         # Output directory uses simple name (no index prefix)
         output_directory = agent_folder_path / "target" / agent_type
-        output_directory.mkdir(parents=True, exist_ok=True)
+        # Only create directory if not using storage backend
+        if self.storage_backend is None:
+            output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
 
     def _process_single_file(self, params: SingleFileProcessParams):
         """Process a single file with the strategy."""
         relative_path = params.locations.item.relative_to(params.locations.input_path)
         output_file_path = params.locations.output_path / relative_path
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+        # Only create directory if not using storage backend
+        if self.storage_backend is None:
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
         params.strategy.execute(
             StrategyExecutionParams(
                 agent_config=params.agent_config,
@@ -375,6 +406,7 @@ class AgentRunner:
                 output_directory=str(output_file_path.parent),
                 idx=params.idx,
                 agent_configs=self.agent_configs,
+                storage_backend=self.storage_backend,
             )
         )
 
@@ -733,6 +765,96 @@ class AgentRunner:
 
         return files_processed_count
 
+    def _process_from_storage_backend(self, params: FileProcessParams) -> int:
+        """
+        Process data from storage backend instead of filesystem.
+
+        Queries the storage backend for target files from upstream node(s)
+        and processes each entry.
+
+        Args:
+            params: FileProcessParams with processing configuration
+
+        Returns:
+            Count of files processed
+        """
+        import json
+        import tempfile
+
+        if self.storage_backend is None:
+            return 0
+
+        files_processed_count = 0
+        output_path = Path(params.output_directory)
+
+        for input_directory in params.upstream_data_dirs:
+            input_path = Path(input_directory)
+            # Extract node name from path (last component of target/NODE_NAME)
+            node_name = input_path.name
+
+            # Skip staging directories - those are still file-based
+            if "staging" in str(input_path):
+                continue
+
+            # Query backend for files from this node
+            try:
+                target_files = self.storage_backend.list_target_files(node_name)
+            except Exception as e:
+                logger.debug(
+                    "Could not list target files from backend for %s: %s",
+                    node_name,
+                    e,
+                )
+                continue
+
+            for relative_path in target_files:
+                try:
+                    # Read data from backend
+                    data = self.storage_backend.read_target(node_name, relative_path)
+
+                    # Create a temporary file with the data for processing
+                    # (maintains compatibility with existing processing pipeline)
+                    temp_dir = tempfile.mkdtemp()
+                    temp_file = Path(temp_dir) / relative_path
+                    temp_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(temp_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f)
+
+                    # Process the file
+                    self._process_single_file(
+                        SingleFileProcessParams(
+                            locations=FileLocationParams(
+                                item=temp_file,
+                                input_path=Path(temp_dir),
+                                output_path=output_path,
+                                input_directory=temp_dir,
+                            ),
+                            agent_config=params.agent_config,
+                            agent_name=params.agent_name,
+                            strategy=params.strategy,
+                            idx=params.idx,
+                        )
+                    )
+                    files_processed_count += 1
+
+                    # Clean up temp file
+                    import shutil
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+
+                except Exception as e:
+                    logger.warning(
+                        "Failed to process backend entry %s/%s: %s",
+                        node_name,
+                        relative_path,
+                        e,
+                    )
+
+        return files_processed_count
+
+    def _is_target_directory(self, path: str) -> bool:
+        """Check if path is a target directory (not staging)."""
+        return "target" in path and "staging" not in path
+
     def process_files(self, params: FileProcessParams) -> None:
         """
         Walks through the upstream data directories, processing each file with the given strategy,
@@ -741,10 +863,24 @@ class AgentRunner:
         - Hidden files (starting with '.')
         - Marker files (e.g., .passthrough_processed)
 
+        When a storage backend is available, reads from the database instead of filesystem.
+
         When processing files from multiple upstream directories (parallel branches),
         files with the same relative path will have their JSON contents merged to ensure
         downstream actions receive all data from all branches.
         """
+        # Try storage backend first for target directories
+        if self.storage_backend is not None:
+            # Check if all upstream directories are target directories (not staging)
+            all_targets = all(
+                self._is_target_directory(d) for d in params.upstream_data_dirs
+            )
+            if all_targets:
+                files_processed_count = self._process_from_storage_backend(params)
+                if files_processed_count > 0:
+                    return
+                # Fall through to filesystem if backend returned nothing
+
         # Use merging approach when there are multiple upstream directories
         # This handles parallel branch outputs correctly
         if len(params.upstream_data_dirs) > 1:

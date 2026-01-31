@@ -2,19 +2,51 @@
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from agent_actions.output.writer import FileWriter
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 
 class OutputHandler:
-    """Responsible for saving output data to appropriate locations."""
+    """
+    Responsible for saving output data to appropriate locations.
 
-    def save_main_output(self, data, file_path, base_directory, output_directory):
+    Optionally uses a StorageBackend for database-backed persistence.
+    """
+
+    def __init__(
+        self,
+        storage_backend: Optional["StorageBackend"] = None,
+        node_name: Optional[str] = None,
+    ):
+        """
+        Initialize output handler.
+
+        Args:
+            storage_backend: Optional storage backend for database persistence
+            node_name: Node name for backend writes (required if storage_backend provided)
+        """
+        self.storage_backend = storage_backend
+        self.node_name = node_name
+
+    def save_main_output(
+        self,
+        data: List[Dict[str, Any]],
+        file_path: str,
+        base_directory: str,
+        output_directory: str,
+    ) -> None:
         """
         Save main output data to the output directory.
 
+        If a storage_backend is configured, writes to the backend instead.
+
         Args:
-            data: Data to save
+            data: Data to save (list of records)
             file_path: Path to the input file
             base_directory: Base directory for calculating relative paths
             output_directory: Directory where the output file will be saved
@@ -22,8 +54,14 @@ class OutputHandler:
         try:
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
-            self._ensure_directory_exists(str(output_file_path))
-            file_writer = FileWriter(str(output_file_path))
+            # Only create directory if not using storage backend
+            if self.storage_backend is None:
+                self._ensure_directory_exists(str(output_file_path))
+            file_writer = FileWriter(
+                str(output_file_path),
+                storage_backend=self.storage_backend,
+                node_name=self.node_name,
+            )
             file_writer.write_target(data)
         except IOError as e:
             raise AgentActionsException(

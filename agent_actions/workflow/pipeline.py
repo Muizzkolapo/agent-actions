@@ -1,10 +1,10 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import json
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.output.writer import FileWriter
@@ -24,6 +24,9 @@ from agent_actions.processing.types import (
 )
 from agent_actions.processing.helpers import run_dynamic_agent
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 TOOL_VENDOR = "tool"
 SOURCE_FOLDER = "source"
 logger = logging.getLogger(__name__)
@@ -38,6 +41,7 @@ class PipelineConfig:
     idx: int
     agent_configs: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
+    storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
 @dataclass
@@ -52,6 +56,7 @@ class BatchPipelineParams:
     batch_agent_configs: Optional[Dict[str, Any]] = None
     source_data: Optional[Any] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
+    storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
 @dataclass
@@ -74,6 +79,7 @@ class ProcessParams:
     processor_factory: Optional[ProcessorFactory]
     agent_configs: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
+    storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
 class ProcessingPipeline:
@@ -127,7 +133,11 @@ class ProcessingPipeline:
             agent_config=config.agent_config,
             agent_name=config.agent_name,
         )
-        self.output_handler = OutputHandler()
+        # Initialize OutputHandler with optional storage backend
+        self.output_handler = OutputHandler(
+            storage_backend=config.storage_backend,
+            node_name=config.agent_name,
+        )
 
     @staticmethod
     def _handle_batch_generation(params: BatchPipelineParams) -> str:
@@ -158,14 +168,23 @@ class ProcessingPipeline:
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(result, dict) and result.get("type") == "passthrough":
-            file_writer = FileWriter(str(output_file_path))
+            # Only create directory if not using storage backend
+            if params.storage_backend is None:
+                output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_writer = FileWriter(
+                str(output_file_path),
+                storage_backend=params.storage_backend,
+                node_name=params.pipeline_agent_name,
+            )
             file_writer.write_target(result["data"])
             marker = output_file_path.parent / ".passthrough_processed"
             marker.touch()
             return str(output_file_path)
 
+        # Batch job placeholder - always JSON (tracking file, not data)
+        # Directory is needed for the placeholder file
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
         placeholder = {
             "batch_job_id": result,
             "status": "submitted",
@@ -211,6 +230,7 @@ class ProcessingPipeline:
                     batch_output_directory=params.paths.output_directory,
                     batch_agent_configs=params.agent_configs,
                     workflow_metadata=params.workflow_metadata,
+                    storage_backend=params.storage_backend,
                 )
             )
         pipeline = create_processing_pipeline_from_params(
@@ -219,6 +239,7 @@ class ProcessingPipeline:
             idx=params.idx,
             processor_factory=params.processor_factory,
             agent_configs=params.agent_configs,
+            storage_backend=params.storage_backend,
         )
         return pipeline.process(
             params.paths.file_path, params.paths.base_directory, params.paths.output_directory
@@ -296,6 +317,7 @@ class ProcessingPipeline:
                 batch_agent_configs=self.config.agent_configs,
                 source_data=source_data,
                 workflow_metadata=self.config.workflow_metadata,
+                storage_backend=self.config.storage_backend,
             )
         )
         return result_path
@@ -326,7 +348,11 @@ class ProcessingPipeline:
 
             # Using SourceDataLoader ensures we follow the rigorous path logic
             # (e.g. handling 'agent_io/target/NODE/file' -> 'agent_io/source/file')
-            source_loader = SourceDataLoader(self.config.agent_name, path_manager)
+            source_loader = SourceDataLoader(
+                self.config.agent_name,
+                path_manager,
+                storage_backend=self.config.storage_backend,
+            )
 
             # Load the source data for the given input file
             loaded_source = source_loader.load_source_data(file_path)
@@ -528,6 +554,7 @@ def create_processing_pipeline_from_params(
     processor_factory: ProcessorFactory,
     agent_configs: Optional[Dict[str, Any]] = None,
     workflow_metadata: Optional[Dict[str, Any]] = None,
+    storage_backend: Optional["StorageBackend"] = None,
 ) -> ProcessingPipeline:
     """
     Factory function for creating a ProcessingPipeline instance from individual parameters.
@@ -539,6 +566,7 @@ def create_processing_pipeline_from_params(
         processor_factory: Required factory for creating processors with DI
         agent_configs: Optional dictionary of all agent configurations
         workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
+        storage_backend: Optional storage backend for database persistence
 
     Returns:
         ProcessingPipeline instance
@@ -549,5 +577,6 @@ def create_processing_pipeline_from_params(
         idx=idx,
         agent_configs=agent_configs,
         workflow_metadata=workflow_metadata,
+        storage_backend=storage_backend,
     )
     return ProcessingPipeline(config, processor_factory)

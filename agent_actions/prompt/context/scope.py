@@ -800,6 +800,7 @@ class ContextScopeProcessor:
         agent_indices: Dict[str, int],
         parent_target_id: Optional[str] = None,
         root_target_id: Optional[str] = None,
+        output_directory: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Load historical node data from saved files.
@@ -821,6 +822,7 @@ class ContextScopeProcessor:
             caller_lineage=lineage,
             parent_target_id=parent_target_id,
             root_target_id=root_target_id,
+            output_directory=output_directory,
         )
 
         return HistoricalNodeDataLoader.load_historical_node_data(request)
@@ -1038,6 +1040,7 @@ class ContextScopeProcessor:
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
         context_scope: Optional[Dict] = None,
+        output_directory: Optional[str] = None,
     ) -> Dict:
         """
         Build field context with explicit namespace structure.
@@ -1273,6 +1276,7 @@ class ContextScopeProcessor:
                         agent_indices=agent_indices,
                         parent_target_id=current_item.get("parent_target_id"),
                         root_target_id=current_item.get("root_target_id"),
+                        output_directory=output_directory,
                     )
 
                     if historical_data is None:

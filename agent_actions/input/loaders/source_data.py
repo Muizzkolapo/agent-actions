@@ -4,11 +4,14 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from agent_actions.config.interfaces import ISourceDataLoader, ProcessingMode
 from agent_actions.errors import DependencyError, FileLoadError, FileSystemError
 from agent_actions.config.paths import PathManager, PathManagerError
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 # Import will be used after class definition to avoid cyclic import
 # (deferred registration pattern)
@@ -19,13 +22,19 @@ logger = logging.getLogger(__name__)
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
-    def __init__(self, agent_name: str, path_manager: PathManager):
+    def __init__(
+        self,
+        agent_name: str,
+        path_manager: PathManager,
+        storage_backend: Optional["StorageBackend"] = None,
+    ):
         """
         Initialize the source data loader.
 
         Args:
             agent_name: Name of the agent
             path_manager: Required PathManager instance for path operations (must be provided)
+            storage_backend: Optional storage backend for database-backed reads
 
         Raises:
             DependencyError: If path_manager is not provided
@@ -34,6 +43,7 @@ class SourceDataLoader(ISourceDataLoader):
         if path_manager is None:
             raise DependencyError("SourceDataLoader", "path_manager")
         self.path_manager = path_manager
+        self.storage_backend = storage_backend
 
     def supports_async(self) -> bool:
         """Return True as this loader supports async operations."""
@@ -45,7 +55,10 @@ class SourceDataLoader(ISourceDataLoader):
 
     def load_source_data(self, file_path: str) -> List[Dict]:
         """
-        Load source data from the source directory.
+        Load source data from the source directory or storage backend.
+
+        If a storage_backend is configured, attempts to read from the backend first.
+        Falls back to file-based loading if backend read fails or is not configured.
 
         Args:
             file_path: Path to the file containing processed data
@@ -55,6 +68,69 @@ class SourceDataLoader(ISourceDataLoader):
 
         Raises:
             IOError: If source data cannot be loaded
+        """
+        # Derive relative path for both backend and file-based loading
+        relative_path = self._derive_source_relative_path(file_path)
+
+        # Try storage backend first if available
+        if self.storage_backend is not None and relative_path:
+            try:
+                return self.storage_backend.read_source(relative_path)
+            except FileNotFoundError:
+                logger.debug(
+                    "Source data not found in backend, falling back to file: %s",
+                    relative_path,
+                    extra={"agent_name": self.agent_name},
+                )
+            except Exception as e:
+                logger.warning(
+                    "Backend read failed, falling back to file: %s",
+                    e,
+                    extra={"agent_name": self.agent_name, "relative_path": relative_path},
+                )
+
+        # Fall back to file-based loading
+        return self._load_source_from_file(file_path)
+
+    def _derive_source_relative_path(self, file_path: str) -> Optional[str]:
+        """
+        Derive the relative path for source data from a target file path.
+
+        Args:
+            file_path: Path to the target file
+
+        Returns:
+            Relative path suitable for backend lookup, or None if derivation fails
+        """
+        try:
+            target_path = self.path_manager.normalize_path(file_path)
+            parts = target_path.parts
+            agent_io_index = parts.index("agent_io")
+            # Skip past agent_io/target/NODE_NAME/ to get the file parts
+            file_parts = parts[agent_io_index + 3:]
+            if file_parts:
+                # Remove .json extension for backend key
+                relative = str(Path(*file_parts))
+                if relative.endswith(".json"):
+                    relative = relative[:-5]
+                return relative
+        except (ValueError, IndexError) as e:
+            logger.debug("Could not derive relative path from agent_io structure: %s", e)
+            # Fallback: use just the filename (for temp files from storage backend)
+            # This handles cases where data is read from SQLite and processed via temp files
+            try:
+                filename = Path(file_path).stem  # filename without extension
+                if filename:
+                    return filename
+            except Exception:
+                pass
+        return None
+
+    def _load_source_from_file(self, file_path: str) -> List[Dict]:
+        """
+        Load source data from file system.
+
+        This is the original file-based loading logic.
         """
         source_file_to_load = None
         try:
@@ -75,7 +151,7 @@ class SourceDataLoader(ISourceDataLoader):
                     "operation": "load_source_data",
                 }
                 raise FileSystemError(error_msg, context=error_context)
-            file_parts = parts[agent_io_index + 3 :]
+            file_parts = parts[agent_io_index + 3:]
             if not file_parts:
                 error_context = {
                     "file_path": file_path,

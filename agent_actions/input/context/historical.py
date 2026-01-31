@@ -28,6 +28,8 @@ class HistoricalDataRequest:
     # Ancestry Chain fields (RFC: docs/specs/RFC_ancestry_chain.md)
     parent_target_id: Optional[str] = None
     root_target_id: Optional[str] = None
+    # Output directory for SQLite fallback (optional)
+    output_directory: Optional[str] = None
 
 
 class HistoricalNodeDataLoader:
@@ -120,13 +122,20 @@ class HistoricalNodeDataLoader:
             )
 
             if not target_path.exists():
-                logger.warning("Target file does not exist: %s", target_path)
-                return None
-
-            # Load and find the record
-            logger.debug("[DEBUG] Loading file: %s", target_path)
-            with open(target_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                # Try SQLite fallback - find database in target directory
+                data = HistoricalNodeDataLoader._try_load_from_sqlite(
+                    request.action_name,
+                    Path(request.file_path).name,
+                    request.output_directory,
+                )
+                if data is None:
+                    logger.warning("Target file does not exist and no SQLite fallback: %s", target_path)
+                    return None
+            else:
+                # Load from JSON file
+                logger.debug("[DEBUG] Loading file: %s", target_path)
+                with open(target_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
 
             logger.debug("[DEBUG] File loaded, %s records found", len(data))
 
@@ -416,4 +425,89 @@ class HistoricalNodeDataLoader:
             "[DEBUG _find_record] No matches found (searched %s records)",
             len(data),
         )
+        return None
+
+    @staticmethod
+    def _try_load_from_sqlite(
+        action_name: str, filename: str, output_directory: Optional[str] = None
+    ) -> Optional[List[Dict]]:
+        """
+        Try to load historical data from SQLite database.
+
+        Searches for a .db file in standard workflow locations and queries
+        the target_data table for the specified action.
+
+        Args:
+            action_name: Name of the action to load data for
+            filename: Original filename (e.g., "books_sample.json")
+            output_directory: Optional output directory path for database lookup
+
+        Returns:
+            List of records from SQLite, or None if not found
+        """
+        import sqlite3
+        from pathlib import Path
+        import os
+
+        search_patterns = []
+
+        # First priority: derive from output_directory if provided
+        if output_directory:
+            output_path = Path(output_directory)
+            # Output directory is typically: .../agent_io/target/{action_name}
+            # Database is at: .../agent_io/target/{workflow_name}.db
+            if "target" in output_path.parts:
+                target_idx = list(output_path.parts).index("target")
+                target_dir = Path(*output_path.parts[: target_idx + 1])
+                if target_dir.exists():
+                    search_patterns.append(target_dir)
+
+        # Fallback: check current working directory structure
+        cwd = Path(os.getcwd())
+
+        # Check multiple levels up
+        current = cwd
+        for _ in range(5):
+            target_dir = current / "agent_io" / "target"
+            if target_dir.exists() and target_dir not in search_patterns:
+                search_patterns.append(target_dir)
+            current = current.parent
+
+        # Also search for any .db file in agent_io/target directories
+        for pattern_base in search_patterns:
+            if pattern_base.exists():
+                for db_file in pattern_base.glob("*.db"):
+                    try:
+                        conn = sqlite3.connect(str(db_file), timeout=5.0)
+                        conn.row_factory = sqlite3.Row
+                        cursor = conn.cursor()
+
+                        # Query for the action's data
+                        # Try with filename first, then without
+                        cursor.execute(
+                            "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
+                            (action_name, filename),
+                        )
+                        row = cursor.fetchone()
+                        conn.close()
+
+                        if row:
+                            import json
+                            data = json.loads(row["data"])
+                            logger.debug(
+                                "[SQLite FALLBACK] Loaded %d records for %s from %s",
+                                len(data) if isinstance(data, list) else 1,
+                                action_name,
+                                db_file,
+                            )
+                            return data if isinstance(data, list) else [data]
+                    except (sqlite3.Error, json.JSONDecodeError) as e:
+                        logger.debug(
+                            "[SQLite FALLBACK] Failed to load from %s: %s",
+                            db_file,
+                            e,
+                        )
+                        continue
+
+        logger.debug("[SQLite FALLBACK] No database found for action %s", action_name)
         return None

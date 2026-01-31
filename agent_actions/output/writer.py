@@ -5,6 +5,8 @@ Shared file writing utilities.
 import json
 import csv
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.logging import fire_event
@@ -13,6 +15,9 @@ from agent_actions.logging.events import (
     FileWriteCompleteEvent,
 )
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 
 class FileWriter(ProcessorErrorHandlerMixin):
     """
@@ -20,12 +25,29 @@ class FileWriter(ProcessorErrorHandlerMixin):
 
     Supports JSON, TXT, and CSV formats with integrated error handling.
     Uses ProcessorErrorHandlerMixin for consistent error reporting.
+
+    Optionally uses a StorageBackend for database-backed persistence.
     """
 
-    def __init__(self, file_path):
+    def __init__(
+        self,
+        file_path: str,
+        storage_backend: Optional["StorageBackend"] = None,
+        node_name: Optional[str] = None,
+    ):
+        """
+        Initialize file writer.
+
+        Args:
+            file_path: Path to the output file
+            storage_backend: Optional storage backend for database persistence
+            node_name: Node name for backend writes (required if storage_backend provided)
+        """
         super().__init__()
         self.file_path = file_path
         self.file_type = Path(file_path).suffix.lower()
+        self.storage_backend = storage_backend
+        self.node_name = node_name
 
     def write_staging(self, data):
         """
@@ -85,14 +107,15 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 file_type=self.file_type,
             )
 
-    def write_target(self, data):
+    def write_target(self, data: List[Dict[str, Any]]) -> None:
         """
-        Write data to target file in JSON format.
+        Write data to target file.
 
-        Creates parent directories if they don't exist.
+        If a storage_backend is configured, writes to SQLite database.
+        Otherwise falls back to JSON file.
 
         Args:
-            data: Data to write as JSON
+            data: Data to write (list of records)
         """
         try:
             # Fire event before writing
@@ -103,12 +126,17 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             )
 
-            Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(self.file_path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=4)
-
-            # Get file size after writing
-            bytes_written = Path(self.file_path).stat().st_size
+            # Use storage backend if available
+            if self.storage_backend is not None and self.node_name is not None:
+                relative_path = Path(self.file_path).name
+                self.storage_backend.write_target(self.node_name, relative_path, data)
+                bytes_written = len(json.dumps(data))
+            else:
+                # Fall back to JSON file
+                Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(self.file_path, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=4)
+                bytes_written = Path(self.file_path).stat().st_size
 
             # Fire event after writing
             fire_event(

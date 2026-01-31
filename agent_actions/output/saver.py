@@ -5,7 +5,7 @@ Unified source data saving across batch and online modes.
 import json
 import logging
 from enum import Enum
-from typing import List, Dict, Union
+from typing import List, Dict, Union, TYPE_CHECKING, Optional
 from pathlib import Path
 
 from agent_actions.logging import fire_event
@@ -13,6 +13,9 @@ from agent_actions.logging.events import (
     SourceDataSavingEvent,
     SourceDataSavedEvent,
 )
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +46,17 @@ class UnifiedSourceDataSaver:
     This saver provides a consistent interface for saving source data across
     batch and online modes while allowing mode-specific optimizations.
 
+    Optionally uses a StorageBackend for database-backed persistence.
+
     Note: Single public method by design - focused utility class.
     """
 
     def __init__(
-        self, base_directory: str, enable_deduplication: bool = True, enable_locking: bool = True
+        self,
+        base_directory: str,
+        enable_deduplication: bool = True,
+        enable_locking: bool = True,
+        storage_backend: Optional["StorageBackend"] = None,
     ):
         """
         Initialize unified source data saver.
@@ -56,16 +65,24 @@ class UnifiedSourceDataSaver:
             base_directory: Base directory for workflow (e.g., '/path/to/workflow')
             enable_deduplication: Whether to deduplicate by source_guid (default: True)
             enable_locking: Whether to use file locking for thread safety (default: True)
+            storage_backend: Optional storage backend for database persistence
 
         Note:
             If portalocker is not installed and enable_locking=True, locking will be
             automatically disabled with a warning.
+            If storage_backend is provided, file locking is not needed (DB handles it).
         """
         self.base_directory = Path(base_directory)
         self.enable_deduplication = enable_deduplication
-        self.enable_locking = enable_locking and PORTALOCKER_AVAILABLE
+        self.storage_backend = storage_backend
 
-        if enable_locking and not PORTALOCKER_AVAILABLE:
+        # If using storage backend, file locking is not needed
+        if storage_backend is not None:
+            self.enable_locking = False
+        else:
+            self.enable_locking = enable_locking and PORTALOCKER_AVAILABLE
+
+        if enable_locking and not PORTALOCKER_AVAILABLE and storage_backend is None:
             logger.warning(
                 "File locking requested but portalocker not available - "
                 "locking disabled. Install: pip install portalocker"
@@ -81,6 +98,8 @@ class UnifiedSourceDataSaver:
         3. Load existing items (if file exists)
         4. Deduplicate by source_guid (if enabled)
         5. Merge and save
+
+        If a storage_backend is configured, writes to the backend instead.
 
         Args:
             items: Single item or list of items with source_guid
@@ -105,20 +124,17 @@ class UnifiedSourceDataSaver:
         if isinstance(items, dict):
             items = [items]
 
-        # Build source file path
+        # Build source file path (for logging/events even when using backend)
         source_dir = self.base_directory / "agent_io" / "source"
-        source_dir.mkdir(parents=True, exist_ok=True)
         source_file = source_dir / f"{relative_path}.json"
 
-        # Ensure parent directories exist
-        source_file.parent.mkdir(parents=True, exist_ok=True)
-
         logger.debug(
-            "Saving %d source items to %s (dedup=%s, lock=%s)",
+            "Saving %d source items to %s (dedup=%s, lock=%s, backend=%s)",
             len(items),
             source_file,
             self.enable_deduplication,
             self.enable_locking,
+            self.storage_backend is not None,
         )
 
         # Fire event before saving
@@ -129,14 +145,25 @@ class UnifiedSourceDataSaver:
             )
         )
 
-        # Save with or without locking
-        if self.enable_locking:
-            self._save_with_lock(source_file, items)
+        # Use storage backend if available
+        if self.storage_backend is not None:
+            self.storage_backend.write_source(
+                relative_path, items, enable_deduplication=self.enable_deduplication
+            )
+            bytes_written = sum(len(json.dumps(item)) for item in items)
         else:
-            self._save_without_lock(source_file, items)
+            # Fall back to file-based storage
+            source_dir.mkdir(parents=True, exist_ok=True)
+            source_file.parent.mkdir(parents=True, exist_ok=True)
 
-        # Get file size after saving
-        bytes_written = source_file.stat().st_size if source_file.exists() else 0
+            # Save with or without locking
+            if self.enable_locking:
+                self._save_with_lock(source_file, items)
+            else:
+                self._save_without_lock(source_file, items)
+
+            # Get file size after saving
+            bytes_written = source_file.stat().st_size if source_file.exists() else 0
 
         # Fire event after saving
         fire_event(
@@ -282,7 +309,9 @@ class UnifiedSourceDataSaver:
 
 # Convenience function for getting saver instance
 def get_source_data_saver(
-    base_directory: str, mode: SourceSaveMode = SourceSaveMode.BATCH
+    base_directory: str,
+    mode: SourceSaveMode = SourceSaveMode.BATCH,
+    storage_backend: Optional["StorageBackend"] = None,
 ) -> UnifiedSourceDataSaver:
     """
     Get UnifiedSourceDataSaver instance with mode-specific defaults.
@@ -290,6 +319,7 @@ def get_source_data_saver(
     Args:
         base_directory: Base directory for workflow
         mode: Save mode (BATCH or ONLINE)
+        storage_backend: Optional storage backend for database persistence
 
     Returns:
         UnifiedSourceDataSaver configured for the specified mode
@@ -300,14 +330,22 @@ def get_source_data_saver(
 
         >>> # Online mode (no locking)
         >>> saver = get_source_data_saver('/workflow', SourceSaveMode.ONLINE)
+
+        >>> # With storage backend
+        >>> backend = get_storage_backend('/workflow', 'my_workflow')
+        >>> saver = get_source_data_saver('/workflow', storage_backend=backend)
     """
     if mode == SourceSaveMode.BATCH:
         return UnifiedSourceDataSaver(
-            base_directory=base_directory, enable_deduplication=True, enable_locking=True
+            base_directory=base_directory,
+            enable_deduplication=True,
+            enable_locking=True,
+            storage_backend=storage_backend,
         )
     # ONLINE mode
     return UnifiedSourceDataSaver(
         base_directory=base_directory,
         enable_deduplication=True,
         enable_locking=False,  # Online is single-threaded
+        storage_backend=storage_backend,
     )

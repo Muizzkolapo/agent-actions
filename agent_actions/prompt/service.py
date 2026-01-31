@@ -46,6 +46,7 @@ class PromptPreparationRequest:
         current_item: Optional current item dict
         file_path: Optional file path for history
         tools_path: Optional path to tools directory
+        output_directory: Optional output directory path for storage backend lookup
     """
 
     agent_config: Dict[str, Any]
@@ -60,6 +61,7 @@ class PromptPreparationRequest:
     current_item: Optional[Dict] = None
     file_path: Optional[str] = None
     tools_path: Optional[str] = None
+    output_directory: Optional[str] = None
 
 
 @dataclass
@@ -131,6 +133,7 @@ class PromptPreparationService:
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
         tools_path: Optional[str] = None,
+        output_directory: Optional[str] = None,
     ) -> PromptPreparationResult:
         """
         Unified entry point for prompt preparation (batch AND realtime).
@@ -163,6 +166,7 @@ class PromptPreparationService:
             current_item: Optional current item dict with source_guid, lineage, etc.
             file_path: Optional file path for historical data loading.
             tools_path: Optional path to tools directory for UDF injection.
+            output_directory: Optional output directory path for storage backend lookup.
 
         Returns:
             PromptPreparationResult containing:
@@ -185,6 +189,7 @@ class PromptPreparationService:
             current_item=current_item,
             file_path=file_path,
             tools_path=tools_path,
+            output_directory=output_directory,
         )
         return PromptPreparationService._prepare_prompt_internal(request)
 
@@ -254,6 +259,7 @@ class PromptPreparationService:
             current_item=request.current_item,
             file_path=request.file_path,
             context_scope=context_scope,  # NEW: Controls which fields to load
+            output_directory=request.output_directory,  # For storage backend lookup
         )
         logger.debug("Built field context with %d top-level keys", len(field_context))
 

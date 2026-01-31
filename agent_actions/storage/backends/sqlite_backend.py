@@ -1,0 +1,357 @@
+"""SQLite storage backend implementation."""
+
+import json
+import logging
+import sqlite3
+from pathlib import Path
+from typing import Dict, List, Any
+
+from agent_actions.storage.backend import StorageBackend
+
+logger = logging.getLogger(__name__)
+
+
+class SQLiteBackend(StorageBackend):
+    """
+    SQLite-based storage backend.
+
+    Stores source and target data in a single SQLite database file
+    per workflow, located at: {workflow}/agent_io/{workflow_name}.db
+
+    Tables:
+        source_data: Stores source records with deduplication by source_guid
+        target_data: Stores target records organized by node_name
+
+    Thread Safety:
+        Uses WAL mode for better concurrency. Each connection should be
+        used from a single thread.
+    """
+
+    # SQL schema for source_data table
+    SOURCE_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS source_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            relative_path TEXT NOT NULL,
+            source_guid TEXT NOT NULL,
+            data TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(relative_path, source_guid)
+        )
+    """
+
+    # SQL schema for target_data table
+    TARGET_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS target_data (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_name TEXT NOT NULL,
+            relative_path TEXT NOT NULL,
+            data TEXT NOT NULL,
+            record_count INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(node_name, relative_path)
+        )
+    """
+
+    # Indexes for common query patterns
+    SOURCE_INDEX_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_source_path ON source_data(relative_path)
+    """
+    TARGET_INDEX_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_target_node_path ON target_data(node_name, relative_path)
+    """
+
+    def __init__(self, db_path: str, workflow_name: str):
+        """
+        Initialize SQLite backend.
+
+        Args:
+            db_path: Path to the SQLite database file
+            workflow_name: Name of the workflow (used for logging)
+        """
+        self.db_path = Path(db_path)
+        self.workflow_name = workflow_name
+        self._connection: sqlite3.Connection | None = None
+
+    @property
+    def connection(self) -> sqlite3.Connection:
+        """Get or create database connection."""
+        if self._connection is None:
+            # Ensure parent directory exists
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+            self._connection = sqlite3.connect(
+                str(self.db_path),
+                check_same_thread=False,  # Allow sharing across threads
+                timeout=30.0,  # Wait up to 30s for locks
+            )
+            # Enable WAL mode for better concurrency
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            # Enable foreign keys
+            self._connection.execute("PRAGMA foreign_keys=ON")
+            # Return rows as sqlite3.Row for dict-like access
+            self._connection.row_factory = sqlite3.Row
+
+        return self._connection
+
+    def initialize(self) -> None:
+        """Create tables and indexes if they don't exist."""
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(self.SOURCE_TABLE_SQL)
+            cursor.execute(self.TARGET_TABLE_SQL)
+            cursor.execute(self.SOURCE_INDEX_SQL)
+            cursor.execute(self.TARGET_INDEX_SQL)
+            self.connection.commit()
+            logger.info(
+                "Initialized SQLite storage backend: %s",
+                self.db_path,
+                extra={"workflow_name": self.workflow_name},
+            )
+        except sqlite3.Error as e:
+            logger.error(
+                "Failed to initialize SQLite backend: %s",
+                e,
+                extra={"db_path": str(self.db_path), "workflow_name": self.workflow_name},
+            )
+            raise
+
+    def write_target(
+        self, node_name: str, relative_path: str, data: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Write target data for a specific node.
+
+        Uses INSERT OR REPLACE to handle updates to existing records.
+
+        Args:
+            node_name: Name of the processing node
+            relative_path: Relative path within target directory
+            data: List of records to write
+
+        Returns:
+            Identifier string: "node_name:relative_path"
+        """
+        data_json = json.dumps(data, ensure_ascii=False)
+        record_count = len(data)
+
+        cursor = self.connection.cursor()
+        try:
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO target_data
+                (node_name, relative_path, data, record_count, created_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (node_name, relative_path, data_json, record_count),
+            )
+            self.connection.commit()
+            logger.debug(
+                "Wrote %d target records: %s/%s",
+                record_count,
+                node_name,
+                relative_path,
+                extra={"workflow_name": self.workflow_name},
+            )
+            return f"{node_name}:{relative_path}"
+        except sqlite3.Error as e:
+            logger.error(
+                "Failed to write target data: %s",
+                e,
+                extra={
+                    "node_name": node_name,
+                    "relative_path": relative_path,
+                    "workflow_name": self.workflow_name,
+                },
+            )
+            raise
+
+    def read_target(
+        self, node_name: str, relative_path: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Read target data for a specific node.
+
+        Args:
+            node_name: Name of the processing node
+            relative_path: Relative path within target directory
+
+        Returns:
+            List of records
+
+        Raises:
+            FileNotFoundError: If no data exists for the given path
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
+            (node_name, relative_path),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            raise FileNotFoundError(
+                f"No target data found for {node_name}/{relative_path}"
+            )
+
+        return json.loads(row["data"])
+
+    def write_source(
+        self,
+        relative_path: str,
+        data: List[Dict[str, Any]],
+        enable_deduplication: bool = True,
+    ) -> str:
+        """
+        Write source data with optional deduplication.
+
+        Each record is stored individually, keyed by (relative_path, source_guid).
+        Deduplication prevents overwriting existing records with the same source_guid.
+
+        Args:
+            relative_path: Relative path within source directory
+            data: List of source records (each should have source_guid)
+            enable_deduplication: If True, skip records with existing source_guids
+
+        Returns:
+            Identifier string: relative_path
+        """
+        cursor = self.connection.cursor()
+        inserted_count = 0
+        skipped_count = 0
+
+        try:
+            for item in data:
+                source_guid = item.get("source_guid")
+                if not source_guid:
+                    logger.warning(
+                        "Skipping source item without source_guid: %s",
+                        relative_path,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                    continue
+
+                data_json = json.dumps(item, ensure_ascii=False)
+
+                if enable_deduplication:
+                    # Use INSERT OR IGNORE to skip duplicates
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO source_data
+                        (relative_path, source_guid, data, created_at)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (relative_path, source_guid, data_json),
+                    )
+                    if cursor.rowcount > 0:
+                        inserted_count += 1
+                    else:
+                        skipped_count += 1
+                else:
+                    # Use INSERT OR REPLACE to overwrite
+                    cursor.execute(
+                        """
+                        INSERT OR REPLACE INTO source_data
+                        (relative_path, source_guid, data, created_at)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (relative_path, source_guid, data_json),
+                    )
+                    inserted_count += 1
+
+            self.connection.commit()
+            logger.debug(
+                "Wrote source data to %s: %d inserted, %d skipped (dedup)",
+                relative_path,
+                inserted_count,
+                skipped_count,
+                extra={"workflow_name": self.workflow_name},
+            )
+            return relative_path
+        except sqlite3.Error as e:
+            logger.error(
+                "Failed to write source data: %s",
+                e,
+                extra={
+                    "relative_path": relative_path,
+                    "workflow_name": self.workflow_name,
+                },
+            )
+            raise
+
+    def read_source(self, relative_path: str) -> List[Dict[str, Any]]:
+        """
+        Read source data.
+
+        Retrieves all records for the given relative_path, ordered by id.
+
+        Args:
+            relative_path: Relative path within source directory
+
+        Returns:
+            List of source records
+
+        Raises:
+            FileNotFoundError: If no data exists for the given path
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT data FROM source_data WHERE relative_path = ? ORDER BY id",
+            (relative_path,),
+        )
+        rows = cursor.fetchall()
+
+        if not rows:
+            raise FileNotFoundError(
+                f"No source data found for {relative_path}"
+            )
+
+        return [json.loads(row["data"]) for row in rows]
+
+    def list_target_files(self, node_name: str) -> List[str]:
+        """
+        List all target files for a specific node.
+
+        Args:
+            node_name: Name of the processing node
+
+        Returns:
+            List of relative paths
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT DISTINCT relative_path FROM target_data WHERE node_name = ? ORDER BY relative_path",
+            (node_name,),
+        )
+        return [row["relative_path"] for row in cursor.fetchall()]
+
+    def list_source_files(self) -> List[str]:
+        """
+        List all source files.
+
+        Returns:
+            List of unique relative paths
+        """
+        cursor = self.connection.cursor()
+        cursor.execute(
+            "SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path"
+        )
+        return [row["relative_path"] for row in cursor.fetchall()]
+
+    def close(self) -> None:
+        """Close the database connection."""
+        if self._connection is not None:
+            try:
+                self._connection.close()
+                logger.debug(
+                    "Closed SQLite connection: %s",
+                    self.db_path,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                logger.warning(
+                    "Error closing SQLite connection: %s",
+                    e,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            finally:
+                self._connection = None

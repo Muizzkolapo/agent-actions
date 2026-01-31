@@ -7,7 +7,7 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from uuid import uuid4
 
 from rich.console import Console
@@ -31,6 +31,10 @@ from agent_actions.logging.events import (
     UDFDiscoveryStartEvent,
     UDFDiscoveryCompleteEvent,
 )
+from agent_actions.storage import get_storage_backend
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 from agent_actions.workflow.parallel.action_executor import (
     ActionLevelOrchestrator,
     LevelExecutionParams,
@@ -94,6 +98,9 @@ class AgentWorkflow:
 
         # Validate schema files exist before proceeding (fail fast)
         self._validate_schema_files()
+
+        # Initialize storage backend
+        self.storage_backend: Optional["StorageBackend"] = self._initialize_storage_backend()
 
         # Initialize services
         self.services = self._initialize_services()
@@ -177,6 +184,7 @@ class AgentWorkflow:
             use_tools=self.config.use_tools,
             constructor_path=self.config.paths.constructor_path,
             default_path=getattr(self.config.manager, "default_path", None),
+            storage_backend=self.storage_backend,
         )
         agent_runner.execution_order = self.execution_order
         agent_runner.agent_indices = self.agent_indices
@@ -347,6 +355,50 @@ class AgentWorkflow:
                     "schema_dir": str(schema_dir),
                 },
             )
+
+    def _initialize_storage_backend(self) -> Optional["StorageBackend"]:
+        """
+        Initialize the storage backend for the workflow.
+
+        Creates an SQLite database at: {workflow}/agent_io/target/{workflow_name}.db
+
+        Returns:
+            Initialized StorageBackend instance, or None if initialization fails
+        """
+        try:
+            # Get workflow directory from config path
+            config_path = Path(self.config.paths.constructor_path)
+            # Assumes: .../workflows/WORKFLOW/agent_config/current.yml
+            workflow_dir = config_path.parents[1]
+
+            backend = get_storage_backend(
+                workflow_path=str(workflow_dir),
+                workflow_name=self.metadata.agent_name,
+                backend_type="sqlite",
+            )
+            backend.initialize()
+
+            db_path = workflow_dir / "agent_io" / "target" / f"{self.metadata.agent_name}.db"
+            logger.info(
+                "Initialized SQLite storage backend: %s",
+                db_path,
+                extra={
+                    "workflow_name": self.metadata.agent_name,
+                    "db_path": str(db_path),
+                },
+            )
+            self.console.print(f"[cyan]📦 Storage backend: {db_path}[/cyan]")
+            return backend
+        except Exception as e:
+            logger.warning(
+                "Failed to initialize storage backend, falling back to file storage: %s",
+                e,
+                extra={"workflow_name": self.metadata.agent_name},
+            )
+            self.console.print(
+                f"[yellow]⚠ Storage backend failed, using JSON files: {e}[/yellow]"
+            )
+            return None
 
     @property
     def agent_name(self) -> str:
