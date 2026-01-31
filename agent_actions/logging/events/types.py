@@ -2595,40 +2595,6 @@ class ContextScopeAppliedEvent(BaseEvent):
 
 
 @dataclass
-class ContextTemplateVariablesEvent(BaseEvent):
-    """
-    Fired to report available template variables.
-
-    Note: Reserved for future use. This event is defined but not currently fired.
-    It will be used to emit template variable summaries during context building.
-    """
-
-    action_name: str = ""
-    namespaces: Dict[str, List[str]] = field(default_factory=dict)
-    total_variables: int = 0
-
-    def __post_init__(self) -> None:
-        self.level = EventLevel.DEBUG
-        self.category = EventCategories.DATA
-        ns_summary = ", ".join(
-            f"{ns}: {len(fields)}" for ns, fields in self.namespaces.items()
-        )
-        self.message = (
-            f"[{self.action_name}] Template variables available: "
-            f"{self.total_variables} total ({ns_summary})"
-        )
-        self.data = {
-            "action_name": self.action_name,
-            "namespaces": self.namespaces,
-            "total_variables": self.total_variables,
-        }
-
-    @property
-    def code(self) -> str:
-        return "CX004"
-
-
-@dataclass
 class ContextDependencyInferredEvent(BaseEvent):
     """Fired when dependencies are auto-inferred from context_scope."""
 

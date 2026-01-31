@@ -130,7 +130,6 @@ from agent_actions.logging.events.types import (
     ContextNamespaceLoadedEvent,
     ContextFieldSkippedEvent,
     ContextScopeAppliedEvent,
-    ContextTemplateVariablesEvent,
     ContextDependencyInferredEvent,
     ContextFieldNotFoundEvent,
     # Event categories
@@ -262,7 +261,6 @@ __all__ = [
     "ContextNamespaceLoadedEvent",
     "ContextFieldSkippedEvent",
     "ContextScopeAppliedEvent",
-    "ContextTemplateVariablesEvent",
     "ContextDependencyInferredEvent",
     "ContextFieldNotFoundEvent",
     # Categories

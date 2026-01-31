@@ -58,7 +58,7 @@ class ContextDebugHandler:
     """
 
     # Event codes we handle
-    CONTEXT_EVENT_CODES = {"CX001", "CX002", "CX003", "CX004", "CX005", "CX006"}
+    CONTEXT_EVENT_CODES = {"CX001", "CX002", "CX003", "CX005", "CX006"}
 
     def __init__(self, console: Optional[Any] = None) -> None:
         """
