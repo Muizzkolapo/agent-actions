@@ -156,6 +156,35 @@ class ContextScopeProcessor:
         return referenced_actions
 
     @staticmethod
+    def _is_parallel_branches(dependencies: List[str]) -> bool:
+        """
+        Detect if dependencies are parallel branches of the same action.
+
+        Parallel branches have the same base name with numeric suffixes:
+        - ['classify_1', 'classify_2', 'classify_3'] → True (all 'classify')
+        - ['extract', 'enrich', 'validate'] → False (different actions)
+        - ['classify'] → True (single = trivially parallel)
+
+        Args:
+            dependencies: List of dependency action names
+
+        Returns:
+            True if all dependencies are branches of same action, False if fan-in
+        """
+        if len(dependencies) <= 1:
+            return True  # Single or empty is trivially "parallel"
+
+        def get_base_name(action_name: str) -> str:
+            """Strip trailing _N suffix to get base action name."""
+            parts = action_name.rsplit("_", 1)
+            if len(parts) == 2 and parts[1].isdigit():
+                return parts[0]
+            return action_name
+
+        base_names = {get_base_name(dep) for dep in dependencies}
+        return len(base_names) == 1
+
+    @staticmethod
     def infer_dependencies(
         action_config: Dict, workflow_actions: List[str], action_name: str = "unknown"
     ) -> Tuple[List[str], List[str]]:
@@ -201,11 +230,41 @@ class ContextScopeProcessor:
         # Support both 'dependencies' and 'depends_on' for backward compatibility
         deps = action_config.get("dependencies") or action_config.get("depends_on", [])
         if deps is None:
-            input_sources = []
+            all_deps = []
         elif isinstance(deps, str):
-            input_sources = [deps]
+            all_deps = [deps]
         else:
-            input_sources = list(deps)
+            all_deps = list(deps)
+
+        # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
+        # For fan-in, only the primary (first) dependency is an input source
+        # The rest become context sources (loaded via historical loader with lineage matching)
+        #
+        # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
+        fan_in_context_sources = []
+        has_reduce_key = action_config.get("reduce_key") is not None
+        is_parallel = ContextScopeProcessor._is_parallel_branches(all_deps)
+
+        if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
+            # Fan-in detected: first is primary input, rest are context sources
+            primary_dep = action_config.get("primary_dependency", all_deps[0])
+            if primary_dep not in all_deps:
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{action_name}': primary_dependency '{primary_dep}' "
+                    f"must be in dependencies list {all_deps}"
+                )
+            input_sources = [primary_dep]
+            fan_in_context_sources = [d for d in all_deps if d != primary_dep]
+            logger.info(
+                f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
+                f"Using '{primary_dep}' as primary input source. "
+                f"Context sources (lineage-matched): {fan_in_context_sources}"
+            )
+        else:
+            # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
+            input_sources = all_deps
 
         # 2. Parse context_scope to find all referenced actions
         context_scope = action_config.get("context_scope", {})
@@ -237,9 +296,10 @@ class ContextScopeProcessor:
                 continue
 
         # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
+        # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
         # Exclude base names of field prefix patterns if they match loop iterations in dependencies
-        potential_context_sources = referenced_actions - set(input_sources)
-        context_sources = []
+        potential_context_sources = referenced_actions - set(input_sources) - set(fan_in_context_sources)
+        context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
         for action in potential_context_sources:
             # Check if this is a field prefix base name and if dependencies contain loop iterations of it
             if action in field_prefix_base_names:

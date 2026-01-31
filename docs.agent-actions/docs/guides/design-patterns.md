@@ -212,7 +212,9 @@ actions:
       observe:
         - extract_incident_details.*
 
-  # Merge results from all parallel branches
+  # Fan-in: merge results from all parallel branches
+  # Since these are different actions, the first (classify_severity) is primary input
+  # assess_customer_impact and assess_system_impact are loaded via historical context
   - name: assign_response_team
     dependencies: [classify_severity, assess_customer_impact, assess_system_impact]
     kind: tool
@@ -226,6 +228,10 @@ actions:
         - seed.team_roster
         - seed.service_catalog
 ```
+
+:::tip Fan-in Pattern
+When multiple different actions feed into one action, the system uses **fan-in**: the first dependency drives execution count, while others are loaded via historical context with lineage matching. This ensures each execution sees data from the same record lineage.
+:::
 
 **Advantages:**
 - Reduces latency through concurrent execution

@@ -61,7 +61,9 @@ actions:
 | `intent` | string | Human-readable description |
 | `kind` | string | `llm` (default) or `tool` |
 | `impl` | string | Python function name (for tool actions) |
-| `dependencies` | string/list | Input source(s) - single action or list for merge pattern |
+| `dependencies` | string/list | Input source(s) - see Dependency Patterns below |
+| `primary_dependency` | string | Override which dependency is primary (for fan-in) |
+| `reduce_key` | string | Aggregation key (groups merged outputs by this field) |
 | `model_vendor` | string | LLM provider |
 | `model_name` | string | Model identifier |
 | `api_key` | string | Environment variable name |
@@ -165,6 +167,40 @@ Execute actions in parallel or sequential loops:
     pattern: merge    # Combines all loop outputs
 ```
 
+## Dependency Patterns
+
+| Pattern | Config | Behavior |
+|---------|--------|----------|
+| **Single** | `dependencies: action_A` | Output becomes input |
+| **Parallel** | `dependencies: [classify_1, classify_2]` | Outputs **merged** (same base name) |
+| **Fan-in** | `dependencies: [extract, enrich, validate]` | All available, **matched by lineage** |
+| **Aggregation** | `dependencies: [...], reduce_key: id` | All **merged**, grouped by key |
+
+**Parallel Branches** - created with `versions`:
+```yaml
+- name: research
+  versions: { range: [1, 3], mode: parallel }
+
+- name: synthesize
+  dependencies: [research_1, research_2, research_3]  # Merged
+```
+
+**Fan-in** - different actions converging:
+```yaml
+- name: generate_report
+  dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
+  primary_dependency: analyze_entities  # Optional override
+  context_scope:
+    observe: [analyze_sentiment.*, analyze_entities.*, analyze_topics.*]
+```
+
+**Aggregation** - merge and group by key:
+```yaml
+- name: aggregate_votes
+  dependencies: [validator_a, validator_b, validator_c]
+  reduce_key: content_id
+```
+
 ## Cross-Workflow Dependencies
 
 ```yaml
@@ -180,11 +216,10 @@ actions:
 | Syntax | Description |
 |--------|-------------|
 | `action_name` | Single input source |
-| `[action_a, action_b]` | Multiple inputs (merge pattern) |
 | `[{workflow: name}]` | Cross-workflow (all outputs) |
 | `[{workflow: name, action: act}]` | Specific action from another workflow |
 
-**Note:** Context dependencies (actions referenced in `context_scope` but not in `dependencies`) are auto-inferred. Only specify input sources in `dependencies`.
+**Note:** Context dependencies (actions referenced in `context_scope` but not in `dependencies`) are auto-inferred via lineage matching.
 
 ## Guards
 

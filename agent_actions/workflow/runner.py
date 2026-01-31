@@ -194,22 +194,41 @@ class AgentRunner:
             DependencyError: If any input source directory not found
         """
         from agent_actions.errors import DependencyError
+        from agent_actions.prompt.context.scope import ContextScopeProcessor
 
         target_dir = agent_folder / "target"
 
-        # Check for deprecated primary_dependency field
-        if "primary_dependency" in agent_config:
-            primary_dep = agent_config["primary_dependency"]
-            logger.warning(
-                f"DEPRECATION WARNING: Action '{agent_name}' uses 'primary_dependency' "
-                f"which is deprecated.\n"
-                f"  OLD STYLE: dependencies: {dependencies}, primary_dependency: {primary_dep}\n"
-                f"  NEW STYLE: dependencies: {primary_dep}\n"
-                f"  Context dependencies are now auto-inferred from context_scope.\n"
-                f"  See docs/specs/SPEC_auto_inferred_context_dependencies.md for migration guide."
-            )
-            # For backward compatibility, use primary_dependency as the only input source
-            dependencies = [primary_dep]
+        # Detect fan-in pattern: multiple DIFFERENT dependencies
+        # For fan-in, only resolve the primary dependency directory
+        # Non-primary dependencies are loaded via historical loader (context sources)
+        #
+        # Exception: If reduce_key is set, it's an aggregation pattern - merge all dependencies
+        if len(dependencies) > 1:
+            has_reduce_key = agent_config.get("reduce_key") is not None
+            is_parallel = ContextScopeProcessor._is_parallel_branches(dependencies)
+
+            if has_reduce_key:
+                # Aggregation pattern with reduce_key - merge all dependencies
+                logger.info(
+                    f"Action '{agent_name}': Aggregation pattern (reduce_key set). "
+                    f"Merging all {len(dependencies)} dependencies: {dependencies}"
+                )
+            elif not is_parallel:
+                # Fan-in pattern: use primary_dependency or first as input source
+                primary_dep = agent_config.get("primary_dependency", dependencies[0])
+                if primary_dep not in dependencies:
+                    raise DependencyError(
+                        f"Action '{agent_name}': primary_dependency '{primary_dep}' "
+                        f"must be in dependencies list {dependencies}",
+                        context={"action": agent_name, "dependencies": dependencies},
+                    )
+                non_primary = [d for d in dependencies if d != primary_dep]
+                logger.info(
+                    f"Action '{agent_name}': Fan-in pattern detected. "
+                    f"Primary input: '{primary_dep}'. "
+                    f"Context sources (loaded via historical loader): {non_primary}"
+                )
+                dependencies = [primary_dep]
 
         # Resolve all input source directories
         resolved_dirs = []
@@ -734,13 +753,17 @@ class AgentRunner:
                     self._warn_no_files_found(params)
                 return
             else:
-                # Multiple different dependencies - shouldn't happen with new design
-                logger.error(
+                # Fan-in pattern: multiple different dependencies
+                # This should have been resolved to primary dependency in _resolve_dependency_directories()
+                # If we reach here, it means all directories should be merged (aggregation pattern)
+                logger.info(
                     f"Multiple dependency directories detected: {dep_names}. "
-                    f"This should have been resolved to primary dependency. "
-                    f"Using first directory only as fallback."
+                    f"Merging all inputs (aggregation pattern)."
                 )
-                params.upstream_data_dirs = [params.upstream_data_dirs[0]]
+                files_processed_count = self._process_merged_files(params)
+                if files_processed_count == 0:
+                    self._warn_no_files_found(params)
+                return
 
         # Single upstream directory - use original logic (more efficient)
         files_processed_count = 0
