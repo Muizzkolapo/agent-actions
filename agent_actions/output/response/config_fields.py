@@ -73,7 +73,11 @@ def inherit_simple_fields(
     """
     for field, default_value in SIMPLE_CONFIG_FIELDS.items():
         # Standard inheritance: action > defaults > hardcoded default
-        agent[field] = action.get(field, defaults.get(field, default_value))
+        value = action.get(field, defaults.get(field, default_value))
+        # Normalize run_mode to lowercase for case-insensitive comparison
+        if field == "run_mode" and isinstance(value, str):
+            value = value.lower()
+        agent[field] = value
 
 
 __all__ = ["SIMPLE_CONFIG_FIELDS", "inherit_simple_fields"]
