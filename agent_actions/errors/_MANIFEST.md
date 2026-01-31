@@ -37,7 +37,9 @@
 | `preflight.py` | Module | Pre-flight validation errors for unified batch/online error handling. | `errors` |
 | `PreFlightValidationError` | Class | Base exception for all pre-flight validation errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `format_user_message` | Method | Format a user-friendly error message with all details. | - |
-| `TemplateVariableError` | Class | Raised when Jinja2 template references undefined variables. | - |
+| `TemplateVariableError` | Class | Raised when Jinja2 template references undefined variables. Includes namespace context for enhanced error messages. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `namespace_context` | Attr | Dict mapping namespace names to available fields for diagnostic output. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `template_line` | Attr | Line number in template where error occurred (for syntax errors). | - |
 | `ContextStructureError` | Class | Raised when context data structure doesn't match expected schema. | - |
 | `DependencyValidationError` | Class | Raised when circular or invalid dependencies are detected. | - |
 | `VendorConfigError` | Class | Raised when vendor configuration is invalid or incompatible. | - |
