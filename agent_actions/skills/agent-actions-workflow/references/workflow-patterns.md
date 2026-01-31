@@ -73,13 +73,18 @@ actions:
 
   - name: score_quality
     dependencies: [generate_seo, generate_recommendations, assess_reading_level]
+    context_scope:
+      observe:
+        - generate_seo.*
+        - generate_recommendations.*
+        - assess_reading_level.*
     prompt: |
       SEO: {{ generate_seo.primary_keywords }}
       Similar: {{ generate_recommendations.similar_books }}
       Level: {{ assess_reading_level.reading_level }}
 ```
 
-**How matching works:** All three parallel branches share the same `parent_target_id`. When `score_quality` runs, it queries for records with that parent and finds all siblings.
+**How matching works:** This is a **fan-in pattern** - `generate_seo` (first in list) is the primary input. The other two are loaded via historical context with lineage matching, ensuring all three come from the same parent record.
 
 ## Multi-enrichment Pattern
 

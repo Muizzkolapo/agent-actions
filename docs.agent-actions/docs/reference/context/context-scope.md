@@ -100,6 +100,39 @@ When consuming outputs from version actions, field names are prefixed to avoid c
 
 See [Version Actions](../execution/versions) for complete documentation.
 
+## Auto-Inferred Context Dependencies
+
+Actions referenced in `context_scope` but **not** in `dependencies` are automatically treated as **context dependencies**. These are loaded via the historical loader with lineage matching.
+
+```yaml
+- name: generate_report
+  dependencies: [extract_data]  # Primary input source
+  context_scope:
+    observe:
+      - extract_data.*         # From input files
+      - enrich_data.*          # Auto-inferred: loaded via historical loader
+      - validate_data.*        # Auto-inferred: loaded via historical loader
+```
+
+**How it works:**
+1. `extract_data` is in `dependencies` → its output files are processed as input
+2. `enrich_data` and `validate_data` are only in `context_scope` → auto-inferred as context dependencies
+3. Context dependencies are loaded via the historical loader, matched by **lineage** to ensure data from the same record flow
+
+This is especially useful for **fan-in patterns** where multiple upstream actions feed into one action:
+
+```yaml
+- name: final_action
+  dependencies: [action_A, action_B, action_C]  # Fan-in pattern
+  context_scope:
+    observe:
+      - action_A.*   # Primary input (first in list)
+      - action_B.*   # Context dependency (lineage-matched)
+      - action_C.*   # Context dependency (lineage-matched)
+```
+
+See [Workflow Dependencies](../execution/workflow-dependencies) for details on fan-in, parallel, and aggregation patterns.
+
 ## Resolution Order
 
 1. **Observe filter** - If `observe` is specified, start with only those fields

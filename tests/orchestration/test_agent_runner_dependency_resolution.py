@@ -1,10 +1,16 @@
 """
 Tests for _resolve_dependency_directories() in AgentRunner.
 
-Tests the simplified dependency model where:
-- `dependencies` = input sources only
-- Context sources are auto-inferred from context_scope
-- Backward compatibility with deprecated primary_dependency
+Tests the 4 dependency patterns:
+1. Single - One dependency, output becomes input
+2. Parallel Branches - Same base name (e.g., classify_1, classify_2), outputs merged
+3. Fan-in - Different actions, first is primary, others via context
+4. Aggregation - Different actions with reduce_key, all merged
+
+Also tests:
+- _is_parallel_branches() detection logic
+- Context sources auto-inferred from context_scope
+- primary_dependency override for fan-in
 """
 
 import pytest
@@ -14,7 +20,456 @@ import tempfile
 import shutil
 
 from agent_actions.workflow.runner import AgentRunner
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 from agent_actions.errors import DependencyError
+
+
+class TestIsParallelBranches:
+    """Test _is_parallel_branches() detection logic."""
+
+    def test_single_dependency_is_parallel(self):
+        """Single dependency is trivially parallel."""
+        assert ContextScopeProcessor._is_parallel_branches(["classify"]) is True
+
+    def test_empty_list_is_parallel(self):
+        """Empty list is trivially parallel."""
+        assert ContextScopeProcessor._is_parallel_branches([]) is True
+
+    def test_same_base_name_with_numeric_suffix_is_parallel(self):
+        """Dependencies with same base name and numeric suffix are parallel."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify_1", "classify_2", "classify_3"]
+        ) is True
+
+    def test_same_base_name_with_different_suffixes_is_parallel(self):
+        """Dependencies with same base name are parallel regardless of suffix number."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["research_1", "research_5", "research_10"]
+        ) is True
+
+    def test_different_base_names_is_not_parallel(self):
+        """Dependencies with different base names are NOT parallel (fan-in)."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["extract", "enrich", "validate"]
+        ) is False
+
+    def test_mixed_base_names_is_not_parallel(self):
+        """Mix of different base names is NOT parallel."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify_1", "validate_1", "score_1"]
+        ) is False
+
+    def test_no_numeric_suffix_different_names_is_not_parallel(self):
+        """Different action names without suffixes are NOT parallel."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["analyzer", "validator", "scorer"]
+        ) is False
+
+    def test_same_name_no_suffix_is_parallel(self):
+        """Same action name repeated (edge case) is parallel."""
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify", "classify"]
+        ) is True
+
+    def test_underscore_in_base_name_handled_correctly(self):
+        """Action names with underscores in base name work correctly."""
+        # extract_raw_qa_1, extract_raw_qa_2 should be parallel
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]
+        ) is True
+
+    def test_similar_but_different_base_names_not_parallel(self):
+        """Similar but different base names are NOT parallel."""
+        # classify_text vs classify_image are different actions
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify_text", "classify_image"]
+        ) is False
+
+    def test_different_base_names_with_same_numeric_suffix_not_parallel(self):
+        """Different base names with same numeric suffix are NOT parallel (fan-in).
+
+        This is an important edge case: classify_text_1 and classify_image_1
+        both end in _1, but they have different base names (classify_text vs classify_image).
+        This should be detected as fan-in, not parallel branches.
+        """
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["classify_text_1", "classify_image_1"]
+        ) is False
+
+    def test_mixed_versioned_and_non_versioned_not_parallel(self):
+        """Mix of versioned and non-versioned deps with different base names is fan-in."""
+        # research_1, research_2, research_3 all have base name 'research'
+        # summarize has base name 'summarize'
+        # Different base names = fan-in
+        assert ContextScopeProcessor._is_parallel_branches(
+            ["research_1", "research_2", "research_3", "summarize"]
+        ) is False
+
+
+class TestGetVersionBranches:
+    """Test _get_version_branches() helper method."""
+
+    def test_finds_matching_version_branches(self):
+        """Finds all version branches matching a base name."""
+        deps = ["research_1", "research_2", "summarize", "validate"]
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == ["research_1", "research_2"]
+
+    def test_no_matching_branches_returns_empty(self):
+        """Returns empty list when no versions match."""
+        deps = ["summarize", "validate"]
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == []
+
+    def test_does_not_match_different_base_names(self):
+        """Does not match deps with different base names even if suffix is numeric."""
+        deps = ["classify_text_1", "classify_image_1"]
+        # Looking for 'classify' versions - neither matches because base names differ
+        result = ContextScopeProcessor._get_version_branches("classify", deps)
+        assert result == []
+
+    def test_requires_exact_prefix_match(self):
+        """Version branch must start with exact base_name + underscore."""
+        deps = ["researcher_1", "research_1"]
+        # 'researcher_1' should NOT match 'research' - different base
+        result = ContextScopeProcessor._get_version_branches("research", deps)
+        assert result == ["research_1"]
+
+
+class TestResolveInputSourcesForFanIn:
+    """Test _resolve_input_sources_for_fan_in() shared helper.
+
+    This helper is used by both infer_dependencies() and _resolve_dependency_directories()
+    to resolve which dependencies are input sources vs context sources for fan-in patterns.
+    """
+
+    def test_no_primary_uses_first_dependency(self):
+        """Without primary_dependency, first dep is the input source."""
+        deps = ["action_a", "action_b", "action_c"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        )
+        assert input_sources == ["action_a"]
+        assert context_sources == ["action_b", "action_c"]
+
+    def test_explicit_primary_selects_that_dependency(self):
+        """With explicit primary_dependency, that dep is the input source."""
+        deps = ["action_a", "action_b", "action_c"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "action_b")
+        )
+        assert input_sources == ["action_b"]
+        assert context_sources == ["action_a", "action_c"]
+
+    def test_versioned_first_dep_includes_all_siblings(self):
+        """When first dep is versioned, all sibling versions become inputs."""
+        deps = ["research_1", "research_2", "research_3", "summarize"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        )
+        assert set(input_sources) == {"research_1", "research_2", "research_3"}
+        assert context_sources == ["summarize"]
+
+    def test_base_name_primary_expands_to_all_versions(self):
+        """Base name as primary_dependency expands to all matching versions."""
+        deps = ["research_1", "research_2", "summarize"]
+        input_sources, context_sources = (
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "research")
+        )
+        assert set(input_sources) == {"research_1", "research_2"}
+        assert context_sources == ["summarize"]
+
+    def test_invalid_primary_raises_value_error(self):
+        """Invalid primary_dependency raises ValueError."""
+        deps = ["action_a", "action_b"]
+        with pytest.raises(ValueError) as exc_info:
+            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "nonexistent")
+        assert "nonexistent" in str(exc_info.value)
+        assert "not found" in str(exc_info.value)
+
+
+class TestDependencyPatterns:
+    """Test all 4 dependency patterns with clear examples."""
+
+    @pytest.fixture
+    def agent_runner(self):
+        """Create AgentRunner instance."""
+        runner = AgentRunner.__new__(AgentRunner)
+        runner.agent_indices = {}
+        runner.manifest_manager = None
+        return runner
+
+    @pytest.fixture
+    def temp_folder(self):
+        """Create temporary folder with target directory."""
+        temp_dir = Path(tempfile.mkdtemp())
+        target_dir = temp_dir / "target"
+        target_dir.mkdir(parents=True)
+        yield temp_dir
+        shutil.rmtree(temp_dir)
+
+    def test_pattern_1_single_dependency(self, agent_runner, temp_folder):
+        """
+        Pattern 1: Single Dependency
+
+        Config: dependencies: extract_data
+        Result: Output becomes input
+        """
+        (temp_folder / "target" / "extract_data").mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["extract_data"],
+            {"dependencies": ["extract_data"]},
+            "validate_data"
+        )
+
+        assert len(result) == 1
+        assert result[0].name == "extract_data"
+
+    def test_pattern_2_parallel_branches(self, agent_runner, temp_folder):
+        """
+        Pattern 2: Parallel Branches
+
+        Config:
+          - name: research
+            versions:
+              range: [1, 3]
+              mode: parallel
+
+          - name: synthesize
+            dependencies: [research_1, research_2, research_3]
+
+        Result: All outputs merged into combined records
+        """
+        for i in [1, 2, 3]:
+            (temp_folder / "target" / f"research_{i}").mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "research_3"],
+            {"dependencies": ["research_1", "research_2", "research_3"]},
+            "synthesize"
+        )
+
+        # All directories returned for merging
+        assert len(result) == 3
+        assert {r.name for r in result} == {"research_1", "research_2", "research_3"}
+
+    def test_pattern_3_fan_in(self, agent_runner, temp_folder):
+        """
+        Pattern 3: Fan-in (Multiple Different Actions)
+
+        Config:
+          - name: generate_report
+            dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
+            context_scope:
+              observe:
+                - analyze_sentiment.*
+                - analyze_entities.*
+                - analyze_topics.*
+
+        Result: First is primary input, others available via lineage-matched context
+        """
+        for action in ["analyze_sentiment", "analyze_entities", "analyze_topics"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["analyze_sentiment", "analyze_entities", "analyze_topics"],
+            {
+                "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
+                "context_scope": {
+                    "observe": [
+                        "analyze_sentiment.*",
+                        "analyze_entities.*",
+                        "analyze_topics.*"
+                    ]
+                }
+            },
+            "generate_report"
+        )
+
+        # Only primary (first) returned - others via historical loader
+        assert len(result) == 1
+        assert result[0].name == "analyze_sentiment"
+
+    def test_pattern_3_fan_in_with_primary_override(self, agent_runner, temp_folder):
+        """
+        Pattern 3: Fan-in with primary_dependency override
+
+        Config:
+          - name: generate_report
+            dependencies: [analyze_sentiment, analyze_entities, analyze_topics]
+            primary_dependency: analyze_entities
+
+        Result: analyze_entities is primary input
+        """
+        for action in ["analyze_sentiment", "analyze_entities", "analyze_topics"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["analyze_sentiment", "analyze_entities", "analyze_topics"],
+            {
+                "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
+                "primary_dependency": "analyze_entities"
+            },
+            "generate_report"
+        )
+
+        # Explicit primary returned
+        assert len(result) == 1
+        assert result[0].name == "analyze_entities"
+
+    def test_pattern_4_aggregation(self, agent_runner, temp_folder):
+        """
+        Pattern 4: Aggregation
+
+        Config:
+          - name: aggregate_validations
+            dependencies: [validator_grammar, validator_accuracy, validator_style]
+            reduce_key: content_id
+
+        Result: All outputs merged and grouped by reduce_key
+        """
+        for validator in ["validator_grammar", "validator_accuracy", "validator_style"]:
+            (temp_folder / "target" / validator).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["validator_grammar", "validator_accuracy", "validator_style"],
+            {
+                "dependencies": ["validator_grammar", "validator_accuracy", "validator_style"],
+                "reduce_key": "content_id"
+            },
+            "aggregate_validations"
+        )
+
+        # All directories returned for merging (aggregation pattern)
+        assert len(result) == 3
+        assert {r.name for r in result} == {"validator_grammar", "validator_accuracy", "validator_style"}
+
+    def test_reduce_key_with_parallel_branches(self, agent_runner, temp_folder):
+        """
+        Edge case: reduce_key with parallel branches
+
+        Config:
+          - name: aggregate_classifications
+            dependencies: [classify_1, classify_2, classify_3]
+            reduce_key: content_id
+
+        Behavior: All outputs are merged (parallel branches merge by default,
+        reduce_key just adds grouping for downstream processing).
+
+        Note: This is valid but rarely used since parallel branches already
+        merge by default. The reduce_key adds grouping by content_id.
+        """
+        for i in range(1, 4):
+            (temp_folder / "target" / f"classify_{i}").mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["classify_1", "classify_2", "classify_3"],
+            {
+                "dependencies": ["classify_1", "classify_2", "classify_3"],
+                "reduce_key": "content_id"
+            },
+            "aggregate_classifications"
+        )
+
+        # All directories returned for merging (reduce_key applies grouping)
+        assert len(result) == 3
+        assert {r.name for r in result} == {"classify_1", "classify_2", "classify_3"}
+
+    def test_invalid_primary_dependency_raises_error(self, agent_runner, temp_folder):
+        """primary_dependency must be in dependencies list."""
+        for action in ["action_a", "action_b"]:
+            (temp_folder / "target" / action).mkdir()
+
+        with pytest.raises(DependencyError) as exc_info:
+            agent_runner._resolve_dependency_directories(
+                temp_folder,
+                ["action_a", "action_b"],
+                {
+                    "dependencies": ["action_a", "action_b"],
+                    "primary_dependency": "action_c"  # Not in list!
+                },
+                "test_action"
+            )
+
+        assert "primary_dependency" in str(exc_info.value)
+        assert "action_c" in str(exc_info.value)
+
+    def test_versioned_primary_with_fan_in(self, agent_runner, temp_folder):
+        """
+        Fan-in with versioned primary: research_1, research_2, research_3 + summarize
+
+        When primary is a version branch, ALL sibling branches become input sources.
+        """
+        for action in ["research_1", "research_2", "research_3", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "research_3", "summarize"],
+            {"dependencies": ["research_1", "research_2", "research_3", "summarize"]},
+            "final_report"
+        )
+
+        # All research branches should be input sources (3 dirs), summarize is context
+        assert len(result) == 3
+        assert {r.name for r in result} == {"research_1", "research_2", "research_3"}
+
+    def test_versioned_primary_base_name_expansion(self, agent_runner, temp_folder):
+        """
+        primary_dependency as base name expands to all version branches.
+
+        Config: primary_dependency: research (base name)
+        Deps: [research_1, research_2, summarize]
+        Result: research_1, research_2 are inputs, summarize is context
+        """
+        for action in ["research_1", "research_2", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "summarize"],
+            {
+                "dependencies": ["research_1", "research_2", "summarize"],
+                "primary_dependency": "research"  # Base name, not in list directly
+            },
+            "final_report"
+        )
+
+        # research expands to research_1, research_2 as inputs
+        assert len(result) == 2
+        assert {r.name for r in result} == {"research_1", "research_2"}
+
+    def test_versioned_primary_explicit_branch(self, agent_runner, temp_folder):
+        """
+        Explicit primary_dependency pointing to a version branch includes all siblings.
+
+        Config: primary_dependency: research_1
+        Deps: [research_1, research_2, summarize]
+        Result: research_1, research_2 are inputs (siblings), summarize is context
+        """
+        for action in ["research_1", "research_2", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "summarize"],
+            {
+                "dependencies": ["research_1", "research_2", "summarize"],
+                "primary_dependency": "research_1"  # Explicit branch
+            },
+            "final_report"
+        )
+
+        # research_1's siblings (research_2) also become inputs
+        assert len(result) == 2
+        assert {r.name for r in result} == {"research_1", "research_2"}
 
 
 class TestResolveDependencyDirectories:
@@ -57,8 +512,8 @@ class TestResolveDependencyDirectories:
         assert len(result) == 1
         assert result[0] == temp_agent_folder / "target" / "action_A"
 
-    def test_multiple_dependencies_returns_all_directories(self, agent_runner, temp_agent_folder):
-        """Test multiple dependencies returns all directories (for merging)."""
+    def test_multiple_dependencies_fan_in_returns_primary_only(self, agent_runner, temp_agent_folder):
+        """Test fan-in pattern: multiple different dependencies returns only primary."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {"dependencies": dependencies}
 
@@ -66,14 +521,55 @@ class TestResolveDependencyDirectories:
             temp_agent_folder, dependencies, agent_config, "test_action"
         )
 
+        # Fan-in: only primary (first) dependency returned
+        # Non-primary deps are loaded via historical loader as context sources
+        assert len(result) == 1
+        assert result[0] == temp_agent_folder / "target" / "action_A"
+
+    def test_multiple_dependencies_parallel_returns_all_directories(self, agent_runner, temp_agent_folder):
+        """Test parallel branches: multiple deps with same base name returns all."""
+        # Create parallel branch directories
+        for suffix in ["1", "2", "3"]:
+            (temp_agent_folder / "target" / f"classify_{suffix}").mkdir(parents=True, exist_ok=True)
+
+        dependencies = ["classify_1", "classify_2", "classify_3"]
+        agent_config = {"dependencies": dependencies}
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_agent_folder, dependencies, agent_config, "test_action"
+        )
+
+        # Parallel branches: all directories returned for merging
+        assert len(result) == 3
+        assert temp_agent_folder / "target" / "classify_1" in result
+        assert temp_agent_folder / "target" / "classify_2" in result
+        assert temp_agent_folder / "target" / "classify_3" in result
+
+    def test_multiple_dependencies_with_reduce_key_returns_all(self, agent_runner, temp_agent_folder):
+        """Test aggregation pattern: reduce_key set returns all dependencies."""
+        dependencies = ["action_A", "action_B", "action_C"]
+        agent_config = {"dependencies": dependencies, "reduce_key": "parent_id"}
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_agent_folder, dependencies, agent_config, "test_action"
+        )
+
+        # Aggregation with reduce_key: all directories returned for merging
         assert len(result) == 3
         assert temp_agent_folder / "target" / "action_A" in result
         assert temp_agent_folder / "target" / "action_B" in result
         assert temp_agent_folder / "target" / "action_C" in result
 
-    def test_missing_dependency_raises_error(self, agent_runner, temp_agent_folder):
-        """Test that missing dependency raises DependencyError."""
-        dependencies = ["action_A", "nonexistent_action"]
+    def test_missing_primary_dependency_raises_error(self, agent_runner, temp_agent_folder):
+        """Test that missing PRIMARY dependency raises DependencyError."""
+        # action_A is primary but doesn't exist, action_B exists
+        (temp_agent_folder / "target" / "action_B").mkdir(parents=True, exist_ok=True)
+        # Remove action_A if it exists from fixture
+        action_a_dir = temp_agent_folder / "target" / "action_A"
+        if action_a_dir.exists():
+            action_a_dir.rmdir()
+
+        dependencies = ["action_A", "action_B"]
         agent_config = {"dependencies": dependencies}
 
         with pytest.raises(DependencyError) as exc_info:
@@ -81,29 +577,22 @@ class TestResolveDependencyDirectories:
                 temp_agent_folder, dependencies, agent_config, "test_action"
             )
 
-        assert "nonexistent_action" in str(exc_info.value)
+        assert "action_A" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 
-    def test_deprecated_primary_dependency_uses_primary_only(self, agent_runner, temp_agent_folder):
-        """Test deprecated primary_dependency falls back to primary only."""
+    def test_primary_dependency_selects_primary_in_fan_in(self, agent_runner, temp_agent_folder):
+        """Test primary_dependency field selects which dep is primary in fan-in."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {
             "dependencies": dependencies,
-            "primary_dependency": "action_B",  # Deprecated field
+            "primary_dependency": "action_B",  # Explicit primary selection
         }
 
-        with patch("agent_actions.orchestration.agent_runner.logger") as mock_logger:
-            result = agent_runner._resolve_dependency_directories(
-                temp_agent_folder, dependencies, agent_config, "test_action"
-            )
+        result = agent_runner._resolve_dependency_directories(
+            temp_agent_folder, dependencies, agent_config, "test_action"
+        )
 
-            # Should log deprecation warning
-            mock_logger.warning.assert_called_once()
-            warning_msg = mock_logger.warning.call_args[0][0]
-            assert "DEPRECATION WARNING" in warning_msg
-            assert "primary_dependency" in warning_msg
-
-        # Should only return primary dependency directory (backward compat)
+        # Fan-in with explicit primary: only action_B returned
         assert len(result) == 1
         assert result[0] == temp_agent_folder / "target" / "action_B"
 

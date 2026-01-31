@@ -128,6 +128,14 @@ class ActionConfig(BaseModel):
     dependencies: List[str] = Field(
         default_factory=list, description="List of upstream dependencies"
     )
+    primary_dependency: Optional[str] = Field(
+        default=None,
+        description="Primary dependency for fan-in pattern (determines execution count)"
+    )
+    reduce_key: Optional[str] = Field(
+        default=None,
+        description="Key for aggregation pattern (groups merged outputs by this field)"
+    )
 
     @field_validator("guard")
     @classmethod

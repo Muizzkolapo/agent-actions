@@ -156,6 +156,136 @@ class ContextScopeProcessor:
         return referenced_actions
 
     @staticmethod
+    def _get_base_name(action_name: str) -> str:
+        """
+        Strip trailing _N suffix to get base action name.
+
+        Examples:
+            'classify_1' → 'classify'
+            'research_10' → 'research'
+            'extract_raw_qa_2' → 'extract_raw_qa'
+            'validate' → 'validate' (no suffix)
+        """
+        parts = action_name.rsplit("_", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            return parts[0]
+        return action_name
+
+    @staticmethod
+    def _is_parallel_branches(dependencies: List[str]) -> bool:
+        """
+        Detect if dependencies are parallel branches of the same action.
+
+        Parallel branches have the same base name with numeric suffixes:
+        - ['classify_1', 'classify_2', 'classify_3'] → True (all 'classify')
+        - ['extract', 'enrich', 'validate'] → False (different actions)
+        - ['classify'] → True (single = trivially parallel)
+
+        Note: Different base names with same suffix are NOT parallel:
+        - ['classify_text_1', 'classify_image_1'] → False (different base names)
+
+        Args:
+            dependencies: List of dependency action names
+
+        Returns:
+            True if all dependencies are branches of same action, False if fan-in
+        """
+        if len(dependencies) <= 1:
+            return True  # Single or empty is trivially "parallel"
+
+        base_names = {ContextScopeProcessor._get_base_name(dep) for dep in dependencies}
+        return len(base_names) == 1
+
+    @staticmethod
+    def _get_version_branches(base_name: str, dependencies: List[str]) -> List[str]:
+        """
+        Find all dependencies that are version branches of a base name.
+
+        Examples:
+            _get_version_branches('research', ['research_1', 'research_2', 'summarize'])
+            → ['research_1', 'research_2']
+
+            _get_version_branches('classify', ['classify_text_1', 'classify_image_1'])
+            → []  (these have different base names)
+
+        Args:
+            base_name: The base action name to match
+            dependencies: List of dependency action names
+
+        Returns:
+            List of dependencies that are versions of base_name
+        """
+        return [
+            d for d in dependencies
+            if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()
+        ]
+
+    @staticmethod
+    def _resolve_input_sources_for_fan_in(
+        dependencies: List[str],
+        primary_dependency: Optional[str] = None,
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Resolve which dependencies are input sources vs context sources for fan-in pattern.
+
+        This is the shared logic used by both infer_dependencies() and
+        _resolve_dependency_directories() to avoid duplication.
+
+        Args:
+            dependencies: List of all dependency action names
+            primary_dependency: Optional explicit primary override
+
+        Returns:
+            Tuple of (input_sources, context_sources)
+
+        Raises:
+            ValueError: If primary_dependency is invalid (not found in deps or as base name)
+        """
+        if primary_dependency is None:
+            # No explicit primary - use first dependency
+            # But if first dep is a version branch, include ALL sibling branches
+            first_dep = dependencies[0]
+            base_name = ContextScopeProcessor._get_base_name(first_dep)
+            sibling_branches = ContextScopeProcessor._get_version_branches(
+                base_name, dependencies
+            )
+
+            if sibling_branches and first_dep in sibling_branches:
+                # First dep is a version branch - include all siblings as input
+                input_sources = sibling_branches
+            else:
+                # First dep is not versioned - just use it
+                input_sources = [first_dep]
+        elif primary_dependency in dependencies:
+            # Explicit primary exists in deps - check if it's versioned
+            base_name = ContextScopeProcessor._get_base_name(primary_dependency)
+            sibling_branches = ContextScopeProcessor._get_version_branches(
+                base_name, dependencies
+            )
+
+            if sibling_branches and primary_dependency in sibling_branches:
+                # Primary is a version branch - include all siblings
+                input_sources = sibling_branches
+            else:
+                # Primary is not versioned - just use it
+                input_sources = [primary_dependency]
+        else:
+            # Primary is a base name - expand to all version branches
+            version_branches = ContextScopeProcessor._get_version_branches(
+                primary_dependency, dependencies
+            )
+            if version_branches:
+                input_sources = version_branches
+            else:
+                raise ValueError(
+                    f"primary_dependency '{primary_dependency}' not found in "
+                    f"dependencies list {dependencies} (also checked as base name)"
+                )
+
+        context_sources = [d for d in dependencies if d not in input_sources]
+        return input_sources, context_sources
+
+    @staticmethod
     def infer_dependencies(
         action_config: Dict, workflow_actions: List[str], action_name: str = "unknown"
     ) -> Tuple[List[str], List[str]]:
@@ -201,11 +331,49 @@ class ContextScopeProcessor:
         # Support both 'dependencies' and 'depends_on' for backward compatibility
         deps = action_config.get("dependencies") or action_config.get("depends_on", [])
         if deps is None:
-            input_sources = []
+            all_deps = []
         elif isinstance(deps, str):
-            input_sources = [deps]
+            all_deps = [deps]
         else:
-            input_sources = list(deps)
+            all_deps = list(deps)
+
+        # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
+        # For fan-in, only the primary dependency is an input source
+        # The rest become context sources (loaded via historical loader with lineage matching)
+        #
+        # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
+        #
+        # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
+        # that matches version branches (research_1, research_2), ALL matching branches
+        # become input sources.
+        fan_in_context_sources = []
+        has_reduce_key = action_config.get("reduce_key") is not None
+        is_parallel = ContextScopeProcessor._is_parallel_branches(all_deps)
+
+        if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
+            # Fan-in detected - use shared helper
+            primary_dep = action_config.get("primary_dependency")
+            try:
+                input_sources, fan_in_context_sources = (
+                    ContextScopeProcessor._resolve_input_sources_for_fan_in(
+                        all_deps, primary_dep
+                    )
+                )
+            except ValueError as e:
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{action_name}': {e}"
+                ) from e
+
+            logger.debug(
+                f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
+                f"Input sources: {input_sources}. "
+                f"Context sources (lineage-matched): {fan_in_context_sources}"
+            )
+        else:
+            # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources
+            input_sources = all_deps
 
         # 2. Parse context_scope to find all referenced actions
         context_scope = action_config.get("context_scope", {})
@@ -237,9 +405,10 @@ class ContextScopeProcessor:
                 continue
 
         # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
+        # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
         # Exclude base names of field prefix patterns if they match loop iterations in dependencies
-        potential_context_sources = referenced_actions - set(input_sources)
-        context_sources = []
+        potential_context_sources = referenced_actions - set(input_sources) - set(fan_in_context_sources)
+        context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
         for action in potential_context_sources:
             # Check if this is a field prefix base name and if dependencies contain loop iterations of it
             if action in field_prefix_base_names:

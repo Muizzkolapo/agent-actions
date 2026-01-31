@@ -521,3 +521,59 @@ When debugging agentic workflow errors, work through this checklist:
 7. [ ] Consider enabling reprompt with `use_llm_critique: true` for LLM schema failures
 
 Most errors fall into one of two categories: schema mismatches (the data structure doesn't match expectations) or missing fields (required data wasn't provided). The checklist above helps you identify which category you're dealing with.
+
+## Dependency Patterns
+
+### Understanding Fan-in vs Parallel
+
+When using multiple dependencies, understanding the pattern detection is crucial:
+
+```yaml
+# Pattern 1: Parallel Branches (MERGE)
+dependencies: [classify_1, classify_2, classify_3]
+# Same base name "classify" → outputs are merged
+# Execution count: N (from merged outputs)
+
+# Pattern 2: Fan-in (PRIMARY + CONTEXT)
+dependencies: [extract, enrich, validate]
+# Different actions → first is primary, others via context
+# Execution count: N (from extract only)
+
+# Pattern 3: Aggregation (MERGE with reduce_key)
+dependencies: [validator_A, validator_B, validator_C]
+reduce_key: parent_id
+# reduce_key set → all outputs merged and grouped by key
+```
+
+### Missing Context Data in Fan-in
+
+**Symptom:** Action only sees data from first dependency, not others.
+
+**Cause:** Fan-in pattern requires context sources to be in `context_scope`:
+
+```yaml
+# WRONG - enrich and validate data not accessible
+- name: generate_report
+  dependencies: [extract, enrich, validate]
+
+# CORRECT - all dependencies in context_scope
+- name: generate_report
+  dependencies: [extract, enrich, validate]
+  context_scope:
+    observe:
+      - extract.*
+      - enrich.*     # Now loaded via historical loader
+      - validate.*   # Now loaded via historical loader
+```
+
+### Unexpected Execution Count
+
+**Symptom:** Action executes more/fewer times than expected.
+
+**Debug:**
+1. Check if dependencies are parallel branches (same base name) or different actions
+2. For fan-in: first dependency determines execution count
+3. For parallel: merged outputs determine execution count
+4. For aggregation: `reduce_key` groups determine execution count
+
+See [Workflow Dependencies](../reference/execution/workflow-dependencies) for pattern details.
