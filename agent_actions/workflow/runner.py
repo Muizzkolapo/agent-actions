@@ -199,10 +199,14 @@ class AgentRunner:
         target_dir = agent_folder / "target"
 
         # Detect fan-in pattern: multiple DIFFERENT dependencies
-        # For fan-in, only resolve the primary dependency directory
+        # For fan-in, only resolve the primary dependency directories
         # Non-primary dependencies are loaded via historical loader (context sources)
         #
         # Exception: If reduce_key is set, it's an aggregation pattern - merge all dependencies
+        #
+        # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
+        # that matches version branches (research_1, research_2), ALL matching branches
+        # become input sources.
         if len(dependencies) > 1:
             has_reduce_key = agent_config.get("reduce_key") is not None
             is_parallel = ContextScopeProcessor._is_parallel_branches(dependencies)
@@ -214,21 +218,52 @@ class AgentRunner:
                     f"Merging all {len(dependencies)} dependencies: {dependencies}"
                 )
             elif not is_parallel:
-                # Fan-in pattern: use primary_dependency or first as input source
-                primary_dep = agent_config.get("primary_dependency", dependencies[0])
-                if primary_dep not in dependencies:
-                    raise DependencyError(
-                        f"Action '{agent_name}': primary_dependency '{primary_dep}' "
-                        f"must be in dependencies list {dependencies}",
-                        context={"action": agent_name, "dependencies": dependencies},
-                    )
-                non_primary = [d for d in dependencies if d != primary_dep]
+                # Fan-in pattern
+                primary_dep = agent_config.get("primary_dependency")
+
+                # Helper to find all version branches matching a base name
+                def get_version_branches(base_name: str, deps: List[str]) -> List[str]:
+                    return [d for d in deps if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()]
+
+                if primary_dep is None:
+                    # No explicit primary - use first dependency
+                    # But if first dep is a version branch, include ALL sibling branches
+                    first_dep = dependencies[0]
+                    base_name = ContextScopeProcessor._get_base_name(first_dep)
+                    sibling_branches = get_version_branches(base_name, dependencies)
+
+                    if sibling_branches and first_dep in sibling_branches:
+                        input_deps = sibling_branches
+                    else:
+                        input_deps = [first_dep]
+                elif primary_dep in dependencies:
+                    # Explicit primary exists in deps - check if it's versioned
+                    base_name = ContextScopeProcessor._get_base_name(primary_dep)
+                    sibling_branches = get_version_branches(base_name, dependencies)
+
+                    if sibling_branches and primary_dep in sibling_branches:
+                        input_deps = sibling_branches
+                    else:
+                        input_deps = [primary_dep]
+                else:
+                    # Primary is a base name - expand to all version branches
+                    version_branches = get_version_branches(primary_dep, dependencies)
+                    if version_branches:
+                        input_deps = version_branches
+                    else:
+                        raise DependencyError(
+                            f"Action '{agent_name}': primary_dependency '{primary_dep}' "
+                            f"not found in dependencies list {dependencies} (also checked as base name)",
+                            context={"action": agent_name, "dependencies": dependencies},
+                        )
+
+                non_primary = [d for d in dependencies if d not in input_deps]
                 logger.info(
                     f"Action '{agent_name}': Fan-in pattern detected. "
-                    f"Primary input: '{primary_dep}'. "
+                    f"Input sources: {input_deps}. "
                     f"Context sources (loaded via historical loader): {non_primary}"
                 )
-                dependencies = [primary_dep]
+                dependencies = input_deps
 
         # Resolve all input source directories
         resolved_dirs = []

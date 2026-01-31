@@ -156,6 +156,22 @@ class ContextScopeProcessor:
         return referenced_actions
 
     @staticmethod
+    def _get_base_name(action_name: str) -> str:
+        """
+        Strip trailing _N suffix to get base action name.
+
+        Examples:
+            'classify_1' → 'classify'
+            'research_10' → 'research'
+            'extract_raw_qa_2' → 'extract_raw_qa'
+            'validate' → 'validate' (no suffix)
+        """
+        parts = action_name.rsplit("_", 1)
+        if len(parts) == 2 and parts[1].isdigit():
+            return parts[0]
+        return action_name
+
+    @staticmethod
     def _is_parallel_branches(dependencies: List[str]) -> bool:
         """
         Detect if dependencies are parallel branches of the same action.
@@ -174,14 +190,7 @@ class ContextScopeProcessor:
         if len(dependencies) <= 1:
             return True  # Single or empty is trivially "parallel"
 
-        def get_base_name(action_name: str) -> str:
-            """Strip trailing _N suffix to get base action name."""
-            parts = action_name.rsplit("_", 1)
-            if len(parts) == 2 and parts[1].isdigit():
-                return parts[0]
-            return action_name
-
-        base_names = {get_base_name(dep) for dep in dependencies}
+        base_names = {ContextScopeProcessor._get_base_name(dep) for dep in dependencies}
         return len(base_names) == 1
 
     @staticmethod
@@ -237,29 +246,72 @@ class ContextScopeProcessor:
             all_deps = list(deps)
 
         # 1b. Handle fan-in pattern: multiple DIFFERENT dependencies
-        # For fan-in, only the primary (first) dependency is an input source
+        # For fan-in, only the primary dependency is an input source
         # The rest become context sources (loaded via historical loader with lineage matching)
         #
         # Exception: If reduce_key is set, it's an aggregation pattern - all are input sources
+        #
+        # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
+        # that matches version branches (research_1, research_2), ALL matching branches
+        # become input sources.
         fan_in_context_sources = []
         has_reduce_key = action_config.get("reduce_key") is not None
         is_parallel = ContextScopeProcessor._is_parallel_branches(all_deps)
 
         if len(all_deps) > 1 and not is_parallel and not has_reduce_key:
-            # Fan-in detected: first is primary input, rest are context sources
-            primary_dep = action_config.get("primary_dependency", all_deps[0])
-            if primary_dep not in all_deps:
-                from agent_actions.errors import ConfigurationError
+            # Fan-in detected
+            primary_dep = action_config.get("primary_dependency")
 
-                raise ConfigurationError(
-                    f"Action '{action_name}': primary_dependency '{primary_dep}' "
-                    f"must be in dependencies list {all_deps}"
-                )
-            input_sources = [primary_dep]
-            fan_in_context_sources = [d for d in all_deps if d != primary_dep]
+            # Helper to find all version branches matching a base name
+            def get_version_branches(base_name: str, deps: List[str]) -> List[str]:
+                """Find all deps that are versions of base_name (e.g., research -> research_1, research_2)."""
+                return [d for d in deps if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()]
+
+            if primary_dep is None:
+                # No explicit primary - use first dependency
+                # But if first dep is a version branch, include ALL sibling branches
+                first_dep = all_deps[0]
+                base_name = ContextScopeProcessor._get_base_name(first_dep)
+                sibling_branches = get_version_branches(base_name, all_deps)
+
+                if sibling_branches and first_dep in sibling_branches:
+                    # First dep is a version branch - include all siblings as input
+                    input_sources = sibling_branches
+                    fan_in_context_sources = [d for d in all_deps if d not in sibling_branches]
+                else:
+                    # First dep is not versioned - just use it
+                    input_sources = [first_dep]
+                    fan_in_context_sources = [d for d in all_deps if d != first_dep]
+            elif primary_dep in all_deps:
+                # Explicit primary exists in deps - check if it's versioned
+                base_name = ContextScopeProcessor._get_base_name(primary_dep)
+                sibling_branches = get_version_branches(base_name, all_deps)
+
+                if sibling_branches and primary_dep in sibling_branches:
+                    # Primary is a version branch - include all siblings
+                    input_sources = sibling_branches
+                    fan_in_context_sources = [d for d in all_deps if d not in sibling_branches]
+                else:
+                    # Primary is not versioned - just use it
+                    input_sources = [primary_dep]
+                    fan_in_context_sources = [d for d in all_deps if d != primary_dep]
+            else:
+                # Primary is a base name - expand to all version branches
+                version_branches = get_version_branches(primary_dep, all_deps)
+                if version_branches:
+                    input_sources = version_branches
+                    fan_in_context_sources = [d for d in all_deps if d not in version_branches]
+                else:
+                    from agent_actions.errors import ConfigurationError
+
+                    raise ConfigurationError(
+                        f"Action '{action_name}': primary_dependency '{primary_dep}' "
+                        f"not found in dependencies list {all_deps} (also checked as base name)"
+                    )
+
             logger.info(
                 f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
-                f"Using '{primary_dep}' as primary input source. "
+                f"Input sources: {input_sources}. "
                 f"Context sources (lineage-matched): {fan_in_context_sources}"
             )
         else:

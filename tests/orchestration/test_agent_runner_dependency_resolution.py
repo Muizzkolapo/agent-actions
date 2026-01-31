@@ -267,6 +267,76 @@ class TestDependencyPatterns:
         assert "primary_dependency" in str(exc_info.value)
         assert "action_c" in str(exc_info.value)
 
+    def test_versioned_primary_with_fan_in(self, agent_runner, temp_folder):
+        """
+        Fan-in with versioned primary: research_1, research_2, research_3 + summarize
+
+        When primary is a version branch, ALL sibling branches become input sources.
+        """
+        for action in ["research_1", "research_2", "research_3", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "research_3", "summarize"],
+            {"dependencies": ["research_1", "research_2", "research_3", "summarize"]},
+            "final_report"
+        )
+
+        # All research branches should be input sources (3 dirs), summarize is context
+        assert len(result) == 3
+        assert {r.name for r in result} == {"research_1", "research_2", "research_3"}
+
+    def test_versioned_primary_base_name_expansion(self, agent_runner, temp_folder):
+        """
+        primary_dependency as base name expands to all version branches.
+
+        Config: primary_dependency: research (base name)
+        Deps: [research_1, research_2, summarize]
+        Result: research_1, research_2 are inputs, summarize is context
+        """
+        for action in ["research_1", "research_2", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "summarize"],
+            {
+                "dependencies": ["research_1", "research_2", "summarize"],
+                "primary_dependency": "research"  # Base name, not in list directly
+            },
+            "final_report"
+        )
+
+        # research expands to research_1, research_2 as inputs
+        assert len(result) == 2
+        assert {r.name for r in result} == {"research_1", "research_2"}
+
+    def test_versioned_primary_explicit_branch(self, agent_runner, temp_folder):
+        """
+        Explicit primary_dependency pointing to a version branch includes all siblings.
+
+        Config: primary_dependency: research_1
+        Deps: [research_1, research_2, summarize]
+        Result: research_1, research_2 are inputs (siblings), summarize is context
+        """
+        for action in ["research_1", "research_2", "summarize"]:
+            (temp_folder / "target" / action).mkdir()
+
+        result = agent_runner._resolve_dependency_directories(
+            temp_folder,
+            ["research_1", "research_2", "summarize"],
+            {
+                "dependencies": ["research_1", "research_2", "summarize"],
+                "primary_dependency": "research_1"  # Explicit branch
+            },
+            "final_report"
+        )
+
+        # research_1's siblings (research_2) also become inputs
+        assert len(result) == 2
+        assert {r.name for r in result} == {"research_1", "research_2"}
+
 
 class TestResolveDependencyDirectories:
     """Test _resolve_dependency_directories() method."""
