@@ -33,6 +33,7 @@ from agent_actions.logging.core.handlers import (
     ConsoleEventHandler,
     JSONFileHandler,
     StructuredLogHandler,
+    ContextDebugHandler,
 )
 
 __all__ = [
@@ -54,4 +55,5 @@ __all__ = [
     "ConsoleEventHandler",
     "JSONFileHandler",
     "StructuredLogHandler",
+    "ContextDebugHandler",
 ]

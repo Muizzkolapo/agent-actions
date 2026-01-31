@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
 from agent_actions.errors import TemplateVariableError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import ContextFieldNotFoundEvent
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.prompt.context.scope import ContextScopeProcessor
@@ -267,6 +269,7 @@ class PromptPreparationService:
                     field_context,
                     context_scope,
                     static_data=static_data,  # Pass static data to processor
+                    action_name=request.agent_name,
                 )
             )
             logger.debug(
@@ -396,17 +399,27 @@ class PromptPreparationService:
             ) from e
         except Exception as e:
             logger.debug("Error rendering prompt template: %s", e)
+
+            # Build namespace-aware context (grouped by namespace)
+            namespace_context = {}
             available_refs = []
 
-            def _collect_available_refs(prefix: str, value: Any) -> None:
+            def _collect_refs_with_namespace(prefix: str, value: Any) -> None:
                 if prefix:
                     available_refs.append(prefix)
+                    # Track by namespace (top-level key)
+                    parts = prefix.split(".", 1)
+                    ns = parts[0]
+                    if ns not in namespace_context:
+                        namespace_context[ns] = []
+                    if len(parts) > 1:
+                        namespace_context[ns].append(parts[1])
                 if isinstance(value, dict):
                     for child_key, child_value in value.items():
                         child_prefix = f"{prefix}.{child_key}" if prefix else child_key
-                        _collect_available_refs(child_prefix, child_value)
+                        _collect_refs_with_namespace(child_prefix, child_value)
 
-            _collect_available_refs("", prompt_context)
+            _collect_refs_with_namespace("", prompt_context)
 
             error_str = str(e)
             missing = []
@@ -420,12 +433,34 @@ class PromptPreparationService:
                     undefined_match = re.search(r"'([^']+)' is undefined", error_str)
                     if undefined_match:
                         missing.append(undefined_match.group(1))
+
+            # Fire event for each missing field to help with debugging
+            for var in missing:
+                if "." in var:
+                    ns, field = var.split(".", 1)
+                    available = namespace_context.get(ns, [])
+                    fire_event(ContextFieldNotFoundEvent(
+                        action_name=agent_name,
+                        field_ref=var,
+                        namespace=ns,
+                        available_fields=available,
+                    ))
+                else:
+                    # Top-level variable not in a namespace
+                    fire_event(ContextFieldNotFoundEvent(
+                        action_name=agent_name,
+                        field_ref=var,
+                        namespace="",
+                        available_fields=list(namespace_context.keys()),
+                    ))
+
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
                 agent_name=agent_name,
                 mode=mode,
                 cause=e,
+                namespace_context=namespace_context,
             ) from e
 
     @staticmethod

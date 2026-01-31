@@ -62,12 +62,45 @@ AgentActionsError: Error generating target: Failed to process content
 
 Let's walk through the most common errors and how to fix them.
 
+### Template Variable Error
+
+**Error:**
+```
+Template rendering failed for agent 'write_question'
+
+  Reference: classify.question_type
+  Namespace 'classify' exists: YES
+  Field 'question_type' in namespace: NO
+  Available in 'classify': question_category, difficulty_level, tags
+
+  Did you mean 'classify.question_category'?
+
+Fix: Check that 'classify' produces the referenced field.
+```
+
+**Cause:** Template references a field that doesn't exist in the namespace. The error message shows:
+- Whether the namespace (e.g., `classify`) exists
+- Whether the field exists within that namespace
+- Available fields you can use instead
+- A suggestion if there's a similar field name (typo detection)
+
+**Fix options:**
+
+1. **Check the field name** - Use the suggested alternative if it's a typo
+2. **Verify the dependency** - Ensure the action producing this field is in your `dependencies` list
+3. **Check the upstream action's output** - Verify the action produces the expected field
+
+---
+
 ### Source Data Structure Mismatch
 
 **Error:**
 ```
-PreFlightValidationError: Template references undefined variables
-missing_references=['source']
+Template rendering failed for agent 'my_action'
+
+  Reference: source.content
+  Namespace 'source' exists: NO
+  Available namespaces: items, metadata
 ```
 
 **Cause:** Source data is a wrapper object, not a flat array of records. This happens when your JSON file has metadata alongside the actual records.

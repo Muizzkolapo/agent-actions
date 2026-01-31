@@ -542,3 +542,192 @@ def action(
     ActionCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
     ).execute()
+
+
+# =============================================================================
+# Context Command
+# =============================================================================
+
+
+class ContextCommand(BaseInspectCommand):
+    """Show context debug information for a specific action."""
+
+    def __init__(
+        self,
+        agent: str,
+        user_code: Optional[str],
+        json_output: bool,
+        action_name: str,
+    ):
+        super().__init__(agent, user_code, json_output)
+        self.target_action_name = action_name
+
+    def execute(self) -> None:
+        workflow = self._load_workflow()
+
+        if self.target_action_name not in workflow.agent_configs:
+            self.console.print(f"[red]Action '{self.target_action_name}' not found[/red]")
+            self.console.print(f"[dim]Available: {', '.join(workflow.agent_configs.keys())}[/dim]")
+            return
+
+        action_config = workflow.agent_configs[self.target_action_name]
+        dependency_info = self._analyze_dependencies(workflow)
+        info = dependency_info[self.target_action_name]
+
+        # Get schema directory for output field extraction
+        schema_dir = self.paths.schema_dir if self.paths else None
+
+        # Build context debug data
+        context_data = self._build_context_data(workflow, action_config, info, schema_dir)
+
+        if self.json_output:
+            self._output_json(context_data)
+        else:
+            self._output_rich(context_data)
+
+    def _build_context_data(
+        self,
+        workflow,
+        action_config: Dict[str, Any],
+        info: Dict[str, Any],
+        schema_dir: Optional[Path],
+    ) -> Dict[str, Any]:
+        """Build comprehensive context debug data for the action."""
+        # Get all namespaces that would be available
+        namespaces = {}
+
+        # Source namespace is always available
+        namespaces["source"] = ["[from source data]"]
+
+        # Add dependency namespaces
+        for dep in info["input_sources"]:
+            dep_config = workflow.agent_configs.get(dep, {})
+            dep_fields = self._get_output_fields(dep_config, schema_dir)
+            namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
+
+        # Add context source namespaces
+        for dep in info["context_sources"]:
+            dep_config = workflow.agent_configs.get(dep, {})
+            dep_fields = self._get_output_fields(dep_config, schema_dir)
+            namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
+
+        # Add special namespaces
+        namespaces["loop"] = ["index", "version"]
+        namespaces["workflow"] = ["name", "run_id"]
+
+        # Get context scope
+        context_scope = action_config.get("context_scope", {})
+
+        # Get output fields
+        output_fields = self._get_output_fields(action_config, schema_dir)
+
+        # Count total template variables
+        total_vars = sum(len(fields) for fields in namespaces.values())
+
+        return {
+            "action_name": self.target_action_name,
+            "workflow": self.agent_name,
+            "namespaces": namespaces,
+            "context_scope": {
+                "observe": context_scope.get("observe", []),
+                "passthrough": context_scope.get("passthrough", []),
+                "drop": context_scope.get("drop", []),
+            },
+            "dependencies": {
+                "input_sources": info["input_sources"],
+                "context_sources": info["context_sources"],
+            },
+            "output_fields": output_fields,
+            "total_template_variables": total_vars,
+        }
+
+    def _output_json(self, context_data: Dict[str, Any]) -> None:
+        click.echo(json_lib.dumps(context_data, indent=2))
+
+    def _output_rich(self, context_data: Dict[str, Any]) -> None:
+        action_name = context_data["action_name"]
+
+        self.console.print()
+        self.console.print(f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]")
+        self.console.print()
+
+        # Namespaces loaded
+        namespaces = context_data.get("namespaces", {})
+        if namespaces:
+            tree = Tree("[bold]Namespaces loaded:[/bold]")
+            for ns, fields in namespaces.items():
+                field_str = ", ".join(fields[:5])
+                if len(fields) > 5:
+                    field_str += f"... (+{len(fields) - 5} more)"
+                tree.add(f"[green]{ns}[/green]: {len(fields)} fields [{field_str}]")
+            self.console.print(tree)
+            self.console.print()
+
+        # Context scope
+        scope = context_data.get("context_scope", {})
+        if scope.get("observe") or scope.get("passthrough") or scope.get("drop"):
+            tree = Tree("[bold]Context scope applied:[/bold]")
+            if scope.get("observe"):
+                tree.add(f"[cyan]observe:[/cyan] {', '.join(scope['observe'])}")
+            if scope.get("passthrough"):
+                tree.add(f"[cyan]passthrough:[/cyan] {', '.join(scope['passthrough'])}")
+            if scope.get("drop"):
+                tree.add(f"[cyan]drop:[/cyan] {', '.join(scope['drop'])}")
+            self.console.print(tree)
+            self.console.print()
+
+        # Template variables
+        if namespaces:
+            tree = Tree("[bold]Template variables available:[/bold]")
+            for ns, fields in namespaces.items():
+                vars_str = ", ".join(f"{{{{ {ns}.{f} }}}}" for f in fields[:3])
+                if len(fields) > 3:
+                    vars_str += f", ... (+{len(fields) - 3} more)"
+                tree.add(f"[magenta]{vars_str}[/magenta]")
+            self.console.print(tree)
+            self.console.print()
+
+        # Dependencies
+        deps = context_data.get("dependencies", {})
+        if deps.get("input_sources") or deps.get("context_sources"):
+            tree = Tree("[bold]Dependencies:[/bold]")
+            if deps.get("input_sources"):
+                tree.add(f"[green]input_sources:[/green] {', '.join(deps['input_sources'])}")
+            if deps.get("context_sources"):
+                tree.add(f"[yellow]context_sources:[/yellow] {', '.join(deps['context_sources'])}")
+            self.console.print(tree)
+            self.console.print()
+
+        # Output fields
+        output_fields = context_data.get("output_fields", [])
+        if output_fields:
+            tree = Tree("[bold]Output fields (from schema):[/bold]")
+            for f in output_fields:
+                tree.add(f"[magenta]{f}[/magenta]")
+            self.console.print(tree)
+            self.console.print()
+
+
+@inspect.command(name="context")
+@click.option("-a", "--agent", required=True, help="Workflow name")
+@click.option("-u", "--user-code", required=False, help="Path to user code directory")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.argument("action_name")
+@handles_user_errors("inspect context")
+@requires_project
+def context(
+    agent: str, user_code: Optional[str], json_output: bool, action_name: str
+) -> None:
+    """
+    Show context debug information for a specific action.
+
+    Displays available namespaces, context scope rules, and template variables
+    that would be available during template rendering.
+
+    Examples:
+        agac inspect context -a my_workflow extract_facts
+        agac inspect context -a my_workflow generate_question --json
+    """
+    ContextCommand(
+        agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
+    ).execute()

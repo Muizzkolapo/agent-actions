@@ -26,6 +26,7 @@ Event Code Prefixes:
     SO - Schema Operations events
     DT - Data Transformation events
     RC - Result Collection events
+    CX - Context introspection events
 """
 
 from dataclasses import dataclass, field
@@ -2492,3 +2493,165 @@ class ExhaustedRecordEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "RC004"
+
+
+# =============================================================================
+# Context Introspection Events (CX prefix)
+# =============================================================================
+
+
+@dataclass
+class ContextNamespaceLoadedEvent(BaseEvent):
+    """Fired when a namespace is loaded into context."""
+
+    action_name: str = ""
+    namespace: str = ""
+    field_count: int = 0
+    fields: List[str] = field(default_factory=list)
+    dropped_fields: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.DEBUG
+        self.category = EventCategories.DATA
+        dropped_str = f" ({len(self.dropped_fields)} dropped)" if self.dropped_fields else ""
+        self.message = (
+            f"[{self.action_name}] Loaded namespace '{self.namespace}': "
+            f"{self.field_count} fields{dropped_str}"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "namespace": self.namespace,
+            "field_count": self.field_count,
+            "fields": self.fields,
+            "dropped_fields": self.dropped_fields,
+        }
+
+    @property
+    def code(self) -> str:
+        return "CX001"
+
+
+@dataclass
+class ContextFieldSkippedEvent(BaseEvent):
+    """Fired when an invalid field reference is skipped."""
+
+    action_name: str = ""
+    field_ref: str = ""
+    reason: str = ""
+    directive: str = ""  # observe, drop, passthrough
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.DATA
+        self.message = (
+            f"[{self.action_name}] Skipped field '{self.field_ref}' "
+            f"in {self.directive}: {self.reason}"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "field_ref": self.field_ref,
+            "reason": self.reason,
+            "directive": self.directive,
+        }
+
+    @property
+    def code(self) -> str:
+        return "CX002"
+
+
+@dataclass
+class ContextScopeAppliedEvent(BaseEvent):
+    """Fired when context scope rules are applied."""
+
+    action_name: str = ""
+    observe_count: int = 0
+    passthrough_count: int = 0
+    drop_count: int = 0
+    observe_fields: List[str] = field(default_factory=list)
+    passthrough_fields: List[str] = field(default_factory=list)
+    drop_fields: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.DEBUG
+        self.category = EventCategories.DATA
+        self.message = (
+            f"[{self.action_name}] Applied context scope: "
+            f"{self.observe_count} observe, {self.passthrough_count} passthrough, "
+            f"{self.drop_count} drop"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "observe_count": self.observe_count,
+            "passthrough_count": self.passthrough_count,
+            "drop_count": self.drop_count,
+            "observe_fields": self.observe_fields,
+            "passthrough_fields": self.passthrough_fields,
+            "drop_fields": self.drop_fields,
+        }
+
+    @property
+    def code(self) -> str:
+        return "CX003"
+
+
+@dataclass
+class ContextDependencyInferredEvent(BaseEvent):
+    """Fired when dependencies are auto-inferred from context_scope."""
+
+    action_name: str = ""
+    input_sources: List[str] = field(default_factory=list)
+    context_sources: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.DEBUG
+        self.category = EventCategories.DATA
+        self.message = (
+            f"[{self.action_name}] Inferred dependencies: "
+            f"{len(self.input_sources)} input, {len(self.context_sources)} context"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "input_sources": self.input_sources,
+            "context_sources": self.context_sources,
+        }
+
+    @property
+    def code(self) -> str:
+        return "CX005"
+
+
+@dataclass
+class ContextFieldNotFoundEvent(BaseEvent):
+    """
+    Fired when a referenced field is not found in the available data.
+
+    This event is fired during template rendering when a variable reference
+    cannot be resolved. It provides debugging information about what fields
+    are available in the namespace.
+    """
+
+    action_name: str = ""
+    field_ref: str = ""
+    namespace: str = ""
+    available_fields: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.DATA
+        available_str = ", ".join(self.available_fields[:5])
+        if len(self.available_fields) > 5:
+            available_str += f"... (+{len(self.available_fields) - 5} more)"
+        self.message = (
+            f"[{self.action_name}] Field '{self.field_ref}' not found in '{self.namespace}'. "
+            f"Available: {available_str}"
+        )
+        self.data = {
+            "action_name": self.action_name,
+            "field_ref": self.field_ref,
+            "namespace": self.namespace,
+            "available_fields": self.available_fields,
+        }
+
+    @property
+    def code(self) -> str:
+        return "CX006"

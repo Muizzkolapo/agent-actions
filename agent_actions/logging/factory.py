@@ -29,6 +29,7 @@ from agent_actions.logging.config import LoggingConfig
 
 if TYPE_CHECKING:
     from agent_actions.logging.core import EventManager
+    from agent_actions.logging.core.handlers import ContextDebugHandler
     from agent_actions.logging.events.handlers import RunResultsCollector
 
 
@@ -343,6 +344,34 @@ class LoggerFactory:
         """Flush all event handlers."""
         if cls._event_manager:
             cls._event_manager.flush()
+
+    @classmethod
+    def enable_context_debug(cls) -> "ContextDebugHandler":
+        """
+        Enable and return the context debug handler.
+
+        This handler collects context-related events during workflow execution
+        and provides a summary display for the --debug-context flag.
+
+        Returns:
+            The ContextDebugHandler instance
+
+        Example:
+            >>> handler = LoggerFactory.enable_context_debug()
+            >>> # ... workflow execution ...
+            >>> handler.display_summary()
+        """
+        if not cls._initialized:
+            cls.initialize()
+
+        from agent_actions.logging.core.handlers import ContextDebugHandler
+
+        handler = ContextDebugHandler()
+
+        if cls._event_manager:
+            cls._event_manager.register(handler)
+
+        return handler
 
     # Backwards compatibility aliases
     initialize_events = initialize

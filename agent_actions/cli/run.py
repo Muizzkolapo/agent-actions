@@ -283,6 +283,12 @@ class RunCommand:
             force=True,  # Reinitialize for each workflow run
         )
 
+        # Enable context debug handler if requested
+        context_debug_handler = None
+        if self.args.debug_context:
+            context_debug_handler = LoggerFactory.enable_context_debug()
+            click.echo("Context debug mode enabled...")
+
         click.echo("Starting workflow execution...")
 
         # Track execution state
@@ -311,6 +317,13 @@ class RunCommand:
             raise  # Re-raise to maintain existing error handling
 
         finally:
+            # Display context debug summary if enabled
+            if context_debug_handler:
+                click.echo("\n" + "=" * 60)
+                click.echo("CONTEXT DEBUG SUMMARY")
+                click.echo("=" * 60)
+                context_debug_handler.display_summary()
+
             # Finalize run tracking
             try:
                 tracker.finalize_workflow_run(
@@ -372,6 +385,11 @@ class RunCommand:
     default=True,
     help="Enable/disable static type checking of field references (default: enabled)",
 )
+@click.option(
+    "--debug-context",
+    is_flag=True,
+    help="Show context debug output during execution",
+)
 @handles_user_errors("run")
 @requires_project
 # Click decorators require explicit params
@@ -386,6 +404,7 @@ def run(
     downstream: bool = False,
     validate_only: bool = False,
     static_typing: bool = True,
+    debug_context: bool = False,
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -399,6 +418,7 @@ def run(
         agent-actions run -a my_agent --upstream
         agent-actions run -a my_agent --downstream
         agent-actions run -a my_agent --upstream --downstream
+        agent-actions run -a my_agent --debug-context
     """
     # Let @handles_user_errors decorator handle all exceptions
     # for consistent error formatting
@@ -411,6 +431,7 @@ def run(
         concurrency_limit=concurrency_limit,
         upstream=upstream,
         downstream=downstream,
+        debug_context=debug_context,
     )
     command = RunCommand(args)
 

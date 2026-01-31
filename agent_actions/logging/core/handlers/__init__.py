@@ -14,6 +14,7 @@ from agent_actions.logging.core.handlers.bridge import (
     DebugEvent,
     SystemEvent,
 )
+from agent_actions.logging.core.handlers.context_debug import ContextDebugHandler
 
 __all__ = [
     "ConsoleEventHandler",
@@ -23,4 +24,5 @@ __all__ = [
     "LogEvent",
     "DebugEvent",
     "SystemEvent",
+    "ContextDebugHandler",
 ]

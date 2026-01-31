@@ -32,6 +32,8 @@ class TemplateVariableError(TemplateRenderingError):
         agent_name: str,
         mode: str,
         cause: Exception,
+        namespace_context: dict = None,
+        template_line: int = None,
     ):
         """
         Initialize TemplateVariableError.
@@ -42,12 +44,16 @@ class TemplateVariableError(TemplateRenderingError):
             agent_name: Name of the agent
             mode: Processing mode (batch/online)
             cause: Original Jinja2 exception
+            namespace_context: Dict mapping namespace names to their available fields
+            template_line: Line number in template where error occurred
         """
         self.missing_variables = missing_variables
         self.available_variables = available_variables
         self.agent_name = agent_name
         self.mode = mode
         self.cause = cause
+        self.namespace_context = namespace_context or {}
+        self.template_line = template_line
 
         msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
         super().__init__(msg)
