@@ -396,17 +396,27 @@ class PromptPreparationService:
             ) from e
         except Exception as e:
             logger.debug("Error rendering prompt template: %s", e)
+
+            # Build namespace-aware context (grouped by namespace)
+            namespace_context = {}
             available_refs = []
 
-            def _collect_available_refs(prefix: str, value: Any) -> None:
+            def _collect_refs_with_namespace(prefix: str, value: Any) -> None:
                 if prefix:
                     available_refs.append(prefix)
+                    # Track by namespace (top-level key)
+                    parts = prefix.split(".", 1)
+                    ns = parts[0]
+                    if ns not in namespace_context:
+                        namespace_context[ns] = []
+                    if len(parts) > 1:
+                        namespace_context[ns].append(parts[1])
                 if isinstance(value, dict):
                     for child_key, child_value in value.items():
                         child_prefix = f"{prefix}.{child_key}" if prefix else child_key
-                        _collect_available_refs(child_prefix, child_value)
+                        _collect_refs_with_namespace(child_prefix, child_value)
 
-            _collect_available_refs("", prompt_context)
+            _collect_refs_with_namespace("", prompt_context)
 
             error_str = str(e)
             missing = []
@@ -426,6 +436,7 @@ class PromptPreparationService:
                 agent_name=agent_name,
                 mode=mode,
                 cause=e,
+                namespace_context=namespace_context,
             ) from e
 
     @staticmethod
