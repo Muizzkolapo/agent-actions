@@ -23,6 +23,7 @@ You can run inspect commands from any subdirectory within your project.
 | `dependencies` | Analyze workflow dependencies and auto-inferred context |
 | `graph` | Show workflow structure as a visual dependency graph |
 | `action` | Show detailed information about a specific action |
+| `context` | Show context debug information for a specific action |
 
 ## inspect dependencies
 
@@ -119,6 +120,44 @@ agac inspect action -a my_workflow generate_question
 agac inspect action -a my_workflow generate_question --json
 ```
 
+## inspect context
+
+**Debug context data availability for an action**
+
+Shows what data namespaces, template variables, and context scope rules would be available during template rendering for a specific action. This helps you understand what data is available without running the workflow.
+
+```bash
+agac inspect context -a <workflow-name> <action-name> [options]
+```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `-a, --agent TEXT` | Workflow name (required) |
+| `-u, --user-code` | Path to user code directory |
+| `--json` | Output as JSON |
+
+**Example:**
+```bash
+agac inspect context -a my_workflow generate_question
+```
+
+The output shows:
+- **Namespaces loaded**: Available data namespaces (source, dependencies, loop, workflow)
+- **Context scope applied**: Which fields are observed, passed through, or dropped
+- **Template variables available**: Variables you can use in your prompt templates
+- **Dependencies**: Input sources and context sources
+
+### JSON Output
+
+```bash
+agac inspect context -a my_workflow generate_question --json
+```
+
+:::tip Debugging Template Errors
+If you're getting "undefined variable" errors in your templates, use `inspect context` to see exactly what variables are available for that action.
+:::
+
 ## Use Cases
 
 ### Debugging Dependency Issues
@@ -145,6 +184,16 @@ agac inspect graph -a my_workflow --json | jq '.execution_order'
 ```bash
 # Check if context fields are correctly inferred
 agac inspect dependencies -a my_workflow --json
+```
+
+### Debugging Template Variable Issues
+
+```bash
+# See what variables are available for an action
+agac inspect context -a my_workflow problematic_action
+
+# Check if specific fields are accessible
+agac inspect context -a my_workflow problematic_action --json | jq '.namespaces'
 ```
 
 ## See Also

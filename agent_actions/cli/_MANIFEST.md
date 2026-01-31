@@ -30,13 +30,16 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the init command. | - |
 | `init` | Function | Initialize a new Agent Actions project. | - |
 | `inspect.py` | Module | Inspect commands for the Agent Actions CLI. | `cli`, `errors`, `orchestration`, `prompt_generation`, `response_processing`, `services`, `utilities`, `validation` |
-| `FieldFlowCommand` | Class | Implementation of the field-flow inspection command. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the field-flow command. | - |
-| `inspect` | Function | Inspect workflow structure and data flow. | - |
-| `field_flow` | Function | Trace and visualize data flow through a workflow. | - |
-| `ConflictsCommand` | Class | Implementation of the conflicts inspection command. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the conflicts command. | - |
-| `conflicts` | Function | Detect field name conflicts in a workflow. | - |
+| `BaseInspectCommand` | Class | Base class for inspect commands with common functionality. | - |
+| `DependenciesCommand` | Class | Show dependency analysis in table format. | - |
+| `GraphCommand` | Class | Show workflow structure as a visual dependency graph. | - |
+| `ActionCommand` | Class | Show detailed information about a single action. | - |
+| `ContextCommand` | Class | Show context debug information for a specific action. | - |
+| `inspect` | Function | Inspect workflow structure and data flow (command group). | - |
+| `dependencies` | Function | Analyze workflow dependencies and auto-inferred context. | - |
+| `graph` | Function | Show workflow structure as a dependency graph. | - |
+| `action` | Function | Show details for a specific action. | - |
+| `context` | Function | Show context debug information for a specific action. | - |
 | `list_udfs.py` | Module | list-udfs command for the Agent Actions CLI. | `cli`, `input_loading`, `utilities` |
 | `ListUDFsCommand` | Class | Implementation of the list-udfs command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the list-udfs command. | - |
