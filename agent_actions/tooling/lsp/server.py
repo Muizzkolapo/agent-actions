@@ -7,6 +7,8 @@ from typing import Optional
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
 from .indexer import build_index, find_project_root
 from .models import Location, ProjectIndex, ReferenceType
 from .resolver import get_reference_at_position, resolve_reference
@@ -593,6 +595,12 @@ def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagn
 
         if reference.type == ReferenceType.CONTEXT_FIELD:
             action_name, field = _split_context_reference(reference.value)
+
+            # Skip validation for special namespaces (source, loop, workflow, seed, etc.)
+            # These are built-in data sources, not user-defined actions
+            if action_name in SPECIAL_NAMESPACES:
+                continue
+
             action_location = index.get_action(action_name, file_path)
             if not action_location:
                 diagnostics.append(
@@ -604,7 +612,10 @@ def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagn
                     )
                 )
                 continue
-            if field:
+
+            # Skip field validation for wildcard pattern (action.*)
+            # The * means "all fields from this action's output"
+            if field and field != "*":
                 schema_fields = _get_action_schema_fields(index, file_path, action_name)
                 if schema_fields and field not in schema_fields:
                     diagnostics.append(
