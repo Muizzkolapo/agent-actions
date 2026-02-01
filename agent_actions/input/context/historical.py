@@ -4,8 +4,12 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, TYPE_CHECKING
+
 from agent_actions.cli.utils.service_logger import ServiceLogger
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +34,8 @@ class HistoricalDataRequest:
     root_target_id: Optional[str] = None
     # Output directory for SQLite fallback (optional)
     output_directory: Optional[str] = None
+    # Storage backend for querying from SQLite/TinyDB
+    storage_backend: Optional["StorageBackend"] = None
 
 
 class HistoricalNodeDataLoader:
@@ -122,18 +128,34 @@ class HistoricalNodeDataLoader:
             )
 
             if not target_path.exists():
-                # No fallback - data must be in storage backend (configured separately)
-                logger.debug(
-                    "Target file does not exist: %s. "
-                    "Historical data should be loaded via storage backend.",
-                    target_path,
-                )
-                return None
-
-            # Load from JSON file (legacy path - storage backend preferred)
-            logger.debug("[DEBUG] Loading file: %s", target_path)
-            with open(target_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                # Try loading from storage backend if available
+                if request.storage_backend is not None:
+                    logger.debug(
+                        "Target file does not exist: %s. Attempting to load from storage backend.",
+                        target_path,
+                    )
+                    data = HistoricalNodeDataLoader._load_from_storage_backend(
+                        request.storage_backend,
+                        request.action_name,
+                        request.file_path,
+                    )
+                    if data is None:
+                        logger.debug(
+                            "No data found in storage backend for action '%s'",
+                            request.action_name,
+                        )
+                        return None
+                else:
+                    logger.debug(
+                        "Target file does not exist: %s and no storage backend configured.",
+                        target_path,
+                    )
+                    return None
+            else:
+                # Load from JSON file (legacy path - storage backend preferred)
+                logger.debug("[DEBUG] Loading file: %s", target_path)
+                with open(target_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
 
             logger.debug("[DEBUG] File loaded, %s records found", len(data))
 
@@ -258,6 +280,62 @@ class HistoricalNodeDataLoader:
         target_file = target_dir / file_name
 
         return target_file
+
+    @staticmethod
+    def _load_from_storage_backend(
+        storage_backend: "StorageBackend",
+        action_name: str,
+        file_path: str,
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Load target data from the storage backend.
+
+        Args:
+            storage_backend: Storage backend instance (SQLite, TinyDB, etc.)
+            action_name: Name of the action/node to load from
+            file_path: Current file path (used to derive relative_path)
+
+        Returns:
+            List of records from storage, or None if not found
+        """
+        from pathlib import Path as PathLib
+
+        try:
+            # Derive relative_path from file_path
+            # file_path is typically: .../target/{action_name}/{relative}.json
+            # Use full filename (with extension) to match how write_target stores data
+            file_name = PathLib(file_path).name  # e.g., "batch_0.json" from ".../batch_0.json"
+
+            logger.debug(
+                "[STORAGE_BACKEND] Loading from storage: node_name=%s, relative_path=%s",
+                action_name,
+                file_name,
+            )
+
+            data = storage_backend.read_target(
+                node_name=action_name,
+                relative_path=file_name,
+            )
+            logger.debug(
+                "[STORAGE_BACKEND] Loaded %d records for %s/%s",
+                len(data) if data else 0,
+                action_name,
+                file_name,
+            )
+            return data
+        except FileNotFoundError:
+            logger.debug(
+                "[STORAGE_BACKEND] No data found for %s/%s",
+                action_name,
+                file_name if "file_name" in dir() else "unknown",
+            )
+            return None
+        except Exception as e:
+            logger.warning(
+                "[STORAGE_BACKEND] Error loading from storage backend: %s",
+                e,
+            )
+            return None
 
     @staticmethod
     def _lineages_match(

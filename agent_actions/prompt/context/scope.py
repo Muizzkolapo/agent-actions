@@ -9,8 +9,11 @@ Processes context_scope directives: static_data, observe, drop, passthrough.
 
 import json
 import logging
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, TYPE_CHECKING
 from copy import deepcopy
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
@@ -801,12 +804,24 @@ class ContextScopeProcessor:
         parent_target_id: Optional[str] = None,
         root_target_id: Optional[str] = None,
         output_directory: Optional[str] = None,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> Optional[Dict]:
         """
-        Load historical node data from saved files.
+        Load historical node data from saved files or storage backend.
 
         Uses HistoricalNodeDataLoader with HistoricalDataRequest.
         Returns content dict or None if not found.
+
+        Args:
+            action_name: Name of the action to load historical data for
+            lineage: Lineage chain of the current record
+            source_guid: Source GUID to match
+            file_path: Path to the current file being processed
+            agent_indices: Mapping of action names to their indices
+            parent_target_id: Optional parent target ID for ancestry matching
+            root_target_id: Optional root target ID for Map-Reduce matching
+            output_directory: Optional output directory (legacy, unused)
+            storage_backend: Optional storage backend for SQLite/TinyDB queries
         """
         from agent_actions.input.context.historical import (
             HistoricalNodeDataLoader,
@@ -823,6 +838,7 @@ class ContextScopeProcessor:
             parent_target_id=parent_target_id,
             root_target_id=root_target_id,
             output_directory=output_directory,
+            storage_backend=storage_backend,
         )
 
         return HistoricalNodeDataLoader.load_historical_node_data(request)
@@ -1041,6 +1057,7 @@ class ContextScopeProcessor:
         file_path: Optional[str] = None,
         context_scope: Optional[Dict] = None,
         output_directory: Optional[str] = None,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> Dict:
         """
         Build field context with explicit namespace structure.
@@ -1073,6 +1090,8 @@ class ContextScopeProcessor:
             current_item: Current record being processed (has lineage, content)
             file_path: Path to current file
             context_scope: Controls which fields to load (progressive data exposure)
+            output_directory: Optional output directory (legacy, unused)
+            storage_backend: Optional storage backend for loading historical data from SQLite/TinyDB
 
         Returns:
             Dict with namespaces: source, {dep_names}, loop, workflow
@@ -1277,6 +1296,7 @@ class ContextScopeProcessor:
                         parent_target_id=current_item.get("parent_target_id"),
                         root_target_id=current_item.get("root_target_id"),
                         output_directory=output_directory,
+                        storage_backend=storage_backend,
                     )
 
                     if historical_data is None:

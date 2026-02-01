@@ -147,7 +147,8 @@ class BatchProcessingService:
             # Save source data before writing output
             if self._source_handler:
                 self._source_handler.save_task_source(
-                    main_output, file_path, base_directory, output_directory
+                    main_output, file_path, base_directory, output_directory,
+                    storage_backend=self._storage_backend,
                 )
 
             # Write output files
