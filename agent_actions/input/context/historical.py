@@ -9,9 +9,6 @@ from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)
 
-# Maximum directory depth to search for SQLite database
-_MAX_SQLITE_SEARCH_DEPTH = 5
-
 
 @dataclass
 class HistoricalDataRequest:
@@ -125,20 +122,18 @@ class HistoricalNodeDataLoader:
             )
 
             if not target_path.exists():
-                # Try SQLite fallback - find database in target directory
-                data = HistoricalNodeDataLoader._try_load_from_sqlite(
-                    request.action_name,
-                    Path(request.file_path).name,
-                    request.output_directory,
+                # No fallback - data must be in storage backend (configured separately)
+                logger.debug(
+                    "Target file does not exist: %s. "
+                    "Historical data should be loaded via storage backend.",
+                    target_path,
                 )
-                if data is None:
-                    logger.warning("Target file does not exist and no SQLite fallback: %s", target_path)
-                    return None
-            else:
-                # Load from JSON file
-                logger.debug("[DEBUG] Loading file: %s", target_path)
-                with open(target_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                return None
+
+            # Load from JSON file (legacy path - storage backend preferred)
+            logger.debug("[DEBUG] Loading file: %s", target_path)
+            with open(target_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
 
             logger.debug("[DEBUG] File loaded, %s records found", len(data))
 
@@ -442,145 +437,3 @@ class HistoricalNodeDataLoader:
         )
         return None
 
-    @staticmethod
-    def _validate_db_path(db_path: "Path", allowed_roots: "List[Path]") -> bool:
-        """
-        Validate that a database path is within allowed directories.
-
-        Prevents path traversal attacks by ensuring the resolved path
-        is within one of the allowed root directories.
-
-        Args:
-            db_path: Path to the database file
-            allowed_roots: List of allowed parent directories
-
-        Returns:
-            True if path is valid and within allowed roots
-        """
-        try:
-            resolved = db_path.resolve()
-            # Check that resolved path is within one of the allowed roots
-            for root in allowed_roots:
-                try:
-                    resolved.relative_to(root.resolve())
-                    return True
-                except ValueError:
-                    continue
-            return False
-        except (OSError, RuntimeError):
-            # Handle permission errors, symlink loops, etc.
-            return False
-
-    @staticmethod
-    def _try_load_from_sqlite(
-        action_name: str, filename: str, output_directory: Optional[str] = None
-    ) -> Optional[List[Dict]]:
-        """
-        Try to load historical data from SQLite database.
-
-        Searches for a .db file in standard workflow locations and queries
-        the target_data table for the specified action.
-
-        Security: Database paths are validated to be within allowed directories
-        to prevent path traversal attacks.
-
-        Args:
-            action_name: Name of the action to load data for
-            filename: Original filename (e.g., "books_sample.json")
-            output_directory: Optional output directory path for database lookup
-
-        Returns:
-            List of records from SQLite, or None if not found
-        """
-        import sqlite3
-        from pathlib import Path
-        import os
-
-        search_patterns = []
-        allowed_roots = []
-
-        # First priority: derive from output_directory if provided
-        if output_directory:
-            output_path = Path(output_directory)
-            # Output directory is typically: .../agent_io/target/{action_name}
-            # Database is at: .../agent_io/target/{workflow_name}.db
-            if "target" in output_path.parts:
-                target_idx = list(output_path.parts).index("target")
-                target_dir = Path(*output_path.parts[: target_idx + 1])
-                if target_dir.exists():
-                    search_patterns.append(target_dir)
-                    # Allow agent_io directory as root for validation
-                    agent_io_dir = target_dir.parent
-                    if agent_io_dir.exists():
-                        allowed_roots.append(agent_io_dir)
-
-        # Fallback: check current working directory structure
-        cwd = Path(os.getcwd())
-        allowed_roots.append(cwd)  # Allow cwd and descendants
-
-        # Check multiple levels up (bounded by constant)
-        current = cwd
-        for _ in range(_MAX_SQLITE_SEARCH_DEPTH):
-            target_dir = current / "agent_io" / "target"
-            if target_dir.exists() and target_dir not in search_patterns:
-                search_patterns.append(target_dir)
-                # Add agent_io as allowed root
-                allowed_roots.append(target_dir.parent)
-            current = current.parent
-            if current == current.parent:  # Reached filesystem root
-                break
-
-        # Search for .db files in discovered directories
-        for pattern_base in search_patterns:
-            if not pattern_base.exists():
-                continue
-            for db_file in pattern_base.glob("*.db"):
-                # Security: Validate path is within allowed directories
-                if not HistoricalNodeDataLoader._validate_db_path(db_file, allowed_roots):
-                    logger.warning(
-                        "[SQLite FALLBACK] Skipping database outside allowed paths: %s",
-                        db_file,
-                    )
-                    continue
-
-                conn = None
-                try:
-                    conn = sqlite3.connect(str(db_file), timeout=5.0)
-                    conn.row_factory = sqlite3.Row
-                    cursor = conn.cursor()
-
-                    # Query for the action's data (parameterized to prevent SQL injection)
-                    cursor.execute(
-                        "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
-                        (action_name, filename),
-                    )
-                    row = cursor.fetchone()
-
-                    if row:
-                        data = json.loads(row["data"])
-                        logger.debug(
-                            "[SQLite FALLBACK] Loaded %d records for %s from %s",
-                            len(data) if isinstance(data, list) else 1,
-                            action_name,
-                            db_file,
-                        )
-                        return data if isinstance(data, list) else [data]
-                except sqlite3.Error as e:
-                    logger.warning(
-                        "[SQLite FALLBACK] Database error loading from %s: %s",
-                        db_file,
-                        e,
-                    )
-                except json.JSONDecodeError as e:
-                    logger.warning(
-                        "[SQLite FALLBACK] JSON decode error for %s in %s: %s",
-                        action_name,
-                        db_file,
-                        e,
-                    )
-                finally:
-                    if conn is not None:
-                        conn.close()
-
-        logger.debug("[SQLite FALLBACK] No database found for action %s", action_name)
-        return None

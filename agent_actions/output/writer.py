@@ -126,17 +126,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             )
 
-            # Use storage backend if available
-            if self.storage_backend is not None and self.node_name is not None:
-                relative_path = Path(self.file_path).name
-                self.storage_backend.write_target(self.node_name, relative_path, data)
-                bytes_written = len(json.dumps(data))
-            else:
-                # Fall back to JSON file
-                Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
-                with open(self.file_path, "w", encoding="utf-8") as file:
-                    json.dump(data, file, indent=4)
-                bytes_written = Path(self.file_path).stat().st_size
+            # Storage backend is required - no JSON file fallback
+            if self.storage_backend is None or self.node_name is None:
+                raise ValueError(
+                    f"Storage backend not configured for write_target. "
+                    f"Configure a storage backend (sqlite, tinydb) in your workflow. "
+                    f"File: {self.file_path}"
+                )
+            relative_path = Path(self.file_path).name
+            self.storage_backend.write_target(self.node_name, relative_path, data)
+            bytes_written = len(json.dumps(data))
 
             # Fire event after writing
             fire_event(
