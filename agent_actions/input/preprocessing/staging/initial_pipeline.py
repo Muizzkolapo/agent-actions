@@ -688,6 +688,14 @@ def _get_batch_id_from_chunk(data_chunk):
 
 def _write_passthrough_result(output_file_path, result_data, storage_backend=None, node_name=None):
     """Write passthrough result and create marker file."""
+    if storage_backend is None or node_name is None:
+        raise AgentActionsException(
+            "Storage backend is required for passthrough writes.",
+            context={
+                "file_path": str(output_file_path),
+                "node_name": node_name,
+            },
+        )
     file_writer = FileWriter(
         str(output_file_path),
         storage_backend=storage_backend,
@@ -774,6 +782,15 @@ def _process_realtime_mode_with_record_processor(
         ctx.agent_name,
         is_first_stage=True,
     )
+
+    if ctx.storage_backend is None:
+        raise AgentActionsException(
+            "Storage backend is required for realtime initial-stage writes.",
+            context={
+                "file_path": str(output_file_path),
+                "agent_name": ctx.agent_name,
+            },
+        )
 
     # Write output using storage backend (required)
     file_writer = FileWriter(

@@ -812,6 +812,10 @@ class AgentRunner:
                     # Read data from backend
                     data = self.storage_backend.read_target(node_name, relative_path)
 
+                    # TODO: Optimize by passing data directly through pipeline
+                    # Currently writes to temp file because _process_single_file and
+                    # strategy.execute expect file paths. Refactoring would require
+                    # changes to SingleFileProcessParams and all strategy implementations.
                     # Create a temporary file with the data for processing
                     # Using TemporaryDirectory context manager for automatic cleanup
                     with tempfile.TemporaryDirectory() as temp_dir:

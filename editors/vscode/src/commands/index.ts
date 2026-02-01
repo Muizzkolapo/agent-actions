@@ -12,7 +12,7 @@ import * as vscode from 'vscode';
 import { ActionInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
 import { DagWebview } from '../views/dagWebview';
-import { DataPreviewProvider, openDataPreview } from '../providers/dataPreviewProvider';
+import { DataPreviewProvider, openDataPreview, DATA_PREVIEW_SCHEME, createPreviewUri } from '../providers/dataPreviewProvider';
 
 interface CommandContext {
     context: vscode.ExtensionContext;
@@ -51,6 +51,14 @@ export function registerCommands({ context, model, dagWebview, dataPreviewProvid
 
         // Focus the workflow tree view
         vscode.commands.registerCommand('agentActions.showWorkflowTree', showWorkflowTree),
+
+        // Pagination commands for data preview
+        vscode.commands.registerCommand('agentActions.nextPage', () =>
+            navigatePreviewPage(model, 'next')
+        ),
+        vscode.commands.registerCommand('agentActions.previousPage', () =>
+            navigatePreviewPage(model, 'previous')
+        ),
     );
 }
 
@@ -182,6 +190,54 @@ async function goToAction(model: WorkflowModel): Promise<void> {
 async function showWorkflowTree(): Promise<void> {
     await vscode.commands.executeCommand('workbench.view.explorer');
     await vscode.commands.executeCommand('agentActionsWorkflow.focus');
+}
+
+/**
+ * Navigate to next or previous page in data preview
+ */
+async function navigatePreviewPage(model: WorkflowModel, direction: 'next' | 'previous'): Promise<void> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+        vscode.window.showInformationMessage('No active preview document');
+        return;
+    }
+
+    const uri = editor.document.uri;
+    if (uri.scheme !== DATA_PREVIEW_SCHEME) {
+        vscode.window.showInformationMessage('This command only works in data preview documents');
+        return;
+    }
+
+    // Parse current parameters from URI
+    const params = new URLSearchParams(uri.query);
+    const workflowPath = params.get('workflowPath') || '';
+    const workflowName = params.get('workflowName') || '';
+    const actionName = uri.path.replace(/^\//, '').replace(/\.json$/, '');
+    const limit = parseInt(params.get('limit') || '50', 10);
+    const currentOffset = parseInt(params.get('offset') || '0', 10);
+
+    // Calculate new offset
+    const newOffset = direction === 'next'
+        ? currentOffset + limit
+        : Math.max(0, currentOffset - limit);
+
+    if (direction === 'previous' && currentOffset === 0) {
+        vscode.window.showInformationMessage('Already at the first page');
+        return;
+    }
+
+    // Find workflow and action to create new URI
+    const workflows = model.getWorkflows();
+    const workflow = workflows.find((w) => w.name === workflowName && w.rootPath === workflowPath);
+    const action = workflow?.actions.find((a) => a.name === actionName);
+
+    if (!workflow || !action) {
+        vscode.window.showErrorMessage(`Could not find workflow or action for pagination`);
+        return;
+    }
+
+    // Open new preview with updated offset
+    await openDataPreview(workflow, action, limit, newOffset);
 }
 
 /**

@@ -401,8 +401,9 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Dict with records, total_count, node_name, and files
         """
-        # Enforce maximum limit to prevent memory issues
-        limit = min(limit, 1000)
+        # Enforce limits to prevent memory issues and invalid values
+        limit = min(max(1, limit), 1000)
+        offset = max(0, offset)
 
         cursor = self.connection.cursor()
 

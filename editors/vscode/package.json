@@ -151,6 +151,18 @@
         "title": "Show Workflow Navigator",
         "category": "Agent Actions",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Next Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Previous Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-left)"
       }
     ],
     "menus": {

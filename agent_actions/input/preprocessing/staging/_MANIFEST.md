@@ -11,4 +11,4 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Module docstring describing the staging helpers. | `preprocessing` |
-| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, and mode-specific preparation helpers for the first stage pipeline. | `processing`, `output`, `logging` |
+| `initial_pipeline.py` | Module | `process_initial_stage` entry point plus validation, source saving, mode-specific preparation helpers, and storage-backend requirements for first-stage target writes. | `processing`, `output`, `logging` |
