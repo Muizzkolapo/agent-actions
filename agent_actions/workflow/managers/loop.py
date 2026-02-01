@@ -5,15 +5,20 @@ Handles correlation of version iteration outputs for downstream agents
 without breaking existing sequential execution.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from collections import defaultdict
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +38,13 @@ class JsonLoadParams:
 class VersionOutputCorrelator:
     """Correlates outputs from parallel version executions for downstream consumption."""
 
-    def __init__(self, agent_folder: Path):
+    def __init__(
+        self,
+        agent_folder: Path,
+        storage_backend: Optional["StorageBackend"] = None,
+    ):
         self.agent_folder = agent_folder
+        self.storage_backend = storage_backend
         self.correlations_cache = {}
 
     def detect_explicit_version_consumption(
@@ -84,11 +94,24 @@ class VersionOutputCorrelator:
 
     def _load_version_outputs(
         self, version_sources: List[str]
-    ) -> tuple[Dict[str, List[Dict[str, Any]]], set]:
-        """Load outputs from all version sources."""
+    ) -> Tuple[Dict[str, List[Dict[str, Any]]], set]:
+        """Load outputs from all version sources.
+
+        Tries storage backend first (if available), then falls back to filesystem.
+        """
         version_outputs = {}
         version_filenames = set()
+
         for version_agent in version_sources:
+            # Try storage backend first
+            if self.storage_backend is not None:
+                outputs, filenames = self._load_from_storage_backend(version_agent)
+                if outputs:
+                    version_outputs[version_agent] = outputs
+                    version_filenames.update(filenames)
+                    continue
+
+            # Fallback to filesystem
             version_idx = self._find_agent_index(version_agent)
             if version_idx is None:
                 continue
@@ -98,13 +121,76 @@ class VersionOutputCorrelator:
                 outputs, filenames = self._load_agent_outputs_with_filenames(version_output_dir)
                 version_outputs[version_agent] = outputs
                 version_filenames.update(filenames)
+
         return version_outputs, version_filenames
+
+    def _load_from_storage_backend(
+        self, version_agent: str
+    ) -> Tuple[List[Dict[str, Any]], set]:
+        """Load outputs from storage backend for a version agent.
+
+        Args:
+            version_agent: Name of the version agent (e.g., "evaluate_model_1")
+
+        Returns:
+            Tuple of (outputs list, filenames set)
+        """
+        if self.storage_backend is None:
+            return [], set()
+
+        outputs = []
+        filenames = set()
+
+        try:
+            target_files = self.storage_backend.list_target_files(version_agent)
+            if not target_files:
+                logger.debug(
+                    "No target files found in storage backend for %s",
+                    version_agent,
+                )
+                return [], set()
+
+            for relative_path in target_files:
+                try:
+                    data = self.storage_backend.read_target(version_agent, relative_path)
+                    if isinstance(data, list):
+                        for record in data:
+                            record["_source_file"] = relative_path
+                        outputs.extend(data)
+                    else:
+                        data["_source_file"] = relative_path
+                        outputs.append(data)
+                    filenames.add(relative_path)
+                except Exception as e:
+                    logger.warning(
+                        "Failed to read target %s/%s from storage backend: %s",
+                        version_agent,
+                        relative_path,
+                        e,
+                    )
+
+            logger.debug(
+                "Loaded %d records from storage backend for %s (files: %s)",
+                len(outputs),
+                version_agent,
+                list(filenames),
+            )
+            return outputs, filenames
+
+        except Exception as e:
+            logger.warning(
+                "Failed to list target files from storage backend for %s: %s",
+                version_agent,
+                e,
+            )
+            return [], set()
 
     def _process_version_files(
         self,
         version_outputs: Dict[str, List[Dict[str, Any]]],
         version_filenames: set,
         correlation_dir: Path,
+        node_name: str,
     ):
         """Process and correlate outputs by file."""
         for filename in version_filenames:
@@ -115,7 +201,9 @@ class VersionOutputCorrelator:
                     file_version_outputs[version_agent] = file_outputs
             if file_version_outputs:
                 correlated_data = self._correlate_by_source_record(file_version_outputs)
-                self._write_correlated_data(correlation_dir, correlated_data, filename)
+                self._write_correlated_data(
+                    correlation_dir, correlated_data, filename, node_name=node_name
+                )
 
     def prepare_correlated_input(
         self, agent_name: str, version_sources: List[str], _current_idx: int
@@ -140,7 +228,9 @@ class VersionOutputCorrelator:
             if not version_outputs:
                 return None
 
-            self._process_version_files(version_outputs, version_filenames, correlation_dir)
+            self._process_version_files(
+                version_outputs, version_filenames, correlation_dir, node_name=agent_name
+            )
             return str(correlation_dir)
         except (OSError, IOError, ValueError, KeyError) as e:
             logger.exception("Error preparing correlated input for %s: %s", agent_name, e)
@@ -149,9 +239,19 @@ class VersionOutputCorrelator:
     def _find_agent_index(self, agent_name: str) -> Optional[int]:
         """Find the execution index of an agent.
 
-        With simple directory naming, we check if the directory exists.
+        With simple directory naming, we check if the directory or storage backend has data.
         Returns 0 if found (index no longer matters for path construction).
         """
+        # Check storage backend first
+        if self.storage_backend is not None:
+            try:
+                target_files = self.storage_backend.list_target_files(agent_name)
+                if target_files:
+                    return 0  # Data exists in storage backend
+            except Exception:
+                pass  # Fall through to filesystem check
+
+        # Fallback to filesystem check
         target_dir = self.agent_folder / "target"
         if not target_dir.exists():
             return None
@@ -421,8 +521,12 @@ class VersionOutputCorrelator:
         output_dir: Path,
         correlated_data: List[Dict[str, Any]],
         filename: str = "correlated_data.json",
+        node_name: Optional[str] = None,
     ):
-        """Write correlated data to the output directory and create corresponding source data."""
+        """Write correlated data to the output directory and create corresponding source data.
+
+        When storage backend is available, writes to both DB and filesystem for compatibility.
+        """
         if not correlated_data:
             return
         # Use dict comprehension instead of copy()+pop() for efficiency
@@ -431,6 +535,25 @@ class VersionOutputCorrelator:
             {k: v for k, v in record.items() if k not in keys_to_remove}
             for record in correlated_data
         ]
+
+        # Write to storage backend if available
+        if self.storage_backend is not None and node_name:
+            try:
+                self.storage_backend.write_target(node_name, filename, cleaned_data)
+                logger.debug(
+                    "Wrote %d correlated records to storage backend for %s/%s",
+                    len(cleaned_data),
+                    node_name,
+                    filename,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Failed to write correlated data to storage backend for %s: %s",
+                    node_name,
+                    e,
+                )
+
+        # Also write to filesystem for compatibility with existing processing pipeline
         output_file = output_dir / filename
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(cleaned_data, f, indent=2)

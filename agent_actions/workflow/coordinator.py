@@ -203,8 +203,11 @@ class AgentWorkflow:
         self._agent_folder = agent_folder  # Store for retry tracker context
         status_file = agent_folder / ".agent_status.json"
 
-        # Initialize loop correlator
-        loop_correlator = VersionOutputCorrelator(agent_folder)
+        # Initialize loop correlator with storage backend for DB-aware version consumption
+        loop_correlator = VersionOutputCorrelator(
+            agent_folder,
+            storage_backend=agent_runner.storage_backend,
+        )
 
         # Initialize modular components
         state_manager = AgentStateManager(status_file, self.execution_order)
