@@ -9,6 +9,9 @@ from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)
 
+# Maximum directory depth to search for SQLite database
+_MAX_SQLITE_SEARCH_DEPTH = 5
+
 
 @dataclass
 class HistoricalDataRequest:
@@ -465,49 +468,59 @@ class HistoricalNodeDataLoader:
         # Fallback: check current working directory structure
         cwd = Path(os.getcwd())
 
-        # Check multiple levels up
+        # Check multiple levels up (bounded by constant)
         current = cwd
-        for _ in range(5):
+        for _ in range(_MAX_SQLITE_SEARCH_DEPTH):
             target_dir = current / "agent_io" / "target"
             if target_dir.exists() and target_dir not in search_patterns:
                 search_patterns.append(target_dir)
             current = current.parent
+            if current == current.parent:  # Reached filesystem root
+                break
 
-        # Also search for any .db file in agent_io/target directories
+        # Search for .db files in discovered directories
         for pattern_base in search_patterns:
-            if pattern_base.exists():
-                for db_file in pattern_base.glob("*.db"):
-                    try:
-                        conn = sqlite3.connect(str(db_file), timeout=5.0)
-                        conn.row_factory = sqlite3.Row
-                        cursor = conn.cursor()
+            if not pattern_base.exists():
+                continue
+            for db_file in pattern_base.glob("*.db"):
+                conn = None
+                try:
+                    conn = sqlite3.connect(str(db_file), timeout=5.0)
+                    conn.row_factory = sqlite3.Row
+                    cursor = conn.cursor()
 
-                        # Query for the action's data
-                        # Try with filename first, then without
-                        cursor.execute(
-                            "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
-                            (action_name, filename),
-                        )
-                        row = cursor.fetchone()
-                        conn.close()
+                    # Query for the action's data
+                    cursor.execute(
+                        "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
+                        (action_name, filename),
+                    )
+                    row = cursor.fetchone()
 
-                        if row:
-                            import json
-                            data = json.loads(row["data"])
-                            logger.debug(
-                                "[SQLite FALLBACK] Loaded %d records for %s from %s",
-                                len(data) if isinstance(data, list) else 1,
-                                action_name,
-                                db_file,
-                            )
-                            return data if isinstance(data, list) else [data]
-                    except (sqlite3.Error, json.JSONDecodeError) as e:
+                    if row:
+                        data = json.loads(row["data"])
                         logger.debug(
-                            "[SQLite FALLBACK] Failed to load from %s: %s",
+                            "[SQLite FALLBACK] Loaded %d records for %s from %s",
+                            len(data) if isinstance(data, list) else 1,
+                            action_name,
                             db_file,
-                            e,
                         )
-                        continue
+                        return data if isinstance(data, list) else [data]
+                except sqlite3.Error as e:
+                    logger.warning(
+                        "[SQLite FALLBACK] Database error loading from %s: %s",
+                        db_file,
+                        e,
+                    )
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "[SQLite FALLBACK] JSON decode error for %s in %s: %s",
+                        action_name,
+                        db_file,
+                        e,
+                    )
+                finally:
+                    if conn is not None:
+                        conn.close()
 
         logger.debug("[SQLite FALLBACK] No database found for action %s", action_name)
         return None

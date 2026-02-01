@@ -121,7 +121,7 @@ class FolderNode extends vscode.TreeItem {
  */
 class DataPreviewNode extends vscode.TreeItem {
     constructor(public readonly action: ActionInfo) {
-        super('\uD83D\uDDC3\uFE0F Preview Data', vscode.TreeItemCollapsibleState.None);
+        super('Preview Data', vscode.TreeItemCollapsibleState.None);
         this.contextValue = 'agentActions.dataPreview';
         this.iconPath = new vscode.ThemeIcon('database');
         this.tooltip = `Preview data from storage backend for ${action.name}`;

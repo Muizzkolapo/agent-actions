@@ -272,7 +272,7 @@ try:
             offset=args.get('offset', 0),
         )
         result['storagePath'] = str(backend.db_path) if hasattr(backend, 'db_path') else workflow_path
-        result['backendType'] = 'sqlite'  # TODO: Get from backend type
+        result['backendType'] = backend.backend_type
         print(json.dumps(result, ensure_ascii=False, default=str))
 
     elif command == 'list_actions':
@@ -281,7 +281,7 @@ try:
 
     elif command == 'stats':
         stats = backend.get_storage_stats()
-        stats['backendType'] = 'sqlite'  # TODO: Get from backend type
+        stats['backendType'] = backend.backend_type
         print(json.dumps(stats, ensure_ascii=False, default=str))
 
     backend.close()

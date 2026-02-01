@@ -154,6 +154,50 @@ class AgentExecutor:
             return False
         return self.deps == other.deps
 
+    def _verify_completion_status(self, agent_name: str) -> tuple:
+        """
+        Verify if a completed agent has actual output in storage.
+
+        Args:
+            agent_name: Name of the agent to verify
+
+        Returns:
+            Tuple of (should_skip: bool, result: Optional[AgentExecutionResult])
+            - If should_skip is True, return the result
+            - If should_skip is False, agent should be re-run
+        """
+        storage_backend = getattr(self.deps.agent_runner, "storage_backend", None)
+        if storage_backend is not None:
+            try:
+                target_files = storage_backend.list_target_files(agent_name)
+                if not target_files:
+                    logger.info(
+                        "Agent %s completed but no output in storage - re-running",
+                        agent_name,
+                    )
+                    self.deps.state_manager.update_status(agent_name, "pending")
+                    return (False, None)
+                return (
+                    True,
+                    AgentExecutionResult(
+                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
+                    ),
+                )
+            except Exception as e:
+                logger.warning("Failed to verify output for %s: %s", agent_name, e)
+                return (
+                    True,
+                    AgentExecutionResult(
+                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
+                    ),
+                )
+        return (
+            True,
+            AgentExecutionResult(
+                success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
+            ),
+        )
+
     def execute_agent_sync(
         self, agent_name: str, *, agent_idx: int, agent_config: Dict[str, Any], is_last_agent: bool
     ) -> AgentExecutionResult:
@@ -185,30 +229,9 @@ class AgentExecutor:
 
         # Check 1: Already completed - verify output exists in storage backend
         if current_status == "completed":
-            storage_backend = getattr(self.deps.agent_runner, "storage_backend", None)
-            if storage_backend is not None:
-                try:
-                    target_files = storage_backend.list_target_files(agent_name)
-                    if not target_files:
-                        logger.info(
-                            "Agent %s completed but no output in storage - re-running",
-                            agent_name,
-                        )
-                        self.deps.state_manager.update_status(agent_name, "pending")
-                        current_status = "pending"
-                    else:
-                        return AgentExecutionResult(
-                            success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                        )
-                except Exception as e:
-                    logger.warning("Failed to verify output for %s: %s", agent_name, e)
-                    return AgentExecutionResult(
-                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                    )
-            else:
-                return AgentExecutionResult(
-                    success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                )
+            should_skip, result = self._verify_completion_status(agent_name)
+            if should_skip:
+                return result
 
         # Check 2: Batch job submitted, check status
         if current_status == "batch_submitted":
@@ -294,30 +317,9 @@ class AgentExecutor:
 
         # Check 1: Already completed - verify output exists in storage backend
         if current_status == "completed":
-            storage_backend = getattr(self.deps.agent_runner, "storage_backend", None)
-            if storage_backend is not None:
-                try:
-                    target_files = storage_backend.list_target_files(agent_name)
-                    if not target_files:
-                        logger.info(
-                            "Agent %s completed but no output in storage - re-running",
-                            agent_name,
-                        )
-                        self.deps.state_manager.update_status(agent_name, "pending")
-                        current_status = "pending"
-                    else:
-                        return AgentExecutionResult(
-                            success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                        )
-                except Exception as e:
-                    logger.warning("Failed to verify output for %s: %s", agent_name, e)
-                    return AgentExecutionResult(
-                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                    )
-            else:
-                return AgentExecutionResult(
-                    success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                )
+            should_skip, result = self._verify_completion_status(agent_name)
+            if should_skip:
+                return result
 
         # Check 2: Batch job submitted, check status
         if current_status == "batch_submitted":

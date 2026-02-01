@@ -4,7 +4,7 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from agent_actions.storage.backend import StorageBackend
 
@@ -70,7 +70,12 @@ class SQLiteBackend(StorageBackend):
         """
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
-        self._connection: sqlite3.Connection | None = None
+        self._connection: Optional[sqlite3.Connection] = None
+
+    @property
+    def backend_type(self) -> str:
+        """Return the backend type identifier."""
+        return "sqlite"
 
     @property
     def connection(self) -> sqlite3.Connection:
@@ -342,7 +347,7 @@ class SQLiteBackend(StorageBackend):
         node_name: str,
         limit: int = 10,
         offset: int = 0,
-        relative_path: str | None = None,
+        relative_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Preview target data for a node with pagination.

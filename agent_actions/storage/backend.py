@@ -1,7 +1,7 @@
 """Abstract storage backend interface for extensible data persistence."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 class StorageBackend(ABC):
@@ -19,6 +19,17 @@ class StorageBackend(ABC):
     File paths are relative to the workflow's agent_io directory,
     maintaining compatibility with the existing JSON file structure.
     """
+
+    @property
+    @abstractmethod
+    def backend_type(self) -> str:
+        """
+        Return the backend type identifier.
+
+        Returns:
+            str: Backend type (e.g., 'sqlite', 's3', 'duckdb')
+        """
+        ...
 
     @abstractmethod
     def initialize(self) -> None:
@@ -145,7 +156,7 @@ class StorageBackend(ABC):
         node_name: str,
         limit: int = 10,
         offset: int = 0,
-        relative_path: str | None = None,
+        relative_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Preview target data for a node with pagination.

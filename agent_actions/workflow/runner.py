@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Tuple, Dict, Optional, List
@@ -456,8 +459,6 @@ class AgentRunner:
         Returns:
             List of merged records, correlated by the reduce key
         """
-        import json
-
         # Collect all records from all files
         all_records = []
         for file_path in file_paths:
@@ -672,8 +673,6 @@ class AgentRunner:
         Returns:
             Count of files processed
         """
-        import json
-
         output_path = Path(params.output_directory)
         files_by_path = self._collect_files_from_upstream(params.upstream_data_dirs)
         files_processed_count = 0
@@ -778,9 +777,6 @@ class AgentRunner:
         Returns:
             Count of files processed
         """
-        import json
-        import tempfile
-
         if self.storage_backend is None:
             return 0
 
@@ -808,6 +804,7 @@ class AgentRunner:
                 continue
 
             for relative_path in target_files:
+                temp_dir = None
                 try:
                     # Read data from backend
                     data = self.storage_backend.read_target(node_name, relative_path)
@@ -837,10 +834,6 @@ class AgentRunner:
                     )
                     files_processed_count += 1
 
-                    # Clean up temp file
-                    import shutil
-                    shutil.rmtree(temp_dir, ignore_errors=True)
-
                 except Exception as e:
                     logger.warning(
                         "Failed to process backend entry %s/%s: %s",
@@ -848,6 +841,10 @@ class AgentRunner:
                         relative_path,
                         e,
                     )
+                finally:
+                    # Always clean up temp directory
+                    if temp_dir is not None:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
 
         return files_processed_count
 
