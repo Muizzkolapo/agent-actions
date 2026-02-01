@@ -18,10 +18,20 @@ agent_workflow/
     │   └── my_workflow.yml    # Workflow definition
     ├── agent_io/
     │   ├── staging/           # Input data (starting point)
-    │   ├── source/            # Metadata tracking staging files
-    │   └── target/            # Output data
+    │   ├── source/            # Metadata tracking staging files (JSON mode)
+    │   ├── target/            # Output data (JSON mode)
+    │   └── my_workflow.db     # SQLite database (database mode)
     └── seed_data/             # Static reference data
 ```
+
+:::tip Storage Backend
+Agent Actions supports two storage modes for source and target data:
+
+- **JSON mode** (default): Individual JSON files in `source/` and `target/` directories
+- **SQLite mode**: All data in a single `{workflow}.db` database file
+
+SQLite mode offers better query performance, built-in deduplication, and atomic writes. Staging data always remains as JSON files regardless of mode.
+:::
 
 ### staging/
 
@@ -44,7 +54,7 @@ Metadata layer that tracks what's in staging:
 
 ### target/
 
-Outputs organized by action:
+Outputs organized by action. In JSON mode:
 
 ```
 agent_io/target/
@@ -55,6 +65,8 @@ agent_io/target/
 └── node_2_summarize/
     └── document_1.json
 ```
+
+In SQLite mode, the same data is stored in the `target_data` table with `node_name` and `relative_path` columns.
 
 ## Data Flow
 
@@ -78,6 +90,43 @@ Here is what happens at each stage:
 5. Filenames preserved through the agentic workflow
 
 Notice that filenames stay consistent across all stages. The `source/` layer provides lineage tracking—you can trace any output back to its original staging file, which is essential for debugging and auditing.
+
+## Storage Backend
+
+Agent Actions uses a pluggable storage backend system for source and target data. The default SQLite backend stores all workflow data in a single database file.
+
+### SQLite Database Schema
+
+The database contains two main tables:
+
+| Table | Purpose |
+|-------|---------|
+| `source_data` | Stores source records with deduplication by `source_guid` |
+| `target_data` | Stores action outputs organized by `node_name` |
+
+### Querying the Database
+
+You can inspect workflow data directly using SQLite:
+
+```bash
+sqlite3 my_workflow/agent_io/my_workflow.db
+
+-- List all actions with output
+SELECT DISTINCT node_name FROM target_data;
+
+-- Count records per action
+SELECT node_name, SUM(record_count) FROM target_data GROUP BY node_name;
+
+-- Preview data from an action
+SELECT data FROM target_data WHERE node_name = 'extract_facts' LIMIT 1;
+```
+
+### Benefits
+
+- **Performance**: Indexed queries for fast data access
+- **Integrity**: ACID transactions prevent partial writes
+- **Deduplication**: Automatic source_guid-based deduplication
+- **Concurrency**: WAL mode enables concurrent reads
 
 ## Learn More
 
