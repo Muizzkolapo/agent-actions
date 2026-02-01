@@ -72,6 +72,7 @@ class BatchProcessingContext:
     base_directory: str
     output_directory: str
     idx: int = 0
+    storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
 def _save_source_items_helper(
@@ -290,6 +291,7 @@ def process_initial_stage(ctx: InitialStageContext):
             base_directory=ctx.base_directory,
             output_directory=ctx.output_directory,
             idx=ctx.idx,
+            storage_backend=ctx.storage_backend,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -725,7 +727,12 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if isinstance(result, dict) and result.get("type") == "passthrough":
-        _write_passthrough_result(output_file_path, result["data"])  # Batch mode doesn't use storage_backend yet
+        _write_passthrough_result(
+            output_file_path,
+            result["data"],
+            storage_backend=ctx.storage_backend,
+            node_name=ctx.agent_name,
+        )
     else:
         _write_batch_placeholder(output_file_path, local_batch_id, result, ctx.agent_name)
 
@@ -739,9 +746,7 @@ def _process_realtime_mode_with_record_processor(
     """
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
-    # Only create directory if not using storage backend
-    if ctx.storage_backend is None:
-        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    # No directory creation - storage backend is required
 
     # Initialize RecordProcessor
     processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
@@ -770,7 +775,7 @@ def _process_realtime_mode_with_record_processor(
         is_first_stage=True,
     )
 
-    # Write output using storage backend if available
+    # Write output using storage backend (required)
     file_writer = FileWriter(
         str(output_file_path),
         storage_backend=ctx.storage_backend,
