@@ -7,7 +7,7 @@ and provides factory methods for creating key application components.
 
 import datetime
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from agent_actions.config.di.configurator import DIConfigurator, ConfigurationProfile
 from agent_actions.config.interfaces import (
@@ -29,6 +29,9 @@ from agent_actions.prompt.data_generator import DataGenerator
 
 from agent_actions.workflow.runner import AgentRunner
 
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,17 +52,26 @@ class ApplicationContainer:
         self.container = DIConfigurator.configure_container(config)
         self.processor_factory = DIConfigurator.create_processor_factory(self.container)
 
-    def get_agent_runner(self, use_tools: bool = True) -> AgentRunner:
+    def get_agent_runner(
+        self,
+        use_tools: bool = True,
+        storage_backend: Optional["StorageBackend"] = None,
+    ) -> AgentRunner:
         """
         Create an AgentRunner with all dependencies injected.
 
         Args:
             use_tools: Whether the agent runner should use tools.
+            storage_backend: Optional storage backend for data persistence.
 
         Returns:
             Configured AgentRunner instance.
         """
-        return AgentRunner(use_tools=use_tools, processor_factory=self.processor_factory)
+        return AgentRunner(
+            use_tools=use_tools,
+            processor_factory=self.processor_factory,
+            storage_backend=storage_backend,
+        )
 
     def get_processor_factory(self) -> ProcessorFactory:
         """

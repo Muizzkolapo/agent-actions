@@ -6,7 +6,7 @@ and generating outputs based on the agent's position in a workflow.
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, TYPE_CHECKING
 import asyncio
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
@@ -17,6 +17,7 @@ from agent_actions.config.di.container import ProcessorFactory
 
 if TYPE_CHECKING:
     from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
+    from agent_actions.storage.backend import StorageBackend
 
 
 @dataclass
@@ -30,6 +31,7 @@ class StrategyExecutionParams:
     output_directory: str
     idx: int
     agent_configs: Optional[Dict[str, Dict]] = None
+    storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
 class AgentStrategy(ABC):
@@ -87,6 +89,7 @@ class AgentStrategy(ABC):
             idx=params.idx,
             processor_factory=self.processor_factory,
             agent_configs=params.agent_configs,
+            storage_backend=params.storage_backend,
         )
         result = pipeline.process(params.file_path, params.base_directory, params.output_directory)
         if asyncio.iscoroutine(result):
@@ -131,6 +134,7 @@ class InitialStrategy(AgentStrategy):
                 base_directory=params.base_directory,
                 output_directory=params.output_directory,
                 idx=params.idx,
+                storage_backend=params.storage_backend,
             )
         )
 

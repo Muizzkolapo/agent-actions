@@ -1,7 +1,10 @@
 """Batch source data persistence handler."""
 
 from pathlib import Path
-from typing import Dict, List, Any, Union
+from typing import Dict, List, Any, Union, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 
 class BatchSourceHandler:
@@ -18,6 +21,7 @@ class BatchSourceHandler:
         file_path: str,
         base_directory: str,
         _output_directory: str,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> None:
         """
         Save task source data using unified source saver.
@@ -56,9 +60,11 @@ class BatchSourceHandler:
             # Fallback to going up 3 levels
             workflow_root = base_path.parent.parent.parent
 
-        # Use unified saver with batch mode settings (locking + deduplication)
+        # Use unified saver with batch mode settings (deduplication enabled)
         saver = UnifiedSourceDataSaver(
-            base_directory=str(workflow_root), enable_deduplication=True, enable_locking=True
+            base_directory=str(workflow_root),
+            enable_deduplication=True,
+            storage_backend=storage_backend,
         )
 
         # Save source items (relative_path without extension for consistency)

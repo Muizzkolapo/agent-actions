@@ -1,0 +1,412 @@
+/**
+ * Storage Backend Reader for Data Preview
+ *
+ * Provides read-only access to any storage backend (SQLite, S3, DuckDB, etc.)
+ * for previewing action output data in VS Code.
+ *
+ * Uses the Python storage backend API for backend-agnostic data access.
+ */
+
+import * as vscode from 'vscode';
+import { resolvePythonPath } from './python';
+
+/**
+ * Preview result with pagination info
+ */
+export interface PreviewResult {
+    records: unknown[];
+    totalCount: number;
+    nodeName: string;
+    files: string[];
+    storagePath: string;
+    backendType: string;
+}
+
+/**
+ * Preview error payload
+ */
+export interface PreviewError {
+    error: string;
+    traceback?: string;
+    stderr?: string;
+}
+
+/**
+ * Storage statistics
+ */
+export interface StorageStats {
+    storagePath: string;
+    backendType: string;
+    dbSizeBytes: number;
+    dbSizeHuman: string;
+    sourceCount: number;
+    targetCount: number;
+    nodes: Map<string, number>;
+}
+
+interface StorageCommandSuccess {
+    ok: true;
+    output: string;
+}
+
+interface StorageCommandFailure {
+    ok: false;
+    error: string;
+    stderr?: string;
+    traceback?: string;
+}
+
+type StorageCommandResult = StorageCommandSuccess | StorageCommandFailure;
+
+/**
+ * Storage Backend Reader class
+ *
+ * Uses the Python storage backend API for backend-agnostic access.
+ * Works with SQLite, and future backends (S3, DuckDB, etc.)
+ */
+export class StorageReader {
+    constructor(
+        private readonly workflowPath: string,
+        private readonly workflowName: string
+    ) {}
+
+    /**
+     * Check if the storage backend has data
+     */
+    async exists(): Promise<boolean> {
+        const result = await this.runStorageCommand('exists');
+        return result.ok && result.output === 'true';
+    }
+
+    /**
+     * Preview data for a specific action
+     */
+    async previewAction(
+        nodeName: string,
+        limit: number = 50,
+        offset: number = 0
+    ): Promise<PreviewResult | PreviewError | null> {
+        const result = await this.runStorageCommand('preview', {
+            node_name: nodeName,
+            limit,
+            offset,
+        });
+
+        if (!result.ok) {
+            return {
+                error: result.error,
+                stderr: result.stderr,
+                traceback: result.traceback,
+            };
+        }
+
+        if (!result.output) {
+            return null;
+        }
+
+        try {
+            const parsed = JSON.parse(result.output) as Record<string, unknown>;
+            if (StorageReader.isErrorPayload(parsed)) {
+                return {
+                    error: parsed.error,
+                    traceback: typeof parsed.traceback === 'string' ? parsed.traceback : undefined,
+                };
+            }
+            return StorageReader.normalizePreviewResult(parsed, nodeName, this.workflowPath);
+        } catch {
+            return {
+                error: 'Failed to parse preview result',
+                stderr: result.output,
+            };
+        }
+    }
+
+    /**
+     * Get list of actions with data
+     */
+    async listActions(): Promise<Map<string, number>> {
+        const result = await this.runStorageCommand('list_actions');
+
+        if (result.ok && result.output) {
+            try {
+                const data = JSON.parse(result.output);
+                return new Map(Object.entries(data));
+            } catch {
+                // Return empty map on parse failure
+            }
+        }
+        return new Map();
+    }
+
+    /**
+     * Get storage statistics
+     */
+    async getStats(): Promise<StorageStats | null> {
+        const result = await this.runStorageCommand('stats');
+
+        if (result.ok && result.output) {
+            try {
+                const data = JSON.parse(result.output);
+                return {
+                    ...data,
+                    nodes: new Map(Object.entries(data.nodes || {})),
+                };
+            } catch {
+                // Return null on parse failure
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Run a storage backend command via Python
+     */
+    private async runStorageCommand(
+        command: string,
+        args: Record<string, unknown> = {}
+    ): Promise<StorageCommandResult> {
+        // Get Python path and module path from settings
+        const config = vscode.workspace.getConfiguration('agentActions');
+        const pythonPath = await resolvePythonPath();
+        const modulePath = config.get<string>('modulePath') || '';
+
+        // Build module path insertion code
+        const modulePathCode = modulePath ? `sys.path.insert(0, ${JSON.stringify(modulePath)})` : '';
+
+        const pythonCode = `
+import json
+import sys
+from pathlib import Path
+
+# Add configured module path if set
+${modulePathCode}
+
+# Add agent_actions to path if needed
+def find_agent_actions():
+    """Try multiple strategies to import agent_actions.storage"""
+    # Strategy 1: Already installed/available
+    try:
+        from agent_actions.storage import get_storage_backend
+        return get_storage_backend
+    except ImportError:
+        pass
+
+    workflow_path = Path(${JSON.stringify(this.workflowPath)})
+
+    # Strategy 2: Look for agent_actions in parent directories of workflow
+    for parent in [workflow_path] + list(workflow_path.parents):
+        candidate = parent / "agent_actions"
+        if (candidate / "storage" / "__init__.py").exists():
+            sys.path.insert(0, str(parent))
+            try:
+                from agent_actions.storage import get_storage_backend
+                return get_storage_backend
+            except ImportError:
+                pass
+
+    # Strategy 3: Look for agent-actions sibling directory (common dev setup)
+    for parent in workflow_path.parents:
+        try:
+            for sibling in parent.iterdir():
+                if sibling.is_dir() and sibling.name in ("agent-actions", "agent_actions"):
+                    candidate = sibling / "agent_actions" / "storage" / "__init__.py"
+                    if candidate.exists():
+                        sys.path.insert(0, str(sibling))
+                        try:
+                            from agent_actions.storage import get_storage_backend
+                            return get_storage_backend
+                        except ImportError:
+                            pass
+        except (PermissionError, OSError):
+            continue
+
+    # Strategy 4: Look one level deeper (e.g., qanalabs/agent-actions in sibling dirs)
+    for parent in workflow_path.parents:
+        try:
+            for sibling in parent.iterdir():
+                if sibling.is_dir():
+                    for subdir in sibling.iterdir():
+                        if subdir.is_dir() and subdir.name in ("agent-actions", "agent_actions"):
+                            candidate = subdir / "agent_actions" / "storage" / "__init__.py"
+                            if candidate.exists():
+                                sys.path.insert(0, str(subdir))
+                                try:
+                                    from agent_actions.storage import get_storage_backend
+                                    return get_storage_backend
+                                except ImportError:
+                                    pass
+        except (PermissionError, OSError):
+            continue
+
+    raise ImportError("Could not find agent_actions.storage module. Install with: pip install agent-actions")
+
+try:
+    get_storage_backend = find_agent_actions()
+except Exception as e:
+    import traceback
+    print(json.dumps({"error": f"Module import failed: {e}", "traceback": traceback.format_exc()}))
+    sys.exit(1)
+
+workflow_path = ${JSON.stringify(this.workflowPath)}
+workflow_name = ${JSON.stringify(this.workflowName)}
+command = ${JSON.stringify(command)}
+args = ${JSON.stringify(args)}
+
+try:
+    backend = get_storage_backend(workflow_path, workflow_name)
+    backend.initialize()
+
+    if command == 'exists':
+        # Check if there's any data
+        try:
+            stats = backend.get_storage_stats()
+            result = 'true' if stats.get('target_count', 0) > 0 else 'false'
+        except Exception:
+            result = 'false'
+        print(result)
+
+    elif command == 'preview':
+        result = backend.preview_target(
+            node_name=args['node_name'],
+            limit=args.get('limit', 50),
+            offset=args.get('offset', 0),
+        )
+        result['storagePath'] = str(backend.db_path) if hasattr(backend, 'db_path') else workflow_path
+        result['backendType'] = backend.backend_type
+        print(json.dumps(result, ensure_ascii=False, default=str))
+
+    elif command == 'list_actions':
+        stats = backend.get_storage_stats()
+        print(json.dumps(stats.get('nodes', {})))
+
+    elif command == 'stats':
+        stats = backend.get_storage_stats()
+        stats['backendType'] = backend.backend_type
+        print(json.dumps(stats, ensure_ascii=False, default=str))
+
+    backend.close()
+
+except Exception as e:
+    import traceback
+    print(json.dumps({"error": str(e), "traceback": traceback.format_exc()}), file=sys.stderr)
+    sys.exit(1)
+`;
+
+        const { execFile } = await import('child_process');
+        const { promisify } = await import('util');
+        const execFileAsync = promisify(execFile);
+
+        try {
+            const { stdout, stderr } = await execFileAsync(pythonPath, ['-c', pythonCode], {
+                maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                cwd: this.workflowPath,
+                timeout: 30000, // 30 second timeout to prevent hangs
+            });
+
+            if (stderr && !stdout) {
+                const parsed = this.parseErrorPayload(stderr);
+                if (parsed) {
+                    return parsed;
+                }
+                return { ok: false, error: stderr };
+            }
+
+            return { ok: true, output: stdout.trim() };
+        } catch (error: unknown) {
+            const err = error as { message?: string; stderr?: string; stdout?: string };
+            const parsed = this.parseErrorPayload(err.stdout) ?? this.parseErrorPayload(err.stderr);
+            if (parsed) {
+                return parsed;
+            }
+            return {
+                ok: false,
+                error: err.message ?? 'Unknown error running storage command',
+                stderr: err.stderr,
+            };
+        }
+    }
+
+    private parseErrorPayload(raw?: string): StorageCommandFailure | null {
+        if (!raw) {
+            return null;
+        }
+
+        const trimmed = raw.trim();
+        if (!trimmed) {
+            return null;
+        }
+
+        const jsonCandidate = StorageReader.extractJson(trimmed);
+        if (jsonCandidate) {
+            try {
+                const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>;
+                if (StorageReader.isErrorPayload(parsed)) {
+                    return {
+                        ok: false,
+                        error: parsed.error,
+                        traceback: typeof parsed.traceback === 'string' ? parsed.traceback : undefined,
+                        stderr: trimmed,
+                    };
+                }
+            } catch {
+                // fall through to plain string error
+            }
+        }
+
+        return { ok: false, error: trimmed };
+    }
+
+    private static extractJson(raw: string): string | null {
+        const start = raw.indexOf('{');
+        const end = raw.lastIndexOf('}');
+        if (start === -1 || end === -1 || end <= start) {
+            return null;
+        }
+        return raw.slice(start, end + 1);
+    }
+
+    private static isErrorPayload(parsed: Record<string, unknown>): parsed is { error: string; traceback?: string } {
+        return typeof parsed.error === 'string';
+    }
+
+    private static normalizePreviewResult(
+        parsed: Record<string, unknown>,
+        fallbackNodeName: string,
+        fallbackStoragePath: string
+    ): PreviewResult {
+        const records = Array.isArray(parsed.records) ? parsed.records : [];
+        const totalCount =
+            typeof parsed.total_count === 'number'
+                ? parsed.total_count
+                : typeof parsed.totalCount === 'number'
+                    ? parsed.totalCount
+                    : records.length;
+        const nodeName =
+            typeof parsed.node_name === 'string'
+                ? parsed.node_name
+                : typeof parsed.nodeName === 'string'
+                    ? parsed.nodeName
+                    : fallbackNodeName;
+        const files = Array.isArray(parsed.files) ? parsed.files.map(String) : [];
+        const storagePath =
+            typeof parsed.storagePath === 'string' ? parsed.storagePath : fallbackStoragePath;
+        const backendType =
+            typeof parsed.backendType === 'string' ? parsed.backendType : 'sqlite';
+
+        return {
+            records,
+            totalCount,
+            nodeName,
+            files,
+            storagePath,
+            backendType,
+        };
+    }
+}
+
+/**
+ * Create a storage reader for a workflow
+ */
+export function createStorageReader(workflowPath: string, workflowName: string): StorageReader {
+    return new StorageReader(workflowPath, workflowName);
+}

@@ -5,9 +5,12 @@ This is a thin facade that delegates to specialized services for all operations.
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Union, Callable
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Union, Callable
 
 from agent_actions.llm.batch.infrastructure.batch_data_loader import BatchDataLoader
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.di.container import registry
 from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
@@ -61,6 +64,8 @@ class BatchService:
         client_resolver: Optional[BatchClientResolver] = None,
         job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
         source_handler: Optional[Any] = None,  # BatchSourceHandler
+        storage_backend: Optional["StorageBackend"] = None,
+        node_name: Optional[str] = None,
     ):
         """Initialize batch service facade with optional pre-built services."""
         from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
@@ -91,6 +96,8 @@ class BatchService:
             client_cache=self._provider_cache, default_client=self.provider
         )
         self._source_handler = source_handler or BatchSourceHandler()
+        self._storage_backend = storage_backend
+        self._node_name = node_name
 
         # Registry manager factory (shared across services)
         self._registry_manager_factory = _create_registry_manager_factory()
@@ -152,6 +159,8 @@ class BatchService:
                 source_handler=self._source_handler,
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
+                storage_backend=self._storage_backend,
+                node_name=self._node_name,
             )
         return self._processing_service
 

@@ -5,9 +5,12 @@ Prompt Preparation Service - Unified prompt preparation for batch and realtime m
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Literal
+from typing import Dict, Any, Optional, Literal, TYPE_CHECKING
 from dataclasses import dataclass
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 from agent_actions.errors import TemplateVariableError
 from agent_actions.logging import fire_event
@@ -46,6 +49,8 @@ class PromptPreparationRequest:
         current_item: Optional current item dict
         file_path: Optional file path for history
         tools_path: Optional path to tools directory
+        output_directory: Optional output directory path for storage backend lookup
+        storage_backend: Optional storage backend for loading historical data from SQLite/TinyDB
     """
 
     agent_config: Dict[str, Any]
@@ -60,6 +65,8 @@ class PromptPreparationRequest:
     current_item: Optional[Dict] = None
     file_path: Optional[str] = None
     tools_path: Optional[str] = None
+    output_directory: Optional[str] = None
+    storage_backend: Optional["StorageBackend"] = None
 
 
 @dataclass
@@ -131,6 +138,8 @@ class PromptPreparationService:
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
         tools_path: Optional[str] = None,
+        output_directory: Optional[str] = None,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> PromptPreparationResult:
         """
         Unified entry point for prompt preparation (batch AND realtime).
@@ -163,6 +172,8 @@ class PromptPreparationService:
             current_item: Optional current item dict with source_guid, lineage, etc.
             file_path: Optional file path for historical data loading.
             tools_path: Optional path to tools directory for UDF injection.
+            output_directory: Optional output directory path for storage backend lookup.
+            storage_backend: Optional storage backend for loading historical data from SQLite/TinyDB.
 
         Returns:
             PromptPreparationResult containing:
@@ -185,6 +196,8 @@ class PromptPreparationService:
             current_item=current_item,
             file_path=file_path,
             tools_path=tools_path,
+            output_directory=output_directory,
+            storage_backend=storage_backend,
         )
         return PromptPreparationService._prepare_prompt_internal(request)
 
@@ -254,6 +267,8 @@ class PromptPreparationService:
             current_item=request.current_item,
             file_path=request.file_path,
             context_scope=context_scope,  # NEW: Controls which fields to load
+            output_directory=request.output_directory,  # For storage backend lookup
+            storage_backend=request.storage_backend,  # For loading historical data from SQLite/TinyDB
         )
         logger.debug("Built field context with %d top-level keys", len(field_context))
 

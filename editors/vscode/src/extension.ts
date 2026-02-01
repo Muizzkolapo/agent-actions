@@ -17,6 +17,7 @@ import {
     ServerOptions,
 } from 'vscode-languageclient/node';
 import { logger, initializeLogger } from './utils/logger';
+import { resolvePythonPath } from './utils/python';
 
 // Model
 import { WorkflowModel } from './model/workflowModel';
@@ -26,6 +27,7 @@ import { WorkflowTreeProvider } from './providers/treeViewProvider';
 import { WorkflowCodeLensProvider } from './providers/codeLensProvider';
 import { ActionDecorationProvider } from './providers/decorationProvider';
 import { WorkflowStatusBar } from './providers/statusBarProvider';
+import { DataPreviewProvider, DATA_PREVIEW_SCHEME } from './providers/dataPreviewProvider';
 
 // Views
 import { DagWebview } from './views/dagWebview';
@@ -34,34 +36,6 @@ import { DagWebview } from './views/dagWebview';
 import { registerCommands } from './commands/index';
 
 let client: LanguageClient;
-
-/**
- * Get Python interpreter path for LSP server
- */
-async function getPythonPath(): Promise<string> {
-    // Try VS Code Python extension first
-    const pythonExt = vscode.extensions.getExtension('ms-python.python');
-    if (pythonExt) {
-        if (!pythonExt.isActive) {
-            await pythonExt.activate();
-        }
-        const pythonApi = pythonExt.exports;
-        const envPath = pythonApi?.environments?.getActiveEnvironmentPath?.();
-        if (envPath?.path) {
-            return envPath.path;
-        }
-    }
-
-    // Check extension settings
-    const config = vscode.workspace.getConfiguration('agentActions');
-    const configPath = config.get<string>('pythonPath');
-    if (configPath) {
-        return configPath;
-    }
-
-    // Default to python3
-    return 'python3';
-}
 
 /**
  * Activate the extension
@@ -73,7 +47,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     // ========================================
     // 1. Initialize LSP Client
     // ========================================
-    const pythonPath = await getPythonPath();
+    const pythonPath = await resolvePythonPath();
 
     const serverOptions: ServerOptions = {
         command: pythonPath,
@@ -158,6 +132,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const dagWebview = new DagWebview(context, workflowModel);
     context.subscriptions.push(dagWebview);
 
+    // Data Preview Provider (for viewing storage backend data)
+    const dataPreviewProvider = new DataPreviewProvider();
+    context.subscriptions.push(
+        dataPreviewProvider,
+        vscode.workspace.registerTextDocumentContentProvider(DATA_PREVIEW_SCHEME, dataPreviewProvider)
+    );
+
     // ========================================
     // 4. Register Commands
     // ========================================
@@ -165,6 +146,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         context,
         model: workflowModel,
         dagWebview,
+        dataPreviewProvider,
     });
 
     logger.info('Agent Actions extension activated');

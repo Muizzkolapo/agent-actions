@@ -37,6 +37,11 @@
           "default": "",
           "description": "Path to Python interpreter. Leave empty to auto-detect from VS Code Python extension."
         },
+        "agentActions.modulePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the agent-actions module directory (containing agent_actions folder). Used for data preview features."
+        },
         "agentActions.showStatusBar": {
           "type": "boolean",
           "default": true,
@@ -118,6 +123,12 @@
         "icon": "$(eye)"
       },
       {
+        "command": "agentActions.previewData",
+        "title": "Preview Data",
+        "category": "Agent Actions",
+        "icon": "$(database)"
+      },
+      {
         "command": "agentActions.showDAG",
         "title": "Show Workflow DAG",
         "category": "Agent Actions",
@@ -140,6 +151,18 @@
         "title": "Show Workflow Navigator",
         "category": "Agent Actions",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Next Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Previous Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-left)"
       }
     ],
     "menus": {
@@ -175,6 +198,11 @@
           "command": "agentActions.viewOutput",
           "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
           "group": "navigation@3"
+        },
+        {
+          "command": "agentActions.previewData",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [

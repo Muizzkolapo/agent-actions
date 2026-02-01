@@ -10,9 +10,12 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable, Set
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable, Set
 
 from agent_actions.logging import fire_event
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 from agent_actions.logging.events import BatchProgressEvent, BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 from agent_actions.output.writer import FileWriter
@@ -56,6 +59,8 @@ class BatchProcessingService:
         source_handler: Optional[Any] = None,
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
+        storage_backend: Optional["StorageBackend"] = None,
+        node_name: Optional[str] = None,
     ):
         """Initialize processing service with dependencies.
 
@@ -67,6 +72,8 @@ class BatchProcessingService:
             source_handler: Optional handler for source data
             agent_indices: Dict mapping agent names to node indices (for reprompt)
             dependency_configs: Dict mapping dependency names to configs (for reprompt)
+            storage_backend: Optional storage backend for database persistence
+            node_name: Node name for backend writes (required if storage_backend provided)
         """
         self._client_resolver = client_resolver
         self._context_manager = context_manager
@@ -75,6 +82,8 @@ class BatchProcessingService:
         self._source_handler = source_handler
         self._agent_indices = agent_indices or {}
         self._dependency_configs = dependency_configs or {}
+        self._storage_backend = storage_backend
+        self._node_name = node_name
 
     def process_batch_results(
         self,
@@ -138,15 +147,22 @@ class BatchProcessingService:
             # Save source data before writing output
             if self._source_handler:
                 self._source_handler.save_task_source(
-                    main_output, file_path, base_directory, output_directory
+                    main_output, file_path, base_directory, output_directory,
+                    storage_backend=self._storage_backend,
                 )
 
             # Write output files
             output_file = Path(output_directory) / Path(file_path).relative_to(
                 base_directory
             ).with_suffix(".json")
-            ensure_directory_exists(output_file, is_file=True)
-            FileWriter(str(output_file)).write_target(main_output)
+            # Only create directory if not using storage backend
+            if self._storage_backend is None:
+                ensure_directory_exists(output_file, is_file=True)
+            FileWriter(
+                str(output_file),
+                storage_backend=self._storage_backend,
+                node_name=self._node_name,
+            ).write_target(main_output)
 
             if side_output_data:
                 side_output_file = (
@@ -281,8 +297,14 @@ class BatchProcessingService:
             side_output_data: Optional side output data
             output_directory: Directory for side output
         """
-        ensure_directory_exists(output_file, is_file=True)
-        FileWriter(str(output_file)).write_target(main_output)
+        # Only create directory if not using storage backend
+        if self._storage_backend is None:
+            ensure_directory_exists(output_file, is_file=True)
+        FileWriter(
+            str(output_file),
+            storage_backend=self._storage_backend,
+            node_name=self._node_name,
+        ).write_target(main_output)
 
         if side_output_data:
             side_output_dir = create_side_output_directory(output_directory)

@@ -589,6 +589,7 @@ class RecordProcessor:
             current_item=current_item,
             file_path=context.file_path,
             tools_path=tools_path,
+            output_directory=context.output_directory,
         )
 
     def _execute_llm(

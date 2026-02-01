@@ -11,7 +11,7 @@ Handles the first stage of data processing workflows including:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import json
 import logging
 import uuid
@@ -42,6 +42,7 @@ class InitialStageContext:
     base_directory: str
     output_directory: str
     idx: int = 0
+    storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
 # Backward compatibility alias
@@ -71,9 +72,12 @@ class BatchProcessingContext:
     base_directory: str
     output_directory: str
     idx: int = 0
+    storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
-def _save_source_items_helper(source_items, file_path, base_directory, output_directory=None):
+def _save_source_items_helper(
+    source_items, file_path, base_directory, output_directory=None, storage_backend=None
+):
     """
     Helper to save source items using UnifiedSourceDataSaver.
 
@@ -83,6 +87,7 @@ def _save_source_items_helper(source_items, file_path, base_directory, output_di
         base_directory: Base directory for input files
         output_directory: Optional output directory - used to determine target workflow root
                          when processing inter-workflow dependencies (manifest-based input)
+        storage_backend: Optional storage backend for database persistence
 
     Note:
         This is extracted to avoid calling protected methods from BatchService.
@@ -113,9 +118,12 @@ def _save_source_items_helper(source_items, file_path, base_directory, output_di
             # Fallback to going up 3 levels
             workflow_root = base_path.parent.parent.parent
 
-    # Use unified saver with batch mode settings
+    # Use unified saver with batch mode settings and optional storage backend
     saver = UnifiedSourceDataSaver(
-        base_directory=str(workflow_root), enable_deduplication=True, enable_locking=True
+        base_directory=str(workflow_root),
+        enable_deduplication=True,
+        enable_locking=True,
+        storage_backend=storage_backend,
     )
 
     # Save source items
@@ -262,7 +270,14 @@ def process_initial_stage(ctx: InitialStageContext):
     # ============================================================================
     # STEP 3: UNIFIED SOURCE SAVING (happens for BOTH modes)
     # ============================================================================
-    _save_source_data(src_text, data_chunk, ctx.file_path, ctx.base_directory, ctx.output_directory)
+    _save_source_data(
+        src_text,
+        data_chunk,
+        ctx.file_path,
+        ctx.base_directory,
+        ctx.output_directory,
+        storage_backend=ctx.storage_backend,
+    )
 
     # ============================================================================
     # STEP 4: Process based on mode
@@ -276,6 +291,7 @@ def process_initial_stage(ctx: InitialStageContext):
             base_directory=ctx.base_directory,
             output_directory=ctx.output_directory,
             idx=ctx.idx,
+            storage_backend=ctx.storage_backend,
         )
         return _process_batch_mode(batch_ctx)
 
@@ -384,7 +400,9 @@ def _should_save_source_items(
         return True
 
 
-def _save_source_data(src_text, data_chunk, file_path, base_directory, output_directory=None):
+def _save_source_data(
+    src_text, data_chunk, file_path, base_directory, output_directory=None, storage_backend=None
+):
     """UNIFIED source saving logic for both batch and realtime modes."""
     # Determine source items to save
     if src_text:
@@ -404,7 +422,9 @@ def _save_source_data(src_text, data_chunk, file_path, base_directory, output_di
             )
             return
 
-        _save_source_items_helper(source_items, file_path, base_directory, output_directory)
+        _save_source_items_helper(
+            source_items, file_path, base_directory, output_directory, storage_backend
+        )
 
 
 def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):
@@ -666,9 +686,21 @@ def _get_batch_id_from_chunk(data_chunk):
     return f"batch_{uuid.uuid4().hex}"
 
 
-def _write_passthrough_result(output_file_path, result_data):
+def _write_passthrough_result(output_file_path, result_data, storage_backend=None, node_name=None):
     """Write passthrough result and create marker file."""
-    file_writer = FileWriter(str(output_file_path))
+    if storage_backend is None or node_name is None:
+        raise AgentActionsException(
+            "Storage backend is required for passthrough writes.",
+            context={
+                "file_path": str(output_file_path),
+                "node_name": node_name,
+            },
+        )
+    file_writer = FileWriter(
+        str(output_file_path),
+        storage_backend=storage_backend,
+        node_name=node_name,
+    )
     file_writer.write_target(result_data)
     passthrough_marker = output_file_path.parent / ".passthrough_processed"
     passthrough_marker.touch()
@@ -703,7 +735,12 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     if isinstance(result, dict) and result.get("type") == "passthrough":
-        _write_passthrough_result(output_file_path, result["data"])
+        _write_passthrough_result(
+            output_file_path,
+            result["data"],
+            storage_backend=ctx.storage_backend,
+            node_name=ctx.agent_name,
+        )
     else:
         _write_batch_placeholder(output_file_path, local_batch_id, result, ctx.agent_name)
 
@@ -717,7 +754,7 @@ def _process_realtime_mode_with_record_processor(
     """
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
-    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    # No directory creation - storage backend is required
 
     # Initialize RecordProcessor
     processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
@@ -746,9 +783,22 @@ def _process_realtime_mode_with_record_processor(
         is_first_stage=True,
     )
 
-    # Write output
-    file_writer = FileWriter(str(output_file_path))
-    file_writer.write_staging(processed_items)
+    if ctx.storage_backend is None:
+        raise AgentActionsException(
+            "Storage backend is required for realtime initial-stage writes.",
+            context={
+                "file_path": str(output_file_path),
+                "agent_name": ctx.agent_name,
+            },
+        )
+
+    # Write output using storage backend (required)
+    file_writer = FileWriter(
+        str(output_file_path),
+        storage_backend=ctx.storage_backend,
+        node_name=ctx.agent_name,
+    )
+    file_writer.write_target(processed_items)
 
 
 # Backward compatibility alias

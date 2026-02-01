@@ -9,7 +9,6 @@
  * - PR #823: Multi-workflow support, status icons
  */
 
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { ActionInfo, ActionStatus, WorkflowInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
@@ -17,7 +16,7 @@ import { WorkflowModel } from '../model/workflowModel';
 /**
  * Tree node types
  */
-type TreeNode = WorkflowNode | ActionNode | FolderNode;
+type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode | FolderNode;
 
 /**
  * Workflow root node
@@ -96,22 +95,53 @@ class ActionNode extends vscode.TreeItem {
 }
 
 /**
- * Folder node for action output
+ * Action group node for versioned actions
+ * Groups actions like extract_raw_qa_1, extract_raw_qa_2 under "extract_raw_qa"
+ */
+class ActionGroupNode extends vscode.TreeItem {
+    constructor(
+        public readonly baseName: string,
+        public readonly actions: ActionInfo[]
+    ) {
+        super(baseName, vscode.TreeItemCollapsibleState.Collapsed);
+        this.contextValue = 'agentActions.actionGroup';
+        this.description = `${actions.length} versions`;
+        this.iconPath = new vscode.ThemeIcon('versions');
+        this.tooltip = `Versioned action: ${baseName}\n${actions.length} versions`;
+    }
+}
+
+/**
+ * Folder node for action output directory
  */
 class FolderNode extends vscode.TreeItem {
-    constructor(
-        public readonly action: ActionInfo,
-        label: string,
-        folderPath: string
-    ) {
-        super(label, vscode.TreeItemCollapsibleState.None);
+    constructor(public readonly action: ActionInfo) {
+        super('Output Folder', vscode.TreeItemCollapsibleState.None);
         this.contextValue = 'agentActions.folder';
-        this.iconPath = new vscode.ThemeIcon('folder-opened');
-        this.tooltip = folderPath;
+        this.iconPath = new vscode.ThemeIcon('folder');
+        this.tooltip = action.folderPath;
+        this.resourceUri = vscode.Uri.file(action.folderPath);
         this.command = {
-            command: 'agentActions.openFolder',
-            title: 'Open Folder',
-            arguments: [folderPath],
+            command: 'revealInExplorer',
+            title: 'Reveal in Explorer',
+            arguments: [vscode.Uri.file(action.folderPath)],
+        };
+    }
+}
+
+/**
+ * Data preview node for viewing storage backend data
+ */
+class DataPreviewNode extends vscode.TreeItem {
+    constructor(public readonly action: ActionInfo) {
+        super('Preview Data', vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'agentActions.dataPreview';
+        this.iconPath = new vscode.ThemeIcon('database');
+        this.tooltip = `Preview data from storage backend for ${action.name}`;
+        this.command = {
+            command: 'agentActions.previewData',
+            title: 'Preview Data',
+            arguments: [action],
         };
     }
 }
@@ -182,45 +212,77 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
             }
             // If single workflow, show actions directly
             if (workflows.length === 1) {
-                return workflows[0].actions.map((a) => new ActionNode(a));
+                return this.buildActionNodes(workflows[0].actions);
             }
             // Multiple workflows: show workflow nodes
             return workflows.map((w) => new WorkflowNode(w));
         }
 
-        // Workflow level: show actions
+        // Workflow level: show actions (with grouping)
         if (element instanceof WorkflowNode) {
-            return element.workflow.actions.map((a) => new ActionNode(a));
+            return this.buildActionNodes(element.workflow.actions);
         }
 
-        // Action level: show folder(s)
+        // Action group level: show versioned actions
+        if (element instanceof ActionGroupNode) {
+            return element.actions.map((a) => new ActionNode(a));
+        }
+
+        // Action level: show folder and data preview
         if (element instanceof ActionNode) {
-            const action = element.action;
-            const nodes: FolderNode[] = [];
-
-            // Main output folder
-            const outputDir = action.outputDir ?? action.name;
-            nodes.push(new FolderNode(
-                action,
-                `\uD83D\uDCC1 target/${outputDir}/`,
-                action.folderPath
-            ));
-
-            // Version folders if any
-            if (action.versions?.length) {
-                for (const versionPath of action.versions) {
-                    const versionName = path.basename(versionPath);
-                    nodes.push(new FolderNode(
-                        action,
-                        `\uD83D\uDCC1 ${versionName}/`,
-                        versionPath
-                    ));
-                }
-            }
-
-            return nodes;
+            return [
+                new FolderNode(element.action),
+                new DataPreviewNode(element.action),
+            ];
         }
 
         return [];
+    }
+
+    /**
+     * Build action nodes, grouping versioned actions under their base name
+     */
+    private buildActionNodes(actions: ActionInfo[]): TreeNode[] {
+        const nodes: TreeNode[] = [];
+        const groupedByBase = new Map<string, ActionInfo[]>();
+        const standalone: ActionInfo[] = [];
+
+        // Separate versioned and standalone actions
+        for (const action of actions) {
+            if (action.baseName) {
+                const existing = groupedByBase.get(action.baseName) ?? [];
+                existing.push(action);
+                groupedByBase.set(action.baseName, existing);
+            } else {
+                standalone.push(action);
+            }
+        }
+
+        // Add standalone actions
+        for (const action of standalone) {
+            nodes.push(new ActionNode(action));
+        }
+
+        // Add grouped actions
+        for (const [baseName, versionedActions] of groupedByBase) {
+            if (versionedActions.length === 1) {
+                // Single version, show as standalone
+                nodes.push(new ActionNode(versionedActions[0]));
+            } else {
+                // Multiple versions, group them
+                nodes.push(new ActionGroupNode(baseName, versionedActions));
+            }
+        }
+
+        // Sort by index
+        nodes.sort((a, b) => {
+            const indexA = a instanceof ActionNode ? a.action.index :
+                a instanceof ActionGroupNode ? Math.min(...a.actions.map(act => act.index)) : 0;
+            const indexB = b instanceof ActionNode ? b.action.index :
+                b instanceof ActionGroupNode ? Math.min(...b.actions.map(act => act.index)) : 0;
+            return indexA - indexB;
+        });
+
+        return nodes;
     }
 }

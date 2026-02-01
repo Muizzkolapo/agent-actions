@@ -15,7 +15,7 @@ processing.
 | `BaseLoader` | Class | Generic loader with `load_file(_async)`, `process(_async)`, and `supports_filetype` contracts. | `config.interfaces`, `typing` |
 | `file_reader.py` | Module | Convenience reader for PDFs, DOCX, HTML, Excel, XML, Markdown, and other user-facing file types with rich error handling. | `processors`, `logging` |
 | `json.py` | Module | `JsonLoader` that parses JSON strings/files, validates required arguments, and surfaces structured `DataParseError` diagnostics. | `errors`, `validation`, `json` |
-| `source_data.py` | Module | `SourceDataLoader` that mirrors target paths into the source directory, loads/saves JSON batches, and enforces project-bound paths. | `config.paths`, `errors`, `json` |
+| `source_data.py` | Module | `SourceDataLoader` that mirrors target paths into the source directory, loads/saves JSON batches, enforces project-bound paths, and supports storage backend fallback for database-backed reads. | `config.paths`, `errors`, `json`, `storage.backend` |
 | `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsException`. | `errors`, `logging` |
 | `text.py` | Module | `TextLoader` for plain text/markdown/HTML content with the same fallback/validation pattern as other loaders. | `errors` |
 | `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing discovered modules and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |

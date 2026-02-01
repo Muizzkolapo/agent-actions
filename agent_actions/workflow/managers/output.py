@@ -9,12 +9,15 @@ import json
 import logging
 import os
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable
+from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from rich.console import Console
 
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,7 @@ class OutputManagerConfig:
     agent_status: Dict[str, Dict[str, Any]]
     loop_correlator: Any
     console: Optional[Console] = None
+    storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
 class AgentOutputManager:
@@ -55,6 +59,7 @@ class AgentOutputManager:
         self.agent_status = config.agent_status
         self.loop_correlator = config.loop_correlator
         self.console = config.console or Console()
+        self.storage_backend = config.storage_backend
 
     def _load_json_files(self, json_files: List[Path], agent_output: Dict[str, Any]) -> List[Any]:
         """Load data from JSON files."""
@@ -207,7 +212,9 @@ class AgentOutputManager:
         upstream_dirs = self.get_upstream_directories(idx)
         # Use simple directory name (no index prefix)
         output_dir = self.agent_folder / "target" / agent_type
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Only create directory when not using storage backend
+        if self.storage_backend is None:
+            output_dir.mkdir(parents=True, exist_ok=True)
 
         # Get reduce_key from agent config for JSON merging
         agent_config = self.agent_configs.get(agent_type, {})
@@ -512,7 +519,9 @@ class AgentOutputManager:
                 # Setup output directory (simple name, no index prefix)
                 agent_type = agent_config["agent_type"]
                 output_directory = Path(agent_folder) / "target" / agent_type
-                output_directory.mkdir(parents=True, exist_ok=True)
+                # Only create directory when not using storage backend
+                if self.storage_backend is None:
+                    output_directory.mkdir(parents=True, exist_ok=True)
                 # Return list of directories (not a single string) to match setup_directories signature
                 return ([str(input_directory)], str(output_directory))
 
@@ -520,14 +529,16 @@ class AgentOutputManager:
                 f"[yellow]⚠️ Failed to correlate version outputs for "
                 f"{current_agent}, falling back to standard input[/yellow]"
             )
-            input_directories, output_dir = original_setup_directories(
+            input_directories, _ = original_setup_directories(
                 agent_folder, agent_config, previous_agent_type, agent_idx
             )
             # input_directories is already a list from setup_directories
             # Setup output directory (simple name, no index prefix)
             agent_type = agent_config["agent_type"]
             output_directory = Path(agent_folder) / "target" / agent_type
-            output_directory.mkdir(parents=True, exist_ok=True)
+            # Only create directory when not using storage backend
+            if self.storage_backend is None:
+                output_directory.mkdir(parents=True, exist_ok=True)
 
             return (input_directories, str(output_directory))
 
