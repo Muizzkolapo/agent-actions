@@ -9,7 +9,6 @@
  * - PR #823: Multi-workflow support, status icons
  */
 
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { ActionInfo, ActionStatus, WorkflowInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
@@ -17,7 +16,7 @@ import { WorkflowModel } from '../model/workflowModel';
 /**
  * Tree node types
  */
-type TreeNode = WorkflowNode | ActionNode | FolderNode | DataPreviewNode;
+type TreeNode = WorkflowNode | ActionNode | DataPreviewNode;
 
 /**
  * Workflow root node
@@ -92,27 +91,6 @@ class ActionNode extends vscode.TreeItem {
             `Outputs: ${outputs}`,
             recordCount,
         ].filter(Boolean).join('\n');
-    }
-}
-
-/**
- * Folder node for action output
- */
-class FolderNode extends vscode.TreeItem {
-    constructor(
-        public readonly action: ActionInfo,
-        label: string,
-        folderPath: string
-    ) {
-        super(label, vscode.TreeItemCollapsibleState.None);
-        this.contextValue = 'agentActions.folder';
-        this.iconPath = new vscode.ThemeIcon('folder-opened');
-        this.tooltip = folderPath;
-        this.command = {
-            command: 'agentActions.openFolder',
-            title: 'Open Folder',
-            arguments: [folderPath],
-        };
     }
 }
 
@@ -210,35 +188,9 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
             return element.workflow.actions.map((a) => new ActionNode(a));
         }
 
-        // Action level: show data preview and folder(s)
+        // Action level: show data preview only
         if (element instanceof ActionNode) {
-            const action = element.action;
-            const nodes: (DataPreviewNode | FolderNode)[] = [];
-
-            // Data preview node (for storage backend data)
-            nodes.push(new DataPreviewNode(action));
-
-            // Main output folder
-            const outputDir = action.outputDir ?? action.name;
-            nodes.push(new FolderNode(
-                action,
-                `\uD83D\uDCC1 target/${outputDir}/`,
-                action.folderPath
-            ));
-
-            // Version folders if any
-            if (action.versions?.length) {
-                for (const versionPath of action.versions) {
-                    const versionName = path.basename(versionPath);
-                    nodes.push(new FolderNode(
-                        action,
-                        `\uD83D\uDCC1 ${versionName}/`,
-                        versionPath
-                    ));
-                }
-            }
-
-            return nodes;
+            return [new DataPreviewNode(element.action)];
         }
 
         return [];
