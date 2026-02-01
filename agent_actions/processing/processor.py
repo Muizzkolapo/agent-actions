@@ -875,4 +875,5 @@ class RecordProcessor:
             agent_indices=base_context.agent_indices,
             dependency_configs=base_context.dependency_configs,
             current_item=item if isinstance(item, dict) else None,
+            storage_backend=base_context.storage_backend,
         )

@@ -300,12 +300,10 @@ class HistoricalNodeDataLoader:
         """
         from pathlib import Path as PathLib
 
-        try:
-            # Derive relative_path from file_path
-            # file_path is typically: .../target/{action_name}/{relative}.json
-            # Use full filename (with extension) to match how write_target stores data
-            file_name = PathLib(file_path).name  # e.g., "batch_0.json" from ".../batch_0.json"
+        file_name = PathLib(file_path).name  # e.g., "batch_0.json" from ".../batch_0.json"
 
+        try:
+            # First try: load with the derived file name (fast path)
             logger.debug(
                 "[STORAGE_BACKEND] Loading from storage: node_name=%s, relative_path=%s",
                 action_name,
@@ -324,12 +322,52 @@ class HistoricalNodeDataLoader:
             )
             return data
         except FileNotFoundError:
+            # File name doesn't match - search across all files for this action
+            # This handles workflows where file names change between stages
+            # (e.g., aggregation, flattening, fan-in patterns)
             logger.debug(
-                "[STORAGE_BACKEND] No data found for %s/%s",
+                "[STORAGE_BACKEND] File %s not found for %s, searching all files",
+                file_name,
                 action_name,
-                file_name if "file_name" in dir() else "unknown",
             )
-            return None
+            try:
+                all_files = storage_backend.list_target_files(action_name)
+                if not all_files:
+                    logger.debug(
+                        "[STORAGE_BACKEND] No files found for action %s",
+                        action_name,
+                    )
+                    return None
+
+                # Load and combine records from all files
+                all_records: List[Dict[str, Any]] = []
+                for f in all_files:
+                    try:
+                        records = storage_backend.read_target(action_name, f)
+                        if records:
+                            all_records.extend(records)
+                    except Exception as e:
+                        logger.debug(
+                            "[STORAGE_BACKEND] Error reading %s/%s: %s",
+                            action_name,
+                            f,
+                            e,
+                        )
+
+                logger.debug(
+                    "[STORAGE_BACKEND] Loaded %d total records from %d files for %s",
+                    len(all_records),
+                    len(all_files),
+                    action_name,
+                )
+                return all_records if all_records else None
+            except Exception as e:
+                logger.warning(
+                    "[STORAGE_BACKEND] Error listing files for %s: %s",
+                    action_name,
+                    e,
+                )
+                return None
         except Exception as e:
             logger.warning(
                 "[STORAGE_BACKEND] Error loading from storage backend: %s",

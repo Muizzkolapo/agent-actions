@@ -1241,9 +1241,11 @@ class ContextScopeProcessor:
                     )
 
                 logger.debug(
-                    "[CONTEXT SOURCES] Loading %d context dependencies: %s",
+                    "[CONTEXT SOURCES] Loading %d context dependencies: %s "
+                    "(storage_backend=%s)",
                     len(context_sources),
                     context_sources,
+                    "available" if storage_backend else "NOT available",
                 )
 
                 for dep_name in context_sources:

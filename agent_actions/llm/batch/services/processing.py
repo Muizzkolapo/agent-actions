@@ -714,7 +714,7 @@ class BatchProcessingService:
 
         try:
             # Prepare tasks for missing records
-            preparator = BatchTaskPreparator()
+            preparator = BatchTaskPreparator(storage_backend=self._storage_backend)
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
                 data=missing_records,
@@ -1058,6 +1058,7 @@ class BatchProcessingService:
                 preparator = BatchTaskPreparator(
                     agent_indices=agent_indices or {},
                     dependency_configs=dependency_configs or {},
+                    storage_backend=self._storage_backend,
                 )
                 result = preparator.prepare_tasks(
                     agent_config=agent_config or {},

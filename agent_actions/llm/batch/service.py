@@ -88,7 +88,9 @@ class BatchService:
 
         # Shared components (used by multiple services)
         self._task_preparator = task_preparator or BatchTaskPreparator(
-            agent_indices=agent_indices, dependency_configs=dependency_configs
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs,
+            storage_backend=storage_backend,
         )
         self._result_processor = result_processor or BatchResultProcessor()
         self._context_manager = context_manager or BatchContextManager()
