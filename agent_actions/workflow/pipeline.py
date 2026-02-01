@@ -151,7 +151,10 @@ class ProcessingPipeline:
             }
 
         batch_service = BatchService(
-            agent_indices=agent_indices, dependency_configs=params.batch_agent_configs
+            agent_indices=agent_indices,
+            dependency_configs=params.batch_agent_configs,
+            storage_backend=params.storage_backend,
+            node_name=params.pipeline_agent_name,
         )
         file_reader = FileReader(params.batch_file_path)
         data = file_reader.read()

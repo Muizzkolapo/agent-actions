@@ -525,7 +525,8 @@ class VersionOutputCorrelator:
     ):
         """Write correlated data to the output directory and create corresponding source data.
 
-        When storage backend is available, writes to both DB and filesystem for compatibility.
+        When storage backend is available, writes to DB only.
+        When no storage backend, writes to filesystem.
         """
         if not correlated_data:
             return
@@ -536,7 +537,7 @@ class VersionOutputCorrelator:
             for record in correlated_data
         ]
 
-        # Write to storage backend if available
+        # Write to storage backend if available, otherwise write to filesystem
         if self.storage_backend is not None and node_name:
             try:
                 self.storage_backend.write_target(node_name, filename, cleaned_data)
@@ -552,12 +553,12 @@ class VersionOutputCorrelator:
                     node_name,
                     e,
                 )
-
-        # Also write to filesystem for compatibility with existing processing pipeline
-        output_file = output_dir / filename
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(cleaned_data, f, indent=2)
-        self._create_correlation_source_data(output_file, cleaned_data)
+        else:
+            # Write to filesystem only when no storage backend
+            output_file = output_dir / filename
+            with open(output_file, "w", encoding="utf-8") as f:
+                json.dump(cleaned_data, f, indent=2)
+            self._create_correlation_source_data(output_file, cleaned_data)
 
     def _create_correlation_source_data(
         self, target_file: Path, correlated_data: List[Dict[str, Any]]

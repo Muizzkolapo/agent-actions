@@ -60,15 +60,22 @@ function parseActions(doc: Record<string, unknown>, content: string): ParsedActi
         return parsePlanBasedActions(doc, content);
     }
 
-    return actionsValue
-        .map((entry) => parseActionEntry(entry))
-        .filter((action): action is ParsedAction => action !== null);
+    const actions: ParsedAction[] = [];
+    for (const entry of actionsValue) {
+        const expanded = parseActionEntry(entry);
+        if (expanded) {
+            actions.push(...expanded);
+        }
+    }
+    return actions;
 }
 
 /**
- * Parse a single action entry from the YAML
+ * Parse a single action entry from the YAML, expanding versions if present
+ * Returns array to handle version expansion (e.g., action with versions: {range: [1,2,3]}
+ * becomes action_1, action_2, action_3)
  */
-function parseActionEntry(entry: unknown): ParsedAction | null {
+function parseActionEntry(entry: unknown): ParsedAction[] | null {
     if (!entry || typeof entry !== 'object') {
         return null;
     }
@@ -83,7 +90,49 @@ function parseActionEntry(entry: unknown): ParsedAction | null {
     const outputFields = normalizeOutputFields(action.schema ?? action.output_fields);
     const type = typeof action.kind === 'string' ? action.kind : undefined;
 
-    return { name, dependencies, type, outputFields };
+    // Check for versions expansion
+    const versions = action.versions as Record<string, unknown> | undefined;
+    if (versions && typeof versions === 'object') {
+        const expanded = expandVersions(name, versions, dependencies, outputFields, type);
+        if (expanded.length > 0) {
+            return expanded;
+        }
+    }
+
+    return [{ name, dependencies, type, outputFields }];
+}
+
+/**
+ * Expand a versioned action into multiple concrete actions
+ * Handles versions.range: [1, 2, 3] -> action_1, action_2, action_3
+ */
+function expandVersions(
+    baseName: string,
+    versions: Record<string, unknown>,
+    baseDependencies: string[],
+    outputFields: string[],
+    type: string | undefined
+): ParsedAction[] {
+    const range = versions.range;
+    if (!Array.isArray(range) || range.length === 0) {
+        return [];
+    }
+
+    return range.map((version) => {
+        const versionSuffix = `_${version}`;
+        const versionedName = `${baseName}${versionSuffix}`;
+
+        // Version dependencies: if base depends on "foo", versioned depends on "foo"
+        // (the actual version resolution happens at runtime)
+        return {
+            name: versionedName,
+            dependencies: baseDependencies,
+            type,
+            outputFields,
+            baseName, // Track the base name for grouping
+            version: version as number | string,
+        };
+    });
 }
 
 /**

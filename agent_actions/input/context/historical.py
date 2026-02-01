@@ -368,6 +368,7 @@ class HistoricalNodeDataLoader:
         matches_found = 0
         parent_match = None
         root_match = None
+        first_match = None  # Fallback for source_guid-only match
 
         for record in data:
             if not isinstance(record, dict):
@@ -387,6 +388,9 @@ class HistoricalNodeDataLoader:
                 continue
 
             matches_found += 1
+            if first_match is None:
+                first_match = record  # Track first source_guid match as fallback
+
             logger.debug(
                 "[DEBUG _find_record] Match #%s: node_id=%s, parent_target_id=%s, root_target_id=%s",
                 matches_found,
@@ -423,6 +427,14 @@ class HistoricalNodeDataLoader:
             if root_match:
                 logger.debug("[DEBUG _find_record] Returning root_target_id match")
                 return root_match
+            # Fallback: return first source_guid match (for Action 0 parallel siblings
+            # that have no parent_target_id because they process original source data)
+            if first_match:
+                logger.debug(
+                    "[DEBUG _find_record] Returning source_guid fallback match "
+                    "(parallel sibling with no parent/root ancestry)"
+                )
+                return first_match
 
         logger.debug(
             "[DEBUG _find_record] No matches found (searched %s records)",

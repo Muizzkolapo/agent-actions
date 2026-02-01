@@ -425,7 +425,9 @@ export class WorkflowModel implements vscode.Disposable {
             const folderPath = path.join(agentIoPath, 'target', outputDir);
             const status = resolveActionStatus(manifest, agentStatus, actionConfig.name);
             const type = toActionType(actionConfig.type, actionConfig.dependencies);
-            const line = parsedConfig.actionLocations.get(actionConfig.name) ?? 0;
+            // For versioned actions, use the base name's location
+            const locationName = actionConfig.baseName ?? actionConfig.name;
+            const line = parsedConfig.actionLocations.get(locationName) ?? 0;
             const configLocation = new vscode.Location(configUri, new vscode.Position(line, 0));
 
             return {
@@ -440,6 +442,8 @@ export class WorkflowModel implements vscode.Disposable {
                 outputFields: actionConfig.outputFields,
                 outputDir,
                 recordCount: manifestAction?.record_count ?? null,
+                baseName: actionConfig.baseName,
+                version: actionConfig.version,
             };
         });
 

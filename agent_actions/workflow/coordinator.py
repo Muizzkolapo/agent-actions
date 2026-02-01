@@ -195,7 +195,10 @@ class AgentWorkflow:
         from agent_actions.llm.batch.service import BatchService
 
         batch_service = BatchService(
-            agent_indices=self.agent_indices, dependency_configs=self.agent_configs
+            agent_indices=self.agent_indices,
+            dependency_configs=self.agent_configs,
+            storage_backend=self.storage_backend,
+            node_name=self.agent_name,
         )
 
         # Get agent folder and store for retry tracking

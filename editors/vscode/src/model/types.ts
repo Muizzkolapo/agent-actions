@@ -57,6 +57,10 @@ export interface ActionInfo {
     outputDir?: string;
     /** Record count from manifest */
     recordCount?: number | null;
+    /** Base name for versioned actions (e.g., "extract_raw_qa" for "extract_raw_qa_1") */
+    baseName?: string;
+    /** Version number/string for versioned actions */
+    version?: number | string;
 }
 
 /**
@@ -128,6 +132,10 @@ export interface ParsedAction {
     dependencies: string[];
     type?: string;
     outputFields: string[];
+    /** Base name for versioned actions (e.g., "extract_raw_qa" for "extract_raw_qa_1") */
+    baseName?: string;
+    /** Version number/string for versioned actions */
+    version?: number | string;
 }
 
 /**
