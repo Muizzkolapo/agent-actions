@@ -590,6 +590,7 @@ class RecordProcessor:
             file_path=context.file_path,
             tools_path=tools_path,
             output_directory=context.output_directory,
+            storage_backend=context.storage_backend,
         )
 
     def _execute_llm(
@@ -841,7 +842,10 @@ class RecordProcessor:
             transform_with_passthrough,
         )
 
-        return transform_with_passthrough(response, content, source_guid, context.agent_config)
+        return transform_with_passthrough(
+            response, content, source_guid, context.agent_config,
+            passthrough_fields=passthrough_fields,
+        )
 
     def _create_item_context(
         self, base_context: ProcessingContext, index: int, item: Any

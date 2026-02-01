@@ -2,7 +2,10 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 
 class ProcessingStatus(Enum):
@@ -230,6 +233,9 @@ class ProcessingContext:
 
     # Current item (per-record) for lineage chaining in realtime processing
     current_item: Optional[Dict[str, Any]] = None
+
+    # Storage backend for database-backed persistence and historical data loading
+    storage_backend: Optional["StorageBackend"] = None
 
     @property
     def action_name(self) -> str:

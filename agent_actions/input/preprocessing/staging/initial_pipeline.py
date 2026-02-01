@@ -769,6 +769,7 @@ def _process_realtime_mode_with_record_processor(
         file_path=str(file_path),
         output_directory=str(output_directory),
         workflow_metadata={"source_file": str(file_path)},
+        storage_backend=ctx.storage_backend,
     )
 
     # Execute batch processing (RecordProcessor.process_batch iterates and calls process() -> LLM)

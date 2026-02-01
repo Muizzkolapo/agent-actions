@@ -417,6 +417,7 @@ class ProcessingPipeline:
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             loop_context=loop_context,
+            storage_backend=self.config.storage_backend,
         )
 
         # Process via RecordProcessor
