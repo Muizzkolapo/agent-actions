@@ -56,8 +56,12 @@ class PreviewCommand:
         """Execute the preview command."""
         paths = ProjectPathsFactory.create_project_paths(self.workflow_name, self.workflow)
 
+        # Derive paths from ProjectPaths (has io_dir and agent_config_dir)
+        target_dir = paths.io_dir / "target"
+        workflow_dir = paths.io_dir.parent  # Workflow root is parent of agent_io
+
         # Find the SQLite database
-        db_path = paths.target_dir / f"{self.workflow_name}.db"
+        db_path = target_dir / f"{self.workflow_name}.db"
 
         if not db_path.exists():
             self.console.print(
@@ -68,7 +72,7 @@ class PreviewCommand:
 
         # Create storage backend
         backend = get_storage_backend(
-            workflow_path=str(paths.workflow_dir),
+            workflow_path=str(workflow_dir),
             workflow_name=self.workflow_name,
             backend_type="sqlite",
         )
