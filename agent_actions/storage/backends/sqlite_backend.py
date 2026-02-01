@@ -337,6 +337,122 @@ class SQLiteBackend(StorageBackend):
         )
         return [row["relative_path"] for row in cursor.fetchall()]
 
+    def preview_target(
+        self,
+        node_name: str,
+        limit: int = 10,
+        offset: int = 0,
+        relative_path: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Preview target data for a node with pagination.
+
+        Args:
+            node_name: Name of the processing node (action)
+            limit: Maximum number of records to return
+            offset: Number of records to skip
+            relative_path: Optional specific file to preview
+
+        Returns:
+            Dict with records, total_count, node_name, and files
+        """
+        cursor = self.connection.cursor()
+
+        # Get list of files for this node
+        files = self.list_target_files(node_name)
+
+        # If specific file requested, filter to it
+        if relative_path:
+            if relative_path not in files:
+                return {
+                    "records": [],
+                    "total_count": 0,
+                    "node_name": node_name,
+                    "files": files,
+                    "error": f"File '{relative_path}' not found for node '{node_name}'",
+                }
+            files_to_query = [relative_path]
+        else:
+            files_to_query = files
+
+        # Collect all records from target files
+        all_records = []
+        for file_path in files_to_query:
+            cursor.execute(
+                "SELECT data, record_count FROM target_data WHERE node_name = ? AND relative_path = ?",
+                (node_name, file_path),
+            )
+            row = cursor.fetchone()
+            if row:
+                records = json.loads(row["data"])
+                for record in records:
+                    record["_file"] = file_path  # Add source file info
+                all_records.extend(records)
+
+        total_count = len(all_records)
+
+        # Apply pagination
+        paginated_records = all_records[offset : offset + limit]
+
+        return {
+            "records": paginated_records,
+            "total_count": total_count,
+            "node_name": node_name,
+            "files": files,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def get_storage_stats(self) -> Dict[str, Any]:
+        """
+        Get storage statistics.
+
+        Returns:
+            Dict with database stats and record counts
+        """
+        cursor = self.connection.cursor()
+
+        # Get source count
+        cursor.execute("SELECT COUNT(*) as count FROM source_data")
+        source_count = cursor.fetchone()["count"]
+
+        # Get target count and breakdown by node
+        cursor.execute(
+            """
+            SELECT node_name, SUM(record_count) as count
+            FROM target_data
+            GROUP BY node_name
+            ORDER BY node_name
+            """
+        )
+        nodes = {row["node_name"]: row["count"] for row in cursor.fetchall()}
+
+        # Get total target records
+        cursor.execute("SELECT SUM(record_count) as count FROM target_data")
+        row = cursor.fetchone()
+        target_count = row["count"] if row["count"] else 0
+
+        # Get database file size
+        db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
+
+        return {
+            "db_path": str(self.db_path),
+            "db_size_bytes": db_size,
+            "db_size_human": self._format_size(db_size),
+            "source_count": source_count,
+            "target_count": target_count,
+            "nodes": nodes,
+        }
+
+    @staticmethod
+    def _format_size(size_bytes: int) -> str:
+        """Format bytes as human-readable size."""
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size_bytes < 1024:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024
+        return f"{size_bytes:.1f} TB"
+
     def close(self) -> None:
         """Close the database connection."""
         if self._connection is not None:

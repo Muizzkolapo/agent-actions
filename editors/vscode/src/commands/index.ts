@@ -12,17 +12,19 @@ import * as vscode from 'vscode';
 import { ActionInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
 import { DagWebview } from '../views/dagWebview';
+import { DataPreviewProvider, openDataPreview } from '../providers/dataPreviewProvider';
 
 interface CommandContext {
     context: vscode.ExtensionContext;
     model: WorkflowModel;
     dagWebview: DagWebview;
+    dataPreviewProvider: DataPreviewProvider;
 }
 
 /**
  * Register all workflow navigator commands
  */
-export function registerCommands({ context, model, dagWebview }: CommandContext): void {
+export function registerCommands({ context, model, dagWebview, dataPreviewProvider }: CommandContext): void {
     context.subscriptions.push(
         // Open action folder in VS Code Explorer sidebar
         vscode.commands.registerCommand('agentActions.openFolder', openFolder),
@@ -32,6 +34,11 @@ export function registerCommands({ context, model, dagWebview }: CommandContext)
 
         // View action output (opens first file in output folder)
         vscode.commands.registerCommand('agentActions.viewOutput', viewOutput),
+
+        // Preview action data from storage backend
+        vscode.commands.registerCommand('agentActions.previewData', (action: ActionInfo) =>
+            previewData(model, action)
+        ),
 
         // Quick pick to jump to any action
         vscode.commands.registerCommand('agentActions.goToAction', () => goToAction(model)),
@@ -71,8 +78,14 @@ async function openFolder(folderPath: string): Promise<void> {
 
 /**
  * Open config file and navigate to action definition
+ *
+ * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
+ * not the ActionInfo directly. We handle both cases.
  */
-async function openConfig(action: ActionInfo): Promise<void> {
+async function openConfig(arg: ActionInfo | { action: ActionInfo }): Promise<void> {
+    // Handle both ActionInfo and ActionNode (which has an 'action' property)
+    const action: ActionInfo | undefined = 'action' in arg ? arg.action : arg;
+
     if (!action?.configLocation) {
         vscode.window.showWarningMessage('Action configuration location not available.');
         return;
@@ -90,10 +103,16 @@ async function openConfig(action: ActionInfo): Promise<void> {
 
 /**
  * View action output - opens first file in output folder
+ *
+ * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
+ * not the ActionInfo directly. We handle both cases.
  */
-async function viewOutput(action: ActionInfo): Promise<void> {
-    if (!action) {
-        vscode.window.showWarningMessage('No action provided.');
+async function viewOutput(arg: ActionInfo | { action: ActionInfo }): Promise<void> {
+    // Handle both ActionInfo and ActionNode (which has an 'action' property)
+    const action: ActionInfo | undefined = 'action' in arg ? arg.action : arg;
+
+    if (!action?.folderPath) {
+        vscode.window.showWarningMessage('No action or folder path provided.');
         return;
     }
 
@@ -163,4 +182,34 @@ async function goToAction(model: WorkflowModel): Promise<void> {
 async function showWorkflowTree(): Promise<void> {
     await vscode.commands.executeCommand('workbench.view.explorer');
     await vscode.commands.executeCommand('agentActionsWorkflow.focus');
+}
+
+/**
+ * Preview action data from storage backend
+ *
+ * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
+ * not the ActionInfo directly. We handle both cases.
+ */
+async function previewData(model: WorkflowModel, arg: ActionInfo | { action: ActionInfo }): Promise<void> {
+    // Handle both ActionInfo and ActionNode (which has an 'action' property)
+    const action: ActionInfo | undefined = 'action' in arg ? arg.action : arg;
+
+    if (!action) {
+        vscode.window.showWarningMessage('No action provided.');
+        return;
+    }
+
+    // Find the workflow this action belongs to
+    const workflows = model.getWorkflows();
+    const workflow = workflows.find((w) =>
+        w.actions.some((a) => a.name === action.name)
+    );
+
+    if (!workflow) {
+        vscode.window.showErrorMessage(`Could not find workflow for action ${action.name}`);
+        return;
+    }
+
+    // Open the data preview
+    await openDataPreview(workflow, action);
 }

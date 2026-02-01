@@ -139,6 +139,47 @@ class StorageBackend(ABC):
         """
         ...
 
+    @abstractmethod
+    def preview_target(
+        self,
+        node_name: str,
+        limit: int = 10,
+        offset: int = 0,
+        relative_path: str | None = None,
+    ) -> Dict[str, Any]:
+        """
+        Preview target data for a node with pagination.
+
+        Args:
+            node_name: Name of the processing node (action)
+            limit: Maximum number of records to return
+            offset: Number of records to skip
+            relative_path: Optional specific file to preview
+
+        Returns:
+            Dict with:
+                - records: List of data records
+                - total_count: Total number of records
+                - node_name: The node name
+                - files: List of file paths for this node
+        """
+        ...
+
+    @abstractmethod
+    def get_storage_stats(self) -> Dict[str, Any]:
+        """
+        Get storage statistics.
+
+        Returns:
+            Dict with:
+                - db_path: Path to the database
+                - db_size_bytes: Size of database file
+                - source_count: Number of source records
+                - target_count: Number of target records
+                - nodes: Dict of node_name -> record_count
+        """
+        ...
+
     def close(self) -> None:
         """
         Close the storage backend and release resources.

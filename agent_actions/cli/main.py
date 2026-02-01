@@ -17,6 +17,7 @@ from agent_actions.cli.docs import docs  # Documentation generation and serving
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect  # Workflow inspection commands
 from agent_actions.cli.list_udfs import list_udfs_cmd
+from agent_actions.cli.commands.preview import preview  # Data preview for SQLite storage
 from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills  # Skills installation for Claude/Codex
@@ -77,6 +78,7 @@ class CLI:
         self.click_group.add_command(compile)  # Alias for render (dbt-style)
         self.click_group.add_command(init)
         self.click_group.add_command(inspect)
+        self.click_group.add_command(preview)  # Preview data from SQLite storage
         self.click_group.add_command(render)
         self.click_group.add_command(run)
         self.click_group.add_command(batch)

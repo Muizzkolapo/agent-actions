@@ -17,7 +17,7 @@ import { WorkflowModel } from '../model/workflowModel';
 /**
  * Tree node types
  */
-type TreeNode = WorkflowNode | ActionNode | FolderNode;
+type TreeNode = WorkflowNode | ActionNode | FolderNode | DataPreviewNode;
 
 /**
  * Workflow root node
@@ -117,6 +117,23 @@ class FolderNode extends vscode.TreeItem {
 }
 
 /**
+ * Data preview node for viewing storage backend data
+ */
+class DataPreviewNode extends vscode.TreeItem {
+    constructor(public readonly action: ActionInfo) {
+        super('\uD83D\uDDC3\uFE0F Preview Data', vscode.TreeItemCollapsibleState.None);
+        this.contextValue = 'agentActions.dataPreview';
+        this.iconPath = new vscode.ThemeIcon('database');
+        this.tooltip = `Preview data from storage backend for ${action.name}`;
+        this.command = {
+            command: 'agentActions.previewData',
+            title: 'Preview Data',
+            arguments: [action],
+        };
+    }
+}
+
+/**
  * Get status icon for action
  */
 function getStatusIcon(status: ActionStatus): vscode.ThemeIcon {
@@ -193,10 +210,13 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
             return element.workflow.actions.map((a) => new ActionNode(a));
         }
 
-        // Action level: show folder(s)
+        // Action level: show data preview and folder(s)
         if (element instanceof ActionNode) {
             const action = element.action;
-            const nodes: FolderNode[] = [];
+            const nodes: (DataPreviewNode | FolderNode)[] = [];
+
+            // Data preview node (for storage backend data)
+            nodes.push(new DataPreviewNode(action));
 
             // Main output folder
             const outputDir = action.outputDir ?? action.name;
