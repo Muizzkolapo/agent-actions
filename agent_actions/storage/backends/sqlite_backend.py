@@ -61,6 +61,9 @@ class SQLiteBackend(StorageBackend):
         CREATE INDEX IF NOT EXISTS idx_target_node_path ON target_data(node_name, relative_path)
     """
 
+    # Valid characters for identifiers (node names, paths)
+    _VALID_IDENTIFIER_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./")
+
     def __init__(self, db_path: str, workflow_name: str):
         """
         Initialize SQLite backend.
@@ -73,6 +76,27 @@ class SQLiteBackend(StorageBackend):
         self.workflow_name = workflow_name
         self._connection: Optional[sqlite3.Connection] = None
         self._lock = threading.Lock()  # Serialize write operations
+
+    def _validate_identifier(self, name: str, field: str) -> str:
+        """
+        Validate identifier to prevent injection attacks.
+
+        Args:
+            name: The identifier to validate
+            field: Field name for error messages
+
+        Returns:
+            The validated identifier
+
+        Raises:
+            ValueError: If identifier contains invalid characters
+        """
+        if not name:
+            raise ValueError(f"Empty {field} not allowed")
+        if not all(c in self._VALID_IDENTIFIER_CHARS for c in name):
+            invalid = set(name) - self._VALID_IDENTIFIER_CHARS
+            raise ValueError(f"Invalid characters in {field}: {invalid}")
+        return name
 
     @property
     def backend_type(self) -> str:
@@ -139,6 +163,10 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Identifier string: "node_name:relative_path"
         """
+        # Validate inputs
+        self._validate_identifier(node_name, "node_name")
+        self._validate_identifier(relative_path, "relative_path")
+
         data_json = json.dumps(data, ensure_ascii=False)
         record_count = len(data)
 
@@ -224,6 +252,9 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Identifier string: relative_path
         """
+        # Validate input
+        self._validate_identifier(relative_path, "relative_path")
+
         with self._lock:
             cursor = self.connection.cursor()
             inserted_count = 0

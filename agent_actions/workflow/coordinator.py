@@ -396,16 +396,17 @@ class AgentWorkflow:
             )
             self.console.print(f"[cyan]📦 Storage backend: {db_path}[/cyan]")
             return backend
-        except Exception as e:
-            logger.warning(
-                "Failed to initialize storage backend, falling back to file storage: %s",
+        except (OSError, ValueError) as e:
+            # Storage backend is required - no fallback
+            logger.error(
+                "Storage backend initialization failed: %s",
                 e,
                 extra={"workflow_name": self.metadata.agent_name},
             )
             self.console.print(
-                f"[yellow]⚠ Storage backend failed, using JSON files: {e}[/yellow]"
+                f"[red]❌ Storage backend failed: {e}[/red]"
             )
-            return None
+            raise
 
     @property
     def agent_name(self) -> str:
