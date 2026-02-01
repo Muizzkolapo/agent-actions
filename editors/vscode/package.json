@@ -50,7 +50,7 @@
         "agentActions.showCodeLens": {
           "type": "boolean",
           "default": true,
-          "description": "Show CodeLens actions above workflow YAML action definitions."
+          "description": "Show CodeLens actions (Preview Output, Status) above workflow YAML action definitions."
         },
         "agentActions.showFileDecorations": {
           "type": "boolean",
@@ -105,22 +105,10 @@
     },
     "commands": [
       {
-        "command": "agentActions.openFolder",
-        "title": "Open Action Folder",
-        "category": "Agent Actions",
-        "icon": "$(folder-opened)"
-      },
-      {
         "command": "agentActions.openConfig",
         "title": "Open Action Config",
         "category": "Agent Actions",
         "icon": "$(go-to-file)"
-      },
-      {
-        "command": "agentActions.viewOutput",
-        "title": "View Action Output",
-        "category": "Agent Actions",
-        "icon": "$(eye)"
       },
       {
         "command": "agentActions.previewData",
@@ -185,24 +173,14 @@
       ],
       "view/item/context": [
         {
-          "command": "agentActions.openFolder",
+          "command": "agentActions.openConfig",
           "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
           "group": "navigation@1"
         },
         {
-          "command": "agentActions.openConfig",
-          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
-          "group": "navigation@2"
-        },
-        {
-          "command": "agentActions.viewOutput",
-          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
-          "group": "navigation@3"
-        },
-        {
           "command": "agentActions.previewData",
           "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
-          "group": "navigation@4"
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [

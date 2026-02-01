@@ -65,8 +65,7 @@ Press `Cmd+Shift+D` (Mac) or `Ctrl+Shift+D` (Windows/Linux) to open a visual DAG
 #### CodeLens Actions
 
 In workflow YAML files, each action shows inline links:
-- 📁 **Open Folder** - Open action output folder in file explorer
-- 👁 **View Output** - Open first output file
+- 🔎 **Preview Output** - Preview action output from storage backend
 - Status indicator with click to show DAG
 
 #### File Decorations

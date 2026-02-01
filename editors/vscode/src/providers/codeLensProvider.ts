@@ -4,9 +4,8 @@
  * Adds clickable links above action definitions in YAML files.
  *
  * Combines best approaches:
- * - PR #820: Open Folder + Go to Action links
- * - PR #821: View Output link
  * - PR #823: Status-aware CodeLens
+ * - Data preview (storage backend)
  */
 
 import * as path from 'path';
@@ -58,25 +57,17 @@ export class WorkflowCodeLensProvider implements vscode.CodeLensProvider, vscode
             const action = this.model.getActionByName(actionName);
             const statusLabel = action ? this.getStatusEmoji(action.status) : '';
 
-            // Open Folder
-            lenses.push(
-                new vscode.CodeLens(range, {
-                    title: '\uD83D\uDCC1 Open Folder',
-                    command: 'agentActions.openFolder',
-                    arguments: [action?.folderPath ?? ''],
-                    tooltip: 'Open action output folder in file explorer',
-                })
-            );
-
-            // View Output
-            lenses.push(
-                new vscode.CodeLens(range, {
-                    title: '\uD83D\uDC41 View Output',
-                    command: 'agentActions.viewOutput',
-                    arguments: [action],
-                    tooltip: 'Open first output file',
-                })
-            );
+            if (action) {
+                // Preview output (storage backend)
+                lenses.push(
+                    new vscode.CodeLens(range, {
+                        title: '\uD83D\uDD0E Preview Output',
+                        command: 'agentActions.previewData',
+                        arguments: [action],
+                        tooltip: 'Preview action output from storage backend',
+                    })
+                );
+            }
 
             // Status indicator (if action found)
             if (action) {
