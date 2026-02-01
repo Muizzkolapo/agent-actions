@@ -363,6 +363,58 @@ class TestConcurrencyAndResilience:
 
                 assert len(retrieved[0]["large_field"]) == 1024 * 1024
 
+    def test_concurrent_writes_from_multiple_threads(self):
+        """Concurrent writes from multiple threads don't cause transaction errors."""
+        import threading
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "test.db"
+            backend = SQLiteBackend(str(db_path), "test_workflow")
+            backend.initialize()
+
+            errors = []
+            results = []
+
+            def write_source(thread_id: int):
+                try:
+                    for i in range(5):
+                        backend.write_source(
+                            f"source_{thread_id}.json",
+                            [{"source_guid": f"guid-{thread_id}-{i}", "data": f"t{thread_id}"}],
+                        )
+                    results.append(f"source-{thread_id}")
+                except Exception as e:
+                    errors.append(f"source-{thread_id}: {e}")
+
+            def write_target(thread_id: int):
+                try:
+                    for i in range(5):
+                        backend.write_target(
+                            f"node_{thread_id}",
+                            f"batch_{i}.json",
+                            [{"id": i, "thread": thread_id}],
+                        )
+                    results.append(f"target-{thread_id}")
+                except Exception as e:
+                    errors.append(f"target-{thread_id}: {e}")
+
+            # Launch multiple threads doing concurrent writes
+            threads = []
+            for i in range(4):
+                threads.append(threading.Thread(target=write_source, args=(i,)))
+                threads.append(threading.Thread(target=write_target, args=(i,)))
+
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            backend.close()
+
+            # No errors should have occurred
+            assert errors == [], f"Concurrent write errors: {errors}"
+            assert len(results) == 8  # 4 source + 4 target threads completed
+
 
 class TestBackendTypeProperty:
     """Test backend_type property behavior."""

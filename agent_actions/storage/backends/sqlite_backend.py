@@ -3,6 +3,7 @@
 import json
 import logging
 import sqlite3
+import threading
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
@@ -71,6 +72,7 @@ class SQLiteBackend(StorageBackend):
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: Optional[sqlite3.Connection] = None
+        self._lock = threading.Lock()  # Serialize write operations
 
     @property
     def backend_type(self) -> str:
@@ -100,25 +102,26 @@ class SQLiteBackend(StorageBackend):
 
     def initialize(self) -> None:
         """Create tables and indexes if they don't exist."""
-        cursor = self.connection.cursor()
-        try:
-            cursor.execute(self.SOURCE_TABLE_SQL)
-            cursor.execute(self.TARGET_TABLE_SQL)
-            cursor.execute(self.SOURCE_INDEX_SQL)
-            cursor.execute(self.TARGET_INDEX_SQL)
-            self.connection.commit()
-            logger.info(
-                "Initialized SQLite storage backend: %s",
-                self.db_path,
-                extra={"workflow_name": self.workflow_name},
-            )
-        except sqlite3.Error as e:
-            logger.error(
-                "Failed to initialize SQLite backend: %s",
-                e,
-                extra={"db_path": str(self.db_path), "workflow_name": self.workflow_name},
-            )
-            raise
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(self.SOURCE_TABLE_SQL)
+                cursor.execute(self.TARGET_TABLE_SQL)
+                cursor.execute(self.SOURCE_INDEX_SQL)
+                cursor.execute(self.TARGET_INDEX_SQL)
+                self.connection.commit()
+                logger.info(
+                    "Initialized SQLite storage backend: %s",
+                    self.db_path,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to initialize SQLite backend: %s",
+                    e,
+                    extra={"db_path": str(self.db_path), "workflow_name": self.workflow_name},
+                )
+                raise
 
     def write_target(
         self, node_name: str, relative_path: str, data: List[Dict[str, Any]]
@@ -139,36 +142,37 @@ class SQLiteBackend(StorageBackend):
         data_json = json.dumps(data, ensure_ascii=False)
         record_count = len(data)
 
-        cursor = self.connection.cursor()
-        try:
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO target_data
-                (node_name, relative_path, data, record_count, created_at)
-                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """,
-                (node_name, relative_path, data_json, record_count),
-            )
-            self.connection.commit()
-            logger.debug(
-                "Wrote %d target records: %s/%s",
-                record_count,
-                node_name,
-                relative_path,
-                extra={"workflow_name": self.workflow_name},
-            )
-            return f"{node_name}:{relative_path}"
-        except sqlite3.Error as e:
-            logger.error(
-                "Failed to write target data: %s",
-                e,
-                extra={
-                    "node_name": node_name,
-                    "relative_path": relative_path,
-                    "workflow_name": self.workflow_name,
-                },
-            )
-            raise
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO target_data
+                    (node_name, relative_path, data, record_count, created_at)
+                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (node_name, relative_path, data_json, record_count),
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Wrote %d target records: %s/%s",
+                    record_count,
+                    node_name,
+                    relative_path,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return f"{node_name}:{relative_path}"
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to write target data: %s",
+                    e,
+                    extra={
+                        "node_name": node_name,
+                        "relative_path": relative_path,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+                raise
 
     def read_target(
         self, node_name: str, relative_path: str
@@ -220,68 +224,69 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Identifier string: relative_path
         """
-        cursor = self.connection.cursor()
-        inserted_count = 0
-        skipped_count = 0
+        with self._lock:
+            cursor = self.connection.cursor()
+            inserted_count = 0
+            skipped_count = 0
 
-        try:
-            for item in data:
-                source_guid = item.get("source_guid")
-                if not source_guid:
-                    logger.warning(
-                        "Skipping source item without source_guid: %s",
-                        relative_path,
-                        extra={"workflow_name": self.workflow_name},
-                    )
-                    continue
+            try:
+                for item in data:
+                    source_guid = item.get("source_guid")
+                    if not source_guid:
+                        logger.warning(
+                            "Skipping source item without source_guid: %s",
+                            relative_path,
+                            extra={"workflow_name": self.workflow_name},
+                        )
+                        continue
 
-                data_json = json.dumps(item, ensure_ascii=False)
+                    data_json = json.dumps(item, ensure_ascii=False)
 
-                if enable_deduplication:
-                    # Use INSERT OR IGNORE to skip duplicates
-                    cursor.execute(
-                        """
-                        INSERT OR IGNORE INTO source_data
-                        (relative_path, source_guid, data, created_at)
-                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                        (relative_path, source_guid, data_json),
-                    )
-                    if cursor.rowcount > 0:
-                        inserted_count += 1
+                    if enable_deduplication:
+                        # Use INSERT OR IGNORE to skip duplicates
+                        cursor.execute(
+                            """
+                            INSERT OR IGNORE INTO source_data
+                            (relative_path, source_guid, data, created_at)
+                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                            """,
+                            (relative_path, source_guid, data_json),
+                        )
+                        if cursor.rowcount > 0:
+                            inserted_count += 1
+                        else:
+                            skipped_count += 1
                     else:
-                        skipped_count += 1
-                else:
-                    # Use INSERT OR REPLACE to overwrite
-                    cursor.execute(
-                        """
-                        INSERT OR REPLACE INTO source_data
-                        (relative_path, source_guid, data, created_at)
-                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                        (relative_path, source_guid, data_json),
-                    )
-                    inserted_count += 1
+                        # Use INSERT OR REPLACE to overwrite
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO source_data
+                            (relative_path, source_guid, data, created_at)
+                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                            """,
+                            (relative_path, source_guid, data_json),
+                        )
+                        inserted_count += 1
 
-            self.connection.commit()
-            logger.debug(
-                "Wrote source data to %s: %d inserted, %d skipped (dedup)",
-                relative_path,
-                inserted_count,
-                skipped_count,
-                extra={"workflow_name": self.workflow_name},
-            )
-            return relative_path
-        except sqlite3.Error as e:
-            logger.error(
-                "Failed to write source data: %s",
-                e,
-                extra={
-                    "relative_path": relative_path,
-                    "workflow_name": self.workflow_name,
-                },
-            )
-            raise
+                self.connection.commit()
+                logger.debug(
+                    "Wrote source data to %s: %d inserted, %d skipped (dedup)",
+                    relative_path,
+                    inserted_count,
+                    skipped_count,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return relative_path
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to write source data: %s",
+                    e,
+                    extra={
+                        "relative_path": relative_path,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+                raise
 
     def read_source(self, relative_path: str) -> List[Dict[str, Any]]:
         """
