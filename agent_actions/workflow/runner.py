@@ -764,7 +764,7 @@ class AgentRunner:
 
         return files_processed_count
 
-    def _process_from_storage_backend(self, params: FileProcessParams) -> int:
+    def _process_from_storage_backend(self, params: FileProcessParams) -> tuple:
         """
         Process data from storage backend instead of filesystem.
 
@@ -775,13 +775,16 @@ class AgentRunner:
             params: FileProcessParams with processing configuration
 
         Returns:
-            Count of files processed
+            Tuple of (files_found, files_processed) to distinguish between
+            "no data in DB" and "data found but processing failed"
         """
         if self.storage_backend is None:
-            return 0
+            return (0, 0)
 
-        files_processed_count = 0
+        files_found = 0
+        files_processed = 0
         output_path = Path(params.output_directory)
+        processing_errors = []
 
         for input_directory in params.upstream_data_dirs:
             input_path = Path(input_directory)
@@ -802,6 +805,8 @@ class AgentRunner:
                     e,
                 )
                 continue
+
+            files_found += len(target_files)
 
             for relative_path in target_files:
                 temp_dir = None
@@ -832,21 +837,41 @@ class AgentRunner:
                             idx=params.idx,
                         )
                     )
-                    files_processed_count += 1
+                    files_processed += 1
 
                 except Exception as e:
+                    error_msg = f"{node_name}/{relative_path}: {e}"
+                    processing_errors.append(error_msg)
                     logger.warning(
                         "Failed to process backend entry %s/%s: %s",
                         node_name,
                         relative_path,
                         e,
+                        exc_info=True,
                     )
                 finally:
                     # Always clean up temp directory
                     if temp_dir is not None:
                         shutil.rmtree(temp_dir, ignore_errors=True)
 
-        return files_processed_count
+        # Log summary if some files failed
+        if files_found > 0 and files_processed < files_found:
+            logger.error(
+                "Storage backend processing incomplete: %d/%d files processed for %s. "
+                "Errors: %s",
+                files_processed,
+                files_found,
+                params.agent_name,
+                "; ".join(processing_errors[:3]),  # Show first 3 errors
+                extra={
+                    "agent_name": params.agent_name,
+                    "files_found": files_found,
+                    "files_processed": files_processed,
+                    "error_count": len(processing_errors),
+                },
+            )
+
+        return (files_found, files_processed)
 
     def _is_target_directory(self, path: str) -> bool:
         """Check if path is a target directory (not staging)."""
@@ -873,10 +898,23 @@ class AgentRunner:
                 self._is_target_directory(d) for d in params.upstream_data_dirs
             )
             if all_targets:
-                files_processed_count = self._process_from_storage_backend(params)
-                if files_processed_count > 0:
+                files_found, files_processed = self._process_from_storage_backend(params)
+                if files_processed > 0:
                     return
-                # Fall through to filesystem if backend returned nothing
+                if files_found > 0:
+                    # Data was found in DB but processing failed
+                    # Don't fall through to filesystem (virtual paths don't exist)
+                    from agent_actions.errors import DependencyError
+                    raise DependencyError(
+                        f"Action '{params.agent_name}': Found {files_found} files in storage "
+                        f"backend but failed to process any. Check logs for details.",
+                        context={
+                            "action": params.agent_name,
+                            "files_found": files_found,
+                            "upstream_dirs": params.upstream_data_dirs,
+                        },
+                    )
+                # Fall through to filesystem if backend had no data
 
         # Use merging approach when there are multiple upstream directories
         # This handles parallel branch outputs correctly

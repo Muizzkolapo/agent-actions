@@ -197,6 +197,7 @@ class TestDependencyPatterns:
         runner = AgentRunner.__new__(AgentRunner)
         runner.agent_indices = {}
         runner.manifest_manager = None
+        runner.storage_backend = None
         return runner
 
     @pytest.fixture
@@ -481,6 +482,7 @@ class TestResolveDependencyDirectories:
         runner = AgentRunner.__new__(AgentRunner)
         runner.agent_indices = {"action_A": 0, "action_B": 1, "action_C": 2}
         runner.manifest_manager = None  # No manifest manager for simple tests
+        runner.storage_backend = None
         return runner
 
     @pytest.fixture
@@ -641,6 +643,7 @@ class TestResolveDependencyDirectoriesIntegration:
     def agent_runner_with_workflow(self, temp_workflow_folder):
         """Create AgentRunner with workflow indices."""
         runner = AgentRunner.__new__(AgentRunner)
+        runner.storage_backend = None
         runner.agent_indices = {
             "extract_raw_qa": 0,
             "flatten_raw_questions": 1,
@@ -690,6 +693,7 @@ class TestResolveDependencyDirectoriesIntegration:
         runner = AgentRunner.__new__(AgentRunner)
         runner.agent_indices = {"validate_1": 0, "validate_2": 1, "validate_3": 2, "aggregate": 3}
         runner.manifest_manager = None
+        runner.storage_backend = None
 
         dependencies = ["validate_1", "validate_2", "validate_3"]
         agent_config = {"dependencies": dependencies, "reduce_key": "parent_id"}
