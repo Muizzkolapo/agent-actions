@@ -463,8 +463,13 @@ class SQLiteBackend(StorageBackend):
 
                 # Collect records until we reach limit
                 if collected < limit:
-                    record["_file"] = file_path
-                    paginated_records.append(record)
+                    # Handle non-dict records (primitives, lists) by wrapping them
+                    if isinstance(record, dict):
+                        record["_file"] = file_path
+                        paginated_records.append(record)
+                    else:
+                        # Wrap non-dict values to preserve file metadata
+                        paginated_records.append({"_file": file_path, "_value": record})
                     collected += 1
                 else:
                     break
