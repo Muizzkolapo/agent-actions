@@ -224,6 +224,7 @@ class AgentWorkflow:
                 agent_status=state_manager.agent_status,
                 loop_correlator=loop_correlator,
                 console=self.console,
+                storage_backend=agent_runner.storage_backend,
             )
         )
 

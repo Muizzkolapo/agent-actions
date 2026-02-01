@@ -222,7 +222,9 @@ class VersionOutputCorrelator:
         try:
             # Use simple directory name (no index prefix)
             correlation_dir = self.agent_folder / "target" / agent_name
-            correlation_dir.mkdir(parents=True, exist_ok=True)
+            # Only create directory when not using storage backend
+            if self.storage_backend is None:
+                correlation_dir.mkdir(parents=True, exist_ok=True)
 
             version_outputs, version_filenames = self._load_version_outputs(version_sources)
             if not version_outputs:
