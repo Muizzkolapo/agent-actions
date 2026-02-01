@@ -443,6 +443,35 @@ class HistoricalNodeDataLoader:
         return None
 
     @staticmethod
+    def _validate_db_path(db_path: "Path", allowed_roots: "List[Path]") -> bool:
+        """
+        Validate that a database path is within allowed directories.
+
+        Prevents path traversal attacks by ensuring the resolved path
+        is within one of the allowed root directories.
+
+        Args:
+            db_path: Path to the database file
+            allowed_roots: List of allowed parent directories
+
+        Returns:
+            True if path is valid and within allowed roots
+        """
+        try:
+            resolved = db_path.resolve()
+            # Check that resolved path is within one of the allowed roots
+            for root in allowed_roots:
+                try:
+                    resolved.relative_to(root.resolve())
+                    return True
+                except ValueError:
+                    continue
+            return False
+        except (OSError, RuntimeError):
+            # Handle permission errors, symlink loops, etc.
+            return False
+
+    @staticmethod
     def _try_load_from_sqlite(
         action_name: str, filename: str, output_directory: Optional[str] = None
     ) -> Optional[List[Dict]]:
@@ -451,6 +480,9 @@ class HistoricalNodeDataLoader:
 
         Searches for a .db file in standard workflow locations and queries
         the target_data table for the specified action.
+
+        Security: Database paths are validated to be within allowed directories
+        to prevent path traversal attacks.
 
         Args:
             action_name: Name of the action to load data for
@@ -465,6 +497,7 @@ class HistoricalNodeDataLoader:
         import os
 
         search_patterns = []
+        allowed_roots = []
 
         # First priority: derive from output_directory if provided
         if output_directory:
@@ -476,9 +509,14 @@ class HistoricalNodeDataLoader:
                 target_dir = Path(*output_path.parts[: target_idx + 1])
                 if target_dir.exists():
                     search_patterns.append(target_dir)
+                    # Allow agent_io directory as root for validation
+                    agent_io_dir = target_dir.parent
+                    if agent_io_dir.exists():
+                        allowed_roots.append(agent_io_dir)
 
         # Fallback: check current working directory structure
         cwd = Path(os.getcwd())
+        allowed_roots.append(cwd)  # Allow cwd and descendants
 
         # Check multiple levels up (bounded by constant)
         current = cwd
@@ -486,6 +524,8 @@ class HistoricalNodeDataLoader:
             target_dir = current / "agent_io" / "target"
             if target_dir.exists() and target_dir not in search_patterns:
                 search_patterns.append(target_dir)
+                # Add agent_io as allowed root
+                allowed_roots.append(target_dir.parent)
             current = current.parent
             if current == current.parent:  # Reached filesystem root
                 break
@@ -495,13 +535,21 @@ class HistoricalNodeDataLoader:
             if not pattern_base.exists():
                 continue
             for db_file in pattern_base.glob("*.db"):
+                # Security: Validate path is within allowed directories
+                if not HistoricalNodeDataLoader._validate_db_path(db_file, allowed_roots):
+                    logger.warning(
+                        "[SQLite FALLBACK] Skipping database outside allowed paths: %s",
+                        db_file,
+                    )
+                    continue
+
                 conn = None
                 try:
                     conn = sqlite3.connect(str(db_file), timeout=5.0)
                     conn.row_factory = sqlite3.Row
                     cursor = conn.cursor()
 
-                    # Query for the action's data
+                    # Query for the action's data (parameterized to prevent SQL injection)
                     cursor.execute(
                         "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
                         (action_name, filename),

@@ -357,15 +357,22 @@ class SQLiteBackend(StorageBackend):
         """
         Preview target data for a node with pagination.
 
+        Uses streaming to avoid loading all records into memory.
+        Records are iterated one file at a time with early exit once
+        limit is reached.
+
         Args:
             node_name: Name of the processing node (action)
-            limit: Maximum number of records to return
+            limit: Maximum number of records to return (max 1000)
             offset: Number of records to skip
             relative_path: Optional specific file to preview
 
         Returns:
             Dict with records, total_count, node_name, and files
         """
+        # Enforce maximum limit to prevent memory issues
+        limit = min(limit, 1000)
+
         cursor = self.connection.cursor()
 
         # Get list of files for this node
@@ -385,24 +392,50 @@ class SQLiteBackend(StorageBackend):
         else:
             files_to_query = files
 
-        # Collect all records from target files
-        all_records = []
-        for file_path in files_to_query:
+        # Get total count efficiently using stored record_count
+        if relative_path:
             cursor.execute(
-                "SELECT data, record_count FROM target_data WHERE node_name = ? AND relative_path = ?",
+                "SELECT COALESCE(SUM(record_count), 0) as total FROM target_data WHERE node_name = ? AND relative_path = ?",
+                (node_name, relative_path),
+            )
+        else:
+            cursor.execute(
+                "SELECT COALESCE(SUM(record_count), 0) as total FROM target_data WHERE node_name = ?",
+                (node_name,),
+            )
+        total_count = cursor.fetchone()["total"]
+
+        # Stream records with pagination - avoid loading all into memory
+        paginated_records: List[Dict[str, Any]] = []
+        skipped = 0
+        collected = 0
+
+        for file_path in files_to_query:
+            if collected >= limit:
+                break
+
+            cursor.execute(
+                "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
                 (node_name, file_path),
             )
             row = cursor.fetchone()
-            if row:
-                records = json.loads(row["data"])
-                for record in records:
-                    record["_file"] = file_path  # Add source file info
-                all_records.extend(records)
+            if not row:
+                continue
 
-        total_count = len(all_records)
+            records = json.loads(row["data"])
+            for record in records:
+                # Skip records until we reach offset
+                if skipped < offset:
+                    skipped += 1
+                    continue
 
-        # Apply pagination
-        paginated_records = all_records[offset : offset + limit]
+                # Collect records until we reach limit
+                if collected < limit:
+                    record["_file"] = file_path
+                    paginated_records.append(record)
+                    collected += 1
+                else:
+                    break
 
         return {
             "records": paginated_records,

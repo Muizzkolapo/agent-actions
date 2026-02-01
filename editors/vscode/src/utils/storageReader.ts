@@ -300,6 +300,7 @@ except Exception as e:
             const { stdout, stderr } = await execFileAsync(pythonPath, ['-c', pythonCode], {
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
                 cwd: this.workflowPath,
+                timeout: 30000, // 30 second timeout to prevent hangs
             });
 
             if (stderr && !stdout) {
