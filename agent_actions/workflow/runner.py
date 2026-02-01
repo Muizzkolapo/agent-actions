@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -764,7 +763,7 @@ class AgentRunner:
 
         return files_processed_count
 
-    def _process_from_storage_backend(self, params: FileProcessParams) -> tuple:
+    def _process_from_storage_backend(self, params: FileProcessParams) -> Tuple[int, int]:
         """
         Process data from storage backend instead of filesystem.
 
@@ -809,34 +808,33 @@ class AgentRunner:
             files_found += len(target_files)
 
             for relative_path in target_files:
-                temp_dir = None
                 try:
                     # Read data from backend
                     data = self.storage_backend.read_target(node_name, relative_path)
 
                     # Create a temporary file with the data for processing
-                    # (maintains compatibility with existing processing pipeline)
-                    temp_dir = tempfile.mkdtemp()
-                    temp_file = Path(temp_dir) / relative_path
-                    temp_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(temp_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f)
+                    # Using TemporaryDirectory context manager for automatic cleanup
+                    with tempfile.TemporaryDirectory() as temp_dir:
+                        temp_file = Path(temp_dir) / relative_path
+                        temp_file.parent.mkdir(parents=True, exist_ok=True)
+                        with open(temp_file, "w", encoding="utf-8") as f:
+                            json.dump(data, f)
 
-                    # Process the file
-                    self._process_single_file(
-                        SingleFileProcessParams(
-                            locations=FileLocationParams(
-                                item=temp_file,
-                                input_path=Path(temp_dir),
-                                output_path=output_path,
-                                input_directory=temp_dir,
-                            ),
-                            agent_config=params.agent_config,
-                            agent_name=params.agent_name,
-                            strategy=params.strategy,
-                            idx=params.idx,
+                        # Process the file
+                        self._process_single_file(
+                            SingleFileProcessParams(
+                                locations=FileLocationParams(
+                                    item=temp_file,
+                                    input_path=Path(temp_dir),
+                                    output_path=output_path,
+                                    input_directory=temp_dir,
+                                ),
+                                agent_config=params.agent_config,
+                                agent_name=params.agent_name,
+                                strategy=params.strategy,
+                                idx=params.idx,
+                            )
                         )
-                    )
                     files_processed += 1
 
                 except Exception as e:
@@ -849,10 +847,6 @@ class AgentRunner:
                         e,
                         exc_info=True,
                     )
-                finally:
-                    # Always clean up temp directory
-                    if temp_dir is not None:
-                        shutil.rmtree(temp_dir, ignore_errors=True)
 
         # Log summary if some files failed
         if files_found > 0 and files_processed < files_found:
