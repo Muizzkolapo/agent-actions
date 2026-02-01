@@ -103,11 +103,10 @@ class UnifiedSourceDataSaver:
         source_file = source_dir / f"{relative_path}.json"
 
         logger.debug(
-            "Saving %d source items to %s (dedup=%s, lock=%s, backend=%s)",
+            "Saving %d source items to %s (dedup=%s, backend=%s)",
             len(items),
             source_file,
             self.enable_deduplication,
-            self.enable_locking,
             self.storage_backend is not None,
         )
 
