@@ -61,6 +61,7 @@ class OutputHandler:
                 str(output_file_path),
                 storage_backend=self.storage_backend,
                 node_name=self.node_name,
+                output_directory=output_directory,
             )
             file_writer.write_target(data)
         except IOError as e:

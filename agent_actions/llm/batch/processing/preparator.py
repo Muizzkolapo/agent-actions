@@ -53,6 +53,7 @@ class BatchTaskPreparator:
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         guard_handler: Optional[GuardHandler] = None,
+        storage_backend: Optional[Any] = None,
     ):
         """
         Initialize task preparator.
@@ -63,11 +64,13 @@ class BatchTaskPreparator:
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
             guard_handler: Optional guard handler (defaults to global)
+            storage_backend: Optional storage backend for historical data loading
         """
         self.filter_service = filter_service
         self.guard_handler = guard_handler
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
+        self.storage_backend = storage_backend
 
     def prepare_tasks(
         self,
@@ -305,6 +308,7 @@ class BatchTaskPreparator:
             file_path=file_path_for_history,
             tools_path=tools_path,
             workflow_metadata=workflow_metadata,
+            storage_backend=self.storage_backend,
         )
 
         # Store passthrough_fields for later merging
@@ -457,4 +461,5 @@ class BatchTaskPreparator:
             current_item=first_row,
             file_path=file_path_for_history,
             workflow_metadata=workflow_metadata,
+            storage_backend=self.storage_backend,
         )

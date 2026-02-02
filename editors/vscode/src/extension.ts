@@ -5,7 +5,7 @@
  *
  * This is a consolidated implementation combining the best approaches from PRs #820-823:
  * - PR #820: Multi-project support, comprehensive package.json contributions
- * - PR #821: Clean event patterns, viewOutput command
+ * - PR #821: Clean event patterns
  * - PR #822: Centralized command registration
  * - PR #823: agent_status.json support, polling, multi-workflow support
  */

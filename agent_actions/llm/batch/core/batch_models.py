@@ -30,6 +30,10 @@ class BatchJobEntry:
     provider: str
     record_count: Optional[int] = None
     workflow_session_id: Optional[str] = None
+    file_name: Optional[str] = None
+    # Version context fields for loop correlation
+    is_versioned_agent: Optional[bool] = None
+    version_base_name: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: dict) -> "BatchJobEntry":

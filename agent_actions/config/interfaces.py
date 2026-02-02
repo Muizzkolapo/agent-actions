@@ -81,28 +81,28 @@ class ISourceDataLoader(ILoader):
     """Interface for source data loading operations."""
 
     @abstractmethod
-    def load_source_data(self, file_path: str) -> List[Dict]:
+    def load_source_data(self, source_relative_path: str) -> List[Dict]:
         """
-        Load source data from the source directory.
+        Load source data from the storage backend.
 
         Args:
-            file_path: Path to the file containing processed data
+            source_relative_path: Relative path for backend lookup (required)
 
         Returns:
             List of source data items
         """
 
-    async def load_source_data_async(self, file_path: str) -> List[Dict]:
+    async def load_source_data_async(self, source_relative_path: str) -> List[Dict]:
         """
         Async version of load_source_data. Default implementation uses sync version.
 
         Args:
-            file_path: Path to the file containing processed data
+            source_relative_path: Relative path for backend lookup (required)
 
         Returns:
             List of source data items
         """
-        return await asyncio.to_thread(self.load_source_data, file_path)
+        return await asyncio.to_thread(self.load_source_data, source_relative_path)
 
     @abstractmethod
     def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
@@ -125,34 +125,6 @@ class ISourceDataLoader(ILoader):
             content: Content to save
         """
         return await asyncio.to_thread(self.save_source_data, file_path, source_guid, content)
-
-    @abstractmethod
-    def load_source_content(self, file_path: str, context_data: Dict[str, Any]) -> Optional[Any]:
-        """
-        Load specific content from source file by source_guid.
-
-        Args:
-            file_path: Path to the file containing processed data
-            context_data: Context data containing source_guid
-
-        Returns:
-            Optional[Any]: Loaded content or None if not found
-        """
-
-    async def load_source_content_async(
-        self, file_path: str, context_data: Dict[str, Any]
-    ) -> Optional[Any]:
-        """
-        Async version of load_source_content. Default implementation uses sync version.
-
-        Args:
-            file_path: Path to the file containing processed data
-            context_data: Context data containing source_guid
-
-        Returns:
-            Optional[Any]: Loaded content or None if not found
-        """
-        return await asyncio.to_thread(self.load_source_content, file_path, context_data)
 
 
 # Processor interfaces

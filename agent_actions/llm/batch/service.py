@@ -88,7 +88,9 @@ class BatchService:
 
         # Shared components (used by multiple services)
         self._task_preparator = task_preparator or BatchTaskPreparator(
-            agent_indices=agent_indices, dependency_configs=dependency_configs
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs,
+            storage_backend=storage_backend,
         )
         self._result_processor = result_processor or BatchResultProcessor()
         self._context_manager = context_manager or BatchContextManager()
@@ -219,11 +221,12 @@ class BatchService:
         )
 
     def process_all_batch_results(
-        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
+        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None,
+        node_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs (delegates to processing service)."""
         return self._get_processing_service().process_all_batch_results(
-            output_directory, agent_config
+            output_directory, agent_config, node_name=node_name
         )
 
     # =========================================================================

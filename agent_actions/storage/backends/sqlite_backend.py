@@ -81,18 +81,22 @@ class SQLiteBackend(StorageBackend):
         """
         Validate identifier to prevent injection attacks.
 
+        Normalizes paths to POSIX format for consistent storage across platforms.
+
         Args:
             name: The identifier to validate
             field: Field name for error messages
 
         Returns:
-            The validated identifier
+            The validated identifier in POSIX format
 
         Raises:
             ValueError: If identifier contains invalid characters
         """
         if not name:
             raise ValueError(f"Empty {field} not allowed")
+        # Normalize to POSIX separators for cross-platform consistency
+        name = name.replace("\\", "/")
         if not all(c in self._VALID_IDENTIFIER_CHARS for c in name):
             invalid = set(name) - self._VALID_IDENTIFIER_CHARS
             raise ValueError(f"Invalid characters in {field}: {invalid}")

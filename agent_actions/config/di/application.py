@@ -18,7 +18,6 @@ from agent_actions.config.interfaces import (
 )
 from agent_actions.errors import ConfigValidationError, DependencyError
 from agent_actions.input.loaders.source_data import SourceDataLoader
-from agent_actions.config.paths import PathManager
 from agent_actions.config.di.container import (
     DependencyContainer,
     ProcessorFactory,
@@ -113,32 +112,21 @@ class ApplicationContainer:
                 dependency_configs[dep_name] = agent_configs[dep_name]
         return dependency_configs
 
-    def _get_source_loader(self, agent_name: str, idx: int):
-        """Get source loader from container with fallbacks."""
+    def _get_source_loader(self, agent_name: str, storage_backend: "StorageBackend"):
+        """Get source loader from container or create with storage backend."""
         try:
             source_loader = self.container.get(ISourceDataLoader)
             logger.debug(
                 "Retrieved ISourceDataLoader from DI container",
-                extra={"agent_name": agent_name, "idx": idx},
-            )
-            return source_loader
-        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
-            pass
-
-        try:
-            source_loader = self.container.get(IDataLoader)
-            logger.info(
-                "Using IDataLoader as fallback for ISourceDataLoader",
-                extra={"agent_name": agent_name, "idx": idx},
+                extra={"agent_name": agent_name},
             )
             return source_loader
         except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             logger.debug(
-                "Creating source_loader via processor_factory",
-                extra={"agent_name": agent_name, "idx": idx},
+                "Creating SourceDataLoader with storage backend",
+                extra={"agent_name": agent_name},
             )
-            path_manager = self.container.get(PathManager)
-            return SourceDataLoader(agent_name=agent_name, path_manager=path_manager)
+            return SourceDataLoader(agent_name=agent_name, storage_backend=storage_backend)
 
     def _get_data_generator(
         self,

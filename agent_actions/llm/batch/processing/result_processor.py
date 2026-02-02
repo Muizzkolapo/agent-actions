@@ -193,7 +193,8 @@ class BatchResultProcessor:
         successful results and errors.
         """
         for batch_result in ctx.batch_results:
-            custom_id = batch_result.custom_id
+            # Normalize custom_id to string for JSON context_map compatibility
+            custom_id = str(batch_result.custom_id)
 
             if batch_result.success and batch_result.content is not None:
                 # Stage 3: Process successful result

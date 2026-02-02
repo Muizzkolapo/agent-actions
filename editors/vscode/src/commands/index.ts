@@ -3,9 +3,8 @@
  *
  * Centralizes all command registration following PR #822's pattern.
  * Commands combine best approaches from all PRs:
- * - PR #820: openFolder with URI handling
  * - PR #821: openConfig with range reveal
- * - PR #823: viewOutput with smart file opening
+ * - Data preview with storage backend
  */
 
 import * as vscode from 'vscode';
@@ -26,14 +25,8 @@ interface CommandContext {
  */
 export function registerCommands({ context, model, dagWebview, dataPreviewProvider }: CommandContext): void {
     context.subscriptions.push(
-        // Open action folder in VS Code Explorer sidebar
-        vscode.commands.registerCommand('agentActions.openFolder', openFolder),
-
         // Open action config and navigate to definition
         vscode.commands.registerCommand('agentActions.openConfig', openConfig),
-
-        // View action output (opens first file in output folder)
-        vscode.commands.registerCommand('agentActions.viewOutput', viewOutput),
 
         // Preview action data from storage backend
         vscode.commands.registerCommand('agentActions.previewData', (action: ActionInfo) =>
@@ -63,28 +56,6 @@ export function registerCommands({ context, model, dagWebview, dataPreviewProvid
 }
 
 /**
- * Open folder in VS Code's Explorer sidebar (not system file manager)
- */
-async function openFolder(folderPath: string): Promise<void> {
-    if (!folderPath) {
-        vscode.window.showWarningMessage('No folder path provided.');
-        return;
-    }
-
-    const uri = vscode.Uri.file(folderPath);
-
-    try {
-        // Check if folder exists
-        await vscode.workspace.fs.stat(uri);
-        // Reveal in VS Code's Explorer sidebar
-        await vscode.commands.executeCommand('revealInExplorer', uri);
-    } catch {
-        // Folder doesn't exist yet
-        vscode.window.showInformationMessage(`Folder not yet created: ${folderPath}`);
-    }
-}
-
-/**
  * Open config file and navigate to action definition
  *
  * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
@@ -107,46 +78,6 @@ async function openConfig(arg: ActionInfo | { action: ActionInfo }): Promise<voi
 
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
     editor.selection = new vscode.Selection(position, position);
-}
-
-/**
- * View action output - opens first file in output folder
- *
- * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
- * not the ActionInfo directly. We handle both cases.
- */
-async function viewOutput(arg: ActionInfo | { action: ActionInfo }): Promise<void> {
-    // Handle both ActionInfo and ActionNode (which has an 'action' property)
-    const action: ActionInfo | undefined = 'action' in arg ? arg.action : arg;
-
-    if (!action?.folderPath) {
-        vscode.window.showWarningMessage('No action or folder path provided.');
-        return;
-    }
-
-    const uri = vscode.Uri.file(action.folderPath);
-
-    try {
-        const entries = await vscode.workspace.fs.readDirectory(uri);
-
-        // Find first file (not directory)
-        const fileEntry = entries.find(([, type]) => type === vscode.FileType.File);
-
-        if (fileEntry) {
-            const fileUri = vscode.Uri.joinPath(uri, fileEntry[0]);
-            const document = await vscode.workspace.openTextDocument(fileUri);
-            await vscode.window.showTextDocument(document, { preview: true });
-            return;
-        }
-
-        // No files found, reveal folder in VS Code Explorer
-        await vscode.commands.executeCommand('revealInExplorer', uri);
-    } catch {
-        // Folder doesn't exist
-        vscode.window.showInformationMessage(
-            `Output folder not yet created: ${action.folderPath}`
-        );
-    }
 }
 
 /**

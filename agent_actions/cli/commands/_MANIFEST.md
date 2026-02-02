@@ -72,3 +72,7 @@
 | `StatusCommand` | Class | Wraps status file loading and Rich table rendering. | `validation`, `project_paths_factory` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Print a rich table with each agent's workflow status. | `rich` |
 | `status` | Function | Click entrypoint that instantiates `StatusCommand`. | `validation` |
+| `preview.py` | Module | Preview command for displaying data stored in the SQLite storage backend. | `cli`, `storage`, `validation` |
+| `PreviewCommand` | Class | Implementation of the preview command with support for multiple output formats. | `storage`, `rich`, `project_paths_factory` |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Load data from storage backend and render in table/json/raw format. | `rich`, `storage` |
+| `preview` | Function | Click entrypoint for `agent-actions preview` that shows stored workflow data. | `validation`, `cli` |

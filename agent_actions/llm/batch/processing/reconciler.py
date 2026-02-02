@@ -128,7 +128,7 @@ class BatchResultReconciler:
 
         for custom_id, original_row in self.context_map.items():
             # Skip records that were already processed
-            if custom_id in self._processed_ids:
+            if str(custom_id) in self._processed_ids:
                 continue
 
             filter_status = BatchContextMetadata.get_filter_status(original_row)
@@ -176,12 +176,12 @@ class BatchResultReconciler:
         Get original record data by custom_id.
 
         Args:
-            custom_id: The custom ID to look up
+            custom_id: The custom ID to look up (normalized to string for JSON compatibility)
 
         Returns:
             Original row data, or empty dict if not found
         """
-        return self.context_map.get(custom_id, {})
+        return self.context_map.get(str(custom_id), {})
 
     def get_source_guid(self, custom_id: str, fallback: str = None) -> str:
         """
@@ -204,14 +204,14 @@ class BatchResultReconciler:
         Useful for loop correlation ID generation where index matters.
 
         Args:
-            custom_id: The custom ID to find
+            custom_id: The custom ID to find (normalized to string for JSON compatibility)
 
         Returns:
             Index of the custom_id in context_map keys, or -1 if not found
         """
         context_keys = list(self.context_map.keys())
         try:
-            return context_keys.index(custom_id)
+            return context_keys.index(str(custom_id))
         except ValueError:
             return -1
 

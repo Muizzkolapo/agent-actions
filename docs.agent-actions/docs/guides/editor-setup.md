@@ -188,15 +188,14 @@ In workflow YAML files (`agent_config/*.yml`), each action definition shows inli
 
 ```yaml
 actions:
-  - name: extract_facts    # 📁 Open Folder | 👁 View Output | ✅ completed
+  - name: extract_facts    # 🔎 Preview Output | ✅ completed
     prompt: $prompts.Extract_Facts
     dependencies: [load_data]
 ```
 
 | Link | Action |
 |------|--------|
-| 📁 **Open Folder** | Open action output folder in file explorer |
-| 👁 **View Output** | Open first output file for quick preview |
+| 🔎 **Preview Output** | Preview action output from storage backend |
 | Status indicator | Shows current status, click to open DAG |
 
 ### File Decorations
@@ -247,7 +246,7 @@ Configure the Workflow Navigator in VS Code settings:
 |---------|---------|-------------|
 | `pythonPath` | `""` | Python interpreter path. Empty = auto-detect from Python extension. |
 | `showStatusBar` | `true` | Show workflow progress in status bar. |
-| `showCodeLens` | `true` | Show action links (Open Folder, View Output) in YAML files. |
+| `showCodeLens` | `true` | Show action links (Preview Output, Status) in YAML files. |
 | `showFileDecorations` | `true` | Show execution order badges on action folders. |
 | `dagLayout` | `"vertical"` | DAG direction: `"vertical"` (top-down) or `"horizontal"` (left-right). |
 | `refreshInterval` | `0` | Polling interval in ms. `0` = rely on file watchers only. Set to `2000` for 2-second polling. |

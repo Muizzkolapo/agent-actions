@@ -3,10 +3,15 @@
 This module uses RecordProcessor for unified processing with retry support.
 """
 
+from __future__ import annotations
+
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 
 from agent_actions.output.response.config_types import AgentEntryDict
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.interfaces import IGenerator, ProcessingMode
 from agent_actions.config.di.container import registry
 from agent_actions.processing.processor import RecordProcessor
@@ -34,6 +39,7 @@ class DataGenerator(IGenerator):
         agent_name: str,
         dependency_configs: Optional[Dict[str, AgentEntryDict]] = None,
         agent_indices: Optional[Dict[str, int]] = None,
+        storage_backend: Optional["StorageBackend"] = None,
     ):
         """
         Initialize the data generator.
@@ -45,11 +51,13 @@ class DataGenerator(IGenerator):
                               Used to build namespaced field_context for {agent.field} references.
             agent_indices: Optional dict mapping agent names to their node indices.
                          Used for loading historical node data via {action_name.field} references.
+            storage_backend: Optional storage backend for historical data loading.
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.dependency_configs = dependency_configs or {}
         self.agent_indices = agent_indices or {}
+        self.storage_backend = storage_backend
 
         # Create RecordProcessor for unified processing with retry
         self._record_processor = RecordProcessor(
@@ -110,6 +118,7 @@ class DataGenerator(IGenerator):
                 workflow_metadata=workflow_metadata,
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
+                storage_backend=self.storage_backend,
             )
 
             # Build item in expected format for RecordProcessor

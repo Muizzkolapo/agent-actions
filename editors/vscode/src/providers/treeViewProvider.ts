@@ -16,7 +16,7 @@ import { WorkflowModel } from '../model/workflowModel';
 /**
  * Tree node types
  */
-type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode | FolderNode;
+type TreeNode = WorkflowNode | ActionNode | ActionGroupNode | DataPreviewNode;
 
 /**
  * Workflow root node
@@ -108,24 +108,6 @@ class ActionGroupNode extends vscode.TreeItem {
         this.description = `${actions.length} versions`;
         this.iconPath = new vscode.ThemeIcon('versions');
         this.tooltip = `Versioned action: ${baseName}\n${actions.length} versions`;
-    }
-}
-
-/**
- * Folder node for action output directory
- */
-class FolderNode extends vscode.TreeItem {
-    constructor(public readonly action: ActionInfo) {
-        super('Output Folder', vscode.TreeItemCollapsibleState.None);
-        this.contextValue = 'agentActions.folder';
-        this.iconPath = new vscode.ThemeIcon('folder');
-        this.tooltip = action.folderPath;
-        this.resourceUri = vscode.Uri.file(action.folderPath);
-        this.command = {
-            command: 'revealInExplorer',
-            title: 'Reveal in Explorer',
-            arguments: [vscode.Uri.file(action.folderPath)],
-        };
     }
 }
 
@@ -228,10 +210,9 @@ export class WorkflowTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
             return element.actions.map((a) => new ActionNode(a));
         }
 
-        // Action level: show folder and data preview
+        // Action level: show data preview
         if (element instanceof ActionNode) {
             return [
-                new FolderNode(element.action),
                 new DataPreviewNode(element.action),
             ];
         }

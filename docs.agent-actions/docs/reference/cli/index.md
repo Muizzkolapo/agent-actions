@@ -169,6 +169,7 @@ Here's what each command does - organized by what you're trying to accomplish:
 |---------|-------------|
 | [`inspect`](./inspect) | Analyze workflow structure, dependencies, and data flow |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
+| [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`list-tools`](./tools#list-tools) | List discovered tools |
 | [`validate-tools`](./tools#validate-tools) | Validate tool references |
 | [`render`](./utilities#render) | Render Jinja2 templates (useful for debugging) |
@@ -187,4 +188,5 @@ Here's what each command does - organized by what you're trying to accomplish:
 
 - **[run Command](./run)** - Execute agentic workflows with all available options
 - **[batch Commands](./batch)** - Manage batch processing for large-scale operations
+- **[preview Command](./preview)** - Inspect data in the SQLite storage backend
 - **[Troubleshooting](./troubleshooting)** - Error messages and debugging strategies
