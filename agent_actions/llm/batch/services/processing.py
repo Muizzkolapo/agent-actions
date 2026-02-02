@@ -430,6 +430,9 @@ class BatchProcessingService:
             )
         )
 
+        # Update registry status to completed
+        manager.update_status(batch_id, BatchStatus.COMPLETED)
+
         return str(output_file)
 
     def _convert_batch_results_to_workflow_format(
