@@ -1,14 +1,10 @@
 /**
  * Storage Backend Reader for Data Preview
- *
- * Provides read-only access to any storage backend (SQLite, S3, DuckDB, etc.)
- * for previewing action output data in VS Code.
- *
- * Uses the Python storage backend API for backend-agnostic data access.
  */
 
 import * as vscode from 'vscode';
 import { resolvePythonPath } from './python';
+import { transformKeys, getString, getNumber, getObject } from './caseTransform';
 
 /**
  * Preview result with pagination info
@@ -138,24 +134,25 @@ export class StorageReader {
         return new Map();
     }
 
-    /**
-     * Get storage statistics
-     */
+    /** Get storage statistics. */
     async getStats(): Promise<StorageStats | null> {
         const result = await this.runStorageCommand('stats');
+        if (!result.ok || !result.output) return null;
 
-        if (result.ok && result.output) {
-            try {
-                const data = JSON.parse(result.output);
-                return {
-                    ...data,
-                    nodes: new Map(Object.entries(data.nodes || {})),
-                };
-            } catch {
-                // Return null on parse failure
-            }
+        try {
+            const data = transformKeys<Record<string, unknown>>(JSON.parse(result.output));
+            return {
+                storagePath: getString(data, 'dbPath'),  // Python: db_path → dbPath
+                backendType: getString(data, 'backendType', 'sqlite'),
+                dbSizeBytes: getNumber(data, 'dbSizeBytes'),
+                dbSizeHuman: getString(data, 'dbSizeHuman'),
+                sourceCount: getNumber(data, 'sourceCount'),
+                targetCount: getNumber(data, 'targetCount'),
+                nodes: new Map(Object.entries(getObject(data, 'nodes') as Record<string, number>)),
+            };
+        } catch {
+            return null;
         }
-        return null;
     }
 
     /**
@@ -369,37 +366,22 @@ except Exception as e:
         return typeof parsed.error === 'string';
     }
 
+    /** Transform Python snake_case response to TypeScript camelCase. */
     private static normalizePreviewResult(
         parsed: Record<string, unknown>,
         fallbackNodeName: string,
         fallbackStoragePath: string
     ): PreviewResult {
-        const records = Array.isArray(parsed.records) ? parsed.records : [];
-        const totalCount =
-            typeof parsed.total_count === 'number'
-                ? parsed.total_count
-                : typeof parsed.totalCount === 'number'
-                    ? parsed.totalCount
-                    : records.length;
-        const nodeName =
-            typeof parsed.node_name === 'string'
-                ? parsed.node_name
-                : typeof parsed.nodeName === 'string'
-                    ? parsed.nodeName
-                    : fallbackNodeName;
-        const files = Array.isArray(parsed.files) ? parsed.files.map(String) : [];
-        const storagePath =
-            typeof parsed.storagePath === 'string' ? parsed.storagePath : fallbackStoragePath;
-        const backendType =
-            typeof parsed.backendType === 'string' ? parsed.backendType : 'sqlite';
+        const data = transformKeys<Record<string, unknown>>(parsed);
+        const records = Array.isArray(data.records) ? data.records : [];
 
         return {
             records,
-            totalCount,
-            nodeName,
-            files,
-            storagePath,
-            backendType,
+            totalCount: getNumber(data, 'totalCount', records.length),
+            nodeName: getString(data, 'nodeName', fallbackNodeName),
+            files: Array.isArray(data.files) ? data.files.map(String) : [],
+            storagePath: getString(data, 'storagePath', fallbackStoragePath),
+            backendType: getString(data, 'backendType', 'sqlite'),
         };
     }
 }

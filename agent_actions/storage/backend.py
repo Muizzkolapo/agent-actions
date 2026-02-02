@@ -18,6 +18,8 @@ class StorageBackend(ABC):
 
     File paths are relative to the workflow's agent_io directory,
     maintaining compatibility with the existing JSON file structure.
+
+    Note: API returns snake_case keys. External consumers transform at boundary.
     """
 
     @property
