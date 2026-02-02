@@ -349,9 +349,8 @@ class ProcessingPipeline:
                 storage_backend=self.config.storage_backend,
             )
 
-            # Load the source data for the given input file
-            # Pass explicit source_relative_path for storage backend reads (temp files lack agent_io structure)
-            loaded_source = source_loader.load_source_data(file_path, self.config.source_relative_path)
+            # Load the source data using the explicit source_relative_path
+            loaded_source = source_loader.load_source_data(self.config.source_relative_path)
 
             if isinstance(loaded_source, list):
                 source_data = loaded_source
