@@ -34,6 +34,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         file_path: str,
         storage_backend: Optional["StorageBackend"] = None,
         node_name: Optional[str] = None,
+        output_directory: Optional[str] = None,
     ):
         """
         Initialize file writer.
@@ -42,12 +43,14 @@ class FileWriter(ProcessorErrorHandlerMixin):
             file_path: Path to the output file
             storage_backend: Optional storage backend for database persistence
             node_name: Node name for backend writes (required if storage_backend provided)
+            output_directory: Base directory for computing relative paths (preserves subdirs)
         """
         super().__init__()
         self.file_path = file_path
         self.file_type = Path(file_path).suffix.lower()
         self.storage_backend = storage_backend
         self.node_name = node_name
+        self.output_directory = output_directory
 
     def write_staging(self, data):
         """
@@ -133,7 +136,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     f"Configure a storage backend (sqlite, tinydb) in your workflow. "
                     f"File: {self.file_path}"
                 )
-            relative_path = Path(self.file_path).name
+            # Compute relative path preserving subdirectory structure
+            file_path = Path(self.file_path)
+            if self.output_directory:
+                try:
+                    relative_path = str(file_path.relative_to(self.output_directory))
+                except ValueError:
+                    # file_path not under output_directory, use filename only
+                    relative_path = file_path.name
+            else:
+                relative_path = file_path.name
             self.storage_backend.write_target(self.node_name, relative_path, data)
             bytes_written = len(json.dumps(data))
 

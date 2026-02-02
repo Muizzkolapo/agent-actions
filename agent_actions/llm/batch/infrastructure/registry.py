@@ -170,6 +170,9 @@ class BatchRegistryManager:
                         provider=entry.provider,
                         record_count=entry.record_count,
                         workflow_session_id=entry.workflow_session_id,
+                        file_name=entry.file_name,
+                        is_versioned_agent=entry.is_versioned_agent,
+                        version_base_name=entry.version_base_name,
                     )
                     self._cache[file_name] = updated_entry
                     self._persist_registry(self._cache)
@@ -261,6 +264,9 @@ class BatchRegistryManager:
                                 provider=entry.provider,
                                 record_count=entry.record_count,
                                 workflow_session_id=entry.workflow_session_id,
+                                file_name=entry.file_name,
+                                is_versioned_agent=entry.is_versioned_agent,
+                                version_base_name=entry.version_base_name,
                             )
                             self._cache[file_name] = updated_entry
                             cache_modified = True

@@ -42,6 +42,7 @@ class PipelineConfig:
     agent_configs: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
+    source_relative_path: Optional[str] = None  # For storage backend source lookups
 
 
 @dataclass
@@ -179,6 +180,7 @@ class ProcessingPipeline:
                 str(output_file_path),
                 storage_backend=params.storage_backend,
                 node_name=params.pipeline_agent_name,
+                output_directory=params.batch_output_directory,
             )
             file_writer.write_target(result["data"])
             marker = output_file_path.parent / ".passthrough_processed"
@@ -340,25 +342,16 @@ class ProcessingPipeline:
         source_data = data
 
         try:
-            # Architectural Fix: Delegate source loading to SourceDataLoader
-            # which encapsulates standard path knowledge and validation logic.
-            # This is more robust than ad-hoc path traversal.
-            from agent_actions.config.paths import PathManager
             from agent_actions.input.loaders.source_data import SourceDataLoader
 
-            # Initialize PathManager. We allow it to auto-discover project root if needed.
-            path_manager = PathManager()
-
-            # Using SourceDataLoader ensures we follow the rigorous path logic
-            # (e.g. handling 'agent_io/target/NODE/file' -> 'agent_io/source/file')
             source_loader = SourceDataLoader(
-                self.config.agent_name,
-                path_manager,
+                agent_name=self.config.agent_name,
                 storage_backend=self.config.storage_backend,
             )
 
             # Load the source data for the given input file
-            loaded_source = source_loader.load_source_data(file_path)
+            # Pass explicit source_relative_path for storage backend reads (temp files lack agent_io structure)
+            loaded_source = source_loader.load_source_data(file_path, self.config.source_relative_path)
 
             if isinstance(loaded_source, list):
                 source_data = loaded_source
@@ -378,7 +371,8 @@ class ProcessingPipeline:
             # source_data remains 'data' (the fallback)
 
         # Batch mode check (tools run synchronously, not in batch)
-        if self.config.agent_config.get("run_mode") == "batch" and not self.is_tool_action:
+        run_mode = self.config.agent_config.get("run_mode")
+        if run_mode == "batch" and not self.is_tool_action:
             self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 
@@ -559,6 +553,7 @@ def create_processing_pipeline_from_params(
     agent_configs: Optional[Dict[str, Any]] = None,
     workflow_metadata: Optional[Dict[str, Any]] = None,
     storage_backend: Optional["StorageBackend"] = None,
+    source_relative_path: Optional[str] = None,
 ) -> ProcessingPipeline:
     """
     Factory function for creating a ProcessingPipeline instance from individual parameters.
@@ -571,6 +566,7 @@ def create_processing_pipeline_from_params(
         agent_configs: Optional dictionary of all agent configurations
         workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
         storage_backend: Optional storage backend for database persistence
+        source_relative_path: Optional explicit path for storage backend source lookups
 
     Returns:
         ProcessingPipeline instance
@@ -582,5 +578,6 @@ def create_processing_pipeline_from_params(
         agent_configs=agent_configs,
         workflow_metadata=workflow_metadata,
         storage_backend=storage_backend,
+        source_relative_path=source_relative_path,
     )
     return ProcessingPipeline(config, processor_factory)

@@ -105,14 +105,14 @@ class BatchLifecycleManager:
         Args:
             output_directory: Path to output directory
             agent_config: Agent configuration
-            agent_name: Name of agent (for error messages)
+            agent_name: Name of agent (for storage backend writes and error messages)
 
         Raises:
             ProcessingError: If result processing fails
         """
         try:
             processed_files = self.batch_service.process_all_batch_results(
-                output_directory, agent_config=agent_config
+                output_directory, agent_config=agent_config, node_name=agent_name
             )
 
             if not processed_files:

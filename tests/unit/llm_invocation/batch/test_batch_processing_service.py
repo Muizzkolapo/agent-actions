@@ -180,16 +180,27 @@ class TestWriteBatchOutput:
     """Tests for _write_batch_output helper method."""
 
     def test_writes_main_output_file(self, tmp_path):
-        """Should write main output to JSON file."""
+        """Should write main output to storage backend."""
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
+
+        # Create mock storage backend that tracks writes
+        mock_storage = MagicMock()
+        written_data = []
+
+        def capture_write(node_name, relative_path, data):
+            written_data.append({"node_name": node_name, "path": relative_path, "data": data})
+
+        mock_storage.write_target = capture_write
 
         service = BatchProcessingService(
             client_resolver=MagicMock(),
             context_manager=MagicMock(),
             result_processor=MagicMock(),
             registry_manager_factory=MagicMock(),
+            storage_backend=mock_storage,
+            node_name="test_node",
         )
 
         main_output = [{"id": "1", "result": "success"}]
@@ -202,17 +213,18 @@ class TestWriteBatchOutput:
             output_directory=str(tmp_path),
         )
 
-        assert output_file.exists()
-        with open(output_file) as f:
-            written_data = json.load(f)
-        assert written_data == main_output
+        # Verify storage backend was called with correct data
+        assert len(written_data) == 1
+        assert written_data[0]["node_name"] == "test_node"
+        assert written_data[0]["path"] == "output.json"
+        assert written_data[0]["data"] == main_output
 
 
 class TestApplyWorkflowSessionId:
     """Tests for _apply_workflow_session_id helper method."""
 
-    def test_returns_none_when_agent_config_missing(self):
-        """Should return None when agent_config is None."""
+    def test_restores_context_when_agent_config_missing(self):
+        """Should restore workflow context from entry when agent_config is None."""
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
@@ -224,11 +236,17 @@ class TestApplyWorkflowSessionId:
             timestamp="2024-01-01",
             provider="openai",
             workflow_session_id="session-123",
+            is_versioned_agent=True,
+            version_base_name="extract_qa",
         )
 
         result = BatchProcessingService._apply_workflow_session_id(None, entry)
 
-        assert result is None
+        assert result == {
+            "workflow_session_id": "session-123",
+            "is_versioned_agent": True,
+            "version_base_name": "extract_qa",
+        }
 
     def test_returns_agent_config_when_entry_missing(self):
         """Should return agent_config when entry is None."""
@@ -242,8 +260,8 @@ class TestApplyWorkflowSessionId:
 
         assert result is agent_config
 
-    def test_returns_agent_config_when_entry_session_missing(self):
-        """Should return agent_config when entry has no workflow_session_id."""
+    def test_preserves_agent_config_when_entry_has_no_values(self):
+        """Should preserve agent_config values when entry has no workflow context."""
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
@@ -260,7 +278,7 @@ class TestApplyWorkflowSessionId:
 
         result = BatchProcessingService._apply_workflow_session_id(agent_config, entry)
 
-        assert result is agent_config
+        assert result == {"workflow_session_id": "session-123", "other": "config"}
 
     def test_preserves_entry_session_id(self):
         """Should overwrite agent_config session ID with entry session ID."""
@@ -284,8 +302,8 @@ class TestApplyWorkflowSessionId:
         assert result["other"] == "config"
         assert agent_config["workflow_session_id"] == "different-session-id"
 
-    def test_returns_same_config_when_session_ids_match(self):
-        """Should return original config when session IDs already match."""
+    def test_merges_version_context_from_entry(self):
+        """Should merge version context fields from entry into result."""
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
@@ -297,12 +315,17 @@ class TestApplyWorkflowSessionId:
             timestamp="2024-01-01",
             provider="openai",
             workflow_session_id="session-123",
+            is_versioned_agent=True,
+            version_base_name="extract_qa",
         )
-        agent_config = {"workflow_session_id": "session-123", "other": "config"}
+        agent_config = {"other": "config"}
 
         result = BatchProcessingService._apply_workflow_session_id(agent_config, entry)
 
-        assert result is agent_config
+        assert result["workflow_session_id"] == "session-123"
+        assert result["is_versioned_agent"] is True
+        assert result["version_base_name"] == "extract_qa"
+        assert result["other"] == "config"
 
 
 class TestProcessAllBatchResults:
@@ -397,11 +420,17 @@ class TestProcessAllBatchResults:
         result_processor = MagicMock()
         result_processor.process.return_value = [{"id": "1", "result": "done"}]
 
+        # Create mock storage backend
+        mock_storage = MagicMock()
+        mock_storage.write_target = MagicMock()
+
         service = BatchProcessingService(
             client_resolver=client_resolver,
             context_manager=context_manager,
             result_processor=result_processor,
             registry_manager_factory=MagicMock(return_value=manager),
+            storage_backend=mock_storage,
+            node_name="test_node",
         )
 
         result = service.process_all_batch_results(str(tmp_path))

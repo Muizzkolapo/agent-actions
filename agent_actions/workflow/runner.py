@@ -57,6 +57,7 @@ class SingleFileProcessParams:
     agent_name: str
     strategy: AgentStrategy
     idx: int
+    source_relative_path: Optional[str] = None  # For storage backend reads
 
 
 @dataclass
@@ -409,6 +410,7 @@ class AgentRunner:
                 idx=params.idx,
                 agent_configs=self.agent_configs,
                 storage_backend=self.storage_backend,
+                source_relative_path=params.source_relative_path,
             )
         )
 
@@ -572,6 +574,57 @@ class AgentRunner:
             elif key not in existing:
                 # First occurrence wins for non-mergeable fields
                 existing[key] = value
+
+    def _merge_records_by_key(
+        self, all_records: List[Any], reduce_key: Optional[str] = None
+    ) -> List:
+        """
+        Merge records by correlating on a key field.
+
+        Used when processing data from multiple parallel branches.
+        Records with the same correlation key are merged into a single record.
+
+        Args:
+            all_records: List of records to merge
+            reduce_key: Field name to use for correlation.
+                       Falls back to: parent_target_id -> source_guid if not specified.
+
+        Returns:
+            List of merged records, correlated by the reduce key
+        """
+        records_by_key: Dict[str, Dict] = {}
+        records_without_key = []
+
+        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
+        key_candidates = []
+        if reduce_key:
+            key_candidates.append(reduce_key)
+        key_candidates.extend(["parent_target_id", "source_guid"])
+
+        for record in all_records:
+            if not isinstance(record, dict):
+                records_without_key.append(record)
+                continue
+
+            # Try to find correlation key using fallback chain
+            correlation_value = None
+            for key_name in key_candidates:
+                correlation_value = record.get(key_name)
+                if not correlation_value:
+                    content = record.get("content", {})
+                    if isinstance(content, dict):
+                        correlation_value = content.get(key_name)
+                if correlation_value:
+                    break
+
+            if correlation_value:
+                if correlation_value not in records_by_key:
+                    records_by_key[correlation_value] = {}
+                self._deep_merge_record(records_by_key[correlation_value], record)
+            else:
+                records_without_key.append(record)
+
+        return list(records_by_key.values()) + records_without_key
 
     def _collect_files_from_upstream(self, upstream_data_dirs: List[str]) -> Dict[Path, List[Path]]:
         """
@@ -768,7 +821,8 @@ class AgentRunner:
         Process data from storage backend instead of filesystem.
 
         Queries the storage backend for target files from upstream node(s)
-        and processes each entry.
+        and processes each entry. Merges data from parallel branches when
+        the same relative path exists in multiple upstream nodes.
 
         Args:
             params: FileProcessParams with processing configuration
@@ -780,14 +834,15 @@ class AgentRunner:
         if self.storage_backend is None:
             return (0, 0)
 
-        files_found = 0
-        files_processed = 0
         output_path = Path(params.output_directory)
         processing_errors = []
 
+        # Collect data from all upstream nodes, grouped by relative path
+        # This enables merge behavior for parallel branches
+        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}  # path -> [(node_name, data), ...]
+
         for input_directory in params.upstream_data_dirs:
             input_path = Path(input_directory)
-            # Extract node name from path (last component of target/NODE_NAME)
             node_name = input_path.name
 
             # Skip staging directories - those are still file-based
@@ -805,52 +860,83 @@ class AgentRunner:
                 )
                 continue
 
-            files_found += len(target_files)
-
             for relative_path in target_files:
                 try:
-                    # Read data from backend
                     data = self.storage_backend.read_target(node_name, relative_path)
-
-                    # TODO: Optimize by passing data directly through pipeline
-                    # Currently writes to temp file because _process_single_file and
-                    # strategy.execute expect file paths. Refactoring would require
-                    # changes to SingleFileProcessParams and all strategy implementations.
-                    # Create a temporary file with the data for processing
-                    # Using TemporaryDirectory context manager for automatic cleanup
-                    with tempfile.TemporaryDirectory() as temp_dir:
-                        temp_file = Path(temp_dir) / relative_path
-                        temp_file.parent.mkdir(parents=True, exist_ok=True)
-                        with open(temp_file, "w", encoding="utf-8") as f:
-                            json.dump(data, f)
-
-                        # Process the file
-                        self._process_single_file(
-                            SingleFileProcessParams(
-                                locations=FileLocationParams(
-                                    item=temp_file,
-                                    input_path=Path(temp_dir),
-                                    output_path=output_path,
-                                    input_directory=temp_dir,
-                                ),
-                                agent_config=params.agent_config,
-                                agent_name=params.agent_name,
-                                strategy=params.strategy,
-                                idx=params.idx,
-                            )
-                        )
-                    files_processed += 1
-
+                    if relative_path not in data_by_path:
+                        data_by_path[relative_path] = []
+                    data_by_path[relative_path].append((node_name, data))
                 except Exception as e:
-                    error_msg = f"{node_name}/{relative_path}: {e}"
-                    processing_errors.append(error_msg)
                     logger.warning(
-                        "Failed to process backend entry %s/%s: %s",
+                        "Failed to read backend entry %s/%s: %s",
                         node_name,
                         relative_path,
                         e,
-                        exc_info=True,
                     )
+
+        files_found = len(data_by_path)
+        files_processed = 0
+
+        for relative_path, data_sources in data_by_path.items():
+            try:
+                if len(data_sources) == 1:
+                    # Single source - use data directly
+                    _, data = data_sources[0]
+                else:
+                    # Multiple sources - merge contents (MapReduce pattern)
+                    reduce_key = params.agent_config.get("reduce_key")
+                    logger.debug(
+                        "Merging %d sources for %s from parallel branches (reduce_key=%s)",
+                        len(data_sources),
+                        relative_path,
+                        reduce_key or "auto",
+                    )
+                    # Collect all data lists and merge them
+                    all_data = []
+                    for _, source_data in data_sources:
+                        if isinstance(source_data, list):
+                            all_data.extend(source_data)
+                        else:
+                            all_data.append(source_data)
+                    data = self._merge_records_by_key(all_data, reduce_key)
+
+                # Write to temp file for processing (strategy.execute expects file paths)
+                # Pass source_relative_path for proper backend source lookup
+                # (temp file paths don't have agent_io structure)
+                # Preserve subdirectories while stripping .json for backend source lookup
+                source_key = str(Path(relative_path).with_suffix(""))
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    temp_file = Path(temp_dir) / relative_path
+                    temp_file.parent.mkdir(parents=True, exist_ok=True)
+                    with open(temp_file, "w", encoding="utf-8") as f:
+                        json.dump(data, f)
+
+                    self._process_single_file(
+                        SingleFileProcessParams(
+                            locations=FileLocationParams(
+                                item=temp_file,
+                                input_path=Path(temp_dir),
+                                output_path=output_path,
+                                input_directory=temp_dir,
+                            ),
+                            agent_config=params.agent_config,
+                            agent_name=params.agent_name,
+                            strategy=params.strategy,
+                            idx=params.idx,
+                            source_relative_path=source_key,
+                        )
+                    )
+                files_processed += 1
+
+            except Exception as e:
+                error_msg = f"{relative_path}: {e}"
+                processing_errors.append(error_msg)
+                logger.warning(
+                    "Failed to process backend entry %s: %s",
+                    relative_path,
+                    e,
+                    exc_info=True,
+                )
 
         # Log summary if some files failed
         if files_found > 0 and files_processed < files_found:

@@ -275,6 +275,7 @@ class BatchSubmissionService:
             # Save to registry
             if output_directory:
                 manager = self._registry_manager_factory(output_directory)
+                file_key = batch_name or "default"
                 entry = BatchJobEntry(
                     batch_id=batch_id,
                     status=initial_status,
@@ -282,8 +283,11 @@ class BatchSubmissionService:
                     provider=provider_type,
                     record_count=len(tasks),
                     workflow_session_id=agent_config.get("workflow_session_id"),
+                    file_name=file_key,
+                    is_versioned_agent=agent_config.get("is_versioned_agent"),
+                    version_base_name=agent_config.get("version_base_name"),
                 )
-                manager.save_batch_job(batch_name or "default", entry)
+                manager.save_batch_job(file_key, entry)
 
             return batch_id
 

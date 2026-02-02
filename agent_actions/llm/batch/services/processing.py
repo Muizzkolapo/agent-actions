@@ -162,6 +162,7 @@ class BatchProcessingService:
                 str(output_file),
                 storage_backend=self._storage_backend,
                 node_name=self._node_name,
+                output_directory=output_directory,
             ).write_target(main_output)
 
             if side_output_data:
@@ -180,13 +181,15 @@ class BatchProcessingService:
             ) from e
 
     def process_all_batch_results(
-        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
+        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None,
+        node_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs in the registry.
 
         Args:
             output_directory: Output directory path
             agent_config: Agent configuration
+            node_name: Override node_name for storage backend writes (uses self._node_name if not provided)
 
         Returns:
             List of output file paths
@@ -200,6 +203,9 @@ class BatchProcessingService:
             raise ProcessingError(
                 "No batch registry found", context={"output_directory": output_directory}
             )
+
+        # Use provided node_name or fall back to instance default
+        effective_node_name = node_name or self._node_name
 
         processed_files = []
         for file_name, entry in all_jobs.items():
@@ -220,6 +226,7 @@ class BatchProcessingService:
                     output_directory=output_directory,
                     agent_config=agent_config,
                     manager=manager,
+                    node_name=effective_node_name,
                 )
                 if output_file:
                     processed_files.append(output_file)
@@ -288,6 +295,7 @@ class BatchProcessingService:
         main_output: List[Dict[str, Any]],
         side_output_data: Optional[List[Dict[str, Any]]],
         output_directory: str,
+        node_name: Optional[str] = None,
     ) -> None:
         """Write main and side output files.
 
@@ -296,6 +304,7 @@ class BatchProcessingService:
             main_output: Main output data to write
             side_output_data: Optional side output data
             output_directory: Directory for side output
+            node_name: Override node_name for storage backend writes
         """
         # Only create directory if not using storage backend
         if self._storage_backend is None:
@@ -303,7 +312,8 @@ class BatchProcessingService:
         FileWriter(
             str(output_file),
             storage_backend=self._storage_backend,
-            node_name=self._node_name,
+            node_name=node_name or self._node_name,
+            output_directory=output_directory,
         ).write_target(main_output)
 
         if side_output_data:
@@ -319,6 +329,7 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
+        node_name: Optional[str] = None,
     ) -> Optional[str]:
         """Process a single batch file and return output path.
 
@@ -331,6 +342,7 @@ class BatchProcessingService:
             output_directory: Output directory path
             agent_config: Agent configuration (may include retry settings)
             manager: Registry manager instance
+            node_name: Override node_name for storage backend writes
 
         Returns:
             Output file path if successful, None if no results
@@ -398,7 +410,7 @@ class BatchProcessingService:
 
         # Determine output path and write files
         output_file = self._determine_output_path(output_directory, file_name, batch_id)
-        self._write_batch_output(output_file, main_output, side_output_data, output_directory)
+        self._write_batch_output(output_file, main_output, side_output_data, output_directory, node_name)
 
         # Calculate completion statistics
         elapsed_time = time.time() - start_time
@@ -455,20 +467,28 @@ class BatchProcessingService:
         entry: Optional[BatchJobEntry],
     ) -> Optional[Dict[str, Any]]:
         """
-        Preserve the workflow session ID used at batch submission time.
+        Preserve workflow context used at batch submission time.
 
-        Ensures deterministic version correlation across resumed batch processing.
+        Ensures deterministic version correlation across resumed batch processing
+        by restoring workflow_session_id, is_versioned_agent, and version_base_name.
         """
-        if not agent_config or not entry or not entry.workflow_session_id:
+        if not entry:
             return agent_config
 
-        existing_session_id = agent_config.get("workflow_session_id")
-        if existing_session_id == entry.workflow_session_id:
-            return agent_config
+        # Create config if None (batch collect mode without agent_config)
+        updated_config = agent_config.copy() if agent_config else {}
 
-        updated_config = agent_config.copy()
-        updated_config["workflow_session_id"] = entry.workflow_session_id
-        return updated_config
+        # Restore workflow session ID
+        if entry.workflow_session_id:
+            updated_config["workflow_session_id"] = entry.workflow_session_id
+
+        # Restore version context for loop correlation
+        if entry.is_versioned_agent is not None:
+            updated_config["is_versioned_agent"] = entry.is_versioned_agent
+        if entry.version_base_name is not None:
+            updated_config["version_base_name"] = entry.version_base_name
+
+        return updated_config if updated_config else None
 
     def _retrieve_results(
         self,

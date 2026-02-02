@@ -32,6 +32,7 @@ class StrategyExecutionParams:
     idx: int
     agent_configs: Optional[Dict[str, Dict]] = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
+    source_relative_path: Optional[str] = None  # For storage backend source lookups
 
 
 class AgentStrategy(ABC):
@@ -90,6 +91,7 @@ class AgentStrategy(ABC):
             processor_factory=self.processor_factory,
             agent_configs=params.agent_configs,
             storage_backend=params.storage_backend,
+            source_relative_path=params.source_relative_path,
         )
         result = pipeline.process(params.file_path, params.base_directory, params.output_directory)
         if asyncio.iscoroutine(result):

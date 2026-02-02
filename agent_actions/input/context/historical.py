@@ -1,9 +1,7 @@
-"""Module for loading historical node data from target files using lineage tracking."""
+"""Module for loading historical node data from storage backend using lineage tracking."""
 
-import json
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
 from agent_actions.cli.utils.service_logger import ServiceLogger
@@ -108,56 +106,27 @@ class HistoricalNodeDataLoader:
                     "[DEBUG] Found node_id=%s for action='%s'", node_id, request.action_name
                 )
 
-            # Get the node index for constructing the path
-            node_idx = request.agent_indices.get(request.action_name)
-            if node_idx is None:
+            # Storage backend is required for historical data loading
+            if request.storage_backend is None:
                 logger.warning(
-                    "No index found for action '%s' in agent_indices", request.action_name
+                    "[HISTORICAL] No storage backend provided for action '%s'",
+                    request.action_name,
                 )
                 return None
 
-            # Construct path to the target file
-            target_path = HistoricalNodeDataLoader._construct_target_path(
-                request.action_name, node_idx, request.file_path
-            )
-            logger.debug(
-                "[DEBUG HISTORICAL] action_name=%s, file_path=%s -> target_path=%s",
+            data = HistoricalNodeDataLoader._load_from_storage_backend(
+                request.storage_backend,
                 request.action_name,
                 request.file_path,
-                target_path,
             )
+            if data is None:
+                logger.debug(
+                    "[HISTORICAL] No data in storage backend for '%s'",
+                    request.action_name,
+                )
+                return None
 
-            if not target_path.exists():
-                # Try loading from storage backend if available
-                if request.storage_backend is not None:
-                    logger.debug(
-                        "Target file does not exist: %s. Attempting to load from storage backend.",
-                        target_path,
-                    )
-                    data = HistoricalNodeDataLoader._load_from_storage_backend(
-                        request.storage_backend,
-                        request.action_name,
-                        request.file_path,
-                    )
-                    if data is None:
-                        logger.debug(
-                            "No data found in storage backend for action '%s'",
-                            request.action_name,
-                        )
-                        return None
-                else:
-                    logger.debug(
-                        "Target file does not exist: %s and no storage backend configured.",
-                        target_path,
-                    )
-                    return None
-            else:
-                # Load from JSON file (legacy path - storage backend preferred)
-                logger.debug("[DEBUG] Loading file: %s", target_path)
-                with open(target_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-            logger.debug("[DEBUG] File loaded, %s records found", len(data))
+            logger.debug("[HISTORICAL] Loaded %d records for %s", len(data), request.action_name)
 
             # DEBUG: Log what we're searching for
             lineage_status = "provided" if request.caller_lineage else "None"
@@ -203,10 +172,10 @@ class HistoricalNodeDataLoader:
             source_guids = set(r.get("source_guid") for r in data if isinstance(r, dict))
             logger.debug("[DEBUG] No match found. File contains source_guids: %s", source_guids)
             logger.warning(
-                "No record found for source_guid=%s, node_id=%s in %s",
+                "No record found for source_guid=%s, node_id=%s in action '%s'",
                 request.source_guid,
                 node_id,
-                target_path,
+                request.action_name,
             )
             return None
 
@@ -250,38 +219,6 @@ class HistoricalNodeDataLoader:
         return None
 
     @staticmethod
-    def _construct_target_path(action_name: str, node_idx: int, current_file_path: str) -> Path:
-        """
-        Construct the path to the target file for the given action.
-
-        Args:
-            action_name: Name of the action/agent
-            node_idx: Node index (kept for API compatibility, not used for path)
-            current_file_path: Current file being processed
-
-        Returns:
-            Path to the target file
-
-        Example:
-            action_name = "fact_extractor"
-            current_file_path = "target/cluster/file.json"
-
-            Returns: Path("target/fact_extractor/file.json")
-        """
-        current_path = Path(current_file_path)
-        file_name = current_path.name
-
-        # Navigate to the target directory root
-        # Structure: target/{action_name}/file.json
-        target_root = current_path.parent.parent
-
-        # Use simple directory name (no index prefix)
-        target_dir = target_root / action_name
-        target_file = target_dir / file_name
-
-        return target_file
-
-    @staticmethod
     def _load_from_storage_backend(
         storage_backend: "StorageBackend",
         action_name: str,
@@ -309,7 +246,6 @@ class HistoricalNodeDataLoader:
                 action_name,
                 file_name,
             )
-
             data = storage_backend.read_target(
                 node_name=action_name,
                 relative_path=file_name,
@@ -467,13 +403,11 @@ class HistoricalNodeDataLoader:
             return None
 
         logger.debug(
-            "[DEBUG _find_record] Searching %s records for source_guid=%s, "
-            "parent_target_id=%s, is_parallel_sibling=%s, action_name=%s",
+            "[HISTORICAL] Searching %d records for source_guid=%s, action_name=%s, is_parallel_sibling=%s",
             len(data),
             source_guid,
-            parent_target_id,
-            is_parallel_sibling,
             action_name,
+            is_parallel_sibling,
         )
 
         matches_found = 0
@@ -533,23 +467,17 @@ class HistoricalNodeDataLoader:
         if is_parallel_sibling:
             # For parallel siblings, prefer ancestry matching strategies
             if parent_match:
-                logger.debug("[DEBUG _find_record] Returning parent_target_id match")
+                logger.debug("[HISTORICAL] Returning parent_target_id match")
                 return parent_match
             if root_match:
-                logger.debug("[DEBUG _find_record] Returning root_target_id match")
+                logger.debug("[HISTORICAL] Returning root_target_id match")
                 return root_match
             # Fallback: return first source_guid match (for Action 0 parallel siblings
             # that have no parent_target_id because they process original source data)
             if first_match:
-                logger.debug(
-                    "[DEBUG _find_record] Returning source_guid fallback match "
-                    "(parallel sibling with no parent/root ancestry)"
-                )
+                logger.debug("[HISTORICAL] Returning source_guid fallback match (parallel sibling)")
                 return first_match
 
-        logger.debug(
-            "[DEBUG _find_record] No matches found (searched %s records)",
-            len(data),
-        )
+        logger.debug("[HISTORICAL] No matches found (searched %d records)", len(data))
         return None
 

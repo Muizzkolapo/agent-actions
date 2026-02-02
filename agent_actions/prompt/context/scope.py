@@ -159,6 +159,46 @@ class ContextScopeProcessor:
         return referenced_actions
 
     @staticmethod
+    def extract_action_names_from_template(template: Optional[str]) -> set:
+        """
+        Extract unique action names referenced in a Jinja2 template.
+
+        Parses template for {{ namespace.field }} patterns and extracts namespace names.
+        Filters out special namespaces (source, loop, workflow) and common Jinja2 filters.
+
+        Args:
+            template: Jinja2 template string
+
+        Returns:
+            Set of action names (potential upstream dependencies) referenced in template
+
+        Example:
+            template = "{{ summarize_page_content.summary }} and {{ source.text }}"
+            Returns: {"summarize_page_content"}  # 'source' is filtered as special namespace
+        """
+        import re
+
+        if not template or not isinstance(template, str):
+            return set()
+
+        referenced_actions = set()
+
+        # Match {{ namespace.field }} or {{ namespace['field'] }} patterns
+        # This regex captures the namespace (first identifier before . or [)
+        pattern = r'\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]'
+        matches = re.findall(pattern, template)
+
+        for namespace in matches:
+            # Filter out special namespaces and common Jinja2 variables
+            if namespace in SPECIAL_NAMESPACES:
+                continue
+            if namespace in ('loop', 'range', 'true', 'false', 'none', 'self'):
+                continue
+            referenced_actions.add(namespace)
+
+        return referenced_actions
+
+    @staticmethod
     def _get_base_name(action_name: str) -> str:
         """
         Strip trailing _N suffix to get base action name.
@@ -383,6 +423,28 @@ class ContextScopeProcessor:
         referenced_actions = ContextScopeProcessor.extract_action_names_from_context_scope(
             context_scope
         )
+
+        # 2a. Auto-infer from prompt template (if no context_scope configured)
+        # This enables {{ upstream_action.field }} references to work without explicit context_scope
+        from agent_actions.prompt.formatter import PromptFormatter
+
+        try:
+            raw_prompt = PromptFormatter.get_raw_prompt(action_config)
+            if raw_prompt:
+                template_actions = ContextScopeProcessor.extract_action_names_from_template(
+                    raw_prompt
+                )
+                # Only add template-referenced actions that are valid workflow actions
+                valid_template_actions = template_actions & set(workflow_actions)
+                if valid_template_actions - referenced_actions:
+                    logger.debug(
+                        f"[TEMPLATE-INFER] Action '{action_name}': Auto-inferred context sources "
+                        f"from template: {valid_template_actions - referenced_actions}"
+                    )
+                referenced_actions = referenced_actions | valid_template_actions
+        except Exception:
+            # If prompt retrieval fails, skip template-based inference
+            pass
 
         # 2b. Identify field prefix patterns and wildcards from context_scope
         # Collect all field references once to avoid duplication
@@ -1130,6 +1192,14 @@ class ContextScopeProcessor:
             ))
 
         # 2. DEPENDENCY namespaces - separate input sources from context sources
+        logger.debug(
+            "[CONTEXT BUILD] Action '%s': agent_config=%s, agent_indices=%s, current_item=%s, file_path=%s",
+            agent_name,
+            bool(agent_config),
+            len(agent_indices) if agent_indices else 0,
+            bool(current_item),
+            bool(file_path),
+        )
         if agent_config and agent_indices and current_item and file_path:
             # BATCH MODE - Use auto-inferred context dependencies
             workflow_actions = list(agent_indices.keys())
@@ -1140,8 +1210,10 @@ class ContextScopeProcessor:
             )
 
             logger.debug(
-                f"[AUTO-INFER] Action '{agent_name}': "
-                f"input_sources={input_sources}, context_sources={context_sources}"
+                "[AUTO-INFER] Action '%s': input_sources=%s, context_sources=%s",
+                agent_name,
+                input_sources,
+                context_sources,
             )
 
             lineage = current_item.get("lineage", [])
@@ -1230,6 +1302,12 @@ class ContextScopeProcessor:
                             )
 
             # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
+            logger.info(
+                "[CONTEXT SOURCES CHECK] Action '%s': context_sources=%s, will load=%s",
+                agent_name,
+                context_sources,
+                bool(context_sources),
+            )
             if context_sources:
                 # Get allowed fields for context sources
                 if "allowed_fields_map" not in locals():
@@ -1240,7 +1318,7 @@ class ContextScopeProcessor:
                         )
                     )
 
-                logger.debug(
+                logger.info(
                     "[CONTEXT SOURCES] Loading %d context dependencies: %s "
                     "(storage_backend=%s)",
                     len(context_sources),
@@ -1301,6 +1379,12 @@ class ContextScopeProcessor:
                         storage_backend=storage_backend,
                     )
 
+                    logger.debug(
+                        "[HISTORICAL] Action '%s': dep='%s' -> %s",
+                        agent_name,
+                        dep_name,
+                        "FOUND" if historical_data else "NOT FOUND",
+                    )
                     if historical_data is None:
                         logger.warning(
                             f"[CONTEXT SOURCE] Context dependency '{dep_name}' historical data not found. "
@@ -1342,7 +1426,19 @@ class ContextScopeProcessor:
                             f"{list(filtered_data.keys())}"
                         )
 
-        elif agent_config and agent_config.get("dependencies") and not agent_indices:
+        else:
+            # Log why batch mode condition wasn't met
+            logger.info(
+                "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met. "
+                "agent_config=%s, agent_indices=%s, current_item=%s, file_path=%s",
+                agent_name,
+                bool(agent_config),
+                len(agent_indices) if agent_indices else 0,
+                bool(current_item),
+                bool(file_path),
+            )
+
+        if agent_config and agent_config.get("dependencies") and not agent_indices:
             # ERROR: Dependencies declared but no agent_indices provided
             # agent_indices is REQUIRED for dependency resolution (no fallbacks)
             from agent_actions.errors import ConfigurationError

@@ -18,10 +18,12 @@ import json
 class MockBatchService:
     """Mock BatchService for testing helper methods in isolation."""
 
-    def __init__(self):
+    def __init__(self, storage_backend=None, node_name=None):
         self.check_status = MagicMock()
         self._context_manager = MagicMock()
         self._client_resolver = MagicMock()
+        self._storage_backend = storage_backend
+        self._node_name = node_name
 
     def _is_batch_ready_for_processing(self, batch_id: str, output_directory: str) -> bool:
         """Check if batch is ready for processing (completed status)."""
@@ -58,8 +60,15 @@ class MockBatchService:
             BatchSideOutputHandler,
         )
 
-        ensure_directory_exists(output_file, is_file=True)
-        FileWriter(str(output_file)).write_target(main_output)
+        # Only create directory if not using storage backend
+        if self._storage_backend is None:
+            ensure_directory_exists(output_file, is_file=True)
+        FileWriter(
+            str(output_file),
+            storage_backend=self._storage_backend,
+            node_name=self._node_name,
+            output_directory=output_directory,
+        ).write_target(main_output)
 
         if side_output_data:
             side_output_dir = create_side_output_directory(output_directory)
@@ -170,8 +179,17 @@ class TestWriteBatchOutput:
     """Tests for _write_batch_output helper method."""
 
     def test_writes_main_output_file(self, tmp_path):
-        """Should write main output to JSON file."""
-        service = MockBatchService()
+        """Should write main output to storage backend."""
+        # Create mock storage backend that tracks writes
+        mock_storage = MagicMock()
+        written_data = []
+
+        def capture_write(node_name, relative_path, data):
+            written_data.append({"node_name": node_name, "path": relative_path, "data": data})
+
+        mock_storage.write_target = capture_write
+
+        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         output_file = tmp_path / "output.json"
 
@@ -182,14 +200,19 @@ class TestWriteBatchOutput:
             output_directory=str(tmp_path),
         )
 
-        assert output_file.exists()
-        with open(output_file) as f:
-            written_data = json.load(f)
-        assert written_data == main_output
+        # Verify storage backend was called with correct data
+        assert len(written_data) == 1
+        assert written_data[0]["node_name"] == "test_node"
+        assert written_data[0]["path"] == "output.json"
+        assert written_data[0]["data"] == main_output
 
     def test_writes_side_output_when_present(self, tmp_path):
         """Should write side output to side_output directory."""
-        service = MockBatchService()
+        # Create mock storage backend
+        mock_storage = MagicMock()
+        mock_storage.write_target = MagicMock()
+
+        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         side_output_data = [{"id": "2", "skipped": True}]
 
@@ -205,8 +228,8 @@ class TestWriteBatchOutput:
             output_directory=str(output_dir),
         )
 
-        # Check main output
-        assert output_file.exists()
+        # Check storage backend was called
+        mock_storage.write_target.assert_called_once()
 
         # Check side output directory was created (at parent level)
         side_output_dir = tmp_path / "side_output"
@@ -214,7 +237,11 @@ class TestWriteBatchOutput:
 
     def test_does_not_create_side_output_when_empty(self, tmp_path):
         """Should not create side_output directory when no side output."""
-        service = MockBatchService()
+        # Create mock storage backend
+        mock_storage = MagicMock()
+        mock_storage.write_target = MagicMock()
+
+        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         output_file = tmp_path / "output.json"
 
