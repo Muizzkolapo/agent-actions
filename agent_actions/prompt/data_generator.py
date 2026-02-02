@@ -3,6 +3,8 @@
 This module uses RecordProcessor for unified processing with retry support.
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 
