@@ -94,22 +94,26 @@ Shows workflow progress at a glance:
 ```json
 {
   "agentActions.pythonPath": "",
+  "agentActions.modulePath": "",
   "agentActions.showStatusBar": true,
   "agentActions.showCodeLens": true,
   "agentActions.showFileDecorations": true,
   "agentActions.dagLayout": "vertical",
-  "agentActions.refreshInterval": 0
+  "agentActions.refreshInterval": 0,
+  "agentActions.previewCacheTTL": 5000
 }
 ```
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `pythonPath` | `""` | Python interpreter path. Empty = auto-detect. |
+| `modulePath` | `""` | Path to agent-actions module. **Set this for faster startup in monorepos.** |
 | `showStatusBar` | `true` | Show workflow status in status bar. |
 | `showCodeLens` | `true` | Show action links in YAML files. |
 | `showFileDecorations` | `true` | Show badges on action folders. |
 | `dagLayout` | `"vertical"` | DAG direction: `"vertical"` or `"horizontal"`. |
 | `refreshInterval` | `0` | Polling interval (ms). 0 = file watchers only. |
+| `previewCacheTTL` | `5000` | Cache duration (ms) for data preview. 0 = disable. |
 
 ## Data Sources
 
@@ -147,6 +151,21 @@ Ensure your project has:
 - Check that `agent_io/target/.manifest.json` exists
 - Try `Cmd+Shift+R` to manually refresh
 - Enable polling: `"agentActions.refreshInterval": 2000`
+
+### Data preview not working / "Module import failed"
+
+The extension needs to find the `agent_actions` Python module. Set `modulePath` explicitly:
+
+```json
+{
+  "agentActions.modulePath": "/path/to/agent-actions"
+}
+```
+
+This is recommended for:
+- **Monorepos** where auto-discovery might find the wrong module
+- **Large directory structures** where traversal is slow
+- **Development setups** with local clones of agent-actions
 
 ## Architecture
 

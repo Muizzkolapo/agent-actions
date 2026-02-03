@@ -313,6 +313,7 @@ except Exception as e:
             const err = error as { message?: string; stderr?: string; stdout?: string };
             const parsed = this.parseErrorPayload(err.stdout) ?? this.parseErrorPayload(err.stderr);
             if (parsed) {
+                this.showModulePathHint(parsed.error);
                 return parsed;
             }
             return {
@@ -321,6 +322,23 @@ except Exception as e:
                 stderr: err.stderr,
             };
         }
+    }
+
+    private static modulePathHintShown = false;
+
+    private showModulePathHint(error: string): void {
+        if (StorageReader.modulePathHintShown) return;
+        if (!error.includes('Could not find agent_actions') && !error.includes('Module import failed')) return;
+
+        StorageReader.modulePathHintShown = true;
+        vscode.window.showWarningMessage(
+            'Agent Actions module not found. Set agentActions.modulePath for faster discovery.',
+            'Open Settings'
+        ).then(selection => {
+            if (selection === 'Open Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'agentActions.modulePath');
+            }
+        });
     }
 
     private parseErrorPayload(raw?: string): StorageCommandFailure | null {
