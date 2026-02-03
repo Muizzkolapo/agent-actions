@@ -24,7 +24,10 @@ export class DataPreviewProvider implements vscode.TextDocumentContentProvider, 
     readonly onDidChange = this._onDidChange.event;
 
     private readonly cache = new Map<string, { content: string; timestamp: number }>();
-    private readonly cacheTTL = 5000; // 5 seconds
+
+    private get cacheTTL(): number {
+        return vscode.workspace.getConfiguration('agentActions').get<number>('previewCacheTTL', 5000);
+    }
 
     dispose(): void {
         this._onDidChange.dispose();

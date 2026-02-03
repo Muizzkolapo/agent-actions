@@ -90,6 +90,13 @@
             "Disable all logging"
           ],
           "description": "Controls the verbosity of Agent Actions logs in the Output panel."
+        },
+        "agentActions.previewCacheTTL": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "Cache duration in milliseconds for data preview (0 to disable caching)."
         }
       }
     },
