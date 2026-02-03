@@ -250,21 +250,33 @@ class ProcessingPipeline:
             params.paths.file_path, params.paths.base_directory, params.paths.output_directory
         )
 
-    def process(self, file_path: str, base_directory: str, output_directory: str) -> str:
+    def process(
+        self,
+        file_path: str,
+        base_directory: str,
+        output_directory: str,
+        data: Optional[List[Dict[str, Any]]] = None,
+    ) -> str:
         """
         Process input file and generate output.
 
         Args:
-            file_path: Path to the input JSON file
+            file_path: Path to the input JSON file (also used for output path calculation)
             base_directory: Base directory for calculating relative paths
-            output_directory: Directory where the output file will be
-                saved
+            output_directory: Directory where the output file will be saved
+            data: Optional pre-loaded data (skips file read when provided)
 
         Returns:
             Path to the generated output file
         """
         try:
-            data = self._read_input_data(file_path)
+            if data is None:
+                data = self._read_input_data(file_path)
+            else:
+                logger.debug(
+                    "Using pre-loaded data for %s (skipping file read)",
+                    file_path,
+                )
             self._process_by_strategy(data, file_path, base_directory, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             return str(Path(output_directory) / relative_path)

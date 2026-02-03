@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import json
 import logging
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Dict, Optional, List
+from typing import TYPE_CHECKING, Tuple, Dict, Optional, List, Any
 
 if TYPE_CHECKING:
     from agent_actions.workflow.managers.manifest import ManifestManager
@@ -58,6 +57,7 @@ class SingleFileProcessParams:
     strategy: AgentStrategy
     idx: int
     source_relative_path: Optional[str] = None  # For storage backend reads
+    data: Optional[List[Dict[str, Any]]] = None  # Pre-loaded data (skips file read)
 
 
 @dataclass
@@ -411,6 +411,7 @@ class AgentRunner:
                 agent_configs=self.agent_configs,
                 storage_backend=self.storage_backend,
                 source_relative_path=params.source_relative_path,
+                data=params.data,
             )
         )
 
@@ -900,32 +901,36 @@ class AgentRunner:
                             all_data.append(source_data)
                     data = self._merge_records_by_key(all_data, reduce_key)
 
-                # Write to temp file for processing (strategy.execute expects file paths)
-                # Pass source_relative_path for proper backend source lookup
-                # (temp file paths don't have agent_io structure)
-                # Preserve subdirectories while stripping .json for backend source lookup
+                # Pass data directly to avoid temp file I/O overhead.
+                # We use output_path as the virtual input path because:
+                # 1. Template resolution requires valid file_path and base_directory
+                # 2. The actual data comes from params.data, not from reading the file
+                # 3. Using output_path ensures relative path calculation works correctly
                 source_key = str(Path(relative_path).with_suffix(""))
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    temp_file = Path(temp_dir) / relative_path
-                    temp_file.parent.mkdir(parents=True, exist_ok=True)
-                    with open(temp_file, "w", encoding="utf-8") as f:
-                        json.dump(data, f)
+                virtual_input_path = output_path / relative_path
 
-                    self._process_single_file(
-                        SingleFileProcessParams(
-                            locations=FileLocationParams(
-                                item=temp_file,
-                                input_path=Path(temp_dir),
-                                output_path=output_path,
-                                input_directory=temp_dir,
-                            ),
-                            agent_config=params.agent_config,
-                            agent_name=params.agent_name,
-                            strategy=params.strategy,
-                            idx=params.idx,
-                            source_relative_path=source_key,
-                        )
+                record_count = len(data) if isinstance(data, list) else 1
+                logger.debug(
+                    "Processing %s with %d pre-loaded records (no file read)",
+                    relative_path,
+                    record_count,
+                )
+                self._process_single_file(
+                    SingleFileProcessParams(
+                        locations=FileLocationParams(
+                            item=virtual_input_path,
+                            input_path=output_path,
+                            output_path=output_path,
+                            input_directory=str(output_path),
+                        ),
+                        agent_config=params.agent_config,
+                        agent_name=params.agent_name,
+                        strategy=params.strategy,
+                        idx=params.idx,
+                        source_relative_path=source_key,
+                        data=data,
                     )
+                )
                 files_processed += 1
 
             except Exception as e:

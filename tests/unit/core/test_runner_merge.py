@@ -143,9 +143,9 @@ class TestStorageBackendMerge:
         processed_data = []
 
         def capture_process(params):
-            import json
-            with open(params.locations.item) as f:
-                processed_data.append(json.load(f))
+            # Data is now passed directly via params.data (no temp file)
+            assert params.data is not None, "params.data should be populated"
+            processed_data.append(params.data)
 
         runner._process_single_file = capture_process
 
@@ -185,9 +185,9 @@ class TestStorageBackendMerge:
         processed_data = []
 
         def capture_process(params):
-            import json
-            with open(params.locations.item) as f:
-                processed_data.append(json.load(f))
+            # Data is now passed directly via params.data (no temp file)
+            assert params.data is not None, "params.data should be populated"
+            processed_data.append(params.data)
 
         runner._process_single_file = capture_process
 
