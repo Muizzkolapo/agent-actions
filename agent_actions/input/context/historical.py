@@ -480,4 +480,3 @@ class HistoricalNodeDataLoader:
 
         logger.debug("[HISTORICAL] No matches found (searched %d records)", len(data))
         return None
-

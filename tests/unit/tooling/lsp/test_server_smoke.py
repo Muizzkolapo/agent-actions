@@ -49,8 +49,7 @@ def test_vscode_extension_uses_correct_lsp_module_path():
         pattern = rf"['\"](-m\s+)?{re.escape(wrong_path)}['\"]"
         match = re.search(pattern, content)
         assert match is None, (
-            f"VS Code extension uses incorrect LSP path '{wrong_path}'. "
-            f"Should be '{correct_path}'"
+            f"VS Code extension uses incorrect LSP path '{wrong_path}'. Should be '{correct_path}'"
         )
 
 

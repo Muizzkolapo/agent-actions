@@ -293,9 +293,7 @@ class TestSchemaStructureValidator:
                 "name": "test_schema",
                 "fields": [{"id": "name", "type": "string", "required": True}],
             }
-            errors = validator.validate_schema_compilability(
-                schema, "test_action", "openai"
-            )
+            errors = validator.validate_schema_compilability(schema, "test_action", "openai")
             assert len(errors) == 0
 
         def test_empty_schema_skipped(self, validator):
@@ -305,7 +303,5 @@ class TestSchemaStructureValidator:
 
         def test_none_schema_skipped(self, validator):
             """Test None schema is skipped."""
-            errors = validator.validate_schema_compilability(
-                None, "test_action", "openai"
-            )
+            errors = validator.validate_schema_compilability(None, "test_action", "openai")
             assert len(errors) == 0

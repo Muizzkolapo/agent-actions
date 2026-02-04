@@ -147,7 +147,10 @@ class BatchProcessingService:
             # Save source data before writing output
             if self._source_handler:
                 self._source_handler.save_task_source(
-                    main_output, file_path, base_directory, output_directory,
+                    main_output,
+                    file_path,
+                    base_directory,
+                    output_directory,
                     storage_backend=self._storage_backend,
                 )
 
@@ -181,7 +184,9 @@ class BatchProcessingService:
             ) from e
 
     def process_all_batch_results(
-        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None,
+        self,
+        output_directory: str,
+        agent_config: Optional[Dict[str, Any]] = None,
         node_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs in the registry.
@@ -410,7 +415,9 @@ class BatchProcessingService:
 
         # Determine output path and write files
         output_file = self._determine_output_path(output_directory, file_name, batch_id)
-        self._write_batch_output(output_file, main_output, side_output_data, output_directory, node_name)
+        self._write_batch_output(
+            output_file, main_output, side_output_data, output_directory, node_name
+        )
 
         # Calculate completion statistics
         elapsed_time = time.time() - start_time

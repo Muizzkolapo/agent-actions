@@ -312,21 +312,25 @@ class ProjectScanner:
 
                     # Collect validation errors
                     if event_type == "ValidationErrorEvent":
-                        logs_data["validation_errors"].append({
-                            "target": data.get("target"),
-                            "error": data.get("error"),
-                            "field": data.get("field"),
-                            "timestamp": meta.get("timestamp"),
-                        })
+                        logs_data["validation_errors"].append(
+                            {
+                                "target": data.get("target"),
+                                "error": data.get("error"),
+                                "field": data.get("field"),
+                                "timestamp": meta.get("timestamp"),
+                            }
+                        )
 
                     # Collect validation warnings
                     if event_type == "ValidationWarningEvent":
-                        logs_data["validation_warnings"].append({
-                            "target": data.get("target"),
-                            "warning": data.get("warning"),
-                            "field": data.get("field"),
-                            "timestamp": meta.get("timestamp"),
-                        })
+                        logs_data["validation_warnings"].append(
+                            {
+                                "target": data.get("target"),
+                                "warning": data.get("warning"),
+                                "field": data.get("field"),
+                                "timestamp": meta.get("timestamp"),
+                            }
+                        )
 
                 # Get recent invocations (last 10)
                 logs_data["recent_invocations"] = list(invocations.values())[-10:]

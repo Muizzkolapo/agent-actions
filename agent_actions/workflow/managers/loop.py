@@ -124,9 +124,7 @@ class VersionOutputCorrelator:
 
         return version_outputs, version_filenames
 
-    def _load_from_storage_backend(
-        self, version_agent: str
-    ) -> Tuple[List[Dict[str, Any]], set]:
+    def _load_from_storage_backend(self, version_agent: str) -> Tuple[List[Dict[str, Any]], set]:
         """Load outputs from storage backend for a version agent.
 
         Args:

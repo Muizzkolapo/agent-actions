@@ -47,9 +47,7 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def write_target(
-        self, node_name: str, relative_path: str, data: List[Dict[str, Any]]
-    ) -> str:
+    def write_target(self, node_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
         """
         Write target data for a specific node.
 
@@ -67,9 +65,7 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def read_target(
-        self, node_name: str, relative_path: str
-    ) -> List[Dict[str, Any]]:
+    def read_target(self, node_name: str, relative_path: str) -> List[Dict[str, Any]]:
         """
         Read target data for a specific node.
 

@@ -91,20 +91,22 @@ class PreviewCommand:
         """Show storage statistics."""
         stats = backend.get_storage_stats()
 
-        self.console.print(Panel(
-            f"[bold]Database:[/bold] {stats['db_path']}\n"
-            f"[bold]Size:[/bold] {stats['db_size_human']}\n"
-            f"[bold]Source Records:[/bold] {stats['source_count']}\n"
-            f"[bold]Target Records:[/bold] {stats['target_count']}",
-            title=f"Storage Stats: {self.workflow_name}",
-        ))
+        self.console.print(
+            Panel(
+                f"[bold]Database:[/bold] {stats['db_path']}\n"
+                f"[bold]Size:[/bold] {stats['db_size_human']}\n"
+                f"[bold]Source Records:[/bold] {stats['source_count']}\n"
+                f"[bold]Target Records:[/bold] {stats['target_count']}",
+                title=f"Storage Stats: {self.workflow_name}",
+            )
+        )
 
-        if stats['nodes']:
+        if stats["nodes"]:
             table = Table(title="Records by Action")
             table.add_column("Action", style="cyan")
             table.add_column("Records", justify="right", style="green")
 
-            for node_name, count in sorted(stats['nodes'].items()):
+            for node_name, count in sorted(stats["nodes"].items()):
                 table.add_row(node_name, str(count or 0))
 
             self.console.print(table)
@@ -113,7 +115,7 @@ class PreviewCommand:
         """List all actions with data in the database."""
         stats = backend.get_storage_stats()
 
-        if not stats['nodes']:
+        if not stats["nodes"]:
             self.console.print("[yellow]No action data found in database.[/yellow]")
             return
 
@@ -123,7 +125,7 @@ class PreviewCommand:
         table.add_column("Records", justify="right", style="green")
         table.add_column("Files", justify="right")
 
-        for idx, (node_name, count) in enumerate(sorted(stats['nodes'].items()), 1):
+        for idx, (node_name, count) in enumerate(sorted(stats["nodes"].items()), 1):
             files = backend.list_target_files(node_name)
             table.add_row(str(idx), node_name, str(count or 0), str(len(files)))
 
@@ -144,29 +146,31 @@ class PreviewCommand:
             self.console.print(f"[red]{result['error']}[/red]")
             return
 
-        if result['total_count'] == 0:
+        if result["total_count"] == 0:
             self.console.print(f"[yellow]No data found for action '{self.action}'[/yellow]")
             return
 
         # Show header info
-        self.console.print(Panel(
-            f"[bold]Action:[/bold] {result['node_name']}\n"
-            f"[bold]Total Records:[/bold] {result['total_count']}\n"
-            f"[bold]Showing:[/bold] {self.offset + 1}-{min(self.offset + self.limit, result['total_count'])} of {result['total_count']}\n"
-            f"[bold]Files:[/bold] {len(result['files'])}",
-            title=f"Preview: {self.action}",
-        ))
+        self.console.print(
+            Panel(
+                f"[bold]Action:[/bold] {result['node_name']}\n"
+                f"[bold]Total Records:[/bold] {result['total_count']}\n"
+                f"[bold]Showing:[/bold] {self.offset + 1}-{min(self.offset + self.limit, result['total_count'])} of {result['total_count']}\n"
+                f"[bold]Files:[/bold] {len(result['files'])}",
+                title=f"Preview: {self.action}",
+            )
+        )
 
         if self.format_type == "json":
-            self._show_json(result['records'])
+            self._show_json(result["records"])
         elif self.format_type == "raw":
-            self._show_raw(result['records'])
+            self._show_raw(result["records"])
         else:
-            self._show_table(result['records'])
+            self._show_table(result["records"])
 
         # Show pagination hint
-        if result['total_count'] > self.offset + self.limit:
-            remaining = result['total_count'] - (self.offset + self.limit)
+        if result["total_count"] > self.offset + self.limit:
+            remaining = result["total_count"] - (self.offset + self.limit)
             self.console.print(
                 f"\n[dim]{remaining} more records. Use [bold]--offset {self.offset + self.limit}[/bold] to see more.[/dim]"
             )
@@ -181,18 +185,20 @@ class PreviewCommand:
         for record in records:
             if isinstance(record, dict):
                 # Handle nested 'content' key
-                if 'content' in record and isinstance(record['content'], dict):
-                    all_keys.update(record['content'].keys())
+                if "content" in record and isinstance(record["content"], dict):
+                    all_keys.update(record["content"].keys())
                 else:
                     all_keys.update(record.keys())
 
         # Filter out internal keys
-        display_keys = [k for k in sorted(all_keys) if not k.startswith('_')]
+        display_keys = [k for k in sorted(all_keys) if not k.startswith("_")]
 
         # Limit columns for readability
         if len(display_keys) > 6:
             display_keys = display_keys[:6]
-            self.console.print(f"[dim]Showing first 6 columns. Use --format json to see all fields.[/dim]\n")
+            self.console.print(
+                f"[dim]Showing first 6 columns. Use --format json to see all fields.[/dim]\n"
+            )
 
         table = Table(show_lines=True)
         table.add_column("#", style="dim", justify="right")
@@ -202,12 +208,20 @@ class PreviewCommand:
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
                 # Handle nested 'content' key
-                data = record.get('content', record) if isinstance(record.get('content'), dict) else record
+                data = (
+                    record.get("content", record)
+                    if isinstance(record.get("content"), dict)
+                    else record
+                )
                 values = [str(idx)]
                 for key in display_keys:
                     val = data.get(key, "")
                     if isinstance(val, (dict, list)):
-                        val = json.dumps(val, ensure_ascii=False)[:100] + "..." if len(json.dumps(val)) > 100 else json.dumps(val, ensure_ascii=False)
+                        val = (
+                            json.dumps(val, ensure_ascii=False)[:100] + "..."
+                            if len(json.dumps(val)) > 100
+                            else json.dumps(val, ensure_ascii=False)
+                        )
                     else:
                         val = str(val)[:100] + "..." if len(str(val)) > 100 else str(val)
                     values.append(val)
@@ -229,26 +243,21 @@ class PreviewCommand:
 
 
 @click.command()
-@click.option(
-    "-w", "--workflow", required=True, help="Workflow configuration file name"
-)
+@click.option("-w", "--workflow", required=True, help="Workflow configuration file name")
 @click.option(
     "-a", "--action", default=None, help="Action name to preview (lists all if not specified)"
 )
+@click.option("-n", "--limit", default=10, type=int, help="Maximum number of records to show")
+@click.option("--offset", default=0, type=int, help="Number of records to skip")
 @click.option(
-    "-n", "--limit", default=10, type=int, help="Maximum number of records to show"
-)
-@click.option(
-    "--offset", default=0, type=int, help="Number of records to skip"
-)
-@click.option(
-    "-f", "--format", "format_type", default="table",
+    "-f",
+    "--format",
+    "format_type",
+    default="table",
     type=click.Choice(["table", "json", "raw"]),
-    help="Output format"
+    help="Output format",
 )
-@click.option(
-    "--stats", is_flag=True, help="Show storage statistics only"
-)
+@click.option("--stats", is_flag=True, help="Show storage statistics only")
 @handles_user_errors("preview")
 @requires_project
 def preview(

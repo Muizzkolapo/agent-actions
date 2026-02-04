@@ -25,4 +25,5 @@ lineage helpers, recovery flows, and transformation pipelines.
 | `processor_init.py` | Module | Startup helpers for processor initialization (configuration, validation). | `validation` |
 | `result_adapters.py` | Module | Adapts raw processor outputs into the standard record format. | `output`, `logging` |
 | `result_collector.py` | Module | Collects main vs side outputs, handles duplicates. | `output` |
+| `task_preparer.py` | Module | Unified task preparation (normalize, prompt, guard) for batch/online. | `input`, `prompt` |
 | `types.py` | Module | Shared typed dicts/enums used across processors. | `typing` |

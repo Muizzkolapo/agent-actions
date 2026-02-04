@@ -22,11 +22,7 @@ class TestCacheEventCreation:
 
     def test_cache_hit_event(self):
         """Test CacheHitEvent creation and properties."""
-        event = CacheHitEvent(
-            cache_type="test_cache",
-            key="test_key",
-            hit_rate=0.85
-        )
+        event = CacheHitEvent(cache_type="test_cache", key="test_key", hit_rate=0.85)
 
         assert event.code == "C001"
         assert event.level == EventLevel.DEBUG
@@ -40,10 +36,7 @@ class TestCacheEventCreation:
 
     def test_cache_hit_event_without_rate(self):
         """Test CacheHitEvent without hit_rate."""
-        event = CacheHitEvent(
-            cache_type="test_cache",
-            key="test_key"
-        )
+        event = CacheHitEvent(cache_type="test_cache", key="test_key")
 
         assert event.code == "C001"
         assert event.data["hit_rate"] is None
@@ -52,11 +45,7 @@ class TestCacheEventCreation:
 
     def test_cache_miss_event(self):
         """Test CacheMissEvent creation and properties."""
-        event = CacheMissEvent(
-            cache_type="test_cache",
-            key="test_key",
-            reason="not found"
-        )
+        event = CacheMissEvent(cache_type="test_cache", key="test_key", reason="not found")
 
         assert event.code == "C002"
         assert event.level == EventLevel.DEBUG
@@ -72,9 +61,7 @@ class TestCacheEventCreation:
     def test_cache_invalidation_event(self):
         """Test CacheInvalidationEvent creation and properties."""
         event = CacheInvalidationEvent(
-            cache_type="test_cache",
-            entries_removed=42,
-            reason="manual clear"
+            cache_type="test_cache", entries_removed=42, reason="manual clear"
         )
 
         assert event.code == "C003"
@@ -90,11 +77,7 @@ class TestCacheEventCreation:
 
     def test_cache_load_event(self):
         """Test CacheLoadEvent creation and properties."""
-        event = CacheLoadEvent(
-            cache_type="test_cache",
-            entries_loaded=100,
-            source="disk"
-        )
+        event = CacheLoadEvent(cache_type="test_cache", entries_loaded=100, source="disk")
 
         assert event.code == "C004"
         assert event.level == EventLevel.DEBUG
@@ -109,10 +92,7 @@ class TestCacheEventCreation:
 
     def test_cache_update_event(self):
         """Test CacheUpdateEvent creation and properties."""
-        event = CacheUpdateEvent(
-            cache_type="test_cache",
-            key="test_key"
-        )
+        event = CacheUpdateEvent(cache_type="test_cache", key="test_key")
 
         assert event.code == "C005"
         assert event.level == EventLevel.DEBUG
@@ -126,11 +106,7 @@ class TestCacheEventCreation:
     def test_cache_stats_event(self):
         """Test CacheStatsEvent creation and properties."""
         event = CacheStatsEvent(
-            cache_type="test_cache",
-            hit_count=85,
-            miss_count=15,
-            total_entries=50,
-            size_bytes=1024
+            cache_type="test_cache", hit_count=85, miss_count=15, total_entries=50, size_bytes=1024
         )
 
         assert event.code == "C006"
@@ -148,12 +124,7 @@ class TestCacheEventCreation:
 
     def test_cache_stats_event_zero_accesses(self):
         """Test CacheStatsEvent with zero hits/misses."""
-        event = CacheStatsEvent(
-            cache_type="test_cache",
-            hit_count=0,
-            miss_count=0,
-            total_entries=0
-        )
+        event = CacheStatsEvent(cache_type="test_cache", hit_count=0, miss_count=0, total_entries=0)
 
         assert event.code == "C006"
         assert event.data["hit_rate"] == 0.0  # Should not divide by zero
@@ -162,10 +133,7 @@ class TestCacheEventCreation:
     def test_cache_stats_event_without_size(self):
         """Test CacheStatsEvent without size_bytes."""
         event = CacheStatsEvent(
-            cache_type="test_cache",
-            hit_count=10,
-            miss_count=5,
-            total_entries=20
+            cache_type="test_cache", hit_count=10, miss_count=5, total_entries=20
         )
 
         assert event.code == "C006"
@@ -177,11 +145,7 @@ class TestCacheEventSerialization:
 
     def test_cache_hit_event_to_dict(self):
         """Test CacheHitEvent serialization."""
-        event = CacheHitEvent(
-            cache_type="test_cache",
-            key="test_key",
-            hit_rate=0.90
-        )
+        event = CacheHitEvent(cache_type="test_cache", key="test_key", hit_rate=0.90)
 
         event_dict = event.to_dict()
 
@@ -195,11 +159,7 @@ class TestCacheEventSerialization:
     def test_cache_stats_event_to_dict(self):
         """Test CacheStatsEvent serialization."""
         event = CacheStatsEvent(
-            cache_type="test_cache",
-            hit_count=80,
-            miss_count=20,
-            total_entries=100,
-            size_bytes=2048
+            cache_type="test_cache", hit_count=80, miss_count=20, total_entries=100, size_bytes=2048
         )
 
         event_dict = event.to_dict()
@@ -245,9 +205,6 @@ class TestCacheEventLevels:
 
     def test_cache_invalidation_is_info(self):
         """Verify CacheInvalidationEvent is INFO level."""
-        event = CacheInvalidationEvent(
-            cache_type="test",
-            entries_removed=10
-        )
+        event = CacheInvalidationEvent(cache_type="test", entries_removed=10)
 
         assert event.level == EventLevel.INFO

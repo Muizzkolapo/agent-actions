@@ -2,31 +2,28 @@
 Batch Task Preparator.
 
 Handles preparation of batch tasks from raw data without state mutation.
-Extracted from BatchService.prepare_batch_tasks_from_data() as part of Phase 4 refactoring.
+Uses TaskPreparer for unified preparation logic shared with online mode.
 """
 
-import ast
 import logging
-import sys
-from typing import Dict, List, Any, Optional, Set
+import warnings
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.input.preprocessing.filtering.guard_handler import GuardHandler
-from agent_actions.input.preprocessing.filtering.evaluator import (
-    get_guard_evaluator,
-    GuardResult,
+from agent_actions.errors import ConfigurationError
+from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm.batch.core.batch_models import (
+    BatchTaskPreparationStats,
+    PreparedBatchTasks,
 )
+from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
+from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
+from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.module_loader import ensure_path_importable
-from agent_actions.errors import ConfigurationError  # New modular pattern!
-from agent_actions.llm.batch.core.batch_models import (
-    PreparedBatchTasks,
-    BatchTaskPreparationStats,
-)
-from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.utils.tools_resolver import resolve_tools_path
 
 logger = logging.getLogger(__name__)
 
@@ -35,8 +32,8 @@ class BatchTaskPreparator:
     """
     Prepares batch tasks from raw data.
 
-    Pure function approach - builds context map and tasks without mutating state.
-    All dependencies are injected for testability.
+    Uses TaskPreparer for unified preparation logic - same code path as online mode.
+    Guard evaluation happens ONCE with full context (like SQL WHERE).
 
     Example:
         preparator = BatchTaskPreparator()
@@ -44,6 +41,7 @@ class BatchTaskPreparator:
         result = preparator.prepare_tasks(
             agent_config=config,
             data=[{'content': 'test'}],
+            provider=provider,
             output_directory='/tmp/node_1_Agent',
             batch_name='test.json'
         )
@@ -57,22 +55,31 @@ class BatchTaskPreparator:
         filter_service=None,
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
-        guard_handler: Optional[GuardHandler] = None,
+        guard_handler=None,
         storage_backend: Optional[Any] = None,
     ):
         """
         Initialize task preparator.
 
         Args:
-            filter_service: Optional filter service (defaults to global) - DEPRECATED,
-                use guard_handler
+            filter_service: DEPRECATED - no longer used, guards handled by TaskPreparer
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
-            guard_handler: Optional guard handler (defaults to global)
+            guard_handler: DEPRECATED - no longer used, guards handled by TaskPreparer
             storage_backend: Optional storage backend for historical data loading
         """
-        self.filter_service = filter_service
-        self.guard_handler = guard_handler
+        if filter_service is not None:
+            warnings.warn(
+                "filter_service is deprecated and ignored. Guards are now handled by TaskPreparer.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if guard_handler is not None:
+            warnings.warn(
+                "guard_handler is deprecated and ignored. Guards are now handled by TaskPreparer.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
         self.storage_backend = storage_backend
@@ -90,8 +97,7 @@ class BatchTaskPreparator:
         """
         Prepare batch tasks from raw data.
 
-        This is the main entry point. Returns immutable PreparedBatchTasks
-        instead of mutating instance state.
+        Uses TaskPreparer for unified preparation (same as online mode).
 
         Args:
             agent_config: Agent configuration
@@ -99,6 +105,7 @@ class BatchTaskPreparator:
             provider: Batch provider instance
             output_directory: Output directory path
             batch_name: Batch file name
+            source_data: Optional source data for lookups
             workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Returns:
@@ -123,68 +130,50 @@ class BatchTaskPreparator:
         self._validate_config(agent_config, provider)
 
         # 2. Setup context
-        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
+        PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 
-        # 2.1 Pre-flight validation: check template variables against first data row
+        # 2.1 Pre-flight validation
         self._run_preflight_validation(
             agent_config,
-            raw_prompt,
             data,
             output_directory,
             batch_name,
             source_data,
-            workflow_metadata=workflow_metadata,
+            workflow_metadata,
         )
-        from agent_actions.utils.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
-        # 3. Get guard handler
-        guard_handler = self._get_guard_handler()
-
-        # 4. Extract filter configuration
-        conditional_clause = agent_config.get("conditional_clause", "")
-        guard_config = agent_config.get("guard")
-
-        # 5. Prepare schema
+        # 3. Prepare schema
         schema = self._prepare_schema(agent_config, provider)
 
-        # 6. Initialize builders
-        context_map_builder = {}
-        tasks_builder = []
+        # 4. Initialize builders
+        context_map_builder: Dict[str, Any] = {}
+        tasks_builder: List[Dict[str, Any]] = []
         stats = BatchTaskPreparationStats(total_items=len(data))
 
-        # 7. Process each data item
-        for idx, row in enumerate(data):
+        # 5. Build PreparationContext for TaskPreparer
+        prep_context = self._build_preparation_context(
+            agent_config=agent_config,
+            output_directory=output_directory,
+            batch_name=batch_name,
+            source_data=source_data,
+            workflow_metadata=workflow_metadata,
+            tools_path=tools_path,
+        )
+
+        # 6. Process each data item using TaskPreparer
+        task_preparer = get_task_preparer()
+
+        for row in data:
             try:
-                # Resolve source item for this row by source_guid (same as online mode)
-                # This allows many processed records to correctly find their shared source document
-                source_item = None
-                if source_data:
-                    source_guid = row.get("source_guid")
-                    if source_guid:
-                        from agent_actions.input.preprocessing.transformation.transformer import (
-                            DataTransformer,
-                        )
-
-                        source_item = DataTransformer.get_content_by_source_guid(
-                            source_data, source_guid
-                        )
-
                 result = self._process_single_item(
                     row=row,
-                    agent_config=agent_config,
-                    guard_handler=guard_handler,
-                    conditional_clause=conditional_clause,
-                    guard_config=guard_config,
-                    output_directory=output_directory,
-                    batch_name=batch_name,
-                    tools_path=tools_path,
+                    prep_context=prep_context,
+                    task_preparer=task_preparer,
                     context_map_builder=context_map_builder,
                     stats=stats,
-                    source_item=source_item,
-                    workflow_metadata=workflow_metadata,
                 )
 
                 if result:
@@ -192,37 +181,32 @@ class BatchTaskPreparator:
                     stats.included_items += 1
 
             except Exception as e:
-                # Catch all exceptions to avoid one bad row stopping entire batch
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
 
-        # 8. Finalize tasks with provider
+        # 7. Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
 
-        # 9. Return immutable result
+        # 8. Return immutable result
         return PreparedBatchTasks(
-            tasks=final_tasks, context_map=context_map_builder, stats=stats, config=agent_config
+            tasks=final_tasks,
+            context_map=context_map_builder,
+            stats=stats,
+            config=agent_config,
         )
 
     def _process_single_item(
         self,
         row: Dict[str, Any],
-        agent_config: Dict[str, Any],
-        guard_handler: GuardHandler,
-        conditional_clause: str,
-        guard_config: Optional[Dict[str, Any]],
-        output_directory: Optional[str],
-        batch_name: Optional[str],
-        tools_path: Optional[str],
+        prep_context: PreparationContext,
+        task_preparer: TaskPreparer,
         context_map_builder: Dict[str, Any],
         stats: BatchTaskPreparationStats,
-        source_item: Optional[Any] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
-        Process a single data item.
+        Process a single data item using TaskPreparer.
 
         Returns prepared task if item should be included, None otherwise.
         Updates context_map_builder and stats as side effects.
@@ -238,272 +222,44 @@ class BatchTaskPreparator:
         BatchContextMetadata.set_filter_status(row_with_meta, FilterStatus.INCLUDED)
         context_map_builder[custom_id] = row_with_meta
 
-        # 3. Extract row content for filtering
-        if "source_guid" in row and "content" in row:
-            row_content = row["content"]
-        else:
-            row_content = row
+        # 3. Update prep_context with current item
+        prep_context.current_item = row_with_meta
 
-        # 4. Apply filtering using unified GuardHandler
-        should_include, status = guard_handler.filter_single_item(
-            {"content": row_content} if "content" in row else row,
-            guard_config,
-            conditional_clause if conditional_clause else None,
-        )
+        # 4. Use TaskPreparer for unified preparation
+        # ONE guard check with full context (normalize → source → prompt → guard)
+        prepared = task_preparer.prepare(row, prep_context, existing_target_id=custom_id)
 
-        # 5. Update context map with filter status
-        context_map_builder[custom_id][ContextMetaKeys.FILTER_STATUS] = status
+        # 5. Store passthrough_fields for later merging
+        if prepared.passthrough_fields and custom_id in context_map_builder:
+            BatchContextMetadata.set_passthrough_fields(
+                context_map_builder[custom_id], prepared.passthrough_fields
+            )
 
-        # 6. Update stats based on filter result
-        if status == "filtered":
+        # 6. Handle guard results
+        if prepared.guard_status == GuardStatus.FILTERED:
+            BatchContextMetadata.set_filter_status(
+                context_map_builder[custom_id], FilterStatus.FILTERED
+            )
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
             stats.filtered_items += 1
-        elif status == "skipped":
-            stats.skipped_items += 1
-
-        # 7. Skip if not included (Phase 1 filtering)
-        if not should_include:
-            # Mark as Phase 1 filtered
-            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "phase1"
+            logger.debug("Guard filtered item %s (phase=unified)", custom_id)
             return None
 
-        # 8. Prepare prompt for this item (includes Phase 2 guard evaluation)
-        return self._prepare_single_task(
-            _row=row,
-            row_content=row_content,
-            custom_id=custom_id,
-            agent_config=agent_config,
-            guard_config=guard_config,
-            output_directory=output_directory,
-            batch_name=batch_name,
-            tools_path=tools_path,
-            context_map_builder=context_map_builder,
-            stats=stats,
-            source_item=source_item,
-            workflow_metadata=workflow_metadata,
-        )
-
-    def _prepare_single_task(
-        self,
-        _row: Dict[str, Any],
-        row_content: Any,
-        custom_id: str,
-        agent_config: Dict[str, Any],
-        guard_config: Optional[Dict[str, Any]],
-        output_directory: Optional[str],
-        batch_name: Optional[str],
-        tools_path: Optional[str],
-        context_map_builder: Dict[str, Any],
-        stats: BatchTaskPreparationStats,
-        source_item: Optional[Any] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Prepare a single batch task using PromptPreparationService.
-
-        Includes Phase 2 guard evaluation after prompt preparation for guards
-        that reference context-dependent fields (passthrough fields, source refs).
-
-        Returns None if Phase 2 guard evaluation filters/skips the item.
-        """
-        from agent_actions.prompt.service import (
-            PromptPreparationService,
-        )
-
-        agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
-
-        # Construct file path for history
-        file_path_for_history = None
-        if output_directory and batch_name:
-            file_path_for_history = str(Path(output_directory) / batch_name)
-
-        # Call PromptPreparationService
-        prep_result = PromptPreparationService.prepare_prompt_with_context(
-            agent_config=agent_config,
-            agent_name=agent_name,
-            contents=row_content if isinstance(row_content, dict) else {},
-            mode="batch",
-            agent_indices=self.agent_indices,
-            dependency_configs=self.dependency_configs,
-            source_content=source_item
-            if source_item is not None
-            else row_content,  # Prioritize explicit source_item
-            current_item=context_map_builder.get(custom_id),
-            file_path=file_path_for_history,
-            tools_path=tools_path,
-            workflow_metadata=workflow_metadata,
-            storage_backend=self.storage_backend,
-        )
-
-        # Store passthrough_fields for later merging
-        if prep_result.passthrough_fields and custom_id in context_map_builder:
-            BatchContextMetadata.set_passthrough_fields(
-                context_map_builder[custom_id], prep_result.passthrough_fields
+        if prepared.guard_status == GuardStatus.SKIPPED:
+            BatchContextMetadata.set_filter_status(
+                context_map_builder[custom_id], FilterStatus.SKIPPED
             )
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "unified"
+            stats.skipped_items += 1
+            logger.debug("Guard skipped item %s (phase=unified)", custom_id)
+            return None
 
-        # Phase 2 Guard Evaluation: Check guards with full context
-        # This enables guards referencing passthrough fields or {source.*} to work in batch mode
-        if guard_config and self._has_context_dependent_guard(agent_config):
-            phase2_result = self._evaluate_phase2_guard(
-                row_content=row_content,
-                guard_config=guard_config,
-                prep_result=prep_result,
-            )
-
-            if not phase2_result.should_execute:
-                # Phase 2 filtered/skipped - update context map and stats
-                status = "skipped" if phase2_result.behavior == "skip" else "filtered"
-                context_map_builder[custom_id][ContextMetaKeys.FILTER_STATUS] = status
-                context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "phase2"
-
-                if status == "filtered":
-                    stats.phase2_filtered_items += 1
-                else:
-                    stats.phase2_skipped_items += 1
-
-                logger.debug(
-                    "Phase 2 guard %s item %s (clause: %s)",
-                    status,
-                    custom_id,
-                    guard_config.get("clause", ""),
-                )
-                return None
-
-        # Create and return task
-        cleaned_row = prep_result.llm_context
+        # 7. Create and return task
         return {
             "target_id": custom_id,
-            "content": cleaned_row,
-            "prompt": prep_result.formatted_prompt,
+            "content": prepared.llm_context,
+            "prompt": prepared.formatted_prompt,
         }
-
-    def _extract_clause_identifiers(self, clause: str) -> Set[str]:
-        """
-        Extract all identifiers (variable names) from a guard clause using AST.
-
-        This is more accurate than regex because it:
-        - Won't match field names inside string literals
-        - Handles complex expressions correctly
-        - Is consistent with how guards are actually evaluated
-
-        Returns empty set if clause can't be parsed.
-        """
-        try:
-            tree = ast.parse(clause, mode="eval")
-            identifiers = set()
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name):
-                    identifiers.add(node.id)
-                elif isinstance(node, ast.Attribute):
-                    # For source.field, extract the root name (source)
-                    root = node
-                    while isinstance(root, ast.Attribute):
-                        root = root.value
-                    if isinstance(root, ast.Name):
-                        identifiers.add(root.id)
-            return identifiers
-        except SyntaxError:
-            # Fall back to empty set if clause isn't valid Python
-            return set()
-
-    def _has_context_dependent_guard(self, agent_config: Dict[str, Any]) -> bool:
-        """
-        Check if guard references context-dependent fields.
-
-        Returns True if guard clause contains:
-        - source.* references (AST-based detection)
-        - {source.*} template references (string-based)
-        - Passthrough field references (AST-based)
-        - Fields from context_scope.observe (AST-based)
-
-        These guards need Phase 2 evaluation after prompt preparation
-        because the referenced fields aren't available in Phase 1.
-        """
-        guard = agent_config.get("guard", {})
-        if not guard:
-            return False
-
-        clause = guard.get("clause", "")
-        if not clause:
-            return False
-
-        # Check for template syntax {source...} which isn't valid Python
-        if "{source" in clause:
-            return True
-
-        # Extract identifiers from clause using AST
-        identifiers = self._extract_clause_identifiers(clause)
-
-        # Check for source references
-        if "source" in identifiers:
-            return True
-
-        # Check for passthrough field references
-        context_scope = agent_config.get("context_scope", {})
-        passthrough = context_scope.get("passthrough", [])
-        if passthrough:
-            for field in passthrough:
-                field_name = field if isinstance(field, str) else field.get("field", "")
-                if field_name and field_name in identifiers:
-                    return True
-
-        # Check for observe field references
-        observe = context_scope.get("observe", [])
-        if observe:
-            for field in observe:
-                field_name = field if isinstance(field, str) else field.get("field", "")
-                if field_name and field_name in identifiers:
-                    return True
-
-        return False
-
-    def _evaluate_phase2_guard(
-        self,
-        row_content: Any,
-        guard_config: Dict[str, Any],
-        prep_result: Any,
-    ) -> GuardResult:
-        """
-        Evaluate guard with full context (Phase 2).
-
-        Called after prompt preparation when guard has context-dependent references.
-        Uses the full prompt_context and passthrough_fields for evaluation.
-        """
-        evaluator = get_guard_evaluator()
-
-        # Build full context for evaluation
-        full_context = {}
-
-        # Add prompt context (includes rendered template variables)
-        if hasattr(prep_result, "prompt_context") and prep_result.prompt_context:
-            full_context.update(prep_result.prompt_context)
-
-        # Add passthrough fields
-        if hasattr(prep_result, "passthrough_fields") and prep_result.passthrough_fields:
-            full_context.update(prep_result.passthrough_fields)
-
-        # Evaluate with full context
-        return evaluator.evaluate_with_context(
-            item=row_content if isinstance(row_content, dict) else {"content": row_content},
-            guard_config=guard_config,
-            context=full_context,
-        )
-
-    def _get_guard_handler(self) -> GuardHandler:
-        """
-        Get guard handler instance.
-
-        Returns:
-            GuardHandler instance for filtering coordination
-        """
-        if self.guard_handler is not None:
-            return self.guard_handler
-
-        # Create handler with filter service
-        from agent_actions.input.preprocessing.filtering.guard_handler import (
-            get_guard_handler,
-        )
-
-        return get_guard_handler()
 
     def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
         """Validate agent configuration."""
@@ -521,7 +277,7 @@ class BatchTaskPreparator:
             )
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
-        """Prepare and compile schema for provider (resolves schema references from registry)."""
+        """Prepare and compile schema for provider."""
         from agent_actions.output.response.schema import prepare_schema_unified
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
@@ -529,7 +285,6 @@ class BatchTaskPreparator:
         if not vendor:
             vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
-        # prepare_schema_unified returns (schema, captured_results) tuple - extract just the schema
         schema, _captured_results = prepare_schema_unified(agent_config, vendor)
         return schema
 
@@ -538,91 +293,69 @@ class BatchTaskPreparator:
         if tools_path:
             ensure_path_importable(tools_path)
 
-    def _get_filter_service(self):
-        """Get filter service instance."""
-        if self.filter_service:
-            return self.filter_service
-        # Fall back to global filter service
-        from agent_actions.input.preprocessing.filtering.service import get_filter_service
+    def _build_preparation_context(
+        self,
+        agent_config: Dict[str, Any],
+        output_directory: Optional[str],
+        batch_name: Optional[str],
+        source_data: Optional[List[Any]],
+        workflow_metadata: Optional[Dict[str, Any]],
+        tools_path: Optional[str],
+        current_item: Optional[Dict[str, Any]] = None,
+    ) -> PreparationContext:
+        """Build PreparationContext with common settings."""
+        agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+        file_path = (
+            str(Path(output_directory) / batch_name) if output_directory and batch_name else None
+        )
 
-        return get_filter_service()
+        return PreparationContext(
+            agent_config=agent_config,
+            agent_name=agent_name,
+            is_first_stage=False,  # Batch is always subsequent-stage
+            is_batch_mode=True,  # Batch processing mode
+            source_data=source_data,
+            agent_indices=self.agent_indices,
+            dependency_configs=self.dependency_configs,
+            workflow_metadata=workflow_metadata,
+            file_path=file_path,
+            output_directory=output_directory,
+            tools_path=tools_path,
+            storage_backend=self.storage_backend,
+            current_item=current_item,
+        )
 
     def _run_preflight_validation(
         self,
         agent_config: Dict[str, Any],
-        raw_prompt: Optional[str],
         data: List[Dict[str, Any]],
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
         source_data: Optional[List[Any]] = None,
         workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Run pre-flight validation on template and first data row.
-
-        Uses the SAME PromptPreparationService as actual task preparation to ensure
-        context is built identically. This guarantees preflight validation catches
-        exactly the errors that would occur during actual processing.
-
-        Args:
-            agent_config: Agent configuration
-            raw_prompt: The raw prompt template
-            data: List of data items (uses first row for validation)
-            output_directory: Output directory for constructing file paths
-            batch_name: Batch file name for constructing file paths
-            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
-
-        Raises:
-            PreFlightValidationError: If validation fails
         """
-        from agent_actions.prompt.service import (
-            PromptPreparationService,
-        )
+        Run pre-flight validation on first data row.
 
-        if not raw_prompt or not data:
-            return  # Nothing to validate
+        Uses TaskPreparer to validate template rendering.
+        """
+        if not data:
+            return
 
-        # Use first row as sample context for validation
         first_row = data[0]
-
-        # Extract content from row (same logic as _process_single_item)
-        if "source_guid" in first_row and "content" in first_row:
-            row_content = first_row["content"]
-        else:
-            row_content = first_row
-
-        agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
-
-        # Construct file path for history (same as _prepare_single_task)
-        file_path_for_history = None
-        if output_directory and batch_name:
-            file_path_for_history = str(Path(output_directory) / batch_name)
-
-        # Determine source content for validation by source_guid (same as main loop)
-        source_content_for_validation = None
-        if source_data:
-            source_guid = first_row.get("source_guid")
-            if source_guid:
-                from agent_actions.input.preprocessing.transformation.transformer import (
-                    DataTransformer,
-                )
-
-                source_content_for_validation = DataTransformer.get_content_by_source_guid(
-                    source_data, source_guid
-                )
-        if source_content_for_validation is None:
-            source_content_for_validation = row_content
-
-        # Use the SAME service as actual task preparation - single source of truth
-        prep_result = PromptPreparationService.prepare_prompt_with_context(
+        tools_path = resolve_tools_path(agent_config)
+        prep_context = self._build_preparation_context(
             agent_config=agent_config,
-            agent_name=agent_name,
-            contents=row_content if isinstance(row_content, dict) else {},
-            mode="batch",
-            agent_indices=self.agent_indices,
-            dependency_configs=self.dependency_configs,
-            source_content=source_content_for_validation,  # Use prioritized source
-            current_item=first_row,
-            file_path=file_path_for_history,
+            output_directory=output_directory,
+            batch_name=batch_name,
+            source_data=source_data,
             workflow_metadata=workflow_metadata,
-            storage_backend=self.storage_backend,
+            tools_path=tools_path,
+            current_item=first_row,
         )
+
+        # Run preparation on first row to catch template errors early
+        # Skip guard evaluation to ensure prompt is always rendered for validation
+        # (guards might filter the first row, hiding template errors)
+        task_preparer = get_task_preparer()
+        task_preparer.prepare(first_row, prep_context, skip_guard=True)

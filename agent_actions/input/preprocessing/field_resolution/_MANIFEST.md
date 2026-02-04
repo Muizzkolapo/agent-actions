@@ -11,7 +11,7 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Exposes the resolver/validator/context helpers plus public exceptions for downstream guards, prompts, and validation helpers. | `preprocessing`, `filtering`, `cli` |
-| `context_provider.py` | Module | `EvaluationContextProvider`/`EvaluationContext` build rich guard/filter contexts that include upstream action outputs, workflow metadata, source data, and loop info. | `filtering`, `preprocessing`, `validation` |
+| `context_provider.py` | Module | `EvaluationContextProvider`/`EvaluationContext` build rich guard/filter contexts that include upstream action outputs, workflow metadata, source data, and version info. | `filtering`, `preprocessing`, `validation` |
 | `exceptions.py` | Module | Custom exceptions (`FieldResolutionError`, `InvalidReferenceError`, `ReferenceNotFoundError`, etc.) used by the resolver and validator to surface reference problems. | `validation`, `filtering` |
 | `reference_parser.py` | Module | `ReferenceParser` plus `ParsedReference`/`ReferenceFormat` that understand selector, template, and Jinja reference syntaxes. | `preprocessing`, `prompt_generation` |
 | `resolver.py` | Module | `FieldReferenceResolver` and `ResolvedReference` that parse, resolve, and substitute field references with strict/fallback modes. | `filtering`, `validation`, `services` |

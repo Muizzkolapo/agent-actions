@@ -36,6 +36,4 @@ class RunCommandArgs(BaseModel):
     downstream: bool = Field(
         False, description="Execute all downstream workflows that depend on this workflow"
     )
-    debug_context: bool = Field(
-        False, description="Show context debug output during execution"
-    )
+    debug_context: bool = Field(False, description="Show context debug output during execution")

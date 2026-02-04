@@ -18,7 +18,9 @@ from agent_actions.logging.events.types import (
     BatchProcessingCompleteEvent,
 )
 from .enrichment import EnrichmentPipeline
+from .prepared_task import GuardStatus, PreparedTask, PreparationContext
 from .recovery.retry import RetryService, create_retry_service_from_config
+from .task_preparer import get_task_preparer
 from .types import (
     ProcessingContext,
     ProcessingResult,
@@ -37,42 +39,19 @@ class RecordProcessor:
 
     Handles both first-stage (raw input) and subsequent-stage (structured input) processing.
 
-    Guard Evaluation Strategy (Two-Phase):
-    ---------------------------------------
-    Guards are evaluated in TWO places for optimization and flexibility:
+    Guard Evaluation:
+    -----------------
+    Guards are evaluated ONCE via TaskPreparer, after prompt preparation,
+    with full context available (input fields, source.*, passthrough fields).
 
-    1. **Early Guard Evaluation (Step 2)**: _evaluate_guard()
-       - Evaluates guards based on input content BEFORE expensive operations
-       - Avoids unnecessary prompt preparation and LLM calls
-       - Guards evaluated: guard.clause, conditional_clause
-       - Context: Input content only (no passthrough fields yet)
-       - Use case: Filter/skip records based on input fields
-
-    2. **LLM Layer Guard (Step 6)**: Handled by run_dynamic_agent()
-       - Evaluates guards AFTER prompt preparation, WITH passthrough fields
-       - Guards can reference {source.*} and passthrough fields
-       - Returns (response, executed) where executed=False means guard skipped
-       - Use case: Guards that need enriched context or source data lookups
-
-    Why Two Phases?
-    ---------------
-    - Performance: Early evaluation avoids expensive LLM calls (~100ms+ saved)
-    - Flexibility: LLM layer can access prompt-prepared passthrough fields
-    - Backwards compatibility: Matches old StagingProcessor/TargetContentProcessor behavior
+    This is like a SQL WHERE clause - simple and predictable.
 
     Example:
     --------
-    # Early guard (evaluated on raw input):
     guard:
-      clause: "status == 'active'"
+      clause: "status == 'active' and source.priority == 'high'"
       behavior: "skip"
-    # → Skipped at Step 2, no LLM call made
-
-    # LLM layer guard (needs passthrough fields):
-    guard:
-      clause: "{source.priority} == 'high' and length > 100"
-      behavior: "skip"
-    # → Skipped at Step 6, after prompt preparation adds passthrough fields
+    # → Guard has access to all fields, evaluated once before LLM call
     """
 
     def __init__(self, agent_config: Dict, agent_name: str):
@@ -126,19 +105,16 @@ class RecordProcessor:
         """
         Process single record (first-stage or subsequent-stage).
 
-        Processing Pipeline (9 steps):
-        1. Normalize input format
-        2. Early guard evaluation (on input content)
-        3. Get source content for prompt
-        4. Prepare prompt (adds passthrough fields)
+        Processing Pipeline:
+        1-4. Prepare task (via TaskPreparer): normalize, source, prompt, guard
         5. Execute LLM
-        6. Handle non-execution (LLM layer guard check)
+        6. Handle non-execution (retry exhausted)
         7. Transform response
         8. Create success result
         9. Enrich (lineage, metadata, loop IDs, etc.)
 
-        Note: Guards evaluated TWICE - see class docstring for details on two-phase
-        guard evaluation strategy.
+        Guard is evaluated ONCE in TaskPreparer, after prompt preparation,
+        with full context available (like SQL WHERE).
 
         Args:
             item: Input item
@@ -149,9 +125,18 @@ class RecordProcessor:
         Returns:
             ProcessingResult with enriched data
         """
-        # Step 1: Normalize input format
+        # Steps 1-4: Prepare task via TaskPreparer (unified preparation logic)
+        prep_context = PreparationContext.from_processing_context(context)
+        prep_context.current_item = item if isinstance(item, dict) else None
+
+        task_preparer = get_task_preparer()
+        prepared = task_preparer.prepare(item, prep_context)
+
+        # Extract key fields for backward compatibility and event firing
         input_record = item if isinstance(item, dict) else None
-        content, source_guid, source_snapshot = self._normalize_input(item, context)
+        source_guid = prepared.source_guid
+        source_snapshot = prepared.source_snapshot
+        content = prepared.original_content
 
         # Fire RP001: Record processing started
         fire_event(
@@ -162,35 +147,49 @@ class RecordProcessor:
             )
         )
 
-        # Step 2: Early guard evaluation (FIRST guard check)
-        # Evaluates guards on input content to avoid expensive operations
-        # if record should be filtered/skipped early
-        guard_result = self._evaluate_guard(content, source_guid, context)
-        if guard_result is not None:
-            return guard_result
+        # Handle Phase 1 guard results (filtered/skipped)
+        if prepared.guard_status == GuardStatus.FILTERED:
+            fire_event(
+                RecordFilteredEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index if hasattr(context, "record_index") else 0,
+                    source_guid=source_guid,
+                    filter_reason="guard_filter",
+                )
+            )
+            return ProcessingResult.filtered(
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
 
-        # Step 3: Get source content for prompt
-        # For first-stage: input content IS the source content (template {{ source.* }})
-        # For subsequent-stage: lookup source from source_data by source_guid
-        if context.is_first_stage:
-            source_content = content
-        else:
-            source_content = self._get_source_content(source_guid, context)
-
-        # Step 4: Prepare prompt
-        # For subsequent-stage, pass the full item as current_item for historical data loading
-        current_item = item if isinstance(item, dict) else None
-        prep_result = self._prepare_prompt(content, source_content, context, current_item)
+        if prepared.guard_status == GuardStatus.SKIPPED:
+            fire_event(
+                RecordFilteredEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index if hasattr(context, "record_index") else 0,
+                    source_guid=source_guid,
+                    filter_reason=f"guard_{prepared.guard_behavior}",
+                )
+            )
+            return ProcessingResult.skipped(
+                passthrough_data=content,
+                reason=f"guard_{prepared.guard_behavior}",
+                source_guid=source_guid,
+                passthrough_fields=prepared.passthrough_fields,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
 
         # Step 5: Execute LLM (with optional retry)
+        # Guard evaluation already done in Step 3 via TaskPreparer (skip_guard_eval=True)
         response, executed, passthrough_fields, recovery_metadata = self._execute_llm(
-            content, prep_result, context
+            content, prepared, context
         )
 
-        # Step 6: Handle non-execution (SECOND guard check at LLM layer or retry exhausted)
-        # run_dynamic_agent() returns executed=False if guards skipped execution
-        # This happens when guards reference passthrough fields or source content
-        # that's only available after prompt preparation (Step 4)
+        # Step 6: Handle non-execution (retry exhausted)
+        # Note: Guards are evaluated ONCE in Step 3, so executed=False here means
+        # retry exhaustion, not guard filtering
         if not executed:
             if response is None:
                 # Check if this is a retry exhaustion vs guard filter
@@ -396,7 +395,7 @@ class RecordProcessor:
 
     def _normalize_input(
         self, item: Any, context: ProcessingContext
-    ) -> Tuple[Any, str, Optional[Any]]:
+    ) -> Tuple[Any, Optional[str], Optional[Any]]:
         """
         Normalize input format.
 
@@ -584,7 +583,7 @@ class RecordProcessor:
             agent_indices=context.agent_indices,
             dependency_configs=context.dependency_configs,
             source_content=source_content,
-            loop_context=context.loop_context,
+            version_context=context.version_context,
             workflow_metadata=context.workflow_metadata,
             current_item=current_item,
             file_path=context.file_path,
@@ -594,14 +593,14 @@ class RecordProcessor:
         )
 
     def _execute_llm(
-        self, content: Any, prep_result, context: ProcessingContext
+        self, content: Any, prepared: PreparedTask, context: ProcessingContext
     ) -> Tuple[Any, bool, Dict, Optional[RecoveryMetadata]]:
         """
-        Execute LLM invocation with optional reprompt and retry (includes SECOND guard check).
+        Execute LLM invocation with optional reprompt and retry.
 
-        run_dynamic_agent() internally evaluates guards that need prompt-prepared
-        context (passthrough fields, {source.*} references). If guard blocks
-        execution, returns executed=False.
+        Guard evaluation is done ONCE by TaskPreparer before this method is called.
+        This method passes skip_guard_eval=True to run_dynamic_agent() to prevent
+        duplicate evaluation.
 
         Recovery Behavior:
         - Reprompt wraps retry (each reprompt attempt gets independent retry protection)
@@ -611,13 +610,13 @@ class RecordProcessor:
 
         Args:
             content: Current content
-            prep_result: Prepared prompt result
+            prepared: PreparedTask from TaskPreparer
             context: ProcessingContext
 
         Returns:
             Tuple of (response, executed, passthrough_fields, recovery_metadata)
-            - response: LLM response or passthrough data if guard skipped
-            - executed: False if LLM layer guard blocked execution
+            - response: LLM response or None if retry exhausted
+            - executed: True if LLM executed, False if retry exhausted
             - passthrough_fields: Fields to merge into output
             - recovery_metadata: Recovery tracking info (None if no recovery occurred)
         """
@@ -652,7 +651,8 @@ class RecordProcessor:
                         content,
                         prompt,  # Use prompt parameter (includes feedback on reprompt)
                         tools_path=tools_path,
-                        llm_context=prep_result.llm_context,
+                        llm_context=prepared.llm_context,
+                        skip_guard_eval=True,  # Guard already evaluated by TaskPreparer
                     )
 
                 retry_result = retry_service.execute(
@@ -680,7 +680,7 @@ class RecordProcessor:
             # Execute with reprompt (wraps retry)
             reprompt_result = reprompt_service.execute(
                 llm_operation=llm_with_retry,
-                original_prompt=prep_result.formatted_prompt,
+                original_prompt=prepared.formatted_prompt,
                 context=f"action={context.agent_name}",
             )
 
@@ -705,7 +705,7 @@ class RecordProcessor:
             return (
                 reprompt_result.response,
                 reprompt_result.executed,
-                prep_result.passthrough_fields,
+                prepared.passthrough_fields,
                 recovery_metadata if not recovery_metadata.is_empty() else None,
             )
 
@@ -720,12 +720,13 @@ class RecordProcessor:
                     content,
                     prompt,  # Use prompt parameter (includes feedback on reprompt)
                     tools_path=tools_path,
-                    llm_context=prep_result.llm_context,
+                    llm_context=prepared.llm_context,
+                    skip_guard_eval=True,  # Guard already evaluated by TaskPreparer
                 )
 
             reprompt_result = reprompt_service.execute(
                 llm_operation=llm_direct,
-                original_prompt=prep_result.formatted_prompt,
+                original_prompt=prepared.formatted_prompt,
                 context=f"action={context.agent_name}",
             )
 
@@ -742,7 +743,7 @@ class RecordProcessor:
             return (
                 reprompt_result.response,
                 reprompt_result.executed,
-                prep_result.passthrough_fields,
+                prepared.passthrough_fields,
                 recovery_metadata if not recovery_metadata.is_empty() else None,
             )
 
@@ -754,9 +755,10 @@ class RecordProcessor:
                     context.agent_config,
                     context.agent_name,
                     content,
-                    prep_result.formatted_prompt,
+                    prepared.formatted_prompt,
                     tools_path=tools_path,
-                    llm_context=prep_result.llm_context,
+                    llm_context=prepared.llm_context,
+                    skip_guard_eval=True,  # Guard already evaluated by TaskPreparer
                 )
 
             retry_result = retry_service.execute(
@@ -787,7 +789,7 @@ class RecordProcessor:
                 return (
                     None,
                     False,
-                    prep_result.passthrough_fields,
+                    prepared.passthrough_fields,
                     recovery_metadata if not recovery_metadata.is_empty() else None,
                 )
 
@@ -800,7 +802,7 @@ class RecordProcessor:
             return (
                 response,
                 executed,
-                prep_result.passthrough_fields,
+                prepared.passthrough_fields,
                 recovery_metadata if not recovery_metadata.is_empty() else None,
             )
 
@@ -810,12 +812,13 @@ class RecordProcessor:
                 context.agent_config,
                 context.agent_name,
                 content,
-                prep_result.formatted_prompt,
+                prepared.formatted_prompt,
                 tools_path=tools_path,
-                llm_context=prep_result.llm_context,
+                llm_context=prepared.llm_context,
+                skip_guard_eval=True,  # Guard already evaluated by TaskPreparer
             )
 
-            return response, executed, prep_result.passthrough_fields, None
+            return response, executed, prepared.passthrough_fields, None
 
     def _transform_response(
         self,
@@ -843,7 +846,10 @@ class RecordProcessor:
         )
 
         return transform_with_passthrough(
-            response, content, source_guid, context.agent_config,
+            response,
+            content,
+            source_guid,
+            context.agent_config,
             passthrough_fields=passthrough_fields,
         )
 
@@ -869,7 +875,7 @@ class RecordProcessor:
             source_data=base_context.source_data,
             file_path=base_context.file_path,
             output_directory=base_context.output_directory,
-            loop_context=base_context.loop_context,
+            version_context=base_context.version_context,
             workflow_metadata=base_context.workflow_metadata,
             record_index=index,
             agent_indices=base_context.agent_indices,

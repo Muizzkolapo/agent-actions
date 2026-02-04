@@ -9,8 +9,18 @@ from .enrichment import (
     PassthroughEnricher,
     RequiredFieldsEnricher,
 )
+from .prepared_task import (
+    GuardStatus,
+    PreparedTask,
+    PreparationContext,
+)
 from .processor import RecordProcessor
 from .result_adapters import ProcessingResultAdapter
+from .task_preparer import (
+    TaskPreparer,
+    get_task_preparer,
+    reset_task_preparer,
+)
 from .types import (
     ProcessingContext,
     ProcessingMode,
@@ -26,6 +36,13 @@ __all__ = [
     "ProcessingResult",
     "ProcessingStatus",
     "RetryState",
+    # Prepared Task (Phase 2)
+    "GuardStatus",
+    "PreparedTask",
+    "PreparationContext",
+    "TaskPreparer",
+    "get_task_preparer",
+    "reset_task_preparer",
     # Enrichment
     "Enricher",
     "EnrichmentPipeline",

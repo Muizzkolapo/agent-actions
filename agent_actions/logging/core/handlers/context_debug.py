@@ -123,11 +123,13 @@ class ContextDebugHandler:
             field_ref = getattr(event, "field_ref", "")
             reason = getattr(event, "reason", "")
             directive = getattr(event, "directive", "")
-            action_info.skipped_fields.append({
-                "field_ref": field_ref,
-                "reason": reason,
-                "directive": directive,
-            })
+            action_info.skipped_fields.append(
+                {
+                    "field_ref": field_ref,
+                    "reason": reason,
+                    "directive": directive,
+                }
+            )
             action_info.warnings.append(f"Skipped {field_ref} in {directive}: {reason}")
 
         elif code == "CX003":  # ContextScopeAppliedEvent
@@ -143,11 +145,13 @@ class ContextDebugHandler:
             field_ref = getattr(event, "field_ref", "")
             namespace = getattr(event, "namespace", "")
             available = getattr(event, "available_fields", [])
-            action_info.not_found_fields.append({
-                "field_ref": field_ref,
-                "namespace": namespace,
-                "available_fields": available,
-            })
+            action_info.not_found_fields.append(
+                {
+                    "field_ref": field_ref,
+                    "namespace": namespace,
+                    "available_fields": available,
+                }
+            )
             action_info.warnings.append(f"Field '{field_ref}' not found in '{namespace}'")
 
     def flush(self) -> None:
@@ -195,7 +199,9 @@ class ContextDebugHandler:
 
         for action_name, info in actions_to_show.items():
             self._console.print()
-            self._console.print(f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]")
+            self._console.print(
+                f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]"
+            )
             self._console.print()
 
             # Namespaces loaded
@@ -203,11 +209,17 @@ class ContextDebugHandler:
                 tree = Tree("[bold]Namespaces loaded:[/bold]")
                 for ns, fields in info.namespaces.items():
                     dropped = info.dropped_fields.get(ns, [])
-                    dropped_str = f" [dim]({len(dropped)} dropped: {', '.join(dropped[:3])}{'...' if len(dropped) > 3 else ''})[/dim]" if dropped else ""
+                    dropped_str = (
+                        f" [dim]({len(dropped)} dropped: {', '.join(dropped[:3])}{'...' if len(dropped) > 3 else ''})[/dim]"
+                        if dropped
+                        else ""
+                    )
                     field_str = ", ".join(fields[:5])
                     if len(fields) > 5:
                         field_str += f"... (+{len(fields) - 5} more)"
-                    tree.add(f"[green]{ns}[/green]: {len(fields)} fields [{field_str}]{dropped_str}")
+                    tree.add(
+                        f"[green]{ns}[/green]: {len(fields)} fields [{field_str}]{dropped_str}"
+                    )
                 self._console.print(tree)
                 self._console.print()
 

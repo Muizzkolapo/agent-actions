@@ -13,11 +13,11 @@ CHUNK_CONFIG_KEY = "chunk_config"
 # Reserved agent/action names that cannot be used in workflows.
 # These names are reserved for built-in functionality and config directives.
 RESERVED_AGENT_NAMES = frozenset(
-    {"source", "loop", "workflow", "seed", "prompt", "schema", "context_scope", "action"}
+    {"source", "version", "workflow", "seed", "prompt", "schema", "context_scope", "action"}
 )
 
 # Special namespaces that are always available without explicit dependency declarations.
-# These namespaces provide built-in data (source input, loop iteration, workflow metadata, etc.)
+# These namespaces provide built-in data (source input, version iteration, workflow metadata, etc.)
 # and don't require being listed in an action's "dependencies" field.
 #
 # Relationship to RESERVED_AGENT_NAMES:

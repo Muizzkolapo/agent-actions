@@ -30,7 +30,7 @@ class OutputManagerConfig:
     execution_order: List[str]
     agent_configs: Dict[str, Dict[str, Any]]
     agent_status: Dict[str, Dict[str, Any]]
-    loop_correlator: Any
+    version_correlator: Any
     console: Optional[Console] = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
 
@@ -57,7 +57,7 @@ class AgentOutputManager:
         self.execution_order = config.execution_order
         self.agent_configs = config.agent_configs
         self.agent_status = config.agent_status
-        self.loop_correlator = config.loop_correlator
+        self.version_correlator = config.version_correlator
         self.console = config.console or Console()
         self.storage_backend = config.storage_backend
 
@@ -446,7 +446,7 @@ class AgentOutputManager:
                 return upstream_dirs
 
         # Check if agent consumes version outputs
-        version_consumption_map = self.loop_correlator.detect_explicit_version_consumption(
+        version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
             self.execution_order, self.agent_configs
         )
 
@@ -455,7 +455,7 @@ class AgentOutputManager:
             version_sources = consumption_config["version_agents"]
             pattern = consumption_config["pattern"]
 
-            correlated_dir = self.loop_correlator.prepare_correlated_input(
+            correlated_dir = self.version_correlator.prepare_correlated_input(
                 current_agent, version_sources, idx
             )
 
@@ -466,9 +466,18 @@ class AgentOutputManager:
                 )
                 return [correlated_dir]
 
-            self.console.print(
-                f"[yellow]⚠️ Failed to correlate version outputs for "
-                f"{current_agent}, falling back to standard input[/yellow]"
+            # Version correlation configured but failed - this is an error, not a fallback
+            from agent_actions.errors import ConfigurationError
+
+            raise ConfigurationError(
+                f"Version correlation failed for '{current_agent}'. "
+                f"Could not load outputs from version sources: {version_sources}. "
+                f"Check that all version agents completed successfully.",
+                context={
+                    "agent": current_agent,
+                    "version_sources": version_sources,
+                    "pattern": pattern,
+                },
             )
 
         # Standard case: use previous agent's output (Linear Chain Default)
@@ -491,7 +500,7 @@ class AgentOutputManager:
         """
         current_agent = self.execution_order[idx]
 
-        version_consumption_map = self.loop_correlator.detect_explicit_version_consumption(
+        version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
             self.execution_order, self.agent_configs
         )
 
@@ -506,7 +515,7 @@ class AgentOutputManager:
             agent_folder, agent_config, previous_agent_type, agent_idx
         ):
             """Wrapper that uses correlated input for version consumers."""
-            correlated_dir = self.loop_correlator.prepare_correlated_input(
+            correlated_dir = self.version_correlator.prepare_correlated_input(
                 current_agent, version_sources, agent_idx
             )
 
@@ -525,21 +534,18 @@ class AgentOutputManager:
                 # Return list of directories (not a single string) to match setup_directories signature
                 return ([str(input_directory)], str(output_directory))
 
-            self.console.print(
-                f"[yellow]⚠️ Failed to correlate version outputs for "
-                f"{current_agent}, falling back to standard input[/yellow]"
-            )
-            input_directories, _ = original_setup_directories(
-                agent_folder, agent_config, previous_agent_type, agent_idx
-            )
-            # input_directories is already a list from setup_directories
-            # Setup output directory (simple name, no index prefix)
-            agent_type = agent_config["agent_type"]
-            output_directory = Path(agent_folder) / "target" / agent_type
-            # Only create directory when not using storage backend
-            if self.storage_backend is None:
-                output_directory.mkdir(parents=True, exist_ok=True)
+            # Version correlation configured but failed - this is an error, not a fallback
+            from agent_actions.errors import ConfigurationError
 
-            return (input_directories, str(output_directory))
+            raise ConfigurationError(
+                f"Version correlation failed for '{current_agent}'. "
+                f"Could not load outputs from version sources: {version_sources}. "
+                f"Check that all version agents completed successfully.",
+                context={
+                    "agent": current_agent,
+                    "version_sources": version_sources,
+                    "pattern": pattern,
+                },
+            )
 
         return correlation_setup_directories

@@ -37,53 +37,59 @@ class TestIsParallelBranches:
 
     def test_same_base_name_with_numeric_suffix_is_parallel(self):
         """Dependencies with same base name and numeric suffix are parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["classify_1", "classify_2", "classify_3"]
-        ) is True
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["classify_1", "classify_2", "classify_3"])
+            is True
+        )
 
     def test_same_base_name_with_different_suffixes_is_parallel(self):
         """Dependencies with same base name are parallel regardless of suffix number."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["research_1", "research_5", "research_10"]
-        ) is True
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["research_1", "research_5", "research_10"])
+            is True
+        )
 
     def test_different_base_names_is_not_parallel(self):
         """Dependencies with different base names are NOT parallel (fan-in)."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["extract", "enrich", "validate"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["extract", "enrich", "validate"]) is False
+        )
 
     def test_mixed_base_names_is_not_parallel(self):
         """Mix of different base names is NOT parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["classify_1", "validate_1", "score_1"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["classify_1", "validate_1", "score_1"])
+            is False
+        )
 
     def test_no_numeric_suffix_different_names_is_not_parallel(self):
         """Different action names without suffixes are NOT parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["analyzer", "validator", "scorer"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["analyzer", "validator", "scorer"])
+            is False
+        )
 
     def test_same_name_no_suffix_is_parallel(self):
         """Same action name repeated (edge case) is parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["classify", "classify"]
-        ) is True
+        assert ContextScopeProcessor._is_parallel_branches(["classify", "classify"]) is True
 
     def test_underscore_in_base_name_handled_correctly(self):
         """Action names with underscores in base name work correctly."""
         # extract_raw_qa_1, extract_raw_qa_2 should be parallel
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]
-        ) is True
+        assert (
+            ContextScopeProcessor._is_parallel_branches(
+                ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]
+            )
+            is True
+        )
 
     def test_similar_but_different_base_names_not_parallel(self):
         """Similar but different base names are NOT parallel."""
         # classify_text vs classify_image are different actions
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["classify_text", "classify_image"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["classify_text", "classify_image"])
+            is False
+        )
 
     def test_different_base_names_with_same_numeric_suffix_not_parallel(self):
         """Different base names with same numeric suffix are NOT parallel (fan-in).
@@ -92,18 +98,22 @@ class TestIsParallelBranches:
         both end in _1, but they have different base names (classify_text vs classify_image).
         This should be detected as fan-in, not parallel branches.
         """
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["classify_text_1", "classify_image_1"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(["classify_text_1", "classify_image_1"])
+            is False
+        )
 
     def test_mixed_versioned_and_non_versioned_not_parallel(self):
         """Mix of versioned and non-versioned deps with different base names is fan-in."""
         # research_1, research_2, research_3 all have base name 'research'
         # summarize has base name 'summarize'
         # Different base names = fan-in
-        assert ContextScopeProcessor._is_parallel_branches(
-            ["research_1", "research_2", "research_3", "summarize"]
-        ) is False
+        assert (
+            ContextScopeProcessor._is_parallel_branches(
+                ["research_1", "research_2", "research_3", "summarize"]
+            )
+            is False
+        )
 
 
 class TestGetVersionBranches:
@@ -146,8 +156,8 @@ class TestResolveInputSourcesForFanIn:
     def test_no_primary_uses_first_dependency(self):
         """Without primary_dependency, first dep is the input source."""
         deps = ["action_a", "action_b", "action_c"]
-        input_sources, context_sources = (
-            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
+            deps, None
         )
         assert input_sources == ["action_a"]
         assert context_sources == ["action_b", "action_c"]
@@ -155,8 +165,8 @@ class TestResolveInputSourcesForFanIn:
     def test_explicit_primary_selects_that_dependency(self):
         """With explicit primary_dependency, that dep is the input source."""
         deps = ["action_a", "action_b", "action_c"]
-        input_sources, context_sources = (
-            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "action_b")
+        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
+            deps, "action_b"
         )
         assert input_sources == ["action_b"]
         assert context_sources == ["action_a", "action_c"]
@@ -164,8 +174,8 @@ class TestResolveInputSourcesForFanIn:
     def test_versioned_first_dep_includes_all_siblings(self):
         """When first dep is versioned, all sibling versions become inputs."""
         deps = ["research_1", "research_2", "research_3", "summarize"]
-        input_sources, context_sources = (
-            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, None)
+        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
+            deps, None
         )
         assert set(input_sources) == {"research_1", "research_2", "research_3"}
         assert context_sources == ["summarize"]
@@ -173,8 +183,8 @@ class TestResolveInputSourcesForFanIn:
     def test_base_name_primary_expands_to_all_versions(self):
         """Base name as primary_dependency expands to all matching versions."""
         deps = ["research_1", "research_2", "summarize"]
-        input_sources, context_sources = (
-            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "research")
+        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
+            deps, "research"
         )
         assert set(input_sources) == {"research_1", "research_2"}
         assert context_sources == ["summarize"]
@@ -219,10 +229,7 @@ class TestDependencyPatterns:
         (temp_folder / "target" / "extract_data").mkdir()
 
         result = agent_runner._resolve_dependency_directories(
-            temp_folder,
-            ["extract_data"],
-            {"dependencies": ["extract_data"]},
-            "validate_data"
+            temp_folder, ["extract_data"], {"dependencies": ["extract_data"]}, "validate_data"
         )
 
         assert len(result) == 1
@@ -250,7 +257,7 @@ class TestDependencyPatterns:
             temp_folder,
             ["research_1", "research_2", "research_3"],
             {"dependencies": ["research_1", "research_2", "research_3"]},
-            "synthesize"
+            "synthesize",
         )
 
         # All directories returned for merging
@@ -281,14 +288,10 @@ class TestDependencyPatterns:
             {
                 "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
                 "context_scope": {
-                    "observe": [
-                        "analyze_sentiment.*",
-                        "analyze_entities.*",
-                        "analyze_topics.*"
-                    ]
-                }
+                    "observe": ["analyze_sentiment.*", "analyze_entities.*", "analyze_topics.*"]
+                },
             },
-            "generate_report"
+            "generate_report",
         )
 
         # Only primary (first) returned - others via historical loader
@@ -314,9 +317,9 @@ class TestDependencyPatterns:
             ["analyze_sentiment", "analyze_entities", "analyze_topics"],
             {
                 "dependencies": ["analyze_sentiment", "analyze_entities", "analyze_topics"],
-                "primary_dependency": "analyze_entities"
+                "primary_dependency": "analyze_entities",
             },
-            "generate_report"
+            "generate_report",
         )
 
         # Explicit primary returned
@@ -342,14 +345,18 @@ class TestDependencyPatterns:
             ["validator_grammar", "validator_accuracy", "validator_style"],
             {
                 "dependencies": ["validator_grammar", "validator_accuracy", "validator_style"],
-                "reduce_key": "content_id"
+                "reduce_key": "content_id",
             },
-            "aggregate_validations"
+            "aggregate_validations",
         )
 
         # All directories returned for merging (aggregation pattern)
         assert len(result) == 3
-        assert {r.name for r in result} == {"validator_grammar", "validator_accuracy", "validator_style"}
+        assert {r.name for r in result} == {
+            "validator_grammar",
+            "validator_accuracy",
+            "validator_style",
+        }
 
     def test_reduce_key_with_parallel_branches(self, agent_runner, temp_folder):
         """
@@ -374,9 +381,9 @@ class TestDependencyPatterns:
             ["classify_1", "classify_2", "classify_3"],
             {
                 "dependencies": ["classify_1", "classify_2", "classify_3"],
-                "reduce_key": "content_id"
+                "reduce_key": "content_id",
             },
-            "aggregate_classifications"
+            "aggregate_classifications",
         )
 
         # All directories returned for merging (reduce_key applies grouping)
@@ -394,9 +401,9 @@ class TestDependencyPatterns:
                 ["action_a", "action_b"],
                 {
                     "dependencies": ["action_a", "action_b"],
-                    "primary_dependency": "action_c"  # Not in list!
+                    "primary_dependency": "action_c",  # Not in list!
                 },
-                "test_action"
+                "test_action",
             )
 
         assert "primary_dependency" in str(exc_info.value)
@@ -415,7 +422,7 @@ class TestDependencyPatterns:
             temp_folder,
             ["research_1", "research_2", "research_3", "summarize"],
             {"dependencies": ["research_1", "research_2", "research_3", "summarize"]},
-            "final_report"
+            "final_report",
         )
 
         # All research branches should be input sources (3 dirs), summarize is context
@@ -438,9 +445,9 @@ class TestDependencyPatterns:
             ["research_1", "research_2", "summarize"],
             {
                 "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research"  # Base name, not in list directly
+                "primary_dependency": "research",  # Base name, not in list directly
             },
-            "final_report"
+            "final_report",
         )
 
         # research expands to research_1, research_2 as inputs
@@ -463,9 +470,9 @@ class TestDependencyPatterns:
             ["research_1", "research_2", "summarize"],
             {
                 "dependencies": ["research_1", "research_2", "summarize"],
-                "primary_dependency": "research_1"  # Explicit branch
+                "primary_dependency": "research_1",  # Explicit branch
             },
-            "final_report"
+            "final_report",
         )
 
         # research_1's siblings (research_2) also become inputs
@@ -514,7 +521,9 @@ class TestResolveDependencyDirectories:
         assert len(result) == 1
         assert result[0] == temp_agent_folder / "target" / "action_A"
 
-    def test_multiple_dependencies_fan_in_returns_primary_only(self, agent_runner, temp_agent_folder):
+    def test_multiple_dependencies_fan_in_returns_primary_only(
+        self, agent_runner, temp_agent_folder
+    ):
         """Test fan-in pattern: multiple different dependencies returns only primary."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {"dependencies": dependencies}
@@ -528,7 +537,9 @@ class TestResolveDependencyDirectories:
         assert len(result) == 1
         assert result[0] == temp_agent_folder / "target" / "action_A"
 
-    def test_multiple_dependencies_parallel_returns_all_directories(self, agent_runner, temp_agent_folder):
+    def test_multiple_dependencies_parallel_returns_all_directories(
+        self, agent_runner, temp_agent_folder
+    ):
         """Test parallel branches: multiple deps with same base name returns all."""
         # Create parallel branch directories
         for suffix in ["1", "2", "3"]:
@@ -547,7 +558,9 @@ class TestResolveDependencyDirectories:
         assert temp_agent_folder / "target" / "classify_2" in result
         assert temp_agent_folder / "target" / "classify_3" in result
 
-    def test_multiple_dependencies_with_reduce_key_returns_all(self, agent_runner, temp_agent_folder):
+    def test_multiple_dependencies_with_reduce_key_returns_all(
+        self, agent_runner, temp_agent_folder
+    ):
         """Test aggregation pattern: reduce_key set returns all dependencies."""
         dependencies = ["action_A", "action_B", "action_C"]
         agent_config = {"dependencies": dependencies, "reduce_key": "parent_id"}

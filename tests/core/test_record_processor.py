@@ -593,14 +593,14 @@ class TestItemContextCreation:
             agent_config={"model": "gpt-4"},
             agent_name="test",
             mode=ProcessingMode.BATCH,
-            loop_context={"loop_id": "loop-123"},
+            version_context={"loop_id": "loop-123"},
             workflow_metadata={"workflow": "test"},
             output_directory="/output",
         )
 
         new_context = processor._create_item_context(base_context, 3, {"item": "data"})
 
-        assert new_context.loop_context == {"loop_id": "loop-123"}
+        assert new_context.version_context == {"loop_id": "loop-123"}
         assert new_context.workflow_metadata == {"workflow": "test"}
         assert new_context.output_directory == "/output"
         assert new_context.mode == ProcessingMode.BATCH

@@ -186,7 +186,9 @@ class WorkflowParser:
             if "versions" in action_data:
                 action["versions"] = action_data["versions"]  # {param, range, mode}
             if "version_consumption" in action_data:
-                action["version_consumption"] = action_data["version_consumption"]  # {source, pattern}
+                action["version_consumption"] = action_data[
+                    "version_consumption"
+                ]  # {source, pattern}
 
             # Parallel merge configuration (MapReduce pattern)
             # reduce_key specifies field to correlate records from parallel branches
@@ -195,7 +197,9 @@ class WorkflowParser:
 
             # Reprompt/retry configuration
             if "reprompt" in action_data:
-                action["reprompt"] = action_data["reprompt"]  # {validation, max_attempts, on_exhausted}
+                action["reprompt"] = action_data[
+                    "reprompt"
+                ]  # {validation, max_attempts, on_exhausted}
 
             # Execution mode configuration
             if "run_mode" in action_data:

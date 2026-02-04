@@ -178,7 +178,11 @@ def _index_workflow_lines(
             continue
 
         line_indent = len(line) - len(line.lstrip())
-        if line.strip() and current_action_indent is not None and line_indent <= current_action_indent:
+        if (
+            line.strip()
+            and current_action_indent is not None
+            and line_indent <= current_action_indent
+        ):
             current_action = None
             current_action_indent = None
             dependencies_indent = None

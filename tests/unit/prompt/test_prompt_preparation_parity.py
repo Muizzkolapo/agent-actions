@@ -20,8 +20,9 @@ class TestBatchModeWorkflowMetadata:
         sig = inspect.signature(BatchTaskPreparator.prepare_tasks)
         params = list(sig.parameters.keys())
 
-        assert "workflow_metadata" in params, \
+        assert "workflow_metadata" in params, (
             "prepare_tasks should accept workflow_metadata parameter"
+        )
 
     def test_prepare_tasks_passes_workflow_metadata_to_service(self):
         """Verify workflow_metadata flows through to PromptPreparationService."""
@@ -32,8 +33,9 @@ class TestBatchModeWorkflowMetadata:
         sig = inspect.signature(BatchTaskPreparator._prepare_single_task)
         params = list(sig.parameters.keys())
 
-        assert "workflow_metadata" in params, \
+        assert "workflow_metadata" in params, (
             "_prepare_single_task should accept workflow_metadata parameter"
+        )
 
     def test_submission_service_accepts_workflow_metadata(self):
         """Verify BatchSubmissionService.prepare_batch_tasks accepts workflow_metadata."""
@@ -43,8 +45,9 @@ class TestBatchModeWorkflowMetadata:
         sig = inspect.signature(BatchSubmissionService.prepare_batch_tasks)
         params = list(sig.parameters.keys())
 
-        assert "workflow_metadata" in params, \
+        assert "workflow_metadata" in params, (
             "prepare_batch_tasks should accept workflow_metadata parameter"
+        )
 
     def test_submit_batch_job_accepts_workflow_metadata(self):
         """Verify BatchSubmissionService.submit_batch_job accepts workflow_metadata."""
@@ -54,8 +57,9 @@ class TestBatchModeWorkflowMetadata:
         sig = inspect.signature(BatchSubmissionService.submit_batch_job)
         params = list(sig.parameters.keys())
 
-        assert "workflow_metadata" in params, \
+        assert "workflow_metadata" in params, (
             "submit_batch_job should accept workflow_metadata parameter"
+        )
 
 
 class TestOnlineModeToolsPath:
@@ -69,16 +73,17 @@ class TestOnlineModeToolsPath:
         source = inspect.getsource(RecordProcessor._prepare_prompt)
 
         # Should import resolve_tools_path
-        assert "resolve_tools_path" in source, \
-            "_prepare_prompt should import resolve_tools_path"
+        assert "resolve_tools_path" in source, "_prepare_prompt should import resolve_tools_path"
 
         # Should call resolve_tools_path
-        assert "resolve_tools_path(context.agent_config)" in source, \
+        assert "resolve_tools_path(context.agent_config)" in source, (
             "_prepare_prompt should resolve tools_path from agent_config"
+        )
 
         # Should pass tools_path to service
-        assert "tools_path=tools_path" in source, \
+        assert "tools_path=tools_path" in source, (
             "_prepare_prompt should pass tools_path to PromptPreparationService"
+        )
 
 
 class TestPromptPreparationServiceParity:
@@ -108,13 +113,15 @@ class TestPromptPreparationServiceParity:
         ]
 
         for param in core_params:
-            assert param in online_source, \
+            assert param in online_source, (
                 f"Online mode should pass {param.rstrip('=')} to PromptPreparationService"
-            assert param in batch_source, \
+            )
+            assert param in batch_source, (
                 f"Batch mode should pass {param.rstrip('=')} to PromptPreparationService"
+            )
 
-    def test_online_has_loop_context_batch_does_not(self):
-        """Verify online has loop_context (expected architectural difference)."""
+    def test_online_has_version_context_batch_does_not(self):
+        """Verify online has version_context (expected architectural difference)."""
         from agent_actions.processing.processor import RecordProcessor
         from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
         import inspect
@@ -122,15 +129,13 @@ class TestPromptPreparationServiceParity:
         online_source = inspect.getsource(RecordProcessor._prepare_prompt)
         batch_source = inspect.getsource(BatchTaskPreparator._prepare_single_task)
 
-        # Online mode has loop_context (for loop iteration context)
-        assert "loop_context=" in online_source, \
-            "Online mode should pass loop_context"
+        # Online mode has version_context (for loop iteration context)
+        assert "version_context=" in online_source, "Online mode should pass version_context"
 
-        # Batch mode doesn't have loop_context (prepares all tasks upfront)
+        # Batch mode doesn't have version_context (prepares all tasks upfront)
         # This is an expected architectural difference
         # Batch mode could pass workflow_metadata instead
-        assert "workflow_metadata=" in batch_source, \
-            "Batch mode should pass workflow_metadata"
+        assert "workflow_metadata=" in batch_source, "Batch mode should pass workflow_metadata"
 
 
 class TestPipelineParamsIncludeWorkflowMetadata:
@@ -142,8 +147,9 @@ class TestPipelineParamsIncludeWorkflowMetadata:
         import dataclasses
 
         fields = {f.name for f in dataclasses.fields(BatchPipelineParams)}
-        assert "workflow_metadata" in fields, \
+        assert "workflow_metadata" in fields, (
             "BatchPipelineParams should have workflow_metadata field"
+        )
 
     def test_process_params_has_workflow_metadata(self):
         """Verify ProcessParams has workflow_metadata field."""
@@ -151,8 +157,7 @@ class TestPipelineParamsIncludeWorkflowMetadata:
         import dataclasses
 
         fields = {f.name for f in dataclasses.fields(ProcessParams)}
-        assert "workflow_metadata" in fields, \
-            "ProcessParams should have workflow_metadata field"
+        assert "workflow_metadata" in fields, "ProcessParams should have workflow_metadata field"
 
     def test_pipeline_config_has_workflow_metadata(self):
         """Verify PipelineConfig has workflow_metadata field."""
@@ -160,8 +165,7 @@ class TestPipelineParamsIncludeWorkflowMetadata:
         import dataclasses
 
         fields = {f.name for f in dataclasses.fields(PipelineConfig)}
-        assert "workflow_metadata" in fields, \
-            "PipelineConfig should have workflow_metadata field"
+        assert "workflow_metadata" in fields, "PipelineConfig should have workflow_metadata field"
 
     def test_create_pipeline_accepts_workflow_metadata(self):
         """Verify create_processing_pipeline_from_params accepts workflow_metadata."""
@@ -170,8 +174,9 @@ class TestPipelineParamsIncludeWorkflowMetadata:
 
         sig = inspect.signature(create_processing_pipeline_from_params)
         params = list(sig.parameters.keys())
-        assert "workflow_metadata" in params, \
+        assert "workflow_metadata" in params, (
             "create_processing_pipeline_from_params should accept workflow_metadata"
+        )
 
 
 if __name__ == "__main__":

@@ -620,9 +620,7 @@ class TestInferDependenciesFourPatterns:
         action_config = {
             "dependencies": ["research_1", "research_2", "summarize"],
             "primary_dependency": "research",  # Base name, not in list directly
-            "context_scope": {
-                "observe": ["research_1.*", "research_2.*", "summarize.*"]
-            },
+            "context_scope": {"observe": ["research_1.*", "research_2.*", "summarize.*"]},
         }
         workflow_actions = ["research_1", "research_2", "summarize", "final_report"]
 
@@ -638,9 +636,7 @@ class TestInferDependenciesFourPatterns:
         """Different base names with same numeric suffix → fan-in, not parallel."""
         action_config = {
             "dependencies": ["classify_text_1", "classify_image_1"],
-            "context_scope": {
-                "observe": ["classify_text_1.*", "classify_image_1.*"]
-            },
+            "context_scope": {"observe": ["classify_text_1.*", "classify_image_1.*"]},
         }
         workflow_actions = ["classify_text_1", "classify_image_1", "combine"]
 

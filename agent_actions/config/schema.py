@@ -130,11 +130,11 @@ class ActionConfig(BaseModel):
     )
     primary_dependency: Optional[str] = Field(
         default=None,
-        description="Primary dependency for fan-in pattern (determines execution count)"
+        description="Primary dependency for fan-in pattern (determines execution count)",
     )
     reduce_key: Optional[str] = Field(
         default=None,
-        description="Key for aggregation pattern (groups merged outputs by this field)"
+        description="Key for aggregation pattern (groups merged outputs by this field)",
     )
 
     @field_validator("guard")

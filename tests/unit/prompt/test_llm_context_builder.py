@@ -263,9 +263,7 @@ class TestPublicMethodDelegation:
         batch_result = LLMContextBuilder.build_llm_context_for_batch(
             base, additional, context_scope
         )
-        direct_result = LLMContextBuilder._build_llm_context(
-            base, additional, context_scope
-        )
+        direct_result = LLMContextBuilder._build_llm_context(base, additional, context_scope)
 
         assert batch_result == direct_result
 
@@ -278,9 +276,7 @@ class TestPublicMethodDelegation:
         realtime_result = LLMContextBuilder.build_llm_context_for_realtime(
             base, additional, context_scope
         )
-        direct_result = LLMContextBuilder._build_llm_context(
-            base, additional, context_scope
-        )
+        direct_result = LLMContextBuilder._build_llm_context(base, additional, context_scope)
 
         assert realtime_result == direct_result
 

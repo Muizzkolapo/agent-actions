@@ -135,9 +135,7 @@ class TestValidateOutputAgainstSchema:
         }
         output = {"name": "John", "extra": "value"}
 
-        report = validate_output_against_schema(
-            output, schema, "test_action", strict_mode=False
-        )
+        report = validate_output_against_schema(output, schema, "test_action", strict_mode=False)
 
         assert report.is_compliant
         assert "extra" in report.extra_fields
@@ -150,9 +148,7 @@ class TestValidateOutputAgainstSchema:
         }
         output = {"name": "John", "extra": "value"}
 
-        report = validate_output_against_schema(
-            output, schema, "test_action", strict_mode=True
-        )
+        report = validate_output_against_schema(output, schema, "test_action", strict_mode=True)
 
         assert not report.is_compliant
         assert "extra" in report.extra_fields
@@ -268,9 +264,7 @@ class TestValidateAndRaiseIfInvalid:
         output = {"name": "John", "extra": "value"}
 
         with pytest.raises(SchemaValidationError) as exc_info:
-            validate_and_raise_if_invalid(
-                output, schema, "test_action", strict_mode=True
-            )
+            validate_and_raise_if_invalid(output, schema, "test_action", strict_mode=True)
 
         error = exc_info.value
         assert "extra" in error.extra_fields

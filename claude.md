@@ -1,6 +1,29 @@
-# AI Coding Agent Guidelines (claude.md)
+# AI Coding Agent Guidelines
 
 These rules define how an AI coding agent should plan, execute, verify, communicate, and recover when working in a real codebase. Optimize for correctness, minimalism, and developer experience.
+
+---
+
+## Project Structure
+
+This project uses the **Agent Manifest Protocol (AMP)** for navigation.
+**[> Open Codebase Map (agent_actions/_MANIFEST.md)](agent_actions/_MANIFEST.md)**
+
+### Navigation Strategy
+1. **Start Here:** Use this file for high-level context.
+2. **Explore:** Follow the `_MANIFEST.md` link above to traverse the codebase structure.
+3. **Inspect:** Read individual `_MANIFEST.md` files in subdirectories to find specific symbols and dependencies.
+4. **Read Code:** Only read source files when you have pinpointed the exact location.
+
+### Development
+- **Install:** `uv sync`
+- **Activate:** `source .venv/bin/activate`
+- **Test:** `pytest`
+- **Lint:** `ruff check .`
+- **Format:** `ruff format .`
+
+### Manifest Maintenance
+Always update `_MANIFEST.md` files when making code changes that add, remove, or modify modules, classes, or functions.
 
 ---
 

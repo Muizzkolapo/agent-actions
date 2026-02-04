@@ -10,5 +10,5 @@ loaders for cataloging prompts at documentation time.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `builder.py` | Module | `ContextBuilder` helpers that resolve field references into prompt context data. | `preprocessing`, `validation` |
-| `scope.py` | Module | `ContextScopeProcessor` that normalizes context_scope, tracks dependencies, and loads historical fields. | `preprocessing`, `validation` |
+| `scope.py` | Module | `ContextScopeProcessor` that normalizes context_scope, expands versioned dependencies, and loads historical fields. | `preprocessing`, `validation` |
 | `static_loader.py` | Module | Static prompt loader used during docs generation to read prompt store files. | `tooling.docs`, `file_io` |

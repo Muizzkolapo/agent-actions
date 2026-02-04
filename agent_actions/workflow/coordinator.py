@@ -206,8 +206,8 @@ class AgentWorkflow:
         self._agent_folder = agent_folder  # Store for retry tracker context
         status_file = agent_folder / ".agent_status.json"
 
-        # Initialize loop correlator with storage backend for DB-aware version consumption
-        loop_correlator = VersionOutputCorrelator(
+        # Initialize version correlator with storage backend for DB-aware version consumption
+        version_correlator = VersionOutputCorrelator(
             agent_folder,
             storage_backend=agent_runner.storage_backend,
         )
@@ -222,7 +222,7 @@ class AgentWorkflow:
                 execution_order=self.execution_order,
                 agent_configs=self.agent_configs,
                 agent_status=state_manager.agent_status,
-                loop_correlator=loop_correlator,
+                version_correlator=version_correlator,
                 console=self.console,
                 storage_backend=agent_runner.storage_backend,
             )
@@ -270,7 +270,7 @@ class AgentWorkflow:
             ),
             support=SupportServices(
                 batch_service=batch_service,
-                loop_correlator=loop_correlator,
+                version_correlator=version_correlator,
                 skip_evaluator=skip_evaluator,
                 batch_manager=batch_manager,
                 output_manager=output_manager,
@@ -356,8 +356,7 @@ class AgentWorkflow:
                 "\n".join(error_lines),
                 context={
                     "missing_schemas": [
-                        {"action": a, "schema": s, "path": str(p)}
-                        for a, s, p in missing_schemas
+                        {"action": a, "schema": s, "path": str(p)} for a, s, p in missing_schemas
                     ],
                     "schema_dir": str(schema_dir),
                 },
@@ -403,9 +402,7 @@ class AgentWorkflow:
                 e,
                 extra={"workflow_name": self.metadata.agent_name},
             )
-            self.console.print(
-                f"[red]❌ Storage backend failed: {e}[/red]"
-            )
+            self.console.print(f"[red]❌ Storage backend failed: {e}[/red]")
             raise
 
     @property

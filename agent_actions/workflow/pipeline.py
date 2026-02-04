@@ -58,6 +58,7 @@ class BatchPipelineParams:
     source_data: Optional[Any] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
+    data: Optional[List[Dict[str, Any]]] = None  # Pre-loaded data (skips file read)
 
 
 @dataclass
@@ -157,8 +158,16 @@ class ProcessingPipeline:
             storage_backend=params.storage_backend,
             node_name=params.pipeline_agent_name,
         )
-        file_reader = FileReader(params.batch_file_path)
-        data = file_reader.read()
+        # Use pre-loaded data if available (storage backend), otherwise read from file
+        if params.data is not None:
+            data = params.data
+            logger.debug(
+                "Using pre-loaded data for batch processing (skipping file read): %s",
+                params.batch_file_path,
+            )
+        else:
+            file_reader = FileReader(params.batch_file_path)
+            data = file_reader.read()
         file_name = Path(params.batch_file_path).name
 
         result = batch_service.submit_batch_job(
@@ -310,7 +319,7 @@ class ProcessingPipeline:
 
     def _handle_batch_mode(
         self,
-        _data: Any,
+        data: Any,
         file_path: str,
         base_directory: str,
         output_directory: str,
@@ -319,10 +328,11 @@ class ProcessingPipeline:
         """Handle batch mode processing.
 
         Args:
-            _data: Input data (unused, kept for interface consistency)
+            data: Input data (pre-loaded from storage backend or None to read from file)
             file_path: Path to the input file
             base_directory: Base directory for processing
             output_directory: Directory for output files
+            source_data: Optional source data for {{ source.* }} templates
         """
         result_path = self._handle_batch_generation(
             BatchPipelineParams(
@@ -335,6 +345,7 @@ class ProcessingPipeline:
                 source_data=source_data,
                 workflow_metadata=self.config.workflow_metadata,
                 storage_backend=self.config.storage_backend,
+                data=data,  # Pass pre-loaded data to avoid file read
             )
         )
         return result_path
@@ -402,13 +413,13 @@ class ProcessingPipeline:
         agent_ids = agent_indices
 
         # Extract version context for versioned agents
-        # This enables {{ i }}, {{ loop.length }}, etc. in Jinja2 templates
-        loop_context = None
+        # This enables {{ i }}, {{ version.length }}, etc. in Jinja2 templates
+        version_context = None
         agent_config = self.config.agent_config
         if agent_config.get("is_versioned_agent"):
             version_context = agent_config.get("_version_context")
             if version_context:
-                loop_context = dict(version_context)  # Copy to avoid mutation
+                version_context = dict(version_context)  # Copy to avoid mutation
 
         # Create processing context
         context = ProcessingContext(
@@ -421,7 +432,7 @@ class ProcessingPipeline:
             output_directory=output_directory,
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
-            loop_context=loop_context,
+            version_context=version_context,
             storage_backend=self.config.storage_backend,
         )
 

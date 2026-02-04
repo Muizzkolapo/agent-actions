@@ -132,24 +132,24 @@ actions:
   dependencies: prior_action           # Single input source
 ```
 
-## Loop Configuration
+## Versions Configuration
 
-Execute actions in parallel or sequential loops:
+Execute actions in parallel or sequential versions:
 
 ```yaml
 - name: generate_variant
-  loop:
+  versions:
     param: variant_id
     range: [1, 2, 3]
     mode: parallel  # or sequential
-  prompt: "Generate variant {{ loop.variant_id }}"
+  prompt: "Generate variant {{ variant_id }}"
 ```
 
 **Dynamic Template Variables:**
 
 ```yaml
 - name: generate_distractors
-  loop:
+  versions:
     param: stage
     range: [1, 3]
   schema:
@@ -157,14 +157,14 @@ Execute actions in parallel or sequential loops:
     why_incorrect_${stage}: string
 ```
 
-**Loop Consumption:**
+**Version Consumption:**
 
 ```yaml
 - name: combine_results
   dependencies: generate_distractors
-  loop_consumption:
+  version_consumption:
     source: generate_distractors
-    pattern: merge    # Combines all loop outputs
+    pattern: merge    # Combines all version outputs
 ```
 
 ## Dependency Patterns

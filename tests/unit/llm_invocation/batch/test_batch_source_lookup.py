@@ -82,26 +82,28 @@ class TestSourceDataLookup:
             (7, 4),  # source-guid-7: 4 records
             (8, 4),  # source-guid-8: 4 records
             (9, 5),  # source-guid-9: 5 records
-            (10, 2), # source-guid-10: 2 records
-            (11, 3), # source-guid-11: 3 records
-            (12, 3), # source-guid-12: 3 records
-            (13, 4), # source-guid-13: 4 records
-            (14, 4), # source-guid-14: 4 records
-            (15, 2), # source-guid-15: 2 records
-            (16, 5), # source-guid-16: 5 records (61 total)
+            (10, 2),  # source-guid-10: 2 records
+            (11, 3),  # source-guid-11: 3 records
+            (12, 3),  # source-guid-12: 3 records
+            (13, 4),  # source-guid-13: 4 records
+            (14, 4),  # source-guid-14: 4 records
+            (15, 2),  # source-guid-15: 2 records
+            (16, 5),  # source-guid-16: 5 records (61 total)
         ]
 
         for source_idx, count in distribution:
             source_guid = f"source-guid-{source_idx}"
             for j in range(count):
-                records.append({
-                    "target_id": f"target-{len(records)}",
-                    "source_guid": source_guid,
-                    "content": {
-                        "question": f"Question {len(records)}",
-                        "answer": f"Answer {len(records)}",
-                    },
-                })
+                records.append(
+                    {
+                        "target_id": f"target-{len(records)}",
+                        "source_guid": source_guid,
+                        "content": {
+                            "question": f"Question {len(records)}",
+                            "answer": f"Answer {len(records)}",
+                        },
+                    }
+                )
 
         assert len(records) == 61, "Should have exactly 61 records"
         return records

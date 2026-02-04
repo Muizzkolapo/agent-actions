@@ -48,10 +48,12 @@ class TestWorkflowSchemaValidation:
         from agent_actions.workflow.coordinator import AgentWorkflow
 
         # Create a mock workflow with missing schema reference
-        with patch.object(AgentWorkflow, '__init__', lambda self: None):
+        with patch.object(AgentWorkflow, "__init__", lambda self: None):
             workflow = AgentWorkflow()
             workflow.config = MagicMock()
-            workflow.config.paths.constructor_path = "/fake/agent_workflow/test/agent_config/test.yml"
+            workflow.config.paths.constructor_path = (
+                "/fake/agent_workflow/test/agent_config/test.yml"
+            )
 
             # Mock agent_configs with a missing schema reference
             workflow.metadata = MagicMock()
@@ -62,9 +64,7 @@ class TestWorkflowSchemaValidation:
             }
 
             # The property returns metadata.agent_configs
-            workflow.__class__.agent_configs = property(
-                lambda self: self.metadata.agent_configs
-            )
+            workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
 
             # Should raise ConfigValidationError
             with pytest.raises(ConfigValidationError) as exc_info:
@@ -77,10 +77,12 @@ class TestWorkflowSchemaValidation:
         """Verify validation passes when no schema_name fields are present."""
         from agent_actions.workflow.coordinator import AgentWorkflow
 
-        with patch.object(AgentWorkflow, '__init__', lambda self: None):
+        with patch.object(AgentWorkflow, "__init__", lambda self: None):
             workflow = AgentWorkflow()
             workflow.config = MagicMock()
-            workflow.config.paths.constructor_path = "/fake/agent_workflow/test/agent_config/test.yml"
+            workflow.config.paths.constructor_path = (
+                "/fake/agent_workflow/test/agent_config/test.yml"
+            )
 
             # Mock agent_configs without schema references
             workflow.metadata = MagicMock()
@@ -91,9 +93,7 @@ class TestWorkflowSchemaValidation:
                 }
             }
 
-            workflow.__class__.agent_configs = property(
-                lambda self: self.metadata.agent_configs
-            )
+            workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
 
             # Should not raise
             workflow._validate_schema_files()
@@ -110,7 +110,7 @@ class TestWorkflowSchemaValidation:
         # Mock cwd to return tmp_path (simulating running from project root)
         monkeypatch.chdir(tmp_path)
 
-        with patch.object(AgentWorkflow, '__init__', lambda self: None):
+        with patch.object(AgentWorkflow, "__init__", lambda self: None):
             workflow = AgentWorkflow()
             workflow.config = MagicMock()
             workflow.config.paths.constructor_path = str(tmp_path / "config.yml")
@@ -123,9 +123,7 @@ class TestWorkflowSchemaValidation:
                 }
             }
 
-            workflow.__class__.agent_configs = property(
-                lambda self: self.metadata.agent_configs
-            )
+            workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
 
             # Should not raise
             workflow._validate_schema_files()
@@ -138,10 +136,12 @@ class TestErrorMessage:
         """Verify error message is clear and actionable."""
         from agent_actions.workflow.coordinator import AgentWorkflow
 
-        with patch.object(AgentWorkflow, '__init__', lambda self: None):
+        with patch.object(AgentWorkflow, "__init__", lambda self: None):
             workflow = AgentWorkflow()
             workflow.config = MagicMock()
-            workflow.config.paths.constructor_path = "/fake/project/agent_workflow/wf/agent_config/wf.yml"
+            workflow.config.paths.constructor_path = (
+                "/fake/project/agent_workflow/wf/agent_config/wf.yml"
+            )
 
             workflow.metadata = MagicMock()
             workflow.metadata.agent_configs = {
@@ -149,9 +149,7 @@ class TestErrorMessage:
                 "transform_data": {"schema_name": "missing_schema_2"},
             }
 
-            workflow.__class__.agent_configs = property(
-                lambda self: self.metadata.agent_configs
-            )
+            workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
 
             with pytest.raises(ConfigValidationError) as exc_info:
                 workflow._validate_schema_files()

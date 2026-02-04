@@ -319,10 +319,17 @@ class TestVersionOutputCorrelator:
         result = correlator._correlate_by_source_record(version_outputs)
         assert len(result) == 2
         rec_a = next((r for r in result if r["source_guid"] == "guid-a"))
-        # Fields are now prefixed with agent name to avoid collisions
-        assert rec_a["content"] == {"loop_1_f1": "v1", "loop_2_f2": "v3", "loop_3_f3": "v5"}
+        # Content is now nested by agent name (not flattened)
+        assert rec_a["content"] == {
+            "loop_1": {"f1": "v1"},
+            "loop_2": {"f2": "v3"},
+            "loop_3": {"f3": "v5"},
+        }
         rec_b = next((r for r in result if r["source_guid"] == "guid-b"))
-        assert rec_b["content"] == {"loop_1_f1": "v2", "loop_2_f2": "v4"}
+        assert rec_b["content"] == {
+            "loop_1": {"f1": "v2"},
+            "loop_2": {"f2": "v4"},
+        }
 
     def test_write_correlated_data(self, correlator, temp_agent_folder):
         """Test writing correlated data and source file creation."""
@@ -394,7 +401,7 @@ class TestVersionOutputCorrelatorIntegration:
         """Test integration with AgentWorkflow's _setup_correlation_if_needed."""
         workflow, agent_folder = mock_agent_workflow
         correlator = VersionOutputCorrelator(agent_folder)
-        workflow.loop_correlator = correlator
+        workflow.version_correlator = correlator
         for i in range(1, 4):
             # Use simple directory names (no node_X_ prefix)
             loop_dir = agent_folder / "target" / f"loop_{i}"
@@ -415,10 +422,10 @@ class TestVersionOutputCorrelatorIntegration:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 1
-            # Fields are now prefixed with agent name
-            assert data[0]["content"]["loop_1_field_1"] == "value_1"
-            assert data[0]["content"]["loop_2_field_2"] == "value_2"
-            assert data[0]["content"]["loop_3_field_3"] == "value_3"
+            # Content is nested by agent name (not flattened)
+            assert data[0]["content"]["loop_1"]["field_1"] == "value_1"
+            assert data[0]["content"]["loop_2"]["field_2"] == "value_2"
+            assert data[0]["content"]["loop_3"]["field_3"] == "value_3"
 
 
 class TestLoopCorrelatorWithSequentialMode:
@@ -459,13 +466,13 @@ class TestLoopCorrelatorWithSequentialMode:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 3
-            # Fields are now prefixed with agent name
-            # Extract iteration values from prefixed fields
+            # Content is nested by agent name
+            # Extract iteration values from nested namespaces
             iterations = set()
             for item in data:
-                for key, value in item["content"].items():
-                    if key.endswith("_iteration"):
-                        iterations.add(value)
+                for agent_name, content in item["content"].items():
+                    if isinstance(content, dict) and "iteration" in content:
+                        iterations.add(content["iteration"])
             assert iterations == {1, 2, 3}
 
     def test_partial_sequential_failure_correlation(self, correlator, temp_agent_folder):
@@ -492,9 +499,10 @@ class TestLoopCorrelatorWithSequentialMode:
                 data = json.load(f)
                 assert len(data) <= 2
                 if len(data) > 0:
-                    # Fields are prefixed with agent name
-                    content_keys = data[0]["content"].keys()
-                    assert any("field_1" in k or "field_2" in k for k in content_keys)
+                    # Content is nested by agent name
+                    content = data[0]["content"]
+                    # Check that process_1 or process_2 namespace exists
+                    assert "process_1" in content or "process_2" in content
 
     def test_sequential_loop_with_mixed_metadata(self, correlator, temp_agent_folder):
         """Test correlation when sequential loop agents have loop_mode metadata."""
@@ -519,10 +527,13 @@ class TestLoopCorrelatorWithSequentialMode:
         with open(output_file, "r") as f:
             data = json.load(f)
             assert len(data) == 1
-            # Fields are now prefixed with agent name
-            # Check that at least one step field exists with expected value
+            # Content is nested by agent name
             content = data[0]["content"]
-            step_values = [content.get(f"step_{i}_step") for i in range(1, 4)]
+            # Check that step namespaces exist with expected values
+            step_values = []
+            for i in range(1, 4):
+                if f"step_{i}" in content and isinstance(content[f"step_{i}"], dict):
+                    step_values.append(content[f"step_{i}"].get("step"))
             assert any(v in [1, 2, 3] for v in step_values if v is not None)
 
     def test_sequential_vs_parallel_correlation_same_behavior(self, correlator, temp_agent_folder):
@@ -567,11 +578,15 @@ class TestLoopCorrelatorWithSequentialMode:
             par_data = json.load(f)
         assert len(seq_data) == 1
         assert len(par_data) == 1
-        # Fields are now prefixed with agent name
-        assert "seq_1_seq_field_1" in seq_data[0]["content"]
-        assert "seq_2_seq_field_2" in seq_data[0]["content"]
-        assert "par_1_par_field_1" in par_data[0]["content"]
-        assert "par_2_par_field_2" in par_data[0]["content"]
+        # Content is nested by agent name
+        assert "seq_1" in seq_data[0]["content"]
+        assert seq_data[0]["content"]["seq_1"]["seq_field_1"] == "seq_value_1"
+        assert "seq_2" in seq_data[0]["content"]
+        assert seq_data[0]["content"]["seq_2"]["seq_field_2"] == "seq_value_2"
+        assert "par_1" in par_data[0]["content"]
+        assert par_data[0]["content"]["par_1"]["par_field_1"] == "par_value_1"
+        assert "par_2" in par_data[0]["content"]
+        assert par_data[0]["content"]["par_2"]["par_field_2"] == "par_value_2"
 
 
 class TestVersionCorrelatorSourceProtection:
@@ -674,6 +689,73 @@ class TestVersionCorrelatorSourceProtection:
             with open(source_file, "r") as f:
                 source_data = json.load(f)
             assert len(source_data[0]) == 2
+
+
+class TestVersionCorrelationFailureError:
+    """Test that version correlation failure raises ConfigurationError instead of silent fallback."""
+
+    def test_version_correlation_failure_raises_error(self):
+        """Test that version correlation failure raises ConfigurationError."""
+        from unittest.mock import MagicMock
+
+        from agent_actions.errors import ConfigurationError
+        from agent_actions.workflow.managers.output import (
+            AgentOutputManager,
+            OutputManagerConfig,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            agent_folder = Path(tmpdir)
+            version_correlator = VersionOutputCorrelator(agent_folder)
+
+            # Create agent configs with version_consumption_config declared
+            # Version agents must have numeric suffixes (action_1, action_2)
+            agent_configs = {
+                "action_1": {"agent_type": "action"},
+                "action_2": {"agent_type": "action"},
+                "consumer": {
+                    "agent_type": "consumer",
+                    "version_consumption_config": {
+                        "source": "action",  # Base name of versioned agents
+                        "pattern": "merge",
+                    },
+                },
+            }
+
+            # Create minimal config for output manager
+            config = OutputManagerConfig(
+                agent_folder=agent_folder,
+                execution_order=["action_1", "action_2", "consumer"],
+                agent_configs=agent_configs,
+                agent_status={},
+                version_correlator=version_correlator,
+                console=MagicMock(),  # Mock console to avoid print errors
+                storage_backend=None,
+            )
+            output_manager = AgentOutputManager(config)
+
+            # Get the correlation wrapper for consumer (idx=2)
+            correlation_wrapper = output_manager.setup_correlation_wrapper(
+                idx=2,
+                original_setup_directories=lambda *_: ([], ""),
+            )
+
+            # The wrapper should exist since consumer has version_consumption_config
+            assert correlation_wrapper is not None
+
+            # Calling the wrapper when no version outputs exist should raise ConfigurationError
+            with pytest.raises(ConfigurationError) as exc_info:
+                correlation_wrapper(
+                    agent_folder=str(agent_folder),
+                    agent_config=agent_configs["consumer"],
+                    previous_agent_type="action_2",
+                    agent_idx=2,
+                )
+
+            # Verify error message contains helpful context
+            error_msg = str(exc_info.value)
+            assert "consumer" in error_msg
+            assert "Version correlation failed" in error_msg
 
 
 if __name__ == "__main__":

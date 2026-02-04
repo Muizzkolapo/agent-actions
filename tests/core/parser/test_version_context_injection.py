@@ -283,7 +283,7 @@ class TestVersionContextInFieldContext:
         """Verify the version namespace has the correct structure for Jinja2."""
         from agent_actions.prompt.context.scope import ContextScopeProcessor
 
-        loop_context = {
+        version_context = {
             "i": 2,
             "idx": 1,
             "length": 3,
@@ -296,7 +296,7 @@ class TestVersionContextInFieldContext:
             contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},
-            loop_context=loop_context,
+            version_context=version_context,
         )
 
         # Version namespace should be present (not "loop")
@@ -316,7 +316,7 @@ class TestVersionContextInFieldContext:
         """Verify {{ i }} and {{ idx }} work at top level (not just {{ version.i }})."""
         from agent_actions.prompt.context.scope import ContextScopeProcessor
 
-        loop_context = {
+        version_context = {
             "i": 1,
             "idx": 0,
             "length": 3,
@@ -328,7 +328,7 @@ class TestVersionContextInFieldContext:
             contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},
-            loop_context=loop_context,
+            version_context=version_context,
         )
 
         # These enable {{ i }} and {{ idx }} in Jinja2 templates

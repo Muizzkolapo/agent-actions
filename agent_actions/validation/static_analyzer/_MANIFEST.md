@@ -39,7 +39,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `add_edge` | Method | Add an edge to the graph. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_node` | Method | Get a node by name. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `has_node` | Method | Check if a node exists. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `is_special_namespace` | Method | Check if name is a special namespace (source, loop, etc.). | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `is_special_namespace` | Method | Check if name is a special namespace (source, version, etc.). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_upstream_nodes` | Method | Get all nodes that this agent depends on. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_downstream_nodes` | Method | Get all nodes that depend on this agent. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `topological_sort` | Method | Return nodes in topological order (Kahn's algorithm). | - |

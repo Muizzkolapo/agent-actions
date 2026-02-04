@@ -401,7 +401,9 @@ def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.Document
 
     file_path = Path(params.text_document.uri.replace("file://", ""))
     references = server.index.references_by_file.get(file_path, [])
-    target = _find_reference_at_position(references, params.position.line, params.position.character)
+    target = _find_reference_at_position(
+        references, params.position.line, params.position.character
+    )
     if not target:
         return []
 
@@ -822,7 +824,6 @@ def _collect_available_guard_variables(file_path: Path) -> set[str]:
                 for field in schema.fields:
                     variables.add(f"{action.name}.{field}")
     return variables
-
 
 
 def main():

@@ -77,7 +77,7 @@ class DataGenerator(IGenerator):
         self,
         contents: Any,
         source_content: Optional[Any] = None,
-        loop_context: Optional[Dict] = None,
+        version_context: Optional[Dict] = None,
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
@@ -90,7 +90,7 @@ class DataGenerator(IGenerator):
         Args:
             contents: Content to process
             source_content: Optional source content for prompt formatting
-            loop_context: Optional loop context for {loop.*} references
+            version_context: Optional version context for {version.*} references
             workflow_metadata: Optional workflow metadata for {workflow.*} references
             current_item: Optional current item dict containing lineage and
                 source_guid for historical node loading
@@ -114,7 +114,7 @@ class DataGenerator(IGenerator):
                 is_first_stage=False,  # This is subsequent-stage processing
                 source_data=source_content,
                 file_path=file_path,
-                loop_context=loop_context,
+                version_context=version_context,
                 workflow_metadata=workflow_metadata,
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,

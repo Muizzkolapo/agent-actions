@@ -128,7 +128,9 @@ class BaseInspectCommand:
         return "Transform" if not context_sources else "Transform + Context"
 
     @staticmethod
-    def _get_output_fields(action_config: Dict[str, Any], schema_dir: Optional[Path] = None) -> List[str]:
+    def _get_output_fields(
+        action_config: Dict[str, Any], schema_dir: Optional[Path] = None
+    ) -> List[str]:
         """Extract output field names from action config schema."""
         import yaml
 
@@ -161,7 +163,14 @@ class BaseInspectCommand:
                         # Handle simple format
                         if isinstance(schema_data, dict):
                             # Filter out JSON Schema keywords
-                            keywords = {"type", "description", "required", "$schema", "title", "additionalProperties"}
+                            keywords = {
+                                "type",
+                                "description",
+                                "required",
+                                "$schema",
+                                "title",
+                                "additionalProperties",
+                            }
                             fields = [k for k in schema_data.keys() if k not in keywords]
                             if fields:
                                 return fields
@@ -316,14 +325,10 @@ class GraphCommand(BaseInspectCommand):
             "execution_order": execution_order,
             "actions": {
                 name: {
-                    "type": self._get_action_type(
-                        info["input_sources"], info["context_sources"]
-                    ),
+                    "type": self._get_action_type(info["input_sources"], info["context_sources"]),
                     "input_sources": info["input_sources"],
                     "context_sources": info["context_sources"],
-                    "output_fields": self._get_output_fields(
-                        workflow.agent_configs.get(name, {})
-                    ),
+                    "output_fields": self._get_output_fields(workflow.agent_configs.get(name, {})),
                 }
                 for name, info in dependency_info.items()
             },
@@ -350,9 +355,7 @@ class GraphCommand(BaseInspectCommand):
 
             info = dependency_info[action_name]
             action_config = workflow.agent_configs.get(action_name, {})
-            action_type = self._get_action_type(
-                info["input_sources"], info["context_sources"]
-            )
+            action_type = self._get_action_type(info["input_sources"], info["context_sources"])
 
             # Action node
             node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")
@@ -527,9 +530,7 @@ class ActionCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect action")
 @requires_project
-def action(
-    agent: str, user_code: Optional[str], json_output: bool, action_name: str
-) -> None:
+def action(agent: str, user_code: Optional[str], json_output: bool, action_name: str) -> None:
     """
     Show details for a specific action.
 
@@ -612,7 +613,7 @@ class ContextCommand(BaseInspectCommand):
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 
         # Add special namespaces
-        namespaces["loop"] = ["index", "version"]
+        namespaces["version"] = ["i", "idx", "length", "first", "last"]
         namespaces["workflow"] = ["name", "run_id"]
 
         # Get context scope
@@ -648,7 +649,9 @@ class ContextCommand(BaseInspectCommand):
         action_name = context_data["action_name"]
 
         self.console.print()
-        self.console.print(f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]")
+        self.console.print(
+            f"[bold cyan]=== Context Debug for action '{action_name}' ===[/bold cyan]"
+        )
         self.console.print()
 
         # Namespaces loaded
@@ -715,9 +718,7 @@ class ContextCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect context")
 @requires_project
-def context(
-    agent: str, user_code: Optional[str], json_output: bool, action_name: str
-) -> None:
+def context(agent: str, user_code: Optional[str], json_output: bool, action_name: str) -> None:
     """
     Show context debug information for a specific action.
 

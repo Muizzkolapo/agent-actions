@@ -44,7 +44,7 @@ class PromptPreparationRequest:
         agent_indices: Optional dict mapping agent names to node indices
         dependency_configs: Optional dict mapping dependency names to configs
         source_content: Optional source content for references
-        loop_context: Optional loop context for references
+        version_context: Optional loop context for references
         workflow_metadata: Optional workflow metadata for references
         current_item: Optional current item dict
         file_path: Optional file path for history
@@ -60,7 +60,7 @@ class PromptPreparationRequest:
     agent_indices: Optional[Dict[str, int]] = None
     dependency_configs: Optional[Dict[str, Dict]] = None
     source_content: Optional[Any] = None
-    loop_context: Optional[Dict] = None
+    version_context: Optional[Dict] = None
     workflow_metadata: Optional[Dict] = None
     current_item: Optional[Dict] = None
     file_path: Optional[str] = None
@@ -133,7 +133,7 @@ class PromptPreparationService:
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         source_content: Optional[Any] = None,
-        loop_context: Optional[Dict] = None,
+        version_context: Optional[Dict] = None,
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
@@ -167,7 +167,7 @@ class PromptPreparationService:
             agent_indices: Optional dict mapping agent names to node indices.
             dependency_configs: Optional dict mapping dependency names to configs.
             source_content: Optional source content for references.
-            loop_context: Optional loop context for references.
+            version_context: Optional loop context for references.
             workflow_metadata: Optional workflow metadata for references.
             current_item: Optional current item dict with source_guid, lineage, etc.
             file_path: Optional file path for historical data loading.
@@ -191,7 +191,7 @@ class PromptPreparationService:
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             source_content=source_content,
-            loop_context=loop_context,
+            version_context=version_context,
             workflow_metadata=workflow_metadata,
             current_item=current_item,
             file_path=file_path,
@@ -200,6 +200,111 @@ class PromptPreparationService:
             storage_backend=storage_backend,
         )
         return PromptPreparationService._prepare_prompt_internal(request)
+
+    @staticmethod
+    def prepare_prompt_with_field_context(
+        agent_config: Dict[str, Any],
+        agent_name: str,
+        contents: Dict[str, Any],
+        *,
+        mode: Literal["batch", "realtime"] = "realtime",
+        field_context: Dict[str, Any],
+        tools_path: Optional[str] = None,
+    ) -> PromptPreparationResult:
+        """
+        Prepare prompt using pre-loaded field_context.
+
+        This method is used when field_context has already been loaded
+        (e.g., for guard evaluation). It skips the context loading step
+        and proceeds directly to context_scope transformations and rendering.
+
+        Args:
+            agent_config: Agent configuration dict
+            agent_name: Name of the agent
+            contents: Content dict to process
+            mode: Processing mode - 'batch' or 'realtime'
+            field_context: Pre-loaded field context (from build_field_context_with_history)
+            tools_path: Optional path to tools directory for UDF injection
+
+        Returns:
+            PromptPreparationResult with formatted_prompt, llm_context, etc.
+        """
+        logger.debug(
+            "Preparing prompt with pre-loaded context for '%s' in %s mode",
+            agent_name, mode
+        )
+
+        # Step 1: Load raw prompt template
+        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
+
+        # Step 2: Extract context_scope
+        context_scope = agent_config.get(
+            "context_scope_expanded"
+        ) or agent_config.get("context_scope", {})
+
+        # Step 3: Load seed data if configured
+        static_data = PromptPreparationService._load_seed_data(
+            agent_config, context_scope, agent_name
+        )
+
+        # Step 4: Apply context_scope transformations
+        if context_scope:
+            prompt_context, llm_additional_context, passthrough_fields = (
+                ContextScopeProcessor.apply_context_scope(
+                    field_context,
+                    context_scope,
+                    static_data=static_data,
+                    action_name=agent_name,
+                )
+            )
+        else:
+            prompt_context = field_context
+            llm_additional_context = {}
+            passthrough_fields = {}
+
+        # Step 5: Build LLM context
+        llm_context = PromptPreparationService._build_llm_context(
+            mode=mode,
+            contents=contents,
+            llm_additional_context=llm_additional_context,
+            context_scope=context_scope,
+        )
+
+        # Step 6: Render template
+        formatted_prompt = PromptPreparationService._render_prompt_template(
+            raw_prompt,
+            prompt_context,
+            agent_name=agent_name,
+            mode=mode,
+        )
+
+        # Step 7: Inject function outputs
+        if tools_path:
+            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
+                formatted_prompt,
+                tools_path,
+                json.dumps(llm_context, ensure_ascii=False),
+                agent_config=agent_config,
+            )
+
+        # Build metadata
+        metadata = {
+            "mode": mode,
+            "field_context_keys": list(field_context.keys()),
+            "observe_fields": list(llm_additional_context.keys()),
+            "passthrough_fields": list(passthrough_fields.keys()),
+            "prompt_length": len(formatted_prompt),
+            "llm_context_keys": list(llm_context.keys()) if isinstance(llm_context, dict) else [],
+            "preloaded_context": True,
+        }
+
+        return PromptPreparationResult(
+            formatted_prompt=formatted_prompt,
+            llm_context=llm_context,
+            passthrough_fields=passthrough_fields,
+            metadata=metadata,
+            prompt_context=prompt_context,
+        )
 
     @staticmethod
     def _prepare_prompt_internal(request: PromptPreparationRequest) -> PromptPreparationResult:
@@ -262,7 +367,7 @@ class PromptPreparationService:
             agent_indices=agent_indices,
             dependency_configs=dependency_configs,
             source_content=request.source_content,
-            loop_context=request.loop_context,
+            version_context=request.version_context,
             workflow_metadata=request.workflow_metadata,
             current_item=request.current_item,
             file_path=request.file_path,
@@ -454,20 +559,24 @@ class PromptPreparationService:
                 if "." in var:
                     ns, field = var.split(".", 1)
                     available = namespace_context.get(ns, [])
-                    fire_event(ContextFieldNotFoundEvent(
-                        action_name=agent_name,
-                        field_ref=var,
-                        namespace=ns,
-                        available_fields=available,
-                    ))
+                    fire_event(
+                        ContextFieldNotFoundEvent(
+                            action_name=agent_name,
+                            field_ref=var,
+                            namespace=ns,
+                            available_fields=available,
+                        )
+                    )
                 else:
                     # Top-level variable not in a namespace
-                    fire_event(ContextFieldNotFoundEvent(
-                        action_name=agent_name,
-                        field_ref=var,
-                        namespace="",
-                        available_fields=list(namespace_context.keys()),
-                    ))
+                    fire_event(
+                        ContextFieldNotFoundEvent(
+                            action_name=agent_name,
+                            field_ref=var,
+                            namespace="",
+                            available_fields=list(namespace_context.keys()),
+                        )
+                    )
 
             raise TemplateVariableError(
                 missing_variables=missing,

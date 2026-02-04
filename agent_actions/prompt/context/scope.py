@@ -33,7 +33,7 @@ class ContextScopeProcessor:
 
     Special Namespaces:
         source: Original input data loaded from source files
-        loop: Current iteration context in versioned actions
+        version: Current iteration context in versioned actions (i, idx, length, first, last)
         workflow: Workflow metadata (name, version, run_id)
     """
 
@@ -103,12 +103,14 @@ class ContextScopeProcessor:
                 _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                 field_names.append(field_name)
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name="unknown",
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="extract_field_names",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name="unknown",
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="extract_field_names",
+                    )
+                )
                 continue
 
         return field_names
@@ -148,12 +150,14 @@ class ContextScopeProcessor:
                 action_name, _ = ContextScopeProcessor.parse_field_reference(field_ref)
                 referenced_actions.add(action_name)
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name="unknown",
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="extract_action_names",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name="unknown",
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="extract_action_names",
+                    )
+                )
                 continue
 
         return referenced_actions
@@ -164,7 +168,7 @@ class ContextScopeProcessor:
         Extract unique action names referenced in a Jinja2 template.
 
         Parses template for {{ namespace.field }} patterns and extracts namespace names.
-        Filters out special namespaces (source, loop, workflow) and common Jinja2 filters.
+        Filters out special namespaces (source, version, workflow) and common Jinja2 filters.
 
         Args:
             template: Jinja2 template string
@@ -185,14 +189,14 @@ class ContextScopeProcessor:
 
         # Match {{ namespace.field }} or {{ namespace['field'] }} patterns
         # This regex captures the namespace (first identifier before . or [)
-        pattern = r'\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]'
+        pattern = r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*[\.\[]"
         matches = re.findall(pattern, template)
 
         for namespace in matches:
             # Filter out special namespaces and common Jinja2 variables
             if namespace in SPECIAL_NAMESPACES:
                 continue
-            if namespace in ('loop', 'range', 'true', 'false', 'none', 'self'):
+            if namespace in ("loop", "range", "true", "false", "none", "self", "version"):
                 continue
             referenced_actions.add(namespace)
 
@@ -259,8 +263,9 @@ class ContextScopeProcessor:
             List of dependencies that are versions of base_name
         """
         return [
-            d for d in dependencies
-            if d.startswith(f"{base_name}_") and d[len(base_name) + 1:].isdigit()
+            d
+            for d in dependencies
+            if d.startswith(f"{base_name}_") and d[len(base_name) + 1 :].isdigit()
         ]
 
     @staticmethod
@@ -289,9 +294,7 @@ class ContextScopeProcessor:
             # But if first dep is a version branch, include ALL sibling branches
             first_dep = dependencies[0]
             base_name = ContextScopeProcessor._get_base_name(first_dep)
-            sibling_branches = ContextScopeProcessor._get_version_branches(
-                base_name, dependencies
-            )
+            sibling_branches = ContextScopeProcessor._get_version_branches(base_name, dependencies)
 
             if sibling_branches and first_dep in sibling_branches:
                 # First dep is a version branch - include all siblings as input
@@ -302,9 +305,7 @@ class ContextScopeProcessor:
         elif primary_dependency in dependencies:
             # Explicit primary exists in deps - check if it's versioned
             base_name = ContextScopeProcessor._get_base_name(primary_dependency)
-            sibling_branches = ContextScopeProcessor._get_version_branches(
-                base_name, dependencies
-            )
+            sibling_branches = ContextScopeProcessor._get_version_branches(base_name, dependencies)
 
             if sibling_branches and primary_dependency in sibling_branches:
                 # Primary is a version branch - include all siblings
@@ -398,16 +399,12 @@ class ContextScopeProcessor:
             primary_dep = action_config.get("primary_dependency")
             try:
                 input_sources, fan_in_context_sources = (
-                    ContextScopeProcessor._resolve_input_sources_for_fan_in(
-                        all_deps, primary_dep
-                    )
+                    ContextScopeProcessor._resolve_input_sources_for_fan_in(all_deps, primary_dep)
                 )
             except ValueError as e:
                 from agent_actions.errors import ConfigurationError
 
-                raise ConfigurationError(
-                    f"Action '{action_name}': {e}"
-                ) from e
+                raise ConfigurationError(f"Action '{action_name}': {e}") from e
 
             logger.debug(
                 f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
@@ -461,32 +458,26 @@ class ContextScopeProcessor:
                 elif ref_field == "*":  # Wildcard pattern
                     wildcard_actions.add(ref_action)
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="infer_dependencies",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="infer_dependencies",
+                    )
+                )
                 continue
 
         # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
         # Also include fan-in context sources (non-primary dependencies from fan-in pattern)
-        # Exclude base names of field prefix patterns if they match loop iterations in dependencies
-        potential_context_sources = referenced_actions - set(input_sources) - set(fan_in_context_sources)
+        # NOTE: Do NOT exclude field prefix base names here. They are expanded later into
+        # version variants so the caller can request all available branches. We will
+        # de-duplicate against input_sources after expansion to avoid overwriting.
+        potential_context_sources = (
+            referenced_actions - set(input_sources) - set(fan_in_context_sources)
+        )
         context_sources = list(fan_in_context_sources)  # Start with fan-in context sources
         for action in potential_context_sources:
-            # Check if this is a field prefix base name and if dependencies contain loop iterations of it
-            if action in field_prefix_base_names:
-                # Check if any dependency starts with this base name (loop iteration pattern)
-                has_loop_iterations = any(dep.startswith(f"{action}_") for dep in input_sources)
-                if has_loop_iterations:
-                    # This base name corresponds to loop iterations in dependencies
-                    # Don't treat it as a separate context source
-                    logger.debug(
-                        f"[LOOP_FIELD_PREFIX] Excluding '{action}' from context sources - "
-                        f"field prefix pattern matches loop iterations in dependencies"
-                    )
-                    continue
             context_sources.append(action)
 
         # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
@@ -519,20 +510,12 @@ class ContextScopeProcessor:
                         and wf_action[len(action) + 1 :].isdigit()
                     ]
                     if version_variants:
-                        # For context sources with wildcards, use field prefix pattern (action_)
-                        # For dependencies or specific fields, expand to all variants
-                        if is_context_sources and action in wildcard_actions:
-                            # Version consumption with wildcard - use field prefix pattern
-                            expanded.append(f"{action}_")
-                            logger.debug(
-                                f"[VERSION_FIELD_PREFIX] Converted version base name '{action}' with wildcard to field prefix '{action}_'"
-                            )
-                        else:
-                            # Expand to all variants
-                            expanded.extend(version_variants)
-                            logger.debug(
-                                f"[VERSION_EXPAND] Expanded version base name '{action}' to {version_variants}"
-                            )
+                        # Expand to all variants. For context sources with wildcards, we still
+                        # expand to concrete version names so they can be loaded via agent_indices.
+                        expanded.extend(version_variants)
+                        logger.debug(
+                            f"[VERSION_EXPAND] Expanded version base name '{action}' to {version_variants}"
+                        )
                     else:
                         # Not a version base name - keep as-is (will error in validation)
                         expanded.append(action)
@@ -543,6 +526,12 @@ class ContextScopeProcessor:
         context_sources_expanded = expand_version_base_names(
             context_sources, is_context_sources=True
         )
+        # Avoid loading context sources already provided via input sources.
+        if input_sources_expanded:
+            input_sources_set = set(input_sources_expanded)
+            context_sources_expanded = [
+                dep for dep in context_sources_expanded if dep not in input_sources_set
+            ]
 
         # 5. Validate all referenced actions exist in workflow
         # Skip validation for field prefix patterns (ending with _) and special namespaces
@@ -552,7 +541,7 @@ class ContextScopeProcessor:
             if dep_action.endswith("_"):
                 continue
 
-            # Skip validation for special reserved namespaces (source, loop, workflow, etc.)
+            # Skip validation for special reserved namespaces (source, version, workflow, etc.)
             if dep_action in SPECIAL_NAMESPACES:
                 continue
 
@@ -576,11 +565,13 @@ class ContextScopeProcessor:
         )
 
         # Fire event for successful inference
-        fire_event(ContextDependencyInferredEvent(
-            action_name=action_name,
-            input_sources=input_sources_expanded,
-            context_sources=context_sources_expanded,
-        ))
+        fire_event(
+            ContextDependencyInferredEvent(
+                action_name=action_name,
+                input_sources=input_sources_expanded,
+                context_sources=context_sources_expanded,
+            )
+        )
 
         return input_sources_expanded, context_sources_expanded
 
@@ -626,7 +617,7 @@ class ContextScopeProcessor:
         This is the 5th namespace that gets added to field_context before filtering.
 
         Args:
-            field_context: Input context with {source, {dep_name}, loop, workflow} namespaces
+            field_context: Input context with {source, {dep_name}, version, workflow} namespaces
             context_scope: Dict with observe/passthrough/drop lists
             static_data: Optional seed data to add under 'seed' namespace
             action_name: Name of the action for event logging
@@ -667,12 +658,14 @@ class ContextScopeProcessor:
                     prompt_context[ns_name].pop(field_name, None)
 
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="drop",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="drop",
+                    )
+                )
                 continue
 
         # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
@@ -700,12 +693,14 @@ class ContextScopeProcessor:
                     # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="observe",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="observe",
+                    )
+                )
                 continue
 
         # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
@@ -731,24 +726,28 @@ class ContextScopeProcessor:
                         passthrough_fields[field_name] = value
 
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="passthrough",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="passthrough",
+                    )
+                )
                 continue
 
         # Fire event for scope application
-        fire_event(ContextScopeAppliedEvent(
-            action_name=action_name,
-            observe_count=len(observe_refs),
-            passthrough_count=len(passthrough_refs),
-            drop_count=len(drop_refs),
-            observe_fields=observe_refs,
-            passthrough_fields=passthrough_refs,
-            drop_fields=drop_refs,
-        ))
+        fire_event(
+            ContextScopeAppliedEvent(
+                action_name=action_name,
+                observe_count=len(observe_refs),
+                passthrough_count=len(passthrough_refs),
+                drop_count=len(drop_refs),
+                observe_fields=observe_refs,
+                passthrough_fields=passthrough_refs,
+                drop_fields=drop_refs,
+            )
+        )
 
         return (prompt_context, llm_context, passthrough_fields)
 
@@ -1030,12 +1029,14 @@ class ContextScopeProcessor:
                 if ref_field == "_":
                     field_prefix_patterns.add(ref_action)
             except ValueError as e:
-                fire_event(ContextFieldSkippedEvent(
-                    action_name=action_name,
-                    field_ref=field_ref,
-                    reason=str(e),
-                    directive="extract_allowed_fields",
-                ))
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=action_name,
+                        field_ref=field_ref,
+                        reason=str(e),
+                        directive="extract_allowed_fields",
+                    )
+                )
                 continue
 
         for dep_name in dependencies:
@@ -1068,12 +1069,14 @@ class ContextScopeProcessor:
                         specific_fields.append(ref_field)
 
                 except ValueError as e:
-                    fire_event(ContextFieldSkippedEvent(
-                        action_name=action_name,
-                        field_ref=field_ref,
-                        reason=str(e),
-                        directive="extract_allowed_fields_inner",
-                    ))
+                    fire_event(
+                        ContextFieldSkippedEvent(
+                            action_name=action_name,
+                            field_ref=field_ref,
+                            reason=str(e),
+                            directive="extract_allowed_fields_inner",
+                        )
+                    )
                     continue
 
             if wildcard_found:
@@ -1113,7 +1116,7 @@ class ContextScopeProcessor:
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,  # Legacy, not used
         source_content: Optional[Any] = None,
-        loop_context: Optional[Dict] = None,
+        version_context: Optional[Dict] = None,
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
@@ -1136,7 +1139,7 @@ class ContextScopeProcessor:
             "source": {...},        # Original input data
             "{dep_name}": {...},    # Dependency action outputs (FILTERED by context_scope)
             "seed": {...},          # Static reference data (via static_data)
-            "loop": {...},          # Loop iteration info
+            "version": {...},       # Version iteration info (i, idx, length, first, last)
             "workflow": {...},      # Workflow metadata
         }
 
@@ -1147,7 +1150,7 @@ class ContextScopeProcessor:
             agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
             dependency_configs: Legacy parameter (not used)
             source_content: Original input data for "source" namespace
-            loop_context: Loop iteration info
+            version_context: Loop iteration info
             workflow_metadata: Workflow metadata
             current_item: Current record being processed (has lineage, content)
             file_path: Path to current file
@@ -1156,7 +1159,7 @@ class ContextScopeProcessor:
             storage_backend: Optional storage backend for loading historical data from SQLite/TinyDB
 
         Returns:
-            Dict with namespaces: source, {dep_names}, loop, workflow
+            Dict with namespaces: source, {dep_names}, version, workflow
 
         Raises:
             ConfigurationError: If action has dependencies but agent_indices not provided
@@ -1184,12 +1187,14 @@ class ContextScopeProcessor:
         if source_namespace:
             field_context["source"] = source_namespace
             logger.debug("Added 'source' namespace with %s fields", len(field_context["source"]))
-            fire_event(ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="source",
-                field_count=len(source_namespace),
-                fields=list(source_namespace.keys()),
-            ))
+            fire_event(
+                ContextNamespaceLoadedEvent(
+                    action_name=agent_name,
+                    namespace="source",
+                    field_count=len(source_namespace),
+                    fields=list(source_namespace.keys()),
+                )
+            )
 
         # 2. DEPENDENCY namespaces - separate input sources from context sources
         logger.debug(
@@ -1200,7 +1205,17 @@ class ContextScopeProcessor:
             bool(current_item),
             bool(file_path),
         )
-        if agent_config and agent_indices and current_item and file_path:
+        batch_mode_enabled = bool(agent_config and agent_indices and current_item and file_path)
+        logger.debug(
+            "[CONTEXT BUILD] Action '%s': batch_mode_enabled=%s (config=%s, indices=%s, item=%s, path=%s)",
+            agent_name,
+            batch_mode_enabled,
+            bool(agent_config),
+            bool(agent_indices),
+            bool(current_item),
+            bool(file_path),
+        )
+        if batch_mode_enabled:
             # BATCH MODE - Use auto-inferred context dependencies
             workflow_actions = list(agent_indices.keys())
 
@@ -1276,10 +1291,71 @@ class ContextScopeProcessor:
                                 f"[VERSION NAMESPACE] Loaded '{version_name}' with "
                                 f"{len(filtered_data)} fields: {list(filtered_data.keys())}"
                             )
+
+                    # Load parallel version sources via historical lookup
+                    # When input_sources has multiple versioned branches (e.g., action_1, action_2),
+                    # current_item only contains data from one. Load others from historical data.
+                    parallel_version_sources = [
+                        src
+                        for src in input_sources
+                        if src not in field_context and src in agent_indices
+                    ]
+                    if parallel_version_sources and source_guid:
+                        logger.debug(
+                            f"[PARALLEL VERSIONS] Loading {len(parallel_version_sources)} parallel "
+                            f"version sources via historical lookup: {parallel_version_sources}"
+                        )
+                        for version_source in parallel_version_sources:
+                            version_idx = agent_indices.get(version_source)
+                            if version_idx is None or version_idx >= current_idx:
+                                continue
+
+                            historical_data = ContextScopeProcessor._load_historical_node(
+                                action_name=version_source,
+                                lineage=lineage,
+                                source_guid=source_guid,
+                                file_path=file_path,
+                                agent_indices=agent_indices,
+                                parent_target_id=current_item.get("parent_target_id"),
+                                root_target_id=current_item.get("root_target_id"),
+                                output_directory=output_directory,
+                                storage_backend=storage_backend,
+                            )
+
+                            if historical_data:
+                                allowed_fields = allowed_fields_map.get(version_source)
+                                if allowed_fields is None:
+                                    field_context[version_source] = historical_data
+                                    logger.debug(
+                                        f"[PARALLEL VERSION] Loaded '{version_source}' with ALL "
+                                        f"{len(historical_data)} fields via historical lookup"
+                                    )
+                                else:
+                                    filtered_data = {
+                                        field: historical_data[field]
+                                        for field in allowed_fields
+                                        if field in historical_data
+                                    }
+                                    field_context[version_source] = filtered_data
+                                    logger.debug(
+                                        f"[PARALLEL VERSION] Loaded '{version_source}' with "
+                                        f"{len(filtered_data)} fields via historical lookup"
+                                    )
+                            else:
+                                logger.warning(
+                                    f"[PARALLEL VERSION] Could not load '{version_source}' "
+                                    f"via historical lookup. source_guid={source_guid}"
+                                )
                 else:
                     # No version namespaces detected - use original behavior
+                    logger.debug(
+                        f"[INPUT SOURCE] input_data keys: {list(input_data.keys()) if input_data else 'EMPTY'}"
+                    )
                     for input_source_name in input_sources:
                         allowed_fields = allowed_fields_map.get(input_source_name)
+                        logger.debug(
+                            f"[INPUT SOURCE] '{input_source_name}': allowed_fields={allowed_fields}"
+                        )
 
                         if allowed_fields is None:
                             # Wildcard: Load all fields
@@ -1295,6 +1371,12 @@ class ContextScopeProcessor:
                                 for field in allowed_fields
                                 if field in input_data
                             }
+                            missing_fields = set(allowed_fields) - set(input_data.keys())
+                            if missing_fields:
+                                logger.warning(
+                                    f"[INPUT SOURCE] '{input_source_name}': expected fields {missing_fields} "
+                                    f"not found in input_data. Available: {list(input_data.keys())}"
+                                )
                             field_context[input_source_name] = filtered_data
                             logger.debug(
                                 f"[INPUT SOURCE] Loaded '{input_source_name}' with {len(filtered_data)} fields "
@@ -1302,7 +1384,7 @@ class ContextScopeProcessor:
                             )
 
             # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
-            logger.info(
+            logger.debug(
                 "[CONTEXT SOURCES CHECK] Action '%s': context_sources=%s, will load=%s",
                 agent_name,
                 context_sources,
@@ -1318,9 +1400,8 @@ class ContextScopeProcessor:
                         )
                     )
 
-                logger.info(
-                    "[CONTEXT SOURCES] Loading %d context dependencies: %s "
-                    "(storage_backend=%s)",
+                logger.debug(
+                    "[CONTEXT SOURCES] Loading %d context dependencies: %s (storage_backend=%s)",
                     len(context_sources),
                     context_sources,
                     "available" if storage_backend else "NOT available",
@@ -1428,7 +1509,7 @@ class ContextScopeProcessor:
 
         else:
             # Log why batch mode condition wasn't met
-            logger.info(
+            logger.debug(
                 "[CONTEXT BUILD SKIP] Action '%s': Batch mode condition not met. "
                 "agent_config=%s, agent_indices=%s, current_item=%s, file_path=%s",
                 agent_name,
@@ -1458,37 +1539,41 @@ class ContextScopeProcessor:
         # 3. VERSION namespace - iteration info (for version actions)
         # Provides {{ version.length }}, {{ version.first }}, {{ version.last }}
         # Also adds top-level {{ i }}, {{ idx }}, and custom param names
-        if loop_context:
-            field_context["version"] = loop_context
+        if version_context:
+            field_context["version"] = version_context
             # Add common version variables at top level for convenience
             # This enables {{ i }} instead of requiring {{ version.i }}
-            if "i" in loop_context:
-                field_context["i"] = loop_context["i"]
-            if "idx" in loop_context:
-                field_context["idx"] = loop_context["idx"]
+            if "i" in version_context:
+                field_context["i"] = version_context["i"]
+            if "idx" in version_context:
+                field_context["idx"] = version_context["idx"]
             # Add custom param names at top level (e.g., {{ classifier_id }})
             reserved_keys = {"i", "idx", "length", "first", "last"}
-            for key, value in loop_context.items():
+            for key, value in version_context.items():
                 if key not in reserved_keys:
                     field_context[key] = value
             logger.debug("Added 'version' namespace with version context")
-            fire_event(ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="version",
-                field_count=len(loop_context),
-                fields=list(loop_context.keys()),
-            ))
+            fire_event(
+                ContextNamespaceLoadedEvent(
+                    action_name=agent_name,
+                    namespace="version",
+                    field_count=len(version_context),
+                    fields=list(version_context.keys()),
+                )
+            )
 
         # 4. WORKFLOW namespace - metadata
         if workflow_metadata:
             field_context["workflow"] = workflow_metadata
             logger.debug("Added 'workflow' namespace")
-            fire_event(ContextNamespaceLoadedEvent(
-                action_name=agent_name,
-                namespace="workflow",
-                field_count=len(workflow_metadata),
-                fields=list(workflow_metadata.keys()),
-            ))
+            fire_event(
+                ContextNamespaceLoadedEvent(
+                    action_name=agent_name,
+                    namespace="workflow",
+                    field_count=len(workflow_metadata),
+                    fields=list(workflow_metadata.keys()),
+                )
+            )
 
         logger.debug(
             f"Built field_context for '{agent_name}' with namespaces: {list(field_context.keys())}"

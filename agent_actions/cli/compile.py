@@ -119,9 +119,7 @@ def render(agent_name: str, template_dir: Optional[str] = None) -> None:
 
 
 @click.command()
-@click.option(
-    "-a", "--agent", "agent_name", required=True, help="Name of the workflow to compile"
-)
+@click.option("-a", "--agent", "agent_name", required=True, help="Name of the workflow to compile")
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
 @handles_user_errors("compile")
 @requires_project

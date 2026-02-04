@@ -110,8 +110,7 @@ class TestSpecialNamespaceValidation:
 
         # Filter for context_scope related errors
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "source" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "source" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for source namespace: {context_errors}"
 
@@ -135,8 +134,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "loop" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "loop" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for loop namespace: {context_errors}"
 
@@ -160,8 +158,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "workflow" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "workflow" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for workflow namespace: {context_errors}"
 
@@ -185,8 +182,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "seed" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "seed" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for seed namespace: {context_errors}"
 
@@ -214,8 +210,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "'action'" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "'action'" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for action namespace: {context_errors}"
 
@@ -241,8 +236,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "'prompt'" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "'prompt'" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for prompt namespace: {context_errors}"
 
@@ -268,8 +262,7 @@ class TestSpecialNamespaceValidation:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message and "'schema'" in d.message
+            d for d in diagnostics if "context_scope" in d.message and "'schema'" in d.message
         ]
         assert context_errors == [], f"Unexpected errors for schema namespace: {context_errors}"
 
@@ -315,8 +308,7 @@ class TestWildcardFieldValidation:
 
         # Should NOT have "does not declare `*`" warning
         wildcard_errors = [
-            d for d in diagnostics
-            if "generate_search_criteria" in d.message and "*" in d.message
+            d for d in diagnostics if "generate_search_criteria" in d.message and "*" in d.message
         ]
         assert wildcard_errors == [], f"Unexpected errors for wildcard: {wildcard_errors}"
 
@@ -352,10 +344,11 @@ class TestWildcardFieldValidation:
 
         # Should NOT have "action missing" error (the action exists)
         action_missing_errors = [
-            d for d in diagnostics
-            if "action_with_schema" in d.message and "missing" in d.message
+            d for d in diagnostics if "action_with_schema" in d.message and "missing" in d.message
         ]
-        assert action_missing_errors == [], f"Unexpected 'action missing' error: {action_missing_errors}"
+        assert action_missing_errors == [], (
+            f"Unexpected 'action missing' error: {action_missing_errors}"
+        )
 
 
 class TestInvalidReferenceValidation:
@@ -381,8 +374,7 @@ class TestInvalidReferenceValidation:
 
         # SHOULD have error for missing action
         action_errors = [
-            d for d in diagnostics
-            if "nonexistent_action" in d.message and "missing" in d.message
+            d for d in diagnostics if "nonexistent_action" in d.message and "missing" in d.message
         ]
         assert len(action_errors) == 1, f"Expected error for missing action: {diagnostics}"
 
@@ -409,8 +401,7 @@ class TestInvalidReferenceValidation:
 
         # SHOULD have error for missing action (wildcard doesn't help if action is missing)
         action_errors = [
-            d for d in diagnostics
-            if "nonexistent_action" in d.message and "missing" in d.message
+            d for d in diagnostics if "nonexistent_action" in d.message and "missing" in d.message
         ]
         assert len(action_errors) == 1, f"Expected error for missing action: {diagnostics}"
 
@@ -474,8 +465,7 @@ class TestEdgeCases:
 
         # Should NOT have "action missing" error (the action exists)
         action_errors = [
-            d for d in diagnostics
-            if "producer" in d.message and "missing" in d.message
+            d for d in diagnostics if "producer" in d.message and "missing" in d.message
         ]
         assert action_errors == [], f"Unexpected error for action-only reference: {action_errors}"
 
@@ -517,8 +507,5 @@ class TestMixedScenarios:
         diagnostics = _collect_diagnostics(workflow_path, index)
 
         # No context_scope errors expected
-        context_errors = [
-            d for d in diagnostics
-            if "context_scope" in d.message
-        ]
+        context_errors = [d for d in diagnostics if "context_scope" in d.message]
         assert context_errors == [], f"Unexpected context_scope errors: {context_errors}"

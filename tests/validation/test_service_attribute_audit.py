@@ -202,9 +202,13 @@ def test_dataclass_definitions_are_parseable():
     deps_fields = _extract_dataclass_fields(WORKFLOW_EXECUTOR, "ExecutorDependencies")
 
     # Verify we found reasonable fields
-    assert len(support_fields) >= 4, f"Expected at least 4 SupportServices fields, got {support_fields}"
+    assert len(support_fields) >= 4, (
+        f"Expected at least 4 SupportServices fields, got {support_fields}"
+    )
     assert len(core_fields) >= 3, f"Expected at least 3 CoreServices fields, got {core_fields}"
-    assert len(deps_fields) >= 4, f"Expected at least 4 ExecutorDependencies fields, got {deps_fields}"
+    assert len(deps_fields) >= 4, (
+        f"Expected at least 4 ExecutorDependencies fields, got {deps_fields}"
+    )
 
     # Verify known fields exist
     assert "batch_manager" in support_fields
@@ -222,7 +226,7 @@ def test_scanner_detects_invalid_attribute_access():
     import tempfile
 
     # Create a temporary file with intentionally bad attribute accesses
-    bad_code = '''
+    bad_code = """
 class BadAccessExample:
     def bad_support_access(self):
         # This should be manifest_manager, not manifest
@@ -235,9 +239,9 @@ class BadAccessExample:
     def bad_deps_access(self):
         # This should be batch_manager, not manager
         return self.deps.invalid_dependency
-'''
+"""
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
         f.write(bad_code)
         temp_path = Path(f.name)
 

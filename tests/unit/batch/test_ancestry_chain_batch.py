@@ -62,9 +62,7 @@ class TestBatchAncestryChainPropagation:
         assert len(result) == 1
         assert result[0]["parent_target_id"] == "parent_tgt_001"
 
-    def test_successful_result_sets_root_target_id_from_input(
-        self, processor, basic_agent_config
-    ):
+    def test_successful_result_sets_root_target_id_from_input(self, processor, basic_agent_config):
         """Verify root_target_id is preserved from input's root_target_id."""
         # Input row with existing root_target_id (from earlier in chain)
         original_row = {
@@ -135,7 +133,7 @@ class TestBatchAncestryChainPropagation:
             "source_guid": "src_stage3",
             "target_id": "stage2_output_tgt",
             "parent_target_id": "stage1_output_tgt",  # Stage 2's parent
-            "root_target_id": "original_input_tgt",   # Original root
+            "root_target_id": "original_input_tgt",  # Original root
             "content": {"field": "stage2_value"},
             "lineage": ["stage1_abc", "stage2_def"],
         }

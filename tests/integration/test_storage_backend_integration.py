@@ -40,9 +40,7 @@ class TestSQLiteBackendLifecycle:
 
             # Verify tables exist
             cursor = backend.connection.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
             tables = [row["name"] for row in cursor.fetchall()]
 
             assert "source_data" in tables
@@ -282,9 +280,7 @@ class TestPreviewAndStats:
 
     def test_preview_target_missing_file(self, backend_with_data):
         """Preview handles missing file gracefully."""
-        result = backend_with_data.preview_target(
-            "extract", relative_path="nonexistent.json"
-        )
+        result = backend_with_data.preview_target("extract", relative_path="nonexistent.json")
 
         assert result["total_count"] == 0
         assert "error" in result

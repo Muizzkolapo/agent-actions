@@ -93,7 +93,7 @@ class SupportServices:
     """Supporting services for workflow execution."""
 
     batch_service: Any
-    loop_correlator: Any
+    version_correlator: Any
     skip_evaluator: Any
     batch_manager: Any
     output_manager: Any

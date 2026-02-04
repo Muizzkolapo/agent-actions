@@ -434,7 +434,7 @@ class ActionExpander:
             agent["version_mode"] = version_config.get("mode", "parallel")
 
             # Compile version context for Jinja2 template rendering
-            # This enables {{ i }}, {{ idx }}, {{ loop.length }}, etc. in prompts
+            # This enables {{ i }}, {{ idx }}, {{ version.length }}, etc. in prompts
             version_context: Dict[str, Any] = {
                 "i": i,
                 "idx": idx,

@@ -384,7 +384,9 @@ def _compile_workflow_schemas(
 # =============================================================================
 
 
-def _apply_version_template(value: Any, param_name: str, current_val: int, idx: int, values: List[int]) -> Any:
+def _apply_version_template(
+    value: Any, param_name: str, current_val: int, idx: int, values: List[int]
+) -> Any:
     """
     Apply version template substitution to a value.
 
@@ -410,12 +412,15 @@ def _apply_version_template(value: Any, param_name: str, current_val: int, idx: 
         return result
     elif isinstance(value, dict):
         return {
-            _apply_version_template(k, param_name, current_val, idx, values) if isinstance(k, str) else k:
-            _apply_version_template(v, param_name, current_val, idx, values)
+            _apply_version_template(k, param_name, current_val, idx, values)
+            if isinstance(k, str)
+            else k: _apply_version_template(v, param_name, current_val, idx, values)
             for k, v in value.items()
         }
     elif isinstance(value, list):
-        return [_apply_version_template(item, param_name, current_val, idx, values) for item in value]
+        return [
+            _apply_version_template(item, param_name, current_val, idx, values) for item in value
+        ]
     return value
 
 

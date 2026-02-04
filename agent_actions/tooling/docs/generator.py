@@ -359,7 +359,9 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     if total_runs > 0:
         print(f"  Loaded {total_runs} workflow run{'s' if total_runs != 1 else ''} with metrics")
     if validation_errors > 0 or validation_warnings > 0:
-        print(f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}")
+        print(
+            f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}"
+        )
     print(f"\nDone. Documentation compiled to {display_path}/")
 
     return True

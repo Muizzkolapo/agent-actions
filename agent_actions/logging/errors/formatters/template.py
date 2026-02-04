@@ -79,7 +79,9 @@ class TemplateErrorFormatter(ErrorFormatter):
                 if fields_in_ns:
                     # Show up to 10 fields
                     display_fields = fields_in_ns[:10]
-                    suffix = f" (and {len(fields_in_ns) - 10} more)" if len(fields_in_ns) > 10 else ""
+                    suffix = (
+                        f" (and {len(fields_in_ns) - 10} more)" if len(fields_in_ns) > 10 else ""
+                    )
                     lines.append(f"  Available in '{ns}': {', '.join(display_fields)}{suffix}")
 
                 # Suggest similar field

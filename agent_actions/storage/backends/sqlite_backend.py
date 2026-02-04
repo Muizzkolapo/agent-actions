@@ -62,7 +62,9 @@ class SQLiteBackend(StorageBackend):
     """
 
     # Valid characters for identifiers (node names, paths)
-    _VALID_IDENTIFIER_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./")
+    _VALID_IDENTIFIER_CHARS = set(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./"
+    )
 
     def __init__(self, db_path: str, workflow_name: str):
         """
@@ -151,9 +153,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def write_target(
-        self, node_name: str, relative_path: str, data: List[Dict[str, Any]]
-    ) -> str:
+    def write_target(self, node_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
         """
         Write target data for a specific node.
 
@@ -206,9 +206,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def read_target(
-        self, node_name: str, relative_path: str
-    ) -> List[Dict[str, Any]]:
+    def read_target(self, node_name: str, relative_path: str) -> List[Dict[str, Any]]:
         """
         Read target data for a specific node.
 
@@ -230,9 +228,7 @@ class SQLiteBackend(StorageBackend):
         row = cursor.fetchone()
 
         if row is None:
-            raise FileNotFoundError(
-                f"No target data found for {node_name}/{relative_path}"
-            )
+            raise FileNotFoundError(f"No target data found for {node_name}/{relative_path}")
 
         return json.loads(row["data"])
 
@@ -346,9 +342,7 @@ class SQLiteBackend(StorageBackend):
         rows = cursor.fetchall()
 
         if not rows:
-            raise FileNotFoundError(
-                f"No source data found for {relative_path}"
-            )
+            raise FileNotFoundError(f"No source data found for {relative_path}")
 
         return [json.loads(row["data"]) for row in rows]
 
@@ -377,9 +371,7 @@ class SQLiteBackend(StorageBackend):
             List of unique relative paths
         """
         cursor = self.connection.cursor()
-        cursor.execute(
-            "SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path"
-        )
+        cursor.execute("SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path")
         return [row["relative_path"] for row in cursor.fetchall()]
 
     def preview_target(

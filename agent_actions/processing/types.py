@@ -220,8 +220,8 @@ class ProcessingContext:
     file_path: Optional[str] = None
     output_directory: Optional[str] = None
 
-    # Loop context for {loop.*} references
-    loop_context: Optional[Dict[str, Any]] = None
+    # Version context for {version.*} references
+    version_context: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
 
     # Current record position (for loop correlation)

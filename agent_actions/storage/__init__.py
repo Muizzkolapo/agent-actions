@@ -63,8 +63,7 @@ def get_storage_backend(
     if backend_type not in BACKENDS:
         available = ", ".join(BACKENDS.keys())
         raise ValueError(
-            f"Unknown storage backend: '{backend_type}'. "
-            f"Available backends: {available}"
+            f"Unknown storage backend: '{backend_type}'. Available backends: {available}"
         )
 
     backend_class = BACKENDS[backend_type]
@@ -78,9 +77,7 @@ def get_storage_backend(
     else:
         # Future backends may have different initialization
         # This is where we'd add S3, DuckDB, etc. configuration
-        raise NotImplementedError(
-            f"Backend '{backend_type}' initialization not implemented"
-        )
+        raise NotImplementedError(f"Backend '{backend_type}' initialization not implemented")
 
     return backend
 

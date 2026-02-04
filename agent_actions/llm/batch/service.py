@@ -221,7 +221,9 @@ class BatchService:
         )
 
     def process_all_batch_results(
-        self, output_directory: str, agent_config: Optional[Dict[str, Any]] = None,
+        self,
+        output_directory: str,
+        agent_config: Optional[Dict[str, Any]] = None,
         node_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs (delegates to processing service)."""

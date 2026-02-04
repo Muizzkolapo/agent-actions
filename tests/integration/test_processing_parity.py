@@ -273,7 +273,7 @@ class TestTargetContentProcessorParity:
     @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
     @patch("agent_actions.utilities.correlation.VersionIdGenerator.add_version_correlation_id")
     @patch("agent_actions.utilities.field_management.FieldManager")
-    def test_loop_context_parity(
+    def test_version_context_parity(
         self,
         mock_field_mgr,
         mock_loop_id,
@@ -307,13 +307,13 @@ class TestTargetContentProcessorParity:
             agent_config={},
             agent_name="test",
             is_first_stage=False,
-            loop_context={"loop_id": "parent-loop-123"},
+            version_context={"loop_id": "parent-loop-123"},
         )
 
         item = {"content": {"text": "input"}, "source_guid": "guid-789"}
         result = processor.process(item, context)
 
-        # TargetContentProcessor passes loop_context to LoopIdGenerator
+        # TargetContentProcessor passes version_context to LoopIdGenerator
         mock_loop_id.assert_called()
 
 

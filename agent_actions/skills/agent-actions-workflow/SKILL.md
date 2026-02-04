@@ -192,7 +192,7 @@ version_consumption:     # ← Correct keyword
 
 ### 3. Version Template Variables
 
-**Template variables (`{{ i }}`, `{{ loop.length }}`) work with both inline prompts AND prompt store references.**
+**Template variables (`{{ i }}`, `{{ version.length }}`) work with both inline prompts AND prompt store references.**
 
 **Works (inline prompt):**
 ```yaml
@@ -200,7 +200,7 @@ version_consumption:     # ← Correct keyword
   versions:
     range: [1, 3]
   prompt: |
-    You are classifier {{ i }} of {{ loop.length }}.
+    You are classifier {{ i }} of {{ version.length }}.
 ```
 
 **Also works (prompt store reference):**
@@ -216,11 +216,11 @@ version_consumption:     # ← Correct keyword
 |----------|-------------|
 | `{{ i }}` | Current iteration value (1, 2, 3...) |
 | `{{ idx }}` | Zero-based index (0, 1, 2...) |
-| `{{ loop.length }}` | Total iterations |
-| `{{ loop.first }}` | True on first iteration |
-| `{{ loop.last }}` | True on last iteration |
+| `{{ version.length }}` | Total iterations |
+| `{{ version.first }}` | True on first iteration |
+| `{{ version.last }}` | True on last iteration |
 
-**Terminology note:** YAML uses `versions:` but template helpers use `loop.` prefix.
+**Note:** Both YAML config and templates use `version.*` namespace for consistency.
 
 ### 4. Prompts Must Reference Available Fields
 

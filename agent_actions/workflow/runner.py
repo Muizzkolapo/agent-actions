@@ -946,8 +946,7 @@ class AgentRunner:
         # Log summary if some files failed
         if files_found > 0 and files_processed < files_found:
             logger.error(
-                "Storage backend processing incomplete: %d/%d files processed for %s. "
-                "Errors: %s",
+                "Storage backend processing incomplete: %d/%d files processed for %s. Errors: %s",
                 files_processed,
                 files_found,
                 params.agent_name,
@@ -983,9 +982,7 @@ class AgentRunner:
         # Try storage backend first for target directories
         if self.storage_backend is not None:
             # Check if all upstream directories are target directories (not staging)
-            all_targets = all(
-                self._is_target_directory(d) for d in params.upstream_data_dirs
-            )
+            all_targets = all(self._is_target_directory(d) for d in params.upstream_data_dirs)
             if all_targets:
                 files_found, files_processed = self._process_from_storage_backend(params)
                 if files_processed > 0:
@@ -994,6 +991,7 @@ class AgentRunner:
                     # Data was found in DB but processing failed
                     # Don't fall through to filesystem (virtual paths don't exist)
                     from agent_actions.errors import DependencyError
+
                     raise DependencyError(
                         f"Action '{params.agent_name}': Found {files_found} files in storage "
                         f"backend but failed to process any. Check logs for details.",

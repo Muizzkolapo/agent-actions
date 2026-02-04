@@ -20,7 +20,7 @@ class ContextBuildConfig:
     dependency_configs: Optional[Dict[str, Dict]] = None
     file_path: Optional[str] = None
     source_content: Optional[Any] = None
-    loop_context: Optional[Dict[str, Any]] = None
+    version_context: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
 
 
@@ -33,14 +33,14 @@ class EvaluationContext:
     - Current item content (what was previously the only context available)
     - All upstream action outputs (NEW: enables direct field access in guards)
     - Source data
-    - Loop context
+    - Version context
     - Workflow metadata
 
     Attributes:
         current_content: Content of the current item being evaluated
         field_context: All upstream action outputs {action_name: {field: value}}
         source_content: Source data (if available)
-        loop_context: Loop metadata (if in a loop)
+        version_context: Version metadata (if in a versioned action)
         workflow_metadata: Workflow-level metadata
         current_item: Full item with lineage and metadata
     """
@@ -48,7 +48,7 @@ class EvaluationContext:
     current_content: Dict[str, Any]
     field_context: Dict[str, Dict[str, Any]] = field(default_factory=dict)
     source_content: Optional[Dict[str, Any]] = None
-    loop_context: Optional[Dict[str, Any]] = None
+    version_context: Optional[Dict[str, Any]] = None
     workflow_metadata: Optional[Dict[str, Any]] = None
     current_item: Optional[Dict[str, Any]] = None
 
@@ -84,12 +84,13 @@ class EvaluationContext:
         The resulting dict has:
         - Current item content at the top level
         - Upstream action data under their action names (for action.field access)
-        - Special contexts under their namespaces (source, loop, workflow)
+        - Special contexts under their namespaces (source, version, workflow)
 
         This enables WHERE clauses like:
         - "extract_facts.count > 5" (upstream field)
         - "status == 'active'" (current item field)
         - "source.type == 'pdf'" (source data)
+        - "version.first" (version iteration context)
         """
         flat = {}
 
@@ -107,8 +108,8 @@ class EvaluationContext:
         if self.source_content and "source" not in flat:
             flat["source"] = self.source_content
 
-        if self.loop_context and "loop" not in flat:
-            flat["loop"] = self.loop_context
+        if self.version_context and "version" not in flat:
+            flat["version"] = self.version_context
 
         if self.workflow_metadata and "workflow" not in flat:
             flat["workflow"] = self.workflow_metadata
@@ -181,7 +182,7 @@ class EvaluationContextProvider:
                 agent_indices=config.agent_indices,
                 dependency_configs=config.dependency_configs,
                 source_content=config.source_content,
-                loop_context=config.loop_context,
+                version_context=config.version_context,
                 workflow_metadata=config.workflow_metadata,
                 current_item=current_item,
                 file_path=config.file_path,
@@ -199,7 +200,7 @@ class EvaluationContextProvider:
             current_content=current_content,
             field_context=field_context,
             source_content=field_context.get("source"),
-            loop_context=field_context.get("loop"),
+            version_context=field_context.get("version"),
             workflow_metadata=field_context.get("workflow"),
             current_item=current_item,
         )
