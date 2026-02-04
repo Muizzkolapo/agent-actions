@@ -6,10 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm.realtime import builder as agent_builder
-from agent_actions.input.preprocessing.filtering.guard_filter import (
-    get_global_guard_filter,
-    FilterItemRequest,
-)
+from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
 from agent_actions.utils.transformation import PassthroughTransformer
 from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
 
@@ -23,6 +20,8 @@ def evaluate_guard_condition(agent_config: Dict, context: Any) -> Tuple[bool, Op
     This is a centralized function for guard evaluation that can be called
     BEFORE prompt rendering to avoid template errors when guards would skip.
 
+    Delegates to GuardEvaluator for unified evaluation logic.
+
     Args:
         agent_config: Agent configuration with guard conditions
         context: Context data for guard evaluation (should include upstream action data)
@@ -33,83 +32,12 @@ def evaluate_guard_condition(agent_config: Dict, context: Any) -> Tuple[bool, Op
         - (False, 'skip') = guard failed with skip behavior, use passthrough
         - (False, 'filter') = guard failed with filter behavior, filter out entirely
     """
-    # Check legacy conditional clause (UDF-based)
-    conditional_result = _evaluate_conditional_clause(agent_config, context)
-    if conditional_result is not None:
-        return conditional_result
-
-    # Check guard condition
-    return _evaluate_guard(agent_config, context)
-
-
-def _evaluate_conditional_clause(
-    agent_config: Dict, context: Any
-) -> Optional[Tuple[bool, Optional[str]]]:
-    """Evaluate legacy conditional clause (UDF-based)."""
-    conditional_clause = (agent_config.get("conditional_clause") or "").lower()
-    if not conditional_clause:
-        return None
-
-    try:
-        if not execute_user_defined_function(conditional_clause, context):
-            logger.debug(
-                "Guard: conditional_clause '%s' evaluated to False, skipping", conditional_clause
-            )
-            return (False, "skip")
-    except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.warning("Guard: conditional_clause evaluation failed: %s, proceeding", e)
-        # Don't skip on UDF errors - proceed with execution
-
-    return None
-
-
-def _evaluate_guard(agent_config: Dict, context: Any) -> Tuple[bool, Optional[str]]:
-    """Evaluate guard condition."""
-    guard_config = agent_config.get("guard")
-    if not guard_config:
-        return (True, None)
-
-    behavior = guard_config.get("behavior", "filter")
-    clause = guard_config.get("clause")
-    passthrough_on_error = guard_config.get("passthrough_on_error", True)
-
-    if not clause:
-        return (True, None)
-
-    try:
-        filter_service = get_global_guard_filter()
-        request = FilterItemRequest(data=context, condition=clause)
-        filter_result = filter_service.filter_item(request)
-        return _process_filter_result(filter_result, behavior, passthrough_on_error, clause)
-
-    except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.warning("Guard: guard condition evaluation exception: %s", e)
-        return (True, None) if passthrough_on_error else (False, behavior)
-
-
-def _process_filter_result(
-    filter_result: Any, behavior: str, passthrough_on_error: bool, clause: str
-) -> Tuple[bool, Optional[str]]:
-    """Process filter result and return guard decision."""
-    # Handle FilterResult object or boolean
-    if hasattr(filter_result, "success") and not filter_result.success:
-        # Evaluation failed
-        if passthrough_on_error:
-            logger.debug(
-                "Guard: condition evaluation failed, proceeding (passthrough_on_error=True)"
-            )
-            return (True, None)
-        logger.debug("Guard: condition evaluation failed, skipping (passthrough_on_error=False)")
-        return (False, behavior)
-
-    matched = filter_result.matched if hasattr(filter_result, "matched") else bool(filter_result)
-
-    if not matched:
-        logger.debug("Guard: condition '%s' not matched, behavior='%s'", clause, behavior)
-        return (False, behavior)
-
-    # All guards passed
-    return (True, None)
+    evaluator = get_guard_evaluator()
+    return evaluator.evaluate(
+        item=context,
+        guard_config=agent_config.get("guard"),
+        conditional_clause=agent_config.get("conditional_clause"),
+    )
 
 
 def run_dynamic_agent(
@@ -297,46 +225,23 @@ def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
 
 
 def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
-    """Check if agent should be skipped based on guard with skip behavior."""
-    guard_config = agent_config.get("guard")
-    if not (guard_config and guard_config.get("behavior") == "skip"):
-        return False
-    try:
-        filter_service = get_global_guard_filter()
-        request = FilterItemRequest(data=context, condition=guard_config["clause"])
-        filter_result = filter_service.filter_item(request)
-        return not filter_result.matched if filter_result.success else False
-    except Exception as e:  # Intentional fallback
-        logger.debug(
-            "Guard skip check failed, using passthrough_on_error setting: %s",
-            e,
-            extra={"guard": guard_config.get("clause"), "operation": "guard_skip_check"},
-        )
-        passthrough_on_error = guard_config.get("passthrough_on_error", True)
-        return passthrough_on_error
+    """
+    Check if agent should be skipped based on guard with skip behavior.
+
+    Delegates to GuardEvaluator for unified evaluation logic.
+    """
+    evaluator = get_guard_evaluator()
+    return evaluator.should_skip(agent_config, context)
 
 
 def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
-    """Check if item should be filtered out based on guard with filter behavior."""
-    guard_config = agent_config.get("guard")
-    if not (guard_config and guard_config.get("behavior") == "filter"):
-        return False
-    try:
-        filter_service = get_global_guard_filter()
-        request = FilterItemRequest(data=context, condition=guard_config["clause"])
-        filter_result = filter_service.filter_item(request)
-        if not filter_result.success:
-            passthrough_on_error = guard_config.get("passthrough_on_error", True)
-            return not passthrough_on_error
-        return not filter_result.matched
-    except Exception as e:  # Intentional fallback
-        logger.debug(
-            "Guard filter check failed, using passthrough_on_error setting: %s",
-            e,
-            extra={"guard": guard_config.get("clause"), "operation": "guard_filter_check"},
-        )
-        passthrough_on_error = guard_config.get("passthrough_on_error", True)
-        return not passthrough_on_error
+    """
+    Check if item should be filtered out based on guard with filter behavior.
+
+    Delegates to GuardEvaluator for unified evaluation logic.
+    """
+    evaluator = get_guard_evaluator()
+    return evaluator.should_filter(agent_config, context)
 
 
 def transform_with_passthrough(

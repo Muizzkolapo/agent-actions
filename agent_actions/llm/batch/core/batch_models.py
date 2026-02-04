@@ -123,8 +123,10 @@ class BatchTaskPreparationStats:
     Attributes:
         total_items: Total items provided
         included_items: Items included in batch
-        filtered_items: Items filtered out (WHERE clause with behavior='filter')
-        skipped_items: Items skipped (WHERE clause with behavior='skip')
+        filtered_items: Items filtered out in Phase 1 (early guard check)
+        skipped_items: Items skipped in Phase 1 (early guard check)
+        phase2_filtered_items: Items filtered out in Phase 2 (after prompt prep)
+        phase2_skipped_items: Items skipped in Phase 2 (after prompt prep)
         error_items: Items that failed during preparation
     """
 
@@ -132,7 +134,19 @@ class BatchTaskPreparationStats:
     included_items: int = 0
     filtered_items: int = 0
     skipped_items: int = 0
+    phase2_filtered_items: int = 0
+    phase2_skipped_items: int = 0
     error_items: int = 0
+
+    @property
+    def total_filtered(self) -> int:
+        """Total items filtered across both phases."""
+        return self.filtered_items + self.phase2_filtered_items
+
+    @property
+    def total_skipped(self) -> int:
+        """Total items skipped across both phases."""
+        return self.skipped_items + self.phase2_skipped_items
 
     @property
     def success_rate(self) -> float:

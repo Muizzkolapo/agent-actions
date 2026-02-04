@@ -97,8 +97,8 @@ class BatchSubmissionService:
         logger.debug(
             "Task preparation complete: %d tasks, %d filtered, %d skipped",
             prepared.task_count,
-            prepared.stats.filtered_items,
-            prepared.stats.skipped_items,
+            prepared.stats.total_filtered,
+            prepared.stats.total_skipped,
         )
         return prepared.tasks, prepared.context_map
 

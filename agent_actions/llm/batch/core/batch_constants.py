@@ -100,6 +100,7 @@ class ContextMetaKeys:
     """
 
     FILTER_STATUS = "_batch_filter_status"
+    FILTER_PHASE = "_batch_filter_phase"  # "phase1" or "phase2" - which phase filtered
     PASSTHROUGH_FIELDS = "_passthrough_fields"
 
     @classmethod
@@ -109,4 +110,4 @@ class ContextMetaKeys:
         Returns:
             Set of all internal key names used in context maps.
         """
-        return {cls.FILTER_STATUS, cls.PASSTHROUGH_FIELDS}
+        return {cls.FILTER_STATUS, cls.FILTER_PHASE, cls.PASSTHROUGH_FIELDS}
