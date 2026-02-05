@@ -2,11 +2,14 @@
 OpenAI Batch API client implementation.
 """
 
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 from ..batch_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
@@ -96,8 +99,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         batch_job = self.client.batches.create(
             input_file_id=batch_file.id, endpoint="/v1/chat/completions", completion_window="24h"
         )
-        print(f"OpenAI batch job created with ID: {batch_job.id}")
-        print(f"Status: {batch_job.status}")
+        logger.info("OpenAI batch job created with ID: %s", batch_job.id)
+        logger.info("Status: %s", batch_job.status)
         return (batch_job.id, batch_job.status)
 
     def _fetch_status(self, batch_id: str) -> str:

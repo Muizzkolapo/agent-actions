@@ -11,7 +11,7 @@ from typing import Dict, Optional, Any
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
-from agent_actions.errors import ConfigurationError, ConfigValidationError
+from agent_actions.errors import ConfigurationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent
 
@@ -78,15 +78,7 @@ class BatchClientResolver:
                 },
             )
 
-        client_type = agent_config.get("model_vendor")
-        if not client_type:
-            raise ConfigValidationError(
-                "model_vendor",
-                "Missing required field 'model_vendor' for batch processing. "
-                "Specify the LLM provider (e.g., openai, anthropic, gemini).",
-            )
-
-        client_type = client_type.lower()
+        client_type = vendor
 
         if client_type == "tool":
             raise ConfigurationError(

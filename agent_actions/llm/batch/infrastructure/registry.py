@@ -4,6 +4,7 @@ Batch Registry Manager.
 Centralized management of .batch_registry.json with caching and thread safety.
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -162,18 +163,7 @@ class BatchRegistryManager:
             # Find entry by batch_id
             for file_name, entry in self._cache.items():
                 if entry.batch_id == batch_id:
-                    # Create updated entry (dataclasses are immutable-ish)
-                    updated_entry = BatchJobEntry(
-                        batch_id=entry.batch_id,
-                        status=new_status,
-                        timestamp=entry.timestamp,
-                        provider=entry.provider,
-                        record_count=entry.record_count,
-                        workflow_session_id=entry.workflow_session_id,
-                        file_name=entry.file_name,
-                        is_versioned_agent=entry.is_versioned_agent,
-                        version_base_name=entry.version_base_name,
-                    )
+                    updated_entry = dataclasses.replace(entry, status=new_status)
                     self._cache[file_name] = updated_entry
                     self._persist_registry(self._cache)
                     logger.info("Updated batch %s status to %s", batch_id, new_status)
@@ -256,18 +246,7 @@ class BatchRegistryManager:
                     try:
                         actual_status = check_provider(entry.batch_id)
                         if actual_status != entry.status:
-                            # Update status in cache
-                            updated_entry = BatchJobEntry(
-                                batch_id=entry.batch_id,
-                                status=actual_status,
-                                timestamp=entry.timestamp,
-                                provider=entry.provider,
-                                record_count=entry.record_count,
-                                workflow_session_id=entry.workflow_session_id,
-                                file_name=entry.file_name,
-                                is_versioned_agent=entry.is_versioned_agent,
-                                version_base_name=entry.version_base_name,
-                            )
+                            updated_entry = dataclasses.replace(entry, status=actual_status)
                             self._cache[file_name] = updated_entry
                             cache_modified = True
                             entry = updated_entry

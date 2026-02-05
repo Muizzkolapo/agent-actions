@@ -3,12 +3,15 @@ Base batch client interface for batch processing systems.
 """
 
 import functools
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple, Type
 from dataclasses import dataclass
 from pathlib import Path
 import json
+
+logger = logging.getLogger(__name__)
 
 
 def retry(
@@ -192,13 +195,9 @@ class BaseBatchClient(ABC):
             - initial_status: Initial status from provider
               (e.g., 'in_progress', 'completed', 'submitted')
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
-        logger.info(f"Submitting batch with {len(tasks)} tasks to {self.__class__.__name__}...")
+        logger.info("Submitting batch with %s tasks to %s...", len(tasks), self.__class__.__name__)
         return self._submit_to_provider_api(input_file, batch_name)
 
     def check_status(self, batch_id: str) -> str:
@@ -214,15 +213,11 @@ class BaseBatchClient(ABC):
         Returns:
             Normalized status string (e.g., 'validating', 'in_progress', 'completed', 'failed')
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         try:
             raw_status = self._fetch_status(batch_id)
             return self._normalize_status(raw_status)
         except Exception as e:
-            logger.error(f"Error checking batch {batch_id}: {e}")
+            logger.error("Error checking batch %s: %s", batch_id, e)
             raise
 
     @abstractmethod
@@ -276,10 +271,6 @@ class BaseBatchClient(ABC):
         Returns:
             List of BatchResult objects containing the processed results
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Fetch raw results with retry
         logger.info("Retrieving results for batch %s...", batch_id)
 
@@ -305,7 +296,7 @@ class BaseBatchClient(ABC):
                     batch_result = self.parse_provider_response(raw_result)
                     batch_results.append(batch_result)
                 except json.JSONDecodeError as e:
-                    logger.error(f"JSON parsing error on line {line_num}: {e}")
+                    logger.error("JSON parsing error on line %s: %s", line_num, e)
                     batch_results.append(
                         BatchResult(
                             custom_id=f"error_line_{line_num}",
@@ -315,7 +306,7 @@ class BaseBatchClient(ABC):
                             metadata={"line_number": line_num, "raw_line": line[:500]},
                         )
                     )
-            return batch_results
+        return batch_results
 
     def parse_provider_response(self, raw_response: Any) -> BatchResult:
         """
@@ -452,6 +443,9 @@ class BaseBatchClient(ABC):
 
         This method remains for backward compatibility but should not be used.
 
+        .. deprecated::
+            TODO(v3.0): Remove -- schema compilation uses prepare_schema_unified().
+
         Args:
             schema_dict: Generic schema dictionary
 
@@ -550,7 +544,7 @@ class BaseBatchClient(ABC):
         with open(file_path, "w", encoding="utf-8") as file:
             for task in tasks:
                 file.write(json.dumps(task) + "\n")
-        print(f"{provider_name.title()} batch input file: {file_path}")
+        logger.info("%s batch input file: %s", provider_name.title(), file_path)
         return file_path
 
     def _read_jsonl_file(self, file_path: Path) -> List[BatchResult]:
@@ -584,7 +578,7 @@ class BaseBatchClient(ABC):
                         batch_result = self.parse_provider_response(raw_result)
                         batch_results.append(batch_result)
                     except json.JSONDecodeError as e:
-                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        logger.error("JSON parsing error on line %s: %s", line_num, e)
                         batch_results.append(
                             BatchResult(
                                 custom_id=f"error_line_{line_num}",
@@ -679,7 +673,7 @@ class BaseBatchClient(ABC):
         with open(result_file_path, "wb") as f:
             f.write(raw_results)
 
-        print(f"Saved raw results to: {result_file_path}")
+        logger.info("Saved raw results to: %s", result_file_path)
         return result_file_path
 
     @abstractmethod

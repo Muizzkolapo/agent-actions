@@ -21,6 +21,8 @@ Usage in online clients:
     from .failure_injection import maybe_raise_error
 
     maybe_raise_error()  # Call before API request
+
+See also: agent_actions.llm.providers.ollama.failure_injection (count-based injection)
 """
 
 import logging

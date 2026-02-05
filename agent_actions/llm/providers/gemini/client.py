@@ -25,98 +25,33 @@ from agent_actions.llm.providers.mixins import (
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.usage_tracker import set_last_usage
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
     LLMErrorEvent,
-    RateLimitEvent,
 )
 
 logger = logging.getLogger(__name__)
 
 
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="gemini",
+    rate_limit_types=(google_exceptions.ResourceExhausted,),
+    network_error_types=(
+        google_exceptions.ServiceUnavailable,
+        google_exceptions.DeadlineExceeded,
+        google_exceptions.InternalServerError,
+    ),
+    base_api_error_type=google_exceptions.GoogleAPICallError,
+    supports_retry_after=False,
+)
+
+
 def _wrap_gemini_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Google Gemini SDK errors into unified agent-actions error types.
-
-    This enables the central retry engine to handle transient errors
-    consistently across all providers. Also fires appropriate LLM events.
-
-    Args:
-        e: The Google API exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "gemini", "model": model_name}
-
-    # Rate limit / quota exceeded
-    if isinstance(e, google_exceptions.ResourceExhausted):
-        fire_event(
-            RateLimitEvent(
-                provider="gemini",
-                retry_after=0.0,
-                request_id=request_id,
-            )
-        )
-        return RateLimitError(f"Gemini rate limit: {e}", context=context, cause=e)
-
-    # Service unavailable (potentially transient)
-    if isinstance(e, google_exceptions.ServiceUnavailable):
-        fire_event(
-            LLMErrorEvent(
-                provider="gemini",
-                model=model_name,
-                error_type="ServiceUnavailable",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Gemini service unavailable: {e}", context=context, cause=e)
-
-    # Timeout / deadline exceeded
-    if isinstance(e, google_exceptions.DeadlineExceeded):
-        fire_event(
-            LLMErrorEvent(
-                provider="gemini",
-                model=model_name,
-                error_type="DeadlineExceeded",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Gemini timeout: {e}", context=context, cause=e)
-
-    # Internal server error
-    if isinstance(e, google_exceptions.InternalServerError):
-        fire_event(
-            LLMErrorEvent(
-                provider="gemini",
-                model=model_name,
-                error_type="InternalServerError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Gemini server error: {e}", context=context, cause=e)
-
-    # Other Google API errors (not retryable)
-    if isinstance(e, google_exceptions.GoogleAPICallError):
-        fire_event(
-            LLMErrorEvent(
-                provider="gemini",
-                model=model_name,
-                error_type="GoogleAPICallError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Gemini API error: {e}", context=context, cause=e)
-
-    # Unknown error, re-raise as-is
-    return e
+    """Wrap Google Gemini SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):

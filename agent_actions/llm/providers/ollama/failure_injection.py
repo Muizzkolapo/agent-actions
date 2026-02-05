@@ -2,7 +2,9 @@
 Failure injection for Ollama clients - testing retry mechanism.
 
 This module provides controlled failure injection for testing retry behavior
-in both online and batch modes.
+in both online and batch modes. It uses a count-based approach (fail first N)
+rather than the rate-based random approach in the shared
+``agent_actions.llm.providers.failure_injection`` module.
 
 Environment variables:
     OLLAMA_FAIL_FIRST_N=2           Fail first N calls/records (online + batch)
@@ -15,6 +17,8 @@ Usage:
     OLLAMA_FAIL_FIRST_N=2 python -m agent_actions run workflow.yml
 
 To remove: Delete this file and remove imports from client.py and batch_client.py
+
+See also: agent_actions.llm.providers.failure_injection (rate-based injection)
 """
 
 import logging

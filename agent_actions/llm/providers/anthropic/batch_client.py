@@ -3,9 +3,12 @@ Anthropic Batch API client implementation.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from ..batch_base import BaseBatchClient, BatchTask, BatchResult
+
+logger = logging.getLogger(__name__)
 
 
 class AnthropicBatchClient(BaseBatchClient):
@@ -143,10 +146,6 @@ class AnthropicBatchClient(BaseBatchClient):
 
         Complexity reduced by breaking into smaller helper methods.
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         if not content_list or not isinstance(content_list, list):
             return content_list
 
@@ -173,10 +172,6 @@ class AnthropicBatchClient(BaseBatchClient):
 
     def _extract_tool_use_content(self, content_list: list) -> Optional[Any]:
         """Extract content from tool_use blocks."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         for content_block in content_list:
             # Check object with type='tool_use'
             if hasattr(content_block, "type") and content_block.type == "tool_use":
@@ -216,15 +211,11 @@ class AnthropicBatchClient(BaseBatchClient):
 
     def _fallback_content_extraction(self, content_item: Any) -> Any:
         """Fallback extraction for edge cases."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Check for tool_use via type + input attributes
         if hasattr(content_item, "type") and hasattr(content_item, "input"):
             if content_item.type == "tool_use":
                 logger.warning(
-                    f"Found uncaught tool use: {getattr(content_item, 'name', 'unknown')}"
+                    "Found uncaught tool use: %s", getattr(content_item, "name", "unknown")
                 )
                 content = content_item.input
                 if hasattr(content, "model_dump"):
@@ -284,7 +275,7 @@ class AnthropicBatchClient(BaseBatchClient):
         file_path = batch_dir / file_name
         with open(file_path, "w", encoding="utf-8") as file:
             json.dump({"requests": tasks}, file, indent=2)
-        print(f"Anthropic batch input saved at: {file_path}")
+        logger.info("Anthropic batch input saved at: %s", file_path)
         return file_path
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
@@ -298,8 +289,8 @@ class AnthropicBatchClient(BaseBatchClient):
             batch_response = self.client.messages.batches.create(requests=tasks)
             batch_id = batch_response.id
             status = batch_response.processing_status
-            print(f"Anthropic batch job created with ID: {batch_id}")
-            print(f"Status: {status}")
+            logger.info("Anthropic batch job created with ID: %s", batch_id)
+            logger.info("Status: %s", status)
             return (batch_id, status)
         except self.anthropic.APIError as e:
             from agent_actions.errors import AnthropicError  # New modular pattern!

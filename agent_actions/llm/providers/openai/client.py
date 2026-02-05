@@ -22,114 +22,32 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
+    LLMErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
-    LLMErrorEvent,
-    RateLimitEvent,
 )
 
 logger = logging.getLogger(__name__)
 
-
-def _extract_retry_after(e: Exception) -> Optional[float]:
-    """Extract retry-after header from an API error response.
-
-    Args:
-        e: The API exception with potential response headers
-
-    Returns:
-        Parsed retry-after value as float, or None if not available
-    """
-    if not hasattr(e, "response") or not e.response:
-        return None
-    retry_after = e.response.headers.get("retry-after")
-    if not retry_after:
-        return None
-    try:
-        return float(retry_after)
-    except ValueError:
-        return None
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="openai",
+    rate_limit_types=(openai.RateLimitError,),
+    network_error_types=(
+        openai.APIConnectionError,
+        openai.APITimeoutError,
+        openai.InternalServerError,
+    ),
+    base_api_error_type=openai.APIError,
+    supports_retry_after=True,
+)
 
 
 def _wrap_openai_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap OpenAI SDK errors into unified agent-actions error types.
-
-    This enables the central retry engine to handle transient errors
-    consistently across all providers. Also fires appropriate LLM events.
-
-    Args:
-        e: The OpenAI SDK exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "openai", "model": model_name}
-
-    if isinstance(e, openai.RateLimitError):
-        retry_after = _extract_retry_after(e)
-        context["retry_after"] = retry_after
-        fire_event(
-            RateLimitEvent(
-                provider="openai",
-                retry_after=retry_after or 0.0,
-                request_id=request_id,
-            )
-        )
-        return RateLimitError(f"OpenAI rate limit: {e}", context=context, cause=e)
-
-    if isinstance(e, openai.APIConnectionError):
-        fire_event(
-            LLMErrorEvent(
-                provider="openai",
-                model=model_name,
-                error_type="APIConnectionError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"OpenAI connection error: {e}", context=context, cause=e)
-
-    if isinstance(e, openai.APITimeoutError):
-        fire_event(
-            LLMErrorEvent(
-                provider="openai",
-                model=model_name,
-                error_type="APITimeoutError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"OpenAI timeout: {e}", context=context, cause=e)
-
-    if isinstance(e, openai.InternalServerError):
-        fire_event(
-            LLMErrorEvent(
-                provider="openai",
-                model=model_name,
-                error_type="InternalServerError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"OpenAI server error: {e}", context=context, cause=e)
-
-    if isinstance(e, openai.APIError):
-        fire_event(
-            LLMErrorEvent(
-                provider="openai",
-                model=model_name,
-                error_type="APIError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"OpenAI API error: {e}", context=context, cause=e)
-
-    return e
+    """Wrap OpenAI SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class OpenAIClient(BaseClient):

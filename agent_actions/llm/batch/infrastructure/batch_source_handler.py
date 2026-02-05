@@ -42,16 +42,8 @@ class BatchSourceHandler:
         #   - .../qanalabs_quiz_gen/agent_io/target/node_X (3 levels to root)
         relative_path = Path(file_path).relative_to(base_directory)
 
-        # Find workflow root by traversing up until we find the parent of 'agent_io'
+        # Find workflow root by locating 'agent_io' in path parts and getting its parent
         base_path = Path(base_directory)
-        workflow_root = base_path
-        for parent in base_path.parents:
-            if (parent / "agent_io").exists() or parent.name != "agent_io":
-                if (parent / "agent_io") == base_path or (parent / "agent_io") in base_path.parents:
-                    workflow_root = parent
-                    break
-
-        # Simpler approach: find 'agent_io' in path parts and get its parent
         parts = base_path.parts
         if "agent_io" in parts:
             agent_io_idx = parts.index("agent_io")

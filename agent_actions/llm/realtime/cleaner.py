@@ -34,7 +34,7 @@ class Cleaner:
             raise click.ClickException(f"Cleaning failed for agent '{self.agent}': {exc}") from exc
 
     def _run(self) -> None:
-        logger.info("Unexpected error while cleaning directories%s", self.agent)
+        logger.debug("Cleaning directories for agent %s", self.agent)
         _, io_dir_str, _ = self.agent_manager.get_agent_paths(self.agent)
         io_dir = Path(io_dir_str)
         directories = []

@@ -24,106 +24,29 @@ from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
-    LLMErrorEvent,
-    RateLimitEvent,
 )
 from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)
 
 
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="ollama",
+    extra_network_types=(httpx.ConnectError, httpx.TimeoutException),
+    status_code_error_types=(httpx.HTTPStatusError,),
+    base_api_error_type=ResponseError,
+    supports_retry_after=False,
+)
+
+
 def _wrap_ollama_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Ollama errors into unified agent-actions error types.
-
-    Also fires appropriate LLM events.
-
-    Args:
-        e: The Ollama exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "ollama", "model": model_name}
-
-    # Connection errors (Ollama uses httpx)
-    if isinstance(e, httpx.ConnectError):
-        fire_event(
-            LLMErrorEvent(
-                provider="ollama",
-                model=model_name,
-                error_type="ConnectError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Ollama connection error: {e}", context=context, cause=e)
-
-    if isinstance(e, httpx.TimeoutException):
-        fire_event(
-            LLMErrorEvent(
-                provider="ollama",
-                model=model_name,
-                error_type="TimeoutException",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Ollama timeout: {e}", context=context, cause=e)
-
-    if isinstance(e, httpx.HTTPStatusError):
-        status_code = e.response.status_code
-        if status_code == 429:
-            fire_event(
-                RateLimitEvent(
-                    provider="ollama",
-                    retry_after=0.0,
-                    request_id=request_id,
-                )
-            )
-            return RateLimitError(f"Ollama rate limit: {e}", context=context, cause=e)
-        if status_code in (502, 503, 504):
-            fire_event(
-                LLMErrorEvent(
-                    provider="ollama",
-                    model=model_name,
-                    error_type="ServerError",
-                    error_message=str(e),
-                    request_id=request_id,
-                )
-            )
-            return NetworkError(f"Ollama server error: {e}", context=context, cause=e)
-        fire_event(
-            LLMErrorEvent(
-                provider="ollama",
-                model=model_name,
-                error_type="HTTPStatusError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Ollama HTTP error: {e}", context=context, cause=e)
-
-    # Ollama ResponseError
-    if isinstance(e, ResponseError):
-        fire_event(
-            LLMErrorEvent(
-                provider="ollama",
-                model=model_name,
-                error_type="ResponseError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Ollama error: {e}", context=context, cause=e)
-
-    # Unknown error, re-raise as-is
-    return e
+    """Wrap Ollama errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class OllamaClient(BaseClient):

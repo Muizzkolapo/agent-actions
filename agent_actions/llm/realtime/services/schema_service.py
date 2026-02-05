@@ -5,7 +5,11 @@ from agent_actions.output.response.schema import prepare_schema_unified
 
 
 class SchemaService:
-    """Handles schema preparation for agents."""
+    """Handles schema preparation for agents.
+
+    .. deprecated::
+        TODO(v3.0): Remove -- callers should use prepare_schema_unified() directly.
+    """
 
     @staticmethod
     def prepare_schema(

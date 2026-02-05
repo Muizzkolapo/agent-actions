@@ -21,114 +21,32 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError, ConfigurationError
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
+    LLMErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
-    LLMErrorEvent,
-    RateLimitEvent,
 )
 
 logger = logging.getLogger(__name__)
 
-
-def _extract_retry_after(e: Exception) -> Optional[float]:
-    """Extract retry-after header from an API error response.
-
-    Args:
-        e: The API exception with potential response headers
-
-    Returns:
-        Parsed retry-after value as float, or None if not available
-    """
-    if not hasattr(e, "response") or not e.response:
-        return None
-    retry_after = e.response.headers.get("retry-after")
-    if not retry_after:
-        return None
-    try:
-        return float(retry_after)
-    except ValueError:
-        return None
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="anthropic",
+    rate_limit_types=(anthropic.RateLimitError,),
+    network_error_types=(
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        anthropic.InternalServerError,
+    ),
+    base_api_error_type=anthropic.APIError,
+    supports_retry_after=True,
+)
 
 
 def _wrap_anthropic_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Anthropic SDK errors into unified agent-actions error types.
-
-    This enables the central retry engine to handle transient errors
-    consistently across all providers. Also fires appropriate LLM events.
-
-    Args:
-        e: The Anthropic SDK exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "anthropic", "model": model_name}
-
-    if isinstance(e, anthropic.RateLimitError):
-        retry_after = _extract_retry_after(e)
-        context["retry_after"] = retry_after
-        fire_event(
-            RateLimitEvent(
-                provider="anthropic",
-                retry_after=retry_after or 0.0,
-                request_id=request_id,
-            )
-        )
-        return RateLimitError(f"Anthropic rate limit: {e}", context=context, cause=e)
-
-    if isinstance(e, anthropic.APIConnectionError):
-        fire_event(
-            LLMErrorEvent(
-                provider="anthropic",
-                model=model_name,
-                error_type="APIConnectionError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Anthropic connection error: {e}", context=context, cause=e)
-
-    if isinstance(e, anthropic.APITimeoutError):
-        fire_event(
-            LLMErrorEvent(
-                provider="anthropic",
-                model=model_name,
-                error_type="APITimeoutError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Anthropic timeout: {e}", context=context, cause=e)
-
-    if isinstance(e, anthropic.InternalServerError):
-        fire_event(
-            LLMErrorEvent(
-                provider="anthropic",
-                model=model_name,
-                error_type="InternalServerError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Anthropic server error: {e}", context=context, cause=e)
-
-    if isinstance(e, anthropic.APIError):
-        fire_event(
-            LLMErrorEvent(
-                provider="anthropic",
-                model=model_name,
-                error_type="APIError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Anthropic API error: {e}", context=context, cause=e)
-
-    return e
+    """Wrap Anthropic SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class AnthropicClient(BaseClient):

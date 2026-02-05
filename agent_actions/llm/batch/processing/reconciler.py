@@ -90,13 +90,7 @@ class BatchResultReconciler:
         Returns:
             Set of custom_ids (as strings) that should be in batch results
         """
-        expected_ids = {
-            str(custom_id)
-            for custom_id, original_row in self.context_map.items()
-            if BatchContextMetadata.is_included(original_row)
-            or BatchContextMetadata.get_filter_status(original_row) is None
-        }
-        return expected_ids
+        return self.collect_expected_custom_ids(self.context_map)
 
     def get_missing_ids(self) -> Set[str]:
         """

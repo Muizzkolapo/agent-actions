@@ -19,6 +19,9 @@ class PromptService:
 
         See: agent_actions.prompt.service.PromptPreparationService
 
+        .. deprecated::
+            TODO(v3.0): Remove -- migrate callers to PromptPreparationService.
+
         Args:
             agent_config: Agent configuration containing prompt settings
             formatted_prompt: Pre-formatted prompt string (optional)

@@ -35,6 +35,22 @@ class BatchJobEntry:
     is_versioned_agent: Optional[bool] = None
     version_base_name: Optional[str] = None
 
+    def __post_init__(self):
+        """Validate that status is a recognized BatchStatus value.
+
+        Logs a warning instead of raising to avoid breaking deserialization
+        of existing registries that may contain provider-specific statuses.
+        """
+        valid = {s.value for s in BatchStatus}
+        if self.status not in valid:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "Unrecognized batch status '%s'. Expected one of: %s",
+                self.status,
+                ", ".join(sorted(valid)),
+            )
+
     @classmethod
     def from_dict(cls, data: dict) -> "BatchJobEntry":
         """Create BatchJobEntry from dictionary (JSON deserialization)."""

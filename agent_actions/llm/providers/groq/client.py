@@ -22,115 +22,41 @@ from groq import Groq
 
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.mixins import JSONResponseMixin
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utils.constants import MODEL_NAME_KEY
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
     LLMErrorEvent,
-    RateLimitEvent,
 )
-from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 
 logger = logging.getLogger(__name__)
 
 
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="groq",
+    rate_limit_types=(groq.RateLimitError,),
+    network_error_types=(
+        groq.APIConnectionError,
+        groq.APITimeoutError,
+        groq.InternalServerError,
+    ),
+    base_api_error_type=groq.APIError,
+    supports_retry_after=True,
+)
+
+
 def _wrap_groq_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Groq SDK errors into unified agent-actions error types.
-
-    Groq uses an OpenAI-compatible SDK, so error types are similar.
-    Also fires appropriate LLM events.
-
-    Args:
-        e: The Groq SDK exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "groq", "model": model_name}
-
-    # Rate limit errors
-    if isinstance(e, groq.RateLimitError):
-        retry_after = None
-        if hasattr(e, "response") and e.response:
-            retry_after = e.response.headers.get("retry-after")
-            if retry_after:
-                try:
-                    retry_after = float(retry_after)
-                except ValueError:
-                    retry_after = None
-        context["retry_after"] = retry_after
-        fire_event(
-            RateLimitEvent(
-                provider="groq",
-                retry_after=retry_after or 0.0,
-                request_id=request_id,
-            )
-        )
-        return RateLimitError(f"Groq rate limit: {e}", context=context, cause=e)
-
-    # Connection/network errors
-    if isinstance(e, groq.APIConnectionError):
-        fire_event(
-            LLMErrorEvent(
-                provider="groq",
-                model=model_name,
-                error_type="APIConnectionError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Groq connection error: {e}", context=context, cause=e)
-
-    # Timeout errors
-    if isinstance(e, groq.APITimeoutError):
-        fire_event(
-            LLMErrorEvent(
-                provider="groq",
-                model=model_name,
-                error_type="APITimeoutError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Groq timeout: {e}", context=context, cause=e)
-
-    # Internal server errors (potentially transient)
-    if isinstance(e, groq.InternalServerError):
-        fire_event(
-            LLMErrorEvent(
-                provider="groq",
-                model=model_name,
-                error_type="InternalServerError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Groq server error: {e}", context=context, cause=e)
-
-    # Other API errors (not retryable)
-    if isinstance(e, groq.APIError):
-        fire_event(
-            LLMErrorEvent(
-                provider="groq",
-                model=model_name,
-                error_type="APIError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Groq API error: {e}", context=context, cause=e)
-
-    # Unknown error, re-raise as-is
-    return e
+    """Wrap Groq SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
-class GroqClient(BaseClient):
+class GroqClient(BaseClient, JSONResponseMixin):
     """Groq API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
@@ -215,29 +141,10 @@ class GroqClient(BaseClient):
         )
 
         response_temp = llm.choices[0].message.content
-        try:
-            response = json.loads(response_temp)
-            response_list = DataTransformer.ensure_list(response)
-            return response_list
-        except json.JSONDecodeError as e:
-            # Return error dict for RepromptEngine repair
-            logger.warning(
-                "Groq returned invalid JSON, returning error dict for repair",
-                extra={
-                    "model": model_name,
-                    "response_text": response_temp[:200] if response_temp else "",
-                    "error": str(e),
-                    "request_id": request_id,
-                },
-            )
-            fire_event(
-                LLMJSONParseErrorEvent(
-                    provider="groq",
-                    model=model_name,
-                    error=str(e),
-                )
-            )
-            return [{"raw_response": response_temp, "_parse_error": str(e)}]
+        response_data = GroqClient.parse_json_response(
+            response_temp, "Groq", "call_json", model_name
+        )
+        return DataTransformer.ensure_list(response_data)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):

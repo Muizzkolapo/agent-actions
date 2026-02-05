@@ -25,82 +25,28 @@ from agent_actions.llm.providers.mixins import (
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.usage_tracker import set_last_usage
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
     LLMErrorEvent,
-    RateLimitEvent,
 )
 
 logger = logging.getLogger(__name__)
 
 
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="cohere",
+    status_code_error_types=(cohere_errors.ApiError,),
+    extra_network_types=(ConnectionError, TimeoutError),
+    supports_retry_after=False,
+)
+
+
 def _wrap_cohere_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Cohere SDK errors into unified agent-actions error types.
-
-    This enables the central retry engine to handle transient errors
-    consistently across all providers. Also fires appropriate LLM events.
-
-    Args:
-        e: The Cohere SDK exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "cohere", "model": model_name}
-
-    # Check status code for rate limit (429)
-    if isinstance(e, cohere_errors.ApiError):
-        status_code = getattr(e, "status_code", None)
-        if status_code == 429:
-            fire_event(
-                RateLimitEvent(
-                    provider="cohere",
-                    retry_after=0.0,
-                    request_id=request_id,
-                )
-            )
-            return RateLimitError(f"Cohere rate limit: {e}", context=context, cause=e)
-        if status_code in (502, 503, 504):
-            fire_event(
-                LLMErrorEvent(
-                    provider="cohere",
-                    model=model_name,
-                    error_type="ServerError",
-                    error_message=str(e),
-                    request_id=request_id,
-                )
-            )
-            return NetworkError(f"Cohere server error: {e}", context=context, cause=e)
-        fire_event(
-            LLMErrorEvent(
-                provider="cohere",
-                model=model_name,
-                error_type="ApiError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Cohere API error: {e}", context=context, cause=e)
-
-    # Connection errors
-    if isinstance(e, (ConnectionError, TimeoutError)):
-        fire_event(
-            LLMErrorEvent(
-                provider="cohere",
-                model=model_name,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Cohere connection error: {e}", context=context, cause=e)
-
-    # Unknown error, re-raise as-is
-    return e
+    """Wrap Cohere SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):

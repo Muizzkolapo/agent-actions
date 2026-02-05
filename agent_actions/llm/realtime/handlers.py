@@ -3,10 +3,9 @@ import shutil
 from typing import Callable, Optional, Dict, Any
 from agent_actions.output.file_handler import FileHandler
 from pathlib import Path
-from agent_actions.errors import AgentNotFoundError  # New modular pattern!
+from agent_actions.errors import AgentNotFoundError
 import logging
 import os
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +110,7 @@ class AgentManager:
             True if the agent exists, False otherwise.
         """
         try:
-            agent_config_dir, _, _ = self.get_agent_paths(agent_name)
+            agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
             return Path(agent_config_dir).exists()
         except AgentNotFoundError:
             return False

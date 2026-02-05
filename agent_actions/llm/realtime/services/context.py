@@ -32,6 +32,9 @@ class ContextService:
 
         This method is kept only for backward compatibility and testing purposes.
 
+        .. deprecated::
+            TODO(v3.0): Remove -- migrate callers to PromptPreparationService.
+
         Args:
             context_data: The context data (str or dict)
             agent_config: Agent configuration
@@ -194,7 +197,10 @@ class ContextService:
         Returns:
             JSON string of tool context
         """
-        # Use llm_context for tool injection (same as LLM)
-        if isinstance(context_data_str, str):
-            return context_data_str
-        return json.dumps(context_data_str, ensure_ascii=False)
+        result = ContextService.prepare_context_data(
+            context_data_str, original_context, is_tool=False
+        )
+        # Ensure string return type for backward compatibility
+        if isinstance(result, str):
+            return result
+        return json.dumps(result, ensure_ascii=False)

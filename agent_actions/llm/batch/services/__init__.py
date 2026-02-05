@@ -9,9 +9,13 @@ from agent_actions.llm.batch.services.retrieval import (
 from agent_actions.llm.batch.services.processing import (
     BatchProcessingService,
 )
+from agent_actions.llm.batch.services.retry import (
+    BatchRetryService,
+)
 
 __all__ = [
     "BatchSubmissionService",
     "BatchRetrievalService",
     "BatchProcessingService",
+    "BatchRetryService",
 ]

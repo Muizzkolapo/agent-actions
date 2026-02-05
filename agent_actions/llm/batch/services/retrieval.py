@@ -7,7 +7,7 @@ BatchService to follow Single Responsibility Principle.
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, List, Callable
 
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
@@ -18,7 +18,8 @@ from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
 )
-from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
+from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.utils.path_utils import ensure_directory_exists
 from agent_actions.errors import ExternalServiceError
 
@@ -82,7 +83,7 @@ class BatchRetrievalService:
                 if file_name
                 else {}
             )
-            batch_results = self._retrieve_results(
+            batch_results = retrieve_and_reconcile(
                 provider,
                 batch_id,
                 output_dir,
@@ -132,44 +133,3 @@ class BatchRetrievalService:
                     },
                 }
                 f.write(json.dumps(raw_format) + "\n")
-
-    def _retrieve_results(
-        self,
-        provider: BaseBatchClient,
-        batch_id: str,
-        output_directory: Optional[str],
-        *,
-        context_map: Optional[Dict[str, Any]] = None,
-        record_count: Optional[int] = None,
-        file_name: Optional[str] = None,
-    ) -> List[BatchResult]:
-        """Retrieve batch results from provider and log reconciliation.
-
-        Args:
-            provider: Batch API client
-            batch_id: Batch job ID
-            output_directory: Output directory path
-            context_map: Context map for reconciliation
-            record_count: Expected record count
-            file_name: Original file name
-
-        Returns:
-            List of batch results
-        """
-        from agent_actions.llm.batch.processing.reconciler import (
-            BatchResultReconciler,
-        )
-
-        batch_results = provider.retrieve_results(batch_id, output_directory)
-
-        # Log reconciliation
-        expected = BatchResultReconciler.collect_expected_custom_ids(context_map or {})
-        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
-        BatchResultReconciler.log_batch_reconciliation(
-            batch_id=batch_id,
-            expected_count=len(expected) or record_count or 0,
-            received_count=len(received),
-            file_name=file_name,
-        )
-
-        return batch_results

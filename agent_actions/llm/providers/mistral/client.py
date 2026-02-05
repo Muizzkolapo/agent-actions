@@ -25,82 +25,28 @@ from agent_actions.llm.providers.mixins import (
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.usage_tracker import set_last_usage
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
     LLMErrorEvent,
-    RateLimitEvent,
 )
 
 logger = logging.getLogger(__name__)
 
 
+_ERROR_MAPPING = VendorErrorMapping(
+    vendor_name="mistral",
+    status_code_error_types=(mistral_models.SDKError,),
+    extra_network_types=(ConnectionError, TimeoutError),
+    supports_retry_after=False,
+)
+
+
 def _wrap_mistral_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
-    """Wrap Mistral SDK errors into unified agent-actions error types.
-
-    This enables the central retry engine to handle transient errors
-    consistently across all providers. Also fires appropriate LLM events.
-
-    Args:
-        e: The Mistral SDK exception
-        model_name: Model name for context
-        request_id: Request ID for correlation
-
-    Returns:
-        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
-    """
-    context = {"vendor": "mistral", "model": model_name}
-
-    # Check for SDKError with status code
-    if isinstance(e, mistral_models.SDKError):
-        status_code = getattr(e, "status_code", None)
-        if status_code == 429:
-            fire_event(
-                RateLimitEvent(
-                    provider="mistral",
-                    retry_after=0.0,
-                    request_id=request_id,
-                )
-            )
-            return RateLimitError(f"Mistral rate limit: {e}", context=context, cause=e)
-        if status_code in (502, 503, 504):
-            fire_event(
-                LLMErrorEvent(
-                    provider="mistral",
-                    model=model_name,
-                    error_type="ServerError",
-                    error_message=str(e),
-                    request_id=request_id,
-                )
-            )
-            return NetworkError(f"Mistral server error: {e}", context=context, cause=e)
-        fire_event(
-            LLMErrorEvent(
-                provider="mistral",
-                model=model_name,
-                error_type="SDKError",
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return VendorAPIError(f"Mistral API error: {e}", context=context, cause=e)
-
-    # Connection errors
-    if isinstance(e, (ConnectionError, TimeoutError)):
-        fire_event(
-            LLMErrorEvent(
-                provider="mistral",
-                model=model_name,
-                error_type=type(e).__name__,
-                error_message=str(e),
-                request_id=request_id,
-            )
-        )
-        return NetworkError(f"Mistral connection error: {e}", context=context, cause=e)
-
-    # Unknown error, re-raise as-is
-    return e
+    """Wrap Mistral SDK errors into unified agent-actions error types."""
+    return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
 
 
 class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):

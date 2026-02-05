@@ -12,6 +12,7 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 | `batch_base.py` | Module | Base helpers shared by batch clients (request shaping, telemetry). | `llm.batch` |
 | `batch_client_factory.py` | Module | Factory that returns a provider-specific batch client implementation. | `llm.batch`, `llm.providers` |
 | `client_base.py` | Module | Abstract base client that defines the interface for streaming/call semantics. | `llm.providers`, `llm.realtime` |
+| `error_wrapper.py` | Module | Unified vendor error wrapping: maps SDK exceptions to RateLimitError/NetworkError/VendorAPIError. | `errors`, `llm.providers` |
 | `failure_injection.py` | Module | Utility to simulate latency/failure scenarios across providers. | `logging`, `llm.providers` |
 | `mixins.py` | Module | Shared mixins for access token handling, logging, context propagation. | `llm.providers` |
 | `usage_tracker.py` | Module | Central usage tracking and quota summary used by providers. | `logging`, `llm.providers` |

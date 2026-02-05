@@ -39,74 +39,54 @@ class ConfigManager:
         self.workflow_config: Optional[WorkflowConfig] = None
         self.pipeline_config: Optional[PipelineConfig] = None
 
-    def load_configs(self):
-        fire_event(ConfigLoadStartEvent(config_file=str(self.constructor_path)))
+    def _load_single_config(self, config_path: str, config_type: str) -> Dict[str, Any]:
+        """Load and parse a single config file with template rendering.
+
+        Args:
+            config_path: Path to the config file.
+            config_type: Human-readable config type for events/errors (e.g. "workflow", "default").
+
+        Returns:
+            Parsed config dictionary.
+
+        Raises:
+            ConfigurationError: On rendering, YAML parsing, or unexpected errors.
+        """
+        fire_event(ConfigLoadStartEvent(config_file=str(config_path)))
         try:
-            config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
-            loaded_config = yaml.safe_load(config_data)
-            self.user_config = loaded_config
-            fire_event(
-                ConfigLoadEvent(config_file=str(self.constructor_path), config_type="workflow")
-            )
+            config_data = render_pipeline_with_templates(config_path, self.template_dir)
+            loaded = yaml.safe_load(config_data)
+            fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
+            return loaded
         except (TemplateRenderingError, ConfigurationError) as e:
             raise ConfigurationError(
-                "Error rendering or loading user config",
+                f"Error rendering or loading {config_type} config",
                 context={
-                    "config_path": str(self.constructor_path),
-                    "operation": "load_user_config",
+                    "config_path": str(config_path),
+                    "operation": f"load_{config_type}_config",
                 },
                 cause=e,
             )
         except yaml.YAMLError as e:
             raise ConfigurationError(
-                "Error parsing YAML for user config",
-                context={"config_path": str(self.constructor_path), "operation": "parse_yaml"},
+                f"Error parsing YAML for {config_type} config",
+                context={"config_path": str(config_path), "operation": "parse_yaml"},
                 cause=e,
             )
         except Exception as e:
             raise ConfigurationError(
-                "Unexpected error loading user config",
+                f"Unexpected error loading {config_type} config",
                 context={
-                    "config_path": str(self.constructor_path),
-                    "operation": "load_user_config",
+                    "config_path": str(config_path),
+                    "operation": f"load_{config_type}_config",
                 },
                 cause=e,
             )
-        # Load default config only if path is provided
+
+    def load_configs(self):
+        self.user_config = self._load_single_config(self.constructor_path, "workflow")
         if self.default_path:
-            fire_event(ConfigLoadStartEvent(config_file=str(self.default_path)))
-            try:
-                default_config_data = render_pipeline_with_templates(
-                    self.default_path, self.template_dir
-                )
-                self.default_config = yaml.safe_load(default_config_data)
-                fire_event(
-                    ConfigLoadEvent(config_file=str(self.default_path), config_type="default")
-                )
-            except (TemplateRenderingError, ConfigurationError) as e:
-                raise ConfigurationError(
-                    "Error rendering or loading default config",
-                    context={
-                        "config_path": str(self.default_path),
-                        "operation": "load_default_config",
-                    },
-                    cause=e,
-                )
-            except yaml.YAMLError as e:
-                raise ConfigurationError(
-                    "Error parsing YAML for default config",
-                    context={"config_path": str(self.default_path), "operation": "parse_yaml"},
-                    cause=e,
-                )
-            except Exception as e:
-                raise ConfigurationError(
-                    "Unexpected error loading default config",
-                    context={
-                        "config_path": str(self.default_path),
-                        "operation": "load_default_config",
-                    },
-                    cause=e,
-                )
+            self.default_config = self._load_single_config(self.default_path, "default")
         # Resolve tool_path with priority: workflow > default > project config
         user_tool_path = None
         if isinstance(self.user_config, dict):
@@ -407,9 +387,3 @@ class ConfigManager:
                 "name": self.pipeline_config.name if self.pipeline_config else None,
             },
         }
-
-
-class DuplicateAgentError(Exception):
-    """Raised when duplicate agents are found in the configuration."""
-
-    pass

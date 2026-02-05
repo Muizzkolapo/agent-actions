@@ -3,8 +3,11 @@ Gemini Batch API client implementation.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from google import genai
@@ -145,23 +148,23 @@ class GeminiBatchClient(BaseBatchClient):
         with open(file_path, "w", encoding="utf-8") as file:
             for task in tasks:
                 file.write(json.dumps(task) + "\n")
-        print(f"Gemini batch file created at: {file_path}")
+        logger.info("Gemini batch file created at: %s", file_path)
         return file_path
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit batch to Gemini API."""
         try:
-            print(f"Uploading file: {input_file}")
+            logger.info("Uploading file: %s", input_file)
             uploaded_file = self.client.files.upload(
                 file=str(input_file),
                 config=types.UploadFileConfig(display_name=f"{batch_name}-batch-input"),
             )
-            print(f"Uploaded file: {uploaded_file.name}")
+            logger.info("Uploaded file: %s", uploaded_file.name)
             model_name = self._get_default_model()
             batch_job = self.client.batches.create(
                 model=model_name, src=uploaded_file.name, config={"display_name": batch_name}
             )
-            print(f"Gemini batch job created with ID: {batch_job.name}")
+            logger.info("Gemini batch job created with ID: %s", batch_job.name)
             status = (
                 batch_job.state.name if hasattr(batch_job.state, "name") else str(batch_job.state)
             )
@@ -215,8 +218,8 @@ class GeminiBatchClient(BaseBatchClient):
                 "Batch job has no output file", context={"batch_id": batch_id, "vendor": "gemini"}
             )
 
-        print(f"Results are in file: {result_file_name}")
-        print("Downloading result file content...")
+        logger.info("Results are in file: %s", result_file_name)
+        logger.debug("Downloading result file content...")
         file_content_bytes = self.client.files.download(file=result_file_name)
 
         if not file_content_bytes or len(file_content_bytes) == 0:

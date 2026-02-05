@@ -2,12 +2,15 @@
 Groq Batch API client implementation.
 """
 
+import logging
 import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
 from ..batch_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
+
+logger = logging.getLogger(__name__)
 
 
 class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
@@ -131,8 +134,8 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 completion_window="24h",
             )
 
-            print(f"Groq batch job created with ID: {batch_job.id}")
-            print(f"Status: {batch_job.status}")
+            logger.info("Groq batch job created with ID: %s", batch_job.id)
+            logger.info("Status: %s", batch_job.status)
             return (batch_job.id, batch_job.status)
 
         except Exception as e:
