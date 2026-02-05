@@ -3,6 +3,7 @@
 import pytest
 
 from agent_actions.models.action_schema import (
+    ActionKind,
     ActionSchema,
     FieldInfo,
     FieldSource,
@@ -90,10 +91,10 @@ class TestActionSchema:
 
     def test_action_schema_defaults(self):
         """Test ActionSchema default values."""
-        schema = ActionSchema(name="test", kind="llm")
+        schema = ActionSchema(name="test", kind=ActionKind.LLM)
 
         assert schema.name == "test"
-        assert schema.kind == "llm"
+        assert schema.kind == ActionKind.LLM
         assert schema.upstream_refs == []
         assert schema.input_fields == []
         assert schema.output_fields == []
@@ -107,7 +108,7 @@ class TestActionSchema:
         """Test available_outputs property excludes dropped fields."""
         schema = ActionSchema(
             name="processor",
-            kind="llm",
+            kind=ActionKind.LLM,
             output_fields=[
                 FieldInfo(name="result", source=FieldSource.SCHEMA, is_dropped=False),
                 FieldInfo(name="internal", source=FieldSource.SCHEMA, is_dropped=True),
@@ -123,7 +124,7 @@ class TestActionSchema:
         """Test dropped_outputs property."""
         schema = ActionSchema(
             name="processor",
-            kind="llm",
+            kind=ActionKind.LLM,
             output_fields=[
                 FieldInfo(name="result", source=FieldSource.SCHEMA, is_dropped=False),
                 FieldInfo(name="internal", source=FieldSource.SCHEMA, is_dropped=True),
@@ -138,7 +139,7 @@ class TestActionSchema:
         """Test required_inputs property."""
         schema = ActionSchema(
             name="tool_action",
-            kind="tool",
+            kind=ActionKind.TOOL,
             input_fields=[
                 FieldInfo(name="text", source=FieldSource.TOOL_OUTPUT, is_required=True),
                 FieldInfo(name="count", source=FieldSource.TOOL_OUTPUT, is_required=True),
@@ -153,7 +154,7 @@ class TestActionSchema:
         """Test optional_inputs property."""
         schema = ActionSchema(
             name="tool_action",
-            kind="tool",
+            kind=ActionKind.TOOL,
             input_fields=[
                 FieldInfo(name="text", source=FieldSource.TOOL_OUTPUT, is_required=True),
                 FieldInfo(name="options", source=FieldSource.TOOL_OUTPUT, is_required=False),
@@ -168,7 +169,7 @@ class TestActionSchema:
         """Test uses_fields property deduplicates references."""
         schema = ActionSchema(
             name="consumer",
-            kind="llm",
+            kind=ActionKind.LLM,
             upstream_refs=[
                 UpstreamReference(
                     "extractor", "summary", "prompt", "{{ action.extractor.summary }}"
@@ -188,7 +189,7 @@ class TestActionSchema:
         """Test ActionSchema serialization."""
         schema = ActionSchema(
             name="extractor",
-            kind="llm",
+            kind=ActionKind.LLM,
             upstream_refs=[
                 UpstreamReference("source", "text", "prompt", "{{ source.text }}"),
             ],
@@ -217,7 +218,7 @@ class TestActionSchema:
 
     def test_empty_schema_properties(self):
         """Test properties on empty schema."""
-        schema = ActionSchema(name="empty", kind="llm")
+        schema = ActionSchema(name="empty", kind=ActionKind.LLM)
 
         assert schema.available_outputs == []
         assert schema.dropped_outputs == []

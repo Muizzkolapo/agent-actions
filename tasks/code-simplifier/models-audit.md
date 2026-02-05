@@ -155,3 +155,42 @@ The models folder has **zero dependencies on other project modules**. It depends
 6. **Type `kind` as an enum** (P1 #2) -- This is the highest-value change but requires cross-folder coordination. Do it after items 1-5 are landed, as it touches `workflow/schema_service.py` and `cli/renderers/schema_renderer.py`. Decide first whether to reuse `AgentKind`, `ActionKind`, or create a new enum in the models folder.
 
 7. **Evaluate `to_dict()` refactoring** (P2 #5) and **filter-and-sort helper** (P3 #7) -- These are optional and should only be pursued if the team agrees they improve readability. The current explicit approach has merit.
+
+---
+
+## Status: ✅ COMPLETED (PR #906)
+
+**Date completed:** 2026-02-05
+
+### Completed Items
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| P1 #1 | Dead duplicate `action.py` | Deleted (167 lines removed) |
+| P1 #2 | `kind` should be enum | Added `ActionKind` enum with LLM, TOOL, SOURCE, SEED values |
+| P2 #3 | `_MANIFEST.md` out of date | Updated to add `ActionKind` entry |
+| P2 #4 | Legacy typing imports | Modernized to `dict`, `list` with `from __future__ import annotations` |
+| P3 #6 | Verbose `uses_fields` dedup | Simplified to 1-line set comprehension |
+| P3 #8-9 | Stale docstring references | Removed references to replaced classes |
+
+### Cross-Folder Changes
+
+The enum change required coordinated updates to:
+- `agent_actions/workflow/schema_service.py` - passes `ActionKind(node.agent_kind.value)`
+- `agent_actions/cli/renderers/schema_renderer.py` - uses `ActionKind.TOOL`, `ActionKind.SOURCE`
+- `agent_actions/cli/schema.py` - uses `.value` for JSON serialization
+- Test files updated to use enum comparisons
+
+### Deferred Items
+
+| Finding | Reason |
+|---------|--------|
+| P2 #5: `to_dict()` refactoring | Existing explicit approach is readable and self-documenting |
+| P3 #7: Filter-and-sort helper | One-liners are already concise; helper might reduce clarity |
+
+### Net Result
+
+- **Lines removed:** ~167 (dead duplicate file)
+- **Lines changed:** ~50 (simplifications and enum additions)
+- **Type safety:** Improved via `ActionKind` enum
+- **Tests:** 69 passed (1 pre-existing failure unrelated to changes)

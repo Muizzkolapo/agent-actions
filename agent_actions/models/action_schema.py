@@ -1,10 +1,26 @@
-"""
-Unified schema model for workflow actions.
-"""
+"""Unified schema model for workflow actions."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
+
+
+class ActionKind(Enum):
+    """Type of action in the workflow.
+
+    Attributes:
+        LLM: Language model action (generates structured output)
+        TOOL: Tool/UDF action (calls external function)
+        SOURCE: Source data (workflow input data)
+        SEED: Seed data (static data defined in config)
+    """
+
+    LLM = "llm"
+    TOOL = "tool"
+    SOURCE = "source"
+    SEED = "seed"
 
 
 class FieldSource(Enum):
@@ -41,7 +57,7 @@ class FieldInfo:
     is_required: bool = True
     is_dropped: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
@@ -56,7 +72,6 @@ class UpstreamReference:
     """Reference to an upstream agent's field.
 
     Represents a template reference like {{ action.extractor.summary }}.
-    Replaces the duplicate InputRequirement and FieldReference classes.
 
     Attributes:
         source_agent: Name of the agent being referenced
@@ -70,7 +85,7 @@ class UpstreamReference:
     location: str
     raw_reference: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "source_agent": self.source_agent,
@@ -84,13 +99,11 @@ class UpstreamReference:
 class ActionSchema:
     """Unified schema for any action type.
 
-    Provides a consistent interface for all action types (llm, tool, source, seed),
-    consolidating OutputSchema, OutputFieldInfo, InputSchema, and InputSchemaInfo
-    into a single representation.
+    Provides a consistent interface for all action types (llm, tool, source, seed).
 
     Attributes:
         name: Action name
-        kind: Type of action ('llm', 'tool', 'source', 'seed')
+        kind: Type of action (llm, tool, source, seed)
         upstream_refs: References to upstream agent fields (template references)
         input_fields: Input fields (for tools with TypedDict input)
         output_fields: Output fields with source tracking
@@ -102,53 +115,46 @@ class ActionSchema:
     """
 
     name: str
-    kind: str
-    upstream_refs: List[UpstreamReference] = field(default_factory=list)
-    input_fields: List[FieldInfo] = field(default_factory=list)
-    output_fields: List[FieldInfo] = field(default_factory=list)
-    dependencies: List[str] = field(default_factory=list)
-    downstream: List[str] = field(default_factory=list)
+    kind: ActionKind
+    upstream_refs: list[UpstreamReference] = field(default_factory=list)
+    input_fields: list[FieldInfo] = field(default_factory=list)
+    output_fields: list[FieldInfo] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    downstream: list[str] = field(default_factory=list)
     is_dynamic: bool = False
     is_schemaless: bool = False
     is_template_based: bool = False
 
     @property
-    def available_outputs(self) -> List[str]:
+    def available_outputs(self) -> list[str]:
         """Fields available to downstream agents (excludes dropped)."""
         return sorted(f.name for f in self.output_fields if not f.is_dropped)
 
     @property
-    def dropped_outputs(self) -> List[str]:
+    def dropped_outputs(self) -> list[str]:
         """Fields explicitly dropped from output."""
         return sorted(f.name for f in self.output_fields if f.is_dropped)
 
     @property
-    def required_inputs(self) -> List[str]:
+    def required_inputs(self) -> list[str]:
         """Required input field names (for tools)."""
         return sorted(f.name for f in self.input_fields if f.is_required)
 
     @property
-    def optional_inputs(self) -> List[str]:
+    def optional_inputs(self) -> list[str]:
         """Optional input field names (for tools)."""
         return sorted(f.name for f in self.input_fields if not f.is_required)
 
     @property
-    def uses_fields(self) -> List[str]:
+    def uses_fields(self) -> list[str]:
         """Unique 'agent.field' references from upstream."""
-        seen = set()
-        result = []
-        for ref in self.upstream_refs:
-            key = f"{ref.source_agent}.{ref.field_name}"
-            if key not in seen:
-                seen.add(key)
-                result.append(key)
-        return sorted(result)
+        return sorted({f"{ref.source_agent}.{ref.field_name}" for ref in self.upstream_refs})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
-            "kind": self.kind,
+            "kind": self.kind.value,
             "upstream_refs": [r.to_dict() for r in self.upstream_refs],
             "input_fields": [f.to_dict() for f in self.input_fields],
             "output_fields": [f.to_dict() for f in self.output_fields],

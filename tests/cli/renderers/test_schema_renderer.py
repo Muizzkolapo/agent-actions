@@ -8,6 +8,7 @@ from rich.panel import Panel
 
 from agent_actions.cli.renderers.schema_renderer import SchemaRenderer
 from agent_actions.models.action_schema import (
+    ActionKind,
     ActionSchema,
     FieldInfo,
     FieldSource,
@@ -34,7 +35,7 @@ class TestSchemaRenderer:
         return {
             "extractor": ActionSchema(
                 name="extractor",
-                kind="llm",
+                kind=ActionKind.LLM,
                 output_fields=[
                     FieldInfo(name="summary", source=FieldSource.SCHEMA),
                     FieldInfo(name="facts", source=FieldSource.SCHEMA),
@@ -43,7 +44,7 @@ class TestSchemaRenderer:
             ),
             "consumer": ActionSchema(
                 name="consumer",
-                kind="llm",
+                kind=ActionKind.LLM,
                 upstream_refs=[
                     UpstreamReference(
                         "extractor", "summary", "prompt", "{{ action.extractor.summary }}"
@@ -114,7 +115,7 @@ class TestSchemaRenderer:
 
     def test_format_input_summary_template_based(self, renderer):
         """Test _format_input_summary handles template-based."""
-        schema = ActionSchema(name="test", kind="llm", is_template_based=True)
+        schema = ActionSchema(name="test", kind=ActionKind.LLM, is_template_based=True)
 
         result = renderer._format_input_summary(schema)
 
@@ -122,7 +123,7 @@ class TestSchemaRenderer:
 
     def test_format_input_summary_dynamic(self, renderer):
         """Test _format_input_summary handles dynamic."""
-        schema = ActionSchema(name="test", kind="llm", is_dynamic=True)
+        schema = ActionSchema(name="test", kind=ActionKind.LLM, is_dynamic=True)
 
         result = renderer._format_input_summary(schema)
 
@@ -132,7 +133,7 @@ class TestSchemaRenderer:
         """Test _format_input_summary shows required/optional fields."""
         schema = ActionSchema(
             name="tool_action",
-            kind="tool",
+            kind=ActionKind.TOOL,
             input_fields=[
                 FieldInfo(name="text", source=FieldSource.TOOL_OUTPUT, is_required=True),
                 FieldInfo(name="options", source=FieldSource.TOOL_OUTPUT, is_required=False),
@@ -148,7 +149,7 @@ class TestSchemaRenderer:
 
     def test_format_output_summary_schemaless(self, renderer):
         """Test _format_output_summary handles schemaless."""
-        schema = ActionSchema(name="test", kind="llm", is_schemaless=True)
+        schema = ActionSchema(name="test", kind=ActionKind.LLM, is_schemaless=True)
 
         result = renderer._format_output_summary(schema)
 
@@ -156,7 +157,7 @@ class TestSchemaRenderer:
 
     def test_format_output_summary_dynamic(self, renderer):
         """Test _format_output_summary handles dynamic."""
-        schema = ActionSchema(name="test", kind="source", is_dynamic=True)
+        schema = ActionSchema(name="test", kind=ActionKind.SOURCE, is_dynamic=True)
 
         result = renderer._format_output_summary(schema)
 
@@ -166,7 +167,7 @@ class TestSchemaRenderer:
         """Test _format_output_summary shows available fields."""
         schema = ActionSchema(
             name="extractor",
-            kind="llm",
+            kind=ActionKind.LLM,
             output_fields=[
                 FieldInfo(name="summary", source=FieldSource.SCHEMA),
                 FieldInfo(name="facts", source=FieldSource.SCHEMA),
@@ -180,7 +181,7 @@ class TestSchemaRenderer:
 
     def test_format_output_summary_empty(self, renderer):
         """Test _format_output_summary handles no fields."""
-        schema = ActionSchema(name="test", kind="llm")
+        schema = ActionSchema(name="test", kind=ActionKind.LLM)
 
         result = renderer._format_output_summary(schema)
 
@@ -199,7 +200,7 @@ class TestSchemaRenderer:
         schemas = {
             "my_tool": ActionSchema(
                 name="my_tool",
-                kind="tool",
+                kind=ActionKind.TOOL,
                 input_fields=[
                     FieldInfo(name="text", source=FieldSource.TOOL_OUTPUT, is_required=True),
                 ],
@@ -239,7 +240,7 @@ class TestSchemaRenderer:
         schemas = {
             "test": ActionSchema(
                 name="test",
-                kind="llm",
+                kind=ActionKind.LLM,
                 output_fields=[
                     FieldInfo(name="original", source=FieldSource.OBSERVE),
                 ],
@@ -254,7 +255,7 @@ class TestSchemaRenderer:
         schemas = {
             "test": ActionSchema(
                 name="test",
-                kind="llm",
+                kind=ActionKind.LLM,
                 output_fields=[
                     FieldInfo(name="meta", source=FieldSource.PASSTHROUGH),
                 ],
@@ -269,7 +270,7 @@ class TestSchemaRenderer:
         schemas = {
             "test": ActionSchema(
                 name="test",
-                kind="llm",
+                kind=ActionKind.LLM,
                 output_fields=[
                     FieldInfo(name="result", source=FieldSource.SCHEMA),
                     FieldInfo(name="internal", source=FieldSource.SCHEMA, is_dropped=True),

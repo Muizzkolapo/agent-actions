@@ -5,6 +5,7 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `action_schema.py` | Module | Unified schema model for workflow actions. | - |
+| `ActionKind` | Class | Type of action in the workflow (llm, tool, source, seed). | - |
 | `FieldSource` | Class | How a field is produced. | - |
 | `FieldInfo` | Class | Information about a single field. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |

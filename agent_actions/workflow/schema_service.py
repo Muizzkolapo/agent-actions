@@ -1,10 +1,11 @@
-"""
-Workflow schema service for unified schema access.
-"""
+"""Workflow schema service for unified schema access."""
 
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+from typing import Any, Optional
 
 from agent_actions.models.action_schema import (
+    ActionKind,
     ActionSchema,
     FieldInfo,
     FieldSource,
@@ -31,8 +32,8 @@ class WorkflowSchemaService:
 
     def __init__(
         self,
-        workflow_config: Dict[str, Any],
-        udf_registry: Optional[Dict[str, Any]] = None,
+        workflow_config: dict[str, Any],
+        udf_registry: Optional[dict[str, Any]] = None,
         schema_loader: Optional[Any] = None,
         project_root: Optional[Any] = None,
         schema_dir: Optional[Any] = None,
@@ -55,7 +56,7 @@ class WorkflowSchemaService:
             project_root=project_root,
             schema_dir=schema_dir,
         )
-        self._schemas: Dict[str, ActionSchema] = {}
+        self._schemas: dict[str, ActionSchema] = {}
         self._validation_result: Optional[StaticValidationResult] = None
 
     @property
@@ -83,7 +84,7 @@ class WorkflowSchemaService:
         self._schemas[action_name] = schema
         return schema
 
-    def get_all_schemas(self) -> Dict[str, ActionSchema]:
+    def get_all_schemas(self) -> dict[str, ActionSchema]:
         """Get schemas for all actions.
 
         Returns:
@@ -104,7 +105,7 @@ class WorkflowSchemaService:
             self._validation_result = self._analyzer.analyze()
         return self._validation_result
 
-    def get_execution_order(self) -> List[str]:
+    def get_execution_order(self) -> list[str]:
         """Get topological execution order of actions.
 
         Returns:
@@ -117,7 +118,7 @@ class WorkflowSchemaService:
 
         return [name for name in order if not self.graph.is_special_namespace(name)]
 
-    def get_downstream_actions(self, action_name: str) -> List[str]:
+    def get_downstream_actions(self, action_name: str) -> list[str]:
         """Get actions that depend on the given action.
 
         Args:
@@ -129,7 +130,7 @@ class WorkflowSchemaService:
         downstream_nodes = self.graph.get_downstream_nodes(action_name)
         return sorted(node.name for node in downstream_nodes)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert full analysis to dictionary for JSON serialization.
 
         Returns:
@@ -225,7 +226,7 @@ class WorkflowSchemaService:
 
         return ActionSchema(
             name=node.name,
-            kind=node.agent_kind.value,
+            kind=ActionKind(node.agent_kind.value),
             upstream_refs=upstream_refs,
             input_fields=sorted(input_fields, key=lambda f: (not f.is_required, f.name)),
             output_fields=sorted(output_fields, key=lambda f: f.name),

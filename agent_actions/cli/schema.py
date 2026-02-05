@@ -130,7 +130,7 @@ class SchemaCommand:
         schemas = {}
         for name, action_schema in service.get_all_schemas().items():
             schemas[name] = {
-                "kind": action_schema.kind,
+                "kind": action_schema.kind.value,
                 "input": {
                     "required": action_schema.required_inputs,
                     "optional": action_schema.optional_inputs,

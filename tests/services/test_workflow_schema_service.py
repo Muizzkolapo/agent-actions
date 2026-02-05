@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.models.action_schema import ActionSchema, FieldSource
+from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSource
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 
@@ -41,7 +41,7 @@ class TestWorkflowSchemaService:
         assert schema is not None
         assert isinstance(schema, ActionSchema)
         assert schema.name == "extractor"
-        assert schema.kind == "llm"
+        assert schema.kind == ActionKind.LLM
 
     def test_get_action_schema_returns_none_for_missing(self):
         """Test get_action_schema returns None for non-existent action."""

@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
-from agent_actions.models.action_schema import ActionSchema, FieldSource
+from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSource
 
 
 class SchemaRenderer:
@@ -56,7 +56,7 @@ class SchemaRenderer:
 
             input_str = self._format_input_summary(schema)
             output_str = self._format_output_summary(schema)
-            table.add_row(action_name, schema.kind, input_str, output_str)
+            table.add_row(action_name, schema.kind.value, input_str, output_str)
 
         return table
 
@@ -96,7 +96,7 @@ class SchemaRenderer:
         Returns:
             Rich Panel with action details
         """
-        tree = Tree(f"[bold cyan]{schema.name}[/bold cyan] ({schema.kind})")
+        tree = Tree(f"[bold cyan]{schema.name}[/bold cyan] ({schema.kind.value})")
 
         # Dependencies
         if schema.dependencies:
@@ -119,7 +119,7 @@ class SchemaRenderer:
                     source_branch.add(f"{ref.field_name} [dim]({ref.location})[/dim]")
 
         # Input schema (for tools)
-        if schema.kind == "tool" and schema.input_fields:
+        if schema.kind == ActionKind.TOOL and schema.input_fields:
             schema_branch = tree.add("[green]expects (input schema):[/green]")
             for field in schema.input_fields:
                 if field.is_required:
@@ -193,21 +193,21 @@ class SchemaRenderer:
             schema: ActionSchema to add
             verbose: Whether to show detailed information
         """
-        action_branch = tree.add(f"[cyan]{schema.name}[/cyan] ({schema.kind})")
+        action_branch = tree.add(f"[cyan]{schema.name}[/cyan] ({schema.kind.value})")
 
         # Inputs - show template references or input schema for tools
         if schema.upstream_refs:
             inputs_branch = action_branch.add("[green]uses:[/green]")
             for ref in schema.upstream_refs:
                 inputs_branch.add(f"{ref.source_agent}.{ref.field_name}")
-        elif schema.kind == "tool" and schema.input_fields:
+        elif schema.kind == ActionKind.TOOL and schema.input_fields:
             inputs_branch = action_branch.add("[green]expects:[/green]")
             for field in schema.input_fields:
                 if field.is_required:
                     inputs_branch.add(f"[bold]{field.name}[/bold]")
                 else:
                     inputs_branch.add(f"{field.name} [dim](optional)[/dim]")
-        elif schema.kind == "source":
+        elif schema.kind == ActionKind.SOURCE:
             action_branch.add("[dim](workflow input)[/dim]")
 
         # Outputs

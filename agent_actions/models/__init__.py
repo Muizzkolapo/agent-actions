@@ -5,6 +5,7 @@ used across the CLI and analysis components.
 """
 
 from .action_schema import (
+    ActionKind,
     ActionSchema,
     FieldInfo,
     FieldSource,
@@ -12,6 +13,7 @@ from .action_schema import (
 )
 
 __all__ = [
+    "ActionKind",
     "ActionSchema",
     "FieldInfo",
     "FieldSource",
