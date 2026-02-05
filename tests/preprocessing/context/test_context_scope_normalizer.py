@@ -4,7 +4,7 @@ Tests for the context_scope_normalizer module.
 Verifies that:
 1. List directives (observe, passthrough, drop, drops) have loop references expanded
 2. Dict directives (seed_data) are preserved as-is (never expanded)
-3. normalize_all_agent_configs creates context_scope_expanded field
+3. normalize_all_agent_configs normalizes context_scope in-place
 """
 
 import pytest
@@ -190,8 +190,8 @@ class TestBuildLoopBaseNameMap:
 class TestNormalizeAllAgentConfigs:
     """Test the normalize_all_agent_configs function."""
 
-    def test_adds_context_scope_expanded_field(self):
-        """Test that context_scope_expanded is added to agents with context_scope."""
+    def test_normalizes_context_scope_in_place(self):
+        """Test that context_scope is normalized in-place (no separate expanded key)."""
         agent_configs = {
             "loop_1": {
                 "is_versioned_agent": True,
@@ -206,18 +206,14 @@ class TestNormalizeAllAgentConfigs:
 
         normalize_all_agent_configs(agent_configs, execution_order)
 
-        # context_scope should be preserved
+        # context_scope should be overwritten with expanded form
         assert agent_configs["consumer"]["context_scope"] == {
-            "observe": ["loop.*"],
-            "seed_data": {"key": "value.json"},
-        }
-
-        # context_scope_expanded should be added
-        assert "context_scope_expanded" in agent_configs["consumer"]
-        assert agent_configs["consumer"]["context_scope_expanded"] == {
             "observe": ["loop_"],  # Expanded
             "seed_data": {"key": "value.json"},  # Preserved
         }
+
+        # No separate expanded key
+        assert "context_scope_expanded" not in agent_configs["consumer"]
 
     def test_skips_agents_without_context_scope(self):
         """Test that agents without context_scope are skipped."""
@@ -226,11 +222,11 @@ class TestNormalizeAllAgentConfigs:
 
         normalize_all_agent_configs(agent_configs, execution_order)
 
-        assert "context_scope_expanded" not in agent_configs["action_a"]
-        assert "context_scope_expanded" not in agent_configs["action_b"]
+        assert "context_scope" not in agent_configs["action_a"]
+        assert "context_scope" not in agent_configs["action_b"]
 
-    def test_preserves_original_context_scope(self):
-        """Test that original context_scope is not mutated."""
+    def test_does_not_mutate_original_list(self):
+        """Test that the original list object passed in is not mutated."""
         original_observe = ["loop.*"]
         agent_configs = {
             "loop_1": {"is_versioned_agent": True, "version_base_name": "loop"},
@@ -240,10 +236,10 @@ class TestNormalizeAllAgentConfigs:
 
         normalize_all_agent_configs(agent_configs, execution_order)
 
-        # Original should not be mutated
-        assert agent_configs["consumer"]["context_scope"]["observe"] == ["loop.*"]
-        # Expanded should have the pattern
-        assert agent_configs["consumer"]["context_scope_expanded"]["observe"] == ["loop_"]
+        # The original list object should not be mutated (normalizer creates a new list)
+        assert original_observe == ["loop.*"]
+        # context_scope should have the expanded form
+        assert agent_configs["consumer"]["context_scope"]["observe"] == ["loop_"]
 
 
 class TestSeedDataPreservation:
@@ -280,15 +276,11 @@ class TestSeedDataPreservation:
 
         normalize_all_agent_configs(agent_configs, execution_order)
 
-        # seed_data must survive in both raw and expanded
+        # seed_data must survive in normalized context_scope
         assert agent_configs["consumer"]["context_scope"]["seed_data"] == {
             "exam_syllabus": "syllabus.json",
             "grading_rubric": "rubric.json",
         }
-        assert agent_configs["consumer"]["context_scope_expanded"]["seed_data"] == {
-            "exam_syllabus": "syllabus.json",
-            "grading_rubric": "rubric.json",
-        }
 
-        # observe should be expanded in context_scope_expanded
-        assert agent_configs["consumer"]["context_scope_expanded"]["observe"] == ["extract_"]
+        # observe should be expanded in-place
+        assert agent_configs["consumer"]["context_scope"]["observe"] == ["extract_"]

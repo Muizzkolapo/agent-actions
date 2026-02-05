@@ -4,11 +4,10 @@ Context Scope Normalizer - Centralized normalization for context_scope directive
 Handles:
 - Directive registry (list vs dict directives)
 - Version reference expansion (action.* -> action_)
-- Preserves both raw and expanded versions
+- In-place normalization of context_scope (overwrites raw with expanded form)
 """
 
 from typing import Dict, Any, List, Optional
-from copy import deepcopy
 import logging
 
 logger = logging.getLogger(__name__)
@@ -61,10 +60,7 @@ def normalize_context_scope(
                 expanded_scope[directive_name] = directive_value
         else:
             # Dict directive or unknown - preserve as-is
-            # Note: Using deepcopy to avoid shared references between raw and expanded.
-            # For large seed_data dicts, this has a performance cost, but ensures safety.
-            # Could optimize to shallow copy if values are guaranteed immutable.
-            expanded_scope[directive_name] = deepcopy(directive_value)
+            expanded_scope[directive_name] = directive_value
 
     return expanded_scope
 
@@ -125,13 +121,14 @@ def normalize_all_agent_configs(
     execution_order: List[str],
 ) -> None:
     """
-    Normalize context_scope for all agents, adding context_scope_expanded field.
+    Normalize context_scope for all agents in-place.
 
     MUTATION CONTRACT:
     ------------------
-    This function mutates agent_configs IN PLACE by adding 'context_scope_expanded'
-    to each agent that has a context_scope. The original 'context_scope' field is
-    preserved and NOT mutated.
+    This function mutates agent_configs IN PLACE by replacing each agent's
+    'context_scope' with its normalized form (version references expanded to
+    field prefix patterns). There is no separate 'context_scope_expanded' key;
+    every downstream consumer reads 'context_scope' and gets the expanded form.
 
     This is part of the config normalization pipeline:
     1. ConfigManager.determine_execution_order() calls this function
@@ -150,14 +147,13 @@ def normalize_all_agent_configs(
         context_scope = config.get("context_scope")
 
         if context_scope:
-            # Create expanded version
+            # Normalize in-place: overwrite context_scope with expanded form
             expanded = normalize_context_scope(context_scope, version_base_map)
-            config["context_scope_expanded"] = expanded
+            config["context_scope"] = expanded
 
             logger.debug(
-                "Normalized context_scope for '%s': raw=%s, expanded=%s",
+                "Normalized context_scope for '%s': %s",
                 agent_name,
-                context_scope.keys(),
                 expanded.keys() if expanded else None,
             )
 

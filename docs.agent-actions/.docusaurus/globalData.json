@@ -80,6 +80,10 @@
               "sidebar": "docsSidebar"
             },
             {
+              "id": "reference/cli/preview",
+              "path": "/docs/reference/cli/preview"
+            },
+            {
               "id": "reference/cli/run",
               "path": "/docs/reference/cli/run",
               "sidebar": "docsSidebar"

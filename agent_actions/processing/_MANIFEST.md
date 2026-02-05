@@ -9,6 +9,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Sub-Module | Description |
 |------------|-------------|
+| [invocation](invocation/) | LLM invocation strategies (online/batch) for unified execution. |
 | [recovery](recovery/_MANIFEST.md) | Retry, checkpoint, and recovery helpers for failed batches. |
 | [transform](transform/_MANIFEST.md) | Transformation helpers for output items and metadata. |
 

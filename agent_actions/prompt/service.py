@@ -237,10 +237,8 @@ class PromptPreparationService:
         # Step 1: Load raw prompt template
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
 
-        # Step 2: Extract context_scope
-        context_scope = agent_config.get(
-            "context_scope_expanded"
-        ) or agent_config.get("context_scope", {})
+        # Step 2: Extract context_scope (already normalized by config pipeline)
+        context_scope = agent_config.get("context_scope", {})
 
         # Step 3: Load seed data if configured
         static_data = PromptPreparationService._load_seed_data(
@@ -353,10 +351,8 @@ class PromptPreparationService:
         logger.debug("Loaded raw prompt (length: %d)", len(raw_prompt))
 
         # Step 1.5: Extract context_scope for progressive data exposure
-        # Prefer expanded version (has loop references resolved), fall back to raw
-        context_scope = request.agent_config.get(
-            "context_scope_expanded"
-        ) or request.agent_config.get("context_scope", {})
+        # Already normalized by config pipeline (version references expanded)
+        context_scope = request.agent_config.get("context_scope", {})
 
         # Step 2: Build field context with historical node loading
         # Pass context_scope to control which fields are loaded (progressive data exposure)

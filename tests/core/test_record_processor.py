@@ -154,51 +154,6 @@ class TestGuardEvaluation:
         assert result.status == ProcessingStatus.FILTERED
 
 
-class TestLLMExecution:
-    """Test _execute_llm method."""
-
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
-    def test_executes_llm_successfully(self, mock_run):
-        """LLM executes successfully → returns response."""
-        mock_run.return_value = ({"generated": "data"}, True)
-
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-        context = ProcessingContext(agent_config={}, agent_name="test")
-
-        prep_result = MagicMock()
-        prep_result.formatted_prompt = "test prompt"
-        prep_result.passthrough_fields = {"field": "value"}
-
-        response, executed, passthrough, recovery_metadata = processor._execute_llm(
-            {"content": "test"}, prep_result, context
-        )
-
-        assert response == {"generated": "data"}
-        assert executed is True
-        assert passthrough == {"field": "value"}
-        assert recovery_metadata is None  # No retry occurred
-
-    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
-    def test_handles_non_execution(self, mock_run):
-        """LLM returns executed=False → returns None response."""
-        mock_run.return_value = (None, False)
-
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-        context = ProcessingContext(agent_config={}, agent_name="test")
-
-        prep_result = MagicMock()
-        prep_result.formatted_prompt = "test prompt"
-        prep_result.passthrough_fields = {}
-
-        response, executed, passthrough, recovery_metadata = processor._execute_llm(
-            {"content": "test"}, prep_result, context
-        )
-
-        assert response is None
-        assert executed is False
-        assert recovery_metadata is None
-
-
 class TestResponseTransformation:
     """Test _transform_response method."""
 

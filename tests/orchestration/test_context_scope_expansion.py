@@ -1,16 +1,15 @@
 """
 Tests for context_scope expansion at orchestration level.
 
-Note: As of the context scope normalization RFC, context_scope expansion
-now happens at config load time via context_scope_normalizer.py (called by
-ConfigManager.determine_execution_order()). The ActionLevelOrchestrator
-no longer mutates context_scope - it stays raw while context_scope_expanded
-contains the version-expanded version.
+Context_scope expansion happens at config load time via context_scope_normalizer.py
+(called by ConfigManager.determine_execution_order()). The normalizer overwrites
+context_scope in-place with the expanded form (version references resolved to
+field prefix patterns).
 
 These tests verify that:
-1. context_scope is preserved as raw (not mutated) in ActionLevelOrchestrator
-2. Dependencies are still expanded to version variants
-3. The normalizer properly creates context_scope_expanded
+1. context_scope is normalized in-place after normalize_all_agent_configs()
+2. Dependencies are still expanded to version variants by ActionLevelOrchestrator
+3. The expanded form has correct field prefix patterns
 """
 
 import pytest
@@ -28,10 +27,8 @@ class TestContextScopeExpansion:
     def test_wildcard_version_reference_expands_to_field_prefix_pattern(self):
         """Test that wildcard references to version base names become field prefix patterns.
 
-        Note: context_scope expansion now happens via normalize_all_agent_configs()
-        at config load time. This test verifies both:
-        1. ActionLevelOrchestrator preserves raw context_scope
-        2. The normalizer creates correct context_scope_expanded
+        context_scope expansion happens via normalize_all_agent_configs() at config
+        load time, overwriting context_scope in-place with the expanded form.
         """
         # Setup: Versioned action extract_raw_qa with 3 iterations
         # Consumer action flatten_questions depends on versions and references it in context_scope
@@ -61,7 +58,7 @@ class TestContextScopeExpansion:
             "flatten_questions": {
                 "dependencies": ["extract_raw_qa"],  # Will be expanded to version variants
                 "context_scope": {
-                    "observe": ["extract_raw_qa.*"]  # Raw, not expanded here
+                    "observe": ["extract_raw_qa.*"]  # Will be normalized in-place
                 },
             },
         }
@@ -81,13 +78,8 @@ class TestContextScopeExpansion:
             "extract_raw_qa_3",
         ]
 
-        # Assert: Raw context_scope should be preserved
+        # Assert: context_scope should be normalized in-place with field prefix pattern
         assert agent_configs["flatten_questions"]["context_scope"] == {
-            "observe": ["extract_raw_qa.*"]  # Raw, preserved
-        }
-
-        # Assert: context_scope_expanded should have field prefix pattern
-        assert agent_configs["flatten_questions"]["context_scope_expanded"] == {
             "observe": ["extract_raw_qa_"]  # Field prefix pattern
         }
 
@@ -151,8 +143,8 @@ class TestContextScopeExpansion:
     def test_mixed_version_and_regular_references(self):
         """Test context_scope with both version and regular action references.
 
-        Note: context_scope expansion now happens via normalize_all_agent_configs().
-        Raw context_scope is preserved, expanded version in context_scope_expanded.
+        context_scope expansion happens via normalize_all_agent_configs(),
+        overwriting context_scope in-place with the expanded form.
         """
         execution_order = [
             "loop_action_1",
@@ -188,18 +180,11 @@ class TestContextScopeExpansion:
         orchestrator = ActionLevelOrchestrator(execution_order, agent_configs)
         orchestrator.compute_execution_levels()
 
-        # Raw context_scope should be preserved
+        # context_scope should be normalized in-place
         assert agent_configs["consumer"]["context_scope"] == {
-            "observe": ["loop_action.*", "regular_action.field1"],
-            "passthrough": ["regular_action.field2"],
-        }
-
-        # Version reference should expand in context_scope_expanded
-        expected_expanded = {
             "observe": ["loop_action_", "regular_action.field1"],
             "passthrough": ["regular_action.field2"],
         }
-        assert agent_configs["consumer"]["context_scope_expanded"] == expected_expanded
 
     def test_no_context_scope_no_expansion(self):
         """Test that actions without context_scope are not affected."""

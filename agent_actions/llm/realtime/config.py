@@ -288,7 +288,7 @@ class ConfigManager:
                 dependency_graph[agent_type] = dependencies
         self.execution_order = topological_sort(dependency_graph)
 
-        # Normalize context_scope for all agents, adding context_scope_expanded field
+        # Normalize context_scope for all agents (expands version references in-place)
         agent_configs_dict = {
             agent_type: config.model_dump() for agent_type, config in self.agent_configs.items()
         }

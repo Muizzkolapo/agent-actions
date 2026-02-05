@@ -9,6 +9,15 @@ from .enrichment import (
     PassthroughEnricher,
     RequiredFieldsEnricher,
 )
+from .invocation import (
+    BatchProvider,
+    InvocationResult,
+    InvocationStrategy,
+    OnlineStrategy,
+    BatchStrategy,
+    BatchSubmissionResult,
+    InvocationStrategyFactory,
+)
 from .prepared_task import (
     GuardStatus,
     PreparedTask,
@@ -43,6 +52,14 @@ __all__ = [
     "TaskPreparer",
     "get_task_preparer",
     "reset_task_preparer",
+    # Invocation Strategies (Phase 3)
+    "BatchProvider",
+    "InvocationResult",
+    "InvocationStrategy",
+    "OnlineStrategy",
+    "BatchStrategy",
+    "BatchSubmissionResult",
+    "InvocationStrategyFactory",
     # Enrichment
     "Enricher",
     "EnrichmentPipeline",

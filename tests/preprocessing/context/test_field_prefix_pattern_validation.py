@@ -146,6 +146,24 @@ class TestFieldPrefixPatternInInferDependencies:
         # No context sources (all in dependencies)
         assert context_sources == []
 
+    def test_normalized_wildcard_context_scope_covers_versioned_dependencies(self):
+        """Normalized wildcard context_scope matches versioned dependency names."""
+        dependencies = [
+            "validate_answer_from_source_1",
+            "validate_answer_from_source_2",
+            "validate_answer_from_source_3",
+        ]
+        # Normalized form (what normalizer produces from "validate_answer_from_source.*")
+        context_scope = {"observe": ["validate_answer_from_source_"]}
+
+        allowed = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+            dependencies, context_scope, action_name="aggregate_validation_votes"
+        )
+
+        assert allowed["validate_answer_from_source_1"] is None
+        assert allowed["validate_answer_from_source_2"] is None
+        assert allowed["validate_answer_from_source_3"] is None
+
     def test_infer_dependencies_with_mixed_patterns(self):
         """Test dependency inference with both field prefix and regular patterns."""
         action_config = {

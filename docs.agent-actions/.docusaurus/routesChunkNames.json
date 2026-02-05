@@ -6,17 +6,17 @@
     },
     "content": "393be207"
   },
-  "/docs-3c8": {
+  "/docs-f4a": {
     "__comp": "5e95c892",
     "__context": {
       "plugin": "aba21aa0"
     }
   },
-  "/docs-65d": {
+  "/docs-66d": {
     "__comp": "a7bd4aaa",
     "__props": "0058b4c6"
   },
-  "/docs-25e": {
+  "/docs-bb7": {
     "__comp": "a94703ab"
   },
   "/docs/-af3": {
@@ -78,6 +78,10 @@
   "/docs/reference/cli/inspect-8a9": {
     "__comp": "17896441",
     "content": "8f7af9d6"
+  },
+  "/docs/reference/cli/preview-a0a": {
+    "__comp": "17896441",
+    "content": "3fac8eaf"
   },
   "/docs/reference/cli/run-532": {
     "__comp": "17896441",

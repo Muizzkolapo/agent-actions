@@ -21,6 +21,7 @@ export default {
   "3be92a6f": [() => import(/* webpackChunkName: "3be92a6f" */ "@site/docs/reference/data-io/data-lineage.md"), "@site/docs/reference/data-io/data-lineage.md", require.resolveWeak("@site/docs/reference/data-io/data-lineage.md")],
   "3c510b69": [() => import(/* webpackChunkName: "3c510b69" */ "@site/docs/reference/execution/run-modes.md"), "@site/docs/reference/execution/run-modes.md", require.resolveWeak("@site/docs/reference/execution/run-modes.md")],
   "3dff79d8": [() => import(/* webpackChunkName: "3dff79d8" */ "@site/docs/reference/execution/artifacts.md"), "@site/docs/reference/execution/artifacts.md", require.resolveWeak("@site/docs/reference/execution/artifacts.md")],
+  "3fac8eaf": [() => import(/* webpackChunkName: "3fac8eaf" */ "@site/docs/reference/cli/preview.md"), "@site/docs/reference/cli/preview.md", require.resolveWeak("@site/docs/reference/cli/preview.md")],
   "560c93f5": [() => import(/* webpackChunkName: "560c93f5" */ "@site/docs/reference/configuration/templates.md"), "@site/docs/reference/configuration/templates.md", require.resolveWeak("@site/docs/reference/configuration/templates.md")],
   "5810f541": [() => import(/* webpackChunkName: "5810f541" */ "@site/docs/reference/execution/workflow-dependencies.md"), "@site/docs/reference/execution/workflow-dependencies.md", require.resolveWeak("@site/docs/reference/execution/workflow-dependencies.md")],
   "5e8c322a": [() => import(/* webpackChunkName: "5e8c322a" */ "@site/docs/api/index.md"), "@site/docs/api/index.md", require.resolveWeak("@site/docs/api/index.md")],

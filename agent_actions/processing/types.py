@@ -16,6 +16,7 @@ class ProcessingStatus(Enum):
     FILTERED = "filtered"  # Filtered out by guard (excluded)
     FAILED = "failed"  # Processing failed
     EXHAUSTED = "exhausted"  # Retry exhausted
+    DEFERRED = "deferred"  # Deferred for batch execution
 
 
 class ProcessingMode(Enum):
@@ -194,6 +195,30 @@ class ProcessingResult:
             error=error,
             **kwargs,
         )
+
+    @classmethod
+    def deferred(cls, task_id: str, **kwargs) -> "ProcessingResult":
+        """
+        Factory for deferred (batch) result.
+
+        Used when task is queued for batch execution rather than
+        executed immediately.
+
+        Args:
+            task_id: Unique identifier for retrieving result later
+        """
+        return cls(
+            status=ProcessingStatus.DEFERRED,
+            data=[],
+            executed=False,
+            node_id=task_id,
+            **kwargs,
+        )
+
+    @property
+    def task_id(self) -> Optional[str]:
+        """Batch task ID (only meaningful when status is DEFERRED)."""
+        return self.node_id if self.status == ProcessingStatus.DEFERRED else None
 
 
 @dataclass

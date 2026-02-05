@@ -246,12 +246,8 @@ class AgentConfig(BaseModel):
     context_scope: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Context scope configuration for data visibility and flow control "
-        "(seed_data, observe, drop directives). This is the raw config.",
-    )
-    context_scope_expanded: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Version-expanded context_scope. List directives have "
-        "version references expanded to field prefix patterns.",
+        "(seed_data, observe, drop directives). Normalized in-place by config pipeline "
+        "(version references expanded to field prefix patterns).",
     )
 
     model_config = ConfigDict(extra="allow")
