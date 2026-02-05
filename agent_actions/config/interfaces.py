@@ -3,7 +3,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
+from typing import Any, Dict, Generic, List, Optional, TypeVar
 
 # Generic type variables for interfaces
 T = TypeVar("T")
@@ -128,56 +128,6 @@ class ISourceDataLoader(ILoader):
 
 
 # Processor interfaces
-class IContentProcessor(IProcessor, Generic[DataT]):
-    """Interface for content processors.
-
-    Type parameter DataT represents the type of data items being processed.
-    """
-
-    @abstractmethod
-    def process(
-        self, data: List[DataT], file_path: str, output_directory: Optional[str] = None
-    ) -> List[DataT]:
-        """Process a list of data items."""
-
-    async def process_async(
-        self, data: List[DataT], file_path: str, output_directory: Optional[str] = None
-    ) -> List[DataT]:
-        """
-        Async version of process. Default implementation uses sync version.
-
-        Args:
-            data: List of data items to process
-            file_path: Path to the input file
-            output_directory: Optional output directory
-
-        Returns:
-            List of processed data items
-        """
-        return await asyncio.to_thread(self.process, data, file_path, output_directory)
-
-    @abstractmethod
-    def process_for_side_output(
-        self, data: List[DataT], file_path: str
-    ) -> Tuple[List[DataT], List[DataT]]:
-        """Process data and separate into main and side outputs."""
-
-    async def process_for_side_output_async(
-        self, data: List[DataT], file_path: str
-    ) -> Tuple[List[DataT], List[DataT]]:
-        """
-        Async version of process_for_side_output. Default implementation.
-
-        Args:
-            data: List of data items to process
-            file_path: Path to the input file
-
-        Returns:
-            Tuple of (main_output, side_output) lists
-        """
-        return await asyncio.to_thread(self.process_for_side_output, data, file_path)
-
-
 class IDataProcessor(IProcessor):
     """Interface for data processing."""
 

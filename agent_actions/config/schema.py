@@ -181,13 +181,6 @@ class DefaultsConfig(BaseModel):
     )
 
 
-class DependencyEdge(BaseModel):
-    """Represents a dependency relationship in the execution plan."""
-
-    action: str = Field(..., description="Action name")
-    depends_on: List[str] = Field(default_factory=list, description="Actions this depends on")
-
-
 class WorkflowConfigV2(BaseModel):
     """New workflow configuration format."""
 
@@ -216,6 +209,5 @@ __all__ = [
     "RetryConfig",
     "ActionConfig",
     "DefaultsConfig",
-    "DependencyEdge",
     "WorkflowConfigV2",
 ]

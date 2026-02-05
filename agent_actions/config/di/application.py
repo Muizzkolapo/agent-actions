@@ -5,7 +5,7 @@ This module provides the main application container that sets up all dependencie
 and provides factory methods for creating key application components.
 """
 
-import datetime
+from datetime import datetime, timezone
 import logging
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
@@ -194,10 +194,6 @@ class ApplicationContainer:
         app_container.processor_factory = ProcessorFactory(container, registry)
         return app_container
 
-    def configure_logging(self):
-        """Configure application logging based on container settings."""
-        return None
-
     def health_check(self) -> Dict[str, Any]:
         """
         Perform health check on all registered services.
@@ -222,5 +218,5 @@ class ApplicationContainer:
         except (KeyError, ValueError, AttributeError, TypeError, RuntimeError, ImportError) as e:
             results["status"] = "unhealthy"
             results["error"] = str(e)
-        results["timestamp"] = datetime.datetime.utcnow().isoformat()
+        results["timestamp"] = datetime.now(timezone.utc).isoformat()
         return results

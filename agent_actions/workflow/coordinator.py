@@ -182,8 +182,6 @@ class AgentWorkflow:
         # Create agent runner
         agent_runner = create_agent_runner(
             use_tools=self.config.use_tools,
-            constructor_path=self.config.paths.constructor_path,
-            default_path=getattr(self.config.manager, "default_path", None),
             storage_backend=self.storage_backend,
         )
         agent_runner.execution_order = self.execution_order

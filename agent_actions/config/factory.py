@@ -38,18 +38,12 @@ def application_container_context(config: Optional[Dict[str, Any]] = None):
     else:
         container = ApplicationContainer(config)
 
-    try:
-        yield container
-    finally:
-        # Container cleanup would go here if needed
-        pass
+    yield container
 
 
 def create_agent_runner(
     config: Optional[Dict[str, Any]] = None,
     use_tools: bool = True,
-    constructor_path: Optional[str] = None,
-    default_path: Optional[str] = None,
     storage_backend: Optional["StorageBackend"] = None,
 ) -> AgentRunner:
     """
@@ -58,8 +52,6 @@ def create_agent_runner(
     Args:
         config: Optional configuration dictionary
         use_tools: Whether the agent runner should use tools
-        constructor_path: Path to user configuration file for context-aware validation
-        default_path: Path to default configuration file
         storage_backend: Optional storage backend for data persistence
 
     Returns:

@@ -9,27 +9,23 @@ from typing import Dict, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
 from dataclasses import dataclass
+from enum import Enum
 
 from agent_actions.errors import DependencyError, ConfigurationError
 
 T = TypeVar("T")
 
 
-class ServiceLifetime:
+class ServiceLifetime(str, Enum):
     """Service lifetime constants."""
 
     SINGLETON = "singleton"
     TRANSIENT = "transient"
-    SCOPED = "scoped"
 
     @classmethod
     def is_valid(cls, lifetime: str) -> bool:
         """Check if a lifetime value is valid."""
-        return lifetime in (cls.SINGLETON, cls.TRANSIENT, cls.SCOPED)
-
-    def __repr__(self):
-        """Return string representation."""
-        return f"ServiceLifetime({self.SINGLETON}, {self.TRANSIENT}, {self.SCOPED})"
+        return lifetime in (cls.SINGLETON.value, cls.TRANSIENT.value)
 
 
 @dataclass
@@ -38,7 +34,7 @@ class ServiceDescriptor:
 
     service_type: Type
     implementation: Type
-    lifetime: str
+    lifetime: ServiceLifetime
 
 
 class DependencyContainer:

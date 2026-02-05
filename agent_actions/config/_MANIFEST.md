@@ -27,13 +27,8 @@ orchestration, prompts, and processing to concrete implementations.
 | `paths.py` | Module | PathManager and standard path resolution. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration models and defaults. | `paths`, `configuration` |
 | `factory.py` | Module | DI-aware factory helpers for `AgentRunner`. | `di`, `configuration` |
-| `initializer.py` | Module | Startup validation and container lifecycle helpers. | `configuration`, `validation` |
 | `init.py` | Module | ProjectInitializer for scaffolding new projects. | `configuration`, `filesystem` |
-| `async_processor.py` | Module | Async processing base classes and helpers. | `async`, `configuration` |
-| `base.py` | Module | Artifact base classes with secure read/write helpers. | `artifacts`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
-| `bootstrap.py` | Module | Legacy DI bootstrap configuration. | `di`, `configuration` |
-| `loader.py` | Module | Reserved for config loading utilities (empty). | `configuration` |
 
 ## Flows
 
@@ -52,8 +47,7 @@ Key Functions
 | Module | Symbol | Type | Description |
 |--------|--------|------|-------------|
 | `environment.py` | `EnvironmentConfig` | Class | Environment settings with validation helpers. |
-| `initializer.py` | `initialize_application` | Function | Run startup validation and build env config. |
-| `initializer.py` | `application_container_context` | Function | Context-managed DI lifecycle with validation. |
+| `factory.py` | `application_container_context` | Function | Context-managed DI lifecycle for container. |
 | `factory.py` | `create_agent_runner` | Function | Create `AgentRunner` via DI container. |
 
 ### Project Path Resolution
@@ -74,17 +68,6 @@ Key Functions
 | `paths.py` | `PathManager.get_agent_paths` | Method | Resolve per-agent config/io/source paths. |
 | `path_config.py` | `load_project_config` | Function | Load project-level config from YAML. |
 
-### Async Processing Mode
-
-```mermaid
-flowchart TD
-    A[ProcessingContext] -->|mode decision| B{SYNC/ASYNC/AUTO}
-    B -->|ASYNC| C[BaseAsyncProcessor]
-    B -->|SYNC| D[Sync Processor]
-```
-
-Key Functions
-
 ## Cross-Module Touchpoints
 
 | Package | Why it matters |
@@ -94,9 +77,3 @@ Key Functions
 | `agent_actions/prompt` | Relies on resolved paths and DI wiring for prompt preparation. |
 | `agent_actions/output` | Uses path resolution to locate IO and schema artifacts. |
 | `agent_actions/cli` | Reads config and project paths to render/run workflows. |
-
-| Module | Symbol | Type | Description |
-|--------|--------|------|-------------|
-| `interfaces.py` | `ProcessingMode` | Enum | Processing mode selection (sync/async/auto). |
-| `async_processor.py` | `BaseAsyncProcessor.process_items_parallel` | Method | Async parallel processing with concurrency control. |
-| `async_processor.py` | `ProcessingContext.should_use_async` | Method | Decide async execution for AUTO mode. |

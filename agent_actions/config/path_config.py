@@ -7,7 +7,7 @@ This module provides utilities for loading project-specific configuration files.
 from typing import Dict, Any
 from pathlib import Path
 import yaml
-from agent_actions.errors import ConfigValidationError  # New modular pattern!
+from agent_actions.errors import ConfigValidationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
 
