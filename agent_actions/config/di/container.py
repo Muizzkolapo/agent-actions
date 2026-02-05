@@ -5,7 +5,7 @@ This module provides a lightweight dependency injection container and registry
 for managing processor dependencies and improving testability.
 """
 
-from typing import Dict, Type, Any, TypeVar, Callable, get_type_hints
+from typing import Dict, Optional, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
 from dataclasses import dataclass
@@ -35,6 +35,56 @@ class ServiceDescriptor:
     service_type: Type
     implementation: Type
     lifetime: ServiceLifetime
+
+
+def _build_init_kwargs(
+    cls: Type,
+    container: "DependencyContainer",
+    overrides: Optional[Dict[str, Any]] = None,
+    *,
+    caller: str = "_build_init_kwargs",
+) -> Dict[str, Any]:
+    """Build keyword arguments for cls.__init__ via dependency resolution.
+
+    Args:
+        cls: The class to inspect.
+        container: DependencyContainer used to resolve typed parameters.
+        overrides: Optional explicit values that take precedence over container resolution.
+        caller: Name of the calling method, included in error context for debuggability.
+
+    Returns:
+        Dictionary of keyword arguments suitable for ``cls(**kwargs)``.
+
+    Raises:
+        DependencyError: If a required parameter cannot be resolved.
+    """
+    signature = inspect.signature(cls.__init__)
+    type_hints = get_type_hints(cls.__init__)
+    init_kwargs: Dict[str, Any] = {}
+    for param_name, param in signature.parameters.items():
+        if param_name == "self" or param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        if overrides is not None and param_name in overrides:
+            init_kwargs[param_name] = overrides[param_name]
+            continue
+        param_type = type_hints.get(param_name)
+        if param_type and container.has(param_type):
+            init_kwargs[param_name] = container.get(param_type)
+        elif param.default != inspect.Parameter.empty:
+            init_kwargs[param_name] = param.default
+        else:
+            raise DependencyError(
+                f"{cls.__name__}: Missing required dependency {param_name}",
+                {
+                    "param_name": param_name,
+                    "class": cls.__name__,
+                    "operation": caller,
+                },
+            )
+    return init_kwargs
 
 
 class DependencyContainer:
@@ -108,30 +158,7 @@ class DependencyContainer:
 
     def _create_instance(self, cls: Type[T]) -> T:
         """Create instance with dependency resolution."""
-        signature = inspect.signature(cls.__init__)
-        type_hints = get_type_hints(cls.__init__)
-        init_kwargs = {}
-        for param_name, param in signature.parameters.items():
-            if param_name == "self" or param.kind in (
-                inspect.Parameter.VAR_POSITIONAL,
-                inspect.Parameter.VAR_KEYWORD,
-            ):
-                continue
-            param_type = type_hints.get(param_name)
-            if param_type and self.has(param_type):
-                init_kwargs[param_name] = self.get(param_type)
-            elif param.default != inspect.Parameter.empty:
-                init_kwargs[param_name] = param.default
-            else:
-                raise DependencyError(
-                    f"{cls.__name__}: Missing required dependency {param_name}",
-                    {
-                        "param_name": param_name,
-                        "class": cls.__name__,
-                        "operation": "_create_instance",
-                    },
-                )
-        return cls(**init_kwargs)
+        return cls(**_build_init_kwargs(cls, self, caller="_create_instance"))
 
 
 class ProcessorRegistry:
@@ -265,30 +292,11 @@ class ProcessorFactory:
 
     def _create_with_dependencies(self, cls: Type, **override_kwargs) -> Any:
         """Create instance with automatic dependency resolution."""
-        signature = inspect.signature(cls.__init__)
-        type_hints = get_type_hints(cls.__init__)
-        init_kwargs = {}
-        for param_name, param in signature.parameters.items():
-            if param_name == "self":
-                continue
-            if param_name in override_kwargs:
-                init_kwargs[param_name] = override_kwargs[param_name]
-                continue
-            param_type = type_hints.get(param_name)
-            if param_type and self.container.has(param_type):
-                init_kwargs[param_name] = self.container.get(param_type)
-            elif param.default != inspect.Parameter.empty:
-                init_kwargs[param_name] = param.default
-            else:
-                raise DependencyError(
-                    f"{cls.__name__}: Missing required dependency {param_name}",
-                    {
-                        "param_name": param_name,
-                        "class": cls.__name__,
-                        "operation": "_create_with_dependencies",
-                    },
-                )
-        return cls(**init_kwargs)
+        return cls(
+            **_build_init_kwargs(
+                cls, self.container, overrides=override_kwargs, caller="_create_with_dependencies"
+            )
+        )
 
 
 registry = ProcessorRegistry()

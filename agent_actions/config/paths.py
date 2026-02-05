@@ -48,7 +48,6 @@ class PathConfig:
         """Get environment-specific configuration."""
         configs = {
             "test": cls(marker_file="test_agent_actions.yml"),
-            "dev": cls(create_if_missing=True),
             "prod": cls(validate_permissions=True, create_if_missing=False),
         }
         return configs.get(environment, cls())

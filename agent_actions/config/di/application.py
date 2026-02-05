@@ -161,23 +161,23 @@ class ApplicationContainer:
         Returns:
             ApplicationContainer configured for the environment.
         """
-        if environment == "development":
-            config = ConfigurationProfile.development()
-        elif environment == "production":
-            config = ConfigurationProfile.production()
-        elif environment == "testing":
-            config = ConfigurationProfile.testing()
-        else:
+        profiles = {
+            "development": ConfigurationProfile.development,
+            "production": ConfigurationProfile.production,
+            "testing": ConfigurationProfile.testing,
+        }
+        profile_fn = profiles.get(environment)
+        if profile_fn is None:
             raise ConfigValidationError(
                 "environment",
                 f"Unknown environment: {environment}",
                 context={
                     "environment": environment,
-                    "valid_environments": ["development", "production", "testing"],
+                    "valid_environments": list(profiles),
                     "operation": "create_for_environment",
                 },
             )
-        return cls(config)
+        return cls(profile_fn())
 
     @classmethod
     def create_for_testing(cls) -> "ApplicationContainer":

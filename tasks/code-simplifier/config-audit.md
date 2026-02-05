@@ -1,5 +1,6 @@
 # Code Simplification Audit: config
 
+**Status:** ✅ Done — PR [#901](https://github.com/Muizzkolapo/agent-actions/pull/901)
 **Audited path:** `agent_actions/config/`
 **Date:** 2026-02-05
 **Modules reviewed:** 11 (8 top-level + 3 in `config/di/`)
@@ -141,8 +142,8 @@ The `config` package is lean and mostly clean in the current tree; several previ
 
 ## Recommended Simplification Order
 
-1. **P2-1 — Deduplicate DI resolution logic** in `container.py`.
-2. **P3-3 — Remove redundant `dev` entry** in `PathConfig.for_environment`.
-3. **P3-4 — Replace if/elif with dict lookup** in `ApplicationContainer.create_for_environment`.
-4. **P3-2 — Consider registry consolidation** only if you want to reduce boilerplate further.
-5. **P3-5 — Optionally move test wiring** if the test container grows.
+1. ~~**P2-1 — Deduplicate DI resolution logic** in `container.py`.~~ ✅ Done
+2. ~~**P3-3 — Remove redundant `dev` entry** in `PathConfig.for_environment`.~~ ✅ Done
+3. ~~**P3-4 — Replace if/elif with dict lookup** in `ApplicationContainer.create_for_environment`.~~ ✅ Done
+4. **P3-2 — Consider registry consolidation** only if you want to reduce boilerplate further. ⏭️ Skipped (changes internal API for modest gain)
+5. **P3-5 — Optionally move test wiring** if the test container grows. ⏭️ Skipped (style concern only, acceptable as-is)
