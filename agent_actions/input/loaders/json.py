@@ -5,7 +5,7 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
-from agent_actions.errors import DataParseError, FileLoadError, ValidationError
+from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
             self.handle_processing_error(
                 e,
                 operation,
-                DataParseError,
+                ValidationError,
                 file_path=file_path,
                 line_number=e.lineno if hasattr(e, "lineno") else None,
                 column_number=e.colno if hasattr(e, "colno") else None,
@@ -64,7 +64,7 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
             raise
         except Exception as e:
             self.handle_processing_error(
-                e, "Processing JSON content", DataParseError, file_path=file_path
+                e, "Processing JSON content", ValidationError, file_path=file_path
             )
             raise
 

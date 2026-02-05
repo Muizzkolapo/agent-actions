@@ -148,6 +148,53 @@ class VendorConfigError(PreFlightValidationError):
         self.unsupported_features = unsupported_features or []
 
 
+class ContextStructureError(PreFlightValidationError):
+    """Raised when context data structure doesn't match expected schema."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        expected_fields: Optional[List[str]] = None,
+        actual_fields: Optional[List[str]] = None,
+        agent_name: Optional[str] = None,
+        mode: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        cause: Optional[Exception] = None,
+    ):
+        ctx = context or {}
+        if expected_fields is not None:
+            ctx["expected_fields"] = expected_fields
+        if actual_fields is not None:
+            ctx["actual_fields"] = actual_fields
+
+        hint = None
+        missing_list: Optional[List[str]] = None
+        if expected_fields and actual_fields is not None:
+            # actual_fields=[] means "known empty" — compute the real diff
+            missing = sorted(set(expected_fields) - set(actual_fields))
+            missing_list = missing if missing else None
+            if missing:
+                hint = f"Missing required fields: {', '.join(missing)}"
+        elif expected_fields:
+            # actual_fields=None means "unknown" — assume all expected are missing
+            missing_list = expected_fields
+
+        super().__init__(
+            message,
+            missing_references=missing_list,
+            available_references=actual_fields if actual_fields else None,
+            hint=hint,
+            mode=mode,
+            agent_name=agent_name,
+            context=ctx,
+            cause=cause,
+        )
+
+        self.expected_fields = expected_fields or []
+        self.actual_fields = actual_fields or []
+
+
 class PathValidationError(PreFlightValidationError):
     """Raised when file or directory paths are invalid or inaccessible.
 

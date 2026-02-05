@@ -5,7 +5,7 @@ import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
 
-from agent_actions.errors import DataParseError, FileLoadError
+from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
 
 logger = logging.getLogger(__name__)
@@ -42,14 +42,14 @@ class XmlLoader(BaseLoader[ET.Element]):
                 position_info["column_number"] = e.position[1]
             operation = f"Parsing XML from {file_path or 'content string'}"
             self.handle_processing_error(
-                e, operation, DataParseError, file_path=file_path, **position_info
+                e, operation, ValidationError, file_path=file_path, **position_info
             )
             raise
         except FileLoadError:
             raise
         except Exception as e:
             self.handle_processing_error(
-                e, "Processing XML content", DataParseError, file_path=file_path
+                e, "Processing XML content", ValidationError, file_path=file_path
             )
             raise
 

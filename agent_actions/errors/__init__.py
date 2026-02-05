@@ -74,6 +74,7 @@ from agent_actions.errors.operations import (
 # Pre-flight validation errors
 from agent_actions.errors.preflight import (
     PreFlightValidationError,
+    ContextStructureError,
     VendorConfigError,
     PathValidationError,
 )
@@ -81,9 +82,6 @@ from agent_actions.errors.preflight import (
 # Backward compatibility aliases
 AgentActionsException = AgentActionsError
 ProcessorError = ProcessingError
-LoaderError = FileSystemError
-DataParseError = ValidationError
-UnsupportedFormatError = ValidationError
 
 __all__ = [
     # Base
@@ -135,11 +133,9 @@ __all__ = [
     "TemplateVariableError",
     # Pre-flight validation
     "PreFlightValidationError",
+    "ContextStructureError",
     "VendorConfigError",
     "PathValidationError",
     # Backward compatibility aliases
     "ProcessorError",
-    "LoaderError",
-    "DataParseError",
-    "UnsupportedFormatError",
 ]

@@ -27,6 +27,7 @@ class TemplateVariableError(TemplateRenderingError):
 
     def __init__(
         self,
+        *,
         missing_variables: list,
         available_variables: list,
         agent_name: str,
@@ -51,9 +52,19 @@ class TemplateVariableError(TemplateRenderingError):
         self.available_variables = available_variables
         self.agent_name = agent_name
         self.mode = mode
-        self.cause = cause
         self.namespace_context = namespace_context or {}
         self.template_line = template_line
 
+        ctx = {
+            "missing_variables": missing_variables,
+            "available_variables": available_variables,
+            "agent_name": agent_name,
+            "mode": mode,
+        }
+        if namespace_context:
+            ctx["namespace_context"] = namespace_context
+        if template_line is not None:
+            ctx["template_line"] = template_line
+
         msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
-        super().__init__(msg)
+        super().__init__(msg, context=ctx, cause=cause)

@@ -12,19 +12,19 @@ The errors folder is a well-organized exception hierarchy with a clean base clas
 
 ### P1 -- High Impact (Significant simplification, low risk)
 
-1. **Duplicate file: `external.py` is identical to `external_services.py`**
+1. ~~**Duplicate file: `external.py` is identical to `external_services.py`**~~ **DONE** (PR #902)
    - **File:** `agent_actions/errors/external.py` (93 lines) and `agent_actions/errors/external_services.py` (93 lines)
    - **What:** These two files are byte-for-byte identical. `diff` produces zero output. The `__init__.py` imports from `external_services.py` only. No other file in the codebase imports from `external.py`.
    - **Why simplify:** Dead file that creates confusion about which is canonical, doubles maintenance surface, and could lead to divergent edits.
    - **Risk:** None. `external.py` has zero downstream consumers.
 
-2. **Missing class definition: `ContextStructureError` referenced but never defined**
+2. ~~**Missing class definition: `ContextStructureError` referenced but never defined**~~ **DONE** (PR #902)
    - **File:** Referenced in `agent_actions/prompt/service.py` lines 333-341 as `from agent_actions.errors.preflight import ContextStructureError`
    - **What:** `ContextStructureError` does not exist as a class definition in `preflight.py` or anywhere else in the codebase. The manifest (`_MANIFEST.md` line 43) lists it as a class in `preflight.py`, but it was never implemented. At runtime, if `request.agent_config is None` in `prompt/service.py`, the lazy import will raise `ImportError`.
    - **Why simplify:** This is a latent runtime bug. Either define the class in `preflight.py` or replace the reference with an existing error class (e.g., `PreFlightValidationError`).
    - **Risk:** Low -- the fix is straightforward, but the code path may be rarely triggered.
 
-3. **Stale manifest: `DependencyValidationError` listed but not defined in errors folder**
+3. ~~**Stale manifest: `DependencyValidationError` listed but not defined in errors folder**~~ **DONE** (PR #902)
    - **File:** `agent_actions/errors/_MANIFEST.md` line 44
    - **What:** The manifest lists `DependencyValidationError` as a class in `preflight.py`, but it does not exist there. A separate `DependencyValidationError` exists in `agent_actions/input/preprocessing/field_resolution/exceptions.py` (inheriting from `FieldResolutionError`, not from the errors hierarchy). The manifest is misleading.
    - **Why simplify:** Stale manifest entries cause navigation errors for developers and AI agents relying on AMP.
@@ -32,24 +32,17 @@ The errors folder is a well-organized exception hierarchy with a clean base clas
 
 ### P2 -- Medium Impact (Meaningful improvement, moderate effort)
 
-4. **Backward-compatibility aliases still actively consumed**
+4. ~~**Backward-compatibility aliases still actively consumed**~~ **PARTIALLY DONE** (PR #902)
    - **File:** `agent_actions/errors/__init__.py` lines 82-86
-   - **What:** Five aliases are defined:
-     - `AgentActionsException = AgentActionsError` -- **heavily used** (20+ call sites across `output/writer.py`, `llm/realtime/output.py`, `processing/result_collector.py`, `input/loaders/file_reader.py`, `input/loaders/tabular.py`, `input/preprocessing/staging/initial_pipeline.py`, `workflow/pipeline.py`, `prompt/prompt_utils.py`, `utils/udf_management/tooling.py`, `utils/error_handler.py`, tests)
-     - `ProcessorError = ProcessingError` -- **used** in `processing/error_handling.py` (imports as `ProcessingError as ProcessorError`)
-     - `DataParseError = ValidationError` -- **used** in `input/loaders/json.py` and `input/loaders/xml.py`
-     - `LoaderError = FileSystemError` -- **never used** outside `__init__.py`
-     - `UnsupportedFormatError = ValidationError` -- **never used** outside `__init__.py`
-   - **Why simplify:** The aliases create two names for the same class, confusing developers reading `except AgentActionsException` vs `except AgentActionsError`. The two unused aliases (`LoaderError`, `UnsupportedFormatError`) can be removed immediately. The three in-use aliases should be migrated (replace old names with canonical names at call sites, then deprecate).
-   - **Risk:** Moderate -- requires coordinated changes across many files for the active aliases. The two unused aliases can be removed with zero risk.
+   - **What:** Five aliases were defined. PR #902 removed three (`LoaderError`, `UnsupportedFormatError`, `DataParseError`) and migrated `DataParseError` call sites in `json.py`/`xml.py` to `ValidationError`.
+   - **Remaining:**
+     - `AgentActionsException = AgentActionsError` -- **heavily used** (20+ call sites) -- dedicated PR needed
+     - `ProcessorError = ProcessingError` -- **used** in `processing/error_handling.py`
+   - **Risk:** Moderate -- remaining aliases require coordinated changes across many files.
 
-5. **`TemplateVariableError` bypasses base class `context`/`cause` contract**
+5. ~~**`TemplateVariableError` bypasses base class `context`/`cause` contract**~~ **DONE** (PR #902)
    - **File:** `agent_actions/errors/operations.py` lines 25-59
-   - **What:** `TemplateVariableError.__init__` stores `self.cause = cause` directly and calls `super().__init__(msg)` with only the message string -- it does NOT pass `context=` or `cause=` to the parent `AgentActionsError.__init__`. This means:
-     - `self.context` will be `{}` (set by base class default) despite having rich attributes
-     - `self.__cause__` will not be set by the base class (the base class sets it when `cause` is passed)
-     - The `__str__` method from `AgentActionsError` will not include any context in the string representation
-   - **Why simplify:** Inconsistent with every other error class in the hierarchy that properly delegates to the base. Limits debuggability.
+   - **What:** `TemplateVariableError.__init__` stored `self.cause = cause` directly and called `super().__init__(msg)` without `context=` or `cause=`. Now delegates properly, and args are keyword-only to match the rest of the hierarchy.
    - **Risk:** Low -- callers already rely on the instance attributes directly.
 
 6. **`VendorAPIError` multi-signature `__init__` is overly complex**
@@ -230,24 +223,22 @@ This is the only upstream dependency. It is a lazy import to avoid circular impo
 
 ## Recommended Simplification Order
 
-1. **Delete `external.py`** (P1-1) -- Zero risk, immediate 93-line reduction, eliminates confusion. No coordinated changes needed.
+1. ~~**Delete `external.py`** (P1-1)~~ **DONE** (PR #902)
 
-2. **Define `ContextStructureError` in `preflight.py` or fix the reference in `prompt/service.py`** (P1-2) -- Fixes a latent runtime bug. Decide whether this should be a new subclass of `PreFlightValidationError` or if the call site should use `PreFlightValidationError` directly.
+2. ~~**Define `ContextStructureError` in `preflight.py`** (P1-2)~~ **DONE** (PR #902)
 
-3. **Fix manifest: remove phantom `ContextStructureError` and `DependencyValidationError` entries** (P1-3) -- Or add them if they should exist. Align manifest with reality.
+3. ~~**Fix manifest: remove phantom `DependencyValidationError`, move `TemplateVariableError` to correct section** (P1-3)~~ **DONE** (PR #902)
 
-4. **Remove unused aliases `LoaderError` and `UnsupportedFormatError`** (P2-4, partial) -- Zero consumers, immediate cleanup.
+4. ~~**Remove unused aliases `LoaderError`, `UnsupportedFormatError`, `DataParseError`; migrate `DataParseError` call sites** (P2-4, partial)~~ **DONE** (PR #902)
 
-5. **Fix `TemplateVariableError` to properly delegate to base class** (P2-5) -- Small change, improves consistency across the hierarchy.
+5. ~~**Fix `TemplateVariableError` to properly delegate to base class; make args keyword-only** (P2-5)~~ **DONE** (PR #902)
 
 6. **Extract shared `format_user_message` pattern** (P2-8) -- Reduces ~60 lines of duplicated formatting logic between `SchemaValidationError` and `PreFlightValidationError`.
 
-7. **Migrate `DataParseError` usage to `ValidationError`** (P2-4, partial) -- Only 2 files to update.
+7. **Plan `AgentActionsException` to `AgentActionsError` migration** (P2-4, remaining) -- Large blast radius, do as a dedicated PR with a deprecation period.
 
-8. **Plan `AgentActionsException` to `AgentActionsError` migration** (P2-4, partial) -- Large blast radius, do as a dedicated PR with a deprecation period.
+8. **Simplify `VendorAPIError` and `ConfigValidationError` constructors** (P2-6, P2-7) -- Audit call sites first, then consolidate to single clean signatures.
 
-9. **Simplify `VendorAPIError` and `ConfigValidationError` constructors** (P2-6, P2-7) -- Audit call sites first, then consolidate to single clean signatures.
+9. **Remove unused exception classes or mark them with deprecation TODO** (P3-9) -- Low priority, evaluate during next cleanup cycle.
 
-10. **Remove unused exception classes or mark them with deprecation TODO** (P3-9) -- Low priority, evaluate during next cleanup cycle.
-
-11. **Remove `pass` statements from classes that already have docstrings** (P3-10) -- Trivial cleanup, can be batched with any other PR.
+10. **Remove `pass` statements from classes that already have docstrings** (P3-10) -- Trivial cleanup, can be batched with any other PR.
