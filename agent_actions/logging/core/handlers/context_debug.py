@@ -13,16 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
-# Try to import Rich, fall back to plain print if not available
-try:
-    from rich.console import Console
-    from rich.tree import Tree
-
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
-    Console = None  # type: ignore
-    Tree = None  # type: ignore
+from agent_actions.logging.core._compat import RICH_AVAILABLE, Console, Tree
 
 
 @dataclass

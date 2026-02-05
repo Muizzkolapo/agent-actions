@@ -34,6 +34,11 @@ class EventLevel(Enum):
             EventLevel.ERROR: logging.ERROR,
         }[self]
 
+    @classmethod
+    def ordered(cls) -> list["EventLevel"]:
+        """Return levels in severity order (DEBUG < INFO < WARN < ERROR)."""
+        return [cls.DEBUG, cls.INFO, cls.WARN, cls.ERROR]
+
 
 class EventCategory(Enum):
     """
@@ -141,31 +146,3 @@ class BaseEvent:
             "meta": self.meta.to_dict(),
             "data": self.data,
         }
-
-
-# Level mixin classes (dbt-style)
-# These provide a clean way to declare event levels
-
-
-class DebugLevel:
-    """Mixin for debug-level events."""
-
-    level: EventLevel = EventLevel.DEBUG
-
-
-class InfoLevel:
-    """Mixin for info-level events."""
-
-    level: EventLevel = EventLevel.INFO
-
-
-class WarnLevel:
-    """Mixin for warning-level events."""
-
-    level: EventLevel = EventLevel.WARN
-
-
-class ErrorLevel:
-    """Mixin for error-level events."""
-
-    level: EventLevel = EventLevel.ERROR

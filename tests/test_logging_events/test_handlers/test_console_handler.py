@@ -6,7 +6,6 @@ This module tests:
 - Category filtering
 - Custom formatters
 - Rich console integration
-- QuietConsoleHandler and VerboseConsoleHandler variants
 """
 
 import sys
@@ -19,8 +18,6 @@ import pytest
 from agent_actions.logging.core.events import BaseEvent, EventLevel, EventMeta
 from agent_actions.logging.core.handlers.console import (
     ConsoleEventHandler,
-    QuietConsoleHandler,
-    VerboseConsoleHandler,
     RICH_AVAILABLE,
 )
 
@@ -233,52 +230,6 @@ class TestConsoleEventHandlerFlush:
         with patch.object(sys.stderr, "flush") as mock_flush:
             handler.flush()
             mock_flush.assert_called_once()
-
-
-class TestQuietConsoleHandler:
-    """Tests for QuietConsoleHandler."""
-
-    def test_min_level_is_warn(self):
-        """Test that QuietConsoleHandler has WARN min level."""
-        handler = QuietConsoleHandler()
-        assert handler.min_level == EventLevel.WARN
-
-    def test_accepts_warn_and_error(self):
-        """Test that only WARN and ERROR are accepted."""
-        handler = QuietConsoleHandler()
-
-        debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
-        info_event = BaseEvent(level=EventLevel.INFO, message="info")
-        warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
-        error_event = BaseEvent(level=EventLevel.ERROR, message="error")
-
-        assert not handler.accepts(debug_event)
-        assert not handler.accepts(info_event)
-        assert handler.accepts(warn_event)
-        assert handler.accepts(error_event)
-
-
-class TestVerboseConsoleHandler:
-    """Tests for VerboseConsoleHandler."""
-
-    def test_min_level_is_debug(self):
-        """Test that VerboseConsoleHandler has DEBUG min level."""
-        handler = VerboseConsoleHandler()
-        assert handler.min_level == EventLevel.DEBUG
-
-    def test_accepts_all_levels(self):
-        """Test that all levels are accepted."""
-        handler = VerboseConsoleHandler()
-
-        debug_event = BaseEvent(level=EventLevel.DEBUG, message="debug")
-        info_event = BaseEvent(level=EventLevel.INFO, message="info")
-        warn_event = BaseEvent(level=EventLevel.WARN, message="warn")
-        error_event = BaseEvent(level=EventLevel.ERROR, message="error")
-
-        assert handler.accepts(debug_event)
-        assert handler.accepts(info_event)
-        assert handler.accepts(warn_event)
-        assert handler.accepts(error_event)
 
 
 class TestRichIntegration:

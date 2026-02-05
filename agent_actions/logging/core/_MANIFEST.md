@@ -15,6 +15,7 @@ registrations consumed by both CLI commands and runtime services.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `_compat.py` | Module | Optional dependency compatibility helpers (Rich availability check). | `logging` |
 | `events.py` | Module | Event emitter definitions shared by logging pipelines. | `logging`, `events` |
 | `manager.py` | Module | Central manager that instantiates configured loggers. | `logging` |
 | `protocols.py` | Module | Protocol/type definitions used by logging handlers. | `typing`, `logging` |

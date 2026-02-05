@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Dict, Literal, Optional
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -30,15 +30,6 @@ class LoggingConfig:
     module_levels: Dict[str, LogLevel] = field(default_factory=dict)
     include_timestamps: bool = True
     include_source_location: bool = False
-    redact_patterns: List[str] = field(
-        default_factory=lambda: [
-            r"api[_-]?key",
-            r"secret",
-            r"token",
-            r"password",
-            r"credential",
-        ]
-    )
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
 
     @classmethod
@@ -69,16 +60,6 @@ class LoggingConfig:
             module_levels=logging_config.get("module_levels", {}),
             include_timestamps=logging_config.get("include_timestamps", True),
             include_source_location=logging_config.get("include_source_location", True),
-            redact_patterns=logging_config.get(
-                "redact_patterns",
-                [
-                    r"api[_-]?key",
-                    r"secret",
-                    r"token",
-                    r"password",
-                    r"credential",
-                ],
-            ),
             file_handler=file_settings,
         )
 

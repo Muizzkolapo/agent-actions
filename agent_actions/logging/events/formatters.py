@@ -13,14 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
 
-# Try to import Rich for colored output
-try:
-    from rich.console import Console as _RichConsole  # noqa: F401
-
-    RICH_AVAILABLE = True
-    del _RichConsole  # Only needed for availability check
-except ImportError:
-    RICH_AVAILABLE = False
+from agent_actions.logging.core._compat import RICH_AVAILABLE
 
 
 class AgentActionsFormatter:

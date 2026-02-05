@@ -1080,7 +1080,7 @@ class BatchSubmissionFailedEvent(BaseEvent):
 
     @property
     def code(self) -> str:
-        return "B004"
+        return "B009"
 
 
 @dataclass
@@ -1103,7 +1103,7 @@ class BatchStatusCheckFailedEvent(BaseEvent):
 
     @property
     def code(self) -> str:
-        return "B005"
+        return "B010"
 
 
 @dataclass
@@ -1124,7 +1124,7 @@ class BatchResultProcessingFailedEvent(BaseEvent):
 
     @property
     def code(self) -> str:
-        return "B006"
+        return "B011"
 
 
 @dataclass
@@ -1147,7 +1147,7 @@ class BatchPartialFailureEvent(BaseEvent):
 
     @property
     def code(self) -> str:
-        return "B007"
+        return "B012"
 
 
 # =============================================================================

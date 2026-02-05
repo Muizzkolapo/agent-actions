@@ -5,7 +5,6 @@ This module tests:
 - EventCategory enum
 - EventMeta dataclass and serialization
 - BaseEvent dataclass and behavior
-- Level mixin classes
 - Domain-specific events (WorkflowStartEvent, AgentCompleteEvent, etc.)
 """
 
@@ -19,10 +18,6 @@ from agent_actions.logging.core.events import (
     EventLevel,
     EventCategory,
     EventMeta,
-    DebugLevel,
-    InfoLevel,
-    WarnLevel,
-    ErrorLevel,
 )
 from agent_actions.logging.events.types import (
     EventCategories,
@@ -229,26 +224,6 @@ class TestBaseEvent:
         assert event.message == "Custom: test_value"
         assert event.code == "X999"
         assert event.event_type == "CustomEvent"
-
-
-class TestLevelMixins:
-    """Tests for level mixin classes."""
-
-    def test_debug_level_mixin(self):
-        """Test DebugLevel mixin sets correct level."""
-        assert DebugLevel.level == EventLevel.DEBUG
-
-    def test_info_level_mixin(self):
-        """Test InfoLevel mixin sets correct level."""
-        assert InfoLevel.level == EventLevel.INFO
-
-    def test_warn_level_mixin(self):
-        """Test WarnLevel mixin sets correct level."""
-        assert WarnLevel.level == EventLevel.WARN
-
-    def test_error_level_mixin(self):
-        """Test ErrorLevel mixin sets correct level."""
-        assert ErrorLevel.level == EventLevel.ERROR
 
 
 class TestEventCategories:

@@ -15,14 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent, EventLevel
 
-# Try to import Rich, fall back to plain print if not available
-try:
-    from rich.console import Console
-
-    RICH_AVAILABLE = True
-except ImportError:
-    RICH_AVAILABLE = False
-    Console = None  # type: ignore
+from agent_actions.logging.core._compat import RICH_AVAILABLE, Console
 
 
 class ConsoleEventHandler:
@@ -92,7 +85,7 @@ class ConsoleEventHandler:
         from agent_actions.logging.core.events import EventLevel
 
         # Check level
-        level_order = [EventLevel.DEBUG, EventLevel.INFO, EventLevel.WARN, EventLevel.ERROR]
+        level_order = EventLevel.ordered()
         if level_order.index(event.level) < level_order.index(self.min_level):
             return False
 
@@ -164,29 +157,3 @@ class ConsoleEventHandler:
         # Join with separator
         separator = " | " if self.show_timestamp else " "
         return separator.join(parts)
-
-
-class QuietConsoleHandler(ConsoleEventHandler):
-    """
-    Minimal console handler that only shows errors and warnings.
-
-    Use this for quiet/silent mode where only problems are reported.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        from agent_actions.logging.core.events import EventLevel
-
-        super().__init__(min_level=EventLevel.WARN, **kwargs)
-
-
-class VerboseConsoleHandler(ConsoleEventHandler):
-    """
-    Verbose console handler that shows all events including debug.
-
-    Use this for debugging and troubleshooting.
-    """
-
-    def __init__(self, **kwargs: Any) -> None:
-        from agent_actions.logging.core.events import EventLevel
-
-        super().__init__(min_level=EventLevel.DEBUG, **kwargs)

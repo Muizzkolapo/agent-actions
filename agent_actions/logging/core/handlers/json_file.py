@@ -81,7 +81,7 @@ class JSONFileHandler:
         """
         from agent_actions.logging.core.events import EventLevel
 
-        level_order = [EventLevel.DEBUG, EventLevel.INFO, EventLevel.WARN, EventLevel.ERROR]
+        level_order = EventLevel.ordered()
         return level_order.index(event.level) >= level_order.index(self.min_level)
 
     def handle(self, event: BaseEvent) -> None:

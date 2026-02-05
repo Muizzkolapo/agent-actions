@@ -106,7 +106,7 @@ class LevelFilter:
     def filter(self, event: "BaseEvent") -> "BaseEvent | None":
         from agent_actions.logging.core.events import EventLevel
 
-        level_order = [EventLevel.DEBUG, EventLevel.INFO, EventLevel.WARN, EventLevel.ERROR]
+        level_order = EventLevel.ordered()
         if level_order.index(event.level) >= level_order.index(self.min_level):
             return event
         return None
