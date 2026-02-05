@@ -17,13 +17,13 @@ from agent_actions.cli.docs import docs  # Documentation generation and serving
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect  # Workflow inspection commands
 from agent_actions.cli.list_udfs import list_udfs_cmd
-from agent_actions.cli.commands.preview import preview  # Data preview for SQLite storage
+from agent_actions.cli.preview import preview  # Data preview for SQLite storage
 from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills  # Skills installation for Claude/Codex
 from agent_actions.cli.status import status
-from agent_actions.cli.test import clean_cli as clean
-from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
+from agent_actions.cli.clean import clean_cli as clean
+from agent_actions.errors import ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import (
     batch,  # CLI command group for batch processing operations
 )

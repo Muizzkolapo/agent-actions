@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)

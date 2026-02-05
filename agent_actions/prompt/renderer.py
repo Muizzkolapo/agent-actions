@@ -14,9 +14,9 @@ import yaml
 from yaml import YAMLError
 from pydantic import ValidationError
 
-from agent_actions.cli.utils.error_handler import ErrorHandler
-from agent_actions.cli.utils.error_wrap import as_validation_error
-from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.utils.error_handler import ErrorHandler
+from agent_actions.utils.error_wrap import as_validation_error
+from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates

@@ -4,7 +4,7 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     FileWriteStartedEvent,

@@ -30,3 +30,6 @@ pathways.
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. | `config.paths`, `file_io` |
 | `safe_format.py` | Module | Robust exception formatting (safe formatting, root cause extraction, chain formatting). | `logging`, `errors` |
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
+| `service_logger.py` | Module | Logging helpers with user-facing flag for INFO vs DEBUG level control. | `logging` |
+| `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
+| `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |

@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
-from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.utils.service_logger import ServiceLogger
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend

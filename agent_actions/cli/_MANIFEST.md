@@ -4,9 +4,7 @@
 
 | Sub-Module | Description |
 |------------|-------------|
-| [commands](commands/_MANIFEST.md) | CLI command implementations, including low-level runners and utilities. |
 | [renderers](renderers/_MANIFEST.md) | CLI renderers for agent-actions. |
-| [utils](utils/_MANIFEST.md) | - |
 
 ## Modules
 
@@ -79,5 +77,9 @@
 | `StatusCommand` | Class | Implementation of the status command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the status command. | - |
 | `status` | Function | Display the status of an agent workflow. | - |
-| `test.py` | Module | Clean command for the Agent Actions CLI. | `cli`, `llm_invocation`, `validation` |
+| `clean.py` | Module | Clean command for the Agent Actions CLI. | `cli`, `llm_invocation`, `validation` |
 | `clean_cli` | Function | CLI entrypoint for 'clean'. | - |
+| `preview.py` | Module | Preview command for viewing SQLite storage data. | `cli`, `storage`, `validation` |
+| `PreviewCommand` | Class | Implementation of the preview command. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the preview command. | - |
+| `preview` | Function | Preview data stored in the SQLite storage backend. | - |

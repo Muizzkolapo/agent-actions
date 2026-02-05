@@ -3,7 +3,7 @@
 import logging
 import io
 import pytest
-from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.utils.service_logger import ServiceLogger
 
 
 class TestServiceLoggerUserFacing:
