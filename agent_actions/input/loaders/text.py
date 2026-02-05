@@ -40,4 +40,4 @@ class TextLoader(BaseLoader[str]):
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""
-        return file_extension.lower() in [".txt", ".md", ".html"]
+        return file_extension.lower() in {".txt", ".md", ".html"}

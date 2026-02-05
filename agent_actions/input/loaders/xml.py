@@ -81,4 +81,4 @@ class XmlLoader(BaseLoader[ET.Element]):
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""
-        return file_extension.lower() in [".xml"]
+        return file_extension.lower() in {".xml"}

@@ -45,10 +45,6 @@ class InitialStageContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
-# Backward compatibility alias
-StagingContext = InitialStageContext
-
-
 @dataclass
 class DataPreparationContext:
     """Context for data preparation."""
@@ -75,6 +71,24 @@ class BatchProcessingContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
+def _derive_workflow_root(primary_path: Optional[str], fallback_path: str) -> Path:
+    """Derive workflow root by finding 'agent_io' in path parts.
+
+    Args:
+        primary_path: Preferred path to derive from (e.g. output_directory).
+        fallback_path: Path to use if primary_path is empty/None (e.g. base_directory).
+
+    Returns:
+        Path to the workflow root directory.
+    """
+    target_path = Path(primary_path) if primary_path else Path(fallback_path)
+    parts = target_path.parts
+    if "agent_io" in parts:
+        agent_io_idx = parts.index("agent_io")
+        return Path(*parts[:agent_io_idx])
+    return target_path.parent.parent.parent
+
+
 def _save_source_items_helper(
     source_items, file_path, base_directory, output_directory=None, storage_backend=None
 ):
@@ -95,28 +109,7 @@ def _save_source_items_helper(
         to ensure source data is saved to the TARGET workflow, not the source workflow.
     """
     relative_path = Path(file_path).relative_to(base_directory)
-
-    # Determine workflow root - prefer output_directory if provided (for inter-workflow deps)
-    # This ensures source is saved to the TARGET workflow when reading from upstream manifest
-    if output_directory:
-        output_path = Path(output_directory)
-        parts = output_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            # Fallback to going up from output directory
-            workflow_root = output_path.parent.parent.parent
-    else:
-        # Legacy behavior - derive from base_directory
-        base_path = Path(base_directory)
-        parts = base_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            # Fallback to going up 3 levels
-            workflow_root = base_path.parent.parent.parent
+    workflow_root = _derive_workflow_root(output_directory, base_directory)
 
     # Use unified saver with batch mode settings and optional storage backend
     saver = UnifiedSourceDataSaver(
@@ -339,24 +332,7 @@ def _should_save_source_items(
 
     # Build path to existing source file
     relative_path = Path(file_path).relative_to(base_directory)
-
-    # Determine workflow root (same logic as _save_source_items_helper)
-    if output_directory:
-        output_path = Path(output_directory)
-        parts = output_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            workflow_root = output_path.parent.parent.parent
-    else:
-        base_path = Path(base_directory)
-        parts = base_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            workflow_root = base_path.parent.parent.parent
+    workflow_root = _derive_workflow_root(output_directory, base_directory)
 
     source_file = workflow_root / "agent_io" / "source" / f"{relative_path.with_suffix('')}.json"
 
@@ -805,7 +781,3 @@ def _process_realtime_mode_with_record_processor(
         output_directory=str(output_directory),
     )
     file_writer.write_target(processed_items)
-
-
-# Backward compatibility alias
-generate_staging = process_initial_stage

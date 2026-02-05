@@ -102,6 +102,20 @@ class TemplateYamlLoader:
 
         return "\n".join(result)
 
+    def _render_param_lines(self, param_dict: Dict[str, Any], indent_str: str) -> List[str]:
+        """Render parameter dict as YAML key-value lines."""
+        lines: List[str] = []
+        for key, value in param_dict.items():
+            if isinstance(value, str):
+                lines.append(f'{indent_str}{key}: "{value}"')
+            elif isinstance(value, list):
+                lines.append(f"{indent_str}{key}:")
+                for item in value:
+                    lines.append(f'{indent_str}  - "{item}"')
+            else:
+                lines.append(f"{indent_str}{key}: {value}")
+        return lines
+
     def _process_multiline_template(self, template_block: str) -> str:
         """Process a multi-line template block."""
         # Find the indentation from the first line
@@ -139,16 +153,7 @@ class TemplateYamlLoader:
         else:
             yaml_lines = [f"{base_indent}template_type: {template_type}"]
 
-        for key, value in param_dict.items():
-            if isinstance(value, str):
-                yaml_lines.append(f'{item_indent}{key}: "{value}"')
-            elif isinstance(value, list):
-                yaml_lines.append(f"{item_indent}{key}:")
-                for item in value:
-                    yaml_lines.append(f'{item_indent}  - "{item}"')
-            else:
-                yaml_lines.append(f"{item_indent}{key}: {value}")
-
+        yaml_lines.extend(self._render_param_lines(param_dict, item_indent))
         return "\n".join(yaml_lines)
 
     def _process_template_line(self, line: str) -> str:
@@ -170,17 +175,7 @@ class TemplateYamlLoader:
 
         # Create YAML representation
         yaml_lines = [f"{indent_str}template_type: {template_type}"]
-
-        for key, value in param_dict.items():
-            if isinstance(value, str):
-                yaml_lines.append(f'{indent_str}{key}: "{value}"')
-            elif isinstance(value, list):
-                yaml_lines.append(f"{indent_str}{key}:")
-                for item in value:
-                    yaml_lines.append(f'{indent_str}  - "{item}"')
-            else:
-                yaml_lines.append(f"{indent_str}{key}: {value}")
-
+        yaml_lines.extend(self._render_param_lines(param_dict, indent_str))
         return "\n".join(yaml_lines)
 
     def _strip_quotes(self, value: str) -> str:

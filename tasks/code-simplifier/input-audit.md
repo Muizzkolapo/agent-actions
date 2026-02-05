@@ -25,9 +25,9 @@ The `input` package is moderately healthy but has several significant simplifica
 2. **Duplicated batch/realtime preparation in initial_pipeline.py** -- `staging/initial_pipeline.py` (811 lines)
    - `_prepare_batch_data()` (lines 525-584) and `_prepare_realtime_data()` (lines 587-675) both handle the same file types (`.txt`, `.md`, `.json`, `.csv`, `.xml`) with nearly identical branching structures and repeated loader instantiation.
    - Both functions duplicate chunk configuration extraction (chunk_size, overlap, tokenizer_model, split_method) from `agent_config`.
-   - `_save_source_items_helper()` (lines 78-131) and `_should_save_source_items()` (lines 303-400) duplicate the "derive workflow_root from agent_io path" logic (the same if/else block with `parts.index("agent_io")` appears **three times** across lines 101-119, 344-359).
+   - ~~`_save_source_items_helper()` (lines 78-131) and `_should_save_source_items()` (lines 303-400) duplicate the "derive workflow_root from agent_io path" logic (the same if/else block with `parts.index("agent_io")` appears **three times** across lines 101-119, 344-359).~~ **Partial done:** `_derive_workflow_root()` extracted in PR #903.
    - **Risk:** Low -- this is internal pipeline code with no public API surface.
-   - **Recommendation:** Extract a `_derive_workflow_root(path)` helper. Unify `_prepare_batch_data` and `_prepare_realtime_data` into a single function with a `mode` parameter, handling only the mode-specific differences (batch metadata injection).
+   - **Recommendation:** ~~Extract a `_derive_workflow_root(path)` helper.~~ Unify `_prepare_batch_data` and `_prepare_realtime_data` into a single function with a `mode` parameter, handling only the mode-specific differences (batch metadata injection).
 
 3. **Chunking strategies are trivial wrappers** -- `chunking/strategies/chunking_strategies.py` (129 lines)
    - `TiktokenChunkingStrategy.split_text_into_chunks()` (lines 48-71) simply calls `Tokenizer.split_text_content()` with `split_method="tiktoken"`.
@@ -51,10 +51,9 @@ The `input` package is moderately healthy but has several significant simplifica
    - **Risk:** Medium -- `FileReader` uses heavy dependencies (PyPDF2, python-docx, pandas, BeautifulSoup) and is the only code path for PDF/DOCX/XLSX reading.
    - **Recommendation:** Extract PDF/DOCX/XLSX reading into dedicated `BaseLoader` subclasses. Consider making `FileReader` a facade that delegates to the typed loaders.
 
-6. **`TemplateYamlLoader` duplicates YAML-to-dict conversion logic** -- `loaders/yaml.py` (283 lines)
-   - `_process_multiline_template()` (lines 105-152) and `_process_template_line()` (lines 154-184) share identical YAML line generation logic: both iterate over `param_dict`, format strings/lists/other types, and build `yaml_lines`. The only difference is the first line's list-item handling.
-   - **Risk:** Low -- self-contained module.
-   - **Recommendation:** Extract shared YAML line generation into a `_format_params_as_yaml(param_dict, indent_str)` helper.
+6. ~~**`TemplateYamlLoader` duplicates YAML-to-dict conversion logic** -- `loaders/yaml.py` (283 lines)~~
+   - ~~`_process_multiline_template()` (lines 105-152) and `_process_template_line()` (lines 154-184) share identical YAML line generation logic: both iterate over `param_dict`, format strings/lists/other types, and build `yaml_lines`. The only difference is the first line's list-item handling.~~
+   - **Done:** PR #903 (extracted `_render_param_lines()` helper)
 
 7. **`source_guid` extraction duplicated** -- `context_preprocessor.py:23-28` and `source_path.py:110-120`
    - `ContextPreprocessor.extract_guid_and_content()` extracts `source_guid` from nested dict structure.
@@ -75,14 +74,12 @@ The `input` package is moderately healthy but has several significant simplifica
 
 ### P3 -- Low Impact (Nice-to-have, minor cleanups)
 
-10. **`[DEBUG]` prefix in log messages** -- `historical.py` has 10+ `logger.debug()` calls with `[DEBUG]` prefix in the message string (e.g., line 84: `"[DEBUG] Finding node_id..."`). The `[DEBUG]` prefix is redundant since these are already at DEBUG level.
-    - Lines: 84, 88, 97-103, 105-107, 131-141, 155-163, 173, 402, 405-410, 439-445, 451, 458, 464, 470, 478, 481.
-    - **Risk:** None.
-    - **Recommendation:** Remove `[DEBUG]` prefixes from debug-level log messages.
+10. ~~**`[DEBUG]` prefix in log messages** -- `historical.py` has 10+ `logger.debug()` calls with `[DEBUG]` prefix in the message string (e.g., line 84: `"[DEBUG] Finding node_id..."`). The `[DEBUG]` prefix is redundant since these are already at DEBUG level.~~
+    - ~~Lines: 84, 88, 97-103, 105-107, 131-141, 155-163, 173, 402, 405-410, 439-445, 451, 458, 464, 470, 478, 481.~~
+    - **Done:** PR #903
 
-11. **`__version__` in `loaders/base.py`** -- Line 43: `__version__ = "0.1.0"`. This appears to be a leftover from early development. The project has a top-level `__version__.py`.
-    - **Risk:** None.
-    - **Recommendation:** Remove the module-level `__version__`.
+11. ~~**`__version__` in `loaders/base.py`** -- Line 43: `__version__ = "0.1.0"`. This appears to be a leftover from early development. The project has a top-level `__version__.py`.~~
+    - **Done:** PR #903
 
 12. **`_node_id` unused parameter** -- `historical.py:368`: `_find_record_by_identifiers` has parameter `_node_id: str` (underscore-prefixed to indicate it is unused) but the docstring says "kept for logging/diagnostics." The parameter is not used in the method body at all.
     - **Risk:** None.
@@ -92,13 +89,11 @@ The `input` package is moderately healthy but has several significant simplifica
     - **Risk:** Low.
     - **Recommendation:** Replace with explicit imports and define `__all__`.
 
-14. **`supports_filetype()` uses list instead of set** -- `json.py:73`, `tabular.py:82`, `xml.py:84`, `text.py:43` all use `file_extension.lower() in [".json"]` (single-element list). Using a set `{".json"}` would be more idiomatic and marginally faster.
-    - **Risk:** None.
-    - **Recommendation:** Change `[".json"]` to `{".json"}` etc.
+14. ~~**`supports_filetype()` uses list instead of set** -- `json.py:73`, `tabular.py:82`, `xml.py:84`, `text.py:43` all use `file_extension.lower() in [".json"]` (single-element list). Using a set `{".json"}` would be more idiomatic and marginally faster.~~
+    - **Done:** PR #903
 
-15. **`NotLikeOperator` and `NotBetweenOperator` instantiate new operators each call** -- `comparison.py:236-237`: `NotLikeOperator.evaluate()` creates `LikeOperator()` on every invocation. Similarly `NotBetweenOperator.evaluate()` (line 289) creates `BetweenOperator()` each time.
-    - **Risk:** None (negligible performance impact).
-    - **Recommendation:** Store the delegate as an instance attribute.
+15. ~~**`NotLikeOperator` and `NotBetweenOperator` instantiate new operators each call** -- `comparison.py:236-237`: `NotLikeOperator.evaluate()` creates `LikeOperator()` on every invocation. Similarly `NotBetweenOperator.evaluate()` (line 289) creates `BetweenOperator()` each time.~~
+    - **Done:** PR #903 (cached as class-level attributes)
 
 16. **`_operator_map` in `WhereClauseEvaluator` is a static mapping** -- `ast_nodes.py:299-316`. This dictionary could be a class-level constant since it never changes, avoiding reconstruction on each evaluator instantiation.
     - **Risk:** None.
@@ -108,9 +103,8 @@ The `input` package is moderately healthy but has several significant simplifica
     - **Risk:** Medium -- removing this import would break backward compatibility for consumers who import batch-related symbols from `input.loaders`.
     - **Recommendation:** Move this import to a compatibility shim or remove it, documenting the direct import path.
 
-18. **`StagingContext` backward-compatibility alias** -- `initial_pipeline.py:49`: `StagingContext = InitialStageContext`. Similarly `generate_staging = process_initial_stage` at line 811. If these aliases are no longer needed, they add confusion.
-    - **Risk:** Low -- need to verify no external consumers use the old names.
-    - **Recommendation:** Grep for usage and remove if unused.
+18. ~~**`StagingContext` backward-compatibility alias** -- `initial_pipeline.py:49`: `StagingContext = InitialStageContext`. Similarly `generate_staging = process_initial_stage` at line 811. If these aliases are no longer needed, they add confusion.~~
+    - **Done:** PR #903 (verified zero external consumers)
 
 19. **`SafeExpressionEvaluator` still uses `eval()`** -- `parser.py:527`. Despite the name "Safe," this class uses Python's `eval()` with a restricted context. While the AST validation is thorough, this remains a code smell that could be replaced with the AST-based `WhereClauseParser` for full expressions.
     - **Risk:** Security consideration -- the AST validation appears robust but `eval()` is inherently risky.
@@ -325,7 +319,7 @@ The `input` package is moderately healthy but has several significant simplifica
 ### `preprocessing/staging/initial_pipeline.py`
 - **Lines:** 811
 - **Complexity:** High. This is the largest and most complex file in the folder.
-- **Findings:** P1-2 (duplicated batch/realtime preparation, triplicated workflow_root derivation), P3-18 (backward-compat aliases)
+- **Findings:** P1-2 (duplicated batch/realtime preparation, ~~triplicated workflow_root derivation~~ **done**), ~~P3-18 (backward-compat aliases)~~ **done**
 
 ### `preprocessing/transformation/string_transformer.py`
 - **Lines:** 330
@@ -407,13 +401,13 @@ The `input` package is moderately healthy but has several significant simplifica
 
 ## Recommended Simplification Order
 
-1. **P3-10, P3-11, P3-14, P3-15, P3-16** -- Quick cosmetic fixes (remove DEBUG prefixes, version string, list-to-set, operator caching). Zero risk, immediate readability improvement. **~1 hour.**
+1. ~~**P3-10, P3-11, P3-14, P3-15, P3-16** -- Quick cosmetic fixes (remove DEBUG prefixes, version string, list-to-set, operator caching). Zero risk, immediate readability improvement.~~ **Done** (PR #903, except P3-16 skipped — instance cache already exists).
 
-2. **P1-2** -- Extract `_derive_workflow_root()` helper from `initial_pipeline.py`. This eliminates the triplicated path derivation logic and is self-contained. **~2 hours.**
+2. ~~**P1-2** -- Extract `_derive_workflow_root()` helper from `initial_pipeline.py`. This eliminates the triplicated path derivation logic and is self-contained.~~ **Partial done** (PR #903 — helper extracted; batch/realtime unification remains).
 
-3. **P2-7** -- Consolidate `source_guid` extraction between `context_preprocessor.py` and `source_path.py`. Small, localized change. **~30 minutes.**
+3. **P2-7** -- Consolidate `source_guid` extraction between `context_preprocessor.py` and `source_path.py`. Small, localized change.
 
-4. **P2-6** -- Extract shared YAML formatting helper in `yaml.py`. Self-contained, no cross-folder impact. **~1 hour.**
+4. ~~**P2-6** -- Extract shared YAML formatting helper in `yaml.py`. Self-contained, no cross-folder impact.~~ **Done** (PR #903).
 
 5. **P1-3** -- Simplify chunking strategies. Either inline `Tokenizer.split_text_content()` calls into `FieldChunker` or move actual splitting logic into the strategies. Self-contained within `chunking/`. **~2 hours.**
 

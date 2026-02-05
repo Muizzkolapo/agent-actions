@@ -70,4 +70,4 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""
-        return file_extension.lower() in [".json"]
+        return file_extension.lower() in {".json"}

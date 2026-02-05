@@ -82,7 +82,7 @@ class HistoricalNodeDataLoader:
             # Find the node_id in lineage for this action
             # If not found, this may be a parallel sibling (ancestry matching case)
             logger.debug(
-                "[DEBUG] Finding node_id for action='%s' in lineage=%s",
+                "Finding node_id for action='%s' in lineage=%s",
                 request.action_name,
                 request.lineage,
             )
@@ -95,16 +95,14 @@ class HistoricalNodeDataLoader:
 
             if is_parallel_sibling:
                 logger.debug(
-                    "[DEBUG] Node not in lineage for action '%s' - trying ancestry matching. "
+                    "Node not in lineage for action '%s' - trying ancestry matching. "
                     "parent_target_id=%s, root_target_id=%s",
                     request.action_name,
                     request.parent_target_id,
                     request.root_target_id,
                 )
             else:
-                logger.debug(
-                    "[DEBUG] Found node_id=%s for action='%s'", node_id, request.action_name
-                )
+                logger.debug("Found node_id=%s for action='%s'", node_id, request.action_name)
 
             # Storage backend is required for historical data loading
             if request.storage_backend is None:
@@ -128,10 +126,9 @@ class HistoricalNodeDataLoader:
 
             logger.debug("[HISTORICAL] Loaded %d records for %s", len(data), request.action_name)
 
-            # DEBUG: Log what we're searching for
             lineage_status = "provided" if request.caller_lineage else "None"
             logger.debug(
-                "[DEBUG] Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s, "
+                "Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s, "
                 "parent_target_id=%s, root_target_id=%s",
                 request.source_guid,
                 node_id,
@@ -151,12 +148,11 @@ class HistoricalNodeDataLoader:
                 action_name=request.action_name,
             )
 
-            # DEBUG: Log result
             if record:
                 content = record.get("content", {})
                 content_keys = list(content.keys()) if isinstance(content, dict) else []
                 logger.debug(
-                    "[DEBUG HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
+                    "[HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
                     request.action_name,
                     record.get("node_id"),
                     content_keys,
@@ -170,7 +166,7 @@ class HistoricalNodeDataLoader:
                 return content
 
             source_guids = set(r.get("source_guid") for r in data if isinstance(r, dict))
-            logger.debug("[DEBUG] No match found. File contains source_guids: %s", source_guids)
+            logger.debug("No match found. File contains source_guids: %s", source_guids)
             logger.warning(
                 "No record found for source_guid=%s, node_id=%s in action '%s'",
                 request.source_guid,
@@ -399,7 +395,7 @@ class HistoricalNodeDataLoader:
             The matching record or None if not found
         """
         if not isinstance(data, list):
-            logger.debug("[DEBUG _find_record] Data is not a list, type=%s", type(data))
+            logger.debug("Data is not a list, type=%s", type(data))
             return None
 
         logger.debug(
@@ -437,7 +433,7 @@ class HistoricalNodeDataLoader:
                 first_match = record  # Track first source_guid match as fallback
 
             logger.debug(
-                "[DEBUG _find_record] Match #%s: node_id=%s, parent_target_id=%s, root_target_id=%s",
+                "Match #%s: node_id=%s, parent_target_id=%s, root_target_id=%s",
                 matches_found,
                 record.get("node_id"),
                 record.get("parent_target_id"),
@@ -448,20 +444,20 @@ class HistoricalNodeDataLoader:
             if not is_parallel_sibling and caller_lineage is not None:
                 record_lineage = record.get("lineage")
                 if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
-                    logger.debug("[DEBUG _find_record] Lineage match found")
+                    logger.debug("Lineage match found")
                     return record
 
             # Strategy 2: Parent matching (for parallel siblings - Diamond pattern)
             if parent_target_id and record.get("parent_target_id") == parent_target_id:
                 if parent_match is None:
                     parent_match = record
-                    logger.debug("[DEBUG _find_record] Parent match found")
+                    logger.debug("Parent match found")
 
             # Strategy 3: Root matching (for Map-Reduce aggregation)
             if root_target_id and record.get("root_target_id") == root_target_id:
                 if root_match is None:
                     root_match = record
-                    logger.debug("[DEBUG _find_record] Root match found")
+                    logger.debug("Root match found")
 
         # Return based on priority
         if is_parallel_sibling:

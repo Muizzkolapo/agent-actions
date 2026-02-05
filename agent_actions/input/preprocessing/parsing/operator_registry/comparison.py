@@ -230,11 +230,12 @@ class LikeOperator(ComparisonOperator):
 class NotLikeOperator(ComparisonOperator):
     """SQL NOT LIKE pattern matching operator."""
 
+    _like_op = LikeOperator()  # Shared instance; LikeOperator must remain stateless
+
     def evaluate(
         self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
     ) -> bool:
-        like_op = LikeOperator()
-        return not like_op.evaluate(left, right, context)
+        return not self._like_op.evaluate(left, right, context)
 
     def get_info(self) -> OperatorInfo:
         return OperatorInfo(
@@ -283,11 +284,12 @@ class BetweenOperator(ComparisonOperator):
 class NotBetweenOperator(ComparisonOperator):
     """NOT BETWEEN range operator."""
 
+    _between_op = BetweenOperator()  # Shared instance; BetweenOperator must remain stateless
+
     def evaluate(
         self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
     ) -> bool:
-        between_op = BetweenOperator()
-        return not between_op.evaluate(left, right, context)
+        return not self._between_op.evaluate(left, right, context)
 
     def get_info(self) -> OperatorInfo:
         return OperatorInfo(
