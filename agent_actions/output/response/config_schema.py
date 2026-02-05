@@ -1,11 +1,12 @@
 """Configuration schema models for agent response processing."""
 
 from enum import Enum
-from typing import List, Optional, Dict, Any, Literal, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent_actions.errors import ValidationError
+from agent_actions.utils.constants import DANGEROUS_PATTERNS
 
 
 class FilterScope(str, Enum):
@@ -65,27 +66,8 @@ class WhereClauseConfig(BaseModel):
                     ),
                 },
             )
-        dangerous_patterns = [
-            "__import__",
-            "exec",
-            "eval",
-            "compile",
-            "open",
-            "file",
-            "input",
-            "raw_input",
-            "reload",
-            "vars",
-            "globals",
-            "locals",
-            "dir",
-            "hasattr",
-            "getattr",
-            "setattr",
-            "delattr",
-        ]
         clause_lower = v.lower()
-        for pattern in dangerous_patterns:
+        for pattern in DANGEROUS_PATTERNS:
             if pattern in clause_lower:
                 raise ValidationError(
                     f"WHERE clause contains potentially dangerous operation: {pattern}",
@@ -141,22 +123,8 @@ class SkipConditionConfig(BaseModel):
     def validate_expression(cls, v, info):
         """Validate custom expressions for safety."""
         if v and info.data.get("condition_type") == "custom":
-            dangerous_patterns = [
-                "__import__",
-                "exec",
-                "eval",
-                "compile",
-                "open",
-                "file",
-                "input",
-                "raw_input",
-                "reload",
-                "vars",
-                "globals",
-                "locals",
-            ]
             expr_lower = v.lower()
-            for pattern in dangerous_patterns:
+            for pattern in DANGEROUS_PATTERNS:
                 if pattern in expr_lower:
                     raise ValidationError(
                         f"Expression contains potentially dangerous operation: {pattern}",

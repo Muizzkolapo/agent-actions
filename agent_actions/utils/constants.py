@@ -16,6 +16,34 @@ RESERVED_AGENT_NAMES = frozenset(
     {"source", "version", "workflow", "seed", "prompt", "schema", "context_scope", "action"}
 )
 
+# Dangerous patterns that are blocked in user-provided expressions (guards, WHERE clauses, etc.)
+# These patterns indicate potentially dangerous operations that could be exploited.
+DANGEROUS_PATTERNS = frozenset(
+    {
+        "__import__",
+        "exec",
+        "eval",
+        "compile",
+        "open",
+        "file",
+        "input",
+        "raw_input",
+        "reload",
+        "vars",
+        "globals",
+        "locals",
+        "dir",
+        "hasattr",
+        "getattr",
+        "setattr",
+        "delattr",
+    }
+)
+
+# Extended dangerous patterns for UDF expressions (includes dunder access)
+DANGEROUS_PATTERNS_UDF = DANGEROUS_PATTERNS | {"__"}
+
+
 # Special namespaces that are always available without explicit dependency declarations.
 # These namespaces provide built-in data (source input, version iteration, workflow metadata, etc.)
 # and don't require being listed in an action's "dependencies" field.

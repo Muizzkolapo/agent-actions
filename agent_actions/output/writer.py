@@ -1,27 +1,26 @@
-"""
-Shared file writing utilities.
-"""
+"""Shared file writing utilities."""
 
-import json
+from __future__ import annotations
+
 import csv
+import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable
 
-from agent_actions.errors import AgentActionsException  # New modular pattern!
-from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.errors import AgentActionsException
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
-    FileWriteStartedEvent,
     FileWriteCompleteEvent,
+    FileWriteStartedEvent,
 )
+from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 
 class FileWriter(ProcessorErrorHandlerMixin):
-    """
-    File writer utility for writing data to various file formats.
+    """File writer utility for writing data to various file formats.
 
     Supports JSON, TXT, and CSV formats with integrated error handling.
     Uses ProcessorErrorHandlerMixin for consistent error reporting.
@@ -32,12 +31,11 @@ class FileWriter(ProcessorErrorHandlerMixin):
     def __init__(
         self,
         file_path: str,
-        storage_backend: Optional["StorageBackend"] = None,
-        node_name: Optional[str] = None,
-        output_directory: Optional[str] = None,
+        storage_backend: StorageBackend | None = None,
+        node_name: str | None = None,
+        output_directory: str | None = None,
     ):
-        """
-        Initialize file writer.
+        """Initialize file writer.
 
         Args:
             file_path: Path to the output file
@@ -52,18 +50,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self.node_name = node_name
         self.output_directory = output_directory
 
-    def write_staging(self, data):
-        """
-        Write data to staging file in appropriate format.
+    def _execute_write(
+        self, operation_name: str, write_fn: Callable[[], int]
+    ) -> None:
+        """Execute a write operation with event firing and error handling.
 
         Args:
-            data: Data to write (format depends on file type)
-
-        Raises:
-            AgentActionsException: If file type is unsupported
+            operation_name: Name of the operation for error reporting
+            write_fn: Callable that performs the write and returns bytes_written
         """
         try:
-            # Fire event before writing
             fire_event(
                 FileWriteStartedEvent(
                     file_path=str(self.file_path),
@@ -71,6 +67,38 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             )
 
+            bytes_written = write_fn()
+
+            fire_event(
+                FileWriteCompleteEvent(
+                    file_path=str(self.file_path),
+                    file_type=self.file_type,
+                    bytes_written=bytes_written,
+                )
+            )
+        except IOError as e:
+            self.handle_file_error(
+                e, operation_name, self.file_path, file_type=self.file_type
+            )
+        except Exception as e:
+            self.handle_processing_error(
+                e,
+                f"{operation_name} {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type,
+            )
+
+    def write_staging(self, data: Any) -> None:
+        """Write data to staging file in appropriate format.
+
+        Args:
+            data: Data to write (format depends on file type)
+
+        Raises:
+            AgentActionsException: If file type is unsupported
+        """
+
+        def do_write() -> int:
             with open(self.file_path, "w", encoding="utf-8") as file:
                 if self.file_type == ".json":
                     json.dump(data, file, indent=4)
@@ -87,124 +115,49 @@ class FileWriter(ProcessorErrorHandlerMixin):
                         f"Unsupported file type for staging: {self.file_type} "
                         f"for file {self.file_path}"
                     )
+            return Path(self.file_path).stat().st_size
 
-            # Get file size after writing
-            bytes_written = Path(self.file_path).stat().st_size
+        self._execute_write("Write staging file", do_write)
 
-            # Fire event after writing
-            fire_event(
-                FileWriteCompleteEvent(
-                    file_path=str(self.file_path),
-                    file_type=self.file_type,
-                    bytes_written=bytes_written,
-                )
-            )
-        except IOError as e:
-            self.handle_file_error(e, "write_staging", self.file_path, file_type=self.file_type)
-        except Exception as e:
-            # Catch-all to delegate all errors to error handler mixin
-            self.handle_processing_error(
-                e,
-                f"Write staging file {self.file_path}",
-                file_path=self.file_path,
-                file_type=self.file_type,
-            )
+    def write_target(self, data: list[dict[str, Any]]) -> None:
+        """Write data to target file.
 
-    def write_target(self, data: List[Dict[str, Any]]) -> None:
-        """
-        Write data to target file.
-
-        If a storage_backend is configured, writes to SQLite database.
-        Otherwise falls back to JSON file.
+        Requires a storage_backend for database-backed persistence.
 
         Args:
             data: Data to write (list of records)
         """
-        try:
-            # Fire event before writing
-            fire_event(
-                FileWriteStartedEvent(
-                    file_path=str(self.file_path),
-                    file_type=self.file_type,
-                )
-            )
 
-            # Storage backend is required - no JSON file fallback
+        def do_write() -> int:
             if self.storage_backend is None or self.node_name is None:
                 raise ValueError(
                     f"Storage backend not configured for write_target. "
                     f"Configure a storage backend (sqlite, tinydb) in your workflow. "
                     f"File: {self.file_path}"
                 )
-            # Compute relative path preserving subdirectory structure
             file_path = Path(self.file_path)
             if self.output_directory:
                 try:
                     relative_path = str(file_path.relative_to(self.output_directory))
                 except ValueError:
-                    # file_path not under output_directory, use filename only
                     relative_path = file_path.name
             else:
                 relative_path = file_path.name
             self.storage_backend.write_target(self.node_name, relative_path, data)
-            bytes_written = len(json.dumps(data))
+            return len(json.dumps(data))
 
-            # Fire event after writing
-            fire_event(
-                FileWriteCompleteEvent(
-                    file_path=str(self.file_path),
-                    file_type=self.file_type,
-                    bytes_written=bytes_written,
-                )
-            )
-        except IOError as e:
-            self.handle_file_error(e, "write_target", self.file_path, file_type=self.file_type)
-        except Exception as e:
-            # Catch-all to delegate all errors to error handler mixin
-            self.handle_processing_error(
-                e,
-                f"Write target file {self.file_path}",
-                file_path=self.file_path,
-                file_type=self.file_type,
-            )
+        self._execute_write("Write target file", do_write)
 
-    def write_source(self, data):
-        """
-        Write data to source file in JSON format.
+    def write_source(self, data: Any) -> None:
+        """Write data to source file in JSON format.
 
         Args:
             data: Data to write as JSON
         """
-        try:
-            # Fire event before writing
-            fire_event(
-                FileWriteStartedEvent(
-                    file_path=str(self.file_path),
-                    file_type=self.file_type,
-                )
-            )
 
+        def do_write() -> int:
             with open(self.file_path, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=4)
+            return Path(self.file_path).stat().st_size
 
-            # Get file size after writing
-            bytes_written = Path(self.file_path).stat().st_size
-
-            # Fire event after writing
-            fire_event(
-                FileWriteCompleteEvent(
-                    file_path=str(self.file_path),
-                    file_type=self.file_type,
-                    bytes_written=bytes_written,
-                )
-            )
-        except IOError as e:
-            self.handle_file_error(e, "write_source", self.file_path, file_type=self.file_type)
-        except Exception as e:
-            # Catch-all to delegate all errors to error handler mixin
-            self.handle_processing_error(
-                e,
-                f"Write source file {self.file_path}",
-                file_path=self.file_path,
-                file_type=self.file_type,
-            )
+        self._execute_write("Write source file", do_write)

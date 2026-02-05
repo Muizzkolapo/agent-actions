@@ -52,25 +52,6 @@ class FileHandler:
         return None
 
     @staticmethod
-    def find_agent_folder(working_directory, folder_name, base_dir):
-        """
-        Searches for a specific folder within the base directory.
-
-        Parameters:
-            working_directory (str): The base directory to start searching from.
-            folder_name (str): The name of the folder to search for.
-            base_dir (str): The base directory name.
-
-        Returns:
-            str or None: The full path to the folder if found, otherwise None.
-        """
-        base_path = Path(working_directory) / base_dir
-        for root, dirs, _ in os.walk(str(base_path)):
-            if folder_name in dirs:
-                return str(Path(root) / folder_name)
-        return None
-
-    @staticmethod
     def get_agent_paths(agent_name):
         """
         Returns the agent configuration directory and IO directory.
@@ -108,7 +89,7 @@ class FileHandler:
         if parent_dir != Path(base_dir):  # Ensure we're not at the root
             return FileHandler.find_config_file(str(parent_dir), filename)
 
-        print(f"Config file '{filename}' not found in {base_dir} or its parent directories.")
+        logger.warning("Config file '%s' not found in %s or its parent directories.", filename, base_dir)
         return None
 
     @staticmethod
@@ -136,22 +117,6 @@ class FileHandler:
         return None
 
     @staticmethod
-    def get_folder(agent_name):
-        """
-        Gets the folder name and full path for an agent's configuration.
-
-        Parameters:
-            agent_name (str): The name of the agent.
-
-        Returns:
-            tuple: (folder_name, full_path) or (None, None) if not found.
-        """
-        agent_config_dir = Path.cwd() / "agent_config"
-        filename = f"{agent_name}.yml" if not agent_name.endswith(".yml") else agent_name
-        full_path = FileHandler.find_config_file(str(agent_config_dir), filename)
-        return FileHandler.get_folder_after_agent_config(full_path), full_path
-
-    @staticmethod
     def get_all_agent_paths(base_dir):
         """
         Gets all agent configuration file paths within the base directory.
@@ -169,26 +134,3 @@ class FileHandler:
                     agent_paths.append(str(Path(root) / file))
         return agent_paths
 
-    @staticmethod
-    def get_file_info(file_path):
-        """
-        Gets information about a file in the staging directory.
-
-        Parameters:
-            file_path (str): The file path in the staging directory.
-
-        Returns:
-            str: The source file path or an error message.
-        """
-        file_path = Path(file_path)
-        if not file_path.exists():
-            return f"File '{file_path}' does not exist."
-
-        dir_path = file_path.parent
-        agent_dir = dir_path.parent
-        source_path = agent_dir / "source"
-        source_file_path = source_path / file_path.name
-
-        if source_path.exists():
-            return str(source_file_path)
-        return None

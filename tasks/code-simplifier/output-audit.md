@@ -250,3 +250,41 @@ The `output/` folder contains 2,926 lines across 12 modules spanning two concern
 8. **P2 #6 -- Convert `ActionExpander` to module-level functions.** Larger refactor but straightforward. Improves readability of the largest module in the folder.
 9. **P2 #7 -- Convert `FileHandler` to module-level functions.** Similar to #8 but with more downstream consumers.
 10. **P2 #5 -- Unify `AgentEntryDict` and `AgentConfig` field definitions.** Highest effort, highest blast radius. Should be tackled only after the simpler items are done and with a clear migration plan.
+
+---
+
+## Status: ✅ COMPLETED (Phase 1)
+
+**Date completed:** 2026-02-05
+
+### Completed Items
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| P1 #1 | Quadruplicated dangerous_patterns | Extracted to `DANGEROUS_PATTERNS` and `DANGEROUS_PATTERNS_UDF` in utils/constants.py |
+| P1 #2 | Dead FileHandler methods | Removed `find_agent_folder`, `get_folder`, `get_file_info` (~45 lines) |
+| P1 #3 | Repetitive writer boilerplate | Extracted `_execute_write()` helper method |
+| P2 #4 | Vestigial SourceSaveMode/factory | Removed enum and factory function (~40 lines) |
+| P3 #8 | Stale "New modular pattern!" comment | Removed |
+| P3 #10 | print() instead of logger | Changed to `logger.warning()` |
+| P3 #12 | GuardParser.parse_consolidated | Removed; tests import `parse_guard_config` directly |
+| P3 #14 | Stale docstring in saver.py | Updated to reflect current behavior |
+
+### Deferred Items
+
+| Finding | Reason |
+|---------|--------|
+| P2 #5: Unify AgentEntryDict/AgentConfig | High blast radius - touches 6+ modules |
+| P2 #6: Convert ActionExpander to functions | Medium blast radius - 7 consumers |
+| P2 #7: Convert FileHandler to functions | Medium blast radius - 8 consumers |
+| P3 #9: Empty response/__init__.py | Low priority |
+| P3 #11: SchemaLoader all-static class | Low priority |
+| P3 #13: Dead branch in _process_schema_config | Trivial |
+| P3 #15: Nested field-type parsing | Low priority |
+
+### Net Result
+
+- **Lines removed:** ~371
+- **Lines added:** ~128
+- **Net:** -243 lines
+- **Tests:** 16 passed (consolidated guard tests)

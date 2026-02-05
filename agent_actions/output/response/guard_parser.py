@@ -2,7 +2,9 @@
 
 import re
 from enum import Enum
+
 from agent_actions.errors import ValidationError
+from agent_actions.utils.constants import DANGEROUS_PATTERNS, DANGEROUS_PATTERNS_UDF
 
 
 class GuardType(str, Enum):
@@ -124,28 +126,8 @@ class GuardParser:
                     ),
                 },
             )
-        dangerous_patterns = [
-            "__import__",
-            "exec",
-            "eval",
-            "compile",
-            "open",
-            "file",
-            "input",
-            "raw_input",
-            "reload",
-            "vars",
-            "globals",
-            "locals",
-            "dir",
-            "hasattr",
-            "getattr",
-            "setattr",
-            "delattr",
-            "__",
-        ]
         expression_lower = expression.lower()
-        for pattern in dangerous_patterns:
+        for pattern in DANGEROUS_PATTERNS_UDF:
             if pattern in expression_lower:
                 raise ValidationError(
                     f"UDF expression contains potentially dangerous pattern: {pattern}",
@@ -177,27 +159,8 @@ class GuardParser:
         Raises:
             ValueError: If expression contains dangerous patterns
         """
-        dangerous_patterns = [
-            "__import__",
-            "exec",
-            "eval",
-            "compile",
-            "open",
-            "file",
-            "input",
-            "raw_input",
-            "reload",
-            "vars",
-            "globals",
-            "locals",
-            "dir",
-            "hasattr",
-            "getattr",
-            "setattr",
-            "delattr",
-        ]
         expression_lower = expression.lower()
-        for pattern in dangerous_patterns:
+        for pattern in DANGEROUS_PATTERNS:
             if pattern in expression_lower:
                 raise ValidationError(
                     f"SQL expression contains potentially dangerous pattern: {pattern}",
@@ -228,22 +191,6 @@ class GuardParser:
     def is_sql_guard(cls, guard: str) -> bool:
         """Check if a guard expression is SQL-like."""
         return guard and (not guard.strip().startswith(cls.UDF_PREFIX))
-
-    @classmethod
-    def parse_consolidated(cls, guard_data) -> "GuardConfig":
-        """
-        Parse consolidated guard configuration.
-
-        Args:
-            guard_data: String (legacy) or dict (new format)
-
-        Returns:
-            GuardConfig instance
-        """
-        from .consolidated_guard import parse_guard_config
-
-        return parse_guard_config(guard_data)
-
 
 def parse_guard(guard: str) -> GuardExpression:
     """Convenience function to parse guard expressions."""

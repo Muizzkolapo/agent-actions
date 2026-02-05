@@ -4,9 +4,13 @@ Following TDD approach - these tests define the expected API and behavior.
 """
 
 import pytest
-from agent_actions.output.response.guard_parser import GuardParser, GuardType, GuardExpression
-from agent_actions.output.response.consolidated_guard import GuardConfig, GuardBehavior
-from agent_actions.errors import ValidationError, ConfigValidationError  # New modular pattern!
+from agent_actions.errors import ConfigValidationError, ValidationError
+from agent_actions.output.response.consolidated_guard import (
+    GuardBehavior,
+    GuardConfig,
+    parse_guard_config,
+)
+from agent_actions.output.response.guard_parser import GuardExpression, GuardParser, GuardType
 
 
 class TestGuardConfig:
@@ -70,24 +74,24 @@ class TestConsolidatedGuardParser:
     def test_parse_object_guard_config(self):
         """Test parsing object-style guard configuration."""
         guard_data = {"condition": "udf:validators.should_process", "on_false": "skip"}
-        config = GuardParser.parse_consolidated(guard_data)
+        config = parse_guard_config(guard_data)
         assert isinstance(config, GuardConfig)
         assert config.condition == "udf:validators.should_process"
         assert config.on_false == GuardBehavior.SKIP
 
     def test_parse_string_guard_legacy(self):
         """Test parsing legacy string guard format."""
-        config = GuardParser.parse_consolidated("udf:validators.check")
+        config = parse_guard_config("udf:validators.check")
         assert config.on_false == GuardBehavior.SKIP
-        config = GuardParser.parse_consolidated('field == "value"')
+        config = parse_guard_config('field == "value"')
         assert config.on_false == GuardBehavior.FILTER
 
     def test_parse_invalid_guard_format(self):
         """Test parsing invalid guard formats raises errors."""
         with pytest.raises(ConfigValidationError, match="Guard must be string or dict"):
-            GuardParser.parse_consolidated(123)
+            parse_guard_config(123)
         with pytest.raises(ConfigValidationError, match="Guard dict must have 'condition' key"):
-            GuardParser.parse_consolidated({"on_false": "skip"})
+            parse_guard_config({"on_false": "skip"})
 
 
 class TestFormatConverterIntegration:
