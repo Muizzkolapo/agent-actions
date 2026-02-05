@@ -156,6 +156,9 @@ class ProcessingResult:
     # LLM response (for metadata extraction)
     raw_response: Optional[Any] = None
 
+    # Pre-extracted metadata (batch path provides this directly)
+    pre_extracted_metadata: Optional[Dict[str, Any]] = None
+
     @classmethod
     def success(cls, data: List[Dict], **kwargs) -> "ProcessingResult":
         """Factory for successful result."""

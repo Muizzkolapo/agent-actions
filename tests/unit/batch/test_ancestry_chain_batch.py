@@ -286,18 +286,20 @@ class TestExhaustedBuilderAncestryChain:
 class TestAncestryChainParityVerification:
     """Verification tests that batch mode matches online mode behavior."""
 
-    def test_batch_uses_add_unified_lineage(self):
-        """Verify batch result processor uses add_unified_lineage method."""
-        import inspect
+    def test_batch_delegates_enrichment_to_pipeline(self):
+        """Verify batch result processor delegates enrichment to EnrichmentPipeline."""
         from agent_actions.llm.batch.processing.result_processor import (
             BatchResultProcessor,
         )
 
-        source = inspect.getsource(BatchResultProcessor._process_successful_result)
+        processor = BatchResultProcessor()
 
-        # Should use add_unified_lineage (not just build_lineage)
-        assert "add_unified_lineage" in source, (
-            "BatchResultProcessor should use add_unified_lineage for parity with online mode"
+        # Pipeline should be set up with default enrichers including LineageEnricher
+        from agent_actions.processing.enrichment import LineageEnricher
+
+        enricher_types = [type(e) for e in processor._enrichment_pipeline.enrichers]
+        assert LineageEnricher in enricher_types, (
+            "BatchResultProcessor should use EnrichmentPipeline with LineageEnricher"
         )
 
     def test_exhausted_builder_ancestry_behavioral(self):

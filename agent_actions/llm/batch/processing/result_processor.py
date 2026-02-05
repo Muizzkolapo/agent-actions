@@ -7,10 +7,9 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
 from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.lineage import LineageBuilder
-from agent_actions.utils.correlation import VersionIdGenerator
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.processing.batch_passthrough_builder import (
     BatchPassthroughBuilder,
@@ -61,19 +60,10 @@ class BatchResultProcessor:
     Pipeline-based processor for batch results.
 
     Converts batch provider results into workflow format using a clean
-    9-stage pipeline architecture. Each stage has a single responsibility
-    and can be tested independently.
-
-    Pipeline stages:
-    1. Initialize context
-    2. Reconcile requests/responses
-    3. Process successful results
-    4. Process error results
-    5. Build agent outputs
-    6. Merge passthroughs
-    7. Update lineage
-    8. Format result
-    9. Generate stats
+    pipeline architecture. Batch-specific pre-processing (JSON mode,
+    passthrough, structure transform) is done locally, then enrichment
+    (metadata, lineage, IDs, recovery) is delegated to the shared
+    EnrichmentPipeline for parity with the online path.
 
     Example:
         processor = BatchResultProcessor()
@@ -87,6 +77,9 @@ class BatchResultProcessor:
 
         # result is the processed data in workflow format
     """
+
+    def __init__(self):
+        self._enrichment_pipeline = EnrichmentPipeline()
 
     def process(
         self,
@@ -273,13 +266,9 @@ class BatchResultProcessor:
         """
         Stage 5: Build agent output from successful batch result.
 
-        Handles all transformations for a successful result:
-        - JSON mode handling
-        - Context scope passthrough
-        - Data transformation
-        - Metadata addition
-        - Lineage tracking
-        - Loop correlation ID
+        Steps 1-5 are batch-specific pre-processing.
+        Enrichment (metadata, lineage, IDs, recovery) is delegated to
+        the shared EnrichmentPipeline via BatchContextAdapter.
         """
         # Step 1: Handle json_mode
         generated_obj = batch_result.content
@@ -311,50 +300,34 @@ class BatchResultProcessor:
             [{original_source_guid: generated_list}]
         )
 
-        # Step 6: Add metadata, lineage, IDs to each item
-        for idx, item in enumerate(structured_items):
-            # Metadata
-            item["metadata"] = batch_result.metadata or {}
+        # Batch items inherit target_id from the original input row.
+        # transform_structure() doesn't carry it over, so set it before enrichment.
+        original_target_id = original_row.get("target_id")
+        if original_target_id:
+            for item in structured_items:
+                if "target_id" not in item or not item["target_id"]:
+                    item["target_id"] = original_target_id
 
-            # Recovery Metadata (per-record)
-            if batch_result.recovery_metadata:
-                item["_recovery"] = batch_result.recovery_metadata.to_dict()
+        # Step 6: Enrich via shared pipeline
+        record_index = ctx.reconciler.get_record_index(custom_id)
 
-            # Lineage tracking (use action_name from agent_config)
-            if ctx.agent_config:
-                action_name = ctx.agent_config.get("agent_type")
-                if not action_name:
-                    action_name = "unknown_action"
-                    logger.warning(
-                        "No agent_type in agent_config for batch result processing, "
-                        "using 'unknown_action' for lineage"
-                    )
-                item_node_id = IDGenerator.generate_node_id(action_name)
-                # Use add_unified_lineage to set lineage AND ancestry chain fields
-                # (parent_target_id, root_target_id) for parity with online mode
-                item = LineageBuilder.add_unified_lineage(
-                    obj=item,
-                    node_id=item_node_id,
-                    parent_item=original_row,
-                )
+        processing_context = BatchContextAdapter.to_processing_context(
+            agent_config=ctx.agent_config or {},
+            original_row=original_row,
+            record_index=record_index,
+            output_directory=ctx.output_directory,
+        )
 
-            # Target ID (ensure present)
-            if "target_id" not in item or not item["target_id"]:
-                item["target_id"] = original_row.get("target_id", IDGenerator.generate_target_id())
+        processing_result = BatchContextAdapter.to_processing_result(
+            data=structured_items,
+            source_guid=original_source_guid,
+            pre_extracted_metadata=batch_result.metadata,
+            recovery_metadata=batch_result.recovery_metadata,
+        )
 
-            # Source GUID (ensure present)
-            if "source_guid" not in item or not item["source_guid"]:
-                item["source_guid"] = original_source_guid
+        enriched = self._enrichment_pipeline.enrich(processing_result, processing_context)
 
-            # Version correlation ID (if agent_config present)
-            if ctx.agent_config:
-                record_index = ctx.reconciler.get_record_index(custom_id)
-                if record_index >= 0:
-                    structured_items[idx] = VersionIdGenerator.add_version_correlation_id(
-                        item, ctx.agent_config, record_index=record_index
-                    )
-
-        return structured_items
+        return enriched.data
 
     def _apply_context_passthrough(
         self,

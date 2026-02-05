@@ -17,6 +17,7 @@ lineage helpers, recovery flows, and transformation pipelines.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `batch_context_adapter.py` | Module | Adapts batch state to `ProcessingContext` + `ProcessingResult` for the shared `EnrichmentPipeline`. | `batch`, `enrichment` |
 | `enrichment.py` | Module | Adds metadata (timestamps, run IDs) to processed items. | `logging`, `workflow` |
 | `error_handling.py` | Module | `ProcessorErrorHandlerMixin` for wrapping file loading/processing logic. | `logging` |
 | `exhausted_builder.py` | Module | Builds reports once a workflow’s retries are exhausted. | `validation`, `logging` |

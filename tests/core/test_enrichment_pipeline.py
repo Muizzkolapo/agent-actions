@@ -253,6 +253,48 @@ class TestMetadataEnricher:
 
         assert mock_add.call_count == 2
 
+    @patch("agent_actions.utils.metadata.MetadataExtractor.extract_from_response")
+    def test_uses_pre_extracted_metadata_when_present(self, mock_extract):
+        """pre_extracted_metadata skips MetadataExtractor, uses dict directly."""
+        enricher = MetadataEnricher()
+        pre_meta = {"model": "gpt-4-batch", "tokens": 200}
+        result = ProcessingResult.success(
+            data=[{"item": 1}, {"item": 2}],
+            pre_extracted_metadata=pre_meta,
+        )
+        context = ProcessingContext(agent_config={}, agent_name="test")
+
+        enriched = enricher.enrich(result, context)
+
+        # MetadataExtractor should NOT be called
+        mock_extract.assert_not_called()
+        # Both items should have the pre-extracted metadata
+        assert enriched.data[0]["metadata"] == pre_meta
+        assert enriched.data[1]["metadata"] == pre_meta
+
+    @patch("agent_actions.utils.metadata.MetadataExtractor.extract_from_response")
+    @patch("agent_actions.utils.field_management.FieldManager.add_metadata")
+    def test_falls_back_to_extraction_when_no_pre_extracted(self, mock_add, mock_extract):
+        """When pre_extracted_metadata is None, falls back to MetadataExtractor."""
+        mock_metadata = MagicMock()
+        mock_metadata.to_dict.return_value = {"model": "gpt-4"}
+        mock_extract.return_value = mock_metadata
+
+        enricher = MetadataEnricher()
+        result = ProcessingResult.success(
+            data=[{"item": 1}],
+            raw_response={"text": "response"},
+            # pre_extracted_metadata not set (defaults to None)
+        )
+        context = ProcessingContext(agent_config={"model": "gpt-4"}, agent_name="test")
+
+        enricher.enrich(result, context)
+
+        # MetadataExtractor SHOULD be called
+        mock_extract.assert_called_once_with(
+            response={"text": "response"}, agent_config={"model": "gpt-4"}
+        )
+
 
 class TestVersionIdEnricher:
     """Test VersionIdEnricher."""
@@ -373,7 +415,7 @@ class TestRequiredFieldsEnricher:
         enricher.enrich(result, context)
 
         mock_instance.ensure_required_fields.assert_called_once_with(
-            {"key": "value"}, "guid-123", 0
+            {"key": "value"}, "guid-123", "test"
         )
 
 

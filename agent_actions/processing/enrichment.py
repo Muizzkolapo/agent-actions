@@ -111,20 +111,25 @@ class MetadataEnricher(Enricher):
     """Add LLM response metadata."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Add metadata from LLM response."""
+        """Add metadata from LLM response or pre-extracted metadata dict."""
         if not result.executed:
             return result
 
         from agent_actions.utils.field_management import FieldManager
-        from agent_actions.utils.metadata import MetadataExtractor
 
-        metadata = MetadataExtractor.extract_from_response(
-            response=result.raw_response,
-            agent_config=context.agent_config,
-        )
+        if result.pre_extracted_metadata is not None:
+            metadata_dict = result.pre_extracted_metadata
+        else:
+            from agent_actions.utils.metadata import MetadataExtractor
+
+            metadata = MetadataExtractor.extract_from_response(
+                response=result.raw_response,
+                agent_config=context.agent_config,
+            )
+            metadata_dict = metadata.to_dict()
 
         for item in result.data:
-            FieldManager.add_metadata(item, metadata=metadata.to_dict())
+            FieldManager.add_metadata(item, metadata=metadata_dict)
 
         return result
 
@@ -135,6 +140,10 @@ class VersionIdEnricher(Enricher):
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
         """Add version correlation ID to each item."""
         if result.status == ProcessingStatus.FILTERED:
+            return result
+
+        # Skip when record_index is invalid (e.g. -1 from batch reconciler miss)
+        if context.record_index < 0:
             return result
 
         from agent_actions.utils.correlation import VersionIdGenerator
@@ -173,8 +182,11 @@ class RequiredFieldsEnricher(Enricher):
 
         from agent_actions.utils.field_management import FieldManager
 
-        for item in result.data:
-            FieldManager().ensure_required_fields(item, result.source_guid, 0)
+        fm = FieldManager()
+        for i, item in enumerate(result.data):
+            result.data[i] = fm.ensure_required_fields(
+                item, result.source_guid, context.action_name
+            )
 
         return result
 
