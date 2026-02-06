@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.utils.lineage.lineage_builder import LineageBuilder
+from agent_actions.utils.lineage.builder import LineageBuilder
 
 
 class TestUnifiedLineageFirstStage:

@@ -7,7 +7,7 @@ This module provides decorators for wrapping exceptions.
 from functools import wraps
 from typing import Callable, Type
 
-from agent_actions.errors import ConfigurationError  # New modular pattern!
+from agent_actions.errors import ConfigurationError
 
 
 def as_validation_error(exc_cls: Type[ConfigurationError] = ConfigurationError) -> Callable:

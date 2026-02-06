@@ -4,8 +4,6 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, TYPE_CHECKING
 
-from agent_actions.utils.service_logger import ServiceLogger
-
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
@@ -72,11 +70,13 @@ class HistoricalNodeDataLoader:
             where record matches source_guid and node_id="node_0_abc123"
         """
         try:
-            ServiceLogger.log_operation_start(
-                logger,
-                "load historical node data",
-                action_name=request.action_name,
-                source_guid=request.source_guid,
+            logger.debug(
+                "Starting load historical node data",
+                extra={
+                    "operation": "load historical node data",
+                    "action_name": request.action_name,
+                    "source_guid": request.source_guid,
+                },
             )
 
             # Find the node_id in lineage for this action
@@ -157,11 +157,13 @@ class HistoricalNodeDataLoader:
                     record.get("node_id"),
                     content_keys,
                 )
-                ServiceLogger.log_operation_success(
-                    logger,
-                    "load historical node data",
-                    action_name=request.action_name,
-                    node_id=node_id,
+                logger.debug(
+                    "Successfully completed load historical node data",
+                    extra={
+                        "operation": "load historical node data",
+                        "action_name": request.action_name,
+                        "node_id": node_id,
+                    },
                 )
                 return content
 
@@ -176,7 +178,11 @@ class HistoricalNodeDataLoader:
             return None
 
         except (ValueError, TypeError, KeyError) as e:
-            ServiceLogger.log_operation_error(logger, "load historical node data", e)
+            logger.error(
+                "Failed to load historical node data: %s",
+                str(e),
+                extra={"operation": "load historical node data", "error": str(e)},
+            )
             # Don't raise - return None to allow processing to continue
             return None
 

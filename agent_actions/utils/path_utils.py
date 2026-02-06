@@ -277,16 +277,6 @@ COMMON_EXTENSIONS = [".json", ".yml", ".yaml", ".txt", ".py"]
 SIDE_OUTPUT_DIR_NAME = "side_output"
 
 
-def mkdir_with_parents(path: Union[str, Path]) -> Path:
-    """Backward compatibility alias for ensure_directory_exists."""
-    return ensure_directory_exists(path)
-
-
-def get_absolute_path(path: Union[str, Path]) -> Path:
-    """Backward compatibility alias for resolve_absolute_path."""
-    return resolve_absolute_path(path)
-
-
 def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
     """
     Perform a topological sort on a dependency graph.

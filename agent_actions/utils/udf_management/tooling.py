@@ -7,7 +7,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
-from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
+from agent_actions.errors import AgentActionsException, ConfigurationError
 from agent_actions.utils.safe_format import safe_format_error
 
 

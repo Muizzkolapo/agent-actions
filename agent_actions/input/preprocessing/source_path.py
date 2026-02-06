@@ -4,7 +4,6 @@ import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Union
-from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     FileWriteStartedEvent,
@@ -29,20 +28,28 @@ class SourcePathManager:
             Path: Path to the source file
         """
         try:
-            ServiceLogger.log_operation_start(logger, "get source path", file_path=file_path)
+            logger.debug(
+                "Starting get source path",
+                extra={"operation": "get source path", "file_path": file_path},
+            )
 
             file_path = Path(file_path)
             agent_dir = file_path.parents[1]  # Go up two levels to get agent directory
             source_dir = agent_dir / "source"
             source_path = source_dir / file_path.name
 
-            ServiceLogger.log_operation_success(
-                logger, "get source path", source_path=str(source_path)
+            logger.debug(
+                "Successfully completed get source path",
+                extra={"operation": "get source path", "source_path": str(source_path)},
             )
             return source_path
 
         except (ValueError, TypeError, KeyError) as e:
-            ServiceLogger.log_operation_error(logger, "get source path", e)
+            logger.error(
+                "Failed to get source path: %s",
+                str(e),
+                extra={"operation": "get source path", "error": str(e)},
+            )
             raise
 
     @staticmethod
@@ -54,8 +61,9 @@ class SourcePathManager:
             source_path: Path to the source file (can be string or Path object)
         """
         try:
-            ServiceLogger.log_operation_start(
-                logger, "ensure source directory", source_path=str(source_path)
+            logger.debug(
+                "Starting ensure source directory",
+                extra={"operation": "ensure source directory", "source_path": str(source_path)},
             )
 
             # Convert string to Path if necessary
@@ -64,10 +72,17 @@ class SourcePathManager:
 
             source_path.parent.mkdir(parents=True, exist_ok=True)
 
-            ServiceLogger.log_operation_success(logger, "ensure source directory")
+            logger.debug(
+                "Successfully completed ensure source directory",
+                extra={"operation": "ensure source directory"},
+            )
 
         except (ValueError, TypeError, KeyError) as e:
-            ServiceLogger.log_operation_error(logger, "ensure source directory", e)
+            logger.error(
+                "Failed to ensure source directory: %s",
+                str(e),
+                extra={"operation": "ensure source directory", "error": str(e)},
+            )
             raise
 
     @staticmethod
@@ -141,8 +156,13 @@ class SourcePathManager:
             content: Content to save
         """
         try:
-            ServiceLogger.log_operation_start(
-                logger, "save source content", source_path=str(source_path), source_guid=source_guid
+            logger.debug(
+                "Starting save source content",
+                extra={
+                    "operation": "save source content",
+                    "source_path": str(source_path),
+                    "source_guid": source_guid,
+                },
             )
 
             # Ensure source directory exists
@@ -194,10 +214,15 @@ class SourcePathManager:
                 )
             )
 
-            ServiceLogger.log_operation_success(
-                logger, "save source content", source_guid=source_guid
+            logger.debug(
+                "Successfully completed save source content",
+                extra={"operation": "save source content", "source_guid": source_guid},
             )
 
         except (ValueError, TypeError, KeyError) as e:
-            ServiceLogger.log_operation_error(logger, "save source content", e)
+            logger.error(
+                "Failed to save source content: %s",
+                str(e),
+                extra={"operation": "save source content", "error": str(e)},
+            )
             raise

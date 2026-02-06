@@ -16,7 +16,6 @@ from pydantic import ValidationError
 
 from agent_actions.utils.error_handler import ErrorHandler
 from agent_actions.utils.error_wrap import as_validation_error
-from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -78,13 +77,14 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 ErrorHandler.
         """
         try:
-            ServiceLogger.log_operation_start(
-                logger,
-                "render template",
-                user_facing=True,
-                config_path=config_path,
-                template_dir=template_dir,
-                output_path=output_path,
+            logger.info(
+                "Starting render template",
+                extra={
+                    "operation": "render template",
+                    "config_path": config_path,
+                    "template_dir": template_dir,
+                    "output_path": output_path,
+                },
             )
             path_validator = PathValidator()
             all_validations_passed = True
@@ -138,8 +138,9 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 with open(output_file_to_write, "w", encoding="utf-8") as f:
                     f.write(rendered_template)
                 logger.info("Rendered template saved to: %s", output_file_to_write)
-            ServiceLogger.log_operation_success(
-                logger, "render template", user_facing=True, config_path=config_path
+            logger.info(
+                "Successfully completed render template",
+                extra={"operation": "render template", "config_path": config_path},
             )
             return rendered_template
         except Exception as e:
@@ -333,13 +334,15 @@ class ConfigRenderingService:
             TemplateRenderingError: If template rendering fails.
             ConfigurationError: If configuration parsing fails.
         """
-        ServiceLogger.log_operation_start(
-            logger,
-            "render and load config",
-            agent_name=agent_name,
-            config_path=str(config_path),
-            template_dir=str(template_dir),
-            output_dir=str(output_dir),
+        logger.debug(
+            "Starting render and load config",
+            extra={
+                "operation": "render and load config",
+                "agent_name": agent_name,
+                "config_path": str(config_path),
+                "template_dir": str(template_dir),
+                "output_dir": str(output_dir),
+            },
         )
         config_path_str = str(config_path)
         template_dir_str = str(template_dir)
@@ -373,7 +376,10 @@ class ConfigRenderingService:
                 cause=e,
             ) from e
         self._validate_agent_config_block(config, agent_name)
-        ServiceLogger.log_operation_success(logger, "render and load config", agent_name=agent_name)
+        logger.debug(
+            "Successfully completed render and load config",
+            extra={"operation": "render and load config", "agent_name": agent_name},
+        )
         return config
 
 

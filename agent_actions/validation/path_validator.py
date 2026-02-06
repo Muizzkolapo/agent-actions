@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from agent_actions.utils.service_logger import ServiceLogger
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -44,30 +43,50 @@ class PathValidator(BaseValidator):
         Generic logic to validate a path (file or directory) and add errors.
         """
         operation_desc = f"validate {entity_type} '{entity_name}' at {path_obj}"
-        ServiceLogger.log_operation_start(logger, operation_desc)
+        logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         path_exists = self._ensure_path_exists(path_obj)
         if options.required and not path_exists:
             msg = f"{entity_name} ({entity_type}) does not exist: {path_obj}"
             self.add_error(msg)
-            ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+            logger.error(
+                "Failed to %s: %s",
+                operation_desc,
+                msg,
+                extra={"operation": operation_desc, "error": msg},
+            )
             return
         if path_exists:
             if entity_type == "directory":
                 if not self._is_directory(path_obj):
                     msg = f"{entity_name} path is not a directory: {path_obj}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+                    logger.error(
+                        "Failed to %s: %s",
+                        operation_desc,
+                        msg,
+                        extra={"operation": operation_desc, "error": msg},
+                    )
                     return
             elif entity_type == "file":
                 if not self._is_file(path_obj):
                     msg = f"{entity_name} path is not a file: {path_obj}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+                    logger.error(
+                        "Failed to %s: %s",
+                        operation_desc,
+                        msg,
+                        extra={"operation": operation_desc, "error": msg},
+                    )
                     return
             else:
                 msg = f"Unknown entity type '{entity_type}' for validation."
                 self.add_error(msg)
-                ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+                logger.error(
+                    "Failed to %s: %s",
+                    operation_desc,
+                    msg,
+                    extra={"operation": operation_desc, "error": msg},
+                )
                 return
             if options.must_be_readable and not os.access(path_obj, os.R_OK):
                 self.add_error(f"{entity_name} ({entity_type}) is not readable: {path_obj}")
@@ -76,7 +95,11 @@ class PathValidator(BaseValidator):
             if options.must_be_executable and not os.access(path_obj, os.X_OK):
                 self.add_error(f"{entity_name} ({entity_type}) is not executable: {path_obj}")
         if not self.has_errors():
-            ServiceLogger.log_operation_success(logger, operation_desc, path=str(path_obj))
+            logger.debug(
+                "Successfully completed %s",
+                operation_desc,
+                extra={"operation": operation_desc, "path": str(path_obj)},
+            )
 
     def _ensure_directory_exists_logic(
         self,
@@ -91,7 +114,7 @@ class PathValidator(BaseValidator):
         Adds errors on failure.
         """
         operation_desc = f"ensure directory exists '{directory_name}' at {path_obj}"
-        ServiceLogger.log_operation_start(logger, operation_desc)
+        logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         if not self._ensure_path_exists(path_obj):
             if create_if_missing:
                 logger.debug("Creating directory: %s at %s", directory_name, path_obj)
@@ -104,7 +127,12 @@ class PathValidator(BaseValidator):
                 except (OSError, ValueError) as e:
                     msg = f"Failed to create {directory_name} directory at {path_obj}: {e}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+                    logger.error(
+                        "Failed to %s: %s",
+                        operation_desc,
+                        msg,
+                        extra={"operation": operation_desc, "error": msg},
+                    )
                     return
             else:
                 self.add_error(
@@ -116,17 +144,23 @@ class PathValidator(BaseValidator):
         elif must_be_writable_after_creation and not os.access(path_obj, os.W_OK):
             self.add_error(f"{directory_name} directory exists but is not writable: {path_obj}")
         if not self.has_errors():
-            ServiceLogger.log_operation_success(logger, operation_desc, path=str(path_obj))
+            logger.debug(
+                "Successfully completed %s",
+                operation_desc,
+                extra={"operation": operation_desc, "path": str(path_obj)},
+            )
 
     def _validate_user_code_path_logic(self, user_code_path_str: Optional[str]) -> None:
         """
         Validates the user code path if provided. Adds errors on failure.
         """
         operation_desc = f"validate user code path '{user_code_path_str}'"
-        ServiceLogger.log_operation_start(logger, operation_desc)
+        logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         if not user_code_path_str:
-            ServiceLogger.log_operation_success(
-                logger, operation_desc, result="Not provided, valid."
+            logger.debug(
+                "Successfully completed %s",
+                operation_desc,
+                extra={"operation": operation_desc, "result": "Not provided, valid."},
             )
             return
         path_obj = Path(user_code_path_str)
@@ -137,7 +171,11 @@ class PathValidator(BaseValidator):
         elif not os.access(path_obj, os.R_OK):
             self.add_error(f"User code directory is not readable: {path_obj}")
         if not self.has_errors():
-            ServiceLogger.log_operation_success(logger, operation_desc, path=str(path_obj))
+            logger.debug(
+                "Successfully completed %s",
+                operation_desc,
+                extra={"operation": operation_desc, "path": str(path_obj)},
+            )
 
     def _parse_path_input(self, path_input: Any, operation: str) -> Optional[Path]:
         """Parse path input to Path object."""
@@ -234,10 +272,14 @@ class PathValidator(BaseValidator):
             self.add_error(f"Unknown operation: {operation}")
         if self.has_errors():
             combined_msg = "; ".join(self.get_errors())
-            ServiceLogger.log_operation_error(
-                logger,
-                f"PathValidator operation '{operation}' failed",
-                Exception(combined_msg),
-                error_details=self.get_errors(),
+            logger.error(
+                "Failed to PathValidator operation '%s': %s",
+                operation,
+                combined_msg,
+                extra={
+                    "operation": f"PathValidator operation '{operation}'",
+                    "error": combined_msg,
+                    "error_details": self.get_errors(),
+                },
             )
         return not self.has_errors()

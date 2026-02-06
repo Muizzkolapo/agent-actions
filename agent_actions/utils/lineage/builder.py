@@ -32,6 +32,26 @@ class LineageBuilder:
     """Builds and tracks lineage chains for data processing."""
 
     @staticmethod
+    def _propagate_ancestry_chain(obj: Dict, parent_item: Dict) -> None:
+        """
+        Propagate ancestry chain fields from parent to object.
+
+        Sets parent_target_id to link to immediate parent's target_id.
+        Sets root_target_id to preserve the original root ancestor.
+
+        Args:
+            obj: Object to update (modified in place)
+            parent_item: Parent item containing ancestry fields
+        """
+        if "target_id" in parent_item:
+            obj["parent_target_id"] = parent_item["target_id"]
+        if "root_target_id" in parent_item:
+            obj["root_target_id"] = parent_item["root_target_id"]
+        elif "target_id" in parent_item:
+            # If no root_target_id, parent is the root
+            obj["root_target_id"] = parent_item["target_id"]
+
+    @staticmethod
     def filter_node_lineage(lineage: List[Any]) -> List[str]:
         """
         Filter lineage to only include valid node IDs.
@@ -87,15 +107,7 @@ class LineageBuilder:
         obj["lineage"] = LineageBuilder.build_lineage(item, node_id)
 
         # Ancestry Chain propagation (RFC: docs/specs/RFC_ancestry_chain.md)
-        # parent_target_id = input's target_id (link to immediate parent)
-        # root_target_id = input's root_target_id (preserve original ancestor)
-        if "target_id" in item:
-            obj["parent_target_id"] = item["target_id"]
-        if "root_target_id" in item:
-            obj["root_target_id"] = item["root_target_id"]
-        elif "target_id" in item:
-            # If no root_target_id, input is the root
-            obj["root_target_id"] = item["target_id"]
+        LineageBuilder._propagate_ancestry_chain(obj, item)
 
         return obj
 
@@ -118,14 +130,7 @@ class LineageBuilder:
         obj["node_id"] = node_id
         if isinstance(context_data, dict) and "lineage" in context_data:
             obj["lineage"] = context_data["lineage"] + [node_id]
-
-            # Ancestry Chain propagation
-            if "target_id" in context_data:
-                obj["parent_target_id"] = context_data["target_id"]
-            if "root_target_id" in context_data:
-                obj["root_target_id"] = context_data["root_target_id"]
-            elif "target_id" in context_data:
-                obj["root_target_id"] = context_data["target_id"]
+            LineageBuilder._propagate_ancestry_chain(obj, context_data)
         else:
             obj["lineage"] = [node_id]
         return obj
@@ -185,12 +190,7 @@ class LineageBuilder:
                 obj["lineage_sources"] = parent_node_ids
 
         # Ancestry Chain propagation from first source
-        if "target_id" in first_source:
-            obj["parent_target_id"] = first_source["target_id"]
-        if "root_target_id" in first_source:
-            obj["root_target_id"] = first_source["root_target_id"]
-        elif "target_id" in first_source:
-            obj["root_target_id"] = first_source["target_id"]
+        LineageBuilder._propagate_ancestry_chain(obj, first_source)
 
         return obj
 
@@ -225,12 +225,7 @@ class LineageBuilder:
 
         # Ancestry chain propagation
         if parent_item:
-            if "target_id" in parent_item:
-                obj["parent_target_id"] = parent_item["target_id"]
-            if "root_target_id" in parent_item:
-                obj["root_target_id"] = parent_item["root_target_id"]
-            elif "target_id" in parent_item:
-                obj["root_target_id"] = parent_item["target_id"]
+            LineageBuilder._propagate_ancestry_chain(obj, parent_item)
 
         return obj
 
@@ -262,11 +257,6 @@ class LineageBuilder:
 
         # Ancestry Chain propagation
         if item:
-            if "target_id" in item:
-                response["parent_target_id"] = item["target_id"]
-            if "root_target_id" in item:
-                response["root_target_id"] = item["root_target_id"]
-            elif "target_id" in item:
-                response["root_target_id"] = item["target_id"]
+            LineageBuilder._propagate_ancestry_chain(response, item)
 
         return response
