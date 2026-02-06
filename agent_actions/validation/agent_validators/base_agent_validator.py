@@ -60,15 +60,6 @@ class BaseAgentEntryValidator(ABC):
         """Return string representation of validator."""
         return f"{self.__class__.__name__}()"
 
-    def is_valid(self) -> bool:
-        """
-        Check if validator is properly configured.
-
-        Returns:
-            bool: Always True (validators are stateless)
-        """
-        return True
-
     @abstractmethod
     def validate(self, context) -> AgentEntryValidationResult:
         """
@@ -81,11 +72,3 @@ class BaseAgentEntryValidator(ABC):
             AgentEntryValidationResult with errors, warnings, and critical flag
         """
         raise NotImplementedError("Subclasses must implement validate()")
-
-    def _format_error(self, description: str, message: str) -> str:
-        """Helper to format error message consistently."""
-        return f"{description} {message}"
-
-    def _format_warning(self, description: str, message: str) -> str:
-        """Helper to format warning message consistently."""
-        return f"{description} {message}"

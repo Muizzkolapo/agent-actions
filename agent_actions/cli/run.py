@@ -152,7 +152,7 @@ class RunCommand:
     def _run_static_analysis(self, agent_configs: dict) -> tuple[list, list]:
         """Run static type checking on field references."""
         click.echo("\nRunning static type checking...")
-        from agent_actions.validation.static_analysis import WorkflowStaticAnalyzer
+        from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
 
         workflow_config = {
             "actions": [{**config, "name": name} for name, config in agent_configs.items()]

@@ -68,15 +68,6 @@ class AgentEntryValidationContext:
             f"has_project_root={self.project_root is not None})"
         )
 
-    def is_valid(self) -> bool:
-        """
-        Check if context is properly configured.
-
-        Returns:
-            bool: True if entry is a dict and description is set
-        """
-        return isinstance(self.entry, dict) and bool(self.description)
-
 
 class AgentEntryValidationOrchestrator:
     """

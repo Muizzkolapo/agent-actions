@@ -27,7 +27,7 @@ from agent_actions.logging.events import (
     ProjectInitializedEvent,
 )
 from agent_actions.validation.init_validator import InitCommandArgs
-from agent_actions.validation.project import ProjectValidator
+from agent_actions.validation.project_validator import ProjectValidator
 
 
 class InitCommand:

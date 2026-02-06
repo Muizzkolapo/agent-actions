@@ -19,9 +19,8 @@ from agent_actions.validation.utils.agent_config_validation_utilities import (
 
 logger = logging.getLogger(__name__)
 
-# Aliases for cleaner code
+# Alias for cleaner code
 _ci_dict = ACVUtils.normalize_entry_keys_to_lowercase
-_ci_get = ACVUtils.get_case_insensitive_value
 
 
 class ConfigValidator(BaseValidator):

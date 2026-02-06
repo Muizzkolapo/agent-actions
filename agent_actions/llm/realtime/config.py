@@ -6,7 +6,7 @@ from pathlib import Path
 from pydantic import ValidationError
 from agent_actions.utils.path_utils import topological_sort
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
-from agent_actions.validation.config import ConfigValidator
+from agent_actions.validation.config_validator import ConfigValidator
 from typing import Dict, Any, Optional, List
 from agent_actions.errors import ConfigurationError, TemplateRenderingError  # New modular pattern!
 from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig

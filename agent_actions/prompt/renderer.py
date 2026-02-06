@@ -21,9 +21,9 @@ from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.output.response.config_types import AgentEntryDict, AgentConfigMap
-from agent_actions.validation.config import ConfigValidator
+from agent_actions.validation.config_validator import ConfigValidator
 from agent_actions.validation.path_validator import PathValidator
-from agent_actions.validation.schema import SchemaValidator
+from agent_actions.validation.schema_validator import SchemaValidator
 
 logger = logging.getLogger(__name__)
 

@@ -11,7 +11,7 @@ from agent_actions.models.action_schema import (
     FieldSource,
     UpstreamReference,
 )
-from agent_actions.validation.static_analysis import (
+from agent_actions.validation.static_analyzer import (
     DataFlowGraph,
     DataFlowNode,
     StaticValidationResult,
