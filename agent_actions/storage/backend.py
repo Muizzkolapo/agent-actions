@@ -1,7 +1,8 @@
 """Abstract storage backend interface for extensible data persistence."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
+from types import TracebackType
+from typing import Dict, List, Any, Optional, Type
 
 
 class StorageBackend(ABC):
@@ -202,6 +203,11 @@ class StorageBackend(ABC):
         """Context manager entry."""
         return self
 
-    def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
+    def __exit__(
+        self,
+        _exc_type: Optional[Type[BaseException]],
+        _exc_val: Optional[BaseException],
+        _exc_tb: Optional[TracebackType],
+    ) -> None:
         """Context manager exit - ensures cleanup."""
         self.close()

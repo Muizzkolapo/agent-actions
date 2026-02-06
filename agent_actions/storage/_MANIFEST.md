@@ -17,9 +17,8 @@ backends (S3, DuckDB, etc.). One database per workflow stored at
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `__init__.py` | Module | Factory functions and backend registry for creating storage instances. | `workflow`, `config` |
+| `__init__.py` | Module | Factory function and backend registry for creating storage instances. | `workflow`, `config` |
 | `get_storage_backend` | Function | Factory that creates storage backend instances by type (default: sqlite). | `workflow` |
-| `register_backend` | Function | Registers custom storage backend implementations into the backend registry. | `config` |
 | `BACKENDS` | Dict | Registry mapping backend type names to their implementation classes. | `config` |
 | `backend.py` | Module | Abstract `StorageBackend` interface defining the contract for all backends. | `abc`, `typing` |
 | `StorageBackend` | ABC | Abstract base class with methods: `initialize`, `write_target`, `read_target`, `write_source`, `read_source`, `list_target_files`, `list_source_files`, `close`. | `abc` |

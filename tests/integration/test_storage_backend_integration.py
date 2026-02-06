@@ -285,6 +285,23 @@ class TestPreviewAndStats:
         assert result["total_count"] == 0
         assert "error" in result
 
+    def test_preview_target_does_not_mutate_stored_data(self, backend_with_data):
+        """Preview should not mutate the original stored records."""
+        # Get original data
+        original = backend_with_data.read_target("extract", "batch_001.json")
+        original_keys = set(original[0].keys())
+
+        # Preview adds _file key to returned records
+        result = backend_with_data.preview_target(
+            "extract", limit=5, relative_path="batch_001.json"
+        )
+        assert "_file" in result["records"][0]
+
+        # Re-read original data - should be unchanged (no _file key)
+        after = backend_with_data.read_target("extract", "batch_001.json")
+        assert set(after[0].keys()) == original_keys
+        assert "_file" not in after[0]
+
     def test_get_storage_stats(self, backend_with_data):
         """Get storage stats returns correct counts."""
         stats = backend_with_data.get_storage_stats()

@@ -167,9 +167,9 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Identifier string: "node_name:relative_path"
         """
-        # Validate inputs
-        self._validate_identifier(node_name, "node_name")
-        self._validate_identifier(relative_path, "relative_path")
+        # Validate and normalize inputs
+        node_name = self._validate_identifier(node_name, "node_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
 
         data_json = json.dumps(data, ensure_ascii=False)
         record_count = len(data)
@@ -220,6 +220,8 @@ class SQLiteBackend(StorageBackend):
         Raises:
             FileNotFoundError: If no data exists for the given path
         """
+        node_name = self._validate_identifier(node_name, "node_name")
+        relative_path = self._validate_identifier(relative_path, "relative_path")
         cursor = self.connection.cursor()
         cursor.execute(
             "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
@@ -252,8 +254,8 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Identifier string: relative_path
         """
-        # Validate input
-        self._validate_identifier(relative_path, "relative_path")
+        # Validate and normalize input
+        relative_path = self._validate_identifier(relative_path, "relative_path")
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -273,31 +275,23 @@ class SQLiteBackend(StorageBackend):
 
                     data_json = json.dumps(item, ensure_ascii=False)
 
-                    if enable_deduplication:
-                        # Use INSERT OR IGNORE to skip duplicates
-                        cursor.execute(
-                            """
-                            INSERT OR IGNORE INTO source_data
-                            (relative_path, source_guid, data, created_at)
-                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                            """,
-                            (relative_path, source_guid, data_json),
-                        )
-                        if cursor.rowcount > 0:
-                            inserted_count += 1
-                        else:
-                            skipped_count += 1
-                    else:
-                        # Use INSERT OR REPLACE to overwrite
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO source_data
-                            (relative_path, source_guid, data, created_at)
-                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                            """,
-                            (relative_path, source_guid, data_json),
-                        )
+                    # conflict_clause is a controlled literal, not user input
+                    # IGNORE: skip if (relative_path, source_guid) exists (dedup)
+                    # REPLACE: overwrite existing record (no dedup)
+                    conflict_clause = "IGNORE" if enable_deduplication else "REPLACE"
+                    cursor.execute(
+                        f"""
+                        INSERT OR {conflict_clause} INTO source_data
+                        (relative_path, source_guid, data, created_at)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (relative_path, source_guid, data_json),
+                    )
+                    # rowcount=0 only when IGNORE skips a duplicate
+                    if cursor.rowcount > 0:
                         inserted_count += 1
+                    elif enable_deduplication:
+                        skipped_count += 1
 
                 self.connection.commit()
                 logger.debug(
@@ -334,6 +328,7 @@ class SQLiteBackend(StorageBackend):
         Raises:
             FileNotFoundError: If no data exists for the given path
         """
+        relative_path = self._validate_identifier(relative_path, "relative_path")
         cursor = self.connection.cursor()
         cursor.execute(
             "SELECT data FROM source_data WHERE relative_path = ? ORDER BY id",
@@ -356,6 +351,7 @@ class SQLiteBackend(StorageBackend):
         Returns:
             List of relative paths
         """
+        node_name = self._validate_identifier(node_name, "node_name")
         cursor = self.connection.cursor()
         cursor.execute(
             "SELECT DISTINCT relative_path FROM target_data WHERE node_name = ? ORDER BY relative_path",
@@ -397,6 +393,10 @@ class SQLiteBackend(StorageBackend):
         Returns:
             Dict with records, total_count, node_name, and files
         """
+        node_name = self._validate_identifier(node_name, "node_name")
+        if relative_path is not None:
+            relative_path = self._validate_identifier(relative_path, "relative_path")
+
         # Enforce limits to prevent memory issues and invalid values
         limit = min(max(1, limit), 1000)
         offset = max(0, offset)
@@ -461,8 +461,8 @@ class SQLiteBackend(StorageBackend):
                 if collected < limit:
                     # Handle non-dict records (primitives, lists) by wrapping them
                     if isinstance(record, dict):
-                        record["_file"] = file_path
-                        paginated_records.append(record)
+                        # Create new dict to avoid mutating original
+                        paginated_records.append({**record, "_file": file_path})
                     else:
                         # Wrap non-dict values to preserve file metadata
                         paginated_records.append({"_file": file_path, "_value": record})
@@ -523,11 +523,12 @@ class SQLiteBackend(StorageBackend):
     @staticmethod
     def _format_size(size_bytes: int) -> str:
         """Format bytes as human-readable size."""
+        size = float(size_bytes)
         for unit in ["B", "KB", "MB", "GB"]:
-            if size_bytes < 1024:
-                return f"{size_bytes:.1f} {unit}"
-            size_bytes /= 1024
-        return f"{size_bytes:.1f} TB"
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
 
     def close(self) -> None:
         """Close the database connection."""

@@ -47,7 +47,7 @@ def get_storage_backend(
         backend_type: Type of backend to use (default: "sqlite")
 
     Returns:
-        Initialized StorageBackend instance
+        StorageBackend instance (call .initialize() before use)
 
     Raises:
         ValueError: If backend_type is not registered
@@ -82,27 +82,9 @@ def get_storage_backend(
     return backend
 
 
-def register_backend(name: str, backend_class: Type[StorageBackend]) -> None:
-    """
-    Register a custom storage backend.
-
-    Args:
-        name: Name to register the backend under
-        backend_class: Class implementing StorageBackend
-
-    Example:
-        >>> class MyCustomBackend(StorageBackend):
-        ...     # implementation
-        ...     pass
-        >>> register_backend("custom", MyCustomBackend)
-    """
-    BACKENDS[name] = backend_class
-
-
 __all__ = [
     "StorageBackend",
     "SQLiteBackend",
     "BACKENDS",
     "get_storage_backend",
-    "register_backend",
 ]
