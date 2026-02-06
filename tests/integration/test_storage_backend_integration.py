@@ -302,6 +302,45 @@ class TestPreviewAndStats:
         assert set(after[0].keys()) == original_keys
         assert "_file" not in after[0]
 
+    def test_preview_target_large_offset_skips_files(self, backend_with_data):
+        """Preview with large offset correctly skips entire files.
+
+        The extract node has:
+        - batch_001.json: 15 records (ids 0-14)
+        - batch_002.json: 10 records (ids 15-24)
+
+        With offset=15, we should skip batch_001.json entirely and
+        start from batch_002.json.
+        """
+        # Offset of 15 should skip all 15 records from batch_001.json
+        result = backend_with_data.preview_target("extract", limit=5, offset=15)
+
+        assert len(result["records"]) == 5
+        assert result["total_count"] == 25
+
+        # All returned records should be from batch_002.json
+        for record in result["records"]:
+            assert record["_file"] == "batch_002.json"
+
+        # First record should be id=15 (first record of batch_002)
+        assert result["records"][0]["id"] == 15
+
+    def test_preview_target_offset_within_second_file(self, backend_with_data):
+        """Preview correctly handles offset that lands mid-file.
+
+        With offset=18, we skip:
+        - All 15 records from batch_001.json
+        - First 3 records from batch_002.json (ids 15, 16, 17)
+        And start at id=18.
+        """
+        result = backend_with_data.preview_target("extract", limit=3, offset=18)
+
+        assert len(result["records"]) == 3
+        # Should get ids 18, 19, 20
+        assert result["records"][0]["id"] == 18
+        assert result["records"][1]["id"] == 19
+        assert result["records"][2]["id"] == 20
+
     def test_get_storage_stats(self, backend_with_data):
         """Get storage stats returns correct counts."""
         stats = backend_with_data.get_storage_stats()

@@ -380,9 +380,10 @@ class SQLiteBackend(StorageBackend):
         """
         Preview target data for a node with pagination.
 
-        Uses streaming to avoid loading all records into memory.
-        Records are iterated one file at a time with early exit once
-        limit is reached.
+        Optimized to minimize queries and avoid unnecessary JSON deserialization:
+        - Single query gets file list with record counts
+        - Uses record_count to skip entire files when offset is large
+        - Only fetches data for files that contain needed records
 
         Args:
             node_name: Name of the processing node (action)
@@ -403,10 +404,23 @@ class SQLiteBackend(StorageBackend):
 
         cursor = self.connection.cursor()
 
-        # Get list of files for this node
-        files = self.list_target_files(node_name)
+        # Single query to get file metadata (path + record_count) for this node
+        # This replaces separate list_target_files() and count queries
+        cursor.execute(
+            """
+            SELECT relative_path, COALESCE(record_count, 0) as record_count
+            FROM target_data
+            WHERE node_name = ?
+            ORDER BY relative_path
+            """,
+            (node_name,),
+        )
+        file_metadata = cursor.fetchall()
 
-        # If specific file requested, filter to it
+        # Build file list from metadata
+        files = [row["relative_path"] for row in file_metadata]
+
+        # If specific file requested, check existence and filter metadata
         if relative_path:
             if relative_path not in files:
                 return {
@@ -416,41 +430,40 @@ class SQLiteBackend(StorageBackend):
                     "files": files,
                     "error": f"File '{relative_path}' not found for node '{node_name}'",
                 }
-            files_to_query = [relative_path]
-        else:
-            files_to_query = files
+            # Filter to just the requested file
+            file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
 
-        # Get total count efficiently using stored record_count
-        if relative_path:
-            cursor.execute(
-                "SELECT COALESCE(SUM(record_count), 0) as total FROM target_data WHERE node_name = ? AND relative_path = ?",
-                (node_name, relative_path),
-            )
-        else:
-            cursor.execute(
-                "SELECT COALESCE(SUM(record_count), 0) as total FROM target_data WHERE node_name = ?",
-                (node_name,),
-            )
-        total_count = cursor.fetchone()["total"]
+        # Calculate total count from metadata (no extra query needed)
+        total_count = sum(row["record_count"] for row in file_metadata)
 
-        # Stream records with pagination - avoid loading all into memory
+        # Smart pagination: use record_count to skip entire files
         paginated_records: List[Dict[str, Any]] = []
         skipped = 0
         collected = 0
 
-        for file_path in files_to_query:
+        for row in file_metadata:
             if collected >= limit:
                 break
 
+            file_path = row["relative_path"]
+            file_record_count = row["record_count"]
+
+            # Skip entire file if all its records fall before offset
+            # This avoids fetching and deserializing data we don't need
+            if skipped + file_record_count <= offset:
+                skipped += file_record_count
+                continue
+
+            # Fetch data only for files we need records from
             cursor.execute(
                 "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
                 (node_name, file_path),
             )
-            row = cursor.fetchone()
-            if not row:
+            data_row = cursor.fetchone()
+            if not data_row:
                 continue
 
-            records = json.loads(row["data"])
+            records = json.loads(data_row["data"])
             for record in records:
                 # Skip records until we reach offset
                 if skipped < offset:
