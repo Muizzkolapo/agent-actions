@@ -8,9 +8,7 @@ import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional
-from uuid import uuid4
 
-from agent_actions.logging import get_manager
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.workspace_index import WorkspaceIndex
 
@@ -318,40 +316,6 @@ class WorkflowDependencyOrchestrator:
             "[blue]Please wait for batch completion and run this command again:[/blue]"
         )
         self.console.print(f"[blue]  agac run -a {self.current_workflow} {flag}[/blue]")
-
-    def resolve_upstream_and_initialize(
-        self,
-        run_upstream: bool,
-        agent_configs: dict,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
-        use_tools: bool,
-    ) -> Optional[bool]:
-        """
-        Initialize correlation context and resolve upstream dependencies.
-
-        Args:
-            run_upstream: Whether to run upstream workflows.
-            agent_configs: Dictionary of agent configurations.
-            user_code_path: Path to user code directory.
-            default_path: Path to default configuration.
-            use_tools: Whether to enable tool usage.
-
-        Returns:
-            True if should continue, False if upstream has pending batches.
-        """
-        if not run_upstream:
-            return True
-
-        # Use context manager to save/restore context
-        manager = get_manager()
-        with manager.context(workflow_name=self.current_workflow, correlation_id=str(uuid4())[:8]):
-            should_continue = self.resolve_upstream_workflows(
-                agent_configs, user_code_path, default_path, use_tools
-            )
-            if not should_continue:
-                return False
-            return True
 
 
 __all__ = ["WorkflowDependencyOrchestrator"]

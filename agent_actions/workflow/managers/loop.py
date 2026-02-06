@@ -314,38 +314,6 @@ class VersionOutputCorrelator:
             )
             params.corrupted_files.append(str(params.json_file.name))
 
-    def _load_agent_outputs(self, output_dir: Path) -> List[Dict[str, Any]]:
-        """Load all JSON outputs from an agent's output directory."""
-        outputs = []
-        corrupted_files = []
-
-        for json_file in output_dir.glob("*.json"):
-            self._load_json_from_file(
-                JsonLoadParams(
-                    json_file=json_file,
-                    outputs=outputs,
-                    corrupted_files=corrupted_files,
-                    output_dir=output_dir,
-                    operation="load_version_outputs",
-                    add_source_file=False,
-                )
-            )
-
-        if corrupted_files:
-            logger.warning(
-                "Skipped %d corrupted files in version output",
-                len(corrupted_files),
-                extra={
-                    "operation": "load_loop_outputs",
-                    "output_dir": str(output_dir),
-                    "corrupted_count": len(corrupted_files),
-                    "corrupted_files": corrupted_files,
-                    "loaded_count": len(outputs),
-                },
-            )
-
-        return outputs
-
     def _load_agent_outputs_with_filenames(
         self, output_dir: Path
     ) -> Tuple[List[Dict[str, Any]], set]:
@@ -491,30 +459,6 @@ class VersionOutputCorrelator:
             # Create nested namespace for each version iteration
             merged_content[agent_name] = content
         return merged_content
-
-    def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:
-        """
-        Extract a correlation key from a record to match it across version iterations.
-
-        Tries multiple strategies to find a suitable correlation key.
-        """
-        if "id" in record:
-            return str(record["id"])
-        if "source_guid" in record:
-            return str(record["source_guid"])
-        key_fields = ["url", "question", "fact", "content"]
-        available_fields = [field for field in key_fields if field in record]
-        if available_fields:
-            key_parts = [str(record[field]) for field in available_fields[:2]]
-            return "|".join(key_parts)
-        stable_fields = {
-            k: v for k, v in record.items() if not any((k.endswith(f"_{i}") for i in range(1, 10)))
-        }
-        if stable_fields:
-            # sort_keys=True for consistent hashing, compact separators for speed
-            content_str = json.dumps(stable_fields, sort_keys=True, separators=(",", ":"))
-            return str(hash(content_str))
-        return None
 
     def _write_correlated_data(
         self,

@@ -20,6 +20,7 @@ from agent_actions.workflow.strategies import (
     StrategyExecutionParams,
 )
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
+from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 from agent_actions.config.di.container import ProcessorFactory
 
 logger = logging.getLogger(__name__)
@@ -334,9 +335,7 @@ class AgentRunner:
         logger.warning("Dependency directory not found for %s", dep_name)
         return None
 
-    def _resolve_linear_directory(
-        self, agent_folder: Path, previous_agent_type: str, _idx: int
-    ) -> Path:
+    def _resolve_linear_directory(self, agent_folder: Path, previous_agent_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior).
 
         Uses simple directory name (action name) without index prefix.
@@ -344,7 +343,6 @@ class AgentRunner:
         Args:
             agent_folder: Path to agent folder
             previous_agent_type: Name of previous action
-            _idx: Unused - kept for API compatibility
         """
         # Use simple name without index prefix
         return agent_folder / "target" / previous_agent_type
@@ -381,7 +379,7 @@ class AgentRunner:
             )
         elif previous_agent_type:
             upstream_data_dirs = [
-                self._resolve_linear_directory(agent_folder_path, previous_agent_type, idx)
+                self._resolve_linear_directory(agent_folder_path, previous_agent_type)
             ]
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
@@ -415,17 +413,6 @@ class AgentRunner:
             )
         )
 
-    def _should_skip_file(self, item: Path, processed_paths: set) -> bool:
-        """Check if file should be skipped."""
-        if item.name.startswith("."):
-            logger.debug("Skipping hidden/marker file: %s", item.name)
-            return True
-        relative_path = item.relative_to(item.parent)
-        if relative_path in processed_paths:
-            logger.debug("Skipping duplicate file: %s", relative_path)
-            return True
-        return False
-
     def _should_skip_item(self, item: Path, input_path: Path, processed_paths: set) -> bool:
         """Check if an item should be skipped during processing."""
         if "batch" in item.parts:
@@ -438,194 +425,6 @@ class AgentRunner:
         if relative_path in processed_paths:
             return True
         return False
-
-    def _merge_json_contents(
-        self, file_paths: List[Path], reduce_key: Optional[str] = None
-    ) -> List:
-        """
-        Merge JSON contents from multiple files by correlating on a key field.
-
-        Used when processing files from multiple parallel branches that have
-        the same filename. Records with the same correlation key are merged into
-        a single record with all fields combined (MapReduce pattern).
-
-        For example, if validator_1 outputs {"parent_target_id": "x", "answer_1": "A"}
-        and validator_2 outputs {"parent_target_id": "x", "answer_2": "B"},
-        the merged result is {"parent_target_id": "x", "answer_1": "A", "answer_2": "B"}.
-
-        Args:
-            file_paths: List of paths to JSON files to merge
-            reduce_key: Field name to use for correlation (e.g., "parent_target_id").
-                       Falls back to: parent_target_id -> source_guid if not specified.
-
-        Returns:
-            List of merged records, correlated by the reduce key
-        """
-        # Collect all records from all files
-        all_records = []
-        for file_path in file_paths:
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        all_records.extend(data)
-                    else:
-                        all_records.append(data)
-            except (json.JSONDecodeError, OSError, IOError) as e:
-                logger.warning(
-                    "Could not read JSON file for merging: %s - %s",
-                    file_path,
-                    e,
-                )
-
-        # Group records by correlation key and merge their contents
-        records_by_key: Dict[str, Dict] = {}
-        records_without_key = []
-
-        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
-        key_candidates = []
-        if reduce_key:
-            key_candidates.append(reduce_key)
-        key_candidates.extend(["parent_target_id", "source_guid"])
-
-        for record in all_records:
-            if not isinstance(record, dict):
-                records_without_key.append(record)
-                continue
-
-            # Try to find correlation key using fallback chain
-            correlation_value = None
-            for key_name in key_candidates:
-                correlation_value = record.get(key_name)
-                if not correlation_value:
-                    # Try nested in content
-                    content = record.get("content", {})
-                    if isinstance(content, dict):
-                        correlation_value = content.get(key_name)
-                if correlation_value:
-                    break
-
-            if correlation_value:
-                if correlation_value not in records_by_key:
-                    records_by_key[correlation_value] = {}
-
-                # Merge this record into the existing one
-                existing = records_by_key[correlation_value]
-                self._deep_merge_record(existing, record)
-            else:
-                # No correlation key found - can't correlate, just include as-is
-                records_without_key.append(record)
-
-        # Return merged records plus any that couldn't be correlated
-        merged = list(records_by_key.values()) + records_without_key
-
-        logger.debug(
-            "Merged %d records from %d files into %d correlated records (key=%s)",
-            len(all_records),
-            len(file_paths),
-            len(merged),
-            reduce_key or "auto",
-        )
-
-        return merged
-
-    def _deep_merge_record(self, existing: Dict, new_record: Dict) -> None:
-        """
-        Deep merge a new record into an existing record.
-
-        Handles special cases for content (dict merge) and lineage (array merge with dedup).
-
-        Args:
-            existing: Target record to merge into (modified in place)
-            new_record: Source record to merge from
-        """
-        for key, value in new_record.items():
-            if key == "content" and isinstance(value, dict):
-                # Deep merge content dictionaries
-                if "content" not in existing:
-                    existing["content"] = {}
-                if isinstance(existing["content"], dict):
-                    existing["content"].update(value)
-                else:
-                    existing["content"] = value
-            elif key == "lineage" and isinstance(value, list):
-                # Merge lineage arrays with deduplication
-                # Lineage entries can be strings (node_ids) or dicts with node_id
-                if "lineage" not in existing:
-                    existing["lineage"] = []
-                if isinstance(existing["lineage"], list):
-                    # Build set of existing node_ids for dedup
-                    existing_node_ids = set()
-                    for entry in existing["lineage"]:
-                        if isinstance(entry, str):
-                            existing_node_ids.add(entry)
-                        elif isinstance(entry, dict) and "node_id" in entry:
-                            existing_node_ids.add(entry["node_id"])
-
-                    # Add new entries that aren't duplicates
-                    for entry in value:
-                        if isinstance(entry, str):
-                            if entry not in existing_node_ids:
-                                existing["lineage"].append(entry)
-                                existing_node_ids.add(entry)
-                        elif isinstance(entry, dict) and "node_id" in entry:
-                            if entry["node_id"] not in existing_node_ids:
-                                existing["lineage"].append(entry)
-                                existing_node_ids.add(entry["node_id"])
-            elif key not in existing:
-                # First occurrence wins for non-mergeable fields
-                existing[key] = value
-
-    def _merge_records_by_key(
-        self, all_records: List[Any], reduce_key: Optional[str] = None
-    ) -> List:
-        """
-        Merge records by correlating on a key field.
-
-        Used when processing data from multiple parallel branches.
-        Records with the same correlation key are merged into a single record.
-
-        Args:
-            all_records: List of records to merge
-            reduce_key: Field name to use for correlation.
-                       Falls back to: parent_target_id -> source_guid if not specified.
-
-        Returns:
-            List of merged records, correlated by the reduce key
-        """
-        records_by_key: Dict[str, Dict] = {}
-        records_without_key = []
-
-        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
-        key_candidates = []
-        if reduce_key:
-            key_candidates.append(reduce_key)
-        key_candidates.extend(["parent_target_id", "source_guid"])
-
-        for record in all_records:
-            if not isinstance(record, dict):
-                records_without_key.append(record)
-                continue
-
-            # Try to find correlation key using fallback chain
-            correlation_value = None
-            for key_name in key_candidates:
-                correlation_value = record.get(key_name)
-                if not correlation_value:
-                    content = record.get("content", {})
-                    if isinstance(content, dict):
-                        correlation_value = content.get(key_name)
-                if correlation_value:
-                    break
-
-            if correlation_value:
-                if correlation_value not in records_by_key:
-                    records_by_key[correlation_value] = {}
-                self._deep_merge_record(records_by_key[correlation_value], record)
-            else:
-                records_without_key.append(record)
-
-        return list(records_by_key.values()) + records_without_key
 
     def _collect_files_from_upstream(self, upstream_data_dirs: List[str]) -> Dict[Path, List[Path]]:
         """
@@ -771,7 +570,7 @@ class AgentRunner:
                     relative_path,
                     reduce_key or "auto",
                 )
-                merged_data = self._merge_json_contents(file_paths, reduce_key=reduce_key)
+                merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
                 # Use the first upstream directory as the base for path structure
                 # This ensures the path contains 'agent_io' which source_loader expects
@@ -899,7 +698,7 @@ class AgentRunner:
                             all_data.extend(source_data)
                         else:
                             all_data.append(source_data)
-                    data = self._merge_records_by_key(all_data, reduce_key)
+                    data = merge_records_by_key(all_data, reduce_key)
 
                 # Pass data directly to avoid temp file I/O overhead.
                 # We use output_path as the virtual input path because:
@@ -1084,7 +883,6 @@ class AgentRunner:
         agent_name: str,
         previous_agent_type: Optional[str],
         idx: int,
-        _is_last_agent: bool = False,
     ) -> str:
         """
         Runs an agent with the appropriate strategy based on its position.
@@ -1094,7 +892,6 @@ class AgentRunner:
             agent_name (str): Name of the agent.
             previous_agent_type (Optional[str]): Type of previous agent.
             idx (int): Current agent's index in workflow.
-            _is_last_agent (bool): Flag indicating if this is the last agent.
 
         Returns:
             str: Path to the output directory.

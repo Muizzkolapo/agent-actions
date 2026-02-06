@@ -8,7 +8,7 @@ and generating outputs based on the agent's position in a workflow.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
-import asyncio
+
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     process_initial_stage,
     InitialStageContext,
@@ -16,7 +16,6 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
 from agent_actions.config.di.container import ProcessorFactory
 
 if TYPE_CHECKING:
-    from agent_actions.workflow.pipeline import ProcessingPipeline, PipelineConfig
     from agent_actions.storage.backend import StorageBackend
 
 
@@ -94,21 +93,12 @@ class AgentStrategy(ABC):
             storage_backend=params.storage_backend,
             source_relative_path=params.source_relative_path,
         )
-        result = pipeline.process(
+        return pipeline.process(
             params.file_path,
             params.base_directory,
             params.output_directory,
             data=params.data,
         )
-        if asyncio.iscoroutine(result):
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-            if loop and loop.is_running():
-                return loop.run_until_complete(result)
-            return asyncio.run(result)
-        return result
 
 
 class InitialStrategy(AgentStrategy):

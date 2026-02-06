@@ -15,6 +15,7 @@ from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
 from rich.console import Console
 
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
+from agent_actions.workflow.merge import merge_json_files
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -303,86 +304,7 @@ class AgentOutputManager:
         Returns:
             List of merged records
         """
-        all_records = []
-        for file_path in file_paths:
-            try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        all_records.extend(data)
-                    else:
-                        all_records.append(data)
-            except (json.JSONDecodeError, OSError, IOError):
-                continue
-
-        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
-        key_candidates = []
-        if reduce_key:
-            key_candidates.append(reduce_key)
-        key_candidates.extend(["parent_target_id", "source_guid"])
-
-        records_by_key: Dict[str, Dict] = {}
-        records_without_key = []
-
-        for record in all_records:
-            if not isinstance(record, dict):
-                records_without_key.append(record)
-                continue
-
-            # Find correlation value
-            correlation_value = None
-            for key_name in key_candidates:
-                correlation_value = record.get(key_name)
-                if not correlation_value:
-                    content = record.get("content", {})
-                    if isinstance(content, dict):
-                        correlation_value = content.get(key_name)
-                if correlation_value:
-                    break
-
-            if correlation_value:
-                if correlation_value not in records_by_key:
-                    records_by_key[correlation_value] = {}
-                # Deep merge
-                existing = records_by_key[correlation_value]
-                for key, value in record.items():
-                    if key == "content" and isinstance(value, dict):
-                        if "content" not in existing:
-                            existing["content"] = {}
-                        if isinstance(existing["content"], dict):
-                            existing["content"].update(value)
-                        else:
-                            existing["content"] = value
-                    elif key == "lineage" and isinstance(value, list):
-                        # Merge lineage arrays with deduplication
-                        # Lineage entries can be strings (node_ids) or dicts
-                        if "lineage" not in existing:
-                            existing["lineage"] = []
-                        if isinstance(existing["lineage"], list):
-                            existing_ids = set()
-                            for entry in existing["lineage"]:
-                                if isinstance(entry, str):
-                                    existing_ids.add(entry)
-                                elif isinstance(entry, dict) and "node_id" in entry:
-                                    existing_ids.add(entry["node_id"])
-
-                            for entry in value:
-                                if isinstance(entry, str):
-                                    if entry not in existing_ids:
-                                        existing["lineage"].append(entry)
-                                        existing_ids.add(entry)
-                                elif (
-                                    isinstance(entry, dict)
-                                    and entry.get("node_id") not in existing_ids
-                                ):
-                                    existing["lineage"].append(entry)
-                                    existing_ids.add(entry.get("node_id"))
-                    elif key not in existing:
-                        existing[key] = value
-            else:
-                records_without_key.append(record)
-
-        return list(records_by_key.values()) + records_without_key
+        return merge_json_files([Path(p) for p in file_paths], reduce_key)
 
     def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
         """

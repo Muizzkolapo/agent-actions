@@ -122,18 +122,6 @@ class AgentWorkflow:
         """Get console from runtime context."""
         return self.runtime.console
 
-    @property
-    def _workspace_index(self):
-        """Get or create workspace index (lazy initialization)."""
-        if not hasattr(self, "_workspace_index_cached"):
-            self._workspace_index_cached = None
-        return self._workspace_index_cached
-
-    @_workspace_index.setter
-    def _workspace_index(self, value):
-        """Set workspace index."""
-        self._workspace_index_cached = value
-
     def _init_dependency_orchestrator(self) -> None:
         """Initialize the workflow dependency orchestrator."""
         workflows_root = self._get_workflows_root()
@@ -739,15 +727,6 @@ class AgentWorkflow:
             )
         )
 
-    def _get_status_display(self, status: str) -> tuple:
-        """Get status display color and suffix."""
-        status_map = {
-            "completed": ("[green]OK[/green]", ""),
-            "batch_submitted": ("[yellow]SUBMITTED[/yellow]", " (batch)"),
-            "failed": ("[red]FAIL[/red]", ""),
-        }
-        return status_map.get(status, ("[yellow]UNKNOWN[/yellow]", ""))
-
     def _log_agent_result(self, params: AgentLogParams):
         """Log agent execution result via event system."""
         if params.result.success:
@@ -780,28 +759,17 @@ class AgentWorkflow:
 
     def _finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""
-        # Count agent statuses
-        completed = 0
-        skipped = 0
-        failed = 0
-
-        for agent_name in self.execution_order:
-            status = self.services.core.state_manager.get_status(agent_name)
-            if status == "completed":
-                completed += 1
-            elif status == "skipped":
-                skipped += 1
-            elif status == "failed":
-                failed += 1
+        # Get status counts from state manager
+        summary = self.services.core.state_manager.get_summary()
 
         # Fire workflow complete event
         fire_event(
             WorkflowCompleteEvent(
                 workflow_name=self.agent_name,
                 elapsed_time=elapsed_time,
-                agents_completed=completed,
-                agents_skipped=skipped,
-                agents_failed=failed,
+                agents_completed=summary.get("completed", 0),
+                agents_skipped=summary.get("skipped", 0),
+                agents_failed=summary.get("failed", 0),
             )
         )
 

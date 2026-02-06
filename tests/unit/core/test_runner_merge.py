@@ -1,82 +1,77 @@
-"""Tests for AgentRunner merge behavior."""
+"""Tests for record merge behavior."""
 
 import pytest
 from unittest.mock import MagicMock, patch
 
+from agent_actions.workflow.merge import merge_records_by_key
 from agent_actions.workflow.runner import AgentRunner
 
 
 class TestMergeRecordsByKey:
-    """Tests for _merge_records_by_key method."""
+    """Tests for merge_records_by_key function."""
 
-    @pytest.fixture
-    def runner(self):
-        """Create an AgentRunner instance for testing."""
-        runner = AgentRunner.__new__(AgentRunner)
-        return runner
-
-    def test_merges_records_with_same_source_guid(self, runner):
+    def test_merges_records_with_same_source_guid(self):
         """Should merge records with the same source_guid."""
         records = [
             {"source_guid": "abc123", "field_1": "value_1"},
             {"source_guid": "abc123", "field_2": "value_2"},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 1
         assert result[0]["source_guid"] == "abc123"
         assert result[0]["field_1"] == "value_1"
         assert result[0]["field_2"] == "value_2"
 
-    def test_merges_records_with_parent_target_id(self, runner):
+    def test_merges_records_with_parent_target_id(self):
         """Should merge records using parent_target_id as correlation key."""
         records = [
             {"parent_target_id": "xyz", "answer_1": "A"},
             {"parent_target_id": "xyz", "answer_2": "B"},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 1
         assert result[0]["answer_1"] == "A"
         assert result[0]["answer_2"] == "B"
 
-    def test_uses_explicit_reduce_key(self, runner):
+    def test_uses_explicit_reduce_key(self):
         """Should use explicit reduce_key when provided."""
         records = [
             {"custom_id": "123", "source_guid": "different1", "data": "a"},
             {"custom_id": "123", "source_guid": "different2", "data": "b"},
         ]
 
-        result = runner._merge_records_by_key(records, reduce_key="custom_id")
+        result = merge_records_by_key(records, reduce_key="custom_id")
 
         assert len(result) == 1
         assert result[0]["custom_id"] == "123"
 
-    def test_keeps_separate_records_with_different_keys(self, runner):
+    def test_keeps_separate_records_with_different_keys(self):
         """Should keep records separate when they have different correlation keys."""
         records = [
             {"source_guid": "abc", "value": 1},
             {"source_guid": "xyz", "value": 2},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 2
 
-    def test_handles_records_without_correlation_key(self, runner):
+    def test_handles_records_without_correlation_key(self):
         """Should include records without correlation keys as-is."""
         records = [
             {"source_guid": "abc", "merged": True},
             {"no_key": "orphan"},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 2
 
-    def test_handles_non_dict_records(self, runner):
+    def test_handles_non_dict_records(self):
         """Should handle non-dict records gracefully."""
         records = [
             {"source_guid": "abc", "value": 1},
@@ -84,31 +79,31 @@ class TestMergeRecordsByKey:
             123,
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 3
 
-    def test_merges_content_deeply(self, runner):
+    def test_merges_content_deeply(self):
         """Should deep merge content dictionaries."""
         records = [
             {"source_guid": "abc", "content": {"field_a": "A"}},
             {"source_guid": "abc", "content": {"field_b": "B"}},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 1
         assert result[0]["content"]["field_a"] == "A"
         assert result[0]["content"]["field_b"] == "B"
 
-    def test_merges_lineage_with_deduplication(self, runner):
+    def test_merges_lineage_with_deduplication(self):
         """Should merge lineage arrays with deduplication."""
         records = [
             {"source_guid": "abc", "lineage": ["node_1", "node_2"]},
             {"source_guid": "abc", "lineage": ["node_2", "node_3"]},
         ]
 
-        result = runner._merge_records_by_key(records)
+        result = merge_records_by_key(records)
 
         assert len(result) == 1
         lineage = result[0]["lineage"]
