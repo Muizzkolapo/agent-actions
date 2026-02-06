@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from jinja2 import Environment, TemplateSyntaxError, meta, nodes
+from jinja2 import Environment, TemplateSyntaxError, nodes
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +24,134 @@ class PromptASTAnalyzer:
     """
     Analyzes Jinja2 templates using AST parsing (no regex).
 
-    Uses Jinja2's built-in meta module to extract variable references.
+    Uses Jinja2's AST traversal to extract full variable paths including
+    nested attribute access (e.g., 'seed.exam_syllabus.platform_name').
     """
 
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
         self.env = Environment()
 
+    def _build_path_from_node(self, node: nodes.Node) -> str:
+        """
+        Build full attribute path by walking the AST node chain.
+
+        Handles:
+        - nodes.Name: Returns the variable name ('seed')
+        - nodes.Getattr: Recursively builds path ('seed.field')
+        - nodes.Getitem: Appends bracket notation ('data[key]')
+
+        Args:
+            node: AST node to build path from
+
+        Returns:
+            Full path string like 'seed.exam_syllabus.platform_name',
+            or empty string if the path is rooted in an unsupported node
+            (e.g., literal like "foo".upper())
+        """
+        if isinstance(node, nodes.Name):
+            return node.name
+        elif isinstance(node, nodes.Getattr):
+            parent_path = self._build_path_from_node(node.node)
+            if not parent_path:
+                # Parent is unsupported (e.g., literal) - skip entire path
+                return ""
+            return f"{parent_path}.{node.attr}"
+        elif isinstance(node, nodes.Getitem):
+            parent_path = self._build_path_from_node(node.node)
+            if not parent_path:
+                # Parent is unsupported (e.g., literal) - skip entire path
+                return ""
+            # Handle constant keys (strings/ints)
+            if isinstance(node.arg, nodes.Const):
+                key = node.arg.value
+                if isinstance(key, str):
+                    return f'{parent_path}["{key}"]'
+                return f"{parent_path}[{key}]"
+            # Dynamic key - can't resolve at parse time
+            return f"{parent_path}[*]"
+        else:
+            # Unsupported node type (Const, Call, etc.) - return empty to skip
+            return ""
+
+    def _extract_full_paths(self, template_ast: nodes.Template) -> Set[str]:
+        """
+        Extract full attribute paths from parsed AST.
+
+        Finds all variable references including nested attribute access.
+        For '{{ seed.exam_syllabus }}', returns {'seed.exam_syllabus'}.
+
+        Excludes declared variables (loop variables, set assignments) which
+        have 'store' context in Jinja2's AST.
+
+        Note: Paths with dynamic keys (e.g., items[i].name) are returned as
+        items[*].name and cannot be statically validated.
+
+        Args:
+            template_ast: Parsed Jinja2 template AST
+
+        Returns:
+            Set of full variable paths (undeclared references only)
+        """
+        paths: Set[str] = set()
+
+        # NOTE: We use id() to track node identity. This is safe because all AST
+        # nodes remain alive for the duration of this method. Do not refactor to
+        # process nodes lazily or across multiple calls without changing this.
+        names_in_chains: Set[int] = set()
+        intermediate_nodes: Set[int] = set()
+
+        # Track declared variable names (loop vars, set assignments)
+        # These have 'store' context and should be excluded from required references
+        declared_names: Set[str] = set()
+        for node in template_ast.find_all(nodes.Name):
+            if node.ctx == "store":
+                declared_names.add(node.name)
+
+        # First pass: identify chain structure
+        for node in template_ast.find_all((nodes.Getattr, nodes.Getitem)):
+            # Mark child nodes as intermediate (not outermost)
+            if isinstance(node.node, (nodes.Getattr, nodes.Getitem)):
+                intermediate_nodes.add(id(node.node))
+            # Mark root Name nodes as part of chains
+            current = node
+            while isinstance(current, (nodes.Getattr, nodes.Getitem)):
+                current = current.node
+            if isinstance(current, nodes.Name):
+                names_in_chains.add(id(current))
+
+        # Second pass: build paths from OUTERMOST Getattr/Getitem nodes only
+        # Skip intermediate nodes to avoid duplicates like seed.exam AND seed.exam.field
+        for node in template_ast.find_all((nodes.Getattr, nodes.Getitem)):
+            if id(node) in intermediate_nodes:
+                continue  # Skip intermediate nodes
+            path = self._build_path_from_node(node)
+            if path:
+                root_name = path.split(".")[0].split("[")[0]
+                if root_name not in declared_names:
+                    paths.add(path)
+
+        # Third pass: add standalone Name nodes (not part of chains)
+        # Only include 'load' context nodes that aren't declared
+        for node in template_ast.find_all(nodes.Name):
+            if id(node) not in names_in_chains:
+                if node.ctx == "load" and node.name not in declared_names:
+                    paths.add(node.name)
+
+        return paths
+
     def extract_variables(self, template_source: str) -> Set[str]:
         """
         Extract all variable references from a Jinja2 template using AST.
 
         This is the industry-standard way to analyze Jinja2 templates.
-        NO REGEX - uses Jinja2's built-in parser.
+        NO REGEX - uses Jinja2's built-in parser with AST traversal.
 
         Args:
             template_source: Jinja2 template string
 
         Returns:
-            Set of variable names referenced in template
+            Set of full variable paths referenced in template
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -57,17 +166,12 @@ class PromptASTAnalyzer:
             ['seed.exam_syllabus.platform_name', 'source.url']
 
         Technical Details:
-            Uses jinja2.meta.find_undeclared_variables() which parses
-            the template's AST and returns all variable references.
+            Uses AST traversal to walk nodes.Getattr and nodes.Getitem
+            chains, building full attribute paths.
         """
         try:
-            # Parse template into AST
             ast = self.env.parse(template_source)
-
-            # Extract undeclared variables (all variables used in template)
-            undeclared = meta.find_undeclared_variables(ast)
-
-            return undeclared
+            return self._extract_full_paths(ast)
 
         except TemplateSyntaxError as e:
             logger.error("Jinja2 syntax error in template: %s", e)
@@ -96,15 +200,16 @@ class PromptASTAnalyzer:
             ast = self.env.parse(template_source)
 
             # Get all referenced variables (with full paths)
-            referenced = meta.find_undeclared_variables(ast)
+            full_paths = self._extract_full_paths(ast)
 
-            # Extract root variables (before first dot)
+            # Extract root variables (before first dot or bracket)
             root_vars = set()
-            for var in referenced:
-                root_var = var.split(".")[0]
+            for var in full_paths:
+                # Handle both 'seed.field' and 'data["key"]' formats
+                root_var = var.split(".")[0].split("[")[0]
                 root_vars.add(root_var)
 
-            return root_vars, referenced
+            return root_vars, full_paths
 
         except TemplateSyntaxError as e:
             raise ValueError(f"Template syntax error: {e}") from e
@@ -199,15 +304,21 @@ class PromptASTAnalyzer:
 
     def get_detailed_field_usage(self, template_source: str) -> List[Dict[str, Any]]:
         """
-        Get detailed information about how each field is used.
+        Get detailed information about how each root variable is used.
 
-        This uses AST node traversal to find exact usage context.
+        This method returns ROOT variable names with line numbers and context,
+        useful for detailed inspection and debugging. For full attribute paths,
+        use extract_variables() instead.
 
         Args:
             template_source: Jinja2 template
 
         Returns:
-            List of field usage details
+            List of field usage details with:
+            - name: Root variable name (not full path)
+            - type: AST node type
+            - line: Line number in template
+            - context: 'load' (reading) or 'store' (declaring)
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -219,12 +330,13 @@ class PromptASTAnalyzer:
             >>> usage = analyzer.get_detailed_field_usage(template)
             >>> len(usage)
             3
+            >>> usage[0]['name']  # Returns 'seed', not 'seed.exam_syllabus'
+            'seed'
         """
-        ast = self.env.parse(template_source)
+        template_ast = self.env.parse(template_source)
         usage_list = []
 
-        # Use Jinja2's visitor pattern to walk AST
-        for node in ast.find_all(nodes.Name):
+        for node in template_ast.find_all(nodes.Name):
             usage_list.append(
                 {
                     "name": node.name,
