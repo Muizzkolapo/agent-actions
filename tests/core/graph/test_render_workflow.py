@@ -1,12 +1,11 @@
 """
-Tests for render_workflow.py - Jinja2 template rendering and YAML normalization.
+Tests for render_workflow.py - Jinja2 template rendering.
 
 This module tests:
-1. normalize_yaml_indentation() function
-2. dedent Jinja2 filter
-3. Failed render caching
-4. Integration with template rendering
-5. Backward compatibility
+1. dedent Jinja2 filter
+2. Failed render caching
+3. Integration with template rendering
+4. Backward compatibility
 """
 
 import pytest
@@ -15,78 +14,8 @@ import tempfile
 import shutil
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-from agent_actions.prompt.render_workflow import (
-    normalize_yaml_indentation,
-    render_pipeline_with_templates,
-)
-from agent_actions.errors import ConfigurationError  # New modular pattern!
-
-
-class TestNormalizeYamlIndentation:
-    """Test the normalize_yaml_indentation() function."""
-
-    def test_normalize_removes_common_indent(self):
-        """Test that common leading whitespace is removed."""
-        input_yaml = "    - name: foo\n      kind: tool"
-        expected = "- name: foo\n  kind: tool"
-        result = normalize_yaml_indentation(input_yaml)
-        assert result == expected
-
-    def test_normalize_preserves_relative_indent(self):
-        """Test that relative indentation within blocks is preserved."""
-        input_yaml = "  parent:\n    child:\n      nested: value"
-        result = normalize_yaml_indentation(input_yaml)
-        parsed = yaml.safe_load(result)
-        assert parsed["parent"]["child"]["nested"] == "value"
-        lines = result.splitlines()
-        assert lines[0] == "parent:"
-        assert lines[1] == "  child:"
-        assert lines[2] == "    nested: value"
-
-    def test_normalize_empty_string(self):
-        """Test that empty string is handled correctly."""
-        assert normalize_yaml_indentation("") == ""
-
-    def test_normalize_already_correct(self):
-        """Test that correctly indented YAML is unchanged."""
-        input_yaml = "- name: foo\n  kind: tool"
-        result = normalize_yaml_indentation(input_yaml)
-        assert result == input_yaml
-
-    def test_normalize_excessive_indent(self):
-        """Test normalization of YAML with excessive indentation."""
-        input_yaml = (
-            "      - name: foo\n        kind: tool\n      - name: bar\n        kind: action"
-        )
-        result = normalize_yaml_indentation(input_yaml)
-        parsed = yaml.safe_load(result)
-        assert len(parsed) == 2
-        assert parsed[0]["name"] == "foo"
-        assert parsed[1]["name"] == "bar"
-
-    def test_normalize_single_line(self):
-        """Test normalization of single-line YAML."""
-        input_yaml = "    name: value"
-        expected = "name: value"
-        result = normalize_yaml_indentation(input_yaml)
-        assert result == expected
-
-    def test_normalize_mixed_content(self):
-        """Test normalization with mixed YAML structures."""
-        input_yaml = "    tools:\n      - name: format_quiz\n        kind: tool\n      - name: validate_quiz\n        kind: tool\n    actions:\n      - name: save_quiz\n        kind: action"
-        result = normalize_yaml_indentation(input_yaml)
-        parsed = yaml.safe_load(result)
-        assert "tools" in parsed
-        assert "actions" in parsed
-        assert len(parsed["tools"]) == 2
-        assert len(parsed["actions"]) == 1
-
-    def test_normalize_with_blank_lines(self):
-        """Test that blank lines are preserved."""
-        input_yaml = "    name: foo\n\n    other: bar"
-        result = normalize_yaml_indentation(input_yaml)
-        lines = result.splitlines(keepends=True)
-        assert len([l for l in lines if l.strip() == ""]) > 0
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.errors import ConfigurationError
 
 
 class TestDedentFilter:

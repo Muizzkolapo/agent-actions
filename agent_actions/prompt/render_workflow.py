@@ -1,8 +1,7 @@
 """
 Module for rendering and compiling workflow templates.
 
-This module provides the single compilation step for workflows, similar to how
-`dbt run` compiles SQL before execution. After render, the YAML is fully
+This module provides the single compilation step for workflows. After render, the YAML is fully
 self-contained with all schemas inlined and ready for direct execution.
 
 Compilation steps:
@@ -30,30 +29,6 @@ from agent_actions.utils.safe_format import safe_format_error
 logger = logging.getLogger(__name__)
 
 
-def normalize_yaml_indentation(yaml_text: str) -> str:
-    """
-    Normalize common YAML indentation issues.
-
-    Fixes:
-    - Excessive leading whitespace from macro indentation
-    - Inconsistent list item spacing
-    - Preserves relative indentation within blocks
-
-    Args:
-        yaml_text: Rendered YAML text that may have indentation issues
-
-    Returns:
-        Normalized YAML text with consistent indentation
-
-    Example:
-        Input:  '      - name: foo\\n        kind: tool'
-        Output: '  - name: foo\\n    kind: tool'
-    """
-    dedented = textwrap.dedent(yaml_text)
-    lines = dedented.splitlines(keepends=True)
-    return "".join(lines)
-
-
 def _load_template_globals(env, templates_folder):
     """
     Load and register all Jinja2 templates and their globals.
@@ -69,7 +44,7 @@ def _load_template_globals(env, templates_folder):
             module = template.module
             env.globals.update(vars(module))
         except jinja2.TemplateNotFound:
-            print(f"Warning: Template file '{template_file}' not found in {templates_folder}.")
+            logger.warning("Template file '%s' not found in %s.", template_file, templates_folder)
         except jinja2.TemplateSyntaxError as e:
             raise TemplateRenderingError(
                 "Syntax error in template",
@@ -301,13 +276,13 @@ def _compile_action_schemas(
             loaded_schema = _load_named_schema(schema_name, schema_dir)
             action["schema"] = loaded_schema
             del action["schema_name"]
-            logger.debug(f"Inlined named schema '{schema_name}' for action '{action_name}'")
+            logger.debug("Inlined named schema '%s' for action '%s'", schema_name, action_name)
         except ConfigurationError as e:
             error_msg = f"Action '{action_name}': Could not load schema '{schema_name}' - {e}"
             if strict and errors is not None:
                 errors.append(error_msg)
             else:
-                logger.warning(f"Could not load schema '{schema_name}' for inlining")
+                logger.warning("Could not load schema '%s' for inlining", schema_name)
 
     # Handle schema: "foo" (string reference) -> load and inline
     schema_value = action.get("schema")
@@ -315,19 +290,19 @@ def _compile_action_schemas(
         try:
             loaded_schema = _load_named_schema(schema_value, schema_dir)
             action["schema"] = loaded_schema
-            logger.debug(f"Inlined schema reference '{schema_value}' for action '{action_name}'")
+            logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
         except ConfigurationError as e:
             error_msg = f"Action '{action_name}': Could not load schema '{schema_value}' - {e}"
             if strict and errors is not None:
                 errors.append(error_msg)
             else:
-                logger.warning(f"Could not load schema '{schema_value}' for inlining")
+                logger.warning("Could not load schema '%s' for inlining", schema_value)
 
     # Handle schema: {field: type} (inline dict) -> expand to unified format
     schema_value = action.get("schema")
     if schema_value and _is_inline_schema_dict(schema_value):
         action["schema"] = _expand_inline_schema(schema_value)
-        logger.debug(f"Expanded inline schema for action '{action_name}'")
+        logger.debug("Expanded inline schema for action '%s'", action_name)
 
     # Also handle output_schema if present (legacy support)
     output_schema = action.get("output_schema")
@@ -600,7 +575,7 @@ def render_pipeline_with_templates(
             cause=e,
         ) from e
 
-    rendered_yaml_content = normalize_yaml_indentation(rendered_yaml_content)
+    rendered_yaml_content = textwrap.dedent(rendered_yaml_content)
 
     # Step 2: Parse YAML
     try:

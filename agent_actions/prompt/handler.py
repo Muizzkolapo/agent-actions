@@ -9,6 +9,9 @@ from agent_actions.output.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 
+# Compiled regex pattern for matching {prompt name} blocks
+PROMPT_PATTERN = re.compile(r"\{prompt\s+(\w+)\}")
+
 
 class PromptLoader:
     """
@@ -52,8 +55,7 @@ class PromptLoader:
         Returns:
             List[str]: A list of prompt names found in the content.
         """
-        pattern = re.compile("\\{prompt\\s+(\\w+)\\}")
-        return pattern.findall(content)
+        return PROMPT_PATTERN.findall(content)
 
     @staticmethod
     def validate_unique_prompts(filename: str, content: str) -> None:
@@ -75,8 +77,7 @@ class PromptLoader:
     @staticmethod
     def validate_prompt_blocks(filename: str, content: str) -> None:
         """Ensure every prompt block is closed with an end token."""
-        pattern = re.compile("\\{prompt\\s+(\\w+)\\}")
-        for match in pattern.finditer(content):
+        for match in PROMPT_PATTERN.finditer(content):
             name = match.group(1)
             start = match.end()
             if content.find("{end_prompt}", start) == -1:

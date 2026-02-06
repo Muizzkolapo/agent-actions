@@ -15,6 +15,7 @@ from copy import deepcopy
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
     ContextFieldSkippedEvent,
@@ -369,8 +370,6 @@ class ContextScopeProcessor:
             Returns:
                 (["add_answer_text"], ["suggest_distractor_counts", "write_scenario_question"])
         """
-        from agent_actions.errors import ConfigurationError
-
         # 1. Get explicit dependencies (input sources)
         # Support both 'dependencies' and 'depends_on' for backward compatibility
         deps = action_config.get("dependencies") or action_config.get("depends_on", [])
@@ -402,8 +401,6 @@ class ContextScopeProcessor:
                     ContextScopeProcessor._resolve_input_sources_for_fan_in(all_deps, primary_dep)
                 )
             except ValueError as e:
-                from agent_actions.errors import ConfigurationError
-
                 raise ConfigurationError(f"Action '{action_name}': {e}") from e
 
             logger.debug(
@@ -967,6 +964,57 @@ class ContextScopeProcessor:
         return version_namespaces
 
     @staticmethod
+    def _filter_and_store_fields(
+        field_context: Dict,
+        name: str,
+        data: Dict,
+        allowed_fields: Optional[List[str]],
+        source_type: str = "FIELD",
+        warn_missing: bool = False,
+    ) -> None:
+        """
+        Filter data by allowed_fields and store in field_context.
+
+        Args:
+            field_context: Target dict to store filtered data
+            name: Key name for storing in field_context
+            data: Source data to filter
+            allowed_fields: Fields to include (None = wildcard, all fields)
+            source_type: Log prefix for debug messages (e.g., "INPUT SOURCE")
+            warn_missing: If True, log warning for missing fields
+        """
+        if allowed_fields is None:
+            # Wildcard: Load all fields
+            field_context[name] = data
+            logger.debug(
+                "[%s] Loaded '%s' with ALL %d fields (wildcard)",
+                source_type,
+                name,
+                len(data),
+            )
+        else:
+            # Specific fields: Filter
+            filtered_data = {field: data[field] for field in allowed_fields if field in data}
+            if warn_missing:
+                missing_fields = set(allowed_fields) - set(data.keys())
+                if missing_fields:
+                    logger.warning(
+                        "[%s] '%s': fields %s not found. Available: %s",
+                        source_type,
+                        name,
+                        missing_fields,
+                        list(data.keys()),
+                    )
+            field_context[name] = filtered_data
+            logger.debug(
+                "[%s] Loaded '%s' with %d fields: %s",
+                source_type,
+                name,
+                len(filtered_data),
+                list(filtered_data.keys()),
+            )
+
+    @staticmethod
     def _extract_allowed_fields_per_dependency(
         dependencies: List[str], context_scope: Optional[Dict], action_name: str = "unknown"
     ) -> Dict[str, Optional[List[str]]]:
@@ -996,8 +1044,6 @@ class ContextScopeProcessor:
                 logger.error(
                     f"Action '{action_name}' has dependencies but no context_scope defined."
                 )
-                from agent_actions.errors import ConfigurationError
-
                 raise ConfigurationError(
                     f"Action '{action_name}' has dependencies but no context_scope defined. "
                     f"All dependencies must have explicit field declarations.\n\n"
@@ -1090,8 +1136,6 @@ class ContextScopeProcessor:
                     f"Dependency '{dep_name}' declared but not referenced in context_scope. "
                     f"All dependencies must have explicit field declarations."
                 )
-                from agent_actions.errors import ConfigurationError
-
                 raise ConfigurationError(
                     f"Dependency '{dep_name}' declared but not referenced in context_scope. "
                     f"Add field declarations (e.g., '{dep_name}.*' or '{dep_name}.field_name').\n\n"
@@ -1271,26 +1315,13 @@ class ContextScopeProcessor:
 
                         # Add as separate namespace in field_context
                         allowed_fields = allowed_fields_map.get(version_name)
-
-                        if allowed_fields is None:
-                            # Wildcard: Load all fields
-                            field_context[version_name] = version_data
-                            logger.debug(
-                                f"[VERSION NAMESPACE] Loaded '{version_name}' with ALL "
-                                f"{len(version_data)} fields (wildcard)"
-                            )
-                        else:
-                            # Specific fields: Filter
-                            filtered_data = {
-                                field: version_data[field]
-                                for field in allowed_fields
-                                if field in version_data
-                            }
-                            field_context[version_name] = filtered_data
-                            logger.debug(
-                                f"[VERSION NAMESPACE] Loaded '{version_name}' with "
-                                f"{len(filtered_data)} fields: {list(filtered_data.keys())}"
-                            )
+                        ContextScopeProcessor._filter_and_store_fields(
+                            field_context,
+                            version_name,
+                            version_data,
+                            allowed_fields,
+                            source_type="VERSION NAMESPACE",
+                        )
 
                     # Load parallel version sources via historical lookup
                     # When input_sources has multiple versioned branches (e.g., action_1, action_2),
@@ -1324,23 +1355,13 @@ class ContextScopeProcessor:
 
                             if historical_data:
                                 allowed_fields = allowed_fields_map.get(version_source)
-                                if allowed_fields is None:
-                                    field_context[version_source] = historical_data
-                                    logger.debug(
-                                        f"[PARALLEL VERSION] Loaded '{version_source}' with ALL "
-                                        f"{len(historical_data)} fields via historical lookup"
-                                    )
-                                else:
-                                    filtered_data = {
-                                        field: historical_data[field]
-                                        for field in allowed_fields
-                                        if field in historical_data
-                                    }
-                                    field_context[version_source] = filtered_data
-                                    logger.debug(
-                                        f"[PARALLEL VERSION] Loaded '{version_source}' with "
-                                        f"{len(filtered_data)} fields via historical lookup"
-                                    )
+                                ContextScopeProcessor._filter_and_store_fields(
+                                    field_context,
+                                    version_source,
+                                    historical_data,
+                                    allowed_fields,
+                                    source_type="PARALLEL VERSION",
+                                )
                             else:
                                 logger.warning(
                                     f"[PARALLEL VERSION] Could not load '{version_source}' "
@@ -1354,34 +1375,18 @@ class ContextScopeProcessor:
                     for input_source_name in input_sources:
                         allowed_fields = allowed_fields_map.get(input_source_name)
                         logger.debug(
-                            f"[INPUT SOURCE] '{input_source_name}': allowed_fields={allowed_fields}"
+                            "[INPUT SOURCE] '%s': allowed_fields=%s",
+                            input_source_name,
+                            allowed_fields,
                         )
-
-                        if allowed_fields is None:
-                            # Wildcard: Load all fields
-                            field_context[input_source_name] = input_data
-                            logger.debug(
-                                f"[INPUT SOURCE] Loaded '{input_source_name}' with ALL {len(input_data)} fields "
-                                f"from current_item (wildcard)"
-                            )
-                        else:
-                            # Specific fields: Filter
-                            filtered_data = {
-                                field: input_data[field]
-                                for field in allowed_fields
-                                if field in input_data
-                            }
-                            missing_fields = set(allowed_fields) - set(input_data.keys())
-                            if missing_fields:
-                                logger.warning(
-                                    f"[INPUT SOURCE] '{input_source_name}': expected fields {missing_fields} "
-                                    f"not found in input_data. Available: {list(input_data.keys())}"
-                                )
-                            field_context[input_source_name] = filtered_data
-                            logger.debug(
-                                f"[INPUT SOURCE] Loaded '{input_source_name}' with {len(filtered_data)} fields "
-                                f"from current_item: {list(filtered_data.keys())}"
-                            )
+                        ContextScopeProcessor._filter_and_store_fields(
+                            field_context,
+                            input_source_name,
+                            input_data,
+                            allowed_fields,
+                            source_type="INPUT SOURCE",
+                            warn_missing=True,
+                        )
 
             # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
             logger.debug(
@@ -1475,37 +1480,21 @@ class ContextScopeProcessor:
                         continue
 
                     logger.debug(
-                        f"[HISTORICAL LOAD] Loaded context dep '{dep_name}': fields={list(historical_data.keys())}"
+                        "[HISTORICAL LOAD] Loaded context dep '%s': fields=%s",
+                        dep_name,
+                        list(historical_data.keys()),
                     )
 
                     # PROGRESSIVE DATA EXPOSURE: Filter to only allowed fields
                     allowed_fields = allowed_fields_map.get(dep_name)
-
-                    if allowed_fields is None:
-                        field_context[dep_name] = historical_data
-                        logger.debug(
-                            f"[CONTEXT SOURCE] Loaded '{dep_name}' with ALL {len(historical_data)} fields (wildcard)"
-                        )
-                    else:
-                        filtered_data = {
-                            field: historical_data[field]
-                            for field in allowed_fields
-                            if field in historical_data
-                        }
-
-                        missing_fields = set(allowed_fields) - set(historical_data.keys())
-                        if missing_fields:
-                            logger.warning(
-                                f"[CONTEXT SOURCE] Dependency '{dep_name}': "
-                                f"context_scope declares fields {missing_fields} but not found. "
-                                f"Available fields: {list(historical_data.keys())}"
-                            )
-
-                        field_context[dep_name] = filtered_data
-                        logger.debug(
-                            f"[CONTEXT SOURCE] Loaded '{dep_name}' with {len(filtered_data)} fields: "
-                            f"{list(filtered_data.keys())}"
-                        )
+                    ContextScopeProcessor._filter_and_store_fields(
+                        field_context,
+                        dep_name,
+                        historical_data,
+                        allowed_fields,
+                        source_type="CONTEXT SOURCE",
+                        warn_missing=True,
+                    )
 
         else:
             # Log why batch mode condition wasn't met
@@ -1522,8 +1511,6 @@ class ContextScopeProcessor:
         if agent_config and agent_config.get("dependencies") and not agent_indices:
             # ERROR: Dependencies declared but no agent_indices provided
             # agent_indices is REQUIRED for dependency resolution (no fallbacks)
-            from agent_actions.errors import ConfigurationError
-
             dependencies = agent_config.get("dependencies", [])
             raise ConfigurationError(
                 f"Action '{agent_name}' has dependencies {dependencies} but agent_indices was not provided. "

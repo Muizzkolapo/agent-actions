@@ -230,8 +230,7 @@ class PromptPreparationService:
             PromptPreparationResult with formatted_prompt, llm_context, etc.
         """
         logger.debug(
-            "Preparing prompt with pre-loaded context for '%s' in %s mode",
-            agent_name, mode
+            "Preparing prompt with pre-loaded context for '%s' in %s mode", agent_name, mode
         )
 
         # Step 1: Load raw prompt template

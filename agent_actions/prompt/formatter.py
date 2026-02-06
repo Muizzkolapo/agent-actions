@@ -32,7 +32,7 @@ class PromptFormatter:
                 raw_prompt = "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
-            from agent_actions.errors import PromptValidationError  # New modular pattern!
+            from agent_actions.errors import PromptValidationError
 
             raise PromptValidationError(
                 f"Failed to get raw prompt: {str(e)}",
@@ -64,7 +64,7 @@ class PromptFormatter:
                 return PromptUtils.replace_field_references(raw_prompt, field_context)
             return raw_prompt
         except Exception as e:
-            from agent_actions.errors import PromptValidationError  # New modular pattern!
+            from agent_actions.errors import PromptValidationError
 
             raise PromptValidationError(
                 f"Failed to format prompt: {str(e)}",

@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from agent_actions.errors import FileSystemError  # New modular pattern!
+from agent_actions.errors import FileSystemError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
     CacheHitEvent,

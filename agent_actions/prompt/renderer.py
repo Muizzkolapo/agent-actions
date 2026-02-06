@@ -50,42 +50,6 @@ class TemplateRenderer(ABC):
         """
 
 
-class ConfigParser(ABC):
-    """Abstract interface for configuration parsing."""
-
-    @abstractmethod
-    def parse(self, config_data: str) -> AgentConfigMap:
-        """
-        Parse configuration data from a string.
-
-        Args:
-            config_data: Configuration data as a string.
-
-        Returns:
-            Parsed configuration as a dictionary.
-
-        Raises:
-            ConfigurationError: If parsing fails.
-        """
-
-
-class OutputWriter(ABC):
-    """Abstract interface for writing output to a file."""
-
-    @abstractmethod
-    def write(self, output_path: str, content: str) -> None:
-        """
-        Write content to the specified path.
-
-        Args:
-            output_path: Path to write the content to.
-            content: Content to write.
-
-        Raises:
-            IOError: If writing fails.
-        """
-
-
 class JinjaTemplateRenderer(TemplateRenderer):
     """Template renderer implementation using Jinja."""
 
@@ -188,96 +152,20 @@ class JinjaTemplateRenderer(TemplateRenderer):
             raise
 
 
-class YAMLConfigParser(ConfigParser):
-    """Configuration parser implementation for YAML."""
-
-    def parse(self, config_data: str) -> AgentConfigMap:
-        """
-        Parse YAML configuration data from a string.
-
-        Args:
-            config_data: YAML configuration data as a string.
-
-        Returns:
-            Parsed configuration as a dictionary.
-
-        Raises:
-            ConfigurationError: If parsing fails.
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "parse YAML configuration")
-            if not config_data:
-                raise ConfigurationError(
-                    "Empty configuration data", context={"operation": "parse_yaml"}
-                )
-            config = yaml.safe_load(config_data)
-            if not isinstance(config, dict):
-                raise ConfigurationError(
-                    "Expected configuration to be a dictionary",
-                    context={"operation": "parse_yaml", "actual_type": type(config).__name__},
-                )
-            ServiceLogger.log_operation_success(logger, "parse YAML configuration")
-            return cast(AgentConfigMap, config)
-        except YAMLError as e:
-            ErrorHandler.handle_config_error(
-                e, "parse", "YAML configuration", context={"config_data": config_data}
-            )
-            raise
-        except Exception as e:
-            ErrorHandler.handle_config_error(
-                e, "parse", "configuration", context={"config_data": config_data}
-            )
-            raise
-
-
-class FileOutputWriter(OutputWriter):
-    """Output writer implementation for files."""
-
-    def write(self, output_path: str, content: str) -> None:
-        """
-        Write content to a file.
-
-        Args:
-            output_path: Path to the output file.
-            content: Content to write.
-
-        Raises:
-            IOError: If writing fails.
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "write output", output_path=output_path)
-            output_dir = Path(output_path).parent
-            if output_dir and not output_dir.exists():
-                output_dir.mkdir(parents=True, exist_ok=True)
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            ServiceLogger.log_operation_success(logger, "write output", output_path=output_path)
-        except Exception as e:
-            ErrorHandler.handle_file_error(
-                e, "write", output_path, context={"content_length": len(content)}
-            )
-
-
 class ConfigRenderingService:
     """Service for rendering and loading configuration data."""
 
     def __init__(
         self,
-        template_renderer: TemplateRenderer = None,
-        config_parser: ConfigParser = None,
-        output_writer: OutputWriter = None,
+        template_renderer: Optional[TemplateRenderer] = None,
     ):
         """
         Initialize the configuration rendering service.
 
         Args:
             template_renderer: Template renderer implementation.
-            config_parser: Configuration parser implementation.
-            output_writer: Output writer implementation.
         """
         self.template_renderer = template_renderer or JinjaTemplateRenderer()
-        self.config_parser = config_parser or YAMLConfigParser()
-        self.output_writer = output_writer or FileOutputWriter()
 
     def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
         """Parse YAML and fail instantly on syntax OR empty content."""
@@ -491,35 +379,6 @@ class ConfigRenderingService:
 
 class ConfigRenderer:
     """Static facade for backwards compatibility with old code."""
-
-    @as_validation_error(ConfigValidationError)
-    def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
-        """Parse YAML, turning low-level YAMLError into our own
-        exception."""
-        try:
-            loaded_config = yaml.safe_load(raw) or {}
-            return cast(AgentConfigMap, loaded_config)
-        except yaml.MarkedYAMLError as exc:
-            mark = exc.problem_mark
-            msg = exc.problem or "syntax error"
-            raise ConfigValidationError(
-                config_key="yaml_syntax",
-                reason="YAML syntax error",
-                context={
-                    "file_name": src.name,
-                    "line": mark.line + 1,
-                    "column": mark.column + 1,
-                    "problem": msg,
-                    "operation": "parse_yaml",
-                },
-            ) from exc
-        except Exception as exc:
-            raise ConfigValidationError(
-                config_key="configuration_format",
-                reason="Configuration format error",
-                context={"file_name": src.name, "operation": "parse_yaml"},
-                cause=exc,
-            ) from exc
 
     @staticmethod
     @as_validation_error(ConfigValidationError)

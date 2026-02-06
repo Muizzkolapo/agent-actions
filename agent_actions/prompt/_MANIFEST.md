@@ -20,5 +20,5 @@ and service wiring used by CLI commands and runtime agents.
 | `handler.py` | Module | `PromptLoader` and prompt builder utilities. | `logging`, `cli` |
 | `prompt_utils.py` | Module | Misc utilities (token counting, template expansion). | `prompt_generation`, `logging` |
 | `render_workflow.py` | Module | Renders workflows into final YAML via templates. | `cli`, `prompt_generation` |
-| `renderer.py` | Module | Rich renderers used by CLI schema/inspect commands. | `cli`, `rich` |
+| `renderer.py` | Module | `JinjaTemplateRenderer` for Jinja rendering, `ConfigRenderingService` for config loading, `ConfigRenderer` static facade for backwards compatibility. | `cli`, `validation` |
 | `service.py` | Module | `PromptService` used by CLI/tests for retrieving prompt definitions. | `logging`, `prompt_generation` |

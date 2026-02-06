@@ -64,8 +64,9 @@ class PromptUtils:
                         # Let's return None if None, user handles it.
                         return None
                     return transformed_text
-                except (AgentActionsException, ConfigurationError) as e:
-                    raise e
+                except (AgentActionsException, ConfigurationError):
+                    # Let known exceptions pass through without wrapping
+                    raise
                 except Exception as e:
                     raise AgentActionsException(
                         f"An unexpected error occurred in function '{function_name}': {str(e)}"
@@ -88,8 +89,9 @@ class PromptUtils:
                 if transformed_text is None:
                     transformed_text = "Error: No valid return from function."
                 text = text[:start] + str(transformed_text) + text[end:]
-            except (AgentActionsException, ConfigurationError) as e:
-                raise e
+            except (AgentActionsException, ConfigurationError):
+                # Let known exceptions pass through without wrapping
+                raise
             except Exception as e:
                 raise AgentActionsException(
                     f"An unexpected error occurred in function '{function_name}': {str(e)}"
