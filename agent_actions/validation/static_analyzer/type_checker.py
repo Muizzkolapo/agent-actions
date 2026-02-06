@@ -19,8 +19,8 @@ class StaticTypeChecker:
     """Performs static type checking on workflow data flow graph.
 
     Validates:
-    1. All referenced agents exist and are in dependencies
-    2. All referenced fields exist in upstream agent's output schema
+    1. All referenced actions exist and are in dependencies
+    2. All referenced fields exist in upstream action's output schema
     3. Referenced fields haven't been dropped
 
     Example:
@@ -89,9 +89,9 @@ class StaticTypeChecker:
         """Check a single input requirement.
 
         Validates:
-        1. Source agent exists (or is special namespace)
-        2. Source agent is reachable via dependencies
-        3. Field exists in source agent's output
+        1. Source action exists (or is special namespace)
+        2. Source action is reachable via dependencies
+        3. Field exists in source action's output
         """
         source_agent = requirement.source_agent
         field_path = requirement.field_path
@@ -107,32 +107,32 @@ class StaticTypeChecker:
         if source_agent in SPECIAL_NAMESPACES:
             return
 
-        # Check 1: Source agent exists
+        # Check 1: Source action exists
         source_node = self.graph.get_node(source_agent)
         if not source_node:
             available_agents = sorted(self.graph.get_all_agent_names())
             result.add_error(
                 StaticTypeError(
-                    message=f"Referenced agent '{source_agent}' does not exist in workflow",
+                    message=f"Referenced action '{source_agent}' does not exist in workflow",
                     location=location,
                     referenced_agent=source_agent,
                     referenced_field=field_path,
-                    hint=f"Available agents: {', '.join(available_agents)}"
+                    hint=f"Available actions: {', '.join(available_agents)}"
                     if available_agents
-                    else "No agents found in workflow",
+                    else "No actions found in workflow",
                 )
             )
             return
 
-        # Check 2: Source agent is reachable via dependencies
+        # Check 2: Source action is reachable via dependencies
         if source_agent != node.name:
             reachable = self.graph.get_reachable_upstream_names(node.name)
             if source_agent not in reachable:
                 result.add_error(
                     StaticTypeError(
                         message=(
-                            f"Referenced agent '{source_agent}' is not reachable from "
-                            f"agent '{node.name}'"
+                            f"Referenced action '{source_agent}' is not reachable from "
+                            f"action '{node.name}'"
                         ),
                         location=location,
                         referenced_agent=source_agent,
@@ -148,12 +148,12 @@ class StaticTypeChecker:
         # Check 3: Field exists in output schema
         output_schema = source_node.output_schema
 
-        # Handle schemaless agents (freeform output)
+        # Handle schemaless actions (freeform output)
         if output_schema.is_schemaless:
             result.add_warning(
                 StaticTypeWarning(
                     message=f"Cannot validate field '{field_path}' - "
-                    f"agent '{source_agent}' has no schema",
+                    f"action '{source_agent}' has no schema",
                     location=location,
                     referenced_agent=source_agent,
                     referenced_field=field_path,
@@ -167,7 +167,7 @@ class StaticTypeChecker:
             result.add_warning(
                 StaticTypeWarning(
                     message=f"Cannot validate field '{field_path}' - "
-                    f"agent '{source_agent}' has dynamic schema",
+                    f"action '{source_agent}' has dynamic schema",
                     location=location,
                     referenced_agent=source_agent,
                     referenced_field=field_path,
@@ -193,13 +193,13 @@ class StaticTypeChecker:
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' has been dropped from "
-                        f"agent '{source_agent}' output",
+                        f"action '{source_agent}' output",
                         location=location,
                         referenced_agent=source_agent,
                         referenced_field=field_path,
                         available_fields=available,
                         hint=f"Remove '{root_field}' from the 'drops' list in "
-                        f"agent '{source_agent}', or use a different field",
+                        f"action '{source_agent}', or use a different field",
                     )
                 )
             else:
@@ -208,7 +208,7 @@ class StaticTypeChecker:
                 result.add_error(
                     StaticTypeError(
                         message=f"Field '{root_field}' not found in "
-                        f"agent '{source_agent}' output schema",
+                        f"action '{source_agent}' output schema",
                         location=location,
                         referenced_agent=source_agent,
                         referenced_field=field_path,
@@ -220,7 +220,7 @@ class StaticTypeChecker:
     def _suggest_similar_field(self, field: str, available: set) -> str:
         """Suggest similar field names for typo correction."""
         if not available:
-            return "No fields available in the source agent's schema"
+            return "No fields available in the source action's schema"
 
         # Simple similarity check (could use Levenshtein distance for better results)
         field_lower = field.lower()
@@ -250,7 +250,7 @@ class StaticTypeChecker:
             if self.graph.is_special_namespace(node_name):
                 continue
 
-            # Get all referenced agents from requirements
+            # Get all referenced actions from requirements
             referenced = set()
             for req in node.input_requirements:
                 if req.source_agent not in SPECIAL_NAMESPACES:
@@ -277,7 +277,7 @@ class StaticTypeChecker:
         return warnings
 
     def check_missing_dependencies(self) -> List[StaticTypeWarning]:
-        """Find agents that are referenced but not declared in dependencies.
+        """Find actions that are referenced but not declared in dependencies.
 
         Note: This returns WARNINGS, not errors, because the runtime automatically
         infers dependencies from references. Explicit depends_on is optional but
@@ -292,7 +292,7 @@ class StaticTypeChecker:
             if self.graph.is_special_namespace(node_name):
                 continue
 
-            # Get all referenced agents
+            # Get all referenced actions
             referenced = set()
             for req in node.input_requirements:
                 if req.source_agent not in SPECIAL_NAMESPACES:
@@ -302,7 +302,7 @@ class StaticTypeChecker:
             implicit = referenced - node.dependencies
 
             for agent in implicit:
-                # Find the first requirement referencing this agent
+                # Find the first requirement referencing this action
                 for req in node.input_requirements:
                     if req.source_agent == agent:
                         warnings.append(

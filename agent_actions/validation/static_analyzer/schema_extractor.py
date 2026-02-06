@@ -1,5 +1,5 @@
 """
-Extract output schemas from agent configurations.
+Extract output schemas from action configurations.
 """
 
 from pathlib import Path
@@ -12,12 +12,12 @@ from .data_flow_graph import InputSchema, OutputSchema
 
 
 class SchemaExtractor:
-    """Extracts output schemas from various agent types.
+    """Extracts output schemas from various action types.
 
     Handles:
-    - LLM agents: from `schema` or `output_schema` field
-    - Tool/UDF agents: from Python files via AST parsing (using impl field)
-    - Non-JSON agents: assume `content` field
+    - LLM actions: from `schema` or `output_schema` field
+    - Tool/UDF actions: from Python files via AST parsing (using impl field)
+    - Non-JSON actions: assume `content` field
 
     Example:
         extractor = SchemaExtractor(project_root=Path.cwd())
@@ -102,10 +102,10 @@ class SchemaExtractor:
         agent_config: Dict[str, Any],
         schema_loader: Optional[Any] = None,
     ) -> OutputSchema:
-        """Extract output schema from agent config.
+        """Extract output schema from action config.
 
         Args:
-            agent_config: Agent configuration dictionary
+            agent_config: Action configuration dictionary
             schema_loader: Optional SchemaLoader for loading external schemas
 
         Returns:
@@ -113,7 +113,7 @@ class SchemaExtractor:
         """
         output = OutputSchema()
 
-        # Determine agent type
+        # Determine action type
         kind = agent_config.get("kind", "llm")
         model_vendor = agent_config.get("model_vendor", "")
 
@@ -122,7 +122,7 @@ class SchemaExtractor:
         else:
             self._extract_llm_schema(agent_config, output, schema_loader)
 
-        # Apply context_scope directives (common to all agents)
+        # Apply context_scope directives (common to all actions)
         self._apply_context_scope(agent_config, output)
 
         return output
@@ -132,13 +132,13 @@ class SchemaExtractor:
         agent_config: Dict[str, Any],
         reference_extractor: Optional[Any] = None,
     ) -> InputSchema:
-        """Extract input schema from agent config.
+        """Extract input schema from action config.
 
         For tools: from Python files via AST parsing (using impl field)
         For LLMs: from template references and context_scope
 
         Args:
-            agent_config: Agent configuration dictionary
+            agent_config: Action configuration dictionary
             reference_extractor: ReferenceExtractor for LLM template analysis
 
         Returns:
@@ -146,14 +146,14 @@ class SchemaExtractor:
         """
         input_schema = InputSchema()
 
-        # Determine agent type
+        # Determine action type
         kind = agent_config.get("kind", "llm")
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
             self._extract_tool_input_schema(agent_config, input_schema)
         else:
-            # LLM agents - extract from template references and context_scope
+            # LLM actions - extract from template references and context_scope
             self._extract_llm_input_schema(agent_config, input_schema, reference_extractor)
 
         return input_schema
@@ -164,10 +164,10 @@ class SchemaExtractor:
         input_schema: InputSchema,
         reference_extractor: Optional[Any] = None,
     ) -> None:
-        """Extract input schema from LLM agent config.
+        """Extract input schema from LLM action config.
 
         Resolves inputs from:
-        - Template references ({{ agent.field }})
+        - Template references ({{ action.field }})
         - context_scope observe fields
         - Dependencies
         """
@@ -179,12 +179,12 @@ class SchemaExtractor:
 
             reference_extractor = ReferenceExtractor()
 
-        # Extract all field references from the agent config
+        # Extract all field references from the action config
         requirements = reference_extractor.extract_from_agent(config)
 
         # Add referenced fields as required inputs
         for req in requirements:
-            # Format: "agent.field" or just "field"
+            # Format: "action.field" or just "field"
             if req.source_agent and req.field_path:
                 field_ref = f"{req.source_agent}.{req.field_path}"
             else:
@@ -200,7 +200,7 @@ class SchemaExtractor:
         config: Dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
-        """Extract input schema from tool/UDF agent.
+        """Extract input schema from tool/UDF action.
 
         Tries the following sources in order:
         1. Python files via scanner (AST parsing)
@@ -327,7 +327,7 @@ class SchemaExtractor:
         output: OutputSchema,
         schema_loader: Optional[Any],
     ) -> None:
-        """Extract schema from LLM agent."""
+        """Extract schema from LLM action."""
         # Get schema definition (supports 'schema', 'output_schema', and 'schema_name')
         schema_def = config.get("schema") or config.get("output_schema")
         schema_name = config.get("schema_name")
@@ -355,7 +355,7 @@ class SchemaExtractor:
                     pass  # Schema loading failed - will fall through to schemaless
 
         if not schema_def:
-            # Check json_mode - if enabled, agent should have schema
+            # Check json_mode - if enabled, action should have schema
             json_mode = config.get("json_mode", True)
             if not json_mode:
                 # Non-JSON mode - freeform output
@@ -407,7 +407,7 @@ class SchemaExtractor:
         config: Dict[str, Any],
         output: OutputSchema,
     ) -> None:
-        """Extract schema from tool/UDF agent using impl field."""
+        """Extract schema from tool/UDF action using impl field."""
         # impl may be stored as 'impl' or 'model_name' depending on config processing
         impl = config.get("impl") or config.get("model_name") or ""
 
@@ -456,7 +456,7 @@ class SchemaExtractor:
         # Add observe fields (pass-through from input)
         observe = config.get("observe", [])
         for ref in observe:
-            # Observe can be "field" or "agent.field" - extract field name
+            # Observe can be "field" or "action.field" - extract field name
             field_name = self._extract_field_name(ref)
             if field_name:
                 output.observe_fields.add(field_name)
@@ -590,8 +590,8 @@ class SchemaExtractor:
 
         Handles formats:
         - 'field' -> 'field'
-        - 'agent.field' -> 'field'
-        - 'agent.nested.field' -> 'nested'
+        - 'action.field' -> 'field'
+        - 'action.nested.field' -> 'nested'
 
         Args:
             reference: Reference string
@@ -603,10 +603,10 @@ class SchemaExtractor:
             return None
 
         if "." in reference:
-            # Format: agent.field or agent.nested.field
+            # Format: action.field or action.nested.field
             parts = reference.split(".")
             if len(parts) >= 2:
-                return parts[1]  # Return first field after agent
+                return parts[1]  # Return first field after action
         else:
             return reference
 
@@ -617,14 +617,14 @@ class SchemaExtractor:
         workflow_config: Dict[str, Any],
         schema_loader: Optional[Any] = None,
     ) -> Dict[str, OutputSchema]:
-        """Extract schemas from all agents in a workflow.
+        """Extract schemas from all actions in a workflow.
 
         Args:
             workflow_config: Full workflow configuration
             schema_loader: Optional schema loader for external schemas
 
         Returns:
-            Dict mapping agent names to their output schemas
+            Dict mapping action names to their output schemas
         """
         schemas: Dict[str, OutputSchema] = {}
 

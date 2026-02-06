@@ -89,8 +89,8 @@ agac run -a workflow --validate-only --static-typing
 
 ### What It Validates
 
-1. **Agent exists** - Referenced agents are defined
-2. **Dependency declared** - Referenced agents in `dependencies`
+1. **Action exists** - Referenced actions are defined
+2. **Dependency declared** - Referenced actions in `dependencies`
 3. **Field exists** - Referenced fields in upstream output schema
 4. **Type compatibility** - Field types match expectations
 
@@ -131,7 +131,7 @@ For schema definition details, see [Schemas](../schemas/index.md).
 |----------|----------|
 | `template` | Missing variables, syntax errors |
 | `context` | Missing fields, type mismatches |
-| `dependency` | Circular deps, missing agents |
+| `dependency` | Circular deps, missing actions |
 | `vendor` | Unsupported features |
 | `path` | Missing files |
 | `static` | Field reference errors |

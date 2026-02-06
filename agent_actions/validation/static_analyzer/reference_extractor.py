@@ -1,5 +1,5 @@
 """
-Extract field references from agent configurations.
+Extract field references from action configurations.
 """
 
 import re
@@ -14,17 +14,17 @@ from .data_flow_graph import InputRequirement
 
 
 class ReferenceExtractor:
-    """Extracts field references from agent prompts, guards, and directives.
+    """Extracts field references from action prompts, guards, and directives.
 
     Uses Jinja2's AST parser to properly handle:
-    - Variable references: {{ agent.field }}
+    - Variable references: {{ action.field }}
     - Loop variables: {% for item in items %} - automatically excluded
     - Nested expressions and filters
 
     Also supports:
-    - Simple brace style: {agent.field}
-    - Guard expressions: agent.field > 5
-    - Context scope directives: agent.field
+    - Simple brace style: {action.field}
+    - Guard expressions: action.field > 5
+    - Context scope directives: action.field
 
     Example:
         extractor = ReferenceExtractor()
@@ -43,11 +43,11 @@ class ReferenceExtractor:
         # extractor.facts
     """
 
-    # Matches {action.agent.field} or {agent.field} (simple brace style)
+    # Matches {action.action_name.field} or {action_name.field} (simple brace style)
     SIMPLE_ACTION_PATTERN = re.compile(r"\{action\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
     SIMPLE_DIRECT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
 
-    # Matches dot notation in guards: agent.field
+    # Matches dot notation in guards: action.field
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
     ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
 
@@ -73,10 +73,10 @@ class ReferenceExtractor:
         self._env = Environment()
 
     def extract_from_agent(self, agent_config: Dict[str, Any]) -> List[InputRequirement]:
-        """Extract all field references from an agent configuration.
+        """Extract all field references from an action configuration.
 
         Args:
-            agent_config: Agent configuration dictionary
+            agent_config: Action configuration dictionary
 
         Returns:
             List of InputRequirement objects
@@ -148,7 +148,7 @@ class ReferenceExtractor:
                     )
                 )
 
-        # Also check simple brace patterns: {action.agent.field} or {agent.field}
+        # Also check simple brace patterns: {action.action_name.field} or {action_name.field}
         for match in self.SIMPLE_ACTION_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
@@ -232,14 +232,14 @@ class ReferenceExtractor:
                 self._walk_ast(child, references, new_locals)
             return
 
-        # Handle Getattr (dot notation): {{ agent.field }}
+        # Handle Getattr (dot notation): {{ action.field }}
         if isinstance(node, nodes.Getattr):
             ref = self._extract_getattr_chain(node)
             if ref:
                 source, field_path = ref
                 # Skip if source is a local variable, builtin, or "action" prefix
                 if source not in local_vars and source not in self.JINJA_BUILTINS:
-                    # Handle action.agent.field -> (agent, field)
+                    # Handle action.action_name.field -> (action_name, field)
                     if source == "action" and "." in field_path:
                         parts = field_path.split(".", 1)
                         source = parts[0]
@@ -256,7 +256,7 @@ class ReferenceExtractor:
     def _extract_getattr_chain(self, node: nodes.Getattr) -> Optional[tuple]:
         """Extract the full attribute chain from a Getattr node.
 
-        Handles chains like: agent.field.subfield -> ('agent', 'field.subfield')
+        Handles chains like: action.field.subfield -> ('action', 'field.subfield')
 
         Returns:
             (root_name, attribute_path) tuple or None if not a simple chain
@@ -382,13 +382,13 @@ class ReferenceExtractor:
         return requirements
 
     def get_referenced_agents(self, requirements: List[InputRequirement]) -> Set[str]:
-        """Get set of all agents referenced (excluding special namespaces).
+        """Get set of all actions referenced (excluding special namespaces).
 
         Args:
             requirements: List of input requirements
 
         Returns:
-            Set of agent names that are referenced
+            Set of action names that are referenced
         """
         agents: Set[str] = set()
         for req in requirements:
@@ -400,13 +400,13 @@ class ReferenceExtractor:
         self,
         workflow_config: Dict[str, Any],
     ) -> Dict[str, List[InputRequirement]]:
-        """Extract references from all agents in a workflow.
+        """Extract references from all actions in a workflow.
 
         Args:
             workflow_config: Full workflow configuration
 
         Returns:
-            Dict mapping agent names to their input requirements
+            Dict mapping action names to their input requirements
         """
         requirements: Dict[str, List[InputRequirement]] = {}
 

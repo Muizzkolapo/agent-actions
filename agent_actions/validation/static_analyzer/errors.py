@@ -20,7 +20,7 @@ class FieldLocation:
     """Location of a field reference in config.
 
     Attributes:
-        agent_name: Name of the agent containing the reference
+        agent_name: Name of the action containing the reference
         config_field: Config field where reference appears (prompt, guard, etc.)
         line_number: Optional line number in config file
         raw_reference: Original reference string
@@ -42,9 +42,9 @@ class StaticTypeIssue:
         message: Main error/warning message
         severity: ERROR or WARNING
         location: Where the issue occurred
-        referenced_agent: Agent being referenced
+        referenced_agent: Action being referenced
         referenced_field: Field being referenced
-        available_fields: Fields available in the referenced agent
+        available_fields: Fields available in the referenced action
         hint: Actionable suggestion for fixing
     """
 
@@ -62,7 +62,7 @@ class StaticTypeIssue:
         lines = [
             f"{prefix}: {self.message}",
             "",
-            f"  Agent: {self.location.agent_name}",
+            f"  Action: {self.location.agent_name}",
             f"  Reference: {self.location.raw_reference}",
             f"  Location: {self.location.config_field}",
         ]
@@ -174,7 +174,7 @@ class StaticValidationResult:
             lines.append("  All field references validated successfully.")
             lines.append("")
         else:
-            # Group issues by agent
+            # Group issues by action
             by_agent: Dict[str, List[StaticTypeIssue]] = {}
             for issue in self.errors + self.warnings:
                 agent = issue.location.agent_name
@@ -184,7 +184,7 @@ class StaticValidationResult:
 
             for agent, agent_issues in sorted(by_agent.items()):
                 lines.append("")
-                lines.append(f"Agent: '{agent}'")
+                lines.append(f"Action: '{agent}'")
                 lines.append("-" * 60)
                 for issue in agent_issues:
                     icon = "X" if issue.severity == ErrorSeverity.ERROR else "!"

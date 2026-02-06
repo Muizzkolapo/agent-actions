@@ -45,9 +45,9 @@ class WorkflowStaticAnalyzer:
         result = analyzer.analyze()
 
     What it checks:
-        1. All referenced agents exist in the workflow
-        2. Referenced agents are declared in depends_on
-        3. Referenced fields exist in upstream agent's output schema
+        1. All referenced actions exist in the workflow
+        2. Referenced actions are declared in depends_on
+        3. Referenced fields exist in upstream action's output schema
         4. Fields haven't been dropped from output
     """
 
@@ -121,7 +121,7 @@ class WorkflowStaticAnalyzer:
         # Add special source node (always available)
         self._add_source_node()
 
-        # Add agent nodes from actions
+        # Add action nodes from actions
         actions = self.workflow_config.get("actions", [])
         for action_config in actions:
             self._add_agent_node(action_config)
@@ -311,10 +311,10 @@ class WorkflowStaticAnalyzer:
         self.graph.add_node(node)
 
     def _add_agent_node(self, action_config: Dict[str, Any]) -> None:
-        """Add an agent node to the graph."""
+        """Add an action node to the graph."""
         name = action_config.get("name", "unknown")
 
-        # Determine agent type
+        # Determine action type
         kind = action_config.get("kind", "llm")
         model_vendor = action_config.get("model_vendor", "")
 
@@ -387,13 +387,13 @@ class WorkflowStaticAnalyzer:
         return self.graph
 
     def get_agent_schema(self, agent_name: str) -> Optional[OutputSchema]:
-        """Get the output schema for a specific agent.
+        """Get the output schema for a specific action.
 
         Args:
-            agent_name: Name of the agent
+            agent_name: Name of the action
 
         Returns:
-            OutputSchema or None if agent not found
+            OutputSchema or None if action not found
         """
         if not self._built:
             self._build_graph()
@@ -402,13 +402,13 @@ class WorkflowStaticAnalyzer:
         return node.output_schema if node else None
 
     def get_agent_input_schema(self, agent_name: str) -> Optional[InputSchema]:
-        """Get the input schema for a specific agent.
+        """Get the input schema for a specific action.
 
         Args:
-            agent_name: Name of the agent
+            agent_name: Name of the action
 
         Returns:
-            InputSchema or None if agent not found
+            InputSchema or None if action not found
         """
         if not self._built:
             self._build_graph()
@@ -532,7 +532,7 @@ class WorkflowStaticAnalyzer:
             return list(self.graph.nodes.keys())
 
     def _build_agent_references(self, node: DataFlowNode) -> List[Dict[str, str]]:
-        """Build references list for an agent node."""
+        """Build references list for an action node."""
         return [
             {"agent": req.source_agent, "field": req.field_path}
             for req in node.input_requirements
@@ -540,7 +540,7 @@ class WorkflowStaticAnalyzer:
         ]
 
     def _build_agent_info(self, node: DataFlowNode) -> Dict[str, Any]:
-        """Build agent info dictionary for a node."""
+        """Build action info dictionary for a node."""
         return {
             "name": node.name,
             "kind": node.agent_kind.value,

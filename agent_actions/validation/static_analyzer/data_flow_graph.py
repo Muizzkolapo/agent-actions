@@ -1,6 +1,6 @@
 """Data flow graph for workflow static analysis.
 
-Represents the workflow as a directed graph where nodes are agents
+Represents the workflow as a directed graph where nodes are actions
 and edges represent data dependencies.
 """
 
@@ -12,7 +12,7 @@ from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 
 class AgentKind(Enum):
-    """Type of agent node."""
+    """Type of action node."""
 
     LLM = "llm"
     TOOL = "tool"
@@ -22,7 +22,7 @@ class AgentKind(Enum):
 
 @dataclass
 class OutputSchema:
-    """Represents the output schema of an agent.
+    """Represents the output schema of an action.
 
     Tracks fields from the schema definition, observe directives,
     passthrough fields, and dropped fields.
@@ -34,7 +34,7 @@ class OutputSchema:
         dropped_fields: Fields excluded from output via drops
         json_schema: Full JSON schema for deep validation (optional)
         is_dynamic: Whether schema is determined at runtime
-        is_schemaless: Whether agent has no schema (freeform output)
+        is_schemaless: Whether action has no schema (freeform output)
     """
 
     schema_fields: Set[str] = field(default_factory=set)
@@ -64,9 +64,9 @@ class OutputSchema:
 
 @dataclass
 class InputSchema:
-    """Represents the input schema of an agent.
+    """Represents the input schema of an action.
 
-    Tracks what fields an agent expects as input, either from:
+    Tracks what fields an action expects as input, either from:
     - Tool/UDF: explicit json_schema from UDF_REGISTRY (legacy with input_type)
     - Tool/UDF: inferred from context_scope (new style without input_type)
     - LLM: inferred from template variables
@@ -110,12 +110,12 @@ class InputSchema:
 
 @dataclass
 class InputRequirement:
-    """A field reference requirement from an agent.
+    """A field reference requirement from an action.
 
-    Represents a single field reference found in the agent's configuration.
+    Represents a single field reference found in the action's configuration.
 
     Attributes:
-        source_agent: Agent being referenced (e.g., 'extractor')
+        source_agent: Action being referenced (e.g., 'extractor')
         field_path: Field being referenced (e.g., 'summary' or 'data.count')
         raw_reference: Original reference string (e.g., '{{ action.extractor.summary }}')
         location: Where it appears (e.g., 'prompt', 'guard')
@@ -132,14 +132,14 @@ class InputRequirement:
 
 @dataclass
 class DataFlowNode:
-    """Node in the data flow graph representing an agent.
+    """Node in the data flow graph representing an action.
 
     Attributes:
-        name: Agent name
-        agent_kind: Type of agent (LLM, TOOL, SOURCE, etc.)
-        output_schema: What fields this agent produces
-        input_schema: What fields this agent expects as input
-        input_requirements: What fields this agent consumes from upstream
+        name: Action name
+        agent_kind: Type of action (LLM, TOOL, SOURCE, etc.)
+        output_schema: What fields this action produces
+        input_schema: What fields this action expects as input
+        input_requirements: What fields this action consumes from upstream
         dependencies: Explicit dependencies from depends_on config
     """
 
@@ -156,11 +156,11 @@ class DataFlowNode:
 
 @dataclass
 class DataFlowEdge:
-    """Edge representing data flow from one agent to another.
+    """Edge representing data flow from one action to another.
 
     Attributes:
-        source: Source agent name (producer)
-        target: Target agent name (consumer)
+        source: Source action name (producer)
+        target: Target action name (consumer)
         fields_used: Which fields are referenced
     """
 
@@ -176,8 +176,8 @@ class DataFlowGraph:
     """Graph representation of workflow data flow.
 
     Builds a directed graph where:
-    - Nodes are agents (including special source/seed nodes)
-    - Edges represent data dependencies between agents
+    - Nodes are actions (including special source/seed nodes)
+    - Edges represent data dependencies between actions
     - Edge labels indicate which fields are used
 
     Used for static analysis of field references before execution.
@@ -185,7 +185,7 @@ class DataFlowGraph:
     Example:
         graph = DataFlowGraph()
 
-        # Add agents
+        # Add actions
         graph.add_node(DataFlowNode(
             name='extractor',
             agent_kind=AgentKind.LLM,
@@ -235,7 +235,7 @@ class DataFlowGraph:
         return name in SPECIAL_NAMESPACES
 
     def get_upstream_nodes(self, agent_name: str) -> List[DataFlowNode]:
-        """Get all nodes that this agent depends on."""
+        """Get all nodes that this action depends on."""
         node = self.nodes.get(agent_name)
         if not node:
             return []
@@ -249,7 +249,7 @@ class DataFlowGraph:
         return upstream
 
     def get_downstream_nodes(self, agent_name: str) -> List[DataFlowNode]:
-        """Get all nodes that depend on this agent."""
+        """Get all nodes that depend on this action."""
         downstream = []
         for node in self.nodes.values():
             if agent_name in node.dependencies:
@@ -257,13 +257,13 @@ class DataFlowGraph:
         return downstream
 
     def get_reachable_upstream_names(self, agent_name: str) -> Set[str]:
-        """Get all upstream agent names reachable via dependencies.
+        """Get all upstream action names reachable via dependencies.
 
         Args:
-            agent_name: Agent name to compute reachability for
+            agent_name: Action name to compute reachability for
 
         Returns:
-            Set of agent names that are dependencies or ancestors
+            Set of action names that are dependencies or ancestors
         """
         node = self.nodes.get(agent_name)
         if not node:
@@ -286,7 +286,7 @@ class DataFlowGraph:
         """Return nodes in topological order (Kahn's algorithm).
 
         Returns:
-            List of agent names in execution order
+            List of action names in execution order
 
         Raises:
             ValueError: If circular dependency detected
@@ -326,7 +326,7 @@ class DataFlowGraph:
         self.edges = []
 
         for node in self.nodes.values():
-            # Group requirements by source agent
+            # Group requirements by source action
             fields_by_source: Dict[str, Set[str]] = {}
 
             for req in node.input_requirements:
@@ -345,7 +345,7 @@ class DataFlowGraph:
                 self.edges.append(edge)
 
     def get_all_agent_names(self) -> Set[str]:
-        """Get names of all non-special nodes."""
+        """Get names of all non-special action nodes."""
         return {name for name in self.nodes if not self.is_special_namespace(name)}
 
     def __repr__(self) -> str:
