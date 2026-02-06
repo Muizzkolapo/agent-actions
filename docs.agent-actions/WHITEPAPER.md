@@ -1143,21 +1143,23 @@ A skilled AI engineer with Ollama on a laptop can outperform a well-funded team 
 > "The fact we're versioning inputs that produce non-deterministic outputs makes this challenging"
 
 **How Agent Actions Solves It:**
-- Pre-flight validation catches configuration errors
-- `--validate-only` flag for CI/CD integration
+- Schema command analyzes workflow structure before execution
 - Schema validation provides binary pass/fail signal
-- Static analysis validates field references before execution
+- Runtime validation catches issues during execution
 
 ```bash
-$ agac run -a my_workflow --validate-only
+$ agac schema -a my_workflow
 
-Pre-Flight Validation
-━━━━━━━━━━━━━━━━━━━━━━
-✅ Schema validation passed
-✅ Dependency graph valid (8 actions, 4 levels)
-✅ Template syntax valid
-✅ Field references resolved
-❌ UDF 'process_data' not found in tools/
+Workflow Schema Analysis
+━━━━━━━━━━━━━━━━━━━━━━━━
+Action: extract_facts
+  Input: source.content, source.url
+  Output: facts (array), count (integer)
+
+Action: validate_facts
+  Dependencies: extract_facts
+  Input: extract_facts.facts
+  Output: validated_facts (array)
 ```
 
 ---
@@ -1661,8 +1663,8 @@ pip install agent-actions
 agac init my-project
 cd my-project
 
-# Validate configuration
-agac run -a sample_workflow --validate-only
+# Analyze workflow schema
+agac schema -a sample_workflow
 
 # Execute workflow
 agac run -a sample_workflow

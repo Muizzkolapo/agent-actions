@@ -84,7 +84,7 @@ prompt: |
 
 1. **Use consistent structure**: All input files should have the same field structure
 2. **Include metadata**: Add tracking fields like `id`, `source`, `timestamp`
-3. **Validate before running**: Catch problems early with `agac run -a my_workflow --validate-only`
+3. **Analyze schemas**: Use `agac schema -a my_workflow` to check field dependencies before running
 
 ## See Also
 

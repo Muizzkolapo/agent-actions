@@ -1,17 +1,8 @@
 """Run command validation module."""
 
-from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, DirectoryPath, Field
-
-
-class ExecutionMode(str, Enum):
-    """Execution mode for agent workflows."""
-
-    AUTO = "auto"
-    PARALLEL = "parallel"
-    SEQUENTIAL = "sequential"
 
 
 class RunCommandArgs(BaseModel):
@@ -22,7 +13,6 @@ class RunCommandArgs(BaseModel):
         None, description="Path to the user's code folder containing UDFs"
     )
     use_tools: bool = Field(False, description="Enable tool usage for agents")
-    force: bool = Field(False, description="Force execution even if validation warnings occur")
     execution_mode: Literal["auto", "parallel", "sequential"] = Field(
         "auto", description="Execution mode: 'auto' (detect), 'parallel', or 'sequential'"
     )
@@ -36,4 +26,3 @@ class RunCommandArgs(BaseModel):
     downstream: bool = Field(
         False, description="Execute all downstream workflows that depend on this workflow"
     )
-    debug_context: bool = Field(False, description="Show context debug output during execution")

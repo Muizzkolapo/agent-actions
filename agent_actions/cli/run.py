@@ -21,7 +21,6 @@ from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, Wo
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
-from agent_actions.validation.preflight import VendorCompatibilityValidator
 
 
 class RunCommand:
@@ -97,140 +96,6 @@ class RunCommand:
         else:
             workflow.run()
 
-    def _setup_validation_workflow(self, paths) -> AgentWorkflow:
-        """Set up workflow for validation."""
-        filename = f"{self.agent_name}.yml"
-        full_path = self._find_config_file(paths.agent_config_dir, filename)
-
-        click.echo("Rendering and loading configuration...")
-        ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
-        )
-
-        click.echo("Loading workflow configuration...")
-        return AgentWorkflow(
-            WorkflowConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=self.args.use_tools,
-                run_upstream=self.args.upstream,
-                run_downstream=self.args.downstream,
-            )
-        )
-
-    def _collect_issues_from_validator(self, validator, prefix: str) -> tuple[list, list]:
-        """Collect and categorize issues from a validator."""
-        errors = []
-        warnings = []
-        for issue in validator.get_issues():
-            message = f"[{prefix}] {issue.message}"
-            if issue.issue_type == "error":
-                errors.append(message)
-            else:
-                warnings.append(message)
-        return errors, warnings
-
-    def _validate_vendors(self, agent_configs: dict) -> tuple[list, list]:
-        """Validate vendor compatibility for all agents."""
-        errors = []
-        warnings = []
-        vendor_validator = VendorCompatibilityValidator()
-
-        for agent_name, agent_config in agent_configs.items():
-            if not vendor_validator.validate_vendor_config(agent_config, agent_name):
-                agent_errors, agent_warnings = self._collect_issues_from_validator(
-                    vendor_validator, agent_name
-                )
-                errors.extend(agent_errors)
-                warnings.extend(agent_warnings)
-
-        return errors, warnings
-
-    def _run_static_analysis(self, agent_configs: dict) -> tuple[list, list]:
-        """Run static type checking on field references."""
-        click.echo("\nRunning static type checking...")
-        from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
-
-        workflow_config = {
-            "actions": [{**config, "name": name} for name, config in agent_configs.items()]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        static_result = analyzer.analyze()
-
-        errors = [f"[static] {e.format_message()}" for e in static_result.errors]
-        warnings = [f"[static] {w.format_message()}" for w in static_result.warnings]
-        return errors, warnings
-
-    def _report_validation_results(self, errors: list, warnings: list) -> None:
-        """Report validation results to the user."""
-        click.echo("")
-        if errors:
-            click.echo(click.style("VALIDATION FAILED", fg="red", bold=True))
-            click.echo(f"\n{len(errors)} error(s) found:\n")
-            for error in errors:
-                click.echo(click.style(f"  ERROR: {error}", fg="red"))
-        else:
-            click.echo(click.style("VALIDATION PASSED", fg="green", bold=True))
-
-        if warnings:
-            click.echo(f"\n{len(warnings)} warning(s):\n")
-            for warning in warnings:
-                click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
-
-        click.echo("")
-        click.echo("-" * 50)
-
-    def execute_validation_only(self, static_typing: bool = True) -> None:
-        """
-        Execute pre-flight validation only, without running the workflow.
-
-        This validates:
-        - Workflow configuration
-        - Agent configurations (vendor compatibility)
-        - Dependencies (circular detection)
-        - Template variables (if possible without data)
-        - Static type checking (field references)
-
-        Args:
-            static_typing: Whether to run static type checking (default: True)
-
-        Exits with code 0 if valid, 1 if errors found.
-        """
-        import sys
-
-        click.echo(f"Running pre-flight validation for: {self.args.agent}")
-        click.echo("Setting up project paths...")
-
-        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
-        PromptValidator().validate(paths.prompt_dir)
-
-        workflow = self._setup_validation_workflow(paths)
-
-        click.echo("\nRunning pre-flight validation...")
-        click.echo("-" * 50)
-
-        # Collect all validation issues
-        errors, warnings = self._validate_vendors(workflow.agent_configs)
-
-        if static_typing:
-            static_errors, static_warnings = self._run_static_analysis(workflow.agent_configs)
-            errors.extend(static_errors)
-            warnings.extend(static_warnings)
-
-        # Report and exit
-        self._report_validation_results(errors, warnings)
-
-        if errors:
-            click.echo("Pre-flight validation failed. Fix errors before running workflow.")
-            sys.exit(1)
-        else:
-            click.echo("Pre-flight validation passed. Workflow is ready to run.")
-            sys.exit(0)
-
     def execute(self) -> None:
         """
         Execute the run command.
@@ -283,12 +148,6 @@ class RunCommand:
             force=True,  # Reinitialize for each workflow run
         )
 
-        # Enable context debug handler if requested
-        context_debug_handler = None
-        if self.args.debug_context:
-            context_debug_handler = LoggerFactory.enable_context_debug()
-            click.echo("Context debug mode enabled...")
-
         click.echo("Starting workflow execution...")
 
         # Track execution state
@@ -317,13 +176,6 @@ class RunCommand:
             raise  # Re-raise to maintain existing error handling
 
         finally:
-            # Display context debug summary if enabled
-            if context_debug_handler:
-                click.echo("\n" + "=" * 60)
-                click.echo("CONTEXT DEBUG SUMMARY")
-                click.echo("=" * 60)
-                context_debug_handler.display_summary()
-
             # Finalize run tracking
             try:
                 tracker.finalize_workflow_run(
@@ -354,7 +206,6 @@ class RunCommand:
     help="Path to the user's code folder containing UDFs",
 )
 @click.option("--use-tools", is_flag=True, help="Enable tool usage for agents")
-@click.option("--force", is_flag=True, help="Force execution even if validation warnings occur")
 @click.option(
     "--execution-mode",
     "-e",
@@ -374,22 +225,6 @@ class RunCommand:
     is_flag=True,
     help="Execute all downstream workflows that depend on this workflow",
 )
-@click.option(
-    "--validate-only",
-    "-v",
-    is_flag=True,
-    help="Run pre-flight validation only, without executing the workflow",
-)
-@click.option(
-    "--static-typing/--no-static-typing",
-    default=True,
-    help="Enable/disable static type checking of field references (default: enabled)",
-)
-@click.option(
-    "--debug-context",
-    is_flag=True,
-    help="Show context debug output during execution",
-)
 @handles_user_errors("run")
 @requires_project
 # Click decorators require explicit params
@@ -397,14 +232,10 @@ def run(
     agent: str,
     user_code: Optional[str],
     use_tools: bool,
-    force: bool = False,
     execution_mode: str = "auto",
     concurrency_limit: int = 5,
     upstream: bool = False,
     downstream: bool = False,
-    validate_only: bool = False,
-    static_typing: bool = True,
-    debug_context: bool = False,
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -417,8 +248,7 @@ def run(
         agent-actions run -a my_agent
         agent-actions run -a my_agent --upstream
         agent-actions run -a my_agent --downstream
-        agent-actions run -a my_agent --upstream --downstream
-        agent-actions run -a my_agent --debug-context
+        agent-actions run -a my_agent --execution-mode parallel
     """
     # Let @handles_user_errors decorator handle all exceptions
     # for consistent error formatting
@@ -426,17 +256,10 @@ def run(
         agent=agent,
         user_code=user_code,
         use_tools=use_tools,
-        force=force,
         execution_mode=execution_mode,
         concurrency_limit=concurrency_limit,
         upstream=upstream,
         downstream=downstream,
-        debug_context=debug_context,
     )
     command = RunCommand(args)
-
-    # Handle validate-only mode
-    if validate_only:
-        command.execute_validation_only(static_typing=static_typing)
-    else:
-        command.execute()
+    command.execute()

@@ -28,15 +28,15 @@ The execution layer orchestrates LLM calls, data transformations, and validated 
 | Conditional execution | `guard: { clause: "...", behavior: filter }` |
 | Handle transient failures | `retry: { max_attempts: 3, on_exhausted: return_last }` |
 
-## Pre-flight Validation
+## Schema Analysis
 
-Validate configuration before making API calls:
+Analyze workflow schemas and field dependencies before making API calls:
 
 ```bash
-agac run -a my_workflow --validate-only
+agac schema -a my_workflow
 ```
 
-Checks field references, schema files, circular dependencies, and vendor configuration.
+Shows input/output schemas for each action and helps catch field reference errors.
 
 ## See Also
 

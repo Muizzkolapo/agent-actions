@@ -44,14 +44,10 @@ agac run -a my_workflow --downstream
 | `-a, --agent NAME` | Agentic workflow name (required) |
 | `-u, --user_code DIRECTORY` | Path to user's code folder containing tools |
 | `--use-tools` | Enable tool usage for actions |
-| `--force` | Force execution even if validation warnings occur |
-| `--validate-only` / `-v` | Run pre-flight validation only (useful for CI/CD) |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |
 | `--upstream` | Execute upstream dependencies first |
 | `--downstream` | Execute downstream agentic workflows after completion |
-| `--static-typing/--no-static-typing` | Enable/disable static type checking (default: enabled) |
-| `--debug-context` | Show context debug output during execution |
 
 ## Parallel Execution
 
@@ -115,25 +111,6 @@ agac run -a middle_workflow --upstream --downstream
 ```
 
 See **[Workflow Dependencies](../execution/workflow-dependencies)** for detailed diagrams and configuration examples.
-
-## Debug Context
-
-Use the `--debug-context` flag to see what data is available during template rendering. This helps diagnose issues with missing or unexpected template variables.
-
-```bash
-# Run with context debug output
-agac run -a my_workflow --debug-context
-```
-
-After execution completes, you'll see a summary showing:
-- **Namespaces loaded**: Which data namespaces were available for each action
-- **Context scope applied**: How observe/passthrough/drop rules were applied
-- **Template variables**: What variables were available for rendering
-- **Warnings**: Any skipped or missing field references
-
-:::tip Static Inspection
-For faster debugging without running the workflow, use `agac inspect context` to see what data *would be* available for an action.
-:::
 
 ## See Also
 

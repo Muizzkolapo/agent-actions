@@ -314,15 +314,7 @@ head -50 prompt_store/qanalabs_quiz_gen.md
 
 **Documentation:** `cli-reference/run.md`, `cli-reference/inspect.md`, `cli-reference/batch.md`
 
-### Test 13a: Validate Only
-```bash
-cd /Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs
-agac run -a qanalabs_quiz_gen --validate-only
-```
-
-**Verify:** [ ] Pre-flight validation runs [ ] No API calls made [ ] Configuration errors caught
-
-### Test 13b: Schema Inspection
+### Test 13a: Schema Inspection
 ```bash
 agac schema -a qanalabs_quiz_gen
 agac schema -a qanalabs_quiz_gen --verbose

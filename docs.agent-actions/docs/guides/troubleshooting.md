@@ -478,25 +478,15 @@ grep -A5 '"status": "FAILED"' artefact/runs.json | tail -20
 
 These commands and patterns are your debugging toolkit.
 
-### Validation Commands
+### Debug Commands
 
 ```bash
-# Pre-flight validation only
-agac run -a workflow --validate-only
-
-# With static type checking
-agac run -a workflow --validate-only --static-typing
-
 # Debug mode (full tracebacks)
 agac run -a workflow --debug
 
 # Verbose output
 agac run -a workflow --debug --verbose
 ```
-
-:::tip
-Run `agac run -a workflow --validate-only` before running your agentic workflow to catch configuration errors early—before any API calls are made.
-:::
 
 ### Common Fixes Cheatsheet
 

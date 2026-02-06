@@ -62,5 +62,5 @@ The output shows:
 
 ## See Also
 
-- [run Command](./run) - Execute workflows with `--validate-only`
+- [run Command](./run) - Execute agentic workflows
 - [Troubleshooting](./troubleshooting) - Debug workflow issues

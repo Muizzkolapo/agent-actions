@@ -141,22 +141,12 @@ Explicit `dependencies` are required for correct execution ordering:
     Validate: {{ extract.data }}
 ```
 
-## Validation
-
-Run pre-flight validation to catch errors early:
-
-```bash
-agac run -a workflow --validate-only
-```
-
-Checks: referenced actions exist, no circular dependencies, type compatibility (with `--static-typing`).
-
 ## Best Practices
 
 1. **Use explicit dependencies** - Required for all referenced actions
 2. **Use Jinja2 syntax** - `{{ action.field }}` for prompts
 3. **Use selector syntax** - `action.field` for guards and context_scope
-4. **Validate early** - Run `--validate-only` before full execution
+4. **Use schema command** - Run `agac schema -a workflow` to analyze field dependencies
 
 ## Version Field Patterns
 

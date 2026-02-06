@@ -591,8 +591,8 @@ Record filtered by guard on action 'generate_output'
 agac schema --validate schema/my_schema.yml
 ```
 
-### Test with --validate-only
+### Analyze Schema Structure
 
 ```bash
-agac run -a workflow --validate-only
+agac schema -a workflow
 ```

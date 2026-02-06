@@ -87,7 +87,7 @@ actions:
 1. **Choose one mode per workflow** - Don't switch modes mid-workflow
 2. **Match template to mode** - Use `source.*` for online, root fields for batch
 3. **Use seed data for static content** - Works identically in both modes
-4. **Test in target mode** - `agac run -a my_workflow --validate-only`
+4. **Analyze schemas** - Run `agac schema -a my_workflow` to check field dependencies
 
 ## See Also
 
