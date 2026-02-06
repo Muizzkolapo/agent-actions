@@ -231,30 +231,6 @@ class TestRetryServiceNonRetriableErrors:
         operation.assert_called_once()
 
 
-class TestRetryServiceWithFallback:
-    """Tests for execute_with_fallback method."""
-
-    def test_fallback_returns_response_on_success(self):
-        """Returns actual response when operation succeeds."""
-        service = RetryService(max_attempts=3)
-        operation = Mock(return_value="success response")
-
-        response, result = service.execute_with_fallback(operation, fallback="default")
-
-        assert response == "success response"
-        assert not result.exhausted
-
-    def test_fallback_returns_fallback_on_exhaustion(self):
-        """Returns fallback value when exhausted with no response."""
-        service = RetryService(max_attempts=2, on_exhausted="return_last")
-        operation = Mock(side_effect=NetworkError("timeout"))
-
-        response, result = service.execute_with_fallback(operation, fallback="default")
-
-        assert response == "default"
-        assert result.exhausted
-
-
 class TestCreateRetryServiceFromConfig:
     """Tests for create_retry_service_from_config factory."""
 

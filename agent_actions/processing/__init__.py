@@ -24,7 +24,6 @@ from .prepared_task import (
     PreparationContext,
 )
 from .processor import RecordProcessor
-from .result_adapters import ProcessingResultAdapter
 from .task_preparer import (
     TaskPreparer,
     get_task_preparer,
@@ -70,6 +69,4 @@ __all__ = [
     "RequiredFieldsEnricher",
     # Processing
     "RecordProcessor",
-    # Adapters
-    "ProcessingResultAdapter",
 ]

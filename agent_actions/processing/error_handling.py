@@ -14,7 +14,7 @@ import csv
 import json
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
@@ -22,7 +22,7 @@ from xml.etree import ElementTree as ET
 
 import yaml
 
-from agent_actions.errors import ProcessingError as ProcessorError  # New modular pattern!
+from agent_actions.errors import ProcessingError as ProcessorError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
 
@@ -58,7 +58,7 @@ class ProcessorErrorHandlerMixin:
             Dictionary containing error context
         """
         context = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "processor": self.__class__.__name__,
             "operation": operation,
         }
@@ -164,8 +164,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             ValidationError with appropriate message
         """
-        from agent_actions.errors import ValidationError  # New modular pattern!
-
+        from agent_actions.errors import ValidationError
         self.handle_processing_error(
             error,
             f"Validation of {target}",
@@ -190,8 +189,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             FileLoadError or FileWriteError depending on operation
         """
-        from agent_actions.errors import FileLoadError, FileWriteError  # New modular pattern!
-
+        from agent_actions.errors import FileLoadError, FileWriteError
         if operation.lower() in ["read", "load", "open"]:
             error_type = FileLoadError
         elif operation.lower() in ["write", "save", "create"]:
@@ -222,8 +220,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             TransformationError with appropriate message
         """
-        from agent_actions.errors import TransformationError  # New modular pattern!
-
+        from agent_actions.errors import TransformationError
         self.handle_processing_error(
             error,
             f"Transformation from {source_type} to {target_type}",
@@ -357,7 +354,7 @@ class ProcessorErrorHandlerMixin:
             Recovery state dictionary
         """
         recovery_state = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "operation": operation,
             "processor": self.__class__.__name__,
             "error": {

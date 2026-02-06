@@ -11,5 +11,4 @@ failures and gather metrics for documentation.
 |------|------|-------------|---------|
 | `reprompt.py` | Module | Tracks reprompt attempts and transitions when validation errors occur. | `reprompting`, `validation` |
 | `retry.py` | Module | Retry helpers with backoff used across processing pipelines. | `retry`, `logging` |
-| `stats.py` | Module | Collects retry/reprompt statistics for telemetry and docs. | `logging`, `tooling.docs` |
 | `validation.py` | Module | Validates that retry/reprompt policies are well-formed before runs. | `validation` |

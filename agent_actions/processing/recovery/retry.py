@@ -7,7 +7,7 @@ It wraps operations with configurable retry behavior and tracks recovery metadat
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging import fire_event
@@ -205,34 +205,6 @@ class RetryService:
             exhausted=True,
             last_error=str(last_error) if last_error else None,
         )
-
-    def execute_with_fallback(
-        self,
-        operation: Callable[[], T],
-        fallback: T,
-        context: Optional[str] = None,
-    ) -> Tuple[T, RetryResult]:
-        """
-        Execute with retry and return fallback value if exhausted.
-
-        This is a convenience method that uses the fallback value when
-        on_exhausted="return_last" and we have no valid response.
-
-        Args:
-            operation: The operation to execute
-            fallback: Value to return if exhausted with no response
-            context: Optional context for logging
-
-        Returns:
-            Tuple of (response_or_fallback, RetryResult)
-        """
-        result = self.execute(operation, context)
-
-        if result.exhausted and result.response is None:
-            return fallback, result
-
-        return result.response, result
-
 
 def create_retry_service_from_config(retry_config: Optional[dict]) -> Optional[RetryService]:
     """

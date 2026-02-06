@@ -1,7 +1,8 @@
 """Unified record processor replacing StagingProcessor and TargetContentProcessor."""
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.operations import TemplateVariableError
@@ -180,7 +181,7 @@ class RecordProcessor:
             fire_event(
                 RecordFilteredEvent(
                     agent_name=context.agent_name,
-                    record_index=context.record_index if hasattr(context, "record_index") else 0,
+                    record_index=context.record_index,
                     source_guid=source_guid,
                     filter_reason="guard_filter",
                 )
@@ -195,7 +196,7 @@ class RecordProcessor:
             fire_event(
                 RecordFilteredEvent(
                     agent_name=context.agent_name,
-                    record_index=context.record_index if hasattr(context, "record_index") else 0,
+                    record_index=context.record_index,
                     source_guid=source_guid,
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
@@ -337,8 +338,6 @@ class RecordProcessor:
             List of ProcessingResults (includes both successes and failures)
         """
         # CRITICAL: Capture start_time BEFORE firing start event (learned from TICKET-019 P0)
-        from datetime import datetime, timezone
-
         start_time = datetime.now(timezone.utc)
 
         # Fire BP001: Batch processing started
@@ -395,11 +394,11 @@ class RecordProcessor:
             except Exception as e:
                 # Create failed result instead of propagating exception
                 # This allows batch processing to continue for transient/data errors
-                # Log the error for debugging
-                import logging
-
-                logging.getLogger(__name__).error(
-                    f"[{context.agent_name}] Error processing item {idx}: {str(e)}"
+                logger.error(
+                    "[%s] Error processing item %d: %s",
+                    context.agent_name,
+                    idx,
+                    str(e),
                 )
                 # Preserve source_snapshot and source_guid for first-stage source saving
                 input_record = item if isinstance(item, dict) else None
@@ -435,41 +434,6 @@ class RecordProcessor:
 
     # Private helper methods
 
-    def _normalize_input(
-        self, item: Any, context: ProcessingContext
-    ) -> Tuple[Any, Optional[str], Optional[Any]]:
-        """
-        Normalize input format.
-
-        First-stage: raw input → generate source_guid, preserve snapshot
-          - Accepts any type: str, list, dict, etc.
-        Subsequent-stage: structured {content, source_guid} → extract fields
-          - Expects dict with 'content' and 'source_guid' keys
-
-        Args:
-            item: Input item (any type for first-stage, dict for subsequent-stage)
-            context: ProcessingContext
-
-        Returns:
-            Tuple of (content, source_guid, source_snapshot)
-        """
-        if context.is_first_stage:
-            from agent_actions.utils.id_generation import IDGenerator
-
-            source_guid = IDGenerator.generate_deterministic_source_guid(item)
-            # Prepare snapshot with chunk_info filtering
-            snapshot = self._prepare_source_snapshot(item)
-            return item, source_guid, snapshot
-        else:
-            # Subsequent-stage expects dict with content/source_guid
-            if isinstance(item, dict):
-                content = item.get("content", item)
-                source_guid = item.get("source_guid")
-                return content, source_guid, item
-            else:
-                # Non-dict input in subsequent-stage: treat as raw content
-                return item, None, None
-
     def _prepare_source_snapshot(self, item: Any) -> Any:
         """
         Prepare source snapshot for first-stage processing.
@@ -490,149 +454,6 @@ class RecordProcessor:
         else:
             snapshot = item.copy() if isinstance(item, dict) else item
         return snapshot
-
-    def _evaluate_guard(
-        self, content: Any, source_guid: str, context: ProcessingContext
-    ) -> Optional[ProcessingResult]:
-        """
-        Evaluate guard conditions early (FIRST guard check).
-
-        This is the performance optimization layer - evaluates guards based on
-        input content BEFORE expensive prompt preparation and LLM calls.
-
-        Limitations:
-        - Cannot access passthrough fields (added in Step 4)
-        - Cannot access {source.*} references (requires prompt preparation)
-        - Guards referencing these will be evaluated at LLM layer (Step 6)
-
-        Args:
-            content: Content to evaluate
-            source_guid: Source GUID
-            context: ProcessingContext
-
-        Returns:
-            ProcessingResult if guard blocks execution, None otherwise
-            None means "proceed to prompt preparation and LLM execution"
-        """
-        from agent_actions.processing.helpers import (
-            evaluate_guard_condition,
-        )
-
-        guard_config = context.agent_config.get("guard")
-        conditional = context.agent_config.get("conditional_clause")
-
-        if not guard_config and not conditional:
-            return None
-
-        eval_context = content if isinstance(content, dict) else {"_raw": content}
-        should_execute, behavior = evaluate_guard_condition(context.agent_config, eval_context)
-
-        if should_execute:
-            return None
-
-        if behavior == "filter":
-            # Fire RP002: Record filtered
-            fire_event(
-                RecordFilteredEvent(
-                    agent_name=context.agent_name,
-                    record_index=context.record_index if hasattr(context, "record_index") else 0,
-                    source_guid=source_guid,
-                    filter_reason="guard_filter",
-                )
-            )
-            return ProcessingResult.filtered(source_guid=source_guid)
-
-        # Fire RP002: Record filtered (skip)
-        fire_event(
-            RecordFilteredEvent(
-                agent_name=context.agent_name,
-                record_index=context.record_index if hasattr(context, "record_index") else 0,
-                source_guid=source_guid,
-                filter_reason=f"guard_{behavior}",
-            )
-        )
-        return ProcessingResult.skipped(
-            passthrough_data=content,
-            reason=f"guard_{behavior}",
-            source_guid=source_guid,
-        )
-
-    def _get_source_content(self, source_guid: str, context: ProcessingContext) -> Optional[Any]:
-        """
-        Get source content for prompt preparation.
-
-        Args:
-            source_guid: Source GUID to lookup
-            context: ProcessingContext
-
-        Returns:
-            Source content if found, None otherwise
-        """
-        if not context.source_data:
-            logger.debug(
-                "Source data not available for %s; cannot look up source_guid=%s",
-                context.agent_name,
-                source_guid,
-            )
-            return None
-        from agent_actions.input.preprocessing.transformation.transformer import (
-            DataTransformer,
-        )
-
-        source_content = DataTransformer.get_content_by_source_guid(
-            context.source_data, source_guid
-        )
-        if source_content is None:
-            logger.debug(
-                "Could not resolve source content for %s (%s source_data items)",
-                context.agent_name,
-                len(context.source_data),
-            )
-        return source_content
-
-    def _prepare_prompt(
-        self,
-        content: Any,
-        source_content: Any,
-        context: ProcessingContext,
-        current_item: Optional[Dict] = None,
-    ):
-        """
-        Prepare prompt using PromptPreparationService.
-
-        Args:
-            content: Current content
-            source_content: Source content for context
-            context: ProcessingContext
-            current_item: Optional full item dict with lineage, source_guid for historical data loading
-
-        Returns:
-            PromptPreparationService result
-        """
-        from agent_actions.prompt.service import (
-            PromptPreparationService,
-        )
-        from agent_actions.utils.tools_resolver import resolve_tools_path
-
-        # Resolve tools_path for function injection (parity with batch mode)
-        tools_path = resolve_tools_path(context.agent_config)
-
-        return PromptPreparationService.prepare_prompt_with_context(
-            agent_config=context.agent_config,
-            agent_name=context.agent_name,
-            contents=content if isinstance(content, dict) else {},
-            mode="realtime" if context.mode.value == "online" else "batch",
-            agent_indices=context.agent_indices,
-            dependency_configs=context.dependency_configs,
-            source_content=source_content,
-            version_context=context.version_context,
-            workflow_metadata=context.workflow_metadata,
-            current_item=current_item,
-            file_path=context.file_path,
-            tools_path=tools_path,
-            output_directory=context.output_directory,
-            storage_backend=context.storage_backend,
-        )
 
     def _transform_response(
         self,

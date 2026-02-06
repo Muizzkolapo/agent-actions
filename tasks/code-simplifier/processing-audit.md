@@ -1,4 +1,4 @@
-# Code Simplification Audit: processing
+# Code Simplification Audit: processing ✅
 
 **Audited path:** `agent_actions/processing/`
 **Date:** 2026-02-05
@@ -478,3 +478,49 @@ The `processing` folder is the core record-processing engine, bridging input/pre
 14. **P2-16: Refactor `result_collector.py` status branching.** Use dispatch table or mapping pattern. Moderate effort.
 
 15. **P3 items (18-26):** Address in bulk during a cleanup sweep. Low effort, low risk.
+
+---
+
+## Status: ✅ COMPLETED (Phase 1 + Phase 2)
+
+**Date completed:** 2026-02-06
+**PR:** #908
+
+### Completed Items
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| P1-4 | Empty strategies/ directory | Deleted |
+| P1-5 | Empty transform/ directory | Deleted |
+| P1-2 | Orphaned lineage_mixin.py | Deleted (172 lines) |
+| P1-1 | Dead processor.py methods | Removed _normalize_input, _evaluate_guard, _get_source_content, _prepare_prompt (~145 lines) |
+| P1-3 | Unused ProcessingResultAdapter | Deleted result_adapters.py (86 lines) |
+| P1-6 | Redundant import logging | Fixed - use module-level logger |
+| P3-23 | datetime import inside method | Moved to top-level |
+| P2-10 | Redundant hasattr guards | Removed (2 occurrences) |
+| P2-12 | Deprecated datetime.utcnow() | Fixed (2 occurrences) |
+| P3-26 | Stale "New modular pattern!" comments | Removed (4 occurrences) |
+
+### Phase 2 Completed Items
+
+| # | Finding | Resolution |
+|---|---------|------------|
+| P2-8/P2-9 | Deduplicate online.py | Extracted `_call_llm()` and `_track_retry_metadata()` helpers (-100 lines) |
+| P2-13 | recovery/stats.py unused | Deleted (220 lines, never integrated) |
+| P2-14 | execute_with_fallback unused | Removed from retry.py (26 lines) |
+| P2-15 | processor_init.py thin wrapper | Deleted (14 lines) |
+
+### Deferred Items
+
+| Finding | Reason |
+|---------|--------|
+| P2-11: Audit error_handling.py mixin | Requires mixin consumer verification |
+| P2-16: Refactor result_collector.py | Medium effort - status branching |
+| P2-17: Extract shared _prepare_source_snapshot | Still called, needs coordination |
+
+### Net Result
+
+- **Phase 1:** -459 lines
+- **Phase 2:** -363 lines
+- **Total:** -822 lines
+- **Tests:** All passing

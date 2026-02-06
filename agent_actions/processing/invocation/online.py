@@ -1,14 +1,15 @@
-"""
-Online (synchronous) invocation strategy.
+"""Online (synchronous) invocation strategy.
 
 Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
 
 Extracted from RecordProcessor._execute_llm() for unified invocation handling.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Tuple
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
@@ -21,38 +22,27 @@ from agent_actions.processing.types import (
 
 if TYPE_CHECKING:
     from agent_actions.processing.recovery.reprompt import RepromptService
-    from agent_actions.processing.recovery.retry import RetryService
+    from agent_actions.processing.recovery.retry import RetryResult, RetryService
     from agent_actions.processing.types import ProcessingContext
 
 logger = logging.getLogger(__name__)
 
 
 class OnlineStrategy(InvocationStrategy):
-    """
-    Synchronous LLM invocation with retry/reprompt support.
+    """Synchronous LLM invocation with retry/reprompt support.
 
     Executes LLM calls immediately and returns response.
     Supports recovery mechanisms:
     - Retry: Re-execute on transient failures
     - Reprompt: Re-execute with feedback on validation failure
-
-    Example:
-        strategy = OnlineStrategy(retry_service, reprompt_service)
-        result = strategy.invoke(prepared_task, context)
-
-        if result.executed:
-            process(result.response)
-        elif result.recovery_metadata:
-            log_recovery(result.recovery_metadata)
     """
 
     def __init__(
         self,
-        retry_service: Optional["RetryService"] = None,
-        reprompt_service: Optional["RepromptService"] = None,
+        retry_service: RetryService | None = None,
+        reprompt_service: RepromptService | None = None,
     ):
-        """
-        Initialize OnlineStrategy.
+        """Initialize OnlineStrategy.
 
         Args:
             retry_service: Optional retry service for transient failures
@@ -64,10 +54,9 @@ class OnlineStrategy(InvocationStrategy):
     def invoke(
         self,
         task: PreparedTask,
-        context: "ProcessingContext",
+        context: ProcessingContext,
     ) -> InvocationResult:
-        """
-        Execute LLM synchronously with optional recovery.
+        """Execute LLM synchronously with optional recovery.
 
         Guard evaluation is already done by TaskPreparer. This method
         passes skip_guard_eval=True to run_dynamic_agent().
@@ -79,8 +68,6 @@ class OnlineStrategy(InvocationStrategy):
         Returns:
             InvocationResult with response or recovery metadata
         """
-        # Defensive: processor handles guard routing before invoke(), but
-        # strategies must also handle it for direct callers bypassing processor.
         if not task.should_execute:
             if task.is_passthrough:
                 return InvocationResult.skipped(
@@ -89,9 +76,7 @@ class OnlineStrategy(InvocationStrategy):
                 )
             return InvocationResult.filtered()
 
-        # Execute with appropriate recovery strategy
         recovery_metadata = RecoveryMetadata()
-
         retry_service = self._retry_service
         reprompt_service = self._reprompt_service
 
@@ -108,7 +93,7 @@ class OnlineStrategy(InvocationStrategy):
                 task, context, recovery_metadata, retry_service
             )
         else:
-            response, executed = self._invoke_direct(task, context)
+            response, executed = self._call_llm(task, context, task.formatted_prompt)
 
         return InvocationResult.immediate(
             response=response,
@@ -121,17 +106,18 @@ class OnlineStrategy(InvocationStrategy):
         """OnlineStrategy supports retry/reprompt recovery."""
         return True
 
-    def _invoke_direct(
+    def _call_llm(
         self,
         task: PreparedTask,
-        context: "ProcessingContext",
+        context: ProcessingContext,
+        prompt: str,
     ) -> Tuple[Any, bool]:
-        """
-        Direct LLM call without recovery.
+        """Execute LLM call with common arguments.
 
         Args:
             task: PreparedTask
             context: ProcessingContext
+            prompt: Formatted prompt string
 
         Returns:
             Tuple of (response, executed)
@@ -139,57 +125,27 @@ class OnlineStrategy(InvocationStrategy):
         from agent_actions.processing.helpers import run_dynamic_agent
 
         tools_path = context.agent_config.get("tools", {}).get("path")
-
         return run_dynamic_agent(
             context.agent_config,
             context.agent_name,
             task.original_content,
-            task.formatted_prompt,
+            prompt,
             tools_path=tools_path,
             llm_context=task.llm_context,
             skip_guard_eval=True,
         )
 
-    def _invoke_with_retry(
+    def _track_retry_metadata(
         self,
-        task: PreparedTask,
-        context: "ProcessingContext",
+        retry_result: RetryResult,
         recovery_metadata: RecoveryMetadata,
-        retry_service: "RetryService",
-    ) -> Tuple[Any, bool, RecoveryMetadata]:
-        """
-        LLM call with retry protection.
+    ) -> None:
+        """Track retry metadata from retry result.
 
         Args:
-            task: PreparedTask
-            context: ProcessingContext
-            recovery_metadata: Container for recovery tracking
-            retry_service: RetryService instance
-
-        Returns:
-            Tuple of (response, executed, recovery_metadata)
+            retry_result: Result from retry service
+            recovery_metadata: Container to update
         """
-        from agent_actions.processing.helpers import run_dynamic_agent
-
-        tools_path = context.agent_config.get("tools", {}).get("path")
-
-        def llm_operation():
-            return run_dynamic_agent(
-                context.agent_config,
-                context.agent_name,
-                task.original_content,
-                task.formatted_prompt,
-                tools_path=tools_path,
-                llm_context=task.llm_context,
-                skip_guard_eval=True,
-            )
-
-        retry_result = retry_service.execute(
-            llm_operation,
-            context=f"action={context.agent_name}",
-        )
-
-        # Track retry metadata
         if retry_result.needed_retry:
             succeeded = not retry_result.exhausted
             failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
@@ -201,6 +157,21 @@ class OnlineStrategy(InvocationStrategy):
                 timestamp=datetime.now(timezone.utc).isoformat(),
             )
 
+    def _invoke_with_retry(
+        self,
+        task: PreparedTask,
+        context: ProcessingContext,
+        recovery_metadata: RecoveryMetadata,
+        retry_service: RetryService,
+    ) -> Tuple[Any, bool, RecoveryMetadata]:
+        """LLM call with retry protection."""
+        retry_result = retry_service.execute(
+            lambda: self._call_llm(task, context, task.formatted_prompt),
+            context=f"action={context.agent_name}",
+        )
+
+        self._track_retry_metadata(retry_result, recovery_metadata)
+
         if retry_result.exhausted:
             logger.warning(
                 "Retry exhausted for action %s after %d attempts: %s",
@@ -210,7 +181,6 @@ class OnlineStrategy(InvocationStrategy):
             )
             return None, False, recovery_metadata
 
-        # Unpack response tuple from run_dynamic_agent
         if retry_result.response:
             response, executed = retry_result.response
         else:
@@ -221,44 +191,17 @@ class OnlineStrategy(InvocationStrategy):
     def _invoke_with_reprompt(
         self,
         task: PreparedTask,
-        context: "ProcessingContext",
+        context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
-        reprompt_service: "RepromptService",
+        reprompt_service: RepromptService,
     ) -> Tuple[Any, bool, RecoveryMetadata]:
-        """
-        LLM call with reprompt validation.
-
-        Args:
-            task: PreparedTask
-            context: ProcessingContext
-            recovery_metadata: Container for recovery tracking
-            reprompt_service: RepromptService instance
-
-        Returns:
-            Tuple of (response, executed, recovery_metadata)
-        """
-        from agent_actions.processing.helpers import run_dynamic_agent
-
-        tools_path = context.agent_config.get("tools", {}).get("path")
-
-        def llm_direct(prompt: str):
-            return run_dynamic_agent(
-                context.agent_config,
-                context.agent_name,
-                task.original_content,
-                prompt,
-                tools_path=tools_path,
-                llm_context=task.llm_context,
-                skip_guard_eval=True,
-            )
-
+        """LLM call with reprompt validation."""
         reprompt_result = reprompt_service.execute(
-            llm_operation=llm_direct,
+            llm_operation=lambda prompt: self._call_llm(task, context, prompt),
             original_prompt=task.formatted_prompt,
             context=f"action={context.agent_name}",
         )
 
-        # Track reprompt metadata (only if reprompting actually occurred)
         if reprompt_result.attempts > 1:
             recovery_metadata.reprompt = RepromptMetadata(
                 attempts=reprompt_result.attempts,
@@ -271,64 +214,22 @@ class OnlineStrategy(InvocationStrategy):
     def _invoke_with_retry_and_reprompt(
         self,
         task: PreparedTask,
-        context: "ProcessingContext",
+        context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
-        retry_service: "RetryService",
-        reprompt_service: "RepromptService",
+        retry_service: RetryService,
+        reprompt_service: RepromptService,
     ) -> Tuple[Any, bool, RecoveryMetadata]:
-        """
-        LLM call with both retry and reprompt (reprompt wraps retry).
-
-        Each reprompt attempt gets independent retry protection.
-
-        Args:
-            task: PreparedTask
-            context: ProcessingContext
-            recovery_metadata: Container for recovery tracking
-            retry_service: RetryService instance
-            reprompt_service: RepromptService instance
-
-        Returns:
-            Tuple of (response, executed, recovery_metadata)
-        """
-        from agent_actions.processing.helpers import run_dynamic_agent
-
-        tools_path = context.agent_config.get("tools", {}).get("path")
+        """LLM call with both retry and reprompt (reprompt wraps retry)."""
 
         def llm_with_retry(prompt: str):
-            """LLM execution with retry protection, using provided prompt."""
-
-            def llm_call():
-                return run_dynamic_agent(
-                    context.agent_config,
-                    context.agent_name,
-                    task.original_content,
-                    prompt,
-                    tools_path=tools_path,
-                    llm_context=task.llm_context,
-                    skip_guard_eval=True,
-                )
-
             retry_result = retry_service.execute(
-                llm_call,
+                lambda: self._call_llm(task, context, prompt),
                 context=f"action={context.agent_name}",
             )
-
-            # Track retry metadata
-            if retry_result.needed_retry:
-                succeeded = not retry_result.exhausted
-                failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
-                recovery_metadata.retry = RetryMetadata(
-                    attempts=retry_result.attempts,
-                    failures=failures,
-                    succeeded=succeeded,
-                    reason=retry_result.reason or "unknown",
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                )
+            self._track_retry_metadata(retry_result, recovery_metadata)
 
             if retry_result.exhausted:
                 return None, False
-
             return retry_result.response
 
         reprompt_result = reprompt_service.execute(
@@ -337,7 +238,6 @@ class OnlineStrategy(InvocationStrategy):
             context=f"action={context.agent_name}",
         )
 
-        # Track reprompt metadata (only if reprompting actually occurred)
         if reprompt_result.attempts > 1:
             recovery_metadata.reprompt = RepromptMetadata(
                 attempts=reprompt_result.attempts,
