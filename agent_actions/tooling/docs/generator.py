@@ -10,6 +10,7 @@ from typing import Dict, Any, Optional
 from agent_actions.output.response.loader import SchemaLoader
 
 from .parser import WorkflowParser, extract_fields_for_docs
+from .run_tracker import _empty_runs_data
 from .scanner import ProjectScanner
 
 
@@ -253,25 +254,6 @@ class CatalogGenerator:
         return catalog
 
 
-class RunsGenerator:
-    """Initialize runs data structure."""
-
-    @staticmethod
-    def initialize_empty() -> Dict[str, Any]:
-        """
-        Initialize empty runs data structure.
-
-        Actual run data will be populated by the workflow execution system
-        via the RunTracker when workflows are executed.
-        """
-        runs = {
-            "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
-            "executions": [],
-        }
-
-        return runs
-
-
 def generate_docs(project_path: str, output_dir: Path) -> bool:
     """
     Main entry point for docs generation.
@@ -329,9 +311,8 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # (RunTracker manages all updates to this file during workflow execution)
     runs_path = output_dir / "runs.json"
     if not runs_path.exists():
-        runs = RunsGenerator.initialize_empty()
         with open(runs_path, "w", encoding="utf-8") as f:
-            json.dump(runs, f, indent=2)
+            json.dump(_empty_runs_data(), f, indent=2)
 
     # Print summary
     total_workflows = catalog["stats"]["total_workflows"]

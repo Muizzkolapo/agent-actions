@@ -15,6 +15,26 @@ from typing import Any, Dict, Optional, Tuple, Type
 import portalocker
 
 
+def _empty_runs_data(*, extended: bool = False) -> Dict[str, Any]:
+    """Create empty runs data structure.
+
+    Args:
+        extended: If True, include schema_version and workflow_metrics fields
+                  (used for workflow run tracking with action-level metrics).
+
+    Returns:
+        Empty runs data structure with metadata and executions list.
+    """
+    runs: Dict[str, Any] = {
+        "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
+        "executions": [],
+    }
+    if extended:
+        runs["metadata"]["schema_version"] = "1.0"
+        runs["workflow_metrics"] = {}
+    return runs
+
+
 def retry(
     max_attempts: int = 3,
     backoff: float = 2.0,
@@ -94,10 +114,7 @@ class RunTracker:
                 pass
 
         # Return empty structure
-        return {
-            "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
-            "executions": [],
-        }
+        return _empty_runs_data()
 
     def _save_runs(self, runs_data: Dict[str, Any]) -> None:
         """Save runs data to file with file locking to prevent concurrent write issues."""
@@ -143,13 +160,7 @@ class RunTracker:
     def _create_empty_runs_file(self) -> None:
         """Create empty runs file with initial structure."""
         with open(self.runs_file, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
-                    "executions": [],
-                },
-                f,
-            )
+            json.dump(_empty_runs_data(), f, indent=2)
 
     def _load_runs_data_from_file(self, f) -> Dict[str, Any]:
         """Load runs data from file handle."""
@@ -158,10 +169,7 @@ class RunTracker:
             return json.load(f)
         except (json.JSONDecodeError, IOError):
             # File is empty or corrupted, create new structure
-            return {
-                "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
-                "executions": [],
-            }
+            return _empty_runs_data()
 
     def _create_run_record(self, runs_data: Dict[str, Any], config: RunConfig) -> str:
         """Create run record and add to runs_data."""
@@ -254,12 +262,7 @@ class RunTracker:
             ended_at = updates["ended_at"]
             run["ended_at"] = ended_at
             # Recalculate duration
-            try:
-                start = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
-                end = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
-                run["duration_seconds"] = (end - start).total_seconds()
-            except (ValueError, AttributeError):
-                pass
+            run["duration_seconds"] = self._calculate_duration(run["started_at"], ended_at)
         if "actions_completed" in updates:
             run["actions_completed"] = updates["actions_completed"]
         if "error_message" in updates:
@@ -285,18 +288,7 @@ class RunTracker:
         # Create file if it doesn't exist
         if not self.runs_file.exists():
             with open(self.runs_file, "w", encoding="utf-8") as f:
-                json.dump(
-                    {
-                        "metadata": {
-                            "generated_at": datetime.now().isoformat(),
-                            "total_runs": 0,
-                            "schema_version": "1.0",
-                        },
-                        "workflow_metrics": {},
-                        "executions": [],
-                    },
-                    f,
-                )
+                json.dump(_empty_runs_data(extended=True), f)
 
         # Atomic read-modify-write with exclusive lock
         with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
@@ -306,15 +298,7 @@ class RunTracker:
                 runs_data = json.load(f)
             except (json.JSONDecodeError, IOError):
                 # File is empty or corrupted, create new structure
-                runs_data = {
-                    "metadata": {
-                        "generated_at": datetime.now().isoformat(),
-                        "total_runs": 0,
-                        "schema_version": "1.0",
-                    },
-                    "workflow_metrics": {},
-                    "executions": [],
-                }
+                runs_data = _empty_runs_data(extended=True)
 
             # Ensure workflow_metrics exists
             if "workflow_metrics" not in runs_data:
@@ -499,12 +483,9 @@ class RunTracker:
                     run["ended_at"] = datetime.now().isoformat()
 
                     # Calculate duration
-                    try:
-                        start = datetime.fromisoformat(run["started_at"].replace("Z", "+00:00"))
-                        end = datetime.fromisoformat(run["ended_at"].replace("Z", "+00:00"))
-                        run["duration_seconds"] = (end - start).total_seconds()
-                    except (ValueError, AttributeError):
-                        pass
+                    run["duration_seconds"] = self._calculate_duration(
+                        run["started_at"], run["ended_at"]
+                    )
 
                     # Add error message if provided
                     if error_message:

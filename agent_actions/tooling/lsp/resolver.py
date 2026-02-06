@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import Location, ProjectIndex, Reference, ReferenceType
+from .utils import is_in_context_scope_list, is_in_dependencies_context
 
 
 def get_reference_at_position(content: str, line: int, character: int) -> Optional[Reference]:
@@ -63,7 +64,7 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
 
     # 4. Dependency reference (simple): - action_name
     dep_match = re.search(r"^\s*-\s*(\w+)\s*$", current_line)
-    if dep_match and _is_in_dependencies_context(lines, line):
+    if dep_match and is_in_dependencies_context(lines, line):
         start = dep_match.start(1)
         end = dep_match.end(1)
         if start <= character <= end:
@@ -121,7 +122,7 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
 
     # 8. Context scope references: - action.field
     context_match = re.search(r"^\s*-\s*([A-Za-z_][\w\.]*)", current_line)
-    if context_match and _is_in_context_scope_list(lines, line):
+    if context_match and is_in_context_scope_list(lines, line):
         start = context_match.start(1)
         end = context_match.end(1)
         if start <= character <= end:
@@ -133,53 +134,6 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
             )
 
     return None
-
-
-def _is_in_dependencies_context(lines: list, current_line: int) -> bool:
-    """Check if current line is within a dependencies block."""
-    # Look backwards for "dependencies:" at same or lower indentation
-    current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
-
-    for i in range(current_line - 1, -1, -1):
-        line = lines[i]
-        if not line.strip():
-            continue
-
-        line_indent = len(line) - len(line.lstrip())
-
-        # If we hit a line with less indentation, stop
-        if line_indent < current_indent and not line.strip().startswith("-"):
-            if "dependencies:" in line:
-                return True
-            return False
-
-        if "dependencies:" in line:
-            return True
-
-    return False
-
-
-def _is_in_context_scope_list(lines: list, current_line: int) -> bool:
-    """Check if current line is within a context_scope observe/drop/passthrough list."""
-    current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
-    list_block_indent = None
-
-    for i in range(current_line - 1, -1, -1):
-        line = lines[i]
-        if not line.strip():
-            continue
-        line_indent = len(line) - len(line.lstrip())
-
-        if list_block_indent is None and line_indent < current_indent:
-            if line.strip().startswith(("observe:", "drop:", "passthrough:")):
-                list_block_indent = line_indent
-                current_indent = line_indent
-                continue
-
-        if list_block_indent is not None and line_indent < list_block_indent:
-            return line.strip().startswith("context_scope:")
-
-    return False
 
 
 def resolve_reference(

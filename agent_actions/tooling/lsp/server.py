@@ -12,6 +12,7 @@ from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from .indexer import build_index, find_project_root
 from .models import Location, ProjectIndex, ReferenceType
 from .resolver import get_reference_at_position, resolve_reference
+from .utils import is_in_dependencies_context, uri_to_path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -58,7 +59,7 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
     # Find project root from workspace folders
     if params.workspace_folders:
         for folder in params.workspace_folders:
-            folder_path = Path(folder.uri.replace("file://", ""))
+            folder_path = uri_to_path(folder.uri)
             root = find_project_root(folder_path)
             if root:
                 server.project_root = root
@@ -120,7 +121,7 @@ def goto_definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
         return None
 
     # Resolve the reference
-    current_file = Path(params.text_document.uri.replace("file://", ""))
+    current_file = uri_to_path(params.text_document.uri)
     location = resolve_reference(reference, server.index, current_file)
 
     if not location:
@@ -258,7 +259,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
             )
 
     # Action completions (in dependencies)
-    elif _is_in_dependencies_block(lines, params.position.line):
+    elif is_in_dependencies_context(lines, params.position.line):
         for name in server.index.actions:
             items.append(
                 lsp.CompletionItem(
@@ -270,12 +271,12 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Context scope completions
     elif _is_in_context_scope_block(lines, params.position.line):
-        current_file = Path(params.text_document.uri.replace("file://", ""))
+        current_file = uri_to_path(params.text_document.uri)
         items.extend(_build_context_scope_completions(current_file))
 
     # Guard/reprompt completions
     elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:
-        current_file = Path(params.text_document.uri.replace("file://", ""))
+        current_file = uri_to_path(params.text_document.uri)
         items.extend(_build_guard_completions(current_file))
 
     # Versions block completions
@@ -302,7 +303,7 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
     if not doc:
         return []
 
-    file_path = Path(params.text_document.uri.replace("file://", ""))
+    file_path = uri_to_path(params.text_document.uri)
     symbols = []
 
     # Handle YAML workflow files - show actions
@@ -399,7 +400,7 @@ def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.Document
     if not server.index:
         return []
 
-    file_path = Path(params.text_document.uri.replace("file://", ""))
+    file_path = uri_to_path(params.text_document.uri)
     references = server.index.references_by_file.get(file_path, [])
     target = _find_reference_at_position(
         references, params.position.line, params.position.character
@@ -432,7 +433,7 @@ def semantic_tokens(params: lsp.SemanticTokensParams) -> lsp.SemanticTokens:
     if not server.index:
         return lsp.SemanticTokens(data=[])
 
-    file_path = Path(params.text_document.uri.replace("file://", ""))
+    file_path = uri_to_path(params.text_document.uri)
     references = server.index.references_by_file.get(file_path, [])
     tokens = _build_semantic_tokens(references)
     return lsp.SemanticTokens(data=tokens)
@@ -444,7 +445,7 @@ def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
     if not server.index:
         return []
 
-    file_path = Path(params.text_document.uri.replace("file://", ""))
+    file_path = uri_to_path(params.text_document.uri)
     actions = server.index.file_actions.get(file_path, {})
     lenses: list[lsp.CodeLens] = []
 
@@ -499,7 +500,7 @@ def signature_help(params: lsp.SignatureHelpParams) -> Optional[lsp.SignatureHel
     if "condition:" not in line and "validation:" not in line:
         return None
 
-    current_file = Path(params.text_document.uri.replace("file://", ""))
+    current_file = uri_to_path(params.text_document.uri)
     variables = _collect_available_guard_variables(current_file)
     if not variables:
         return None
@@ -563,7 +564,7 @@ def _publish_diagnostics(uri: str) -> None:
     if not doc:
         return
 
-    file_path = Path(uri.replace("file://", ""))
+    file_path = uri_to_path(uri)
     diagnostics = _collect_diagnostics(file_path, server.index)
     server.text_document_publish_diagnostics(
         lsp.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics)
@@ -740,21 +741,6 @@ def _is_in_versions_block(lines: list[str], line_number: int) -> bool:
         if line_indent < current_indent and line.strip().startswith("versions:"):
             return True
         if line_indent <= current_indent and line.strip().startswith("versions:"):
-            return True
-    return False
-
-
-def _is_in_dependencies_block(lines: list[str], line_number: int) -> bool:
-    """Check if a line is inside a dependencies block."""
-    current_indent = len(lines[line_number]) - len(lines[line_number].lstrip())
-    for i in range(line_number, -1, -1):
-        line = lines[i]
-        if not line.strip():
-            continue
-        line_indent = len(line) - len(line.lstrip())
-        if line_indent < current_indent and line.strip().startswith("dependencies:"):
-            return True
-        if line_indent <= current_indent and line.strip().startswith("dependencies:"):
             return True
     return False
 
