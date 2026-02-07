@@ -220,50 +220,10 @@ class AgentConfig(BaseModel):
     model_config = ConfigDict(extra="allow")
 
 
-class DataSourceType(str, Enum):
-    """Type of data source for start-node input."""
-
-    STAGING = "staging"
-    LOCAL = "local"
-    API = "api"
-
-
-class DataSourceConfig(BaseModel):
-    """Configuration for a start-node data source.
-
-    Used internally by the resolver — not exposed through the config pipeline.
-    The config pipeline keeps data_source as Optional[str] on AgentConfig;
-    this model is only instantiated at the point of consumption.
-    """
-
-    type: DataSourceType = Field(
-        default=DataSourceType.STAGING, description="Data source type"
-    )
-    folder: Optional[str] = Field(
-        default=None, description="Local folder path (for type=local)"
-    )
-    file_type: Optional[List[str]] = Field(
-        default=None, description="File type filter, e.g. ['json', 'csv']"
-    )
-    url: Optional[str] = Field(
-        default=None, description="API endpoint URL (for type=api)"
-    )
-    headers: Optional[Dict[str, str]] = Field(
-        default=None, description="HTTP headers for API requests"
-    )
-    query: Optional[Dict[str, str]] = Field(
-        default=None, description="Query parameters for API requests"
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
 __all__ = [
     "DefaultAgentConfig",
     "AgentConfig",
     "WhereClauseConfig",
     "FilterScope",
     "SkipConditionConfig",
-    "DataSourceType",
-    "DataSourceConfig",
 ]
