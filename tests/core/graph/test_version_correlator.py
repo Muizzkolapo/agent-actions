@@ -737,7 +737,6 @@ class TestVersionCorrelationFailureError:
             # Get the correlation wrapper for consumer (idx=2)
             correlation_wrapper = output_manager.setup_correlation_wrapper(
                 idx=2,
-                original_setup_directories=lambda *_: ([], ""),
             )
 
             # The wrapper should exist since consumer has version_consumption_config

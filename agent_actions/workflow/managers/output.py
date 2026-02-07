@@ -416,15 +416,12 @@ class AgentOutputManager:
         # Use simple directory name (no index prefix)
         return [str(self.agent_folder / "target" / prev_agent)]
 
-    def setup_correlation_wrapper(
-        self, idx: int, original_setup_directories: Callable
-    ) -> Optional[Callable]:
+    def setup_correlation_wrapper(self, idx: int) -> Optional[Callable]:
         """
         Create a correlation-aware setup_directories wrapper if needed.
 
         Args:
             idx: Index of the agent
-            original_setup_directories: Original setup_directories function
 
         Returns:
             Wrapped setup_directories function if correlation needed, None otherwise

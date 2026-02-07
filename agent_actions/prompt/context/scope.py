@@ -480,7 +480,7 @@ class ContextScopeProcessor:
         # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
         # This handles version_consumption where context_scope references the base name
         def expand_version_base_names(
-            action_list: List[str], is_context_sources: bool = False
+            action_list: List[str],
         ) -> List[str]:
             """Expand version base names to their actual variants in the workflow."""
             expanded = []
@@ -519,10 +519,8 @@ class ContextScopeProcessor:
             return expanded
 
         # Expand both input_sources and context_sources
-        input_sources_expanded = expand_version_base_names(input_sources, is_context_sources=False)
-        context_sources_expanded = expand_version_base_names(
-            context_sources, is_context_sources=True
-        )
+        input_sources_expanded = expand_version_base_names(input_sources)
+        context_sources_expanded = expand_version_base_names(context_sources)
         # Avoid loading context sources already provided via input sources.
         if input_sources_expanded:
             input_sources_set = set(input_sources_expanded)

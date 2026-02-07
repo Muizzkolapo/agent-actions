@@ -47,18 +47,12 @@ class DataSourceConfig(BaseModel):
     this model is only instantiated at the point of consumption.
     """
 
-    type: DataSourceType = Field(
-        default=DataSourceType.STAGING, description="Data source type"
-    )
-    folder: Optional[str] = Field(
-        default=None, description="Local folder path (for type=local)"
-    )
+    type: DataSourceType = Field(default=DataSourceType.STAGING, description="Data source type")
+    folder: Optional[str] = Field(default=None, description="Local folder path (for type=local)")
     file_type: Optional[List[str]] = Field(
         default=None, description="File type filter, e.g. ['json', 'csv']"
     )
-    url: Optional[str] = Field(
-        default=None, description="API endpoint URL (for type=api)"
-    )
+    url: Optional[str] = Field(default=None, description="API endpoint URL (for type=api)")
     headers: Optional[Dict[str, str]] = Field(
         default=None, description="HTTP headers for API requests"
     )
@@ -67,6 +61,7 @@ class DataSourceConfig(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
 
 logger = logging.getLogger(__name__)
 
@@ -140,14 +135,15 @@ def _validate_project_containment(folder: Path, project_root: Path) -> None:
         )
 
 
-def _resolve_local(
-    config: DataSourceConfig, agent_folder: Path
-) -> DataSourceResolutionResult:
+def _resolve_local(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:
     """Resolve a local-folder data source."""
     if not config.folder:
         raise ConfigurationError(
             "Local data source requires a 'folder' field",
-            context={"data_source": config.model_dump(exclude={"headers"}), "operation": "resolve_local_data_source"},
+            context={
+                "data_source": config.model_dump(exclude={"headers"}),
+                "operation": "resolve_local_data_source",
+            },
         )
 
     folder = Path(config.folder)
@@ -188,7 +184,10 @@ def _resolve_api(
     if not config.url:
         raise ConfigurationError(
             "API data source requires a 'url' field",
-            context={"data_source": config.model_dump(exclude={"headers"}), "operation": "resolve_api_data_source"},
+            context={
+                "data_source": config.model_dump(exclude={"headers"}),
+                "operation": "resolve_api_data_source",
+            },
         )
 
     # Security: only HTTP(S) URLs

@@ -170,9 +170,7 @@ class AgentRunner:
         logger.debug("Resolved upstream from manifest: %s", upstream_path)
         return [upstream_path]
 
-    def _resolve_start_node_directories(
-        self, agent_folder: Path, agent_name: str
-    ) -> List[Path]:
+    def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> List[Path]:
         """Resolve upstream directories for a start node (no dependencies).
 
         Tries manifest-based resolution first for inter-workflow dependencies,
@@ -182,9 +180,7 @@ class AgentRunner:
         manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
         if manifest_dirs:
             return manifest_dirs
-        result = resolve_start_node_data_source(
-            agent_folder, self.data_source_config, agent_name
-        )
+        result = resolve_start_node_data_source(agent_folder, self.data_source_config, agent_name)
         return result.directories
 
     def _resolve_dependency_directories(

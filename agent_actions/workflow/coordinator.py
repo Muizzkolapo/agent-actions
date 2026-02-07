@@ -425,12 +425,10 @@ class AgentWorkflow:
         """Discover user-defined functions from configured paths."""
         total_udfs = 0
         if self.config.paths.user_code_path:
-            total_udfs = self._discover_udfs_from_path(
-                self.config.paths.user_code_path, is_primary=True
-            )
+            total_udfs = self._discover_udfs_from_path(self.config.paths.user_code_path)
         elif self.config.manager.tool_path:
             for path in self.config.manager.tool_path:
-                count = self._discover_udfs_from_path(path, is_primary=False)
+                count = self._discover_udfs_from_path(path)
                 total_udfs += count
 
         # Fire UDF discovery complete event once with total count
@@ -438,7 +436,7 @@ class AgentWorkflow:
             self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
             fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
-    def _discover_udfs_from_path(self, path: str, is_primary: bool = True) -> int:
+    def _discover_udfs_from_path(self, path: str) -> int:
         """Discover UDFs from a specific path."""
         abs_path = Path(path).absolute()
 

@@ -18,6 +18,7 @@ from agent_actions.errors import ConfigurationError, FileSystemError
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_agent_folder(tmp_path: Path) -> Path:
     """Create a minimal agent_io folder structure."""
     agent_folder = tmp_path / "project" / "agent_io"

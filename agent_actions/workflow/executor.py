@@ -733,9 +733,7 @@ class AgentExecutor:
 
     def _setup_correlation(self, agent_idx: int) -> Optional[callable]:
         """Setup loop correlation if needed, return original setup function."""
-        correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(
-            agent_idx, self.deps.agent_runner.setup_directories
-        )
+        correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(agent_idx)
 
         if correlation_wrapper:
             original = self.deps.agent_runner.setup_directories
