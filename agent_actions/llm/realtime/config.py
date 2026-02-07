@@ -311,6 +311,7 @@ class ConfigManager:
                 "prompt": "",
                 "schema_name": "",
                 "code_path": "",
+                "data_source": "",
                 "anthropic_version": "",
             }
             for field, default_value in string_fields_with_defaults.items():

@@ -6,13 +6,12 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Dict, Optional, List, Any, Set, Union
+from typing import TYPE_CHECKING, Tuple, Dict, Optional, List, Any
 
 if TYPE_CHECKING:
     from agent_actions.workflow.managers.manifest import ManifestManager
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.errors import FileSystemError
-from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.output.file_handler import FileHandler
 from agent_actions.workflow.strategies import (
     InitialStrategy,
@@ -37,7 +36,6 @@ class FileProcessParams:
     upstream_data_dirs: List[str]
     output_directory: str
     idx: int
-    file_type_filter: Optional[Set[str]] = None
 
 
 @dataclass
@@ -102,7 +100,6 @@ class AgentRunner:
         self.agent_configs: Optional[Dict[str, Dict]] = None
         self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: Optional[ManifestManager] = None  # Set by AgentWorkflow
-        self.data_source_config: Optional[Union[str, Dict[str, Any]]] = None  # Set by coordinator
         self.strategies: Dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
@@ -170,22 +167,16 @@ class AgentRunner:
         logger.debug("Resolved upstream from manifest: %s", upstream_path)
         return [upstream_path]
 
-    def _resolve_start_node_directories(
-        self, agent_folder: Path, agent_name: str
-    ) -> List[Path]:
-        """Resolve upstream directories for a start node (no dependencies).
+    def _resolve_start_node_directories(self, agent_folder: Path) -> List[Path]:
+        """Resolve upstream directories for the start node (idx=0).
 
         Tries manifest-based resolution first for inter-workflow dependencies,
-        then delegates to the data source resolver (which defaults to staging).
-        Uses workflow-level ``self.data_source_config`` — not per-agent config.
+        falls back to staging directory for direct file input.
         """
         manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
         if manifest_dirs:
             return manifest_dirs
-        result = resolve_start_node_data_source(
-            agent_folder, self.data_source_config, agent_name
-        )
-        return result.directories
+        return [agent_folder / "staging"]
 
     def _resolve_dependency_directories(
         self, agent_folder: Path, dependencies: List[str], agent_config: Dict, agent_name: str
@@ -377,11 +368,8 @@ class AgentRunner:
         dependencies = agent_config.get("dependencies", [])
 
         # Determine upstream directories based on workflow position
-        # Start node: no dependencies AND no previous agent (parallel/DAG workflows)
-        if not dependencies and not previous_agent_type:
-            upstream_data_dirs = self._resolve_start_node_directories(
-                agent_folder_path, agent_config.get("agent_type", "unknown")
-            )
+        if idx == 0:
+            upstream_data_dirs = self._resolve_start_node_directories(agent_folder_path)
         elif dependencies and hasattr(self, "agent_indices") and self.agent_indices:
             upstream_data_dirs = self._resolve_dependency_directories(
                 agent_folder_path,
@@ -425,13 +413,7 @@ class AgentRunner:
             )
         )
 
-    def _should_skip_item(
-        self,
-        item: Path,
-        input_path: Path,
-        processed_paths: set,
-        file_type_filter: Optional[Set[str]] = None,
-    ) -> bool:
+    def _should_skip_item(self, item: Path, input_path: Path, processed_paths: set) -> bool:
         """Check if an item should be skipped during processing."""
         if "batch" in item.parts:
             return True
@@ -441,8 +423,6 @@ class AgentRunner:
             return True
         relative_path = item.relative_to(input_path)
         if relative_path in processed_paths:
-            return True
-        if file_type_filter and item.suffix.lstrip(".").lower() not in file_type_filter:
             return True
         return False
 
@@ -492,7 +472,7 @@ class AgentRunner:
         """Process all files in a single directory. Returns count of files processed."""
         count = 0
         for item in input_path.rglob("*"):
-            if self._should_skip_item(item, input_path, processed_paths, params.file_type_filter):
+            if self._should_skip_item(item, input_path, processed_paths):
                 continue
 
             relative_path = item.relative_to(input_path)
@@ -885,18 +865,6 @@ class AgentRunner:
         input_directories, output_directory = self.setup_directories(
             agent_folder, params.agent_config, params.previous_agent_type, params.idx
         )
-
-        # Resolve file_type_filter for start nodes — only when the data source
-        # resolver is used (not when inputs come from an upstream manifest)
-        file_type_filter = None
-        if not params.agent_config.get("dependencies") and not params.previous_agent_type:
-            agent_folder_path = Path(agent_folder)
-            if not self._resolve_upstream_from_manifest(agent_folder_path):
-                result = resolve_start_node_data_source(
-                    agent_folder_path, self.data_source_config, params.agent_name
-                )
-                file_type_filter = result.file_type_filter
-
         self.process_files(
             FileProcessParams(
                 agent_config=params.agent_config,
@@ -905,7 +873,6 @@ class AgentRunner:
                 upstream_data_dirs=input_directories,
                 output_directory=output_directory,
                 idx=params.idx,
-                file_type_filter=file_type_filter,
             )
         )
         return output_directory

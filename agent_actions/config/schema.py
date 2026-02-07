@@ -179,10 +179,6 @@ class DefaultsConfig(BaseModel):
         description="Default fields to pass-through from input to output "
         "(visible to LLM but not regenerated)",
     )
-    data_source: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None,
-        description="Default data source for start-node input",
-    )
 
 
 class WorkflowConfigV2(BaseModel):

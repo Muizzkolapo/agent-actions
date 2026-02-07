@@ -177,10 +177,6 @@ class AgentWorkflow:
         agent_runner.agent_configs = self.agent_configs
         agent_runner.workflow_name = self.agent_name
 
-        # Set workflow-level data_source from YAML defaults (not per-agent)
-        workflow_defaults = self.config.manager.user_config.get("defaults") or {}
-        agent_runner.data_source_config = workflow_defaults.get("data_source")
-
         # Import here to avoid circular dependency
         from agent_actions.llm.batch.service import BatchService
 
@@ -215,7 +211,6 @@ class AgentWorkflow:
                 version_correlator=version_correlator,
                 console=self.console,
                 storage_backend=agent_runner.storage_backend,
-                data_source_config=agent_runner.data_source_config,
             )
         )
 
