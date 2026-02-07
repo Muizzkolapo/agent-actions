@@ -11,7 +11,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Callable, Union, TYPE_CHECKING
 from rich.console import Console
 
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
@@ -34,6 +34,7 @@ class OutputManagerConfig:
     version_correlator: Any
     console: Optional[Console] = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
+    data_source_config: Optional[Union[str, Dict[str, Any]]] = None
 
 
 class AgentOutputManager:
@@ -61,6 +62,7 @@ class AgentOutputManager:
         self.version_correlator = config.version_correlator
         self.console = config.console or Console()
         self.storage_backend = config.storage_backend
+        self.data_source_config = config.data_source_config
 
     def _load_json_files(self, json_files: List[Path], agent_output: Dict[str, Any]) -> List[Any]:
         """Load data from JSON files."""
@@ -335,18 +337,25 @@ class AgentOutputManager:
         Returns:
             List of paths to upstream directories
         """
-        # First agent: check manifest first, fall back to staging
-        if idx == 0:
+        current_agent = self.execution_order[idx]
+        agent_config = self.agent_configs.get(current_agent, {})
+        dependencies = agent_config.get("dependencies", [])
+        previous_agent_type = self.execution_order[idx - 1] if idx > 0 else None
+
+        # Start node (no dependencies and no implicit predecessor):
+        # use manifest or data source resolver
+        if not dependencies and not previous_agent_type:
             manifest_dirs = self._resolve_upstream_from_manifest()
             if manifest_dirs:
                 return manifest_dirs
-            return [str(self.agent_folder / "staging")]
+            from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 
-        current_agent = self.execution_order[idx]
-        agent_config = self.agent_configs.get(current_agent, {})
+            result = resolve_start_node_data_source(
+                self.agent_folder, self.data_source_config, current_agent
+            )
+            return [str(d) for d in result.directories]
 
         # Check for explicitly declared dependencies (DAG/Diamond)
-        dependencies = agent_config.get("dependencies", [])
         if dependencies:
             upstream_dirs = []
             target_dir = self.agent_folder / "target"

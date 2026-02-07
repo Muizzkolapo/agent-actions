@@ -1,0 +1,278 @@
+"""Data source resolver for start-node input directories.
+
+Resolves the ``data_source`` field from an agent config into concrete
+directories that the runner can iterate over.  The resolver is the *only*
+place that interprets ``data_source`` — the rest of the config pipeline
+keeps it as a plain ``Optional[str | dict]``.
+
+Supported source types:
+  - **staging** (default): ``agent_folder / "staging"``
+  - **local**: validated local folder path (must exist, within project root)
+  - **api**: fetches JSON from a URL and caches to disk
+
+Extensible: to add GCS/S3, add a new ``DataSourceType`` variant and a
+resolver branch here.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, List, Optional, Set
+from urllib.parse import urlparse
+
+from agent_actions.cli.project_root import find_project_root
+from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.output.response.config_schema import DataSourceConfig, DataSourceType
+
+logger = logging.getLogger(__name__)
+
+# Safety limits for API fetches
+_MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB
+_REQUEST_TIMEOUT_SECONDS = 30
+_REMOTE_CACHE_DIR = "_remote_cache"
+
+# Type names that require dict config — used to catch bare-string typos early
+_KNOWN_TYPES = {t.value for t in DataSourceType}
+
+
+@dataclass
+class DataSourceResolutionResult:
+    """Result of resolving a data source to concrete directories."""
+
+    directories: List[Path]
+    file_type_filter: Optional[Set[str]] = field(default=None)
+
+
+def _parse_data_source(raw: Any) -> DataSourceConfig:
+    """Parse a raw data_source value into a DataSourceConfig.
+
+    Accepts:
+      - ``DataSourceConfig`` instance (returned as-is)
+      - ``str``: ``"staging"`` → staging; absolute/relative path → local folder
+      - ``dict``: passed to ``DataSourceConfig(**d)``
+    """
+    if isinstance(raw, DataSourceConfig):
+        return raw
+
+    if isinstance(raw, str):
+        raw_lower = raw.strip().lower()
+        if raw_lower == "staging" or raw_lower == "":
+            return DataSourceConfig(type=DataSourceType.STAGING)
+        if raw_lower in _KNOWN_TYPES:
+            raise ConfigurationError(
+                f"data_source type '{raw_lower}' requires a dict config "
+                f"(e.g. {{type: {raw_lower}, ...}}), not a bare string",
+                context={"data_source": raw},
+            )
+        # Anything else is treated as a local folder path
+        return DataSourceConfig(type=DataSourceType.LOCAL, folder=raw.strip())
+
+    if isinstance(raw, dict):
+        return DataSourceConfig(**raw)
+
+    raise ConfigurationError(
+        f"Invalid data_source value: expected str, dict, or DataSourceConfig, got {type(raw).__name__}",
+        context={"data_source": repr(raw)},
+    )
+
+
+def _resolve_staging(agent_folder: Path) -> DataSourceResolutionResult:
+    """Resolve staging data source — just return the staging directory."""
+    return DataSourceResolutionResult(directories=[agent_folder / "staging"])
+
+
+def _validate_project_containment(folder: Path, project_root: Path) -> None:
+    """Ensure *folder* is inside *project_root* (security check)."""
+    try:
+        folder.resolve().relative_to(project_root.resolve())
+    except ValueError:
+        raise FileSystemError(
+            f"Local data source folder '{folder}' is outside the project root '{project_root}'",
+            context={
+                "folder": str(folder),
+                "project_root": str(project_root),
+                "operation": "resolve_local_data_source",
+            },
+        )
+
+
+def _resolve_local(
+    config: DataSourceConfig, agent_folder: Path
+) -> DataSourceResolutionResult:
+    """Resolve a local-folder data source."""
+    if not config.folder:
+        raise ConfigurationError(
+            "Local data source requires a 'folder' field",
+            context={"data_source": config.model_dump(exclude={"headers"}), "operation": "resolve_local_data_source"},
+        )
+
+    folder = Path(config.folder)
+    if not folder.is_absolute():
+        folder = agent_folder / folder
+
+    # Security: must be within project root
+    project_root = find_project_root(str(agent_folder))
+    if project_root is None:
+        project_root = agent_folder.resolve().parent
+    _validate_project_containment(folder, project_root)
+
+    if not folder.exists():
+        raise FileSystemError(
+            f"Local data source folder does not exist: {folder}",
+            context={"folder": str(folder), "operation": "resolve_local_data_source"},
+        )
+
+    file_type_filter = None
+    if config.file_type:
+        file_type_filter = {ft.strip().lower().lstrip(".") for ft in config.file_type}
+
+    return DataSourceResolutionResult(
+        directories=[folder],
+        file_type_filter=file_type_filter,
+    )
+
+
+def _resolve_api(
+    config: DataSourceConfig, agent_folder: Path, agent_name: str
+) -> DataSourceResolutionResult:
+    """Resolve an API data source — fetch JSON and cache to disk.
+
+    Caching: responses are cached per (url, query, headers) fingerprint.
+    Once cached, the data is reused for all subsequent runs without re-fetching.
+    To force a refresh, delete the ``_remote_cache/api/`` directory inside agent_io.
+    """
+    if not config.url:
+        raise ConfigurationError(
+            "API data source requires a 'url' field",
+            context={"data_source": config.model_dump(exclude={"headers"}), "operation": "resolve_api_data_source"},
+        )
+
+    # Security: only HTTP(S) URLs
+    parsed = urlparse(config.url)
+    if parsed.scheme not in ("http", "https"):
+        raise ConfigurationError(
+            f"API data source URL must use http or https scheme, got '{parsed.scheme}'",
+            context={"url": config.url, "operation": "resolve_api_data_source"},
+        )
+
+    # Only JSON supported for now
+    if config.file_type and not all(
+        ft.strip().lower().lstrip(".") == "json" for ft in config.file_type
+    ):
+        raise ConfigurationError(
+            "API data source only supports JSON file type",
+            context={
+                "file_type": config.file_type,
+                "operation": "resolve_api_data_source",
+            },
+        )
+
+    # Build cache directory keyed on URL + query + headers fingerprint
+    fingerprint_input = config.url
+    if config.query:
+        fingerprint_input += json.dumps(config.query, sort_keys=True)
+    if config.headers:
+        fingerprint_input += json.dumps(config.headers, sort_keys=True)
+    fingerprint = hashlib.sha256(fingerprint_input.encode()).hexdigest()[:12]
+
+    cache_dir = agent_folder / _REMOTE_CACHE_DIR / "api" / fingerprint / "data"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    cache_file = cache_dir / f"{agent_name}.json"
+
+    # Fetch if not cached
+    if not cache_file.exists():
+        _fetch_api_data(config, cache_file)
+    else:
+        logger.info("Using cached API data: %s (from %s)", cache_file, config.url)
+
+    return DataSourceResolutionResult(directories=[cache_dir])
+
+
+def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
+    """Fetch JSON data from API endpoint and write to cache file."""
+    try:
+        import urllib.request
+        from urllib.parse import urlencode
+
+        url = config.url
+        if config.query:
+            url = f"{url}?{urlencode(config.query)}"
+        req = urllib.request.Request(url)  # type: ignore[arg-type]
+        if config.headers:
+            for key, value in config.headers.items():
+                req.add_header(key, value)
+
+        with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT_SECONDS) as resp:
+            data = resp.read(_MAX_RESPONSE_BYTES + 1)
+            if len(data) > _MAX_RESPONSE_BYTES:
+                raise ConfigurationError(
+                    f"API response exceeds {_MAX_RESPONSE_BYTES} byte limit",
+                    context={"url": config.url, "operation": "fetch_api_data"},
+                )
+
+        # Validate JSON
+        parsed = json.loads(data)
+
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(parsed, f)
+
+        logger.info("Fetched and cached API data: %s -> %s", config.url, cache_file)
+
+    except (json.JSONDecodeError, ValueError) as e:
+        raise ConfigurationError(
+            f"API response is not valid JSON: {e}",
+            context={"url": config.url, "operation": "fetch_api_data"},
+        ) from e
+    except Exception as e:
+        if isinstance(e, (ConfigurationError, FileSystemError)):
+            raise
+        raise ConfigurationError(
+            f"Failed to fetch API data source: {e}",
+            context={"url": config.url, "operation": "fetch_api_data"},
+        ) from e
+
+
+def resolve_start_node_data_source(
+    agent_folder: Path,
+    data_source: Any,
+    agent_name: str,
+) -> DataSourceResolutionResult:
+    """Resolve the data source for a start node.
+
+    This is the single entry point for data source resolution.
+
+    **Backward compatible:** when ``data_source`` is missing, empty, or None,
+    falls back to ``agent_folder / "staging"``.
+
+    Args:
+        agent_folder: Path to the agent_io folder for this workflow.
+        data_source: Raw data source value (str, dict, DataSourceConfig, or None).
+        agent_name: Name of the agent (for logging / error context).
+
+    Returns:
+        DataSourceResolutionResult with directories and optional file_type_filter.
+    """
+    # Backward compat: no data_source → staging
+    if not data_source:
+        return _resolve_staging(agent_folder)
+
+    config = _parse_data_source(data_source)
+
+    if config.type == DataSourceType.STAGING:
+        return _resolve_staging(agent_folder)
+
+    if config.type == DataSourceType.LOCAL:
+        return _resolve_local(config, agent_folder)
+
+    if config.type == DataSourceType.API:
+        return _resolve_api(config, agent_folder, agent_name)
+
+    raise ConfigurationError(
+        f"Unsupported data source type: {config.type}",
+        context={"data_source": data_source, "agent_name": agent_name},
+    )
