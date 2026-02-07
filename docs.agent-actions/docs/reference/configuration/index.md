@@ -111,6 +111,7 @@ actions:
 | `schema` | string | Output validation schema |
 | `drops` | list | Fields to exclude from LLM prompt and final output |
 | `observe` | list | Fields to pass-through from input to output (visible to LLM but not regenerated) |
+| `data_source` | object/string | Optional input source configuration for start-node actions (defaults to `staging/`) |
 
 ### Model Fields
 
@@ -138,6 +139,19 @@ actions:
 - **File granularity** is only supported for tool actions (`kind: tool`)
 - **Guards** are not supported with File granularity
 :::
+
+### Input Source
+
+Start-node actions can override the default `staging/` input with a local folder and optional file-type filter:
+
+```yaml
+actions:
+  - name: extract_facts
+    data_source:
+      type: local
+      folder: ./data
+      file_type: json
+```
 
 ### Validation Fields
 

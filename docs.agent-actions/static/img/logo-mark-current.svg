@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140" viewBox="0 0 140 140" fill="none">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="pulse-glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+
+    <linearGradient id="flow-left" gradientUnits="userSpaceOnUse" x1="28" y1="18" x2="58" y2="64">
+      <stop offset="0" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="-0.3;1" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+      </stop>
+      <stop offset="0" stop-color="var(--logo-pale)" stop-opacity="1">
+        <animate attributeName="offset" values="-0.1;1.2" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+      </stop>
+      <stop offset="0.1" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="0.1;1.4" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+      </stop>
+    </linearGradient>
+
+    <linearGradient id="flow-center" gradientUnits="userSpaceOnUse" x1="70" y1="12" x2="70" y2="60">
+      <stop offset="0" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="-0.3;1" dur="2.2s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="0" stop-color="var(--logo-pale)" stop-opacity="1">
+        <animate attributeName="offset" values="-0.1;1.2" dur="2.2s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="0.1" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="0.1;1.4" dur="2.2s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+
+    <linearGradient id="flow-right" gradientUnits="userSpaceOnUse" x1="112" y1="18" x2="82" y2="64">
+      <stop offset="0" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="-0.3;1" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+      </stop>
+      <stop offset="0" stop-color="var(--logo-pale)" stop-opacity="1">
+        <animate attributeName="offset" values="-0.1;1.2" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+      </stop>
+      <stop offset="0.1" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="0.1;1.4" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+      </stop>
+    </linearGradient>
+
+    <linearGradient id="flow-exit" gradientUnits="userSpaceOnUse" x1="70" y1="85" x2="70" y2="121">
+      <stop offset="0" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="-0.4;1" dur="2.2s" repeatCount="indefinite" begin="0.8s"/>
+      </stop>
+      <stop offset="0" stop-color="var(--logo-pale)" stop-opacity="1">
+        <animate attributeName="offset" values="-0.15;1.2" dur="2.2s" repeatCount="indefinite" begin="0.8s"/>
+      </stop>
+      <stop offset="0.15" stop-color="var(--logo-bright)" stop-opacity="0">
+        <animate attributeName="offset" values="0.1;1.4" dur="2.2s" repeatCount="indefinite" begin="0.8s"/>
+      </stop>
+    </linearGradient>
+  </defs>
+
+  <g filter="url(#glow)">
+    <path d="M28 18 C28 42, 48 54, 58 64" stroke="var(--logo-bright)" stroke-width="8" stroke-linecap="round" opacity="0.12"/>
+    <path d="M70 12 C70 34, 70 48, 70 60" stroke="var(--logo-bright)" stroke-width="8" stroke-linecap="round" opacity="0.18"/>
+    <path d="M112 18 C112 42, 92 54, 82 64" stroke="var(--logo-bright)" stroke-width="8" stroke-linecap="round" opacity="0.12"/>
+    <circle cx="70" cy="72" r="13" stroke="var(--logo-bright)" stroke-width="2.5" opacity="0.15"/>
+    <circle cx="70" cy="72" r="5" fill="var(--logo-bright)" opacity="0.18"/>
+    <path d="M70 85 L70 116" stroke="var(--logo-bright)" stroke-width="9" stroke-linecap="round" opacity="0.12"/>
+    <path d="M58 106 L70 121 L82 106" stroke="var(--logo-bright)" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.12"/>
+
+    <circle cx="28" cy="18" r="6.5" fill="var(--logo-bright)" opacity="0.15"/>
+    <circle cx="28" cy="18" r="6.5" fill="var(--logo-pale)" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0.15;0.7;0.15" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+    </circle>
+    <circle cx="28" cy="18" r="12" fill="none" stroke="var(--logo-bright)">
+      <animate attributeName="opacity" values="0;0.35;0" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+      <animate attributeName="r" values="6.5;16;18" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+      <animate attributeName="stroke-width" values="3;1;0" dur="2.2s" repeatCount="indefinite" begin="0.4s"/>
+    </circle>
+
+    <circle cx="70" cy="12" r="6.5" fill="var(--logo-bright)" opacity="0.2"/>
+    <circle cx="70" cy="12" r="6.5" fill="var(--logo-pale)" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0.2;0.9;0.2" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="70" cy="12" r="12" fill="none" stroke="var(--logo-bright)">
+      <animate attributeName="opacity" values="0;0.45;0" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="6.5;16;18" dur="2.2s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="3;1;0" dur="2.2s" repeatCount="indefinite"/>
+    </circle>
+
+    <circle cx="112" cy="18" r="6.5" fill="var(--logo-bright)" opacity="0.15"/>
+    <circle cx="112" cy="18" r="6.5" fill="var(--logo-pale)" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0.15;0.7;0.15" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+    </circle>
+    <circle cx="112" cy="18" r="12" fill="none" stroke="var(--logo-bright)">
+      <animate attributeName="opacity" values="0;0.35;0" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+      <animate attributeName="r" values="6.5;16;18" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+      <animate attributeName="stroke-width" values="3;1;0" dur="2.2s" repeatCount="indefinite" begin="0.7s"/>
+    </circle>
+
+    <path d="M28 18 C28 42, 48 54, 58 64" stroke="url(#flow-left)" stroke-width="10" stroke-linecap="round" filter="url(#pulse-glow)"/>
+    <path d="M70 12 C70 34, 70 48, 70 60" stroke="url(#flow-center)" stroke-width="10" stroke-linecap="round" filter="url(#pulse-glow)"/>
+    <path d="M112 18 C112 42, 92 54, 82 64" stroke="url(#flow-right)" stroke-width="10" stroke-linecap="round" filter="url(#pulse-glow)"/>
+
+    <circle cx="70" cy="72" r="13" stroke="var(--logo-bright)" stroke-width="2.5" fill="none">
+      <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+    </circle>
+    <circle cx="70" cy="72" r="13" stroke="var(--logo-pale)" stroke-width="1" fill="none" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0;0.5;0" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+      <animate attributeName="r" values="13;19;22" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+      <animate attributeName="stroke-width" values="2;0.5;0" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+    </circle>
+
+    <circle cx="70" cy="72" r="5" fill="var(--logo-pale)" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0.25;0.9;0.25" dur="2.2s" repeatCount="indefinite" begin="0.6s"/>
+    </circle>
+
+    <path d="M70 85 L70 116" stroke="url(#flow-exit)" stroke-width="11" stroke-linecap="round" filter="url(#pulse-glow)"/>
+    <path d="M58 106 L70 121 L82 106" stroke="var(--logo-pale)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" filter="url(#pulse-glow)">
+      <animate attributeName="opacity" values="0.1;0.75;0.1" dur="2.2s" repeatCount="indefinite" begin="1s"/>
+    </path>
+  </g>
+</svg>

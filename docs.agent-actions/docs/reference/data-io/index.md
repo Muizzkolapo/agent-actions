@@ -44,6 +44,17 @@ agent_io/staging/
 └── batch_input.csv
 ```
 
+You can also point the start node at a local folder via `data_source` config:
+
+```yaml
+actions:
+  - name: extract_facts
+    data_source:
+      type: local
+      folder: ./data
+      file_type: [json, csv]
+```
+
 ### source/
 
 Metadata layer that tracks what's in staging:

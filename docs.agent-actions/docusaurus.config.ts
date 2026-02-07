@@ -19,6 +19,12 @@ const config: Config = {
     mermaid: true,
   },
   themes: ['@docusaurus/theme-mermaid'],
+  stylesheets: [
+    {
+      href: 'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+      type: 'text/css',
+    },
+  ],
 
   // Set the production url of your site here
   url: 'https://agent-actions.example.com',
@@ -28,7 +34,7 @@ const config: Config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'your-org', // Usually your GitHub org/user name.
+  organizationName: 'Muizzkolapo', // Usually your GitHub org/user name.
   projectName: 'agent-actions', // Usually your repo name.
 
   onBrokenLinks: 'throw',
@@ -51,7 +57,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/your-org/agent-actions/tree/main/agentaction-docs/',
+            'https://github.com/Muizzkolapo/agent-actions/tree/main/agentaction-docs/',
         },
         blog: {
           showReadingTime: true,
@@ -62,7 +68,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/your-org/agent-actions/tree/main/agentaction-docs/',
+            'https://github.com/Muizzkolapo/agent-actions/tree/main/agentaction-docs/',
           // Useful options to enforce blogging best practices
           onInlineTags: 'warn',
           onInlineAuthors: 'warn',
@@ -81,7 +87,7 @@ const config: Config = {
 
     // Enable light/dark mode toggle
     colorMode: {
-      defaultMode: 'light',
+      defaultMode: 'dark',
       disableSwitch: false,
       respectPrefersColorScheme: true,
     },
@@ -93,10 +99,11 @@ const config: Config = {
     },
 
     navbar: {
-      title: 'Agent Actions',
+      title: 'agent-actions',
       logo: {
         alt: 'Agent Actions Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo-mark-light.svg',
+        srcDark: 'img/logo-mark-dark.svg',
       },
       items: [
         {
@@ -106,7 +113,7 @@ const config: Config = {
           label: 'Documentation',
         },
         {
-          href: 'https://github.com/your-org/agent-actions',
+          href: 'https://github.com/Muizzkolapo/agent-actions',
           label: 'GitHub',
           position: 'right',
         },
@@ -116,8 +123,12 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Docs',
+          title: 'Documentation',
           items: [
+            {
+              label: 'Quick Start',
+              to: '/docs/',
+            },
             {
               label: 'Tutorials',
               to: '/docs/tutorials',
@@ -133,24 +144,19 @@ const config: Config = {
           ],
         },
         {
-          title: 'Community',
-          items: [
-            {
-              label: 'Issues',
-              href: 'https://github.com/your-org/agent-actions/issues',
-            },
-            {
-              label: 'Discussions',
-              href: 'https://github.com/your-org/agent-actions/discussions',
-            },
-          ],
-        },
-        {
-          title: 'More',
+          title: 'Project',
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/your-org/agent-actions',
+              href: 'https://github.com/Muizzkolapo/agent-actions',
+            },
+            {
+              label: 'Issues',
+              href: 'https://github.com/Muizzkolapo/agent-actions/issues',
+            },
+            {
+              label: 'Discussions',
+              href: 'https://github.com/Muizzkolapo/agent-actions/discussions',
             },
           ],
         },
