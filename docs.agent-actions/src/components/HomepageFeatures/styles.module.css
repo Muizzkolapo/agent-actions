@@ -21,19 +21,19 @@
 }
 
 .card:hover {
-  border-color: var(--docs-teal);
+  border-color: var(--docs-border-light);
   background: var(--docs-bg-elevated);
   transform: translateY(-1px);
 }
 
 .icon {
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--docs-teal-pale);
-  background: var(--docs-teal-dim);
-  border: 1px solid rgba(19, 78, 74, 0.3);
+  color: var(--docs-stone-light);
+  background: var(--docs-stone-dim);
+  border: 1px solid rgba(120, 113, 108, 0.2);
   border-radius: 6px;
   padding: 4px 8px;
   display: inline-flex;
@@ -43,17 +43,21 @@
 }
 
 :global([data-theme='light']) .card {
-  box-shadow: 0 10px 26px rgba(11, 15, 14, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+:global([data-theme='light']) .card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 :global([data-theme='light']) .icon {
-  color: var(--docs-teal);
-  background: rgba(19, 78, 74, 0.1);
-  border-color: rgba(19, 78, 74, 0.2);
+  color: var(--docs-stone);
+  background: rgba(120, 113, 108, 0.08);
+  border-color: rgba(120, 113, 108, 0.15);
 }
 
 .title {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 14.5px;
   font-weight: 700;
   color: var(--docs-text);

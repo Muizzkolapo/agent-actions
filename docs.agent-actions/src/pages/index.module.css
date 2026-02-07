@@ -14,9 +14,9 @@
   top: -60px;
   left: 50%;
   transform: translateX(-50%);
-  width: 600px;
-  height: 300px;
-  background: radial-gradient(ellipse, rgba(45, 212, 191, 0.04), transparent 70%);
+  width: 500px;
+  height: 250px;
+  background: radial-gradient(ellipse, rgba(120, 113, 108, 0.03), transparent 70%);
   pointer-events: none;
 }
 
@@ -24,18 +24,18 @@
   width: 120px;
   height: 120px;
   margin: 0 auto 18px;
-  color: var(--docs-teal-bright);
+  color: var(--docs-stone-bright);
   animation: heroFloat 6s ease-in-out infinite;
-  filter: drop-shadow(0 0 18px rgba(45, 212, 191, 0.2));
-  --logo-bright: var(--docs-teal-bright);
-  --logo-pale: var(--docs-teal-pale);
+  filter: drop-shadow(0 0 18px rgba(120, 113, 108, 0.15));
+  --logo-bright: var(--docs-stone-bright);
+  --logo-pale: var(--docs-stone-pale);
 }
 
 :global([data-theme='light']) .heroMark {
-  color: var(--docs-teal);
-  filter: drop-shadow(0 0 14px rgba(19, 78, 74, 0.2));
-  --logo-bright: var(--docs-teal);
-  --logo-pale: var(--docs-teal-mid);
+  color: var(--docs-stone);
+  filter: drop-shadow(0 0 14px rgba(120, 113, 108, 0.15));
+  --logo-bright: var(--docs-stone);
+  --logo-pale: var(--docs-stone-light);
 }
 
 @keyframes heroFloat {
@@ -61,21 +61,21 @@
 }
 
 .heroTagline {
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--docs-teal-bright);
+  color: var(--docs-stone-light);
   margin-bottom: 16px;
-  background: var(--docs-teal-dim-2);
-  border: 1px solid var(--docs-teal-dim);
+  background: var(--docs-stone-dim-2);
+  border: 1px solid var(--docs-stone-dim);
   display: inline-block;
   padding: 4px 14px;
   border-radius: 999px;
 }
 
 .heroTitle {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 44px;
   font-weight: 800;
   letter-spacing: -1.5px;
@@ -85,17 +85,17 @@
 }
 
 .heroAccent {
-  color: var(--docs-teal-bright);
+  color: var(--docs-stone-bright);
 }
 
 :global([data-theme='light']) .heroTagline {
-  color: var(--docs-teal);
-  background: rgba(19, 78, 74, 0.08);
-  border-color: rgba(19, 78, 74, 0.18);
+  color: var(--docs-stone);
+  background: rgba(120, 113, 108, 0.06);
+  border-color: rgba(120, 113, 108, 0.14);
 }
 
 :global([data-theme='light']) .heroAccent {
-  color: var(--docs-teal);
+  color: var(--docs-stone-pale);
 }
 
 .heroDesc {
@@ -115,7 +115,7 @@
 
 .btnPrimary,
 .btnSecondary {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 14px;
   font-weight: 600;
   padding: 11px 24px;
@@ -129,13 +129,13 @@
 }
 
 .btnPrimary {
-  background: var(--docs-teal);
-  color: var(--docs-text);
+  background: var(--docs-stone);
+  color: #ffffff;
 }
 
 .btnPrimary:hover {
-  background: var(--docs-teal-mid);
-  color: var(--docs-text);
+  background: var(--docs-stone-light);
+  color: #ffffff;
 }
 
 .btnSecondary {
@@ -145,8 +145,8 @@
 }
 
 .btnSecondary:hover {
-  border-color: var(--docs-teal);
-  color: var(--docs-teal-bright);
+  border-color: var(--docs-border-light);
+  color: var(--docs-stone-bright);
 }
 
 .heroInstall {
@@ -158,7 +158,7 @@
   border: 1px solid var(--docs-border);
   border-radius: 10px;
   padding: 10px 18px;
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 13.5px;
   color: var(--docs-text-2);
 }
@@ -168,7 +168,7 @@
 }
 
 .heroInstallCmd {
-  color: var(--docs-teal-pale);
+  color: var(--docs-stone-bright);
 }
 
 /* ============ Shared Section Styles ============ */
@@ -179,19 +179,19 @@
 }
 
 .sectionTag {
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--docs-teal-bright);
-  background: var(--docs-teal-dim-2);
-  border: 1px solid var(--docs-teal-dim);
+  color: var(--docs-stone-light);
+  background: var(--docs-stone-dim-2);
+  border: 1px solid var(--docs-stone-dim);
   padding: 4px 12px;
   border-radius: 999px;
 }
 
 .sectionTitle {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -1px;
@@ -208,9 +208,9 @@
 }
 
 :global([data-theme='light']) .sectionTag {
-  color: var(--docs-teal);
-  background: rgba(19, 78, 74, 0.08);
-  border-color: rgba(19, 78, 74, 0.18);
+  color: var(--docs-stone);
+  background: rgba(120, 113, 108, 0.06);
+  border-color: rgba(120, 113, 108, 0.14);
 }
 
 /* ============ Workflow Showcase ============ */
@@ -221,7 +221,7 @@
   background: linear-gradient(
     180deg,
     var(--docs-bg) 0%,
-    rgba(19, 78, 74, 0.02) 100%
+    rgba(120, 113, 108, 0.02) 100%
   );
 }
 
@@ -242,7 +242,7 @@
   background: linear-gradient(
     180deg,
     var(--docs-bg) 0%,
-    rgba(19, 78, 74, 0.03) 100%
+    rgba(120, 113, 108, 0.03) 100%
   );
 }
 
@@ -273,7 +273,7 @@
   gap: 3px;
   background: var(--docs-bg-card);
   border: 1px solid var(--docs-border);
-  border-left: 2px solid var(--docs-teal);
+  border-left: 2px solid var(--docs-stone);
   border-radius: 8px;
   padding: 10px 14px;
   flex-shrink: 0;
@@ -282,8 +282,8 @@
 }
 
 .pipelineNode:hover {
-  border-color: rgba(19, 78, 74, 0.5);
-  border-left-color: var(--docs-teal-bright);
+  border-color: var(--docs-border-light);
+  border-left-color: var(--docs-stone-light);
 }
 
 .pipelineEndpoint {
@@ -292,11 +292,11 @@
 }
 
 .pipelineEndpoint:hover {
-  border-left-color: rgba(19, 78, 74, 0.5);
+  border-left-color: var(--docs-border-light);
 }
 
 .pipelineName {
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 11.5px;
   font-weight: 500;
   color: var(--docs-text);
@@ -305,7 +305,7 @@
 
 .pipelineDetail {
   font-size: 10px;
-  color: var(--docs-teal-pale);
+  color: var(--docs-stone-light);
   white-space: nowrap;
 }
 
@@ -314,7 +314,7 @@
 }
 
 :global([data-theme='light']) .pipelineDetail {
-  color: var(--docs-teal);
+  color: var(--docs-stone);
 }
 
 /* ============ Capabilities ============ */
@@ -340,21 +340,23 @@
   border: 1px solid var(--docs-border);
   border-radius: 12px;
   padding: 22px;
-  transition: border-color 0.25s ease;
+  transition: all 0.25s ease;
 }
 
 .capCard:hover {
-  border-color: rgba(19, 78, 74, 0.4);
+  border-color: var(--docs-border-light);
+  background: var(--docs-bg-elevated);
+  transform: translateY(-1px);
 }
 
 .capBadge {
-  font-family: 'DM Mono', monospace;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--docs-teal-pale);
-  background: var(--docs-teal-dim);
-  border: 1px solid rgba(19, 78, 74, 0.3);
+  color: var(--docs-stone-light);
+  background: var(--docs-stone-dim);
+  border: 1px solid rgba(120, 113, 108, 0.2);
   border-radius: 5px;
   padding: 3px 7px;
   display: inline-block;
@@ -362,7 +364,7 @@
 }
 
 .capTitle {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   font-size: 15px;
   font-weight: 700;
   color: var(--docs-text);
@@ -388,9 +390,9 @@
 }
 
 .capSnippet code {
-  font-family: 'DM Mono', monospace !important;
+  font-family: 'JetBrains Mono', monospace !important;
   font-size: 12px !important;
-  color: var(--docs-teal-pale) !important;
+  color: var(--docs-stone-bright) !important;
   white-space: pre;
   background: transparent !important;
   border: none !important;
@@ -398,17 +400,21 @@
 }
 
 :global([data-theme='light']) .capCard {
-  box-shadow: 0 2px 10px rgba(11, 15, 14, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+:global([data-theme='light']) .capCard:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 :global([data-theme='light']) .capBadge {
-  color: var(--docs-teal);
-  background: rgba(19, 78, 74, 0.1);
-  border-color: rgba(19, 78, 74, 0.2);
+  color: var(--docs-stone);
+  background: rgba(120, 113, 108, 0.08);
+  border-color: rgba(120, 113, 108, 0.15);
 }
 
 :global([data-theme='light']) .capSnippet code {
-  color: var(--docs-teal) !important;
+  color: var(--docs-stone-pale) !important;
 }
 
 /* ============ Responsive ============ */

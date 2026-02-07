@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'Agent Actions',
   tagline: 'YAML-native multi-agent DAG workflows with schema-first validation',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -21,7 +21,7 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
   stylesheets: [
     {
-      href: 'https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap',
+      href: 'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap',
       type: 'text/css',
     },
   ],
@@ -89,7 +89,7 @@ const config: Config = {
     colorMode: {
       defaultMode: 'dark',
       disableSwitch: false,
-      respectPrefersColorScheme: true,
+      respectPrefersColorScheme: false,
     },
 
     // Table of contents settings
@@ -123,23 +123,23 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Documentation',
+          title: 'Docs',
           items: [
             {
               label: 'Quick Start',
               to: '/docs/',
             },
             {
-              label: 'Tutorials',
-              to: '/docs/tutorials',
+              label: 'Key Concepts',
+              to: '/docs/tutorials/concepts',
             },
             {
-              label: 'Guides',
-              to: '/docs/guides',
+              label: 'Design Patterns',
+              to: '/docs/guides/design-patterns',
             },
             {
-              label: 'Reference',
-              to: '/docs/reference',
+              label: 'CLI Reference',
+              to: '/docs/reference/cli',
             },
           ],
         },
@@ -155,13 +155,26 @@ const config: Config = {
               href: 'https://github.com/Muizzkolapo/agent-actions/issues',
             },
             {
+              label: 'Changelog',
+              href: 'https://github.com/Muizzkolapo/agent-actions/releases',
+            },
+          ],
+        },
+        {
+          title: 'Community',
+          items: [
+            {
               label: 'Discussions',
               href: 'https://github.com/Muizzkolapo/agent-actions/discussions',
+            },
+            {
+              label: 'Contributing',
+              href: 'https://github.com/Muizzkolapo/agent-actions/blob/main/CONTRIBUTING.md',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Agent Actions.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Agent Actions. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
@@ -173,14 +186,15 @@ const config: Config = {
         dark: 'dark',
       },
       options: {
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        fontSize: 14,
+        fontFamily: '"Space Grotesk", "Inter", -apple-system, sans-serif',
+        fontSize: 15,
         flowchart: {
           curve: 'basis',
           padding: 20,
-          nodeSpacing: 50,
-          rankSpacing: 50,
+          nodeSpacing: 60,
+          rankSpacing: 60,
           htmlLabels: true,
+          useMaxWidth: false,
         },
       },
     },
