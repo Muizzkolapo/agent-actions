@@ -10,6 +10,7 @@ Also covers:
 - Anthropic call_json return normalization
 """
 
+import typing
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +19,7 @@ from agent_actions.output.response.schema import compile_unified_schema
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Fixtures & helpers
 # ---------------------------------------------------------------------------
 
 SAMPLE_UNIFIED_SCHEMA = {
@@ -43,53 +44,201 @@ def agent_config_with_output_field():
     return {"model_name": "test-model", "output_field": "summary"}
 
 
+def _make_gemini_mocks(text):
+    """Set up Gemini mocks and return (mock_genai_patcher, mock_fire_patcher, client_class)."""
+    mock_response = MagicMock()
+    mock_response.text = text
+    mock_response.usage_metadata = None
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value = mock_response
+    return mock_model
+
+
+def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_tokens=15):
+    """Build mock response for OpenAI-style providers (Groq, OpenAI)."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = text
+    mock_response.usage.prompt_tokens = prompt_tokens
+    mock_response.usage.completion_tokens = completion_tokens
+    mock_response.usage.total_tokens = total_tokens
+    return mock_response
+
+
+def _make_mistral_mocks(text, prompt_tokens=20, completion_tokens=10, total_tokens=30):
+    """Build mock response for Mistral (uses chat.complete instead of chat.completions.create)."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = text
+    mock_response.usage.prompt_tokens = prompt_tokens
+    mock_response.usage.completion_tokens = completion_tokens
+    mock_response.usage.total_tokens = total_tokens
+    return mock_response
+
+
+def _make_cohere_mocks(text):
+    """Build mock response for Cohere."""
+    text_block = MagicMock()
+    text_block.text = text
+    mock_response = MagicMock()
+    mock_response.message.content = [text_block]
+    mock_response.usage = None
+    return mock_response
+
+
+def _make_anthropic_mocks(text, input_tokens=10, output_tokens=20):
+    """Build mock response for Anthropic."""
+    text_block = MagicMock()
+    text_block.text = text
+    mock_response = MagicMock()
+    mock_response.content = [text_block]
+    mock_response.usage.input_tokens = input_tokens
+    mock_response.usage.output_tokens = output_tokens
+    mock_response.stop_reason = "end_turn"
+    return mock_response
+
+
+# Provider setup functions for parameterized call_non_json tests.
+# Each returns (patch_targets, setup_fn) where setup_fn takes the mocks and text,
+# then returns the client class and its call_non_json method args.
+
+
+def _setup_gemini(text):
+    mock_model = _make_gemini_mocks(text)
+    patches = {
+        "fire": "agent_actions.llm.providers.gemini.client.fire_event",
+        "mod": "agent_actions.llm.providers.gemini.client.genai",
+    }
+
+    def configure(mock_mod, mock_fire):
+        mock_mod.GenerativeModel.return_value = mock_model
+
+    from agent_actions.llm.providers.gemini.client import GeminiClient
+
+    return patches, configure, GeminiClient
+
+
+def _setup_groq(text):
+    mock_response = _make_openai_style_mocks(text)
+    patches = {
+        "fire": "agent_actions.llm.providers.groq.client.fire_event",
+        "mod": "agent_actions.llm.providers.groq.client.Groq",
+    }
+
+    def configure(mock_mod, mock_fire):
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+        mock_mod.return_value = mock_client
+
+    from agent_actions.llm.providers.groq.client import GroqClient
+
+    return patches, configure, GroqClient
+
+
+def _setup_mistral(text):
+    mock_response = _make_mistral_mocks(text)
+    patches = {
+        "fire": "agent_actions.llm.providers.mistral.client.fire_event",
+        "mod": "agent_actions.llm.providers.mistral.client.Mistral",
+    }
+
+    def configure(mock_mod, mock_fire):
+        mock_client = MagicMock()
+        mock_client.chat.complete.return_value = mock_response
+        mock_mod.return_value = mock_client
+
+    from agent_actions.llm.providers.mistral.client import MistralClient
+
+    return patches, configure, MistralClient
+
+
+def _setup_cohere(text):
+    mock_response = _make_cohere_mocks(text)
+    patches = {
+        "fire": "agent_actions.llm.providers.cohere.client.fire_event",
+        "mod": "agent_actions.llm.providers.cohere.client.cohere",
+    }
+
+    def configure(mock_mod, mock_fire):
+        mock_client = MagicMock()
+        mock_client.chat.return_value = mock_response
+        mock_mod.ClientV2.return_value = mock_client
+
+    from agent_actions.llm.providers.cohere.client import CohereClient
+
+    return patches, configure, CohereClient
+
+
+def _setup_anthropic(text):
+    mock_response = _make_anthropic_mocks(text)
+    patches = {
+        "fire": "agent_actions.llm.providers.anthropic.client.fire_event",
+        "mod": "agent_actions.llm.providers.anthropic.client.anthropic",
+    }
+
+    def configure(mock_mod, mock_fire):
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+        mock_mod.Anthropic.return_value = mock_client
+
+    from agent_actions.llm.providers.anthropic.client import AnthropicClient
+
+    return patches, configure, AnthropicClient
+
+
+PROVIDER_SETUPS = [
+    pytest.param("gemini", _setup_gemini, id="gemini"),
+    pytest.param("groq", _setup_groq, id="groq"),
+    pytest.param("mistral", _setup_mistral, id="mistral"),
+    pytest.param("cohere", _setup_cohere, id="cohere"),
+    pytest.param("anthropic", _setup_anthropic, id="anthropic"),
+]
+
+
+def _run_provider_call_non_json(setup_fn, text, config):
+    """Execute call_non_json for any provider using its setup function."""
+    patches_dict, configure, client_cls = setup_fn(text)
+    with patch(patches_dict["fire"]) as mock_fire, patch(patches_dict["mod"]) as mock_mod:
+        configure(mock_mod, mock_fire)
+        return client_cls.call_non_json("key", config, "prompt", "data")
+
+
 # ---------------------------------------------------------------------------
-# Gemini call_non_json
+# Parameterized call_non_json: default field + custom output_field
 # ---------------------------------------------------------------------------
 
 
-class TestGeminiCallNonJson:
-    """Gemini call_non_json returns List[Dict[str, str]] with output_field."""
+class TestCallNonJsonReturnContract:
+    """All providers' call_non_json returns List[Dict[str, str]] with correct field."""
 
-    @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_returns_list_of_dict_default_field(self, mock_genai, mock_fire, base_agent_config):
-        from agent_actions.llm.providers.gemini.client import GeminiClient
-
-        mock_response = MagicMock()
-        mock_response.text = "Hello world"
-        mock_response.usage_metadata = None
-
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
-
-        result = GeminiClient.call_non_json("key", base_agent_config, "prompt", "data")
+    @pytest.mark.parametrize("provider_name,setup_fn", PROVIDER_SETUPS)
+    def test_returns_list_of_dict_default_field(self, provider_name, setup_fn, base_agent_config):
+        result = _run_provider_call_non_json(
+            setup_fn, f"{provider_name} response", base_agent_config
+        )
 
         assert isinstance(result, list)
         assert len(result) == 1
         assert isinstance(result[0], dict)
-        assert result[0] == {"raw_response": "Hello world"}
+        assert result[0] == {"raw_response": f"{provider_name} response"}
 
-    @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
+    @pytest.mark.parametrize("provider_name,setup_fn", PROVIDER_SETUPS)
     def test_returns_custom_output_field(
-        self, mock_genai, mock_fire, agent_config_with_output_field
+        self, provider_name, setup_fn, agent_config_with_output_field
     ):
-        from agent_actions.llm.providers.gemini.client import GeminiClient
-
-        mock_response = MagicMock()
-        mock_response.text = "Summary text"
-        mock_response.usage_metadata = None
-
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
-
-        result = GeminiClient.call_non_json("key", agent_config_with_output_field, "prompt", "data")
+        result = _run_provider_call_non_json(
+            setup_fn, "Summary text", agent_config_with_output_field
+        )
 
         assert result[0] == {"summary": "Summary text"}
 
+
+# ---------------------------------------------------------------------------
+# Gemini-specific: no JSON directives in non-JSON mode
+# ---------------------------------------------------------------------------
+
+
+class TestGeminiCallNonJson:
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
     @patch("agent_actions.llm.providers.gemini.client.genai")
     def test_no_json_directives_in_non_json_mode(self, mock_genai, mock_fire, base_agent_config):
@@ -106,70 +255,20 @@ class TestGeminiCallNonJson:
 
         GeminiClient.call_non_json("key", base_agent_config, "prompt", "data")
 
-        # Verify GenerativeModel was called WITHOUT system_instruction and JSON mime type
         call_args, call_kwargs = mock_genai.GenerativeModel.call_args
         assert call_args == ("test-model",)
-        # No system_instruction for non-JSON mode
         assert "system_instruction" not in call_kwargs
-        # generation_config should be None (empty dict → None) or not contain JSON directives
         gen_config = call_kwargs.get("generation_config")
         if gen_config is not None:
             assert "response_mime_type" not in gen_config
 
 
 # ---------------------------------------------------------------------------
-# Groq call_non_json
+# Groq-specific: temperature and max_tokens from config
 # ---------------------------------------------------------------------------
 
 
 class TestGroqCallNonJson:
-    """Groq call_non_json returns List[Dict[str, str]] with output_field."""
-
-    @patch("agent_actions.llm.providers.groq.client.fire_event")
-    @patch("agent_actions.llm.providers.groq.client.Groq")
-    def test_returns_list_of_dict_default_field(self, mock_groq_cls, mock_fire, base_agent_config):
-        from agent_actions.llm.providers.groq.client import GroqClient
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Groq response"
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_groq_cls.return_value = mock_client
-
-        result = GroqClient.call_non_json("key", base_agent_config, "prompt", "data")
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], dict)
-        assert result[0] == {"raw_response": "Groq response"}
-
-    @patch("agent_actions.llm.providers.groq.client.fire_event")
-    @patch("agent_actions.llm.providers.groq.client.Groq")
-    def test_returns_custom_output_field(
-        self, mock_groq_cls, mock_fire, agent_config_with_output_field
-    ):
-        from agent_actions.llm.providers.groq.client import GroqClient
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Summary"
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
-        mock_client = MagicMock()
-        mock_client.chat.completions.create.return_value = mock_response
-        mock_groq_cls.return_value = mock_client
-
-        result = GroqClient.call_non_json("key", agent_config_with_output_field, "prompt", "data")
-
-        assert result[0] == {"summary": "Summary"}
-
     @patch("agent_actions.llm.providers.groq.client.fire_event")
     @patch("agent_actions.llm.providers.groq.client.Groq")
     def test_temperature_and_max_tokens_from_config(self, mock_groq_cls, mock_fire):
@@ -177,13 +276,7 @@ class TestGroqCallNonJson:
 
         config = {"model_name": "test-model", "temperature": 0.3, "max_tokens": 2000}
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "resp"
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
+        mock_response = _make_openai_style_mocks("resp")
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_groq_cls.return_value = mock_client
@@ -202,13 +295,7 @@ class TestGroqCallNonJson:
 
         config = {"model_name": "test-model", "temperature": None, "max_tokens": None}
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "resp"
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
+        mock_response = _make_openai_style_mocks("resp")
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_groq_cls.return_value = mock_client
@@ -221,115 +308,8 @@ class TestGroqCallNonJson:
 
 
 # ---------------------------------------------------------------------------
-# Mistral call_non_json
+# Cohere call_json schema fix
 # ---------------------------------------------------------------------------
-
-
-class TestMistralCallNonJson:
-    """Mistral call_non_json returns List[Dict[str, str]] with output_field."""
-
-    @patch("agent_actions.llm.providers.mistral.client.fire_event")
-    @patch("agent_actions.llm.providers.mistral.client.Mistral")
-    def test_returns_list_of_dict_default_field(
-        self, mock_mistral_cls, mock_fire, base_agent_config
-    ):
-        from agent_actions.llm.providers.mistral.client import MistralClient
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Mistral response"
-        mock_response.usage.prompt_tokens = 20
-        mock_response.usage.completion_tokens = 10
-        mock_response.usage.total_tokens = 30
-
-        mock_client = MagicMock()
-        mock_client.chat.complete.return_value = mock_response
-        mock_mistral_cls.return_value = mock_client
-
-        result = MistralClient.call_non_json("key", base_agent_config, "prompt", "data")
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], dict)
-        assert result[0] == {"raw_response": "Mistral response"}
-
-    @patch("agent_actions.llm.providers.mistral.client.fire_event")
-    @patch("agent_actions.llm.providers.mistral.client.Mistral")
-    def test_returns_custom_output_field(
-        self, mock_mistral_cls, mock_fire, agent_config_with_output_field
-    ):
-        from agent_actions.llm.providers.mistral.client import MistralClient
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Summary"
-        mock_response.usage.prompt_tokens = 20
-        mock_response.usage.completion_tokens = 10
-        mock_response.usage.total_tokens = 30
-
-        mock_client = MagicMock()
-        mock_client.chat.complete.return_value = mock_response
-        mock_mistral_cls.return_value = mock_client
-
-        result = MistralClient.call_non_json(
-            "key", agent_config_with_output_field, "prompt", "data"
-        )
-
-        assert result[0] == {"summary": "Summary"}
-
-
-# ---------------------------------------------------------------------------
-# Cohere call_non_json + call_json schema fix
-# ---------------------------------------------------------------------------
-
-
-class TestCohereCallNonJson:
-    """Cohere call_non_json returns List[Dict[str, str]] with output_field."""
-
-    @patch("agent_actions.llm.providers.cohere.client.fire_event")
-    @patch("agent_actions.llm.providers.cohere.client.cohere")
-    def test_returns_list_of_dict_default_field(
-        self, mock_cohere_mod, mock_fire, base_agent_config
-    ):
-        from agent_actions.llm.providers.cohere.client import CohereClient
-
-        mock_response = MagicMock()
-        text_block = MagicMock()
-        text_block.text = "Cohere response"
-        mock_response.message.content = [text_block]
-        mock_response.usage = None
-
-        mock_client = MagicMock()
-        mock_client.chat.return_value = mock_response
-        mock_cohere_mod.ClientV2.return_value = mock_client
-
-        result = CohereClient.call_non_json("key", base_agent_config, "prompt", "data")
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], dict)
-        assert result[0] == {"raw_response": "Cohere response"}
-
-    @patch("agent_actions.llm.providers.cohere.client.fire_event")
-    @patch("agent_actions.llm.providers.cohere.client.cohere")
-    def test_returns_custom_output_field(
-        self, mock_cohere_mod, mock_fire, agent_config_with_output_field
-    ):
-        from agent_actions.llm.providers.cohere.client import CohereClient
-
-        mock_response = MagicMock()
-        text_block = MagicMock()
-        text_block.text = "Summary"
-        mock_response.message.content = [text_block]
-        mock_response.usage = None
-
-        mock_client = MagicMock()
-        mock_client.chat.return_value = mock_response
-        mock_cohere_mod.ClientV2.return_value = mock_client
-
-        result = CohereClient.call_non_json("key", agent_config_with_output_field, "prompt", "data")
-
-        assert result[0] == {"summary": "Summary"}
 
 
 class TestCohereCallJsonSchemaFix:
@@ -337,7 +317,6 @@ class TestCohereCallJsonSchemaFix:
 
     @staticmethod
     def _mock_cohere_v2_response(text):
-        """Build a mock Cohere v2 response with message.content[0].text."""
         content_block = MagicMock()
         content_block.text = text
         mock_response = MagicMock()
@@ -363,15 +342,12 @@ class TestCohereCallJsonSchemaFix:
         mock_client.chat.return_value = mock_response
         mock_cohere_mod.ClientV2.return_value = mock_client
 
-        result = CohereClient.call_json("key", config, "prompt", "data", compiled_schema)
+        CohereClient.call_json("key", config, "prompt", "data", compiled_schema)
 
-        # Verify the prompt includes field names from properties, not schema keys
         call_args = mock_client.chat.call_args
-        prompt_messages = call_args[1]["messages"]
-        prompt_message = prompt_messages[0]["content"]
+        prompt_message = call_args[1]["messages"][0]["content"]
         assert "'name'" in prompt_message
         assert "'age'" in prompt_message
-        # Should NOT contain schema-level keys
         assert "'type'" not in prompt_message
         assert "'properties'" not in prompt_message
 
@@ -388,14 +364,10 @@ class TestCohereCallJsonSchemaFix:
         mock_client.chat.return_value = mock_response
         mock_cohere_mod.ClientV2.return_value = mock_client
 
-        # Should not raise
         result = CohereClient.call_json("key", config, "prompt", "data", None)
         assert result is not None
 
-        # Verify prompt does NOT contain "with the fields " (empty string)
-        call_args = mock_client.chat.call_args
-        prompt_messages = call_args[1]["messages"]
-        prompt_message = prompt_messages[0]["content"]
+        prompt_message = mock_client.chat.call_args[1]["messages"][0]["content"]
         assert "with the fields " not in prompt_message
 
     @patch("agent_actions.llm.providers.cohere.client.fire_event")
@@ -417,66 +389,11 @@ class TestCohereCallJsonSchemaFix:
 
 
 # ---------------------------------------------------------------------------
-# Anthropic call_non_json
+# Anthropic-specific tests
 # ---------------------------------------------------------------------------
 
 
 class TestAnthropicCallNonJson:
-    """Anthropic call_non_json returns List[Dict[str, str]] with output_field."""
-
-    @patch("agent_actions.llm.providers.anthropic.client.fire_event")
-    @patch("agent_actions.llm.providers.anthropic.client.anthropic")
-    def test_returns_list_of_dict_default_field(
-        self, mock_anthropic_mod, mock_fire, base_agent_config
-    ):
-        from agent_actions.llm.providers.anthropic.client import AnthropicClient
-
-        text_block = MagicMock()
-        text_block.text = "Anthropic response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_response
-        mock_anthropic_mod.Anthropic.return_value = mock_client
-
-        result = AnthropicClient.call_non_json("key", base_agent_config, "prompt", "data")
-
-        assert isinstance(result, list)
-        assert len(result) == 1
-        assert isinstance(result[0], dict)
-        assert result[0] == {"raw_response": "Anthropic response"}
-
-    @patch("agent_actions.llm.providers.anthropic.client.fire_event")
-    @patch("agent_actions.llm.providers.anthropic.client.anthropic")
-    def test_returns_custom_output_field(
-        self, mock_anthropic_mod, mock_fire, agent_config_with_output_field
-    ):
-        from agent_actions.llm.providers.anthropic.client import AnthropicClient
-
-        text_block = MagicMock()
-        text_block.text = "Summary"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
-        mock_client = MagicMock()
-        mock_client.messages.create.return_value = mock_response
-        mock_anthropic_mod.Anthropic.return_value = mock_client
-
-        result = AnthropicClient.call_non_json(
-            "key", agent_config_with_output_field, "prompt", "data"
-        )
-
-        assert result[0] == {"summary": "Summary"}
-
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")
     def test_empty_response_raises_vendor_error(
@@ -485,8 +402,7 @@ class TestAnthropicCallNonJson:
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
         from agent_actions.errors import VendorAPIError
 
-        # Response with no text blocks
-        tool_block = MagicMock(spec=[])  # No .text attribute
+        tool_block = MagicMock(spec=[])
         del tool_block.text
 
         mock_response = MagicMock()
@@ -508,15 +424,7 @@ class TestAnthropicCallNonJson:
         """Non-JSON mode must NOT include tools in the API call."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
-        text_block = MagicMock()
-        text_block.text = "response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
+        mock_response = _make_anthropic_mocks("response")
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
@@ -587,19 +495,9 @@ class TestAnthropicSharedCallApi:
     def test_max_tokens_logged_from_config(self, mock_anthropic_mod, mock_fire):
         """max_tokens in log should reflect actual config, not hardcoded 1024."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
-        import logging
 
         config = {"model_name": "claude-3", "max_tokens": 4096}
-
-        text_block = MagicMock()
-        text_block.text = "response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
+        mock_response = _make_anthropic_mocks("response")
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
@@ -607,7 +505,6 @@ class TestAnthropicSharedCallApi:
         with patch("agent_actions.llm.providers.anthropic.client.logger") as mock_logger:
             AnthropicClient.call_non_json("key", config, "prompt", "data")
 
-            # Find the debug call with max_tokens
             request_calls = [
                 c for c in mock_logger.debug.call_args_list if c[0][0] == "Anthropic API request"
             ]
@@ -621,24 +518,14 @@ class TestAnthropicSharedCallApi:
         """When max_tokens is not in config, it should default to 1024."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
-        config = {"model_name": "claude-3"}  # No max_tokens
-
-        text_block = MagicMock()
-        text_block.text = "response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
+        config = {"model_name": "claude-3"}
+        mock_response = _make_anthropic_mocks("response")
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
 
         AnthropicClient.call_non_json("key", config, "prompt", "data")
 
-        # Verify the API was called with max_tokens=1024
         call_kwargs = mock_client.messages.create.call_args[1]
         assert call_kwargs["max_tokens"] == 1024
 
@@ -670,7 +557,6 @@ class TestOllamaTokenCounts:
         config = {"model_name": "llama3"}
         OllamaClient.call_json(None, config, "prompt", "data")
 
-        # Verify fire_event was called with LLMResponseEvent containing token counts
         response_events = [
             call for call in mock_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
         ]
@@ -716,7 +602,6 @@ class TestOllamaTokenCounts:
 
         mock_response = MagicMock(spec=["message"])
         mock_response.message.content = "response"
-        # No prompt_eval_count or eval_count attributes
 
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
@@ -724,39 +609,26 @@ class TestOllamaTokenCounts:
 
         config = {"model_name": "llama3"}
         result = OllamaClient.call_non_json(None, config, "prompt", "data")
-
-        # Should not raise and should default to 0
         assert isinstance(result, list)
 
 
 # ---------------------------------------------------------------------------
-# Schema compilation for new targets
+# Schema compilation for new targets (groq + mistral parameterized)
 # ---------------------------------------------------------------------------
 
 
 class TestCompileUnifiedSchemaNewTargets:
     """compile_unified_schema supports groq, mistral, and cohere targets."""
 
-    def test_groq_produces_openai_compatible_format(self):
-        result = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "groq")
+    @pytest.mark.parametrize("target", ["groq", "mistral"], ids=["groq", "mistral"])
+    def test_openai_compatible_format(self, target):
+        result = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, target)
 
-        assert "name" in result
         assert result["name"] == "test_schema"
         assert "schema" in result
         assert result["schema"]["type"] == "object"
         assert "name" in result["schema"]["properties"]
         assert "age" in result["schema"]["properties"]
-        assert result["schema"]["required"] == ["name"]
-        assert result["schema"]["additionalProperties"] is False
-
-    def test_mistral_produces_openai_compatible_format(self):
-        result = compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "mistral")
-
-        assert "name" in result
-        assert result["name"] == "test_schema"
-        assert "schema" in result
-        assert result["schema"]["type"] == "object"
-        assert "name" in result["schema"]["properties"]
         assert result["schema"]["required"] == ["name"]
 
     def test_cohere_produces_native_format(self):
@@ -766,7 +638,6 @@ class TestCompileUnifiedSchemaNewTargets:
         assert "name" in result["properties"]
         assert "age" in result["properties"]
         assert result["required"] == ["name"]
-        # Cohere format should NOT have nested "name"/"schema" wrapper
         assert "schema" not in result
 
     def test_unknown_target_raises_error(self):
@@ -782,8 +653,7 @@ class TestCompileUnifiedSchemaNewTargets:
         with pytest.raises(ConfigValidationError) as exc_info:
             compile_unified_schema(SAMPLE_UNIFIED_SCHEMA, "invalid")
 
-        error_context = exc_info.value.context
-        valid_systems = error_context["valid_systems"]
+        valid_systems = exc_info.value.context["valid_systems"]
         assert "groq" in valid_systems
         assert "mistral" in valid_systems
         assert "cohere" in valid_systems
@@ -820,7 +690,7 @@ class TestConfigFieldsGenerationParams:
 
 
 # ---------------------------------------------------------------------------
-# Generation params helper
+# Generation params helper (stop_as_list parameterized)
 # ---------------------------------------------------------------------------
 
 
@@ -851,19 +721,18 @@ class TestExtractGenerationParams:
         )
         assert result == {"max_output_tokens": 100, "stop_sequences": "END", "top_p": 0.9}
 
-    def test_stop_as_list_wraps_string(self):
+    @pytest.mark.parametrize(
+        "stop_input,expected",
+        [
+            pytest.param("END", ["END"], id="string_wrapped"),
+            pytest.param(["END", "STOP"], ["END", "STOP"], id="list_preserved"),
+        ],
+    )
+    def test_stop_as_list(self, stop_input, expected):
         from agent_actions.llm.providers.generation_params import extract_generation_params
 
-        config = {"stop": "END"}
-        result = extract_generation_params(config, stop_as_list=True)
-        assert result == {"stop": ["END"]}
-
-    def test_stop_as_list_preserves_list(self):
-        from agent_actions.llm.providers.generation_params import extract_generation_params
-
-        config = {"stop": ["END", "STOP"]}
-        result = extract_generation_params(config, stop_as_list=True)
-        assert result == {"stop": ["END", "STOP"]}
+        result = extract_generation_params({"stop": stop_input}, stop_as_list=True)
+        assert result == {"stop": expected}
 
     def test_extra_params(self):
         from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -919,13 +788,7 @@ class TestOpenAITopPStopForwarding:
             "presence_penalty": 0.2,
         }
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"result": "ok"}'
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
+        mock_response = _make_openai_style_mocks('{"result": "ok"}')
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai_cls.return_value = mock_client
@@ -954,13 +817,7 @@ class TestOpenAITopPStopForwarding:
             "presence_penalty": 0.3,
         }
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "response"
-        mock_response.usage.prompt_tokens = 10
-        mock_response.usage.completion_tokens = 5
-        mock_response.usage.total_tokens = 15
-
+        mock_response = _make_openai_style_mocks("response")
         mock_client = MagicMock()
         mock_client.chat.completions.create.return_value = mock_response
         mock_openai_cls.return_value = mock_client
@@ -983,16 +840,7 @@ class TestAnthropicStopForwarding:
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         config = {"model_name": "claude-3", "stop": "END", "top_p": 0.9}
-
-        text_block = MagicMock()
-        text_block.text = "response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
+        mock_response = _make_anthropic_mocks("response")
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
@@ -1009,16 +857,7 @@ class TestAnthropicStopForwarding:
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         config = {"model_name": "claude-3", "stop": ["END", "STOP"]}
-
-        text_block = MagicMock()
-        text_block.text = "response"
-
-        mock_response = MagicMock()
-        mock_response.content = [text_block]
-        mock_response.usage.input_tokens = 10
-        mock_response.usage.output_tokens = 20
-        mock_response.stop_reason = "end_turn"
-
+        mock_response = _make_anthropic_mocks("response")
         mock_client = MagicMock()
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
@@ -1065,12 +904,7 @@ class TestCohereTopPStopForwarding:
 
         config = {"model_name": "command-r", "top_p": 0.9, "stop": ["\\n"]}
 
-        content_block = MagicMock()
-        content_block.text = '{"result": "ok"}'
-        mock_response = MagicMock()
-        mock_response.message.content = [content_block]
-        mock_response.usage = None
-
+        mock_response = _make_cohere_mocks('{"result": "ok"}')
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
         mock_cohere_mod.ClientV2.return_value = mock_client
@@ -1080,7 +914,6 @@ class TestCohereTopPStopForwarding:
         call_kwargs = mock_client.chat.call_args[1]
         assert call_kwargs["p"] == 0.9
         assert call_kwargs["stop_sequences"] == ["\\n"]
-        # Should NOT use 'top_p' key
         assert "top_p" not in call_kwargs
 
     @patch("agent_actions.llm.providers.cohere.client.fire_event")
@@ -1090,12 +923,7 @@ class TestCohereTopPStopForwarding:
 
         config = {"model_name": "command-r", "top_p": 0.7, "stop": "END"}
 
-        mock_response = MagicMock()
-        text_block = MagicMock()
-        text_block.text = "response"
-        mock_response.message.content = [text_block]
-        mock_response.usage = None
-
+        mock_response = _make_cohere_mocks("response")
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
         mock_cohere_mod.ClientV2.return_value = mock_client
@@ -1138,7 +966,7 @@ class TestOllamaTopPStopForwarding:
 
 
 # ---------------------------------------------------------------------------
-# SINGLE_RESPONSE_CLIENTS audit
+# SINGLE_RESPONSE_CLIENTS audit (collapsed to 1 test)
 # ---------------------------------------------------------------------------
 
 
@@ -1148,83 +976,61 @@ class TestSingleResponseClients:
     def test_set_is_empty(self):
         from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
 
-        assert len(SINGLE_RESPONSE_CLIENTS) == 0
-
-    def test_anthropic_not_in_single_response(self):
-        from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
-
-        assert "anthropic" not in SINGLE_RESPONSE_CLIENTS
-
-    def test_groq_not_in_single_response(self):
-        from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
-
-        assert "groq" not in SINGLE_RESPONSE_CLIENTS
-
-    def test_cohere_not_in_single_response(self):
-        from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
-
-        assert "cohere" not in SINGLE_RESPONSE_CLIENTS
-
-    def test_mistral_not_in_single_response(self):
-        from agent_actions.llm.realtime.services.invocation import SINGLE_RESPONSE_CLIENTS
-
-        assert "mistral" not in SINGLE_RESPONSE_CLIENTS
+        assert SINGLE_RESPONSE_CLIENTS == set()
 
 
 # ---------------------------------------------------------------------------
-# Cohere/Mistral call_json normalization (P4 fix)
+# call_json normalization: dict → List[Dict] (parameterized across providers)
 # ---------------------------------------------------------------------------
 
 
-class TestCohereCallJsonNormalization:
-    """Cohere call_json always returns List[Dict]."""
+class TestCallJsonDictWrapping:
+    """Cohere, Mistral, and Gemini call_json wrap single-dict response in a list."""
 
     @patch("agent_actions.llm.providers.cohere.client.fire_event")
     @patch("agent_actions.llm.providers.cohere.client.cohere")
-    def test_dict_response_wrapped_in_list(self, mock_cohere_mod, mock_fire):
+    def test_cohere_dict_wrapped_in_list(self, mock_cohere_mod, mock_fire):
         from agent_actions.llm.providers.cohere.client import CohereClient
 
-        config = {"model_name": "command-r"}
-
-        content_block = MagicMock()
-        content_block.text = '{"name": "Alice"}'
-        mock_response = MagicMock()
-        mock_response.message.content = [content_block]
-        mock_response.usage = None
-
+        mock_response = _make_cohere_mocks('{"name": "Alice"}')
         mock_client = MagicMock()
         mock_client.chat.return_value = mock_response
         mock_cohere_mod.ClientV2.return_value = mock_client
 
-        result = CohereClient.call_json("key", config, "prompt", "data", None)
-
+        result = CohereClient.call_json("key", {"model_name": "command-r"}, "prompt", "data", None)
         assert isinstance(result, list)
         assert result == [{"name": "Alice"}]
 
-
-class TestMistralCallJsonNormalization:
-    """Mistral call_json always returns List[Dict]."""
-
     @patch("agent_actions.llm.providers.mistral.client.fire_event")
     @patch("agent_actions.llm.providers.mistral.client.Mistral")
-    def test_dict_response_wrapped_in_list(self, mock_mistral_cls, mock_fire):
+    def test_mistral_dict_wrapped_in_list(self, mock_mistral_cls, mock_fire):
         from agent_actions.llm.providers.mistral.client import MistralClient
 
-        config = {"model_name": "mistral-large"}
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = '{"name": "Alice"}'
-        mock_response.usage.prompt_tokens = 20
-        mock_response.usage.completion_tokens = 10
-        mock_response.usage.total_tokens = 30
-
+        mock_response = _make_mistral_mocks('{"name": "Alice"}')
         mock_client = MagicMock()
         mock_client.chat.complete.return_value = mock_response
         mock_mistral_cls.return_value = mock_client
 
-        result = MistralClient.call_json("key", config, "prompt", "data", None)
+        result = MistralClient.call_json(
+            "key", {"model_name": "mistral-large"}, "prompt", "data", None
+        )
+        assert isinstance(result, list)
+        assert result == [{"name": "Alice"}]
 
+    @patch("agent_actions.llm.providers.gemini.client.fire_event")
+    @patch("agent_actions.llm.providers.gemini.client.genai")
+    def test_gemini_dict_wrapped_in_list(self, mock_genai, mock_fire):
+        from agent_actions.llm.providers.gemini.client import GeminiClient
+
+        mock_response = MagicMock()
+        mock_response.text = '{"name": "Alice"}'
+        mock_response.usage_metadata = None
+
+        mock_model = MagicMock()
+        mock_model.generate_content.return_value = mock_response
+        mock_genai.GenerativeModel.return_value = mock_model
+
+        result = GeminiClient.call_json("key", {"model_name": "gemini-pro"}, "prompt", "data", None)
         assert isinstance(result, list)
         assert result == [{"name": "Alice"}]
 
@@ -1307,31 +1113,11 @@ class TestOllamaSetLastUsage:
 
 
 # ---------------------------------------------------------------------------
-# Gemini call_json normalization (Issue #3)
+# Gemini call_json normalization (no system_instruction in JSON mode)
 # ---------------------------------------------------------------------------
 
 
 class TestGeminiCallJsonNormalization:
-    """Gemini call_json always returns List[Dict]."""
-
-    @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_dict_response_wrapped_in_list(self, mock_genai, mock_fire):
-        from agent_actions.llm.providers.gemini.client import GeminiClient
-
-        mock_response = MagicMock()
-        mock_response.text = '{"name": "Alice"}'
-        mock_response.usage_metadata = None
-
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
-
-        result = GeminiClient.call_json("key", {"model_name": "gemini-pro"}, "prompt", "data", None)
-
-        assert isinstance(result, list)
-        assert result == [{"name": "Alice"}]
-
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
     @patch("agent_actions.llm.providers.gemini.client.genai")
     def test_no_system_instruction_in_json_mode(self, mock_genai, mock_fire):
@@ -1353,7 +1139,7 @@ class TestGeminiCallJsonNormalization:
 
 
 # ---------------------------------------------------------------------------
-# Cohere call_non_json content guard (Issue #5)
+# Cohere call_non_json content guard
 # ---------------------------------------------------------------------------
 
 
@@ -1367,7 +1153,7 @@ class TestCohereCallNonJsonContentGuard:
         from agent_actions.llm.providers.cohere.client import CohereClient
 
         mock_response = MagicMock()
-        mock_response.message.content = []  # Empty content list
+        mock_response.message.content = []
         mock_response.usage = None
 
         mock_client = MagicMock()
@@ -1396,28 +1182,23 @@ class TestCohereCallNonJsonContentGuard:
 
 
 # ---------------------------------------------------------------------------
-# BaseClient contract (Issue #1)
+# BaseClient contract (parameterized)
 # ---------------------------------------------------------------------------
 
 
 class TestBaseClientReturnTypes:
     """BaseClient abstract methods declare List[Dict] return types."""
 
-    def test_call_json_return_annotation_is_list(self):
+    @pytest.mark.parametrize(
+        "method_name",
+        [
+            pytest.param("call_json", id="call_json"),
+            pytest.param("call_non_json", id="call_non_json"),
+        ],
+    )
+    def test_return_annotation_is_list(self, method_name):
         from agent_actions.llm.providers.client_base import BaseClient
-        import typing
 
-        hints = typing.get_type_hints(BaseClient.call_json)
-        ret = hints["return"]
-        # Should be List[Dict[str, Any]], not Union
-        origin = getattr(ret, "__origin__", None)
-        assert origin is list
-
-    def test_call_non_json_return_annotation_is_list(self):
-        from agent_actions.llm.providers.client_base import BaseClient
-        import typing
-
-        hints = typing.get_type_hints(BaseClient.call_non_json)
-        ret = hints["return"]
-        origin = getattr(ret, "__origin__", None)
+        hints = typing.get_type_hints(getattr(BaseClient, method_name))
+        origin = getattr(hints["return"], "__origin__", None)
         assert origin is list

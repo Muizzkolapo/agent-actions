@@ -6,6 +6,8 @@ into unified error types (RateLimitError, NetworkError, VendorAPIError).
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.llm.providers.error_wrapper import (
     VendorErrorMapping,
@@ -58,103 +60,75 @@ STATUS_CODE_MAPPING = VendorErrorMapping(
 class TestExtractRetryAfter:
     """Tests for _extract_retry_after helper."""
 
-    def test_returns_none_without_response(self):
-        e = Exception("no response")
-        assert _extract_retry_after(e) is None
-
-    def test_returns_none_with_none_response(self):
-        e = Exception("null response")
-        e.response = None
-        assert _extract_retry_after(e) is None
-
-    def test_extracts_float_retry_after(self):
-        e = Exception("rate limited")
-        e.response = MagicMock()
-        e.response.headers = {"retry-after": "30.5"}
-        assert _extract_retry_after(e) == 30.5
-
-    def test_returns_none_for_invalid_value(self):
-        e = Exception("bad header")
-        e.response = MagicMock()
-        e.response.headers = {"retry-after": "not-a-number"}
-        assert _extract_retry_after(e) is None
+    @pytest.mark.parametrize(
+        "setup,expected",
+        [
+            pytest.param(lambda e: None, None, id="no_response_attr"),
+            pytest.param(lambda e: setattr(e, "response", None), None, id="none_response"),
+            pytest.param(
+                lambda e: setattr(e, "response", MagicMock(headers={"retry-after": "30.5"})),
+                30.5,
+                id="valid_float",
+            ),
+            pytest.param(
+                lambda e: setattr(
+                    e, "response", MagicMock(headers={"retry-after": "not-a-number"})
+                ),
+                None,
+                id="invalid_value",
+            ),
+        ],
+    )
+    def test_extract_retry_after(self, setup, expected):
+        e = Exception("test")
+        setup(e)
+        assert _extract_retry_after(e) == expected
 
 
 class TestWrapVendorErrorTypeBased:
     """Tests for type-based error classification (OpenAI/Anthropic/Groq style)."""
 
+    @pytest.mark.parametrize(
+        "exception,expected_type",
+        [
+            pytest.param(FakeRateLimitError("too many requests"), RateLimitError, id="rate_limit"),
+            pytest.param(FakeConnectionError("connection refused"), NetworkError, id="connection"),
+            pytest.param(FakeTimeoutError("timed out"), NetworkError, id="timeout"),
+            pytest.param(FakeAPIError("bad request"), VendorAPIError, id="api_error"),
+        ],
+    )
     @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_rate_limit_error(self, mock_fire):
-        e = FakeRateLimitError("too many requests")
-        result = wrap_vendor_error(e, "gpt-4", TYPE_BASED_MAPPING, "req-1")
-
-        assert isinstance(result, RateLimitError)
-        assert "rate limit" in str(result)
+    def test_classified_errors(self, mock_fire, exception, expected_type):
+        result = wrap_vendor_error(exception, "gpt-4", TYPE_BASED_MAPPING, "req-1")
+        assert isinstance(result, expected_type)
         mock_fire.assert_called_once()
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_network_error_connection(self, mock_fire):
-        e = FakeConnectionError("connection refused")
-        result = wrap_vendor_error(e, "gpt-4", TYPE_BASED_MAPPING)
-
-        assert isinstance(result, NetworkError)
-        mock_fire.assert_called_once()
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_network_error_timeout(self, mock_fire):
-        e = FakeTimeoutError("timed out")
-        result = wrap_vendor_error(e, "gpt-4", TYPE_BASED_MAPPING)
-
-        assert isinstance(result, NetworkError)
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_base_api_error(self, mock_fire):
-        e = FakeAPIError("bad request")
-        result = wrap_vendor_error(e, "gpt-4", TYPE_BASED_MAPPING)
-
-        assert isinstance(result, VendorAPIError)
 
     def test_unknown_error_returned_as_is(self):
         e = ValueError("something else")
         result = wrap_vendor_error(e, "gpt-4", TYPE_BASED_MAPPING)
-
         assert result is e
 
 
 class TestWrapVendorErrorStatusCodeBased:
     """Tests for status-code-based error classification (Cohere/Mistral style)."""
 
+    @pytest.mark.parametrize(
+        "status_code,expected_type",
+        [
+            pytest.param(429, RateLimitError, id="429_rate_limit"),
+            pytest.param(503, NetworkError, id="503_network"),
+            pytest.param(502, NetworkError, id="502_network"),
+            pytest.param(400, VendorAPIError, id="400_api_error"),
+        ],
+    )
     @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_status_429_is_rate_limit(self, mock_fire):
-        e = FakeStatusCodeError(429)
+    def test_status_code_classification(self, mock_fire, status_code, expected_type):
+        e = FakeStatusCodeError(status_code)
         result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
-
-        assert isinstance(result, RateLimitError)
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_status_503_is_network_error(self, mock_fire):
-        e = FakeStatusCodeError(503)
-        result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
-
-        assert isinstance(result, NetworkError)
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_status_502_is_network_error(self, mock_fire):
-        e = FakeStatusCodeError(502)
-        result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
-
-        assert isinstance(result, NetworkError)
-
-    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
-    def test_other_status_is_vendor_api_error(self, mock_fire):
-        e = FakeStatusCodeError(400)
-        result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
-
-        assert isinstance(result, VendorAPIError)
+        assert isinstance(result, expected_type)
 
     @patch("agent_actions.llm.providers.error_wrapper.fire_event")
     def test_extra_network_types(self, mock_fire):
         e = ConnectionError("refused")
         result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
-
         assert isinstance(result, NetworkError)

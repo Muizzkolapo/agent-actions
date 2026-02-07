@@ -14,22 +14,32 @@ class TestBatchStatus:
         """BatchStatus should have all expected status values."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        assert hasattr(BatchStatus, "SUBMITTED")
-        assert hasattr(BatchStatus, "VALIDATING")
-        assert hasattr(BatchStatus, "IN_PROGRESS")
-        assert hasattr(BatchStatus, "FINALIZING")
-        assert hasattr(BatchStatus, "COMPLETED")
-        assert hasattr(BatchStatus, "FAILED")
-        assert hasattr(BatchStatus, "CANCELLED")
+        for name in (
+            "SUBMITTED",
+            "VALIDATING",
+            "IN_PROGRESS",
+            "FINALIZING",
+            "COMPLETED",
+            "FAILED",
+            "CANCELLED",
+        ):
+            assert hasattr(BatchStatus, name)
 
-    def test_status_values_are_strings(self):
+    @pytest.mark.parametrize(
+        "member,expected",
+        [
+            ("COMPLETED", "completed"),
+            ("FAILED", "failed"),
+            ("SUBMITTED", "submitted"),
+            ("IN_PROGRESS", "in_progress"),
+        ],
+        ids=["completed", "failed", "submitted", "in_progress"],
+    )
+    def test_status_values_are_strings(self, member, expected):
         """BatchStatus values should be string-compatible."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        assert BatchStatus.COMPLETED == "completed"
-        assert BatchStatus.FAILED == "failed"
-        assert BatchStatus.SUBMITTED == "submitted"
-        assert BatchStatus.IN_PROGRESS == "in_progress"
+        assert getattr(BatchStatus, member) == expected
 
     def test_status_string_conversion(self):
         """BatchStatus should convert to string properly."""
@@ -38,75 +48,77 @@ class TestBatchStatus:
         assert str(BatchStatus.COMPLETED) == "completed"
         assert f"{BatchStatus.FAILED}" == "failed"
 
-    def test_terminal_states_includes_completed(self):
-        """terminal_states() should include COMPLETED."""
+    @pytest.mark.parametrize(
+        "member,in_terminal",
+        [
+            ("COMPLETED", True),
+            ("FAILED", True),
+            ("CANCELLED", True),
+            ("IN_PROGRESS", False),
+            ("SUBMITTED", False),
+        ],
+        ids=["completed", "failed", "cancelled", "in_progress", "submitted"],
+    )
+    def test_terminal_states_membership(self, member, in_terminal):
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         terminal = BatchStatus.terminal_states()
-        assert BatchStatus.COMPLETED in terminal
+        status = getattr(BatchStatus, member)
+        assert (status in terminal) is in_terminal
 
-    def test_terminal_states_includes_failed(self):
-        """terminal_states() should include FAILED."""
+    @pytest.mark.parametrize(
+        "member,in_flight",
+        [
+            ("SUBMITTED", True),
+            ("IN_PROGRESS", True),
+            ("VALIDATING", True),
+            ("COMPLETED", False),
+            ("FAILED", False),
+        ],
+        ids=["submitted", "in_progress", "validating", "completed", "failed"],
+    )
+    def test_in_flight_states_membership(self, member, in_flight):
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        terminal = BatchStatus.terminal_states()
-        assert BatchStatus.FAILED in terminal
-
-    def test_terminal_states_includes_cancelled(self):
-        """terminal_states() should include CANCELLED."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        terminal = BatchStatus.terminal_states()
-        assert BatchStatus.CANCELLED in terminal
-
-    def test_terminal_states_excludes_in_progress(self):
-        """terminal_states() should NOT include IN_PROGRESS."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        terminal = BatchStatus.terminal_states()
-        assert BatchStatus.IN_PROGRESS not in terminal
-
-    def test_in_flight_states_includes_submitted(self):
-        """in_flight_states() should include SUBMITTED."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        in_flight = BatchStatus.in_flight_states()
-        assert BatchStatus.SUBMITTED in in_flight
-
-    def test_in_flight_states_includes_in_progress(self):
-        """in_flight_states() should include IN_PROGRESS."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        in_flight = BatchStatus.in_flight_states()
-        assert BatchStatus.IN_PROGRESS in in_flight
+        in_flight_set = BatchStatus.in_flight_states()
+        status = getattr(BatchStatus, member)
+        assert (status in in_flight_set) is in_flight
 
     def test_in_flight_and_terminal_are_disjoint(self):
         """in_flight_states() and terminal_states() should not overlap."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        terminal = BatchStatus.terminal_states()
-        in_flight = BatchStatus.in_flight_states()
-        assert terminal.isdisjoint(in_flight)
+        assert BatchStatus.terminal_states().isdisjoint(BatchStatus.in_flight_states())
 
-    def test_is_terminal_method(self):
-        """is_terminal() should correctly identify terminal states."""
+    @pytest.mark.parametrize(
+        "member,is_terminal",
+        [
+            ("COMPLETED", True),
+            ("FAILED", True),
+            ("CANCELLED", True),
+            ("IN_PROGRESS", False),
+            ("SUBMITTED", False),
+        ],
+    )
+    def test_is_terminal_method(self, member, is_terminal):
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        assert BatchStatus.COMPLETED.is_terminal() is True
-        assert BatchStatus.FAILED.is_terminal() is True
-        assert BatchStatus.CANCELLED.is_terminal() is True
-        assert BatchStatus.IN_PROGRESS.is_terminal() is False
-        assert BatchStatus.SUBMITTED.is_terminal() is False
+        assert getattr(BatchStatus, member).is_terminal() is is_terminal
 
-    def test_is_in_flight_method(self):
-        """is_in_flight() should correctly identify in-flight states."""
+    @pytest.mark.parametrize(
+        "member,is_in_flight",
+        [
+            ("SUBMITTED", True),
+            ("IN_PROGRESS", True),
+            ("VALIDATING", True),
+            ("COMPLETED", False),
+            ("FAILED", False),
+        ],
+    )
+    def test_is_in_flight_method(self, member, is_in_flight):
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
-        assert BatchStatus.SUBMITTED.is_in_flight() is True
-        assert BatchStatus.IN_PROGRESS.is_in_flight() is True
-        assert BatchStatus.VALIDATING.is_in_flight() is True
-        assert BatchStatus.COMPLETED.is_in_flight() is False
-        assert BatchStatus.FAILED.is_in_flight() is False
+        assert getattr(BatchStatus, member).is_in_flight() is is_in_flight
 
 
 class TestFilterStatus:
@@ -116,20 +128,19 @@ class TestFilterStatus:
         """FilterStatus should have all expected values."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
 
-        assert hasattr(FilterStatus, "INCLUDED")
-        assert hasattr(FilterStatus, "SKIPPED")
-        assert hasattr(FilterStatus, "FILTERED")
+        for name in ("INCLUDED", "SKIPPED", "FILTERED"):
+            assert hasattr(FilterStatus, name)
 
-    def test_filter_status_values_are_strings(self):
-        """FilterStatus values should be string-compatible."""
+    @pytest.mark.parametrize(
+        "member,expected",
+        [("INCLUDED", "included"), ("SKIPPED", "skipped"), ("FILTERED", "filtered")],
+    )
+    def test_filter_status_values_are_strings(self, member, expected):
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
 
-        assert FilterStatus.INCLUDED == "included"
-        assert FilterStatus.SKIPPED == "skipped"
-        assert FilterStatus.FILTERED == "filtered"
+        assert getattr(FilterStatus, member) == expected
 
     def test_filter_status_string_conversion(self):
-        """FilterStatus should convert to string properly."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
 
         assert str(FilterStatus.INCLUDED) == "included"
@@ -139,24 +150,19 @@ class TestFilterStatus:
 class TestContextMetaKeys:
     """Tests for ContextMetaKeys constants."""
 
-    def test_filter_status_key(self):
-        """FILTER_STATUS should be the internal metadata key."""
+    @pytest.mark.parametrize(
+        "attr,expected",
+        [
+            ("FILTER_STATUS", "_batch_filter_status"),
+            ("PASSTHROUGH_FIELDS", "_passthrough_fields"),
+        ],
+    )
+    def test_key_values(self, attr, expected):
         from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
 
-        assert ContextMetaKeys.FILTER_STATUS == "_batch_filter_status"
-
-    def test_passthrough_fields_key(self):
-        """PASSTHROUGH_FIELDS should be the internal metadata key."""
-        from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
-
-        assert ContextMetaKeys.PASSTHROUGH_FIELDS == "_passthrough_fields"
-
-    def test_all_keys_are_internal(self):
-        """All meta keys should start with underscore (internal convention)."""
-        from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
-
-        assert ContextMetaKeys.FILTER_STATUS.startswith("_")
-        assert ContextMetaKeys.PASSTHROUGH_FIELDS.startswith("_")
+        value = getattr(ContextMetaKeys, attr)
+        assert value == expected
+        assert value.startswith("_")
 
     def test_all_internal_keys_method(self):
         """all_internal_keys() should return set of all internal keys."""
@@ -172,21 +178,18 @@ class TestEnumComparison:
     """Tests for enum comparison with string values."""
 
     def test_batch_status_equals_string(self):
-        """BatchStatus should compare equal to its string value."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         assert BatchStatus.COMPLETED == "completed"
         assert "completed" == BatchStatus.COMPLETED
 
     def test_filter_status_equals_string(self):
-        """FilterStatus should compare equal to its string value."""
         from agent_actions.llm.batch.core.batch_constants import FilterStatus
 
         assert FilterStatus.INCLUDED == "included"
         assert "included" == FilterStatus.INCLUDED
 
     def test_batch_status_in_list(self):
-        """BatchStatus should work in list membership checks."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         statuses = ["submitted", "in_progress", "completed"]
@@ -194,12 +197,10 @@ class TestEnumComparison:
         assert BatchStatus.FAILED not in statuses
 
     def test_batch_status_as_dict_key(self):
-        """BatchStatus should work as dictionary key."""
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         status_map = {
             BatchStatus.COMPLETED: "done",
             BatchStatus.FAILED: "error",
         }
-        # Should also be accessible via string
         assert status_map.get(BatchStatus.COMPLETED) == "done"

@@ -46,40 +46,26 @@ def subsequent_stage_context(basic_agent_config):
 class TestPreparedTaskDataclass:
     """Tests for PreparedTask dataclass."""
 
-    def test_should_execute_when_passed(self):
-        """Test should_execute returns True when guard passed."""
+    @pytest.mark.parametrize(
+        "guard_status,guard_behavior,should_execute,is_passthrough,is_filtered",
+        [
+            pytest.param(GuardStatus.PASSED, None, True, False, False, id="passed"),
+            pytest.param(GuardStatus.SKIPPED, "skip", False, True, False, id="skipped"),
+            pytest.param(GuardStatus.FILTERED, "filter", False, False, True, id="filtered"),
+        ],
+    )
+    def test_guard_status_properties(
+        self, guard_status, guard_behavior, should_execute, is_passthrough, is_filtered
+    ):
         task = PreparedTask(
             target_id="t1",
             source_guid="g1",
-            guard_status=GuardStatus.PASSED,
+            guard_status=guard_status,
+            guard_behavior=guard_behavior,
         )
-        assert task.should_execute is True
-        assert task.is_passthrough is False
-        assert task.is_filtered is False
-
-    def test_is_passthrough_when_skipped(self):
-        """Test is_passthrough returns True when guard skipped."""
-        task = PreparedTask(
-            target_id="t1",
-            source_guid="g1",
-            guard_status=GuardStatus.SKIPPED,
-            guard_behavior="skip",
-        )
-        assert task.should_execute is False
-        assert task.is_passthrough is True
-        assert task.is_filtered is False
-
-    def test_is_filtered_when_filtered(self):
-        """Test is_filtered returns True when guard filtered."""
-        task = PreparedTask(
-            target_id="t1",
-            source_guid="g1",
-            guard_status=GuardStatus.FILTERED,
-            guard_behavior="filter",
-        )
-        assert task.should_execute is False
-        assert task.is_passthrough is False
-        assert task.is_filtered is True
+        assert task.should_execute is should_execute
+        assert task.is_passthrough is is_passthrough
+        assert task.is_filtered is is_filtered
 
 
 class TestPreparationContext:

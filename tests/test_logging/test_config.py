@@ -10,35 +10,23 @@ from agent_actions.logging.config import LoggingConfig
 class TestLoggingConfigDefaults:
     """Tests for LoggingConfig default values."""
 
-    def test_default_file_handler_enabled(self):
-        """Test that file handler is enabled by default."""
+    @pytest.mark.parametrize(
+        "attr_chain,expected",
+        [
+            pytest.param(("file_handler", "enabled"), True, id="enabled"),
+            pytest.param(("file_handler", "path"), None, id="path"),
+            pytest.param(("file_handler", "level"), "DEBUG", id="level"),
+            pytest.param(("file_handler", "max_bytes"), 10_485_760, id="max_bytes"),
+            pytest.param(("file_handler", "backup_count"), 5, id="backup_count"),
+            pytest.param(("file_handler", "format"), "human", id="format"),
+        ],
+    )
+    def test_defaults(self, attr_chain, expected):
         config = LoggingConfig()
-        assert config.file_handler.enabled is True
-
-    def test_default_log_file_path_is_none(self):
-        """Test that log file path defaults to None."""
-        config = LoggingConfig()
-        assert config.file_handler.path is None
-
-    def test_default_file_log_level(self):
-        """Test that file log level defaults to DEBUG."""
-        config = LoggingConfig()
-        assert config.file_handler.level == "DEBUG"
-
-    def test_default_file_max_bytes(self):
-        """Test that file max bytes defaults to 10MB."""
-        config = LoggingConfig()
-        assert config.file_handler.max_bytes == 10_485_760
-
-    def test_default_file_backup_count(self):
-        """Test that file backup count defaults to 5."""
-        config = LoggingConfig()
-        assert config.file_handler.backup_count == 5
-
-    def test_default_file_format(self):
-        """Test that file format defaults to 'human'."""
-        config = LoggingConfig()
-        assert config.file_handler.format == "human"
+        obj = config
+        for attr in attr_chain:
+            obj = getattr(obj, attr)
+        assert obj == expected
 
 
 class TestLoggingConfigFromEnvironment:

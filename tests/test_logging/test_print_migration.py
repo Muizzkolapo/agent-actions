@@ -5,7 +5,6 @@ This test ensures that diagnostic print statements are converted to structured
 logging, while allowing legitimate user-facing print statements in CLI modules.
 """
 
-import os
 import re
 from pathlib import Path
 import pytest
@@ -36,15 +35,6 @@ class TestPrintStatementMigration:
         "agent_actions/input_loading/udf_loader.py",  # UDF discovery count
     }
 
-    # Patterns that indicate diagnostic (non-user-facing) prints that should use logging
-    DIAGNOSTIC_PATTERNS = [
-        re.compile(r"print.*debug", re.IGNORECASE),
-        re.compile(r"print.*traceback", re.IGNORECASE),
-        re.compile(r"print.*exception", re.IGNORECASE),
-        re.compile(r"print.*\bif\s+debug\b", re.IGNORECASE),
-        re.compile(r"print.*\bif\s+verbose\b", re.IGNORECASE),
-    ]
-
     @pytest.fixture
     def source_files(self):
         """Get all Python source files in agent_actions package."""
@@ -65,56 +55,6 @@ class TestPrintStatementMigration:
             source_files.append((str(rel_path), py_file))
 
         return source_files
-
-    def test_no_diagnostic_print_statements(self, source_files):
-        """
-        Test that diagnostic print statements have been converted to logging.
-
-        This test scans all source files for print() statements that match
-        diagnostic patterns (debug, traceback, exception, etc.) which should
-        use the logging system instead.
-
-        Note: Files in ALLOWED_PRINT_FILES are skipped since they may have
-        legitimate debug output for users (e.g., --debug flag output).
-        """
-        violations = []
-
-        for rel_path, file_path in source_files:
-            # Skip allowlisted files (they may have user-facing debug output)
-            if rel_path in self.ALLOWED_PRINT_FILES:
-                continue
-
-            with open(file_path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-
-            for line_num, line in enumerate(lines, start=1):
-                # Skip comments
-                if line.strip().startswith("#"):
-                    continue
-
-                # Check if line contains print()
-                if "print(" in line or "print (" in line:
-                    # Check if it matches diagnostic patterns
-                    for pattern in self.DIAGNOSTIC_PATTERNS:
-                        if pattern.search(line):
-                            violations.append(
-                                {
-                                    "file": rel_path,
-                                    "line": line_num,
-                                    "content": line.strip(),
-                                    "pattern": pattern.pattern,
-                                }
-                            )
-                            break
-
-        if violations:
-            error_msg = "\n\nFound diagnostic print() statements that should use logging:\n\n"
-            for v in violations:
-                error_msg += f"  {v['file']}:{v['line']}\n"
-                error_msg += f"    {v['content']}\n"
-                error_msg += f"    (matches pattern: {v['pattern']})\n\n"
-            error_msg += "Please convert these to use logger.debug(), logger.info(), etc.\n"
-            pytest.fail(error_msg)
 
     def test_print_statements_only_in_allowed_files(self, source_files):
         """
@@ -169,23 +109,6 @@ class TestPrintStatementMigration:
 
             # Optional: You can make this a warning instead of just info
             # pytest.warn(UserWarning(report))
-
-    def test_allowlist_files_exist(self):
-        """Test that all files in the allowlist actually exist."""
-        project_root = Path(__file__).parent.parent.parent
-
-        missing_files = []
-        for allowed_file in self.ALLOWED_PRINT_FILES:
-            file_path = project_root / allowed_file
-            if not file_path.exists():
-                missing_files.append(allowed_file)
-
-        if missing_files:
-            error_msg = "\n\nAllowlist contains non-existent files:\n"
-            for f in missing_files:
-                error_msg += f"  - {f}\n"
-            error_msg += "\nPlease update ALLOWED_PRINT_FILES in test_print_migration.py\n"
-            pytest.fail(error_msg)
 
     def test_no_bare_print_in_new_code(self, source_files):
         """

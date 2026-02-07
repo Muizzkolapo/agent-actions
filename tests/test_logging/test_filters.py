@@ -34,62 +34,37 @@ class TestRedactingFilter:
             filter_instance.filter(record)
             assert expected in record.msg or "***" in record.msg, f"Failed for: {input_msg}"
 
-    def test_redacts_secret_patterns(self):
-        """Test that secret patterns are redacted."""
+    @pytest.mark.parametrize(
+        "msg,sensitive_value",
+        [
+            pytest.param("secret=mysecretvalue", "mysecretvalue", id="secret"),
+            pytest.param("token=mytokenvalue", "mytokenvalue", id="token"),
+            pytest.param("password=mypassword123", "mypassword123", id="password"),
+            pytest.param(
+                "Using key sk-ant-api03-abcdefghij1234567890",
+                "sk-ant-api03-abcdefghij1234567890",
+                id="anthropic_key",
+            ),
+        ],
+    )
+    def test_redacts_sensitive_patterns(self, msg, sensitive_value):
+        """Test that various sensitive patterns are redacted."""
         filter_instance = RedactingFilter()
         record = logging.LogRecord(
             name="test",
             level=logging.INFO,
             pathname="test.py",
             lineno=1,
-            msg="secret=mysecretvalue",
+            msg=msg,
             args=(),
             exc_info=None,
         )
-
         filter_instance.filter(record)
-
-        assert "mysecretvalue" not in record.msg
-        assert "***" in record.msg
-
-    def test_redacts_token_patterns(self):
-        """Test that token patterns are redacted."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="token=mytokenvalue",
-            args=(),
-            exc_info=None,
-        )
-
-        filter_instance.filter(record)
-
-        assert "mytokenvalue" not in record.msg
-        assert "***" in record.msg
-
-    def test_redacts_password_patterns(self):
-        """Test that password patterns are redacted."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="password=mypassword123",
-            args=(),
-            exc_info=None,
-        )
-
-        filter_instance.filter(record)
-
-        assert "mypassword123" not in record.msg
+        assert sensitive_value not in record.msg
         assert "***" in record.msg
 
     def test_redacts_openai_keys(self):
-        """Test that OpenAI API keys are redacted."""
+        """Test that OpenAI API keys are redacted with sk-*** prefix."""
         filter_instance = RedactingFilter()
         record = logging.LogRecord(
             name="test",
@@ -100,32 +75,12 @@ class TestRedactingFilter:
             args=(),
             exc_info=None,
         )
-
         filter_instance.filter(record)
-
         assert "sk-abcdefghij1234567890abcdefghij12" not in record.msg
         assert "sk-***" in record.msg
 
-    def test_redacts_anthropic_keys(self):
-        """Test that Anthropic API keys are redacted."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="Using key sk-ant-api03-abcdefghij1234567890",
-            args=(),
-            exc_info=None,
-        )
-
-        filter_instance.filter(record)
-
-        assert "sk-ant-api03-abcdefghij1234567890" not in record.msg
-        assert "***" in record.msg
-
     def test_redacts_google_keys(self):
-        """Test that Google API keys are redacted."""
+        """Test that Google API keys are redacted with AIza*** prefix."""
         filter_instance = RedactingFilter()
         record = logging.LogRecord(
             name="test",
@@ -136,9 +91,7 @@ class TestRedactingFilter:
             args=(),
             exc_info=None,
         )
-
         filter_instance.filter(record)
-
         assert "AIzaSyC1234567890abcdefghijklmnopqrstuv" not in record.msg
         assert "AIza***" in record.msg
 

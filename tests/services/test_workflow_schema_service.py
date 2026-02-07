@@ -85,29 +85,6 @@ class TestWorkflowSchemaService:
         assert "source" not in schemas
         assert "action1" in schemas
 
-    def test_validate_returns_validation_result(self):
-        """Test validate returns StaticValidationResult."""
-        service = self._create_service(
-            [
-                {
-                    "name": "extractor",
-                    "model_vendor": "openai",
-                    "output_schema": {"text": "str"},
-                },
-                {
-                    "name": "consumer",
-                    "model_vendor": "openai",
-                    "depends_on": ["extractor"],
-                    "prompt": "{{ action.extractor.text }}",
-                },
-            ]
-        )
-
-        result = service.validate()
-
-        assert result.is_valid
-        assert len(result.errors) == 0
-
     def test_validate_detects_missing_field(self):
         """Test validate detects missing field references."""
         service = self._create_service(

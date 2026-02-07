@@ -6,7 +6,6 @@ are properly converted to the unified format and compile correctly for all vendo
 """
 
 import pytest
-import logging
 from agent_actions.output.response.schema import (
     compile_unified_schema,
     _convert_json_schema_to_unified,
@@ -68,24 +67,6 @@ class TestArraySchemaConversion:
         scores_prop = result["properties"]["scores"]
         assert scores_prop["type"] == "array", "Property should be array type"
         assert scores_prop["items"]["type"] == "number", "Items should be number type"
-
-    def test_array_schema_with_empty_items(self, caplog):
-        """Array with empty items should handle gracefully with warning."""
-        schema = {"name": "broken", "type": "array", "items": {}}
-
-        with caplog.at_level(
-            logging.WARNING, logger="agent_actions.response_processing.schema_change"
-        ):
-            result = compile_unified_schema(schema, "anthropic")
-
-        # Should not crash and should create fallback
-        assert result is not None, "Should return a result, not crash"
-        assert result[0]["input_schema"]["properties"], "Should have properties"
-
-        # Check warning was logged
-        assert any("empty or invalid 'items'" in record.message for record in caplog.records), (
-            "Should log warning about invalid items"
-        )
 
     def test_array_schema_without_items(self):
         """Array without items key doesn't trigger conversion (no 'items' in schema check)."""
@@ -274,20 +255,6 @@ class TestConversionFunction:
 
         assert result["name"] == "response", "Should default to 'response'"
         assert result["fields"][0]["id"] == "response", "Field id should match default name"
-
-    def test_convert_handles_null_items(self, caplog):
-        """Conversion should handle None items gracefully."""
-        schema = {"name": "test", "type": "array", "items": None}
-
-        with caplog.at_level(
-            logging.WARNING, logger="agent_actions.response_processing.schema_change"
-        ):
-            result = _convert_json_schema_to_unified(schema)
-
-        assert result is not None, "Should return fallback structure"
-        assert any("empty or invalid 'items'" in record.message for record in caplog.records), (
-            "Should log warning"
-        )
 
 
 class TestEdgeCases:

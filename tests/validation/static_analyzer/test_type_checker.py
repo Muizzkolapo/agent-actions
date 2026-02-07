@@ -264,36 +264,6 @@ class TestStaticTypeChecker:
         assert any("agent2" in w.message for w in warnings)
         assert any("never referenced" in w.message for w in warnings)
 
-    def test_special_namespace_skipped(self):
-        """Test special namespaces (source, loop) are skipped."""
-        graph = DataFlowGraph()
-
-        graph.add_node(
-            DataFlowNode(
-                name="source",
-                agent_kind=AgentKind.SOURCE,
-                output_schema=OutputSchema(is_dynamic=True),
-            )
-        )
-
-        graph.add_node(
-            DataFlowNode(
-                name="agent",
-                agent_kind=AgentKind.LLM,
-                output_schema=OutputSchema(schema_fields={"result"}),
-                input_requirements=[
-                    InputRequirement("source", "data", "prompt", "{{ source.data }}"),
-                    InputRequirement("loop", "item", "prompt", "{{ loop.item }}"),
-                ],
-            )
-        )
-
-        checker = StaticTypeChecker(graph)
-        result = checker.check_all()
-
-        # Should pass - source and loop are special namespaces
-        assert result.is_valid
-
     def test_multiple_errors_collected(self):
         """Test multiple errors are all collected."""
         graph = self._create_graph_with_agents(

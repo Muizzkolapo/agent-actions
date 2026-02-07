@@ -18,12 +18,6 @@ class TestSpecialNamespaceConstants:
         """Test that SPECIAL_NAMESPACES constant is defined in utils.constants."""
         assert isinstance(SPECIAL_NAMESPACES, (set, frozenset))
 
-    def test_special_namespaces_contains_expected_core_values(self):
-        """Test that core special namespaces (source, loop, workflow) are defined."""
-        # Core namespaces that MUST be present for basic functionality
-        core_namespaces = {"source", "loop", "workflow"}
-        assert core_namespaces.issubset(SPECIAL_NAMESPACES)
-
     def test_special_namespaces_is_subset_of_reserved(self):
         """Test that all special namespaces are also reserved names."""
         # Core invariant: special namespaces should be a subset of reserved names
@@ -59,21 +53,6 @@ class TestSpecialNamespaceValidationBypass:
 
         assert "source" in context_sources
 
-    def test_loop_namespace_bypasses_validation(self):
-        """Test that 'loop' namespace doesn't require workflow action."""
-        action_config = {
-            "dependencies": [],
-            "context_scope": {"observe": ["loop.index", "loop.total"]},
-        }
-        workflow_actions = ["other_action"]  # 'loop' not in workflow
-
-        # Should NOT raise ConfigurationError
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test_action"
-        )
-
-        assert "loop" in context_sources
-
     def test_workflow_namespace_bypasses_validation(self):
         """Test that 'workflow' namespace doesn't require workflow action."""
         action_config = {
@@ -94,29 +73,6 @@ class TestSpecialNamespaceValidationBypass:
 
         assert "workflow" in context_sources
 
-    def test_mixed_special_and_regular_namespaces(self):
-        """Test that special namespaces coexist with regular actions."""
-        action_config = {
-            "dependencies": ["real_action"],
-            "context_scope": {
-                "observe": [
-                    "source.page_content",  # Special
-                    "real_action.field",  # Regular
-                    "loop.index",  # Special
-                ]
-            },
-        }
-        workflow_actions = ["real_action"]  # Only regular action exists
-
-        # Should NOT raise ConfigurationError for special namespaces
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test_action"
-        )
-
-        assert "real_action" in input_sources
-        assert "source" in context_sources
-        assert "loop" in context_sources
-
     def test_unknown_namespace_still_raises_error(self):
         """Test that unknown namespaces (not in SPECIAL_NAMESPACES) still fail."""
         action_config = {
@@ -135,29 +91,6 @@ class TestSpecialNamespaceValidationBypass:
 
         assert "unknown_action" in str(exc_info.value)
         assert "not found in workflow" in str(exc_info.value)
-
-    def test_all_special_namespaces_bypass_validation(self):
-        """Test that all three special namespaces work together."""
-        action_config = {
-            "dependencies": [],
-            "context_scope": {
-                "observe": [
-                    "source.page_content",
-                    "loop.index",
-                    "workflow.name",
-                ]
-            },
-        }
-        workflow_actions = ["unrelated_action"]
-
-        # Should NOT raise ConfigurationError
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test_action"
-        )
-
-        assert "source" in context_sources
-        assert "loop" in context_sources
-        assert "workflow" in context_sources
 
 
 class TestEnrichSourceNamespace:

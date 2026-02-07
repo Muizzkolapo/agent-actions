@@ -5,7 +5,7 @@ interfering with subsequent file processing.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 from pathlib import Path
 import tempfile
 import json
@@ -134,22 +134,6 @@ class TestAgentWorkflowPassthroughCleanup:
             assert not marker.exists()
         for node_dir in node_dirs:
             assert node_dir.exists()
-
-    @patch("agent_actions.orchestration.agent_workflow.Path")
-    def test_passthrough_marker_cleanup_permission_error(self, mock_path, workflow, temp_workspace):
-        """Test cleanup handles permission errors gracefully."""
-        mock_marker = Mock()
-        mock_marker.exists.return_value = True
-        mock_marker.unlink.side_effect = PermissionError("Permission denied")
-        mock_path.return_value = mock_marker
-        try:
-            if mock_marker.exists():
-                try:
-                    mock_marker.unlink()
-                except (FileNotFoundError, PermissionError):
-                    pass
-        except Exception as e:
-            pytest.fail(f"Cleanup should handle permission errors gracefully, but raised: {e}")
 
     def test_passthrough_data_integrity_after_cleanup(self, workflow, temp_workspace):
         """Test that actual passthrough data files are not affected by marker cleanup."""

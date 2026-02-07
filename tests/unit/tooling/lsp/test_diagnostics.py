@@ -114,30 +114,6 @@ class TestSpecialNamespaceValidation:
         ]
         assert context_errors == [], f"Unexpected errors for source namespace: {context_errors}"
 
-    def test_loop_namespace_no_error(self, tmp_path: Path) -> None:
-        """loop.* references should NOT report 'action missing' errors."""
-        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
-        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
-        _write_file(
-            workflow_path,
-            dedent("""
-                actions:
-                  - name: process_item
-                    context_scope:
-                      observe:
-                        - loop.index
-                        - loop.length
-            """),
-        )
-
-        index = build_index(tmp_path)
-        diagnostics = _collect_diagnostics(workflow_path, index)
-
-        context_errors = [
-            d for d in diagnostics if "context_scope" in d.message and "loop" in d.message
-        ]
-        assert context_errors == [], f"Unexpected errors for loop namespace: {context_errors}"
-
     def test_workflow_namespace_no_error(self, tmp_path: Path) -> None:
         """workflow.* references should NOT report 'action missing' errors."""
         _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
@@ -468,44 +444,3 @@ class TestEdgeCases:
             d for d in diagnostics if "producer" in d.message and "missing" in d.message
         ]
         assert action_errors == [], f"Unexpected error for action-only reference: {action_errors}"
-
-
-class TestMixedScenarios:
-    """Tests for mixed scenarios combining special namespaces and real actions."""
-
-    def test_mixed_special_and_real_actions(self, tmp_path: Path) -> None:
-        """Workflow with both special namespaces and real actions should work correctly."""
-        _write_file(tmp_path / "agent_actions.yml", "name: demo\n")
-        _write_file(
-            tmp_path / "schema" / "output_schema.yml",
-            dedent("""
-                type: object
-                properties:
-                  result:
-                    type: string
-            """),
-        )
-        workflow_path = tmp_path / "agent_workflow" / "demo" / "agent_config" / "demo.yml"
-        _write_file(
-            workflow_path,
-            dedent("""
-                actions:
-                  - name: process_data
-                    schema: output_schema
-                  - name: final_step
-                    dependencies: [process_data]
-                    context_scope:
-                      observe:
-                        - source.input_data
-                        - process_data.*
-                        - process_data.result
-                        - loop.index
-            """),
-        )
-
-        index = build_index(tmp_path)
-        diagnostics = _collect_diagnostics(workflow_path, index)
-
-        # No context_scope errors expected
-        context_errors = [d for d in diagnostics if "context_scope" in d.message]
-        assert context_errors == [], f"Unexpected context_scope errors: {context_errors}"

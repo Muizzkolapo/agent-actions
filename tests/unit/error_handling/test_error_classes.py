@@ -1,5 +1,7 @@
 """Tests for error class construction and base class delegation."""
 
+import pytest
+
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.preflight import ContextStructureError
 
@@ -49,34 +51,18 @@ class TestTemplateVariableError:
 class TestContextStructureError:
     """Verify ContextStructureError reports only truly missing fields."""
 
-    def test_partial_missing_reports_only_absent_fields(self):
-        err = ContextStructureError(
-            "partial",
-            expected_fields=["a", "b"],
-            actual_fields=["a"],
-        )
-        assert err.missing_references == ["b"]
-        assert "a" not in err.missing_references
-
-    def test_all_missing(self):
-        err = ContextStructureError(
-            "all gone",
-            expected_fields=["a", "b"],
-            actual_fields=[],
-        )
-        assert sorted(err.missing_references) == ["a", "b"]
-
-    def test_none_missing(self):
-        err = ContextStructureError(
-            "fine",
-            expected_fields=["a"],
-            actual_fields=["a", "b"],
-        )
-        assert err.missing_references == []
+    @pytest.mark.parametrize(
+        "expected,actual,missing",
+        [
+            pytest.param(["a", "b"], ["a"], ["b"], id="partial_missing"),
+            pytest.param(["a", "b"], [], ["a", "b"], id="all_missing"),
+            pytest.param(["a"], ["a", "b"], [], id="none_missing"),
+        ],
+    )
+    def test_missing_references(self, expected, actual, missing):
+        err = ContextStructureError("msg", expected_fields=expected, actual_fields=actual)
+        assert sorted(err.missing_references) == sorted(missing)
 
     def test_actual_fields_none_treats_all_as_missing(self):
-        err = ContextStructureError(
-            "unknown",
-            expected_fields=["x", "y"],
-        )
+        err = ContextStructureError("unknown", expected_fields=["x", "y"])
         assert err.missing_references == ["x", "y"]

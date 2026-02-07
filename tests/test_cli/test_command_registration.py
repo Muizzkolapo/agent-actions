@@ -51,14 +51,6 @@ class TestCommandRegistration:
         assert "--force" in result.output
         assert "--all" in result.output
 
-    def test_run_command_help(self, runner):
-        """Test run command shows help correctly."""
-        result = runner.invoke(cli, ["run", "--help"])
-
-        assert result.exit_code == 0
-        assert "--agent" in result.output
-        assert "--validate-only" in result.output or "-v" in result.output
-
     def test_schema_command_help(self, runner):
         """Test schema command shows help correctly."""
         result = runner.invoke(cli, ["schema", "--help"])

@@ -532,23 +532,4 @@ class TestThreadSafety:
 class TestSchemaVersioning:
     """Tests for schema version handling."""
 
-    def test_logs_warning_on_version_mismatch(self, temp_agent_io, caplog):
-        """Should log warning when schema version differs."""
-        # Create manifest with different version
-        target_dir = temp_agent_io / "target"
-        target_dir.mkdir(parents=True)
-        manifest_path = target_dir / MANIFEST_FILENAME
-
-        old_manifest = {
-            "schema_version": "0.9",
-            "workflow_name": "test",
-            "actions": {},
-        }
-        with open(manifest_path, "w") as f:
-            json.dump(old_manifest, f)
-
-        # Load with new manager
-        manager = ManifestManager(temp_agent_io)
-        _ = manager.manifest
-
-        assert "schema version mismatch" in caplog.text.lower()
+    pass

@@ -16,42 +16,38 @@ from agent_actions.validation.static_analyzer import (
 class TestOutputSchema:
     """Tests for OutputSchema class."""
 
-    def test_available_fields_with_schema_fields(self):
-        """Test available_fields returns schema fields."""
-        schema = OutputSchema(
-            schema_fields={"name", "age", "email"},
-        )
-
-        assert schema.available_fields == {"name", "age", "email"}
-
-    def test_available_fields_with_observe(self):
-        """Test available_fields includes observed fields."""
-        schema = OutputSchema(
-            schema_fields={"name"},
-            observe_fields={"age", "email"},
-        )
-
-        assert schema.available_fields == {"name", "age", "email"}
-
-    def test_available_fields_with_drops(self):
-        """Test available_fields excludes dropped fields."""
-        schema = OutputSchema(
-            schema_fields={"name", "age", "email"},
-            dropped_fields={"email"},
-        )
-
-        assert schema.available_fields == {"name", "age"}
-
-    def test_available_fields_formula(self):
-        """Test available = (schema + observe) - dropped."""
-        schema = OutputSchema(
-            schema_fields={"a", "b"},
-            observe_fields={"c", "d"},
-            dropped_fields={"b", "c"},
-        )
-
-        # (a, b) + (c, d) - (b, c) = (a, d)
-        assert schema.available_fields == {"a", "d"}
+    @pytest.mark.parametrize(
+        "kwargs,expected",
+        [
+            pytest.param(
+                {"schema_fields": {"name", "age", "email"}},
+                {"name", "age", "email"},
+                id="schema_only",
+            ),
+            pytest.param(
+                {"schema_fields": {"name"}, "observe_fields": {"age", "email"}},
+                {"name", "age", "email"},
+                id="with_observe",
+            ),
+            pytest.param(
+                {"schema_fields": {"name", "age", "email"}, "dropped_fields": {"email"}},
+                {"name", "age"},
+                id="with_drops",
+            ),
+            pytest.param(
+                {
+                    "schema_fields": {"a", "b"},
+                    "observe_fields": {"c", "d"},
+                    "dropped_fields": {"b", "c"},
+                },
+                {"a", "d"},
+                id="formula",
+            ),
+        ],
+    )
+    def test_available_fields(self, kwargs, expected):
+        schema = OutputSchema(**kwargs)
+        assert schema.available_fields == expected
 
     def test_is_schemaless(self):
         """Test schemaless flag."""
@@ -345,15 +341,19 @@ class TestDataFlowGraph:
         with pytest.raises(ValueError, match="[Cc]ircular|[Cc]ycle"):
             graph.topological_sort()
 
-    def test_special_namespaces(self):
-        """Test special namespaces are recognized."""
+    @pytest.mark.parametrize(
+        "namespace,expected",
+        [
+            pytest.param("source", True, id="source"),
+            pytest.param("version", True, id="version"),
+            pytest.param("workflow", True, id="workflow"),
+            pytest.param("seed", True, id="seed"),
+            pytest.param("my_agent", False, id="regular_agent"),
+        ],
+    )
+    def test_special_namespaces(self, namespace, expected):
         graph = DataFlowGraph()
-
-        assert graph.is_special_namespace("source")
-        assert graph.is_special_namespace("loop")
-        assert graph.is_special_namespace("workflow")
-        assert graph.is_special_namespace("seed")
-        assert not graph.is_special_namespace("my_agent")
+        assert graph.is_special_namespace(namespace) is expected
 
     def test_get_all_agent_names(self):
         """Test getting all agent names excludes special namespaces."""

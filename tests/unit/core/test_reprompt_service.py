@@ -494,35 +494,44 @@ class TestParameterValidation:
         def test_validator(response: dict) -> bool:
             return response.get("valid", False)
 
-    def test_empty_validation_name_raises(self):
-        """Should raise ValueError for empty validation_name."""
-        with pytest.raises(ValueError, match="validation_name cannot be empty"):
-            RepromptService(validation_name="", max_attempts=2)
-
-    def test_whitespace_validation_name_raises(self):
-        """Should raise ValueError for whitespace-only validation_name."""
-        with pytest.raises(ValueError, match="validation_name cannot be empty"):
-            RepromptService(validation_name="   ", max_attempts=2)
-
-    def test_max_attempts_zero_raises(self):
-        """Should raise ValueError for max_attempts < 1."""
-        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
-            RepromptService(validation_name="test_validator", max_attempts=0)
-
-    def test_max_attempts_negative_raises(self):
-        """Should raise ValueError for negative max_attempts."""
-        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
-            RepromptService(validation_name="test_validator", max_attempts=-1)
-
-    def test_invalid_on_exhausted_raises(self):
-        """Should raise ValueError for invalid on_exhausted value."""
-        with pytest.raises(ValueError, match="on_exhausted must be one of"):
-            RepromptService(validation_name="test_validator", on_exhausted="invalid")
-
-    def test_typo_in_on_exhausted_raises(self):
-        """Should catch typos in on_exhausted (e.g., 'rais' instead of 'raise')."""
-        with pytest.raises(ValueError, match="on_exhausted must be one of"):
-            RepromptService(validation_name="test_validator", on_exhausted="rais")
+    @pytest.mark.parametrize(
+        "kwargs,match",
+        [
+            pytest.param(
+                {"validation_name": "", "max_attempts": 2},
+                "validation_name cannot be empty",
+                id="empty_name",
+            ),
+            pytest.param(
+                {"validation_name": "   ", "max_attempts": 2},
+                "validation_name cannot be empty",
+                id="whitespace_name",
+            ),
+            pytest.param(
+                {"validation_name": "test_validator", "max_attempts": 0},
+                "max_attempts must be >= 1",
+                id="zero_attempts",
+            ),
+            pytest.param(
+                {"validation_name": "test_validator", "max_attempts": -1},
+                "max_attempts must be >= 1",
+                id="negative_attempts",
+            ),
+            pytest.param(
+                {"validation_name": "test_validator", "on_exhausted": "invalid"},
+                "on_exhausted must be one of",
+                id="invalid_on_exhausted",
+            ),
+            pytest.param(
+                {"validation_name": "test_validator", "on_exhausted": "rais"},
+                "on_exhausted must be one of",
+                id="typo_on_exhausted",
+            ),
+        ],
+    )
+    def test_invalid_params_raise(self, kwargs, match):
+        with pytest.raises(ValueError, match=match):
+            RepromptService(**kwargs)
 
     def test_missing_validation_key_raises(self):
         """Should raise ValueError when 'validation' key is missing from config."""

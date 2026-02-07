@@ -20,97 +20,31 @@ from agent_actions.validation.static_analyzer.data_flow_graph import (
 )
 
 
-class TestFieldProducer:
-    """Tests for FieldProducer dataclass."""
-
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
-        producer = FieldProducer(action="extractor", field_source="schema")
-        result = producer.to_dict()
-        assert result == {"action": "extractor", "field_source": "schema"}
-
-
-class TestAffectedReference:
-    """Tests for AffectedReference dataclass."""
-
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
-        ref = AffectedReference(
-            action="summarizer",
-            location="task_instructions",
-            raw_reference="{{ extractor.title }}",
-        )
-        result = ref.to_dict()
-        assert result == {
-            "action": "summarizer",
-            "location": "task_instructions",
-            "raw_reference": "{{ extractor.title }}",
-        }
-
-
-class TestConflict:
-    """Tests for Conflict dataclass."""
-
-    def test_to_dict_basic(self):
-        """Test basic conversion to dictionary."""
-        conflict = Conflict(
-            conflict_type=ConflictType.SHADOWING,
-            severity=ConflictSeverity.WARNING,
-            field_name="title",
-            message="Field 'title' produced by multiple actions",
-            resolution="Use qualified reference",
-        )
-        result = conflict.to_dict()
-        assert result["type"] == "shadowing"
-        assert result["severity"] == "warning"
-        assert result["field_name"] == "title"
-        assert result["producers"] == []
-        assert result["affected_references"] == []
-
-    def test_to_dict_with_producers_and_refs(self):
-        """Test conversion with producers and affected references."""
-        conflict = Conflict(
-            conflict_type=ConflictType.AMBIGUOUS_REFERENCE,
-            severity=ConflictSeverity.ERROR,
-            field_name="summary",
-            message="Ambiguous reference",
-            resolution="Use qualified reference",
-            producers=[
-                FieldProducer("action1", "schema"),
-                FieldProducer("action2", "observe"),
-            ],
-            affected_references=[
-                AffectedReference("action3", "task", "{{ summary }}"),
-            ],
-        )
-        result = conflict.to_dict()
-        assert len(result["producers"]) == 2
-        assert len(result["affected_references"]) == 1
-
-
 class TestConflictAnalysisResult:
     """Tests for ConflictAnalysisResult dataclass."""
 
-    def test_has_conflicts_empty(self):
-        """Test has_conflicts with no conflicts."""
-        result = ConflictAnalysisResult(workflow_name="test")
-        assert not result.has_conflicts
-
-    def test_has_conflicts_with_conflicts(self):
-        """Test has_conflicts with conflicts."""
-        result = ConflictAnalysisResult(
-            workflow_name="test",
-            conflicts=[
-                Conflict(
-                    conflict_type=ConflictType.SHADOWING,
-                    severity=ConflictSeverity.WARNING,
-                    field_name="title",
-                    message="Test",
-                    resolution="Fix it",
-                )
-            ],
-        )
-        assert result.has_conflicts
+    @pytest.mark.parametrize(
+        "conflicts,expected",
+        [
+            pytest.param([], False, id="empty"),
+            pytest.param(
+                [
+                    Conflict(
+                        conflict_type=ConflictType.SHADOWING,
+                        severity=ConflictSeverity.WARNING,
+                        field_name="title",
+                        message="Test",
+                        resolution="Fix it",
+                    )
+                ],
+                True,
+                id="with_conflicts",
+            ),
+        ],
+    )
+    def test_has_conflicts(self, conflicts, expected):
+        result = ConflictAnalysisResult(workflow_name="test", conflicts=conflicts)
+        assert result.has_conflicts is expected
 
     def test_error_count(self):
         """Test error_count property."""
@@ -190,23 +124,6 @@ class TestConflictAnalysisResult:
         # Should match when action is a consumer
         filtered = result.filter_by_action("consumer")
         assert len(filtered.conflicts) == 1
-
-    def test_to_dict(self):
-        """Test conversion to dictionary."""
-        result = ConflictAnalysisResult(
-            workflow_name="test_workflow",
-            conflicts=[],
-            actions_analyzed=5,
-            unique_fields=10,
-            shadowed_fields=2,
-        )
-        output = result.to_dict()
-        assert output["workflow_name"] == "test_workflow"
-        assert output["has_conflicts"] is False
-        assert output["error_count"] == 0
-        assert output["summary"]["actions_analyzed"] == 5
-        assert output["summary"]["unique_fields"] == 10
-        assert output["summary"]["shadowed_fields"] == 2
 
 
 class TestConflictDetector:

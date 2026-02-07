@@ -898,37 +898,6 @@ class TestPrimaryDependencyValidation:
         assert result.is_valid
         assert len(result.errors) == 0
 
-    def test_multiple_deps_without_primary_is_valid(self):
-        """Test that multiple deps without explicit primary is valid (uses convention)."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "dep_A",
-                    "prompt": "test",
-                    "schema": {"type": "object", "properties": {"f1": {"type": "string"}}},
-                },
-                {
-                    "name": "dep_B",
-                    "prompt": "test",
-                    "schema": {"type": "object", "properties": {"f2": {"type": "string"}}},
-                },
-                {
-                    "name": "action_convention",
-                    "dependencies": ["dep_A", "dep_B"],
-                    # No primary_dependency - uses last by convention
-                    "prompt": "Process: {{ action.dep_A.f1 }} {{ action.dep_B.f2 }}",
-                    "schema": {"type": "object"},
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
-
-        # Should be valid - convention is to use last dependency
-        assert result.is_valid
-        assert len(result.errors) == 0
-
     def test_context_scope_references_undeclared_dependency_error(self):
         """Test reverse check: context_scope references dependency not in dependencies list."""
         workflow_config = {

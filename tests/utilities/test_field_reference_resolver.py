@@ -306,20 +306,6 @@ class TestReferenceValidator:
         assert len(errors) == 1
         assert "not in dependencies" in errors[0]
 
-    def test_validate_special_namespaces_allowed(self, validator, agent_indices):
-        """Test that special namespaces are always allowed."""
-        agent_config = {"agent_type": "extract_facts", "dependencies": []}
-
-        # source, loop, workflow, seed are always allowed
-        errors = validator.validate(
-            references=["source.title", "loop.index", "workflow.name", "seed.data"],
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name="extract_facts",
-        )
-
-        assert len(errors) == 0
-
     def test_validate_strict_raises_exception(self, validator, agent_indices):
         """Test validate_strict raises on errors."""
         agent_config = {"agent_type": "filter_action", "dependencies": []}

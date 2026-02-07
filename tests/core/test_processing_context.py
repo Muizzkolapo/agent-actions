@@ -22,30 +22,18 @@ class TestProcessingContextRequired:
 class TestProcessingContextDefaults:
     """Test default values for ProcessingContext fields."""
 
-    def test_default_mode_is_online(self):
-        """Default mode is ProcessingMode.ONLINE."""
+    @pytest.mark.parametrize(
+        "field,expected",
+        [
+            pytest.param("mode", ProcessingMode.ONLINE, id="mode"),
+            pytest.param("is_first_stage", False, id="is_first_stage"),
+            pytest.param("source_data", [], id="source_data"),
+            pytest.param("record_index", 0, id="record_index"),
+        ],
+    )
+    def test_defaults(self, field, expected):
         ctx = ProcessingContext(agent_config={}, agent_name="test")
-
-        assert ctx.mode == ProcessingMode.ONLINE
-
-    def test_default_is_first_stage_is_false(self):
-        """Default is_first_stage is False (subsequent stage)."""
-        ctx = ProcessingContext(agent_config={}, agent_name="test")
-
-        assert ctx.is_first_stage is False
-
-    def test_default_source_data_is_empty_list(self):
-        """Default source_data is empty list."""
-        ctx = ProcessingContext(agent_config={}, agent_name="test")
-
-        assert ctx.source_data == []
-        assert isinstance(ctx.source_data, list)
-
-    def test_default_record_index_is_zero(self):
-        """Default record_index is 0."""
-        ctx = ProcessingContext(agent_config={}, agent_name="test")
-
-        assert ctx.record_index == 0
+        assert getattr(ctx, field) == expected
 
 
 class TestProcessingContextProperties:

@@ -100,19 +100,20 @@ class TestProcessingResultFactories:
 class TestProcessingResultDefaults:
     """Test default values for ProcessingResult fields."""
 
-    def test_default_data_is_empty_list(self):
-        """Default data field is empty list, not None."""
+    @pytest.mark.parametrize(
+        "field,expected,check_type",
+        [
+            pytest.param("data", [], list, id="data"),
+            pytest.param("passthrough_fields", {}, dict, id="passthrough_fields"),
+            pytest.param("executed", True, None, id="executed"),
+        ],
+    )
+    def test_defaults(self, field, expected, check_type):
         result = ProcessingResult(status=ProcessingStatus.SUCCESS)
-
-        assert result.data == []
-        assert isinstance(result.data, list)
-
-    def test_default_passthrough_fields_is_empty_dict(self):
-        """Default passthrough_fields is empty dict."""
-        result = ProcessingResult(status=ProcessingStatus.SUCCESS)
-
-        assert result.passthrough_fields == {}
-        assert isinstance(result.passthrough_fields, dict)
+        value = getattr(result, field)
+        assert value == expected
+        if check_type is not None:
+            assert isinstance(value, check_type)
 
     def test_default_retry_state_is_fresh(self):
         """Default RetryState has attempts=0, exhausted=False."""
@@ -122,38 +123,28 @@ class TestProcessingResultDefaults:
         assert result.retry_state.last_error is None
         assert result.retry_state.exhausted is False
 
-    def test_default_executed_is_true(self):
-        """Default executed is True (most results are executed)."""
-        result = ProcessingResult(status=ProcessingStatus.SUCCESS)
-
-        assert result.executed is True
-
 
 class TestRetryState:
     """Test RetryState dataclass."""
 
-    def test_retry_state_default_values(self):
-        """RetryState defaults: attempts=0, last_error=None, exhausted=False."""
-        state = RetryState()
-
-        assert state.attempts == 0
-        assert state.last_error is None
-        assert state.exhausted is False
-
-    def test_retry_state_tracks_attempts(self):
-        """RetryState.attempts increments correctly."""
-        state = RetryState(attempts=3)
-
-        assert state.attempts == 3
-
-    def test_retry_state_stores_last_error(self):
-        """RetryState.last_error captures error message."""
-        state = RetryState(last_error="Connection timeout")
-
-        assert state.last_error == "Connection timeout"
-
-    def test_retry_state_exhausted_flag(self):
-        """RetryState.exhausted=True when max attempts reached."""
-        state = RetryState(attempts=5, exhausted=True)
-
-        assert state.exhausted is True
+    @pytest.mark.parametrize(
+        "kwargs,field,expected",
+        [
+            pytest.param({}, "attempts", 0, id="default_attempts"),
+            pytest.param({}, "last_error", None, id="default_last_error"),
+            pytest.param({}, "exhausted", False, id="default_exhausted"),
+            pytest.param({"attempts": 3}, "attempts", 3, id="custom_attempts"),
+            pytest.param(
+                {"last_error": "Connection timeout"},
+                "last_error",
+                "Connection timeout",
+                id="custom_last_error",
+            ),
+            pytest.param(
+                {"attempts": 5, "exhausted": True}, "exhausted", True, id="custom_exhausted"
+            ),
+        ],
+    )
+    def test_retry_state_fields(self, kwargs, field, expected):
+        state = RetryState(**kwargs)
+        assert getattr(state, field) == expected

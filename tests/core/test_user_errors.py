@@ -3,7 +3,6 @@ Tests for user_errors module user-friendly error formatting.
 """
 
 import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
 from agent_actions.logging.errors import UserError, ErrorTranslator, format_user_error
 from agent_actions.errors import (
@@ -231,20 +230,6 @@ class TestFormatUserError:
         context = {"command": "run", "file": "config.yml"}
         result = format_user_error(wrapper, context)
         assert "Missing required field" in result or "Configuration Error" in result
-
-    @patch("agent_actions.shared.user_errors.ErrorTranslator")
-    def test_format_uses_translator(self, mock_translator_class):
-        """Test that format_user_error uses ErrorTranslator."""
-        mock_translator = Mock()
-        mock_translator_class.return_value = mock_translator
-        mock_translator.translate.return_value = UserError(
-            category="test", title="Test Error", details="Test details"
-        )
-        exc = ValueError("Test")
-        context = {"command": "test"}
-        format_user_error(exc, context)
-        mock_translator_class.assert_called_once()
-        mock_translator.translate.assert_called_once_with(exc, context)
 
     def test_format_with_pathlib_paths(self):
         """Test formatting with pathlib.Path objects in context."""

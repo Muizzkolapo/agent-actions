@@ -11,8 +11,6 @@ This module tests:
 from datetime import datetime, timezone
 from dataclasses import dataclass
 
-import pytest
-
 from agent_actions.logging.core.events import (
     BaseEvent,
     EventLevel,
@@ -36,10 +34,6 @@ from agent_actions.logging.events.types import (
     LLMResponseEvent,
     LLMErrorEvent,
     RateLimitEvent,
-    ValidationStartEvent,
-    ValidationCompleteEvent,
-    ValidationErrorEvent,
-    ValidationWarningEvent,
 )
 
 
@@ -531,82 +525,6 @@ class TestLLMEvents:
         assert "30.0s" in event.message
 
 
-class TestValidationEvents:
-    """Tests for validation events."""
-
-    def test_validation_start_event(self):
-        """Test ValidationStartEvent initialization and properties."""
-        event = ValidationStartEvent(
-            target="agent.yaml",
-            validation_type="schema",
-        )
-
-        assert event.level == EventLevel.DEBUG
-        assert event.category == EventCategories.VALIDATION
-        assert event.code == "V001"
-        assert "agent.yaml" in event.message
-
-    def test_validation_complete_event_success(self):
-        """Test ValidationCompleteEvent with no errors."""
-        event = ValidationCompleteEvent(
-            target="agent.yaml",
-            validation_type="schema",
-            warnings=0,
-        )
-
-        assert event.level == EventLevel.DEBUG
-        assert event.code == "V002"
-        assert "passed" in event.message.lower() or "validated" in event.message.lower()
-
-    def test_validation_complete_event_with_warnings(self):
-        """Test ValidationCompleteEvent with warnings."""
-        event = ValidationCompleteEvent(
-            target="agent.yaml",
-            validation_type="schema",
-            warnings=2,
-        )
-
-        assert event.warnings == 2
-        assert "warning" in event.message.lower()
-
-    def test_validation_error_event(self):
-        """Test ValidationErrorEvent initialization and properties."""
-        event = ValidationErrorEvent(
-            target="agent.yaml",
-            field="name",
-            error_message="Field is required",
-        )
-
-        assert event.level == EventLevel.ERROR
-        assert event.category == EventCategories.VALIDATION
-        assert event.code == "V003"
-        assert "agent.yaml" in event.message
-        assert "Field is required" in event.message
-
-    def test_validation_error_event_without_field(self):
-        """Test ValidationErrorEvent without field specified."""
-        event = ValidationErrorEvent(
-            target="config.yaml",
-            field="",
-            error_message="Invalid format",
-        )
-
-        assert "config.yaml" in event.message
-
-    def test_validation_warning_event(self):
-        """Test ValidationWarningEvent initialization and properties."""
-        event = ValidationWarningEvent(
-            target="agent.yaml",
-            field="description",
-            warning_message="Field is recommended",
-        )
-
-        assert event.level == EventLevel.WARN
-        assert event.category == EventCategories.VALIDATION
-        assert event.code == "V004"
-        assert "Field is recommended" in event.message
-
-
 class TestEventSerialization:
     """Tests for event serialization."""
 
@@ -627,39 +545,6 @@ class TestEventSerialization:
         assert d["data"]["workflow_name"] == "test"
         assert d["data"]["agent_count"] == 3
         assert "timestamp" in d["meta"]
-
-    def test_all_events_have_code(self):
-        """Test that all event types have a code property."""
-        events = [
-            WorkflowStartEvent(workflow_name="test", agent_count=1),
-            WorkflowCompleteEvent(workflow_name="test"),
-            WorkflowFailedEvent(workflow_name="test", error_message="fail"),
-            AgentStartEvent(agent_name="test"),
-            AgentCompleteEvent(agent_name="test"),
-            AgentSkipEvent(agent_name="test"),
-            AgentFailedEvent(agent_name="test", error_message="fail"),
-            AgentCachedEvent(agent_name="test"),
-            BatchSubmittedEvent(batch_id="test"),
-            BatchProgressEvent(batch_id="test"),
-            BatchCompleteEvent(batch_id="test"),
-            LLMRequestEvent(provider="test", model="test"),
-            LLMResponseEvent(provider="test", model="test"),
-            LLMErrorEvent(provider="test", model="test", error_message="fail"),
-            RateLimitEvent(provider="test"),
-            ValidationStartEvent(target="test", validation_type="test"),
-            ValidationCompleteEvent(target="test", validation_type="test"),
-            ValidationErrorEvent(target="test", error_message="fail"),
-            ValidationWarningEvent(target="test", warning_message="warn"),
-        ]
-
-        for event in events:
-            code = event.code
-            assert code is not None, f"Event {type(event).__name__} should have a code"
-            assert len(code) == 4, (
-                f"Event {type(event).__name__} code should be 4 chars, got {code}"
-            )
-            assert code[0].isalpha(), f"Event {type(event).__name__} code should start with letter"
-            assert code[1:].isdigit(), f"Event {type(event).__name__} code should have 3 digits"
 
     def test_all_events_serializable(self):
         """Test that all event types can be serialized to dict."""

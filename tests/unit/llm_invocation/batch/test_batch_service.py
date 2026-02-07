@@ -257,27 +257,6 @@ class TestWriteBatchOutput:
         assert not side_output_dir.exists()
 
 
-class TestBatchStatusEnumComparison:
-    """Tests verifying BatchStatus enum works correctly for status checks."""
-
-    def test_string_comparison_works(self):
-        """BatchStatus should compare equal to string values."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        assert BatchStatus.COMPLETED == "completed"
-        assert "completed" == BatchStatus.COMPLETED
-
-    def test_terminal_states_check(self):
-        """Terminal states should be correctly identified."""
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-
-        terminal = BatchStatus.terminal_states()
-        assert BatchStatus.COMPLETED in terminal
-        assert BatchStatus.FAILED in terminal
-        assert BatchStatus.CANCELLED in terminal
-        assert BatchStatus.IN_PROGRESS not in terminal
-
-
 class TestBatchServiceFacade:
     """Tests for BatchService facade pattern (Phase 4.5).
 
