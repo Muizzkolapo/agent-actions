@@ -43,7 +43,7 @@ class ImportRewriter(ast.NodeTransformer):
         # Try partial matches (for submodules)
         # Sort by length (longest first) to match most specific path
         for old_path in sorted(self.mapping.keys(), key=len, reverse=True):
-            if module.startswith(old_path + '.') or module == old_path:
+            if module.startswith(old_path + ".") or module == old_path:
                 # Replace the matching prefix
                 new_module = module.replace(old_path, self.mapping[old_path], 1)
                 return new_module
@@ -65,11 +65,13 @@ class ImportRewriter(ast.NodeTransformer):
         for alias in node.names:
             new_name = self._find_replacement(alias.name)
             if new_name and new_name != alias.name:
-                self.changes.append({
-                    'line': node.lineno,
-                    'old': f'import {alias.name}',
-                    'new': f'import {new_name}'
-                })
+                self.changes.append(
+                    {
+                        "line": node.lineno,
+                        "old": f"import {alias.name}",
+                        "new": f"import {new_name}",
+                    }
+                )
                 alias.name = new_name
                 modified = True
 
@@ -88,11 +90,13 @@ class ImportRewriter(ast.NodeTransformer):
         if node.module:
             new_module = self._find_replacement(node.module)
             if new_module and new_module != node.module:
-                self.changes.append({
-                    'line': node.lineno,
-                    'old': f'from {node.module} import ...',
-                    'new': f'from {new_module} import ...'
-                })
+                self.changes.append(
+                    {
+                        "line": node.lineno,
+                        "old": f"from {node.module} import ...",
+                        "new": f"from {new_module} import ...",
+                    }
+                )
                 node.module = new_module
 
         return node
@@ -109,22 +113,22 @@ def load_migration_map(plan_file: str) -> Dict[str, str]:
 
     mapping = {}
 
-    for rule in plan['rules']:
-        source = Path(rule['source'])
-        dest = Path(rule['destination'])
+    for rule in plan["rules"]:
+        source = Path(rule["source"])
+        dest = Path(rule["destination"])
 
         # Convert file paths to module paths
         def path_to_module(p: Path) -> str:
             parts = p.parts
             # Find agent_actions index
-            if 'agent_actions' in parts:
-                idx = parts.index('agent_actions')
+            if "agent_actions" in parts:
+                idx = parts.index("agent_actions")
                 module_parts = parts[idx:]
                 # Remove .py extension
-                if module_parts[-1].endswith('.py'):
+                if module_parts[-1].endswith(".py"):
                     module_parts = list(module_parts[:-1]) + [module_parts[-1][:-3]]
-                return '.'.join(module_parts)
-            return ''
+                return ".".join(module_parts)
+            return ""
 
         old_module = path_to_module(source)
         new_module = path_to_module(dest)
@@ -169,6 +173,7 @@ def fix_file_imports_ast(file_path: Path, mapping: Dict[str, str], dry_run: bool
             # Python < 3.9: Fall back to astor if available
             try:
                 import astor
+
                 new_content = astor.to_source(new_tree)
             except ImportError:
                 # Last resort: use compile + rewrite manually
@@ -196,22 +201,31 @@ def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
 
     # 13-stage architecture directories
     stage_dirs = [
-        'input_loading', 'preprocessing', 'validation', 'prompt_generation',
-        'llm_invocation', 'response_processing', 'postprocessing',
-        'orchestration', 'state_management', 'configuration',
-        'cli', 'utilities', 'shared'
+        "input_loading",
+        "preprocessing",
+        "validation",
+        "prompt_generation",
+        "llm_invocation",
+        "response_processing",
+        "postprocessing",
+        "orchestration",
+        "state_management",
+        "configuration",
+        "cli",
+        "utilities",
+        "shared",
     ]
 
     for stage in stage_dirs:
         stage_path = root / stage
         if stage_path.exists():
-            files.extend(stage_path.rglob('*.py'))
+            files.extend(stage_path.rglob("*.py"))
 
     # Include tests if requested
     if include_tests:
-        tests_path = Path('tests')
+        tests_path = Path("tests")
         if tests_path.exists():
-            files.extend(tests_path.rglob('*.py'))
+            files.extend(tests_path.rglob("*.py"))
 
     return files
 
@@ -223,8 +237,8 @@ def main():
         sys.exit(1)
 
     plan_file = sys.argv[1]
-    execute = '--execute' in sys.argv
-    include_tests = '--tests' in sys.argv
+    execute = "--execute" in sys.argv
+    include_tests = "--tests" in sys.argv
 
     print("🔧 AST-based Import Fixer\n")
 
@@ -239,7 +253,7 @@ def main():
     print(f"   Loaded {len(mapping)} path mappings\n")
 
     # Find Python files
-    root = Path('agent_actions')
+    root = Path("agent_actions")
     search_desc = "stage directories" + (" and tests" if include_tests else "")
     print(f"🔍 Finding Python files in {search_desc}...")
     python_files = find_python_files(root, include_tests=include_tests)
@@ -278,5 +292,5 @@ def main():
         print(f"\n✅ No import changes needed!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

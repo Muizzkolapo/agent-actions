@@ -22,6 +22,7 @@ from groq import Groq
 
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import JSONResponseMixin
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
@@ -79,13 +80,17 @@ class GroqClient(BaseClient, JSONResponseMixin):
             )
         )
 
+        # Build optional LLM parameters from agent config
+        json_completion_kwargs = {
+            "messages": [{"role": "system", "content": prompt_dedent}],
+            "model": model_name,
+            "response_format": {"type": "json_object"},
+            **extract_generation_params(agent_config),
+        }
+
         start_time = datetime.now()
         try:
-            llm = client.chat.completions.create(
-                messages=[{"role": "system", "content": prompt_dedent}],
-                model=model_name,
-                response_format={"type": "json_object"},
-            )
+            llm = client.chat.completions.create(**json_completion_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:
@@ -153,11 +158,13 @@ class GroqClient(BaseClient, JSONResponseMixin):
         context_data_str = StringProcessor.process_as_string(context_data)
         prompt = f"\n                Instructions: {prompt_config}\n                Input Text: {str(context_data_str)}\n                \n                Please provide a direct response without any JSON formatting.\n                Begin your response here:\n            "
         prompt_dedent = dedent(prompt).strip()
+        params = extract_generation_params(agent_config)
+        params.setdefault("temperature", 0.7)
+        params.setdefault("max_tokens", 1000)
         completion_kwargs = {
             "messages": [{"role": "system", "content": prompt_dedent}],
             "model": model_name,
-            "temperature": 0.7,
-            "max_tokens": 1000,
+            **params,
         }
 
         # Generate request ID for correlation
@@ -210,7 +217,8 @@ class GroqClient(BaseClient, JSONResponseMixin):
 
         try:
             response_content = response.choices[0].message.content
-            return [response_content]
+            output_field = agent_config.get("output_field", "raw_response")
+            return [{output_field: response_content}]
         except (AttributeError, IndexError, TypeError) as e:
             fire_event(
                 LLMErrorEvent(

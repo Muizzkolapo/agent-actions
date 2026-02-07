@@ -50,9 +50,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self.node_name = node_name
         self.output_directory = output_directory
 
-    def _execute_write(
-        self, operation_name: str, write_fn: Callable[[], int]
-    ) -> None:
+    def _execute_write(self, operation_name: str, write_fn: Callable[[], int]) -> None:
         """Execute a write operation with event firing and error handling.
 
         Args:
@@ -77,9 +75,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 )
             )
         except IOError as e:
-            self.handle_file_error(
-                e, operation_name, self.file_path, file_type=self.file_type
-            )
+            self.handle_file_error(e, operation_name, self.file_path, file_type=self.file_type)
         except Exception as e:
             self.handle_processing_error(
                 e,

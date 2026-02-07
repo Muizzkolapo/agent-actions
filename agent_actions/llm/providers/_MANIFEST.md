@@ -14,6 +14,7 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 | `client_base.py` | Module | Abstract base client that defines the interface for streaming/call semantics. | `llm.providers`, `llm.realtime` |
 | `error_wrapper.py` | Module | Unified vendor error wrapping: maps SDK exceptions to RateLimitError/NetworkError/VendorAPIError. | `errors`, `llm.providers` |
 | `failure_injection.py` | Module | Utility to simulate latency/failure scenarios across providers. | `logging`, `llm.providers` |
+| `generation_params.py` | Module | Shared helper (`extract_generation_params`) for extracting temperature/max_tokens/top_p/stop from agent config with vendor-specific key mapping. | `llm.providers` |
 | `mixins.py` | Module | Shared mixins for access token handling, logging, context propagation. | `llm.providers` |
 | `usage_tracker.py` | Module | Central usage tracking and quota summary used by providers. | `logging`, `llm.providers` |
 | `agac/__init__.py` | Module | `agac` (Claude-branded) provider helpers (callbacks, config). | `llm.providers` |

@@ -46,9 +46,7 @@ class UnifiedSourceDataSaver:
         self.storage_backend = storage_backend
         del enable_locking  # Explicitly unused - storage backend handles concurrency
 
-    def save_source_items(
-        self, items: dict | list[dict], relative_path: str
-    ) -> None:
+    def save_source_items(self, items: dict | list[dict], relative_path: str) -> None:
         """Save source data to storage backend with optional deduplication.
 
         Args:

@@ -5,6 +5,7 @@ Code analysis utilities for clean code review.
 Uses mature tools: radon, prospector, vulture
 Provides AST parsing, lineage tracking, and ASCII diagram generation.
 """
+
 import ast
 import json
 import subprocess
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 @dataclass
 class CodeLineage:
     """Represents the lineage/dependencies of a code module."""
+
     module_path: str
     imports: List[str] = field(default_factory=list)
     from_imports: Dict[str, List[str]] = field(default_factory=dict)
@@ -39,7 +41,7 @@ class ASTAnalyzer(ast.NodeVisitor):
         """Track import statements."""
         for alias in node.names:
             self.lineage.imports.append(alias.name)
-            self.lineage.dependencies.add(alias.name.split('.')[0])
+            self.lineage.dependencies.add(alias.name.split(".")[0])
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom):
@@ -48,7 +50,7 @@ class ASTAnalyzer(ast.NodeVisitor):
             module = node.module
             names = [alias.name for alias in node.names]
             self.lineage.from_imports[module] = names
-            self.lineage.dependencies.add(module.split('.')[0])
+            self.lineage.dependencies.add(module.split(".")[0])
         self.generic_visit(node)
 
     def visit_ClassDef(self, node: ast.ClassDef):
@@ -136,7 +138,7 @@ def analyze_code(file_path: Path) -> CodeLineage:
     Returns:
         CodeLineage object with extracted information
     """
-    with open(file_path, 'r', encoding='utf-8') as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         source = f.read()
 
     try:
@@ -175,9 +177,9 @@ def generate_ascii_lineage_diagram(lineage: CodeLineage) -> str:
         for imp in lineage.imports[:5]:  # Limit to first 5
             lines.append(f"│  ├─ {imp:<40} │")
         for module, names in list(lineage.from_imports.items())[:5]:
-            items = ', '.join(names[:3])
+            items = ", ".join(names[:3])
             if len(names) > 3:
-                items += f"... (+{len(names)-3})"
+                items += f"... (+{len(names) - 3})"
             lines.append(f"│  ├─ from {module}: {items:<27} │")
         if len(lineage.imports) + len(lineage.from_imports) > 5:
             remaining = len(lineage.imports) + len(lineage.from_imports) - 5
@@ -196,7 +198,7 @@ def generate_ascii_lineage_diagram(lineage: CodeLineage) -> str:
             else:
                 lines.append(f"│  ├─ {cls:<40} │")
         if len(lineage.classes) > 5:
-            lines.append(f"│  └─ ... and {len(lineage.classes)-5} more          │")
+            lines.append(f"│  └─ ... and {len(lineage.classes) - 5} more          │")
 
     lines.append("├─────────────────────────────────────────────┤")
 
@@ -206,12 +208,18 @@ def generate_ascii_lineage_diagram(lineage: CodeLineage) -> str:
         for func in lineage.functions[:5]:
             lines.append(f"│  ├─ {func:<40} │")
         if len(lineage.functions) > 5:
-            lines.append(f"│  └─ ... and {len(lineage.functions)-5} more      │")
+            lines.append(f"│  └─ ... and {len(lineage.functions) - 5} more      │")
 
     lines.append("├─────────────────────────────────────────────┤")
 
     # Complexity
-    complexity_label = "Low" if lineage.complexity_score < 10 else "Medium" if lineage.complexity_score < 25 else "High"
+    complexity_label = (
+        "Low"
+        if lineage.complexity_score < 10
+        else "Medium"
+        if lineage.complexity_score < 25
+        else "High"
+    )
     lines.append(f"│ 📊 COMPLEXITY: {lineage.complexity_score} ({complexity_label})              │")
 
     lines.append("└─────────────────────────────────────────────┘")
@@ -252,7 +260,7 @@ def generate_dependency_graph(lineage: CodeLineage) -> str:
             lines.append(f"                ├──→ {dep}")
 
     if len(lineage.dependencies) > 8:
-        lines.append(f"                └──→ ... and {len(lineage.dependencies)-8} more")
+        lines.append(f"                └──→ ... and {len(lineage.dependencies) - 8} more")
 
     return "\n".join(lines)
 
@@ -269,10 +277,7 @@ def run_radon_complexity(file_path: Path) -> Dict:
     """
     try:
         result = subprocess.run(
-            ['radon', 'cc', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=30
+            ["radon", "cc", str(file_path), "-j"], capture_output=True, text=True, timeout=30
         )
         if result.returncode == 0 and result.stdout:
             data = json.loads(result.stdout)
@@ -294,10 +299,7 @@ def run_radon_maintainability(file_path: Path) -> Dict:
     """
     try:
         result = subprocess.run(
-            ['radon', 'mi', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=30
+            ["radon", "mi", str(file_path), "-j"], capture_output=True, text=True, timeout=30
         )
         if result.returncode == 0 and result.stdout:
             data = json.loads(result.stdout)
@@ -319,10 +321,7 @@ def run_radon_raw_metrics(file_path: Path) -> Dict:
     """
     try:
         result = subprocess.run(
-            ['radon', 'raw', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=30
+            ["radon", "raw", str(file_path), "-j"], capture_output=True, text=True, timeout=30
         )
         if result.returncode == 0 and result.stdout:
             data = json.loads(result.stdout)
@@ -344,10 +343,10 @@ def run_prospector(file_path: Path) -> Dict:
     """
     try:
         result = subprocess.run(
-            ['prospector', str(file_path), '--output-format', 'json', '--no-autodetect'],
+            ["prospector", str(file_path), "--output-format", "json", "--no-autodetect"],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
         if result.returncode in [0, 1] and result.stdout:  # prospector returns 1 if issues found
             data = json.loads(result.stdout)
@@ -369,13 +368,10 @@ def run_vulture(file_path: Path) -> List[str]:
     """
     try:
         result = subprocess.run(
-            ['vulture', str(file_path)],
-            capture_output=True,
-            text=True,
-            timeout=30
+            ["vulture", str(file_path)], capture_output=True, text=True, timeout=30
         )
         if result.stdout:
-            return result.stdout.strip().split('\n') if result.stdout.strip() else []
+            return result.stdout.strip().split("\n") if result.stdout.strip() else []
         return []
     except Exception:
         return []
@@ -418,9 +414,9 @@ def generate_comprehensive_report(file_path: Path) -> str:
         if file_key in complexity:
             lines.append("")
             for item in complexity[file_key]:
-                name = item.get('name', 'Unknown')
-                cc = item.get('complexity', 0)
-                rank = item.get('rank', '?')
+                name = item.get("name", "Unknown")
+                cc = item.get("complexity", 0)
+                rank = item.get("rank", "?")
                 lines.append(f"  • {name}: Complexity={cc} (Rank: {rank})")
     else:
         lines.append("  No complexity data available")
@@ -433,8 +429,8 @@ def generate_comprehensive_report(file_path: Path) -> str:
         file_key = str(file_path)
         if file_key in maintainability:
             mi_data = maintainability[file_key]
-            mi_score = mi_data.get('mi', 0)
-            mi_rank = mi_data.get('rank', '?')
+            mi_score = mi_data.get("mi", 0)
+            mi_rank = mi_data.get("rank", "?")
             lines.append(f"  Maintainability Index: {mi_score:.2f} (Rank: {mi_rank})")
             lines.append("")
 
@@ -458,25 +454,25 @@ def generate_comprehensive_report(file_path: Path) -> str:
     lines.append("─" * 80)
 
     prospector_results = run_prospector(file_path)
-    if prospector_results and 'messages' in prospector_results:
-        messages = prospector_results['messages']
+    if prospector_results and "messages" in prospector_results:
+        messages = prospector_results["messages"]
         if messages:
             # Group by severity
             by_severity = {}
             for msg in messages:
-                severity = msg.get('severity', 'unknown')
+                severity = msg.get("severity", "unknown")
                 if severity not in by_severity:
                     by_severity[severity] = []
                 by_severity[severity].append(msg)
 
-            for severity in ['error', 'warning', 'info']:
+            for severity in ["error", "warning", "info"]:
                 if severity in by_severity:
                     lines.append(f"\n  {severity.upper()}S:")
                     for msg in by_severity[severity][:10]:  # Limit to 10 per severity
-                        location = msg.get('location', {})
-                        line_num = location.get('line', '?')
-                        source = msg.get('source', 'unknown')
-                        message = msg.get('message', '')
+                        location = msg.get("location", {})
+                        line_num = location.get("line", "?")
+                        source = msg.get("source", "unknown")
+                        message = msg.get("message", "")
                         lines.append(f"    Line {line_num} [{source}]: {message}")
 
                     if len(by_severity[severity]) > 10:
@@ -513,6 +509,7 @@ def generate_comprehensive_report(file_path: Path) -> str:
 if __name__ == "__main__":
     # Test with this file
     import sys
+
     if len(sys.argv) > 1:
         file_path = Path(sys.argv[1])
         print(generate_comprehensive_report(file_path))

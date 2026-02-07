@@ -18,6 +18,11 @@
 # Optional: Set temperature for all actions in this workflow
 # temperature: 0.7
 
+# Optional: Other generation parameters
+# max_tokens: 4096
+# top_p: 0.95
+# stop: ["\n\n"]
+
 # Actions to execute in this workflow
 actions:
   # Single action example

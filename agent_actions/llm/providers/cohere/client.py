@@ -18,6 +18,7 @@ from cohere.core import api_error as cohere_errors
 
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import (
     JSONResponseMixin,
     GenericErrorHandlerMixin,
@@ -71,12 +72,30 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             context_data_str = StringProcessor.process_as_string(context_data)
-            co = cohere.Client(api_key=api_key)
-            prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            <|begin_of_output_schema|> : GENERATE JSON with the fields {", ".join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
+            co = cohere.ClientV2(api_key=api_key)
+            # Extract field names from compiled schema format or raw schema
+            if schema is not None:
+                schema_fields = schema.get("properties", schema).keys()
+                fields_str = ", ".join([f"'{field}'" for field in schema_fields])
+                schema_instruction = f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
+            else:
+                schema_instruction = (
+                    "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
+                )
+            prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            {schema_instruction}\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
             prompt_dedent = dedent(prompt)
-            response = co.chat(
-                model=model_name, message=prompt_dedent, response_format={"type": "json_object"}
-            )
+            messages = [{"role": "user", "content": prompt_dedent}]
+            chat_kwargs = {
+                "model": model_name,
+                "messages": messages,
+                "response_format": {"type": "json_object"},
+                **extract_generation_params(
+                    agent_config,
+                    key_map={"top_p": "p", "stop": "stop_sequences"},
+                    stop_as_list=True,
+                ),
+            }
+            response = co.chat(**chat_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
@@ -96,12 +115,12 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage (Cohere v1 uses meta.tokens)
+        # Extract token usage (Cohere v2 uses usage.tokens)
         prompt_tokens = 0
         completion_tokens = 0
         total_tokens = 0
-        if hasattr(response, "meta") and response.meta and hasattr(response.meta, "tokens"):
-            tokens = response.meta.tokens
+        if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
+            tokens = response.usage.tokens
             prompt_tokens = tokens.input_tokens
             completion_tokens = tokens.output_tokens
             total_tokens = tokens.input_tokens + tokens.output_tokens
@@ -126,14 +145,22 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        intermediate_json = response.text
+        # Guard against empty or missing content in Cohere v2 response
+        if not hasattr(response, "message") or not response.message or not response.message.content:
+            raise VendorAPIError(
+                "Cohere JSON response contained no content",
+                vendor="cohere",
+                operation="call_json",
+            )
+        intermediate_json = response.message.content[0].text
 
-        return CohereClient.parse_json_response(
+        result = CohereClient.parse_json_response(
             response_content=intermediate_json,
             vendor_name="Cohere",
             operation="call_json",
             model_name=model_name,
         )
+        return result if isinstance(result, list) else [result]
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -157,7 +184,16 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
             messages = [{"role": "user", "content": dedent(prompt)}]
-            response = co.chat(model=model_name, messages=messages)
+            non_json_kwargs = {
+                "model": model_name,
+                "messages": messages,
+                **extract_generation_params(
+                    agent_config,
+                    key_map={"top_p": "p", "stop": "stop_sequences"},
+                    stop_as_list=True,
+                ),
+            }
+            response = co.chat(**non_json_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except cohere_errors.ApiError as e:
@@ -222,6 +258,13 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
+        # Guard against empty or missing content in Cohere v2 response
+        if not hasattr(response, "message") or not response.message or not response.message.content:
+            raise VendorAPIError(
+                "Cohere non-JSON response contained no content",
+                vendor="cohere",
+                operation="call_non_json",
+            )
         response_message = response.message.content[0].text
 
         logger.debug(
@@ -233,4 +276,5 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "request_id": request_id,
             },
         )
-        return [response_message]
+        output_field = agent_config.get("output_field", "raw_response")
+        return [{output_field: response_message}]

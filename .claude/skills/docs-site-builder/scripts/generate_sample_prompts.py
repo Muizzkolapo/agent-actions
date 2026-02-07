@@ -2,6 +2,7 @@
 """
 Generate sample prompts for the documentation site.
 """
+
 import json
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from agent_actions.docs.scanner import ProjectScanner
+
 
 def main():
     # Scan the qanalabs project for real prompts and schemas
@@ -27,27 +29,30 @@ def main():
     print(f"Found {len(schemas)} schemas")
 
     # Update the sample catalog.json
-    catalog_path = Path(__file__).parent / "agent_actions/docs/docs_site/sample_artefact/catalog.json"
+    catalog_path = (
+        Path(__file__).parent / "agent_actions/docs/docs_site/sample_artefact/catalog.json"
+    )
 
-    with open(catalog_path, 'r') as f:
+    with open(catalog_path, "r") as f:
         catalog = json.load(f)
 
     # Add prompts and schemas collections
-    catalog['prompts'] = prompts
-    catalog['schemas'] = schemas
+    catalog["prompts"] = prompts
+    catalog["schemas"] = schemas
 
     # Update stats
-    catalog['stats']['total_prompts'] = len(prompts)
-    catalog['stats']['total_schemas'] = len(schemas)
+    catalog["stats"]["total_prompts"] = len(prompts)
+    catalog["stats"]["total_schemas"] = len(schemas)
 
     # Write back
-    with open(catalog_path, 'w') as f:
+    with open(catalog_path, "w") as f:
         json.dump(catalog, f, indent=2)
 
     print(f"✅ Updated catalog")
     print(f"   - {len(prompts)} prompts")
     print(f"   - {len(schemas)} schemas")
     print(f"   Catalog: {catalog_path}")
+
 
 if __name__ == "__main__":
     main()

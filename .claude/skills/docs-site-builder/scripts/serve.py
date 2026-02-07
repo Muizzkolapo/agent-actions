@@ -10,6 +10,7 @@ import subprocess
 import sys
 import os
 
+
 def main():
     # Find the project root (where agent_actions package is)
     current_dir = os.getcwd()
@@ -20,9 +21,7 @@ def main():
 
     try:
         # Start the server using Python module syntax
-        subprocess.run([
-            sys.executable, "-m", "agent_actions.docs.server"
-        ], check=True)
+        subprocess.run([sys.executable, "-m", "agent_actions.docs.server"], check=True)
     except KeyboardInterrupt:
         print("\n✅ Server stopped")
     except subprocess.CalledProcessError as e:
@@ -32,6 +31,7 @@ def main():
         print("❌ Error: agent_actions module not found", file=sys.stderr)
         print("Make sure you're running from the project root directory", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

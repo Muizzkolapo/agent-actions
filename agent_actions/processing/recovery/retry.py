@@ -206,6 +206,7 @@ class RetryService:
             last_error=str(last_error) if last_error else None,
         )
 
+
 def create_retry_service_from_config(retry_config: Optional[dict]) -> Optional[RetryService]:
     """
     Create a RetryService from action configuration.

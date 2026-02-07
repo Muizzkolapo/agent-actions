@@ -19,7 +19,11 @@ class TestAgentExists:
         """agent_exists returns True when the config directory exists on disk."""
         config_dir = tmp_path / "agent_config"
         config_dir.mkdir()
-        mock_get_paths.return_value = (str(config_dir), str(tmp_path / "io"), str(tmp_path / "logs"))
+        mock_get_paths.return_value = (
+            str(config_dir),
+            str(tmp_path / "io"),
+            str(tmp_path / "logs"),
+        )
 
         assert AgentManager.agent_exists("my_agent") is True
         mock_get_paths.assert_called_once_with("my_agent")
@@ -37,6 +41,10 @@ class TestAgentExists:
     def test_returns_false_when_config_dir_does_not_exist(self, mock_get_paths, tmp_path):
         """agent_exists returns False when config dir path doesn't exist on disk."""
         nonexistent = tmp_path / "does_not_exist"
-        mock_get_paths.return_value = (str(nonexistent), str(tmp_path / "io"), str(tmp_path / "logs"))
+        mock_get_paths.return_value = (
+            str(nonexistent),
+            str(tmp_path / "io"),
+            str(tmp_path / "logs"),
+        )
 
         assert AgentManager.agent_exists("ghost_agent") is False

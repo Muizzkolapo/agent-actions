@@ -1,0 +1,30 @@
+name: test_mistral
+description: "Test workflow for Mistral provider"
+version: "1.0.0"
+
+defaults:
+  model_vendor: mistral
+  model_name: mistral-small-3-2-25-06
+  api_key: MISTRAL_API_KEY
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  temperature: 0.7
+  max_tokens: 1024
+  top_p: 0.9
+  stop: "\n\n"
+
+actions:
+  - name: summarize
+    intent: "Summarize input content"
+    prompt: "Summarize the following content in 2-3 sentences."
+    json_mode: true
+    schema:
+      summary: string
+
+  - name: classify
+    intent: "Classify the content"
+    prompt: "Classify the content into one of: news, research, opinion, other."
+    json_mode: false
+    temperature: 0.3
+    stop: null

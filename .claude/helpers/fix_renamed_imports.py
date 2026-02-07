@@ -15,51 +15,42 @@ from typing import Dict
 # Mapping of old import paths to new paths (accounting for renamed files)
 RENAMED_MODULES = {
     # Utilities that were renamed
-    'agent_actions.utilities.path_utils': 'agent_actions.utilities.utils_path_utils',
-    'agent_actions.utilities.processor_utils': 'agent_actions.utilities.utils_processor_utils',
-    'agent_actions.utilities.processor_helpers': 'agent_actions.utilities.utils_processor_helpers',
-
+    "agent_actions.utilities.path_utils": "agent_actions.utilities.utils_path_utils",
+    "agent_actions.utilities.processor_utils": "agent_actions.utilities.utils_processor_utils",
+    "agent_actions.utilities.processor_helpers": "agent_actions.utilities.utils_processor_helpers",
     # Core utilities that were moved
-    'agent_actions.core.utils.path_utils': 'agent_actions.utilities.utils_path_utils',
-    'agent_actions.core.utils.processor_utils': 'agent_actions.utilities.utils_processor_utils',
-    'agent_actions.core.utils.processor_helpers': 'agent_actions.utilities.utils_processor_helpers',
-
+    "agent_actions.core.utils.path_utils": "agent_actions.utilities.utils_path_utils",
+    "agent_actions.core.utils.processor_utils": "agent_actions.utilities.utils_processor_utils",
+    "agent_actions.core.utils.processor_helpers": "agent_actions.utilities.utils_processor_helpers",
     # Input loading files
-    'agent_actions.core.loaders.data_loaders.base_loader': 'agent_actions.input_loading.base_base_loader',
-    'agent_actions.agents.base.base_loader': 'agent_actions.input_loading.base_base_loader',
-    'agent_actions.core.loaders.udf_loader': 'agent_actions.input_loading.udf_loader',
-
+    "agent_actions.core.loaders.data_loaders.base_loader": "agent_actions.input_loading.base_base_loader",
+    "agent_actions.agents.base.base_loader": "agent_actions.input_loading.base_base_loader",
+    "agent_actions.core.loaders.udf_loader": "agent_actions.input_loading.udf_loader",
     # Agents that were moved
-    'agent_actions.agents.base.agent_builder': 'agent_actions.llm_invocation.realtime.agent_builder',
-    'agent_actions.agents.transformers.prompt_utils': 'agent_actions.preprocessing.prompt_utils',
-    'agent_actions.agents.generators.data_generator': 'agent_actions.prompt_generation.data_generator',
-    'agent_actions.agents.validators.input_signature_validator': 'agent_actions.validation.input_signature_validator',
-
+    "agent_actions.agents.base.agent_builder": "agent_actions.llm_invocation.realtime.agent_builder",
+    "agent_actions.agents.transformers.prompt_utils": "agent_actions.preprocessing.prompt_utils",
+    "agent_actions.agents.generators.data_generator": "agent_actions.prompt_generation.data_generator",
+    "agent_actions.agents.validators.input_signature_validator": "agent_actions.validation.input_signature_validator",
     # State management
-    'agent_actions.core.signatures': 'agent_actions.state_management.signatures',
-    'agent_actions.core.context.signature_computer': 'agent_actions.state_management.signature_computer',
-    'agent_actions.core.path_manager': 'agent_actions.state_management.path_manager',
-    'agent_actions.core.context.path_manager': 'agent_actions.state_management.path_manager',
-
+    "agent_actions.core.signatures": "agent_actions.state_management.signatures",
+    "agent_actions.core.context.signature_computer": "agent_actions.state_management.signature_computer",
+    "agent_actions.core.path_manager": "agent_actions.state_management.path_manager",
+    "agent_actions.core.context.path_manager": "agent_actions.state_management.path_manager",
     # Tasks/CLI
-    'agent_actions.tasks.validate_udfs': 'agent_actions.validation.validate_udfs',
-    'agent_actions.tasks.services.batch_service': 'agent_actions.llm_invocation.batch.batch_service',
-
+    "agent_actions.tasks.validate_udfs": "agent_actions.validation.validate_udfs",
+    "agent_actions.tasks.services.batch_service": "agent_actions.llm_invocation.batch.batch_service",
     # Configuration
-    'agent_actions.core.bootstrap': 'agent_actions.configuration.bootstrap_bootstrap',
-
+    "agent_actions.core.bootstrap": "agent_actions.configuration.bootstrap_bootstrap",
     # Orchestration
-    'agent_actions.core.graph.agent_workflow': 'agent_actions.orchestration.agent_workflow',
-    'agent_actions.core.graph.loop_correlator': 'agent_actions.orchestration.loop_correlator',
-    'agent_actions.core.graph.dependency_injection': 'agent_actions.orchestration.dependency_injection',
-    'agent_actions.core.runtime.agent_runner': 'agent_actions.orchestration.agent_runner',
-
+    "agent_actions.core.graph.agent_workflow": "agent_actions.orchestration.agent_workflow",
+    "agent_actions.core.graph.loop_correlator": "agent_actions.orchestration.loop_correlator",
+    "agent_actions.core.graph.dependency_injection": "agent_actions.orchestration.dependency_injection",
+    "agent_actions.core.runtime.agent_runner": "agent_actions.orchestration.agent_runner",
     # Response processing / utilities
-    'agent_actions.core.utils.guard_parser': 'agent_actions.response_processing.guard_parser',
-    'agent_actions.utilities.guard_parser': 'agent_actions.response_processing.guard_parser',
-
+    "agent_actions.core.utils.guard_parser": "agent_actions.response_processing.guard_parser",
+    "agent_actions.utilities.guard_parser": "agent_actions.response_processing.guard_parser",
     # Exceptions/Shared
-    'agent_actions.core.exceptions': 'agent_actions.shared.exceptions',
+    "agent_actions.core.exceptions": "agent_actions.shared.exceptions",
 }
 
 
@@ -78,16 +69,16 @@ def fix_imports_in_file(file_path: Path, dry_run: bool = True) -> int:
         # Fix each known renamed module
         for old_module, new_module in RENAMED_MODULES.items():
             # Pattern 1: from X import Y
-            pattern1 = rf'from {re.escape(old_module)}(\s+import\s+)'
-            replacement1 = rf'from {new_module}\1'
+            pattern1 = rf"from {re.escape(old_module)}(\s+import\s+)"
+            replacement1 = rf"from {new_module}\1"
             new_content = re.sub(pattern1, replacement1, content)
             if new_content != content:
                 changes += content.count(old_module) - new_content.count(old_module)
                 content = new_content
 
             # Pattern 2: import X
-            pattern2 = rf'(\s)import\s+{re.escape(old_module)}(\s|$)'
-            replacement2 = rf'\1import {new_module}\2'
+            pattern2 = rf"(\s)import\s+{re.escape(old_module)}(\s|$)"
+            replacement2 = rf"\1import {new_module}\2"
             new_content = re.sub(pattern2, replacement2, content)
             if new_content != content:
                 changes += 1
@@ -110,7 +101,7 @@ def main():
         sys.exit(1)
 
     directory = Path(sys.argv[1])
-    execute = '--execute' in sys.argv
+    execute = "--execute" in sys.argv
 
     print(f"🔧 Fixing renamed imports in {directory}/\n")
 
@@ -118,7 +109,7 @@ def main():
         print("⚠️  DRY RUN MODE - No files will be modified\n")
 
     # Find all Python files
-    python_files = list(directory.rglob('*.py'))
+    python_files = list(directory.rglob("*.py"))
 
     total_changes = 0
     files_changed = 0
@@ -146,5 +137,5 @@ def main():
         print(f"\n✅ No import changes needed!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -4,6 +4,7 @@ Batch code analyzer for reviewing multiple modules.
 
 Scans a directory and generates a prioritized summary report.
 """
+
 import sys
 from pathlib import Path
 from typing import List, Dict, Tuple
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class FileAnalysis:
     """Analysis results for a single file."""
+
     file_path: Path
     complexity_score: int = 0
     maintainability_index: float = 0.0
@@ -36,17 +38,14 @@ def analyze_file(file_path: Path) -> FileAnalysis:
     # Radon complexity
     try:
         cmd = subprocess.run(
-            ['radon', 'cc', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["radon", "cc", str(file_path), "-j"], capture_output=True, text=True, timeout=10
         )
         if cmd.returncode == 0 and cmd.stdout:
             data = json.loads(cmd.stdout)
             file_key = str(file_path)
             if file_key in data:
                 for item in data[file_key]:
-                    cc = item.get('complexity', 0)
+                    cc = item.get("complexity", 0)
                     result.complexity_score += cc
                     if cc > 10:  # Flag high complexity
                         result.high_complexity_functions.append(
@@ -58,73 +57,67 @@ def analyze_file(file_path: Path) -> FileAnalysis:
     # Radon maintainability
     try:
         cmd = subprocess.run(
-            ['radon', 'mi', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["radon", "mi", str(file_path), "-j"], capture_output=True, text=True, timeout=10
         )
         if cmd.returncode == 0 and cmd.stdout:
             data = json.loads(cmd.stdout)
             file_key = str(file_path)
             if file_key in data:
-                result.maintainability_index = data[file_key].get('mi', 0)
+                result.maintainability_index = data[file_key].get("mi", 0)
     except Exception:
         pass
 
     # Radon raw metrics
     try:
         cmd = subprocess.run(
-            ['radon', 'raw', str(file_path), '-j'],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["radon", "raw", str(file_path), "-j"], capture_output=True, text=True, timeout=10
         )
         if cmd.returncode == 0 and cmd.stdout:
             data = json.loads(cmd.stdout)
             file_key = str(file_path)
             if file_key in data:
-                result.loc = data[file_key].get('loc', 0)
+                result.loc = data[file_key].get("loc", 0)
     except Exception:
         pass
 
     # Prospector violations
     try:
         cmd = subprocess.run(
-            ['prospector', str(file_path), '--output-format', 'json', '--no-autodetect'],
+            ["prospector", str(file_path), "--output-format", "json", "--no-autodetect"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
         if cmd.returncode in [0, 1] and cmd.stdout:
             data = json.loads(cmd.stdout)
-            if 'messages' in data:
-                messages = data['messages']
+            if "messages" in data:
+                messages = data["messages"]
                 result.violations_count = len(messages)
                 for msg in messages:
-                    severity = msg.get('severity', 'unknown')
-                    result.violations_by_severity[severity] = \
+                    severity = msg.get("severity", "unknown")
+                    result.violations_by_severity[severity] = (
                         result.violations_by_severity.get(severity, 0) + 1
+                    )
                     # Store actual violation details
-                    result.violations_details.append({
-                        'line': msg.get('location', {}).get('line', 0),
-                        'source': msg.get('source', 'unknown'),
-                        'code': msg.get('code', ''),
-                        'message': msg.get('message', ''),
-                        'severity': severity
-                    })
+                    result.violations_details.append(
+                        {
+                            "line": msg.get("location", {}).get("line", 0),
+                            "source": msg.get("source", "unknown"),
+                            "code": msg.get("code", ""),
+                            "message": msg.get("message", ""),
+                            "severity": severity,
+                        }
+                    )
     except Exception:
         pass
 
     # Vulture dead code
     try:
         cmd = subprocess.run(
-            ['vulture', str(file_path)],
-            capture_output=True,
-            text=True,
-            timeout=10
+            ["vulture", str(file_path)], capture_output=True, text=True, timeout=10
         )
         if cmd.stdout:
-            lines = [l for l in cmd.stdout.strip().split('\n') if l.strip()]
+            lines = [l for l in cmd.stdout.strip().split("\n") if l.strip()]
             result.dead_code_count = len(lines)
             result.dead_code_details = lines  # Store actual findings
 
@@ -133,9 +126,10 @@ def analyze_file(file_path: Path) -> FileAnalysis:
 
     # Parse imports using AST
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
         import ast
+
         tree = ast.parse(source, filename=str(file_path))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -158,12 +152,12 @@ def build_dependency_graph(analyses: List[FileAnalysis]) -> None:
         # Extract module name from file path
         # e.g., agent_actions/agents/base/agent_builder.py -> agent_actions.agents.base.agent_builder
         parts = analysis.file_path.parts
-        if 'agent_actions' in parts:
-            start_idx = parts.index('agent_actions')
+        if "agent_actions" in parts:
+            start_idx = parts.index("agent_actions")
             module_parts = parts[start_idx:]
-            if module_parts[-1].endswith('.py'):
+            if module_parts[-1].endswith(".py"):
                 module_parts = list(module_parts[:-1]) + [module_parts[-1][:-3]]
-            module_name = '.'.join(module_parts)
+            module_name = ".".join(module_parts)
             module_to_file[module_name] = analysis.file_path
 
     # Now build imported_by relationships
@@ -197,7 +191,9 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
     total_violations = sum(a.violations_count for a in analyses)
     total_dead_code = sum(a.dead_code_count for a in analyses)
     avg_complexity = sum(a.complexity_score for a in analyses) / len(analyses) if analyses else 0
-    avg_maintainability = sum(a.maintainability_index for a in analyses) / len(analyses) if analyses else 0
+    avg_maintainability = (
+        sum(a.maintainability_index for a in analyses) / len(analyses) if analyses else 0
+    )
 
     lines.append("─" * 100)
     lines.append("📈 OVERALL STATISTICS")
@@ -217,9 +213,13 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
     for i, analysis in enumerate(sorted_by_complexity, 1):
         rel_path = analysis.file_path.relative_to(directory.parent)
         lines.append(f"  {i}. {rel_path}")
-        lines.append(f"     Complexity: {analysis.complexity_score}, MI: {analysis.maintainability_index:.1f}, LOC: {analysis.loc}")
+        lines.append(
+            f"     Complexity: {analysis.complexity_score}, MI: {analysis.maintainability_index:.1f}, LOC: {analysis.loc}"
+        )
         if analysis.high_complexity_functions:
-            lines.append(f"     High complexity functions: {', '.join(analysis.high_complexity_functions[:3])}")
+            lines.append(
+                f"     High complexity functions: {', '.join(analysis.high_complexity_functions[:3])}"
+            )
     lines.append("")
 
     # Top 10 files with most violations
@@ -234,7 +234,9 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
             # Build the violations line
             viol_line = f"     Violations: {analysis.violations_count}"
             if analysis.violations_by_severity:
-                sev_str = ", ".join([f"{k}: {v}" for k, v in analysis.violations_by_severity.items()])
+                sev_str = ", ".join(
+                    [f"{k}: {v}" for k, v in analysis.violations_by_severity.items()]
+                )
                 viol_line += f" ({sev_str})"
             lines.append(viol_line)
     lines.append("")
@@ -243,21 +245,33 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
     lines.append("─" * 100)
     lines.append("📉 TOP 10 LOWEST MAINTAINABILITY INDEX (Needs Refactoring)")
     lines.append("─" * 100)
-    sorted_by_mi = sorted([a for a in analyses if a.maintainability_index > 0],
-                          key=lambda a: a.maintainability_index)[:10]
+    sorted_by_mi = sorted(
+        [a for a in analyses if a.maintainability_index > 0], key=lambda a: a.maintainability_index
+    )[:10]
     for i, analysis in enumerate(sorted_by_mi, 1):
         rel_path = analysis.file_path.relative_to(directory.parent)
-        mi_rank = "A" if analysis.maintainability_index >= 20 else "B" if analysis.maintainability_index >= 10 else "C"
+        mi_rank = (
+            "A"
+            if analysis.maintainability_index >= 20
+            else "B"
+            if analysis.maintainability_index >= 10
+            else "C"
+        )
         lines.append(f"  {i}. {rel_path}")
-        lines.append(f"     MI: {analysis.maintainability_index:.1f} (Rank: {mi_rank}), Complexity: {analysis.complexity_score}")
+        lines.append(
+            f"     MI: {analysis.maintainability_index:.1f} (Rank: {mi_rank}), Complexity: {analysis.complexity_score}"
+        )
     lines.append("")
 
     # Files with dead code
     lines.append("─" * 100)
     lines.append("💀 TOP 10 FILES WITH MOST DEAD CODE")
     lines.append("─" * 100)
-    sorted_by_dead = sorted([a for a in analyses if a.dead_code_count > 0],
-                            key=lambda a: a.dead_code_count, reverse=True)[:10]
+    sorted_by_dead = sorted(
+        [a for a in analyses if a.dead_code_count > 0],
+        key=lambda a: a.dead_code_count,
+        reverse=True,
+    )[:10]
     if sorted_by_dead:
         for i, analysis in enumerate(sorted_by_dead, 1):
             rel_path = analysis.file_path.relative_to(directory.parent)
@@ -274,20 +288,33 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
     lines.append("")
 
     # Get top 5 files by violations for detailed view
-    top_violation_files = sorted([a for a in analyses if a.violations_count > 0],
-                                 key=lambda a: a.violations_count, reverse=True)[:5]
+    top_violation_files = sorted(
+        [a for a in analyses if a.violations_count > 0],
+        key=lambda a: a.violations_count,
+        reverse=True,
+    )[:5]
 
     for analysis in top_violation_files:
         rel_path = analysis.file_path.relative_to(directory.parent)
         lines.append(f"📄 {rel_path}")
-        lines.append(f"   Violations: {analysis.violations_count}, Complexity: {analysis.complexity_score}, "
-                    f"MI: {analysis.maintainability_index:.1f}, LOC: {analysis.loc}")
+        lines.append(
+            f"   Violations: {analysis.violations_count}, Complexity: {analysis.complexity_score}, "
+            f"MI: {analysis.maintainability_index:.1f}, LOC: {analysis.loc}"
+        )
 
         # Show downstream impact
         if analysis.imported_by:
-            lines.append(f"   ⚠️  Downstream Impact: {len(analysis.imported_by)} files depend on this")
-            lines.append(f"      Used by: {', '.join([Path(p).name for p in analysis.imported_by[:3]])}"
-                        + (f" (+{len(analysis.imported_by)-3} more)" if len(analysis.imported_by) > 3 else ""))
+            lines.append(
+                f"   ⚠️  Downstream Impact: {len(analysis.imported_by)} files depend on this"
+            )
+            lines.append(
+                f"      Used by: {', '.join([Path(p).name for p in analysis.imported_by[:3]])}"
+                + (
+                    f" (+{len(analysis.imported_by) - 3} more)"
+                    if len(analysis.imported_by) > 3
+                    else ""
+                )
+            )
 
         # Show sample violations
         if analysis.violations_details:
@@ -295,18 +322,20 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
             # Group by severity and show top 3
             by_severity = {}
             for v in analysis.violations_details:
-                sev = v['severity']
+                sev = v["severity"]
                 if sev not in by_severity:
                     by_severity[sev] = []
                 by_severity[sev].append(v)
 
             shown = 0
-            for sev in ['high', 'medium', 'low', 'unknown']:
+            for sev in ["high", "medium", "low", "unknown"]:
                 if sev in by_severity and shown < 5:
                     for v in by_severity[sev][:3]:
                         if shown >= 5:
                             break
-                        lines.append(f"      • Line {v['line']}: [{v['source']}] {v['message'][:80]}")
+                        lines.append(
+                            f"      • Line {v['line']}: [{v['source']}] {v['message'][:80]}"
+                        )
                         shown += 1
 
         # Show dead code details
@@ -387,7 +416,7 @@ def main():
 
     # Find all Python files
     python_files = list(directory.rglob("*.py"))
-    python_files = [f for f in python_files if '__pycache__' not in str(f)]
+    python_files = [f for f in python_files if "__pycache__" not in str(f)]
 
     # Progress messages to stderr (so they don't pollute the report)
     print(f"Found {len(python_files)} Python files in {directory}", file=sys.stderr)
@@ -396,7 +425,7 @@ def main():
     # Analyze each file
     analyses = []
     for i, file_path in enumerate(python_files, 1):
-        print(f"  [{i}/{len(python_files)}] {file_path.name}...", end='\r', file=sys.stderr)
+        print(f"  [{i}/{len(python_files)}] {file_path.name}...", end="\r", file=sys.stderr)
         analysis = analyze_file(file_path)
         analyses.append(analysis)
 

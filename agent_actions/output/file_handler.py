@@ -89,7 +89,9 @@ class FileHandler:
         if parent_dir != Path(base_dir):  # Ensure we're not at the root
             return FileHandler.find_config_file(str(parent_dir), filename)
 
-        logger.warning("Config file '%s' not found in %s or its parent directories.", filename, base_dir)
+        logger.warning(
+            "Config file '%s' not found in %s or its parent directories.", filename, base_dir
+        )
         return None
 
     @staticmethod
@@ -133,4 +135,3 @@ class FileHandler:
                 if file.endswith(".yml"):
                     agent_paths.append(str(Path(root) / file))
         return agent_paths
-

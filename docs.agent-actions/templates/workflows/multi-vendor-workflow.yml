@@ -108,6 +108,7 @@ actions:
     api_key: ${ANTHROPIC_API_KEY}
     temperature: 0.7
     max_tokens: 4000
+    top_p: 0.95
 
   # ACTION 3: Use Google Gemini for multimodal reasoning
   # Strength: Large context window, multimodal capabilities
@@ -195,6 +196,7 @@ actions:
     model_name: llama-3.1-70b-versatile
     api_key: ${GROQ_API_KEY}
     temperature: 0.3
+    stop: ["\n\n"]  # Stop at double newline for concise output
 
   # ACTION 5: Use Perplexity for fact-checking with search
   # Strength: Real-time web search, current information

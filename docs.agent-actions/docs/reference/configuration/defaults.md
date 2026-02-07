@@ -48,6 +48,10 @@ actions:
 | `run_mode` | string | `batch` or `online` execution |
 | `drops` | list | Default fields to exclude from LLM prompt and output |
 | `observe` | list | Default fields to pass-through from input to output |
+| `temperature` | float | LLM temperature (0.0-2.0) |
+| `max_tokens` | integer | Maximum response tokens |
+| `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
+| `stop` | string/list | Stop sequence(s) to end generation |
 
 :::note Schema vs Runtime
 The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
@@ -279,13 +283,36 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
 
+  # Generation parameters
+  temperature: 0.7
+  max_tokens: 2000
+
   # Processing configuration
   json_mode: true
   granularity: record
   run_mode: batch
 ```
 
-### 5. Environment-Specific Defaults
+### 5. Set Generation Parameters at Defaults Level
+
+Generation parameters like `temperature`, `max_tokens`, `top_p`, and `stop` follow the same inheritance rules. Set sensible defaults and override per-action:
+
+```yaml
+defaults:
+  temperature: 0.7
+  max_tokens: 2000
+
+actions:
+  - name: creative_writing
+    temperature: 0.9  # Override: more creative
+    max_tokens: 4000  # Override: longer output
+
+  - name: classification
+    temperature: 0.1  # Override: more deterministic
+    stop: ["\n"]      # Stop at newline
+```
+
+### 6. Environment-Specific Defaults
 
 Create separate config files for different environments:
 

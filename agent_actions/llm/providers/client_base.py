@@ -8,7 +8,7 @@ data redaction, and invocation dispatch to JSON or non-JSON modes.
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 
@@ -122,7 +122,7 @@ class BaseClient(ABC):
         prompt_config: Dict[str, Any],
         context_data: Dict[str, Any],
         schema: Optional[Dict[str, Any]],
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> List[Dict[str, Any]]:
         """
         Call vendor API in JSON mode with schema.
 
@@ -134,7 +134,7 @@ class BaseClient(ABC):
             schema: Optional JSON schema for structured output
 
         Returns:
-            JSON response as dict or list of dicts
+            List of response dicts
         """
 
     @staticmethod
@@ -165,7 +165,7 @@ class BaseClient(ABC):
         prompt_config: Dict[str, Any],
         context_data: Dict[str, Any],
         schema: Optional[Dict[str, Any]],
-    ) -> Union[str, Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """Dispatch to JSON or non-JSON methods after loading the API key."""
         api_key: Optional[str] = cls.get_api_key(agent_config)
         json_mode: bool = agent_config.get(JSON_MODE_KEY, True)

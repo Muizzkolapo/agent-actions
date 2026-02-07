@@ -26,7 +26,7 @@ def create_backup(root_path: Path):
     if backup_path.exists():
         print(f"⚠️  Backup already exists at {backup_path}")
         response = input("Overwrite? (yes/no): ")
-        if response.lower() != 'yes':
+        if response.lower() != "yes":
             print("Using existing backup")
             return backup_path
 
@@ -41,7 +41,7 @@ def create_backup(root_path: Path):
 
 def execute_migration(plan: dict, dry_run: bool = True):
     """Execute the migration plan."""
-    rules = plan['rules']
+    rules = plan["rules"]
 
     if dry_run:
         print("\n⚠️  DRY RUN MODE - No files will be moved\n")
@@ -53,8 +53,8 @@ def execute_migration(plan: dict, dry_run: bool = True):
     created_dirs = set()
 
     for rule in rules:
-        source = Path(rule['source'])
-        destination = Path(rule['destination'])
+        source = Path(rule["source"])
+        destination = Path(rule["destination"])
 
         try:
             if not dry_run:
@@ -100,7 +100,7 @@ def execute_migration(plan: dict, dry_run: bool = True):
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='Execute migration plan from JSON',
+        description="Execute migration plan from JSON",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -112,26 +112,16 @@ Examples:
 
   # Execute without backup (NOT RECOMMENDED)
   python execute_migration.py plan_final.json --execute
-        """
+        """,
     )
 
-    parser.add_argument(
-        'plan_file',
-        type=str,
-        help='Migration plan JSON file'
-    )
+    parser.add_argument("plan_file", type=str, help="Migration plan JSON file")
 
     parser.add_argument(
-        '--execute',
-        action='store_true',
-        help='Execute migration (default: dry run)'
+        "--execute", action="store_true", help="Execute migration (default: dry run)"
     )
 
-    parser.add_argument(
-        '--backup',
-        action='store_true',
-        help='Create backup before executing'
-    )
+    parser.add_argument("--backup", action="store_true", help="Create backup before executing")
 
     args = parser.parse_args()
 
@@ -143,7 +133,7 @@ Examples:
     print(f"   Files to migrate: {len(plan['rules'])}")
     print(f"   Remaining conflicts: {plan['stats']['conflicts']}")
 
-    if plan['stats']['conflicts'] > 0:
+    if plan["stats"]["conflicts"] > 0:
         print(f"\n❌ Cannot execute: {plan['stats']['conflicts']} conflicts remain!")
         print("   Resolve conflicts first, then try again.")
         sys.exit(1)
@@ -151,14 +141,14 @@ Examples:
     # Create backup if requested
     if args.execute and args.backup:
         # Determine root path from first rule
-        if plan['rules']:
-            root_path = Path(plan['rules'][0]['source']).parents[1]  # agent_actions/
+        if plan["rules"]:
+            root_path = Path(plan["rules"][0]["source"]).parents[1]  # agent_actions/
             create_backup(root_path)
 
     # Execute migration
     if args.execute:
         response = input("\n⚠️  This will move files. Continue? (yes/no): ")
-        if response.lower() != 'yes':
+        if response.lower() != "yes":
             print("Cancelled.")
             sys.exit(0)
 
@@ -175,5 +165,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

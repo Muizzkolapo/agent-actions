@@ -24,23 +24,23 @@ def load_migration_map(plan_file: str) -> Dict[str, str]:
 
     mapping = {}
 
-    for rule in plan['rules']:
-        source = Path(rule['source'])
-        dest = Path(rule['destination'])
+    for rule in plan["rules"]:
+        source = Path(rule["source"])
+        dest = Path(rule["destination"])
 
         # Convert file paths to module paths
         # e.g., agent_actions/core/parser/config.py → agent_actions.core.parser.config
         def path_to_module(p: Path) -> str:
             parts = p.parts
             # Find agent_actions index
-            if 'agent_actions' in parts:
-                idx = parts.index('agent_actions')
+            if "agent_actions" in parts:
+                idx = parts.index("agent_actions")
                 module_parts = parts[idx:]
                 # Remove .py extension
-                if module_parts[-1].endswith('.py'):
+                if module_parts[-1].endswith(".py"):
                     module_parts = list(module_parts[:-1]) + [module_parts[-1][:-3]]
-                return '.'.join(module_parts)
-            return ''
+                return ".".join(module_parts)
+            return ""
 
         old_module = path_to_module(source)
         new_module = path_to_module(dest)
@@ -57,22 +57,31 @@ def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
 
     # Only search in stage directories
     stage_dirs = [
-        'input_loading', 'preprocessing', 'validation', 'prompt_generation',
-        'llm_invocation', 'response_processing', 'postprocessing',
-        'orchestration', 'state_management', 'configuration',
-        'cli', 'utilities', 'shared'
+        "input_loading",
+        "preprocessing",
+        "validation",
+        "prompt_generation",
+        "llm_invocation",
+        "response_processing",
+        "postprocessing",
+        "orchestration",
+        "state_management",
+        "configuration",
+        "cli",
+        "utilities",
+        "shared",
     ]
 
     for stage in stage_dirs:
         stage_path = root / stage
         if stage_path.exists():
-            files.extend(stage_path.rglob('*.py'))
+            files.extend(stage_path.rglob("*.py"))
 
     # Include tests if requested
     if include_tests:
-        tests_path = Path('tests')
+        tests_path = Path("tests")
         if tests_path.exists():
-            files.extend(tests_path.rglob('*.py'))
+            files.extend(tests_path.rglob("*.py"))
 
     return files
 
@@ -86,12 +95,12 @@ def extract_imports(content: str) -> List[Tuple[str, str, str]]:
     imports = []
 
     # Match: from agent_actions.x.y import z
-    from_pattern = r'^(\s*from\s+(agent_actions\.[^\s]+)\s+import\s+(.+))$'
+    from_pattern = r"^(\s*from\s+(agent_actions\.[^\s]+)\s+import\s+(.+))$"
 
     # Match: import agent_actions.x.y
-    import_pattern = r'^(\s*import\s+(agent_actions\.[^\s,]+))(.*)$'
+    import_pattern = r"^(\s*import\s+(agent_actions\.[^\s,]+))(.*)$"
 
-    for line in content.split('\n'):
+    for line in content.split("\n"):
         # Try from ... import
         match = re.match(from_pattern, line)
         if match:
@@ -106,7 +115,7 @@ def extract_imports(content: str) -> List[Tuple[str, str, str]]:
         if match:
             full_line = match.group(1) + match.group(3)
             module = match.group(2)
-            imports.append((full_line, module, ''))
+            imports.append((full_line, module, ""))
 
     return imports
 
@@ -166,8 +175,8 @@ def main():
         sys.exit(1)
 
     plan_file = sys.argv[1]
-    execute = '--execute' in sys.argv
-    include_tests = '--tests' in sys.argv
+    execute = "--execute" in sys.argv
+    include_tests = "--tests" in sys.argv
 
     print("🔧 Fixing import paths...\n")
 
@@ -177,7 +186,7 @@ def main():
     print(f"   Loaded {len(mapping)} path mappings\n")
 
     # Find Python files
-    root = Path('agent_actions')
+    root = Path("agent_actions")
     search_desc = "stage directories" + (" and tests" if include_tests else "")
     print(f"🔍 Finding Python files in {search_desc}...")
     python_files = find_python_files(root, include_tests=include_tests)
@@ -217,5 +226,5 @@ def main():
         print(f"\n✅ No import changes needed!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

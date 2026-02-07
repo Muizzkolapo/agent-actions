@@ -19,6 +19,8 @@ from ollama import Client, ResponseError
 import httpx
 
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
@@ -155,14 +157,24 @@ class OllamaClient(BaseClient):
 
         logger.debug("Calling Ollama with JSON mode, schema=%s", bool(ollama_schema))
 
+        # Build optional LLM parameters (Ollama uses 'options' dict)
+        options = extract_generation_params(
+            agent_config,
+            key_map={"max_tokens": "num_predict"},
+            stop_as_list=True,
+        )
+
         start_time = datetime.now()
         try:
-            response = OllamaClient._get_client(agent_config).chat(
-                model=model,
-                messages=messages,
-                stream=False,
-                format=ollama_schema if ollama_schema else "json",
-            )
+            chat_kwargs: Dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "format": ollama_schema if ollama_schema else "json",
+            }
+            if options:
+                chat_kwargs["options"] = options
+            response = OllamaClient._get_client(agent_config).chat(**chat_kwargs)
         except (
             httpx.ConnectError,
             httpx.TimeoutException,
@@ -174,10 +186,19 @@ class OllamaClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Ollama doesn't provide token counts in the same way, use 0 as default
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
+        # Extract token counts from Ollama response
+        prompt_tokens = getattr(response, "prompt_eval_count", 0) or 0
+        completion_tokens = getattr(response, "eval_count", 0) or 0
+        total_tokens = prompt_tokens + completion_tokens
+
+        if total_tokens > 0:
+            set_last_usage(
+                {
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
 
         # Fire LLM response event
         fire_event(
@@ -228,7 +249,7 @@ class OllamaClient(BaseClient):
         prompt_config: str,
         context_data: Any,
         _schema: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, str]]:
         """
         Plain-text chat (no schema enforcement).
 
@@ -264,9 +285,19 @@ class OllamaClient(BaseClient):
 
         start_time = datetime.now()
         try:
-            response = OllamaClient._get_client(agent_config).chat(
-                model=model, messages=messages, stream=False
+            non_json_options = extract_generation_params(
+                agent_config,
+                key_map={"max_tokens": "num_predict"},
+                stop_as_list=True,
             )
+            non_json_kwargs: Dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+            }
+            if non_json_options:
+                non_json_kwargs["options"] = non_json_options
+            response = OllamaClient._get_client(agent_config).chat(**non_json_kwargs)
         except (
             httpx.ConnectError,
             httpx.TimeoutException,
@@ -278,10 +309,19 @@ class OllamaClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Ollama doesn't provide token counts in the same way, use 0 as default
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
+        # Extract token counts from Ollama response
+        prompt_tokens = getattr(response, "prompt_eval_count", 0) or 0
+        completion_tokens = getattr(response, "eval_count", 0) or 0
+        total_tokens = prompt_tokens + completion_tokens
+
+        if total_tokens > 0:
+            set_last_usage(
+                {
+                    "input_tokens": prompt_tokens,
+                    "output_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                }
+            )
 
         # Fire LLM response event
         fire_event(

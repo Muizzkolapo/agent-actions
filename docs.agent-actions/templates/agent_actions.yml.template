@@ -40,6 +40,10 @@ api_key: ${OPENAI_API_KEY}
 # Optional: Presence penalty (-2.0 to 2.0)
 # presence_penalty: 0.0
 
+# Optional: Stop sequences to end generation (string or list)
+# stop: "\n"
+# stop: ["\n", "END"]
+
 # ============================================================================
 # MULTI-VENDOR EXAMPLE
 # ============================================================================

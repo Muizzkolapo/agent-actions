@@ -116,9 +116,7 @@ class TaskPreparer:
         # Step 3: Load full context (upstream outputs, version, workflow, source)
         # This context is used for BOTH guard evaluation and prompt rendering
         current_item = item if isinstance(item, dict) else context.current_item
-        field_context = self._load_full_context(
-            content, source_content, context, current_item
-        )
+        field_context = self._load_full_context(content, source_content, context, current_item)
 
         # Step 4: Guard evaluation with FULL context (ONE check)
         # Guards can reference upstream outputs (e.g., extract_facts.count > 5)

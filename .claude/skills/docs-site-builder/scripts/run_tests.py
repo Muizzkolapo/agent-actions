@@ -10,6 +10,7 @@ import subprocess
 import sys
 import glob
 
+
 def main():
     # Find all test files
     test_files = glob.glob("test-*.js")
@@ -49,7 +50,7 @@ def main():
             failed_tests.append(test)
 
     # Summary
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     if failed_tests:
         print(f"❌ {len(failed_tests)} test(s) failed:")
         for test in failed_tests:
@@ -57,6 +58,7 @@ def main():
         sys.exit(1)
     else:
         print(f"✅ All {len(tests_to_run)} test(s) passed!")
+
 
 if __name__ == "__main__":
     main()

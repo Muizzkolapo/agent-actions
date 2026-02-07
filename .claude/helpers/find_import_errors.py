@@ -21,20 +21,22 @@ def collect_test_file(test_file: Path) -> Tuple[bool, str]:
     """
     try:
         result = subprocess.run(
-            [sys.executable, '-m', 'pytest', str(test_file), '--co', '-q'],
+            [sys.executable, "-m", "pytest", str(test_file), "--co", "-q"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
 
         # Check if there was an error
-        if result.returncode != 0 and ('ModuleNotFoundError' in result.stdout or 'ImportError' in result.stdout):
+        if result.returncode != 0 and (
+            "ModuleNotFoundError" in result.stdout or "ImportError" in result.stdout
+        ):
             return (False, result.stdout)
 
-        return (True, '')
+        return (True, "")
 
     except subprocess.TimeoutExpired:
-        return (False, 'Timeout')
+        return (False, "Timeout")
     except Exception as e:
         return (False, str(e))
 
@@ -61,7 +63,7 @@ def extract_missing_module(error_output: str) -> str:
     if match:
         return match.group(1)
 
-    return ''
+    return ""
 
 
 def find_all_import_errors() -> Dict[str, List[str]]:
@@ -74,7 +76,7 @@ def find_all_import_errors() -> Dict[str, List[str]]:
     errors_by_module = {}
 
     # Find all test files
-    test_files = list(Path('tests').rglob('test_*.py'))
+    test_files = list(Path("tests").rglob("test_*.py"))
 
     print(f"🔍 Checking {len(test_files)} test files for import errors...\n")
 
@@ -92,7 +94,7 @@ def find_all_import_errors() -> Dict[str, List[str]]:
                     errors_by_module[missing_module] = []
                 errors_by_module[missing_module].append(str(test_file))
 
-                rel_path = test_file.relative_to('tests')
+                rel_path = test_file.relative_to("tests")
                 print(f"❌ {rel_path}")
                 print(f"   Missing: {missing_module}\n")
 
@@ -131,8 +133,8 @@ def main():
         print_grouped_errors(errors)
 
         # Save to file
-        output_file = 'import_errors.txt'
-        with open(output_file, 'w') as f:
+        output_file = "import_errors.txt"
+        with open(output_file, "w") as f:
             f.write("Import Errors Report\n")
             f.write("=" * 80 + "\n\n")
 
@@ -148,5 +150,5 @@ def main():
         print("\n✅ No import errors found!")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

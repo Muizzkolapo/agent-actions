@@ -24,7 +24,7 @@ def pick_best_version(sources: List[str]) -> str:
     3. integrations/ over agents/
     """
     # Prefer core/ over _internal/
-    core_files = [s for s in sources if '/core/' in s]
+    core_files = [s for s in sources if "/core/" in s]
     if core_files:
         # If multiple core files, pick largest
         if len(core_files) > 1:
@@ -32,7 +32,7 @@ def pick_best_version(sources: List[str]) -> str:
         return core_files[0]
 
     # Prefer integrations/ over agents/
-    integration_files = [s for s in sources if '/integrations/' in s]
+    integration_files = [s for s in sources if "/integrations/" in s]
     if integration_files:
         return integration_files[0]
 
@@ -49,7 +49,7 @@ def auto_resolve_merges(plan_file: str, resolutions_file: str) -> dict:
     with open(resolutions_file) as f:
         resolutions = json.load(f)
 
-    merge_actions = resolutions['actions']['MERGE']
+    merge_actions = resolutions["actions"]["MERGE"]
 
     if not merge_actions:
         print("No MERGE actions to resolve")
@@ -57,12 +57,12 @@ def auto_resolve_merges(plan_file: str, resolutions_file: str) -> dict:
 
     print(f"🔵 Auto-resolving {len(merge_actions)} MERGE conflicts...\n")
 
-    updated_rules = plan['rules'].copy()
+    updated_rules = plan["rules"].copy()
     removed_count = 0
 
     for action in merge_actions:
-        dest = action['destination']
-        sources = action['sources']
+        dest = action["destination"]
+        sources = action["sources"]
 
         # Pick best version
         keep_file = pick_best_version(sources)
@@ -73,18 +73,15 @@ def auto_resolve_merges(plan_file: str, resolutions_file: str) -> dict:
 
         # Remove rules for files to delete
         for delete_file in delete_files:
-            updated_rules = [
-                rule for rule in updated_rules
-                if rule['source'] != delete_file
-            ]
+            updated_rules = [rule for rule in updated_rules if rule["source"] != delete_file]
             removed_count += 1
             print(f"   ❌ Removing: {Path(delete_file).relative_to(Path.cwd() / 'agent_actions')}")
 
         print()
 
-    plan['rules'] = updated_rules
-    plan['conflicts'] = []
-    plan['stats']['conflicts'] = 0
+    plan["rules"] = updated_rules
+    plan["conflicts"] = []
+    plan["stats"]["conflicts"] = 0
 
     print(f"✅ Removed {removed_count} duplicate rules")
     print(f"✅ Resolved {len(merge_actions)} MERGE conflicts\n")
@@ -111,8 +108,8 @@ def main():
     plan = auto_resolve_merges(plan_file, resolution_file)
 
     # Save final migration plan
-    output_file = 'plan_final.json'
-    with open(output_file, 'w') as f:
+    output_file = "plan_final.json"
+    with open(output_file, "w") as f:
         json.dump(plan, f, indent=2)
 
     print(f"📄 Final migration plan saved to: {output_file}")
@@ -120,8 +117,10 @@ def main():
     print(f"   Total files to migrate: {len(plan['rules'])}")
     print(f"   Remaining conflicts: {len(plan['conflicts'])}")
     print(f"\n✅ Ready to migrate! Run:")
-    print(f"   python .claude/helpers/stage_refactorer.py agent_actions/ --json {output_file} --execute --backup")
+    print(
+        f"   python .claude/helpers/stage_refactorer.py agent_actions/ --json {output_file} --execute --backup"
+    )
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

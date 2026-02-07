@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 @dataclass
 class MigrationRule:
     """Rule for migrating a file from old to new location."""
+
     source: Path
     destination: Path
     stage: str
@@ -35,6 +36,7 @@ class MigrationRule:
 @dataclass
 class RefactoringPlan:
     """Complete refactoring plan."""
+
     rules: List[MigrationRule] = field(default_factory=list)
     conflicts: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -49,22 +51,22 @@ class StageRefactorer:
         "input_loading": {
             "name": "Input Loading & Extraction",
             "patterns": ["extractor", "loader", "reader", "load", "extract", "read"],
-            "exclude_patterns": ["staging_loader"]  # Goes to preprocessing
+            "exclude_patterns": ["staging_loader"],  # Goes to preprocessing
         },
         "preprocessing": {
             "name": "Pre-Processing & Data Preparation",
             "patterns": ["staging", "filter", "chunk", "transform", "preprocess"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "validation": {
             "name": "Pre-LLM Validation",
             "patterns": ["validator", "validation", "validate", "check"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "prompt_generation": {
             "name": "Prompt Generation & Context Building",
             "patterns": ["generator", "prompt", "template", "render"],
-            "exclude_patterns": ["target_generator"]  # Goes to postprocessing
+            "exclude_patterns": ["target_generator"],  # Goes to postprocessing
         },
         "llm_invocation": {
             "name": "LLM Invocation & Provider Integration",
@@ -72,49 +74,49 @@ class StageRefactorer:
             "exclude_patterns": [],
             "subfolders": {
                 "realtime": ["provider", "vendor", "handler", "agent_builder", "streaming"],
-                "batch": ["batch", "queue", "poll"]
-            }
+                "batch": ["batch", "queue", "poll"],
+            },
         },
         "response_processing": {
             "name": "Response Processing & Transformation",
             "patterns": ["response", "interceptor", "strategy", "parse"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "postprocessing": {
             "name": "Post-Processing & Output Generation",
             "patterns": ["target", "output", "writer", "write", "post"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "orchestration": {
             "name": "Workflow Orchestration & Execution",
             "patterns": ["workflow", "runtime", "runner", "orchestrat", "execut", "graph"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "state_management": {
             "name": "State Management & Context",
             "patterns": ["artifact", "lineage", "context", "state", "signature"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "configuration": {
             "name": "Configuration & Schema Management",
             "patterns": ["parser", "config", "schema", "contract", "migration", "bootstrap"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "cli": {
             "name": "CLI & User Interface",
             "patterns": ["cli", "command", "task", "main"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "utilities": {
             "name": "Utilities & Common Functions",
             "patterns": ["util", "helper", "common", "constant"],
-            "exclude_patterns": []
+            "exclude_patterns": [],
         },
         "shared": {
             "name": "Shared / Cross-Cutting Concerns",
             "patterns": ["base", "exception", "type", "interface", "contract"],
-            "exclude_patterns": []
-        }
+            "exclude_patterns": [],
+        },
     }
 
     def __init__(self, root_path: str, dry_run: bool = True):
@@ -180,12 +182,12 @@ class StageRefactorer:
         for root, dirs, files in os.walk(self.root_path):
             # Skip already processed stage directories and pycache
             stage_dirs = list(self.STAGE_STRUCTURE.keys())
-            dirs[:] = [d for d in dirs if d not in stage_dirs and d != '__pycache__']
+            dirs[:] = [d for d in dirs if d not in stage_dirs and d != "__pycache__"]
 
             root_path = Path(root)
 
             for file_name in files:
-                if not file_name.endswith('.py') or file_name.startswith('.'):
+                if not file_name.endswith(".py") or file_name.startswith("."):
                     continue
 
                 source_file = root_path / file_name
@@ -225,7 +227,7 @@ class StageRefactorer:
                         destination=dest_file,
                         stage=stage,
                         confidence=confidence,
-                        reason=reason
+                        reason=reason,
                     )
 
                     self.plan.rules.append(rule)
@@ -236,7 +238,7 @@ class StageRefactorer:
             "total_files": total_files,
             "classified": classified_files,
             "unclassified": total_files - classified_files,
-            "conflicts": len(self.plan.conflicts)
+            "conflicts": len(self.plan.conflicts),
         }
 
         print(f"✅ Scanned {total_files} files")
@@ -311,16 +313,16 @@ class StageRefactorer:
                     "destination": str(r.destination),
                     "stage": r.stage,
                     "confidence": r.confidence,
-                    "reason": r.reason
+                    "reason": r.reason,
                 }
                 for r in self.plan.rules
             ],
             "conflicts": self.plan.conflicts,
             "warnings": self.plan.warnings,
-            "stats": self.plan.stats
+            "stats": self.plan.stats,
         }
 
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(plan_dict, f, indent=2)
 
         print(f"\n📄 Plan exported to: {output_file}")
@@ -360,7 +362,7 @@ class StageRefactorer:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='Refactor codebase to stage-based structure',
+        description="Refactor codebase to stage-based structure",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -375,41 +377,23 @@ Examples:
 
   # Execute with backup
   python stage_refactorer.py agent_actions/ --execute --backup
-        """
+        """,
     )
 
-    parser.add_argument(
-        'path',
-        type=str,
-        help='Root path to refactor'
-    )
+    parser.add_argument("path", type=str, help="Root path to refactor")
 
     parser.add_argument(
-        '--execute',
-        action='store_true',
-        help='Execute migration (default: dry run)'
+        "--execute", action="store_true", help="Execute migration (default: dry run)"
     )
 
-    parser.add_argument(
-        '--json',
-        type=str,
-        help='Export plan as JSON',
-        metavar='FILE'
-    )
+    parser.add_argument("--json", type=str, help="Export plan as JSON", metavar="FILE")
 
-    parser.add_argument(
-        '--backup',
-        action='store_true',
-        help='Create backup before executing'
-    )
+    parser.add_argument("--backup", action="store_true", help="Create backup before executing")
 
     args = parser.parse_args()
 
     # Create refactorer
-    refactorer = StageRefactorer(
-        root_path=args.path,
-        dry_run=not args.execute
-    )
+    refactorer = StageRefactorer(root_path=args.path, dry_run=not args.execute)
 
     # Build plan
     refactorer.build_migration_plan()
@@ -434,7 +418,7 @@ Examples:
 
         # Confirm
         response = input("\n⚠️  This will move files. Continue? (yes/no): ")
-        if response.lower() == 'yes':
+        if response.lower() == "yes":
             refactorer.execute_migration()
         else:
             print("   Cancelled.")
@@ -442,5 +426,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

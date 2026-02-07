@@ -19,6 +19,7 @@ import openai
 from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
@@ -94,13 +95,20 @@ class OpenAIClient(BaseClient):
             )
         )
 
+        # Build optional LLM parameters from agent config
+        completion_kwargs: Dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            "response_format": {"type": "json_schema", "json_schema": schema},
+            **extract_generation_params(
+                agent_config,
+                extra_params=("frequency_penalty", "presence_penalty"),
+            ),
+        }
+
         start_time = datetime.now()
         try:
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=messages,
-                response_format={"type": "json_schema", "json_schema": schema},
-            )
+            response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
             raise _wrap_openai_error(e, model_name, request_id) from e
         duration = (datetime.now() - start_time).total_seconds()
@@ -213,9 +221,19 @@ class OpenAIClient(BaseClient):
             )
         )
 
+        # Build optional LLM parameters from agent config
+        completion_kwargs: Dict[str, Any] = {
+            "model": model_name,
+            "messages": messages,
+            **extract_generation_params(
+                agent_config,
+                extra_params=("frequency_penalty", "presence_penalty"),
+            ),
+        }
+
         start_time = datetime.now()
         try:
-            response = client.chat.completions.create(model=model_name, messages=messages)
+            response = client.chat.completions.create(**completion_kwargs)
         except openai.APIError as e:
             raise _wrap_openai_error(e, model_name, request_id) from e
         duration = (datetime.now() - start_time).total_seconds()

@@ -171,8 +171,10 @@ class TestTaskPreparerGuardEvaluation:
         preparer = TaskPreparer()
 
         # Mock context loading and prompt rendering
-        with patch.object(preparer, "_load_full_context") as mock_ctx, \
-             patch.object(preparer, "_render_prompt") as mock_prep:
+        with (
+            patch.object(preparer, "_load_full_context") as mock_ctx,
+            patch.object(preparer, "_render_prompt") as mock_prep,
+        ):
             mock_ctx.return_value = {"content": "test"}
             mock_result = MagicMock()
             mock_result.formatted_prompt = "test"
@@ -193,7 +195,9 @@ class TestTaskPreparerPrepare:
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._render_prompt")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._evaluate_guard")
-    def test_prepare_returns_prepared_task(self, mock_guard, mock_render_prompt, mock_load_ctx, basic_context):
+    def test_prepare_returns_prepared_task(
+        self, mock_guard, mock_render_prompt, mock_load_ctx, basic_context
+    ):
         """Test prepare returns PreparedTask with all fields."""
         # Setup mocks - context loading
         mock_load_ctx.return_value = {"content": "test", "full": "context"}
@@ -361,7 +365,9 @@ class TestGuardEvaluatedOnce:
 class TestModeSelection:
     """Tests for batch/realtime mode selection based on is_batch_mode flag."""
 
-    @patch("agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context")
+    @patch(
+        "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
+    )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_online_mode_uses_realtime(self, mock_load_ctx, mock_prepare):
         """Test that online processing (is_batch_mode=False) uses realtime mode."""
@@ -391,7 +397,9 @@ class TestModeSelection:
         call_kwargs = mock_prepare.call_args[1]
         assert call_kwargs["mode"] == "realtime"
 
-    @patch("agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context")
+    @patch(
+        "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
+    )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_batch_mode_uses_batch(self, mock_load_ctx, mock_prepare):
         """Test that batch processing (is_batch_mode=True) uses batch mode."""
@@ -420,7 +428,9 @@ class TestModeSelection:
         call_kwargs = mock_prepare.call_args[1]
         assert call_kwargs["mode"] == "batch"
 
-    @patch("agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context")
+    @patch(
+        "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
+    )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     def test_online_with_loop_uses_realtime(self, mock_load_ctx, mock_prepare):
         """Test that online processing with loop context also uses realtime mode."""
@@ -460,7 +470,9 @@ class TestGuardBeforePromptRendering:
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._evaluate_guard")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._render_prompt")
-    def test_guard_filter_prevents_prompt_rendering(self, mock_render_prompt, mock_guard, mock_load_ctx):
+    def test_guard_filter_prevents_prompt_rendering(
+        self, mock_render_prompt, mock_guard, mock_load_ctx
+    ):
         """Verify filtered items don't trigger prompt rendering."""
         # Setup context loading
         mock_load_ctx.return_value = {"status": "inactive"}
@@ -495,7 +507,9 @@ class TestGuardBeforePromptRendering:
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._evaluate_guard")
     @patch("agent_actions.processing.task_preparer.TaskPreparer._render_prompt")
-    def test_guard_pass_triggers_prompt_rendering(self, mock_render_prompt, mock_guard, mock_load_ctx):
+    def test_guard_pass_triggers_prompt_rendering(
+        self, mock_render_prompt, mock_guard, mock_load_ctx
+    ):
         """Verify passing items DO trigger prompt rendering."""
         # Setup context loading
         mock_load_ctx.return_value = {"status": "active", "field": "value"}

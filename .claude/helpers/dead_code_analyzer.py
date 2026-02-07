@@ -13,6 +13,7 @@ Confidence Tiers:
 - MEDIUM (70-89%): Vulture detects but filtered for common patterns
 - LOW (<70%): Vulture only, high false positive risk
 """
+
 import ast
 import sys
 import subprocess
@@ -25,6 +26,7 @@ from dataclasses import dataclass, field
 @dataclass
 class DeadCodeItem:
     """Represents a single dead code finding."""
+
     file_path: str
     line_number: int
     item_type: str  # function, class, variable, import, method, property, attribute
@@ -39,6 +41,7 @@ class DeadCodeItem:
 @dataclass
 class DeadCodeReport:
     """Complete dead code analysis for a file or directory."""
+
     analyzed_paths: List[str] = field(default_factory=list)
     total_files: int = 0
     total_dead_items: int = 0
@@ -74,20 +77,20 @@ FALSE_POSITIVE_PATTERNS = {
             r"Processor$",  # FooProcessor classes
             r"Factory$",  # FooFactory classes
             r"Plugin$",  # FooPlugin classes
-        ]
+        ],
     },
     "abstract_method": {
         "description": "Abstract method in base class",
         "indicators": [
             r"^_.*",  # Private methods starting with _
         ],
-        "context_required": ["ABC", "abstractmethod", "BaseClass", "Abstract"]
+        "context_required": ["ABC", "abstractmethod", "BaseClass", "Abstract"],
     },
     "magic_method": {
         "description": "Magic/dunder method",
         "indicators": [
             r"^__.*__$",  # __init__, __str__, etc.
-        ]
+        ],
     },
     "test_fixture": {
         "description": "Test fixture or pytest hook",
@@ -96,18 +99,20 @@ FALSE_POSITIVE_PATTERNS = {
             r"^setUp",
             r"^tearDown",
             r"^pytest_",
-        ]
+        ],
     },
     "property_decorator": {
         "description": "Property accessed via decorator",
         "indicators": [
             r"@property",
-        ]
-    }
+        ],
+    },
 }
 
 
-def check_false_positive_risk(item: DeadCodeItem, file_content: Optional[str] = None) -> Tuple[bool, str]:
+def check_false_positive_risk(
+    item: DeadCodeItem, file_content: Optional[str] = None
+) -> Tuple[bool, str]:
     """
     Check if an item is likely a false positive.
 
@@ -144,6 +149,7 @@ def check_false_positive_risk(item: DeadCodeItem, file_content: Optional[str] = 
 # RUFF INTEGRATION
 # =============================================================================
 
+
 def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
     """
     Run Ruff for accurate import and variable detection.
@@ -155,48 +161,53 @@ def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
     try:
         # Check if ruff is available
         result = subprocess.run(
-            ['ruff', 'check', str(target_path), '--select', 'F401,F841', '--output-format', 'text'],
+            ["ruff", "check", str(target_path), "--select", "F401,F841", "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
 
         # Parse ruff output
         # Format: path/file.py:line:col: F401 `module` imported but unused
-        for line in result.stdout.strip().split('\n'):
+        for line in result.stdout.strip().split("\n"):
             if not line.strip():
                 continue
 
             try:
                 # Example: agent_actions/core/parser.py:10:1: F401 `datetime` imported but unused
-                match = re.match(r'([^:]+):(\d+):\d+:\s+(F\d+)\s+(.+)', line)
+                match = re.match(r"([^:]+):(\d+):\d+:\s+(F\d+)\s+(.+)", line)
                 if match:
                     file_path, line_num, code, message = match.groups()
 
                     # Extract item name from message
-                    name_match = re.search(r'`([^`]+)`', message)
+                    name_match = re.search(r"`([^`]+)`", message)
                     if name_match:
                         item_name = name_match.group(1)
 
                         # Determine type
                         item_type = "import" if code == "F401" else "variable"
 
-                        dead_items.append(DeadCodeItem(
-                            file_path=file_path,
-                            line_number=int(line_num),
-                            item_type=item_type,
-                            item_name=item_name,
-                            confidence=95,  # Ruff is very accurate
-                            reason=f"Ruff: {message}",
-                            size_lines=1,
-                            detected_by=["ruff"]
-                        ))
+                        dead_items.append(
+                            DeadCodeItem(
+                                file_path=file_path,
+                                line_number=int(line_num),
+                                item_type=item_type,
+                                item_name=item_name,
+                                confidence=95,  # Ruff is very accurate
+                                reason=f"Ruff: {message}",
+                                size_lines=1,
+                                detected_by=["ruff"],
+                            )
+                        )
             except Exception as e:
                 print(f"Warning: Could not parse ruff line: {line}", file=sys.stderr)
                 continue
 
     except FileNotFoundError:
-        print("Info: Ruff not found. Install with: pip install ruff (highly recommended)", file=sys.stderr)
+        print(
+            "Info: Ruff not found. Install with: pip install ruff (highly recommended)",
+            file=sys.stderr,
+        )
         return []
     except subprocess.TimeoutExpired:
         print("Warning: Ruff analysis timed out", file=sys.stderr)
@@ -212,6 +223,7 @@ def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
 # VULTURE INTEGRATION
 # =============================================================================
 
+
 def run_vulture_analysis(target_path: Path) -> List[DeadCodeItem]:
     """
     Run vulture to detect dead code.
@@ -222,50 +234,52 @@ def run_vulture_analysis(target_path: Path) -> List[DeadCodeItem]:
 
     try:
         result = subprocess.run(
-            ['vulture', str(target_path), '--min-confidence', '60'],
+            ["vulture", str(target_path), "--min-confidence", "60"],
             capture_output=True,
             text=True,
-            timeout=60
+            timeout=60,
         )
 
         if result.stdout:
-            for line in result.stdout.strip().split('\n'):
+            for line in result.stdout.strip().split("\n"):
                 if not line.strip():
                     continue
 
                 try:
                     # Example: agent_actions/core/parser.py:45: unused function 'parse_data' (60% confidence)
-                    parts = line.split(':', 2)
+                    parts = line.split(":", 2)
                     if len(parts) >= 3:
                         file_path = parts[0].strip()
                         line_num = int(parts[1].strip())
                         message = parts[2].strip()
 
-                        if 'unused' in message:
+                        if "unused" in message:
                             msg_parts = message.split("'")
                             if len(msg_parts) >= 2:
                                 item_name = msg_parts[1]
 
                                 # Extract type
-                                type_part = message.split('unused')[1].split("'")[0].strip()
+                                type_part = message.split("unused")[1].split("'")[0].strip()
                                 item_type = type_part.lower()
 
                                 # Extract confidence
                                 confidence = 60
-                                if '(' in message and '%' in message:
-                                    conf_str = message.split('(')[1].split('%')[0]
+                                if "(" in message and "%" in message:
+                                    conf_str = message.split("(")[1].split("%")[0]
                                     confidence = int(conf_str)
 
-                                dead_items.append(DeadCodeItem(
-                                    file_path=file_path,
-                                    line_number=line_num,
-                                    item_type=item_type,
-                                    item_name=item_name,
-                                    confidence=confidence,
-                                    reason=f"Vulture detected unused {item_type}",
-                                    size_lines=1,
-                                    detected_by=["vulture"]
-                                ))
+                                dead_items.append(
+                                    DeadCodeItem(
+                                        file_path=file_path,
+                                        line_number=line_num,
+                                        item_type=item_type,
+                                        item_name=item_name,
+                                        confidence=confidence,
+                                        reason=f"Vulture detected unused {item_type}",
+                                        size_lines=1,
+                                        detected_by=["vulture"],
+                                    )
+                                )
                 except (ValueError, IndexError):
                     continue
 
@@ -282,6 +296,7 @@ def run_vulture_analysis(target_path: Path) -> List[DeadCodeItem]:
 # =============================================================================
 # AST ANALYSIS
 # =============================================================================
+
 
 class DeadCodeDetector(ast.NodeVisitor):
     """AST visitor to detect potentially unused code patterns."""
@@ -304,7 +319,7 @@ class DeadCodeDetector(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom):
         """Track from imports."""
         for alias in node.names:
-            if alias.name != '*':
+            if alias.name != "*":
                 name = alias.asname if alias.asname else alias.name
                 self.imports[name] = node.lineno
         self.generic_visit(node)
@@ -323,7 +338,7 @@ class DeadCodeDetector(ast.NodeVisitor):
         """Track function definitions."""
         if self.current_class:
             self.class_methods[self.current_class].append(node.name)
-            if not (node.name.startswith('__') or node.name in ['setUp', 'tearDown', 'test_']):
+            if not (node.name.startswith("__") or node.name in ["setUp", "tearDown", "test_"]):
                 self.defined_names[f"{self.current_class}.{node.name}"] = node.lineno
         else:
             self.defined_names[node.name] = node.lineno
@@ -346,23 +361,25 @@ class DeadCodeDetector(ast.NodeVisitor):
         unused = []
         for name, line in self.imports.items():
             if name not in self.used_names:
-                unused.append(DeadCodeItem(
-                    file_path=self.file_path,
-                    line_number=line,
-                    item_type="import",
-                    item_name=name,
-                    confidence=85,
-                    reason="AST analysis: Import never referenced",
-                    size_lines=1,
-                    detected_by=["ast"]
-                ))
+                unused.append(
+                    DeadCodeItem(
+                        file_path=self.file_path,
+                        line_number=line,
+                        item_type="import",
+                        item_name=name,
+                        confidence=85,
+                        reason="AST analysis: Import never referenced",
+                        size_lines=1,
+                        detected_by=["ast"],
+                    )
+                )
         return unused
 
 
 def analyze_file_ast(file_path: Path) -> List[DeadCodeItem]:
     """Analyze a single file using AST."""
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -382,10 +399,9 @@ def analyze_file_ast(file_path: Path) -> List[DeadCodeItem]:
 # MULTI-TOOL ANALYSIS & CONFIDENCE SCORING
 # =============================================================================
 
+
 def merge_and_score_findings(
-    ruff_items: List[DeadCodeItem],
-    vulture_items: List[DeadCodeItem],
-    ast_items: List[DeadCodeItem]
+    ruff_items: List[DeadCodeItem], vulture_items: List[DeadCodeItem], ast_items: List[DeadCodeItem]
 ) -> List[DeadCodeItem]:
     """
     Merge findings from multiple tools and adjust confidence scores.
@@ -444,6 +460,7 @@ def merge_and_score_findings(
 # LINE SPAN CALCULATION
 # =============================================================================
 
+
 def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
     """Calculate the actual line span for each dead code item."""
     items_by_file: Dict[str, List[DeadCodeItem]] = {}
@@ -455,10 +472,10 @@ def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
 
     for file_path, items in items_by_file.items():
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
-            tree = ast.parse(''.join(lines), filename=file_path)
+            tree = ast.parse("".join(lines), filename=file_path)
 
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
@@ -479,6 +496,7 @@ def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
 # MAIN ANALYSIS FUNCTION
 # =============================================================================
 
+
 def analyze_dead_code(target_path: Path) -> DeadCodeReport:
     """
     Perform comprehensive multi-tool dead code analysis.
@@ -490,7 +508,7 @@ def analyze_dead_code(target_path: Path) -> DeadCodeReport:
         files = [target_path]
         report.analyzed_paths = [str(target_path)]
     else:
-        files = [f for f in target_path.rglob("*.py") if '__pycache__' not in str(f)]
+        files = [f for f in target_path.rglob("*.py") if "__pycache__" not in str(f)]
         report.analyzed_paths = [str(target_path)]
 
     report.total_files = len(files)
@@ -502,13 +520,13 @@ def analyze_dead_code(target_path: Path) -> DeadCodeReport:
     # 1. Ruff (fast and accurate)
     print("  [1/3] Running Ruff analysis...", file=sys.stderr)
     ruff_items = run_ruff_analysis(target_path)
-    report.tools_available['ruff'] = len(ruff_items) > 0 or True  # Tool ran successfully
+    report.tools_available["ruff"] = len(ruff_items) > 0 or True  # Tool ran successfully
     print(f"        Found {len(ruff_items)} items", file=sys.stderr)
 
     # 2. Vulture (comprehensive but noisy)
     print("  [2/3] Running Vulture analysis...", file=sys.stderr)
     vulture_items = run_vulture_analysis(target_path)
-    report.tools_available['vulture'] = len(vulture_items) > 0 or True
+    report.tools_available["vulture"] = len(vulture_items) > 0 or True
     print(f"        Found {len(vulture_items)} items", file=sys.stderr)
 
     # 3. AST analysis
@@ -516,7 +534,7 @@ def analyze_dead_code(target_path: Path) -> DeadCodeReport:
     ast_items = []
     for file_path in files:
         ast_items.extend(analyze_file_ast(file_path))
-    report.tools_available['ast'] = True
+    report.tools_available["ast"] = True
     print(f"        Found {len(ast_items)} items", file=sys.stderr)
 
     print("", file=sys.stderr)
@@ -535,19 +553,19 @@ def analyze_dead_code(target_path: Path) -> DeadCodeReport:
     for item in report.dead_items:
         report.dead_lines_total += item.size_lines
 
-        if item.item_type in ['function', 'def']:
+        if item.item_type in ["function", "def"]:
             report.unused_functions += 1
-        elif item.item_type in ['class', 'cls']:
+        elif item.item_type in ["class", "cls"]:
             report.unused_classes += 1
-        elif item.item_type in ['variable', 'var']:
+        elif item.item_type in ["variable", "var"]:
             report.unused_variables += 1
-        elif item.item_type == 'import':
+        elif item.item_type == "import":
             report.unused_imports += 1
-        elif item.item_type in ['method', 'function']:
+        elif item.item_type in ["method", "function"]:
             report.unused_methods += 1
-        elif item.item_type == 'property':
+        elif item.item_type == "property":
             report.unused_properties += 1
-        elif item.item_type == 'attribute':
+        elif item.item_type == "attribute":
             report.unused_attributes += 1
 
     print("", file=sys.stderr)
@@ -557,6 +575,7 @@ def analyze_dead_code(target_path: Path) -> DeadCodeReport:
 # =============================================================================
 # ENHANCED REPORTING
 # =============================================================================
+
 
 def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> str:
     """Generate an enhanced ASCII report with confidence tiers."""
@@ -636,7 +655,9 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
                 lines.append(f"📄 {display_path}")
                 for item in sorted(items, key=lambda x: x.line_number):
                     tools_str = ",".join(item.detected_by)
-                    lines.append(f"   Line {item.line_number}: {item.item_type} '{item.item_name}' [{item.confidence}% | {tools_str}]")
+                    lines.append(
+                        f"   Line {item.line_number}: {item.item_type} '{item.item_name}' [{item.confidence}% | {tools_str}]"
+                    )
                 lines.append("")
         else:
             lines.append("  No high-confidence dead code found.")
@@ -665,7 +686,9 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
                 for item in sorted(items, key=lambda x: x.line_number)[:5]:  # Top 5 per file
                     tools_str = ",".join(item.detected_by)
                     risk_str = f" ⚠️  {item.false_positive_risk}" if item.false_positive_risk else ""
-                    lines.append(f"   Line {item.line_number}: {item.item_type} '{item.item_name}' [{item.confidence}% | {tools_str}]{risk_str}")
+                    lines.append(
+                        f"   Line {item.line_number}: {item.item_type} '{item.item_name}' [{item.confidence}% | {tools_str}]{risk_str}"
+                    )
                 if len(items) > 5:
                     lines.append(f"   ... and {len(items) - 5} more")
                 lines.append("")
@@ -679,7 +702,9 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
             lines.append(f"⚪ LOW CONFIDENCE ITEMS (<70%) - {len(low_conf)} items")
             lines.append("─" * 100)
             lines.append("  These items have high false positive risk and are not shown in detail.")
-            lines.append("  Most are likely used via dispatch tables, polymorphism, or dynamic loading.")
+            lines.append(
+                "  Most are likely used via dispatch tables, polymorphism, or dynamic loading."
+            )
             lines.append("  Run with --show-all to see full list.")
             lines.append("")
 
@@ -699,9 +724,11 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
     lines.append("")
 
     if report.unused_imports > 0:
-        high_conf_imports = [i for i in high_conf if i.item_type == 'import']
+        high_conf_imports = [i for i in high_conf if i.item_type == "import"]
         if high_conf_imports:
-            lines.append(f"  🚀 Quick win: Remove {len(high_conf_imports)} unused imports (safest cleanup)")
+            lines.append(
+                f"  🚀 Quick win: Remove {len(high_conf_imports)} unused imports (safest cleanup)"
+            )
             lines.append("")
 
     lines.append(f"  Safe removal estimate: ~{sum(i.size_lines for i in high_conf):,} lines")
@@ -717,6 +744,7 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
 # MAIN
 # =============================================================================
 
+
 def main():
     """Main entry point."""
     if len(sys.argv) < 2:
@@ -728,8 +756,8 @@ def main():
         sys.exit(1)
 
     target_path = Path(sys.argv[1])
-    show_details = '--brief' not in sys.argv
-    show_all = '--show-all' in sys.argv
+    show_details = "--brief" not in sys.argv
+    show_all = "--show-all" in sys.argv
 
     if not target_path.exists():
         print(f"Error: {target_path} does not exist", file=sys.stderr)

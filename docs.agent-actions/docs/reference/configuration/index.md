@@ -122,6 +122,17 @@ actions:
 | `api_key` | string | Environment variable name for API key |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
+| `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
+| `stop` | string/list | Stop sequence(s) to end generation |
+
+:::note Vendor-Specific Parameter Mapping
+Generation parameters (`temperature`, `max_tokens`, `top_p`, `stop`) are mapped to vendor-specific API keys automatically:
+- **OpenAI / Groq / Mistral**: Parameters passed through as-is. OpenAI and Groq also support `frequency_penalty` and `presence_penalty`.
+- **Anthropic**: `stop` → `stop_sequences` (string values are wrapped in a list)
+- **Gemini**: `max_tokens` → `max_output_tokens`, `stop` → `stop_sequences`
+- **Cohere**: `top_p` → `p`, `stop` → `stop_sequences`
+- **Ollama**: `max_tokens` → `num_predict`, parameters placed in `options` dict. `stop` strings are wrapped in a list.
+:::
 
 ### Execution Fields
 

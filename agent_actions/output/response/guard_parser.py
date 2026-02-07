@@ -192,6 +192,7 @@ class GuardParser:
         """Check if a guard expression is SQL-like."""
         return guard and (not guard.strip().startswith(cls.UDF_PREFIX))
 
+
 def parse_guard(guard: str) -> GuardExpression:
     """Convenience function to parse guard expressions."""
     return GuardParser.parse(guard)

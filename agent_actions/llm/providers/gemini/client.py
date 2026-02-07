@@ -18,6 +18,7 @@ from google.api_core import exceptions as google_exceptions
 
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import (
     JSONResponseMixin,
     GenericErrorHandlerMixin,
@@ -76,10 +77,17 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             genai.configure(api_key=api_key)
+            generation_config = {
+                "response_mime_type": "application/json",
+                **extract_generation_params(
+                    agent_config,
+                    key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
+                    stop_as_list=True,
+                ),
+            }
             llm = genai.GenerativeModel(
                 model_name,
-                system_instruction="Return only JSON",
-                generation_config={"response_mime_type": "application/json"},
+                generation_config=generation_config,
             )
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
@@ -133,12 +141,13 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        return GeminiClient.parse_json_response(
+        result = GeminiClient.parse_json_response(
             response_content=response_temp.text,
             vendor_name="Gemini",
             operation="call_json",
             model_name=model_name,
         )
+        return result if isinstance(result, list) else [result]
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -159,10 +168,14 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             genai.configure(api_key=api_key)
+            generation_config = extract_generation_params(
+                agent_config,
+                key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
+                stop_as_list=True,
+            )
             llm = genai.GenerativeModel(
                 model_name,
-                system_instruction="Return only JSON",
-                generation_config={"response_mime_type": "application/json"},
+                generation_config=generation_config if generation_config else None,
             )
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
@@ -231,15 +244,16 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
         )
 
-        response_list = response_temp.text
+        output_field = agent_config.get("output_field", "raw_response")
+        response_text = response_temp.text
 
         logger.debug(
             "Gemini non-JSON response retrieved successfully",
             extra={
                 "operation": "gemini_call_non_json",
                 "model": model_name,
-                "response_length": len(response_list) if response_list else 0,
+                "response_length": len(response_text) if response_text else 0,
                 "request_id": request_id,
             },
         )
-        return [response_list]
+        return [{output_field: response_text}]

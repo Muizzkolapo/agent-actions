@@ -170,7 +170,8 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
         if field.get("required", False):
             required.append(key)
     target = target_system.lower()
-    if target == "openai":
+    if target in ("openai", "groq", "mistral", "agac-provider"):
+        # OpenAI-compatible format — Groq, Mistral, and agac-provider use the same shape
         compiled = {
             "name": unified.get("name", ""),
             "schema": {
@@ -203,16 +204,12 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
             "required": required,
             "additionalProperties": False,
         }
-    elif target == "agac-provider":
-        # Use OpenAI-compatible format for agac-provider
+    elif target == "cohere":
+        # Cohere native format
         compiled = {
-            "name": unified.get("name", ""),
-            "schema": {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-                "additionalProperties": False,
-            },
+            "type": "object",
+            "properties": properties,
+            "required": required,
         }
     else:
         raise ConfigValidationError(
@@ -220,7 +217,16 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
             f"Unknown target system: {target}",
             context={
                 "target_system": target,
-                "valid_systems": ["openai", "anthropic", "gemini", "ollama", "agac-provider"],
+                "valid_systems": [
+                    "openai",
+                    "anthropic",
+                    "gemini",
+                    "ollama",
+                    "agac-provider",
+                    "groq",
+                    "mistral",
+                    "cohere",
+                ],
                 "operation": "compile_unified_schema",
             },
         )
@@ -445,7 +451,7 @@ def _compile_schema_for_vendor(
     except ConfigValidationError:
         logger.warning(
             "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
-            "For schema support, use one of: openai, anthropic, gemini, ollama, agac-provider",
+            "For schema support, use one of: openai, anthropic, gemini, ollama, groq, mistral, cohere, agac-provider",
             vendor,
             schema_name,
         )

@@ -41,6 +41,7 @@ import fnmatch
 @dataclass
 class ModuleInfo:
     """Information about a Python module."""
+
     path: Path
     name: str
     imports: List[str] = field(default_factory=list)
@@ -54,6 +55,7 @@ class ModuleInfo:
 @dataclass
 class DirectoryInfo:
     """Information about a directory."""
+
     path: Path
     name: str
     modules: List[str] = field(default_factory=list)
@@ -66,6 +68,7 @@ class DirectoryInfo:
 @dataclass
 class OrganizationReport:
     """Complete organization report."""
+
     root_path: Path
     total_modules: int = 0
     total_directories: int = 0
@@ -81,20 +84,20 @@ class CodeOrganizer:
 
     # Known architectural patterns (13-stage architecture)
     LAYER_PATTERNS = {
-        'input_loading': 'Stage 1: Input Loading',
-        'preprocessing': 'Stage 2: Pre-Processing',
-        'validation': 'Stage 3: Validation',
-        'prompt_generation': 'Stage 4: Prompt Generation',
-        'llm_invocation': 'Stage 5: LLM Invocation',
-        'response_processing': 'Stage 6: Response Processing',
-        'postprocessing': 'Stage 7: Post-Processing',
-        'orchestration': 'Workflow Orchestration',
-        'state_management': 'State Management',
-        'configuration': 'Configuration & DI',
-        'cli': 'CLI Interface',
-        'utilities': 'Utilities',
-        'shared': 'Shared Components',
-        'tests': 'Test Suite',
+        "input_loading": "Stage 1: Input Loading",
+        "preprocessing": "Stage 2: Pre-Processing",
+        "validation": "Stage 3: Validation",
+        "prompt_generation": "Stage 4: Prompt Generation",
+        "llm_invocation": "Stage 5: LLM Invocation",
+        "response_processing": "Stage 6: Response Processing",
+        "postprocessing": "Stage 7: Post-Processing",
+        "orchestration": "Workflow Orchestration",
+        "state_management": "State Management",
+        "configuration": "Configuration & DI",
+        "cli": "CLI Interface",
+        "utilities": "Utilities",
+        "shared": "Shared Components",
+        "tests": "Test Suite",
     }
 
     # Processing stages in the agent pipeline (updated for 13-stage architecture)
@@ -103,112 +106,121 @@ class CodeOrganizer:
             "name": "Input Loading & Extraction",
             "description": "Load and extract data from various sources (JSON, CSV, XML, text)",
             "patterns": ["input_loading/", "file_reader", "loader"],
-            "keywords": ["loader", "extractor", "reader", "load", "extract", "read"]
+            "keywords": ["loader", "extractor", "reader", "load", "extract", "read"],
         },
         "2_PRE_PROCESSING": {
             "name": "Pre-Processing & Data Preparation",
             "description": "Transform, filter, chunk, and prepare data before LLM processing",
             "patterns": ["preprocessing/", "staging", "filter", "chunk"],
-            "keywords": ["staging", "filter", "chunk", "transform", "prepare", "preprocess"]
+            "keywords": ["staging", "filter", "chunk", "transform", "prepare", "preprocess"],
         },
         "3_VALIDATION": {
             "name": "Validation",
             "description": "Validate inputs, prompts, configurations, and outputs",
             "patterns": ["validation/", "validator"],
-            "keywords": ["validator", "validate", "validation", "check"]
+            "keywords": ["validator", "validate", "validation", "check"],
         },
         "4_PROMPT_GENERATION": {
             "name": "Prompt Generation & Context Building",
             "description": "Build prompts, manage context, apply templates",
             "patterns": ["prompt_generation/", "generator", "prompt", "render"],
-            "keywords": ["generator", "prompt", "template", "render", "context"]
+            "keywords": ["generator", "prompt", "template", "render", "context"],
         },
         "5_LLM_INVOCATION": {
             "name": "LLM Invocation & Provider Integration",
             "description": "Call LLM providers (OpenAI, Anthropic, Gemini, etc.) for real-time and batch processing",
             "patterns": ["llm_invocation/", "provider", "vendor", "handler"],
-            "keywords": ["provider", "vendor", "handler", "llm", "model"]
+            "keywords": ["provider", "vendor", "handler", "llm", "model"],
         },
         "5B_BATCH_PROCESSING": {
             "name": "Batch Processing & Queue Management",
             "description": "Manage batch operations, queue submissions, async result polling, and bulk LLM processing",
             "patterns": ["llm_invocation/batch/", "batch_service", "queue"],
-            "keywords": ["batch", "batch_service", "queue", "async", "poll", "submit", "result", "bulk"]
+            "keywords": [
+                "batch",
+                "batch_service",
+                "queue",
+                "async",
+                "poll",
+                "submit",
+                "result",
+                "bulk",
+            ],
         },
         "6_RESPONSE_PROCESSING": {
             "name": "Response Processing & Transformation",
             "description": "Process LLM responses, parse JSON, transform outputs",
             "patterns": ["response_processing/", "response_transformer", "interceptor"],
-            "keywords": ["transformer", "response", "interceptor", "strategy", "parse"]
+            "keywords": ["transformer", "response", "interceptor", "strategy", "parse"],
         },
         "7_POST_PROCESSING": {
             "name": "Post-Processing & Output Generation",
             "description": "Generate final outputs, apply post-processing",
             "patterns": ["postprocessing/", "target", "output", "writer"],
-            "keywords": ["target", "output", "writer", "write", "generate"]
+            "keywords": ["target", "output", "writer", "write", "generate"],
         },
         "8_ORCHESTRATION": {
             "name": "Workflow Orchestration & Execution",
             "description": "Manage workflow execution, dependencies, and task orchestration",
             "patterns": ["orchestration/", "workflow", "runner", "graph"],
-            "keywords": ["workflow", "runtime", "runner", "orchestrat", "execut", "graph"]
+            "keywords": ["workflow", "runtime", "runner", "orchestrat", "execut", "graph"],
         },
         "9_STATE_MANAGEMENT": {
             "name": "State Management & Context",
             "description": "Manage application state, context, and artifacts",
             "patterns": ["state_management/", "artifact", "lineage", "manifest"],
-            "keywords": ["context", "artifact", "state", "lineage", "manifest", "path_manager"]
+            "keywords": ["context", "artifact", "state", "lineage", "manifest", "path_manager"],
         },
         "10_CONFIGURATION": {
             "name": "Configuration & Schema Management",
             "description": "Parse and manage configuration, schemas, DI, and bootstrapping",
             "patterns": ["configuration/", "config", "schema", "di_configurator"],
-            "keywords": ["config", "schema", "bootstrap", "di_configurator", "container"]
+            "keywords": ["config", "schema", "bootstrap", "di_configurator", "container"],
         },
         "11_CLI_INTERFACE": {
             "name": "CLI & User Interface",
             "description": "Command-line interface and user interactions",
             "patterns": ["cli/", "command"],
-            "keywords": ["cli", "command", "task", "interface"]
+            "keywords": ["cli", "command", "task", "interface"],
         },
         "12_UTILITIES": {
             "name": "Utilities & Common Functions",
             "description": "Shared utilities, helpers, and common functions",
             "patterns": ["utils", "common", "helper"],
-            "keywords": ["utils", "helper", "common", "utility"]
+            "keywords": ["utils", "helper", "common", "utility"],
         },
     }
 
     COMMON_SUBMODULES = {
-        'base': 'Base classes and interfaces',
-        'handlers': 'Request/response handlers',
-        'validators': 'Validation logic',
-        'utils': 'Utility functions',
-        'extractors': 'Data extraction',
-        'generators': 'Data generation',
-        'transformers': 'Data transformation',
-        'loaders': 'Data loading',
-        'providers': 'Service providers',
-        'strategies': 'Strategy patterns',
-        'interceptors': 'Interceptor patterns',
-        'services': 'Business services',
-        'contracts': 'Interfaces and contracts',
-        'context': 'Context management',
-        'graph': 'Graph structures',
-        'parser': 'Parsing logic',
-        'runtime': 'Runtime execution',
-        'migration': 'Data migration',
-        'lineage': 'Lineage tracking',
-        'filters': 'Filtering logic',
-        'bootstrap': 'Initialization',
-        'common': 'Common utilities',
-        'staging': 'Staging operations',
+        "base": "Base classes and interfaces",
+        "handlers": "Request/response handlers",
+        "validators": "Validation logic",
+        "utils": "Utility functions",
+        "extractors": "Data extraction",
+        "generators": "Data generation",
+        "transformers": "Data transformation",
+        "loaders": "Data loading",
+        "providers": "Service providers",
+        "strategies": "Strategy patterns",
+        "interceptors": "Interceptor patterns",
+        "services": "Business services",
+        "contracts": "Interfaces and contracts",
+        "context": "Context management",
+        "graph": "Graph structures",
+        "parser": "Parsing logic",
+        "runtime": "Runtime execution",
+        "migration": "Data migration",
+        "lineage": "Lineage tracking",
+        "filters": "Filtering logic",
+        "bootstrap": "Initialization",
+        "common": "Common utilities",
+        "staging": "Staging operations",
     }
 
     def __init__(self, root_path: str, exclude_patterns: List[str] = None):
         """Initialize organizer."""
         self.root_path = Path(root_path).resolve()
-        self.exclude_patterns = exclude_patterns or ['__pycache__', '*.pyc', '.git', 'venv', 'env']
+        self.exclude_patterns = exclude_patterns or ["__pycache__", "*.pyc", ".git", "venv", "env"]
         self.modules: Dict[str, ModuleInfo] = {}
         self.directories: Dict[str, DirectoryInfo] = {}
 
@@ -220,7 +232,7 @@ class CodeOrganizer:
     def analyze_module(self, file_path: Path) -> ModuleInfo:
         """Analyze a single Python module."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
                 tree = ast.parse(content)
         except Exception as e:
@@ -241,7 +253,7 @@ class CodeOrganizer:
             elif isinstance(node, ast.ClassDef):
                 classes.append(node.name)
             elif isinstance(node, ast.FunctionDef):
-                if not node.name.startswith('_'):  # Skip private functions
+                if not node.name.startswith("_"):  # Skip private functions
                     functions.append(node.name)
 
         lines_of_code = len(content.splitlines())
@@ -269,14 +281,14 @@ class CodeOrganizer:
                 if self.should_exclude(item):
                     continue
 
-                if item.is_file() and item.suffix == '.py':
+                if item.is_file() and item.suffix == ".py":
                     total_files += 1
                     module_info = self.analyze_module(item)
                     modules.append(module_info.name)
                     total_lines += module_info.lines_of_code
                     self.modules[str(item.relative_to(self.root_path))] = module_info
 
-                    if item.name == '__init__.py':
+                    if item.name == "__init__.py":
                         has_init = True
 
                 elif item.is_dir():
@@ -334,14 +346,14 @@ class CodeOrganizer:
 
         for stage_id, stage_info in self.PROCESSING_STAGES.items():
             # Check patterns
-            for pattern in stage_info['patterns']:
+            for pattern in stage_info["patterns"]:
                 if pattern.lower() in module_lower:
                     stages.append(stage_id)
                     break
 
             # Check keywords in filename
             if not stages or stage_id not in stages:
-                for keyword in stage_info['keywords']:
+                for keyword in stage_info["keywords"]:
                     if keyword in module_lower:
                         stages.append(stage_id)
                         break
@@ -377,15 +389,15 @@ class CodeOrganizer:
         """Check if import creates circular dependency."""
         # Simple heuristic: check if importing from parent or sibling at higher level
         # This is a simplified check - full cycle detection would require graph analysis
-        if not import_name.startswith('agent_actions'):
+        if not import_name.startswith("agent_actions"):
             return False
 
-        parts = import_name.split('.')
+        parts = import_name.split(".")
         if len(parts) < 2:
             return False
 
         # Check for internal importing core (lower level importing higher level)
-        if '_internal' in module_dir and 'core' in parts:
+        if "_internal" in module_dir and "core" in parts:
             return True
 
         return False
@@ -397,7 +409,7 @@ class CodeOrganizer:
         # Check for missing __init__.py files
         for dir_path, dir_info in self.directories.items():
             if dir_info.total_files > 0 and not dir_info.has_init:
-                if '.' not in dir_path:  # Not already a relative path issue
+                if "." not in dir_path:  # Not already a relative path issue
                     issues.append(f"Missing __init__.py in {dir_path}")
 
         # Check for oversized modules (>500 LOC)
@@ -411,7 +423,7 @@ class CodeOrganizer:
 
         # Check for misplaced files (utils in non-utils directories, etc.)
         for module_path in self.modules.keys():
-            if 'util' in module_path.lower() and 'utils' not in module_path:
+            if "util" in module_path.lower() and "utils" not in module_path:
                 issues.append(f"Utility module outside utils directory: {module_path}")
 
         return issues
@@ -421,9 +433,9 @@ class CodeOrganizer:
         recommendations = []
 
         # Analyze issue patterns
-        large_modules = [i for i in issues if 'Large module' in i]
-        missing_inits = [i for i in issues if 'Missing __init__.py' in i]
-        circular_deps = [i for i in issues if 'circular dependency' in i]
+        large_modules = [i for i in issues if "Large module" in i]
+        missing_inits = [i for i in issues if "Missing __init__.py" in i]
+        circular_deps = [i for i in issues if "circular dependency" in i]
 
         if large_modules:
             recommendations.append(
@@ -448,7 +460,7 @@ class CodeOrganizer:
             )
 
         # Check for utils proliferation
-        utils_count = sum(1 for path in self.modules.keys() if 'utils' in path.lower())
+        utils_count = sum(1 for path in self.modules.keys() if "utils" in path.lower())
         if utils_count > 10:
             recommendations.append(
                 f"🛠️  Multiple utils modules ({utils_count}): Consider consolidating or better organizing utility code"
@@ -470,8 +482,7 @@ class CodeOrganizer:
         dependencies = {}
         for module_path, module_info in self.modules.items():
             internal_imports = [
-                imp for imp in module_info.imports
-                if imp.startswith('agent_actions')
+                imp for imp in module_info.imports if imp.startswith("agent_actions")
             ]
             if internal_imports:
                 dependencies[module_path] = internal_imports
@@ -523,7 +534,7 @@ class CodeOrganizer:
         if report.architecture_layers:
             print(f"\n🏗️  Architectural Layers:")
             for layer_name, layer_info in sorted(report.architecture_layers.items()):
-                description = self.LAYER_PATTERNS.get(layer_name, 'Unknown')
+                description = self.LAYER_PATTERNS.get(layer_name, "Unknown")
                 print(f"  • {layer_name}/ - {description}")
                 print(f"    Files: {layer_info.total_files}, Lines: {layer_info.total_lines:,}")
                 if layer_info.subdirs:
@@ -536,14 +547,14 @@ class CodeOrganizer:
             # Group by type
             issues_by_type = defaultdict(list)
             for issue in report.organizational_issues:
-                if 'Missing __init__' in issue:
-                    issues_by_type['Missing __init__.py'].append(issue)
-                elif 'Large module' in issue:
-                    issues_by_type['Large modules'].append(issue)
-                elif 'circular dependency' in issue:
-                    issues_by_type['Circular dependencies'].append(issue)
+                if "Missing __init__" in issue:
+                    issues_by_type["Missing __init__.py"].append(issue)
+                elif "Large module" in issue:
+                    issues_by_type["Large modules"].append(issue)
+                elif "circular dependency" in issue:
+                    issues_by_type["Circular dependencies"].append(issue)
                 else:
-                    issues_by_type['Other'].append(issue)
+                    issues_by_type["Other"].append(issue)
 
             for issue_type, issues in sorted(issues_by_type.items()):
                 print(f"\n  {issue_type} ({len(issues)}):")
@@ -563,28 +574,28 @@ class CodeOrganizer:
         """Export report as JSON."""
         # Convert to dict, handling Path objects
         report_dict = {
-            'root_path': str(report.root_path),
-            'total_modules': report.total_modules,
-            'total_directories': report.total_directories,
-            'total_lines': report.total_lines,
-            'architecture_layers': {
+            "root_path": str(report.root_path),
+            "total_modules": report.total_modules,
+            "total_directories": report.total_directories,
+            "total_lines": report.total_lines,
+            "architecture_layers": {
                 name: {
-                    'path': str(info.path),
-                    'name': info.name,
-                    'modules': info.modules,
-                    'subdirs': info.subdirs,
-                    'total_files': info.total_files,
-                    'total_lines': info.total_lines,
-                    'has_init': info.has_init,
+                    "path": str(info.path),
+                    "name": info.name,
+                    "modules": info.modules,
+                    "subdirs": info.subdirs,
+                    "total_files": info.total_files,
+                    "total_lines": info.total_lines,
+                    "has_init": info.has_init,
                 }
                 for name, info in report.architecture_layers.items()
             },
-            'module_dependencies': report.module_dependencies,
-            'organizational_issues': report.organizational_issues,
-            'recommendations': report.recommendations,
+            "module_dependencies": report.module_dependencies,
+            "organizational_issues": report.organizational_issues,
+            "recommendations": report.recommendations,
         }
 
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump(report_dict, f, indent=2)
 
         print(f"📄 Report exported to: {output_file}")
@@ -593,7 +604,7 @@ class CodeOrganizer:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='Analyze and organize Python codebase structure',
+        description="Analyze and organize Python codebase structure",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -608,37 +619,29 @@ Examples:
 
   # Exclude additional patterns
   python code_organizer.py . --exclude "*.bak" "temp_*"
-        """
+        """,
     )
 
     parser.add_argument(
-        'path',
+        "path",
         type=str,
-        help='Root path to analyze (default: current directory)',
-        nargs='?',
-        default='.'
+        help="Root path to analyze (default: current directory)",
+        nargs="?",
+        default=".",
     )
 
     parser.add_argument(
-        '--json',
-        type=str,
-        help='Export report as JSON to specified file',
-        metavar='FILE'
+        "--json", type=str, help="Export report as JSON to specified file", metavar="FILE"
     )
 
-    parser.add_argument(
-        '--exclude',
-        nargs='+',
-        help='Additional patterns to exclude',
-        default=[]
-    )
+    parser.add_argument("--exclude", nargs="+", help="Additional patterns to exclude", default=[])
 
     args = parser.parse_args()
 
     # Create organizer
     organizer = CodeOrganizer(
         root_path=args.path,
-        exclude_patterns=['__pycache__', '*.pyc', '.git', 'venv', 'env'] + args.exclude
+        exclude_patterns=["__pycache__", "*.pyc", ".git", "venv", "env"] + args.exclude,
     )
 
     # Scan codebase
@@ -658,5 +661,5 @@ Examples:
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

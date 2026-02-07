@@ -31,8 +31,9 @@ CLIENT_REGISTRY: Dict[str, Any] = {
     "agac-provider": AgacClient,
 }
 
-# Clients that return single response (need wrapping in list)
-SINGLE_RESPONSE_CLIENTS: set = {"cohere", "mistral", "anthropic", "groq"}
+# All providers now normalise their return type to List[Dict] internally,
+# so no wrapping is needed here.
+SINGLE_RESPONSE_CLIENTS: set = set()
 
 
 class ClientInvocationService:
