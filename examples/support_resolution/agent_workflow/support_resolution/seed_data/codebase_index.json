@@ -1,0 +1,43 @@
+{
+  "project": "acme-platform",
+  "language": "python",
+  "framework": "fastapi",
+  "modules": {
+    "authentication": {
+      "path": "src/auth/",
+      "files": ["auth_handler.py", "jwt_utils.py", "oauth_provider.py", "permissions.py"],
+      "description": "User authentication and authorization"
+    },
+    "api": {
+      "path": "src/api/",
+      "files": ["routes.py", "middleware.py", "validators.py", "serializers.py"],
+      "description": "REST API endpoints and middleware"
+    },
+    "database": {
+      "path": "src/db/",
+      "files": ["models.py", "connection.py", "migrations/", "queries.py"],
+      "description": "Database models and queries"
+    },
+    "workers": {
+      "path": "src/workers/",
+      "files": ["task_queue.py", "email_worker.py", "report_generator.py"],
+      "description": "Background job processing"
+    },
+    "utils": {
+      "path": "src/utils/",
+      "files": ["logging.py", "config.py", "helpers.py", "exceptions.py"],
+      "description": "Shared utilities and configuration"
+    }
+  },
+  "common_issues": {
+    "authentication": ["JWT expiration", "OAuth callback errors", "Permission denied"],
+    "api": ["Rate limiting", "Validation errors", "Timeout issues"],
+    "database": ["Connection pool exhaustion", "Migration failures", "Query performance"],
+    "workers": ["Queue backlog", "Failed jobs", "Memory leaks"]
+  },
+  "recent_changes": [
+    {"date": "2024-01-15", "module": "authentication", "description": "Updated JWT expiration handling"},
+    {"date": "2024-01-10", "module": "api", "description": "Added rate limiting middleware"},
+    {"date": "2024-01-05", "module": "database", "description": "Optimized user queries"}
+  ]
+}

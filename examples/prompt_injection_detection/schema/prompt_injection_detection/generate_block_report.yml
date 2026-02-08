@@ -1,0 +1,42 @@
+name: generate_block_report
+description: Schema for LLM-generated forensic block report when a prompt is classified as BLOCK
+fields:
+  - id: report_title
+    type: string
+    description: "Concise title for the block report (e.g., 'Prompt Injection Blocked: DAN Jailbreak Attempt')"
+  - id: executive_summary
+    type: string
+    description: "2-3 sentence summary of what was detected, why it was blocked, and the risk level"
+  - id: attack_classification
+    type: string
+    description: "Classification of the attack type (e.g., role_hijacking, delimiter_injection, social_engineering, multi_vector)"
+  - id: evidence_analysis
+    type: string
+    description: "Detailed analysis of the evidence from all detection layers explaining how they converge on the block decision"
+  - id: key_indicators
+    type: array
+    items:
+      type: string
+    description: "Bullet-point list of the most damning indicators that led to the block"
+  - id: statistical_evidence
+    type: string
+    description: "Summary of what the statistical layers found (scores, anomaly flags, patterns matched)"
+  - id: semantic_evidence
+    type: string
+    description: "Summary of the semantic/intent analysis findings"
+  - id: recommended_actions
+    type: array
+    items:
+      type: string
+    description: "Recommended follow-up actions (e.g., log for threat intel, alert security team, update pattern DB)"
+  - id: false_positive_assessment
+    type: string
+    description: "Assessment of whether this could be a false positive and what would need to be true for that"
+required:
+  - report_title
+  - executive_summary
+  - attack_classification
+  - evidence_analysis
+  - key_indicators
+  - recommended_actions
+additionalProperties: false

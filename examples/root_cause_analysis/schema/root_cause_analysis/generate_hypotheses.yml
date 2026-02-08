@@ -1,0 +1,20 @@
+name: generate_hypotheses
+description: Schema for root cause hypothesis generation
+fields:
+  - id: hypotheses
+    type: array
+    items:
+      type: object
+    description: "List of causal hypotheses with cause, mechanism, confidence, evidence"
+  - id: reasoning_path
+    type: string
+    description: "Description of the reasoning approach used"
+  - id: supporting_evidence
+    type: array
+    items:
+      type: string
+    description: "Overall evidence used in hypothesis generation"
+required:
+  - hypotheses
+  - reasoning_path
+additionalProperties: false

@@ -1,0 +1,30 @@
+name: assess_data_quality
+description: Schema for ML data quality assessment
+fields:
+  - id: quality_score
+    type: number
+    description: "Overall data quality score (0.0-1.0)"
+  - id: completeness
+    type: number
+    description: "Data completeness ratio (0.0-1.0)"
+  - id: consistency_score
+    type: number
+    description: "Data consistency score (0.0-1.0)"
+  - id: detected_issues
+    type: array
+    items:
+      type: object
+    description: "List of detected data quality issues with severity"
+  - id: data_profile
+    type: object
+    description: "Statistical profile of the data"
+  - id: recommendations
+    type: array
+    items:
+      type: string
+    description: "Recommendations for improving data quality"
+required:
+  - quality_score
+  - completeness
+  - detected_issues
+additionalProperties: false

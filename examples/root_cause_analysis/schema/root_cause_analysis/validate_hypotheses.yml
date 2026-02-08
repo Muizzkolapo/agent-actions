@@ -1,0 +1,23 @@
+name: validate_hypotheses
+description: Schema for hypothesis validation results
+fields:
+  - id: validated_hypotheses
+    type: array
+    items:
+      type: object
+    description: "List of validated hypotheses with status and evidence"
+  - id: evidence_analysis
+    type: string
+    description: "Overall analysis of evidence"
+  - id: confidence_scores
+    type: object
+    description: "Updated confidence scores per hypothesis"
+  - id: contradicting_evidence
+    type: array
+    items:
+      type: string
+    description: "Evidence that contradicts hypotheses"
+required:
+  - validated_hypotheses
+  - evidence_analysis
+additionalProperties: false

@@ -1,0 +1,147 @@
+{
+  "causal_rules": {
+    "memory_exhaustion_rule": {
+      "condition": "memory_usage > 95% AND eviction_rate > 1000/sec",
+      "implies": "cache_miss_storm_likely",
+      "confidence": 0.9,
+      "typical_effects": ["cache_hit_rate_drop", "db_load_increase", "latency_spike"]
+    },
+    "connection_pool_exhaustion_rule": {
+      "condition": "active_connections > max_pool_size * 0.95",
+      "implies": "connection_timeout_imminent",
+      "confidence": 0.95,
+      "typical_effects": ["connection_refused", "service_timeout", "error_rate_spike"]
+    },
+    "database_lock_contention_rule": {
+      "condition": "lock_wait_time > 1s AND waiting_transactions > 50",
+      "implies": "inefficient_query_or_deadlock",
+      "confidence": 0.85,
+      "typical_effects": ["transaction_timeout", "throughput_degradation"]
+    },
+    "rate_limit_exceeded_rule": {
+      "condition": "http_429_rate > 10% AND retry_count_increasing",
+      "implies": "external_api_rate_limit",
+      "confidence": 0.92,
+      "typical_effects": ["operation_failure", "backlog_buildup", "data_staleness"]
+    },
+    "circuit_breaker_open_rule": {
+      "condition": "error_rate > threshold AND circuit_breaker_state = 'open'",
+      "implies": "downstream_service_unhealthy",
+      "confidence": 0.88,
+      "typical_effects": ["request_rejection", "fallback_triggered", "degraded_functionality"]
+    }
+  },
+  "causal_chains": {
+    "cache_failure_cascade": {
+      "chain": [
+        "cache_unavailable",
+        "cache_miss_rate_100%",
+        "database_query_spike",
+        "db_connection_pool_exhausted",
+        "service_timeout",
+        "error_cascade"
+      ],
+      "probability": 0.85,
+      "time_to_cascade": "2-5 minutes",
+      "breakpoints": ["implement_fallback_cache", "increase_db_pool_size", "add_circuit_breaker"]
+    },
+    "slow_query_cascade": {
+      "chain": [
+        "unoptimized_query_deployed",
+        "query_execution_time_spike",
+        "active_connections_accumulate",
+        "connection_pool_exhausted",
+        "new_requests_timeout",
+        "service_degradation"
+      ],
+      "probability": 0.78,
+      "time_to_cascade": "5-15 minutes",
+      "breakpoints": ["kill_slow_query", "rollback_deployment", "add_query_timeout"]
+    },
+    "external_api_failure_cascade": {
+      "chain": [
+        "external_api_latency_increase",
+        "request_timeout",
+        "retry_storm",
+        "rate_limit_exceeded",
+        "exponential_backoff",
+        "operation_backlog",
+        "business_impact"
+      ],
+      "probability": 0.72,
+      "time_to_cascade": "10-30 minutes",
+      "breakpoints": ["enable_circuit_breaker", "implement_fallback", "reduce_retry_rate"]
+    },
+    "resource_leak_cascade": {
+      "chain": [
+        "resource_leak_introduced",
+        "gradual_resource_depletion",
+        "resource_exhaustion",
+        "service_unresponsive",
+        "health_check_failure",
+        "load_balancer_removes_instance",
+        "remaining_instances_overloaded",
+        "complete_outage"
+      ],
+      "probability": 0.82,
+      "time_to_cascade": "30-120 minutes",
+      "breakpoints": ["restart_service", "rollback_deployment", "scale_horizontally"]
+    }
+  },
+  "confounding_factors": {
+    "traffic_spike": {
+      "description": "Sudden increase in traffic can mask or amplify underlying issues",
+      "distinguishing_signals": [
+        "Check if error rate is proportional to traffic increase",
+        "Compare current load to historical capacity limits",
+        "Look for resource utilization patterns"
+      ]
+    },
+    "deployment_timing": {
+      "description": "New deployment may coincide with but not cause the issue",
+      "distinguishing_signals": [
+        "Check if rollback resolves the issue",
+        "Compare error patterns before/after deployment",
+        "Look for configuration changes vs code changes"
+      ]
+    },
+    "scheduled_jobs": {
+      "description": "Periodic background jobs can create resource contention",
+      "distinguishing_signals": [
+        "Check job schedule alignment with issue timing",
+        "Look for resource spikes at job execution time",
+        "Verify if issue recurs at same time intervals"
+      ]
+    },
+    "upstream_dependency": {
+      "description": "Issue may originate from upstream service, not the failing service",
+      "distinguishing_signals": [
+        "Trace requests through service chain",
+        "Check if upstream latency correlates with failures",
+        "Look for error propagation patterns"
+      ]
+    }
+  },
+  "validation_tests": {
+    "correlation_test": {
+      "description": "Check if suspected cause and effect are correlated",
+      "method": "Calculate correlation coefficient between cause metric and effect metric",
+      "threshold": "r > 0.7 suggests strong correlation"
+    },
+    "temporal_precedence_test": {
+      "description": "Verify that cause precedes effect in time",
+      "method": "Check timestamps: cause_time < effect_time, and lag < expected_propagation_time",
+      "threshold": "Cause should precede effect by expected propagation time"
+    },
+    "counterfactual_test": {
+      "description": "If we remove the cause, does the effect disappear?",
+      "method": "Check historical incidents where cause was mitigated - did effect resolve?",
+      "threshold": "Effect should resolve within expected time after cause mitigation"
+    },
+    "mechanism_test": {
+      "description": "Is there a plausible mechanism linking cause to effect?",
+      "method": "Verify causal chain exists in system topology and known patterns",
+      "threshold": "All intermediate steps should have documented causal relationships"
+    }
+  }
+}

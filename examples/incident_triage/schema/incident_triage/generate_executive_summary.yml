@@ -1,0 +1,22 @@
+name: generate_executive_summary
+description: Schema for executive summary of high-severity incidents
+fields:
+  - id: executive_summary
+    type: string
+    description: "3-4 sentence non-technical summary"
+  - id: business_impact_summary
+    type: string
+    description: "Business impact in leadership terms"
+  - id: response_status
+    type: string
+    description: "Current response activities and timeline"
+  - id: key_stakeholders
+    type: array
+    items:
+      type: string
+    description: "Stakeholders to be informed"
+required:
+  - executive_summary
+  - business_impact_summary
+  - response_status
+additionalProperties: false

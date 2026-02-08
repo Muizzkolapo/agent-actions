@@ -1,0 +1,128 @@
+{
+  "oncall_teams": {
+    "backend-oncall": {
+      "team_name": "Backend Engineering Oncall",
+      "primary_contact": "@backend-oncall",
+      "slack_channel": "#backend-incidents",
+      "escalation_policy": "backend-escalation",
+      "responsibilities": [
+        "API services",
+        "Business logic",
+        "Database operations",
+        "Background jobs"
+      ],
+      "sla": {
+        "SEV1": "5 minutes",
+        "SEV2": "15 minutes",
+        "SEV3": "30 minutes"
+      }
+    },
+    "frontend-oncall": {
+      "team_name": "Frontend Engineering Oncall",
+      "primary_contact": "@frontend-oncall",
+      "slack_channel": "#frontend-incidents",
+      "escalation_policy": "frontend-escalation",
+      "responsibilities": [
+        "Web application",
+        "Mobile apps",
+        "CDN and assets",
+        "Client-side performance"
+      ],
+      "sla": {
+        "SEV1": "5 minutes",
+        "SEV2": "15 minutes",
+        "SEV3": "30 minutes"
+      }
+    },
+    "data-oncall": {
+      "team_name": "Data Platform Oncall",
+      "primary_contact": "@data-oncall",
+      "slack_channel": "#data-incidents",
+      "escalation_policy": "data-escalation",
+      "responsibilities": [
+        "Database clusters",
+        "Data pipelines",
+        "Analytics infrastructure",
+        "Data warehousing"
+      ],
+      "sla": {
+        "SEV1": "10 minutes",
+        "SEV2": "20 minutes",
+        "SEV3": "1 hour"
+      }
+    },
+    "payments-oncall": {
+      "team_name": "Payments Oncall",
+      "primary_contact": "@payments-oncall",
+      "slack_channel": "#payments-incidents",
+      "escalation_policy": "payments-critical",
+      "responsibilities": [
+        "Payment processing",
+        "Billing systems",
+        "Stripe integration",
+        "Revenue-critical flows"
+      ],
+      "sla": {
+        "SEV1": "5 minutes",
+        "SEV2": "10 minutes",
+        "SEV3": "30 minutes"
+      }
+    },
+    "security-oncall": {
+      "team_name": "Security Oncall",
+      "primary_contact": "@security-oncall",
+      "slack_channel": "#security-incidents",
+      "escalation_policy": "security-critical",
+      "responsibilities": [
+        "Authentication",
+        "Authorization",
+        "Security vulnerabilities",
+        "Compliance incidents"
+      ],
+      "sla": {
+        "SEV1": "Immediate",
+        "SEV2": "10 minutes",
+        "SEV3": "30 minutes"
+      }
+    },
+    "platform-oncall": {
+      "team_name": "Platform Engineering Oncall",
+      "primary_contact": "@platform-oncall",
+      "slack_channel": "#platform-incidents",
+      "escalation_policy": "platform-escalation",
+      "responsibilities": [
+        "Kubernetes infrastructure",
+        "CI/CD pipelines",
+        "Monitoring systems",
+        "Core infrastructure"
+      ],
+      "sla": {
+        "SEV1": "5 minutes",
+        "SEV2": "15 minutes",
+        "SEV3": "30 minutes"
+      }
+    }
+  },
+  "escalation_leads": {
+    "engineering-leads": {
+      "contacts": ["@vp-engineering", "@director-backend", "@director-frontend"],
+      "slack_channel": "#exec-incidents",
+      "trigger_conditions": ["SEV1 after 30min", "SEV2 after 1hr", "Multiple SEV2s"]
+    },
+    "data-leads": {
+      "contacts": ["@director-data", "@data-architect"],
+      "slack_channel": "#data-leadership",
+      "trigger_conditions": ["Data loss risk", "SEV1 data incident"]
+    },
+    "security-team": {
+      "contacts": ["@ciso", "@security-director"],
+      "slack_channel": "#security-leadership",
+      "trigger_conditions": ["Security breach", "Auth compromise", "PII exposure"]
+    },
+    "product-engineering": {
+      "contacts": ["@vp-product", "@cto"],
+      "slack_channel": "#product-incidents",
+      "trigger_conditions": ["Customer-facing SEV1", "Revenue impact >$10k"]
+    }
+  }
+}

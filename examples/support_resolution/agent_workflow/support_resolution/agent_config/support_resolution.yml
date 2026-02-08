@@ -1,0 +1,150 @@
+################################################################################
+# Support-to-Resolution Pipeline
+################################################################################
+# Description: End-to-end pipeline that takes a GitHub issue or support ticket
+#              and generates customer response, internal task, and draft PR.
+#
+# Showcases:
+#   - Parallel research strategies (codebase, docs, similar issues)
+#   - Fan-in synthesis
+#   - Multi-output generation (response, task, PR)
+#   - Version variables for researcher identification
+################################################################################
+
+name: support_resolution
+description: "Transform support tickets into actionable responses, tasks, and PRs"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+  model_vendor: anthropic
+  model_name: claude-sonnet-4-20250514
+  api_key: ANTHROPIC_API_KEY
+  context_scope:
+    seed_data:
+      codebase_index: $file:codebase_index.json
+      response_templates: $file:response_templates.json
+      team_routing: $file:team_routing.json
+
+actions:
+  # ==========================================================================
+  # STAGE 1: ANALYZE & CLASSIFY ISSUE
+  # ==========================================================================
+  - name: analyze_issue
+    intent: "Extract key information and classify the issue"
+    schema: support_resolution/analyze_issue
+    prompt: $support_resolution.Analyze_Issue
+    context_scope:
+      observe:
+        - source.*
+
+  # ==========================================================================
+  # STAGE 2: PARALLEL RESEARCH (3 strategies)
+  # ==========================================================================
+  - name: research
+    dependencies: [analyze_issue]
+    intent: "Research the issue from different angles"
+    versions:
+      range: [1, 3]
+      mode: parallel
+    schema: support_resolution/research_findings
+    prompt: $support_resolution.Research_Issue
+    context_scope:
+      observe:
+        - analyze_issue.*
+        - source.*
+
+  # ==========================================================================
+  # STAGE 3: SYNTHESIZE FINDINGS
+  # ==========================================================================
+  - name: synthesize_findings
+    dependencies: [research]
+    kind: tool
+    impl: merge_research_findings
+    intent: "Merge and deduplicate research from all strategies"
+    version_consumption:
+      source: research
+      pattern: merge
+    context_scope:
+      observe:
+        - research.*
+      passthrough:
+        - analyze_issue.*
+
+  # ==========================================================================
+  # STAGE 4: DETERMINE RESOLUTION PATH
+  # ==========================================================================
+  - name: determine_resolution
+    dependencies: [synthesize_findings]
+    intent: "Decide resolution approach based on findings"
+    schema: support_resolution/resolution_path
+    prompt: $support_resolution.Determine_Resolution
+    context_scope:
+      observe:
+        - synthesize_findings.*
+        - analyze_issue.*
+
+  # ==========================================================================
+  # STAGE 5a: GENERATE CUSTOMER RESPONSE
+  # ==========================================================================
+  - name: generate_response
+    dependencies: [determine_resolution]
+    intent: "Draft customer-facing response"
+    schema: support_resolution/customer_response
+    prompt: $support_resolution.Generate_Response
+    context_scope:
+      observe:
+        - determine_resolution.*
+        - analyze_issue.*
+        - synthesize_findings.solution_summary
+
+  # ==========================================================================
+  # STAGE 5b: GENERATE INTERNAL TASK
+  # ==========================================================================
+  - name: generate_task
+    dependencies: [determine_resolution]
+    intent: "Create internal task/ticket for engineering"
+    schema: support_resolution/internal_task
+    prompt: $support_resolution.Generate_Task
+    context_scope:
+      observe:
+        - determine_resolution.*
+        - analyze_issue.*
+        - synthesize_findings.*
+
+  # ==========================================================================
+  # STAGE 5c: DRAFT PR (if code change needed)
+  # ==========================================================================
+  - name: draft_pr
+    dependencies: [determine_resolution]
+    intent: "Draft PR title, description, and suggested changes"
+    schema: support_resolution/pr_draft
+    prompt: $support_resolution.Draft_PR
+    guard:
+      condition: 'requires_code_change == true'
+      on_false: "skip"
+    context_scope:
+      observe:
+        - determine_resolution.*
+        - analyze_issue.*
+        - synthesize_findings.*
+
+  # ==========================================================================
+  # STAGE 6: FORMAT FINAL OUTPUT
+  # ==========================================================================
+  - name: format_output
+    dependencies: [generate_response, generate_task, draft_pr]
+    kind: tool
+    impl: format_resolution_package
+    intent: "Package all outputs into final resolution bundle"
+    context_scope:
+      observe:
+        - analyze_issue.*
+        - generate_response.*
+        - generate_task.*
+        - draft_pr.*
+      passthrough:
+        - determine_resolution.*
+        - synthesize_findings.*

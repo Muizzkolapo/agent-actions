@@ -1,0 +1,31 @@
+name: semantic_threat_analysis
+description: Schema for LLM-based semantic and intent analysis of prompt text independent of statistical signals
+fields:
+  - id: intent_classification
+    type: string
+    description: "Primary intent: benign_request, information_seeking, social_engineering, role_manipulation, data_extraction, system_probing, or mixed_intent"
+  - id: manipulation_techniques
+    type: array
+    items:
+      type: string
+    description: "Identified manipulation techniques (e.g., authority_impersonation, emotional_appeal, urgency_framing, academic_pretext, nested_instruction)"
+  - id: semantic_risk_score
+    type: number
+    description: "Semantic risk assessment (0.0 = clearly benign, 1.0 = clearly malicious)"
+  - id: deception_indicators
+    type: array
+    items:
+      type: string
+    description: "Specific phrases or patterns that suggest deceptive intent"
+  - id: benign_explanation
+    type: string
+    description: "If the prompt could be legitimate, explain the benign interpretation"
+  - id: threat_narrative
+    type: string
+    description: "Narrative explanation of the threat assessment and reasoning chain"
+required:
+  - intent_classification
+  - manipulation_techniques
+  - semantic_risk_score
+  - threat_narrative
+additionalProperties: false

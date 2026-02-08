@@ -1,0 +1,29 @@
+name: generate_response_plan
+description: Schema for initial incident response plan with action items
+fields:
+  - id: immediate_actions
+    type: array
+    items:
+      type: string
+    description: "Actions to take immediately (first 5 minutes)"
+  - id: investigation_steps
+    type: array
+    items:
+      type: string
+    description: "Steps to identify root cause"
+  - id: communication_plan
+    type: string
+    description: "Who to notify, when, and what to say"
+  - id: escalation_criteria
+    type: array
+    items:
+      type: string
+    description: "Conditions that trigger escalation"
+  - id: estimated_tte
+    type: string
+    description: "Estimated time to engage"
+required:
+  - immediate_actions
+  - communication_plan
+  - escalation_criteria
+additionalProperties: false

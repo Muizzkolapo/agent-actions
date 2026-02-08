@@ -1,0 +1,20 @@
+name: classify_severity
+description: Schema for severity classification output from independent classifiers
+fields:
+  - id: severity
+    type: string
+    description: "Severity level (SEV1/SEV2/SEV3/SEV4/SEV5)"
+  - id: confidence
+    type: number
+    description: "Confidence in classification (0.0-1.0)"
+  - id: reasoning
+    type: string
+    description: "Explanation for the severity classification"
+  - id: business_impact_estimate
+    type: string
+    description: "Brief estimate of business impact"
+required:
+  - severity
+  - confidence
+  - reasoning
+additionalProperties: false

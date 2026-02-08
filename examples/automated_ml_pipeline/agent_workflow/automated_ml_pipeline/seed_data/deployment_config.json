@@ -1,0 +1,189 @@
+{
+  "deployment_targets": {
+    "production": {
+      "endpoint": "https://api.company.com/v1/predictions",
+      "infrastructure": "kubernetes",
+      "replicas": 5,
+      "autoscaling": {
+        "enabled": true,
+        "min_replicas": 3,
+        "max_replicas": 20,
+        "target_cpu_utilization": 70
+      },
+      "resource_limits": {
+        "cpu": "2 cores",
+        "memory": "4 GB",
+        "gpu": false
+      },
+      "health_checks": {
+        "liveness_probe": "/health",
+        "readiness_probe": "/ready",
+        "initial_delay_seconds": 30
+      }
+    },
+    "staging": {
+      "endpoint": "https://api-staging.company.com/v1/predictions",
+      "infrastructure": "kubernetes",
+      "replicas": 2,
+      "autoscaling": {
+        "enabled": false
+      }
+    },
+    "canary": {
+      "traffic_percentage": 5,
+      "duration_hours": 24,
+      "rollback_on_error_rate": 0.05
+    }
+  },
+  "deployment_requirements": {
+    "model_performance": {
+      "min_accuracy": 0.85,
+      "min_recall": 0.75,
+      "min_precision": 0.80,
+      "min_roc_auc": 0.88
+    },
+    "business_performance": {
+      "min_churn_prevention_rate": 0.68,
+      "max_false_positive_cost_daily": 5000,
+      "min_net_value_per_prediction": 80
+    },
+    "technical_requirements": {
+      "max_model_size_mb": 200,
+      "max_inference_latency_ms": 50,
+      "max_memory_usage_mb": 3500,
+      "support_batch_prediction": true
+    },
+    "operational_requirements": {
+      "monitoring_dashboard": "required",
+      "alerting_configured": "required",
+      "rollback_procedure": "documented",
+      "ab_test_capability": "required"
+    },
+    "compliance_requirements": {
+      "model_explainability": "required",
+      "feature_importance_documented": "required",
+      "bias_analysis_completed": "required",
+      "data_privacy_reviewed": "required"
+    }
+  },
+  "monitoring_config": {
+    "metrics_to_track": [
+      "prediction_count",
+      "inference_latency_p50",
+      "inference_latency_p95",
+      "inference_latency_p99",
+      "error_rate",
+      "model_accuracy",
+      "precision",
+      "recall",
+      "false_positive_rate",
+      "false_negative_rate"
+    ],
+    "business_metrics_to_track": [
+      "churn_prevention_rate",
+      "intervention_cost",
+      "retention_revenue_impact"
+    ],
+    "alert_thresholds": {
+      "error_rate": {"warning": 0.01, "critical": 0.05},
+      "latency_p99_ms": {"warning": 40, "critical": 60},
+      "accuracy_degradation": {"warning": 0.02, "critical": 0.05},
+      "prediction_volume_drop": {"warning": 0.2, "critical": 0.5}
+    },
+    "drift_detection": {
+      "enabled": true,
+      "feature_drift_check_frequency": "daily",
+      "prediction_drift_check_frequency": "daily",
+      "alert_on_drift_score": 0.15
+    }
+  },
+  "rollback_config": {
+    "automatic_rollback": {
+      "enabled": true,
+      "conditions": [
+        "error_rate > 0.05",
+        "latency_p99 > 100ms",
+        "accuracy_degradation > 0.10"
+      ]
+    },
+    "manual_rollback": {
+      "approval_required": true,
+      "approvers": ["ml-team-lead", "sre-oncall"]
+    },
+    "rollback_to": "previous_production_model",
+    "notification_channels": ["#ml-deployments", "#incidents"]
+  },
+  "ab_testing_config": {
+    "default_strategy": "canary",
+    "canary_traffic_percentage": 5,
+    "ramp_up_schedule": [
+      {"hours": 2, "traffic": 5},
+      {"hours": 6, "traffic": 10},
+      {"hours": 12, "traffic": 25},
+      {"hours": 24, "traffic": 50},
+      {"hours": 48, "traffic": 100}
+    ],
+    "success_criteria": {
+      "min_sample_size": 10000,
+      "min_statistical_significance": 0.05,
+      "required_improvement": 0.02,
+      "evaluation_window_hours": 24
+    }
+  },
+  "feature_store_config": {
+    "online_store": {
+      "type": "redis",
+      "endpoint": "redis://feature-store:6379",
+      "ttl_seconds": 3600
+    },
+    "offline_store": {
+      "type": "s3",
+      "bucket": "ml-feature-store",
+      "prefix": "features/"
+    },
+    "feature_versioning": {
+      "enabled": true,
+      "track_lineage": true
+    }
+  },
+  "model_versioning": {
+    "storage": {
+      "type": "s3",
+      "bucket": "ml-models",
+      "prefix": "churn_predictor/"
+    },
+    "artifacts_to_save": [
+      "model_binary",
+      "feature_names",
+      "feature_transformations",
+      "training_config",
+      "performance_metrics",
+      "training_data_stats"
+    ],
+    "retention_policy": {
+      "keep_production_models": "indefinitely",
+      "keep_candidate_models": "90 days",
+      "keep_failed_experiments": "30 days"
+    }
+  },
+  "deployment_checklist": {
+    "pre_deployment": [
+      "Model performance exceeds thresholds",
+      "Model explainability artifacts generated",
+      "Bias analysis completed",
+      "Integration tests passed",
+      "Staging deployment successful",
+      "Monitoring dashboards configured",
+      "Rollback procedure documented",
+      "Stakeholder approval obtained"
+    ],
+    "post_deployment": [
+      "Monitor canary metrics for 24 hours",
+      "Verify prediction latency < SLA",
+      "Check for data drift",
+      "Validate business metrics improvement",
+      "Update model registry",
+      "Notify stakeholders of deployment success"
+    ]
+  }
+}

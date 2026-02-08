@@ -1,0 +1,56 @@
+{
+  "description": "Reference topic distribution from legitimate user prompts for JSD calculation",
+  "corpus_size": 10000,
+  "topic_keywords": {
+    "technical": [
+      "code", "function", "api", "debug", "error", "bug", "deploy",
+      "database", "server", "algorithm", "library", "framework",
+      "compile", "runtime", "syntax", "variable", "class", "method",
+      "test", "git", "docker", "kubernetes", "python", "javascript",
+      "typescript", "rust", "sql", "html", "css", "react", "node"
+    ],
+    "creative": [
+      "story", "poem", "write", "creative", "fiction", "character",
+      "plot", "narrative", "dialogue", "scene", "imagine", "describe",
+      "setting", "theme", "genre", "novel", "essay", "blog",
+      "article", "content", "draft", "edit", "rewrite", "tone"
+    ],
+    "business": [
+      "email", "meeting", "report", "strategy", "presentation",
+      "proposal", "client", "customer", "revenue", "budget",
+      "project", "deadline", "team", "workflow", "process",
+      "market", "analysis", "stakeholder", "roi", "kpi", "okr"
+    ],
+    "personal": [
+      "recipe", "travel", "health", "fitness", "hobby", "learn",
+      "study", "advice", "recommend", "suggest", "plan", "schedule",
+      "organize", "productivity", "goal", "motivation", "career"
+    ],
+    "system_control": [
+      "ignore", "override", "system", "prompt", "instruction",
+      "forget", "disregard", "pretend", "persona", "role",
+      "admin", "root", "sudo", "bypass", "unlock", "jailbreak",
+      "mode", "restrict", "constraint", "safety", "filter"
+    ],
+    "data_extraction": [
+      "reveal", "show", "display", "output", "print", "hidden",
+      "secret", "internal", "original", "initial", "previous",
+      "context", "history", "memory", "training", "weights",
+      "parameters", "configuration", "settings", "rules"
+    ]
+  },
+  "reference_distribution": {
+    "technical": 0.35,
+    "creative": 0.22,
+    "business": 0.20,
+    "personal": 0.18,
+    "system_control": 0.03,
+    "data_extraction": 0.02
+  },
+  "anomaly_thresholds": {
+    "system_control_elevated": 0.15,
+    "data_extraction_elevated": 0.10,
+    "jsd_suspicious": 0.25,
+    "jsd_high_risk": 0.45
+  }
+}

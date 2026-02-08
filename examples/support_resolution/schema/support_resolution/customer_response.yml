@@ -1,0 +1,41 @@
+name: customer_response
+description: Schema for customer-facing response
+fields:
+  - id: subject
+    type: string
+    description: "Response subject/title"
+  - id: greeting
+    type: string
+    description: "Personalized greeting"
+  - id: acknowledgment
+    type: string
+    description: "Acknowledgment of their issue"
+  - id: explanation
+    type: string
+    description: "Clear explanation of what's happening"
+  - id: solution
+    type: string
+    description: "The solution or workaround"
+  - id: steps
+    type: array
+    items:
+      type: string
+    description: "Step-by-step instructions if applicable"
+  - id: next_steps
+    type: string
+    description: "What happens next (timeline, follow-up)"
+  - id: closing
+    type: string
+    description: "Professional closing"
+  - id: tone
+    type: string
+    description: "Tone used: empathetic | technical | casual | formal"
+  - id: full_response
+    type: string
+    description: "Complete formatted response ready to send"
+required:
+  - subject
+  - explanation
+  - solution
+  - full_response
+additionalProperties: false

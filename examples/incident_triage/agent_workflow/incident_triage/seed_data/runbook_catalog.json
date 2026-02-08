@@ -1,0 +1,147 @@
+{
+  "runbooks": {
+    "payment-outage": {
+      "title": "Payment Processing Outage Response",
+      "severity_level": "SEV1",
+      "immediate_actions": [
+        "Check Stripe dashboard status page: https://status.stripe.com",
+        "Verify payment-service pod health: kubectl get pods -n payments",
+        "Check payments-db connection pool: SELECT count(*) FROM pg_stat_activity",
+        "Review last 15min deploys: kubectl rollout history deployment/payment-service"
+      ],
+      "investigation_steps": [
+        "Check payment-service logs: kubectl logs -n payments -l app=payment-service --tail=500",
+        "Review Stripe webhook delivery failures in dashboard",
+        "Check database connection pool metrics in DataDog",
+        "Review recent code changes in payment-service repo"
+      ],
+      "mitigation_options": [
+        "Rollback payment-service deployment if recent deploy",
+        "Scale up payment-service replicas: kubectl scale deployment/payment-service --replicas=10",
+        "Restart stuck pods: kubectl delete pod -n payments -l app=payment-service",
+        "Enable circuit breaker to fail-fast instead of timeout"
+      ],
+      "escalation_path": ["payments-oncall", "backend-oncall", "engineering-leads"],
+      "known_issues": [
+        {
+          "symptom": "502 errors on /payment/process",
+          "root_cause": "Database connection pool exhausted",
+          "solution": "Restart payment-service pods to reset connections"
+        },
+        {
+          "symptom": "Stripe webhook timeouts",
+          "root_cause": "Webhook handler timeout set too low",
+          "solution": "Increase webhook timeout to 30s in config"
+        }
+      ]
+    },
+    "api-gateway-down": {
+      "title": "API Gateway Complete Outage",
+      "severity_level": "SEV1",
+      "immediate_actions": [
+        "Check AWS API Gateway metrics in CloudWatch",
+        "Verify backend service health endpoints",
+        "Check for recent infrastructure changes",
+        "Review WAF rules for blocking"
+      ],
+      "investigation_steps": [
+        "Check API Gateway logs in CloudWatch",
+        "Verify SSL certificate validity",
+        "Check rate limiting rules",
+        "Review backend target health"
+      ],
+      "mitigation_options": [
+        "Rollback recent API Gateway config changes",
+        "Disable problematic WAF rules temporarily",
+        "Failover to secondary API Gateway in different region",
+        "Enable maintenance mode page"
+      ],
+      "escalation_path": ["backend-oncall", "platform-oncall", "engineering-leads"]
+    },
+    "checkout-failures": {
+      "title": "Checkout Service Failures",
+      "severity_level": "SEV1-SEV2",
+      "immediate_actions": [
+        "Check checkout-service error rate in DataDog",
+        "Verify payment-service is healthy",
+        "Check inventory-service availability",
+        "Review recent checkout-service deploys"
+      ],
+      "investigation_steps": [
+        "Analyze error patterns: What error codes? Which endpoints?",
+        "Check database query performance for checkout tables",
+        "Review payment gateway integration health",
+        "Check inventory sync status"
+      ],
+      "mitigation_options": [
+        "Rollback checkout-service if recent deploy",
+        "Scale up replicas if under load",
+        "Enable degraded mode (skip optional features)",
+        "Route traffic to backup region"
+      ],
+      "escalation_path": ["backend-oncall", "payments-oncall"]
+    },
+    "db-failover": {
+      "title": "Database Failover Procedure",
+      "severity_level": "SEV1",
+      "immediate_actions": [
+        "Alert data-oncall and backend-oncall",
+        "Enable read-only mode on application",
+        "Assess replication lag on standby",
+        "Prepare for failover approval"
+      ],
+      "investigation_steps": [
+        "Verify standby database is healthy",
+        "Check replication lag: SELECT pg_last_xact_replay_timestamp()",
+        "Identify root cause of primary failure",
+        "Estimate data loss window"
+      ],
+      "mitigation_options": [
+        "Execute automated failover: ./scripts/db-failover.sh",
+        "Manual failover if automation fails",
+        "Disable writes until failover complete"
+      ],
+      "escalation_path": ["data-oncall", "data-leads", "engineering-leads"],
+      "prerequisites": [
+        "Standby replication lag < 10 seconds",
+        "Engineering lead approval obtained",
+        "Communication sent to #incidents channel"
+      ]
+    },
+    "auth-outage": {
+      "title": "Authentication Service Outage",
+      "severity_level": "SEV1",
+      "immediate_actions": [
+        "Check session cache (Redis) health",
+        "Verify OAuth provider status (Auth0, Google, etc)",
+        "Check certificate expiration dates",
+        "Review recent auth-service deploys"
+      ],
+      "investigation_steps": [
+        "Check Redis connection metrics",
+        "Review auth-service error logs",
+        "Verify JWT signing key accessibility",
+        "Check OAuth callback URL configuration"
+      ],
+      "mitigation_options": [
+        "Restart Redis cluster if connection issues",
+        "Rollback auth-service deployment",
+        "Rotate to backup OAuth provider",
+        "Enable local auth fallback mode"
+      ],
+      "escalation_path": ["security-oncall", "backend-oncall", "security-team"]
+    }
+  },
+  "response_templates": {
+    "SEV1": {
+      "initial_message": "🚨 SEV1 INCIDENT: {title}\n\n**Impact**: {impact}\n**Teams Engaged**: {teams}\n**War Room**: {slack_channel}\n\nInvestigating now. Updates every 15 minutes.",
+      "update_frequency": "15 minutes",
+      "stakeholders": ["engineering-all", "leadership", "support"]
+    },
+    "SEV2": {
+      "initial_message": "⚠️ SEV2 INCIDENT: {title}\n\n**Impact**: {impact}\n**Team**: {team}\n\nInvestigation in progress.",
+      "update_frequency": "30 minutes",
+      "stakeholders": ["engineering-leads", "affected-teams"]
+    }
+  }
+}

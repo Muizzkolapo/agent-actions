@@ -1,0 +1,42 @@
+name: analyze_issue
+description: Schema for issue analysis and classification
+fields:
+  - id: issue_type
+    type: string
+    description: "Type: bug | feature_request | question | documentation | performance"
+  - id: severity
+    type: string
+    description: "Severity: critical | high | medium | low"
+  - id: affected_area
+    type: string
+    description: "Primary area affected (e.g., authentication, API, UI)"
+  - id: summary
+    type: string
+    description: "One-sentence summary of the issue"
+  - id: key_symptoms
+    type: array
+    items:
+      type: string
+    description: "Observable symptoms or error messages"
+  - id: user_impact
+    type: string
+    description: "How this affects the user's workflow"
+  - id: reproduction_steps
+    type: array
+    items:
+      type: string
+    description: "Steps to reproduce (if applicable)"
+  - id: environment
+    type: object
+    description: "Environment details (OS, version, etc.)"
+  - id: search_keywords
+    type: array
+    items:
+      type: string
+    description: "Keywords for searching codebase and docs"
+required:
+  - issue_type
+  - severity
+  - affected_area
+  - summary
+additionalProperties: false

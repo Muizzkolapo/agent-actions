@@ -1,0 +1,43 @@
+name: validate_bisac
+description: Schema for BISAC validation output
+fields:
+  - id: isbn
+    type: string
+    description: "Book ISBN (passthrough)"
+  - id: title
+    type: string
+    description: "Book title (passthrough)"
+  - id: authors
+    type: array
+    items:
+      type: string
+    description: "Book authors (passthrough)"
+  - id: publisher
+    type: string
+    description: "Publisher (passthrough)"
+  - id: publish_year
+    type: integer
+    description: "Publication year (passthrough)"
+  - id: page_count
+    type: integer
+    description: "Page count (passthrough)"
+  - id: description
+    type: string
+    description: "Raw description (passthrough)"
+  - id: bisac_valid
+    type: boolean
+    description: "Whether BISAC codes passed validation"
+  - id: bisac_codes
+    type: array
+    items:
+      type: string
+    description: "Normalized BISAC codes"
+  - id: bisac_names
+    type: array
+    items:
+      type: string
+    description: "Human-readable BISAC category names"
+  - id: validation_notes
+    type: string
+    description: "Validation notes or warnings"
+additionalProperties: false

@@ -1,0 +1,68 @@
+name: search_book_catalog
+description: Schema for catalog search results
+fields:
+  - id: matching_books
+    type: array
+    description: "Candidate books retrieved from catalog"
+    items:
+      type: object
+      properties:
+        isbn:
+          type: string
+          description: "ISBN"
+        title:
+          type: string
+          description: "Book title"
+        authors:
+          type: array
+          items:
+            type: string
+          description: "Book authors"
+        genres:
+          type: array
+          items:
+            type: string
+          description: "BISAC or genre codes"
+        description:
+          type: string
+          description: "Book description"
+        relevance_score:
+          type: number
+          description: "Relevance score"
+      required:
+        - isbn
+        - title
+        - authors
+        - genres
+        - description
+        - relevance_score
+  - id: search_metadata
+    type: object
+    description: "Metadata about the search operation"
+    properties:
+      total_in_catalog:
+        type: integer
+        description: "Total books in catalog"
+      candidates_found:
+        type: integer
+        description: "Total matches found"
+      returned:
+        type: integer
+        description: "Matches returned"
+      search_method:
+        type: string
+        description: "Search method used"
+      genres_searched:
+        type: array
+        items:
+          type: string
+        description: "Genres searched"
+      keywords_searched:
+        type: array
+        items:
+          type: string
+        description: "Keywords searched"
+      error:
+        type: string
+        description: "Error message, if any"
+additionalProperties: false

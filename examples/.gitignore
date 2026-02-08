@@ -1,0 +1,7 @@
+.env
+*.db
+.DS_Store
+__pycache__/
+**/agent_io/target/
+**/agent_io/.agent_status.json
+**/agent_io/source/

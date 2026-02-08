@@ -1,0 +1,19 @@
+name: assess_customer_impact
+description: Schema for customer and revenue impact assessment
+fields:
+  - id: customer_impact_level
+    type: string
+    description: "Impact level (CRITICAL/HIGH/MEDIUM/LOW/NONE)"
+  - id: affected_customer_count_estimate
+    type: string
+    description: "Estimated number of affected customers (range)"
+  - id: revenue_impact_estimate
+    type: string
+    description: "Estimated revenue impact (range or description)"
+  - id: customer_facing
+    type: boolean
+    description: "Whether this is customer-facing"
+required:
+  - customer_impact_level
+  - customer_facing
+additionalProperties: false

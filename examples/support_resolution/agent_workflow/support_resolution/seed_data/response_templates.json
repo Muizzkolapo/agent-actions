@@ -1,0 +1,35 @@
+{
+  "templates": {
+    "bug_acknowledged": {
+      "opening": "Thank you for reporting this issue. We've identified the problem and are working on a fix.",
+      "tone": "empathetic"
+    },
+    "workaround_provided": {
+      "opening": "We understand this is frustrating. While we work on a permanent fix, here's a workaround that should help:",
+      "tone": "helpful"
+    },
+    "feature_request": {
+      "opening": "Thank you for this suggestion! We're always looking for ways to improve.",
+      "tone": "appreciative"
+    },
+    "question_answered": {
+      "opening": "Great question! Here's what you need to know:",
+      "tone": "informative"
+    },
+    "need_more_info": {
+      "opening": "Thanks for reaching out. To help you better, could you provide some additional details?",
+      "tone": "collaborative"
+    }
+  },
+  "closings": {
+    "standard": "Please let us know if you have any other questions. We're here to help!",
+    "urgent": "We're treating this as a priority and will keep you updated on our progress.",
+    "feature": "We've added this to our backlog and will consider it for future releases."
+  },
+  "guidelines": {
+    "max_paragraphs": 4,
+    "avoid_jargon": true,
+    "include_timeline": "when_applicable",
+    "signature": "The Support Team"
+  }
+}

@@ -1,0 +1,18 @@
+name: validate_description
+description: Schema for marketing description validation output
+fields:
+  - id: description_valid
+    type: boolean
+    description: "Whether the description meets quality requirements"
+  - id: word_count
+    type: integer
+    description: "Word count of marketing_description"
+  - id: benefit_count
+    type: integer
+    description: "Count of key_benefits"
+  - id: validation_issues
+    type: array
+    items:
+      type: string
+    description: "List of validation issues"
+additionalProperties: false

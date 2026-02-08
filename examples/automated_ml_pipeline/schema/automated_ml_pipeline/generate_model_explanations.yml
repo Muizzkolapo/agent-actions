@@ -1,0 +1,28 @@
+name: generate_model_explanations
+description: Schema for model explainability outputs
+fields:
+  - id: explanation_type
+    type: string
+    description: "Type of explanation (global, local, or both)"
+  - id: feature_importance_ranking
+    type: array
+    items:
+      type: object
+    description: "Ranked feature importance with scores and direction"
+  - id: decision_rules
+    type: array
+    items:
+      type: string
+    description: "Extracted decision rules from the model"
+  - id: shap_summary
+    type: string
+    description: "Description of SHAP analysis results"
+  - id: model_behavior_insights
+    type: array
+    items:
+      type: string
+    description: "Key insights about model behavior"
+required:
+  - explanation_type
+  - feature_importance_ranking
+additionalProperties: false

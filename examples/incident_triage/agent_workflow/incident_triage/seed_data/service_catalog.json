@@ -1,0 +1,115 @@
+{
+  "services": {
+    "api-gateway": {
+      "name": "API Gateway",
+      "tier": "tier-1",
+      "owner_team": "backend-oncall",
+      "dependencies": ["checkout-service", "payment-service", "auth-service"],
+      "impact_if_down": "All API traffic blocked, complete outage",
+      "typical_issues": [
+        "Rate limiting misconfiguration",
+        "Certificate expiration",
+        "Connection pool exhaustion"
+      ],
+      "monitoring": ["DataDog APM", "CloudWatch", "PagerDuty"],
+      "runbooks": ["api-gateway-down", "api-502-errors", "rate-limit-issues"]
+    },
+    "checkout-service": {
+      "name": "Checkout Service",
+      "tier": "tier-1",
+      "owner_team": "backend-oncall",
+      "dependencies": ["payment-service", "inventory-service", "customer-db"],
+      "impact_if_down": "Unable to complete purchases, direct revenue impact",
+      "typical_issues": [
+        "Database connection timeouts",
+        "Payment gateway integration failures",
+        "Inventory sync issues"
+      ],
+      "monitoring": ["DataDog APM", "Sentry"],
+      "runbooks": ["checkout-failures", "payment-integration-debug"]
+    },
+    "payment-service": {
+      "name": "Payment Processing Service",
+      "tier": "tier-0",
+      "owner_team": "payments-oncall",
+      "dependencies": ["stripe-api", "payments-db", "fraud-detection"],
+      "impact_if_down": "CRITICAL: All payments blocked, immediate revenue loss",
+      "typical_issues": [
+        "Stripe webhook failures",
+        "Database connection pool exhausted",
+        "Fraud detection API timeout"
+      ],
+      "monitoring": ["DataDog APM", "Stripe Dashboard", "Revenue monitoring"],
+      "runbooks": ["payment-outage", "stripe-webhook-failures", "rollback-payments-deploy"]
+    },
+    "auth-service": {
+      "name": "Authentication Service",
+      "tier": "tier-0",
+      "owner_team": "security-oncall",
+      "dependencies": ["user-db", "session-cache", "oauth-providers"],
+      "impact_if_down": "CRITICAL: Login/signup broken, existing sessions may fail",
+      "typical_issues": [
+        "Session cache (Redis) down",
+        "OAuth provider issues",
+        "Certificate rotation problems"
+      ],
+      "monitoring": ["DataDog APM", "Auth0 Dashboard"],
+      "runbooks": ["auth-outage", "session-cache-recovery", "oauth-debug"]
+    },
+    "frontend-web": {
+      "name": "Web Frontend Application",
+      "tier": "tier-1",
+      "owner_team": "frontend-oncall",
+      "dependencies": ["cdn", "api-gateway", "static-assets"],
+      "impact_if_down": "Website unavailable, complete user outage",
+      "typical_issues": [
+        "CDN cache issues",
+        "Build/deployment failures",
+        "Static asset 404s"
+      ],
+      "monitoring": ["Vercel Dashboard", "Sentry", "Real User Monitoring"],
+      "runbooks": ["frontend-deploy-rollback", "cdn-cache-purge"]
+    },
+    "database-primary": {
+      "name": "Primary PostgreSQL Cluster",
+      "tier": "tier-0",
+      "owner_team": "data-oncall",
+      "dependencies": [],
+      "impact_if_down": "CRITICAL: Most services will fail, complete outage",
+      "typical_issues": [
+        "Connection pool exhaustion",
+        "Disk space full",
+        "Replication lag",
+        "Lock contention"
+      ],
+      "monitoring": ["DataDog Database", "CloudWatch RDS", "PgHero"],
+      "runbooks": ["db-failover", "connection-pool-recovery", "disk-space-emergency"]
+    }
+  },
+  "service_tiers": {
+    "tier-0": {
+      "name": "Mission Critical",
+      "description": "Complete outage if down, immediate revenue/brand impact",
+      "max_downtime": "0 minutes",
+      "severity_if_down": "SEV1"
+    },
+    "tier-1": {
+      "name": "Business Critical",
+      "description": "Major functionality impaired, significant user impact",
+      "max_downtime": "15 minutes",
+      "severity_if_down": "SEV1-SEV2"
+    },
+    "tier-2": {
+      "name": "Important",
+      "description": "Important features affected, moderate user impact",
+      "max_downtime": "1 hour",
+      "severity_if_down": "SEV2-SEV3"
+    },
+    "tier-3": {
+      "name": "Standard",
+      "description": "Non-critical features, limited user impact",
+      "max_downtime": "4 hours",
+      "severity_if_down": "SEV3-SEV4"
+    }
+  }
+}

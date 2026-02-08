@@ -1,0 +1,39 @@
+name: research_findings
+description: Schema for research findings from each strategy
+fields:
+  - id: research_strategy
+    type: string
+    description: "Strategy used: codebase_search | documentation_search | similar_issues"
+  - id: findings
+    type: array
+    items:
+      type: object
+    description: "List of relevant findings with source and relevance"
+  - id: relevant_files
+    type: array
+    items:
+      type: string
+    description: "File paths that may be related to the issue"
+  - id: potential_causes
+    type: array
+    items:
+      type: string
+    description: "Potential root causes identified"
+  - id: suggested_solutions
+    type: array
+    items:
+      type: object
+    description: "Possible solutions with confidence and complexity"
+  - id: related_issues
+    type: array
+    items:
+      type: object
+    description: "Similar issues found (with links if available)"
+  - id: confidence_score
+    type: number
+    description: "Confidence in findings (0.0-1.0)"
+required:
+  - research_strategy
+  - findings
+  - confidence_score
+additionalProperties: false

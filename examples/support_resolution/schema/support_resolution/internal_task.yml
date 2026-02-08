@@ -1,0 +1,51 @@
+name: internal_task
+description: Schema for internal engineering task
+fields:
+  - id: title
+    type: string
+    description: "Task title (concise, actionable)"
+  - id: description
+    type: string
+    description: "Detailed task description"
+  - id: task_type
+    type: string
+    description: "Type: bug | feature | tech_debt | documentation | investigation"
+  - id: priority
+    type: string
+    description: "Priority: p0 | p1 | p2 | p3"
+  - id: labels
+    type: array
+    items:
+      type: string
+    description: "Labels/tags for the task"
+  - id: assigned_team
+    type: string
+    description: "Team to assign"
+  - id: acceptance_criteria
+    type: array
+    items:
+      type: string
+    description: "Definition of done"
+  - id: technical_notes
+    type: string
+    description: "Technical context for engineers"
+  - id: related_files
+    type: array
+    items:
+      type: string
+    description: "Files likely to be modified"
+  - id: test_requirements
+    type: array
+    items:
+      type: string
+    description: "Testing requirements"
+  - id: original_issue_link
+    type: string
+    description: "Link back to original issue/ticket"
+required:
+  - title
+  - description
+  - task_type
+  - priority
+  - acceptance_criteria
+additionalProperties: false

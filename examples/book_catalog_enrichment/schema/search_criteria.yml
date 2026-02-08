@@ -1,0 +1,26 @@
+name: search_criteria
+description: Search criteria for finding similar books in catalog
+fields:
+  - id: query_text
+    type: string
+    description: "Natural language query for semantic search"
+  - id: genres
+    type: array
+    items:
+      type: string
+    description: "BISAC genre codes to filter by"
+  - id: keywords
+    type: array
+    items:
+      type: string
+    description: "Keywords for matching similar books"
+  - id: target_audience
+    type: string
+    description: "Target reader profile (e.g., beginners, professionals)"
+  - id: exclude_isbn
+    type: string
+    description: "ISBN of current book to exclude from results"
+required:
+  - query_text
+  - genres
+additionalProperties: false

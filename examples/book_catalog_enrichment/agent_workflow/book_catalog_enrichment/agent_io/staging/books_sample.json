@@ -1,0 +1,20 @@
+[
+  {
+    "isbn": "9780134685991",
+    "title": "Effective Java",
+    "authors": ["Joshua Bloch"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2017,
+    "page_count": 416,
+    "description": "The definitive guide to Java Platform best practices from the creator of many key Java features."
+  },
+  {
+    "isbn": "9780596007126",
+    "title": "Head First Design Patterns",
+    "authors": ["Eric Freeman", "Elisabeth Freeman", "Kathy Sierra", "Bert Bates"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2004,
+    "page_count": 638,
+    "description": "A brain-friendly guide to design patterns using Java examples."
+  }
+]

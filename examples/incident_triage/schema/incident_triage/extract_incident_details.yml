@@ -1,0 +1,32 @@
+name: extract_incident_details
+description: Schema for extracting structured information from raw incident reports
+fields:
+  - id: title
+    type: string
+    description: "Brief incident title summarizing the issue"
+  - id: description
+    type: string
+    description: "Detailed description of the incident"
+  - id: affected_systems
+    type: array
+    items:
+      type: string
+    description: "List of systems/services affected by the incident"
+  - id: error_messages
+    type: array
+    items:
+      type: string
+    description: "Key error messages extracted from logs/reports"
+  - id: impact_signals
+    type: array
+    items:
+      type: string
+    description: "Indicators of business/customer impact"
+  - id: reporter_priority
+    type: string
+    description: "Priority level indicated by the reporter (P1/P2/P3/P4)"
+required:
+  - title
+  - description
+  - affected_systems
+additionalProperties: false
