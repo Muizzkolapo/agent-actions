@@ -3,7 +3,6 @@
 import logging
 from typing import Any, Dict, List
 
-from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.errors import AgentActionsException
 from agent_actions.logging import fire_event
@@ -129,39 +128,28 @@ class ResultCollector:
                 )
             elif result.status == ProcessingStatus.EXHAUSTED:
                 exhausted_count += 1
-                if result.recovery_metadata and result.recovery_metadata.retry:
-                    # First stage uses source_snapshot, downstream uses input_record
-                    if is_first_stage:
-                        original_row = result.source_snapshot
-                    else:
-                        original_row = result.input_record
-                    exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(
+                data = result.data or []
+                if data:
+                    output.extend(data)
+                attempts = (
+                    result.recovery_metadata.retry.attempts
+                    if result.recovery_metadata and result.recovery_metadata.retry
+                    else "unknown"
+                )
+                logger.debug(
+                    "Collected EXHAUSTED result source_guid=%s attempts=%s",
+                    result.source_guid,
+                    attempts,
+                )
+                # Fire RC004: Exhausted record event
+                fire_event(
+                    ExhaustedRecordEvent(
+                        agent_name=agent_name,
+                        record_index=idx,
                         source_guid=result.source_guid,
-                        original_row=original_row,
-                        recovery_metadata=result.recovery_metadata,
-                        agent_config=agent_config,
-                        action_name=agent_config.get("agent_type", agent_name),
+                        reason=f"exhausted_after_{attempts}_attempts",
                     )
-                    output.append(exhausted_item)
-                    logger.debug(
-                        "Collected EXHAUSTED result source_guid=%s attempts=%s",
-                        result.source_guid,
-                        result.recovery_metadata.retry.attempts,
-                    )
-                    # Fire RC004: Exhausted record event
-                    fire_event(
-                        ExhaustedRecordEvent(
-                            agent_name=agent_name,
-                            record_index=idx,
-                            source_guid=result.source_guid,
-                            reason=f"exhausted_after_{result.recovery_metadata.retry.attempts}_attempts",
-                        )
-                    )
-                else:
-                    logger.debug(
-                        "Skipped EXHAUSTED result without retry metadata source_guid=%s",
-                        result.source_guid,
-                    )
+                )
             elif result.status == ProcessingStatus.FAILED:
                 failed_count += 1
                 logger.error("Processing failed: %s", result.error)

@@ -6,17 +6,14 @@ import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
-from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
 from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.batch.processing.batch_passthrough_builder import (
-    BatchPassthroughBuilder,
-)
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
 
 logger = logging.getLogger(__name__)
 
@@ -466,23 +463,26 @@ class BatchResultProcessor:
         """
         Stage 6: Merge passthrough records for missing/skipped items.
 
-        Uses BatchResultReconciler to find records that need passthrough treatment,
-        then uses BatchPassthroughBuilder to create properly formatted passthrough items.
+        Routes all passthrough/exhausted records through the EnrichmentPipeline
+        for consistent lineage, metadata, and version_correlation_id enrichment.
 
         IMPORTANT: Exhausted retry records are treated differently from skipped records:
         - Skipped records (guard/conditional): Passthrough with original content
-        - Exhausted retry records: Error record WITHOUT old content (matches online behavior)
+        - Exhausted retry records: Empty schema content + _recovery metadata
         """
         # Get reconciliation result
         reconciliation = ctx.reconciler.reconcile()
 
         # Build passthrough items for missing/skipped records
         if reconciliation.passthrough_records:
-            builder = BatchPassthroughBuilder(ctx.output_directory)
-
             for custom_id, original_row in reconciliation.passthrough_records:
                 # Check if this is an exhausted retry record
                 is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
+
+                record_index = ctx.reconciler.get_record_index(custom_id)
+                source_guid = ctx.reconciler.get_source_guid(
+                    custom_id, fallback=custom_id or "unknown"
+                )
 
                 if is_exhausted:
                     # Check on_exhausted behavior from retry config
@@ -499,26 +499,64 @@ class BatchResultProcessor:
                             f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
                         )
 
-                    # Exhausted retry: Create record with empty schema fields + _recovery
-                    # This gives downstream actions the expected structure but empty values
+                    # Exhausted retry: Build record with empty schema + route through enrichment
                     recovery_meta = ctx.exhausted_recovery[custom_id]
-                    exhausted_item = self._create_exhausted_item(
-                        ctx, custom_id, original_row, recovery_meta
+                    empty_content = ExhaustedRecordBuilder.build_empty_content(
+                        ctx.agent_config or {}
                     )
-                    ctx.processed_data.append(exhausted_item)
+                    exhausted_item = {
+                        "content": empty_content,
+                        "source_guid": source_guid,
+                        "metadata": {"retry_exhausted": True},
+                    }
+                    if original_row.get("target_id"):
+                        exhausted_item["target_id"] = original_row["target_id"]
+
+                    processing_context = BatchContextAdapter.to_processing_context(
+                        agent_config=ctx.agent_config or {},
+                        original_row=original_row,
+                        record_index=record_index,
+                        output_directory=ctx.output_directory,
+                    )
+                    processing_result = ProcessingResult.exhausted(
+                        error=f"Retry exhausted after {recovery_meta.retry.attempts} attempts",
+                        data=[exhausted_item],
+                        source_guid=source_guid,
+                        recovery_metadata=recovery_meta,
+                    )
+                    enriched = self._enrichment_pipeline.enrich(
+                        processing_result, processing_context
+                    )
+                    ctx.processed_data.extend(enriched.data)
                     ctx.error_count += 1
                 else:
-                    # Regular passthrough (guard/conditional skip): Keep old content
-                    # Legacy behavior: Always use 'conditional_clause_failed' reason
-                    # This ensures 'skipped_by_conditional' metadata flag (matches legacy)
-                    reason = "conditional_clause_failed"
+                    # Regular passthrough (guard/conditional skip): Route through enrichment
+                    passthrough_item = {
+                        "content": original_row.get("content", original_row),
+                        "source_guid": source_guid,
+                        "metadata": {
+                            "agent_type": "passthrough",
+                            "skipped_by_conditional": True,
+                        },
+                    }
+                    if original_row.get("target_id"):
+                        passthrough_item["target_id"] = original_row["target_id"]
 
-                    # Build passthrough item
-                    passthrough_item = builder._build_item(original_row, reason, custom_id)
-                    # Remove internal tracking field
-                    passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
-
-                    ctx.processed_data.append(passthrough_item)
+                    processing_context = BatchContextAdapter.to_processing_context(
+                        agent_config=ctx.agent_config or {},
+                        original_row=original_row,
+                        record_index=record_index,
+                        output_directory=ctx.output_directory,
+                    )
+                    processing_result = ProcessingResult.skipped(
+                        passthrough_data=passthrough_item,
+                        reason="conditional_clause_failed",
+                        source_guid=source_guid,
+                    )
+                    enriched = self._enrichment_pipeline.enrich(
+                        processing_result, processing_context
+                    )
+                    ctx.processed_data.extend(enriched.data)
                     ctx.passthrough_count += 1
 
         return ctx

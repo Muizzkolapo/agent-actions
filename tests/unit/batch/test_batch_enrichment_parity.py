@@ -130,6 +130,51 @@ class TestBatchEnrichmentParity:
         assert result[0]["parent_target_id"] == "parent_tgt"
         assert result[0]["root_target_id"] == "root_tgt"
 
+    def test_passthrough_records_have_version_correlation_id(self, processor):
+        """Stage 6 passthrough records should get version_correlation_id for versioned agents."""
+        versioned_config = {
+            "agent_type": "test_agent",
+            "json_mode": True,
+            "is_versioned_agent": True,
+            "version_base_name": "test_agent",
+            "workflow_session_id": "session_456",
+        }
+        # id_1 gets a successful response; id_2 is missing (becomes passthrough)
+        context_map = {
+            "id_1": {
+                "source_guid": "sg_1",
+                "target_id": "tgt_1",
+                "content": {"input": "data1"},
+            },
+            "id_2": {
+                "source_guid": "sg_2",
+                "target_id": "tgt_2",
+                "content": {"input": "data2"},
+            },
+        }
+        # Only id_1 has a batch result — id_2 will be a passthrough
+        batch_results = [
+            BatchResult(
+                custom_id="id_1",
+                success=True,
+                content={"output": "result1"},
+                metadata={},
+            )
+        ]
+
+        result = processor.process(
+            batch_results=batch_results,
+            context_map=context_map,
+            agent_config=versioned_config,
+        )
+
+        assert len(result) == 2
+        # Both records should have version_correlation_id
+        for item in result:
+            assert "version_correlation_id" in item, (
+                f"Record with source_guid={item.get('source_guid')} missing version_correlation_id"
+            )
+
     def test_multiple_items_all_enriched(self, processor, agent_config):
         """Multiple batch results should all be independently enriched."""
         context_map = {

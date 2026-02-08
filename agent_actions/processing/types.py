@@ -189,11 +189,13 @@ class ProcessingResult:
         return cls(status=ProcessingStatus.FAILED, data=[], executed=False, error=error, **kwargs)
 
     @classmethod
-    def exhausted(cls, error: str, **kwargs) -> "ProcessingResult":
+    def exhausted(
+        cls, error: str, data: Optional[List[Dict]] = None, **kwargs
+    ) -> "ProcessingResult":
         """Factory for exhausted (retry) result."""
         return cls(
             status=ProcessingStatus.EXHAUSTED,
-            data=[],
+            data=data or [],
             executed=False,
             error=error,
             **kwargs,

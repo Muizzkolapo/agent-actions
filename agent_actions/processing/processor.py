@@ -18,6 +18,7 @@ from agent_actions.logging.events.types import (
     BatchProcessingCompleteEvent,
 )
 from .enrichment import EnrichmentPipeline
+from .exhausted_builder import ExhaustedRecordBuilder
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
 from .prepared_task import GuardStatus, PreparationContext
 from .task_preparer import get_task_preparer
@@ -201,14 +202,35 @@ class RecordProcessor:
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
             )
-            return ProcessingResult.skipped(
-                passthrough_data=content,
+            # Build a proper passthrough item for enrichment
+            passthrough_item = {
+                "content": content,
+                "source_guid": source_guid,
+                "metadata": {
+                    "agent_type": "passthrough",
+                    "reason": f"guard_{prepared.guard_behavior}",
+                },
+            }
+            if input_record and isinstance(input_record, dict) and "target_id" in input_record:
+                passthrough_item["target_id"] = input_record["target_id"]
+            result = ProcessingResult.skipped(
+                passthrough_data=passthrough_item,
                 reason=f"guard_{prepared.guard_behavior}",
                 source_guid=source_guid,
                 passthrough_fields=prepared.passthrough_fields,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
             )
+            enriched_result = self.enrichment_pipeline.enrich(result, context)
+            fire_event(
+                RecordProcessingCompleteEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index,
+                    source_guid=source_guid,
+                    status=enriched_result.status.value,
+                )
+            )
+            return enriched_result
 
         # Step 5: Execute LLM via invocation strategy
         # Guard evaluation already done in TaskPreparer (strategy uses skip_guard_eval=True)
@@ -237,13 +259,37 @@ class RecordProcessor:
             if response is None:
                 # Check if this is a retry exhaustion vs guard filter
                 if recovery_metadata and recovery_metadata.retry:
-                    return ProcessingResult.exhausted(
+                    # Build exhausted record with empty schema content for enrichment
+                    empty_content = ExhaustedRecordBuilder.build_empty_content(context.agent_config)
+                    exhausted_item = {
+                        "content": empty_content,
+                        "source_guid": source_guid,
+                        "metadata": {"retry_exhausted": True},
+                    }
+                    if (
+                        input_record
+                        and isinstance(input_record, dict)
+                        and "target_id" in input_record
+                    ):
+                        exhausted_item["target_id"] = input_record["target_id"]
+                    result = ProcessingResult.exhausted(
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
+                        data=[exhausted_item],
                         source_guid=source_guid,
                         recovery_metadata=recovery_metadata,
                         source_snapshot=source_snapshot,
                         input_record=input_record,
                     )
+                    enriched_result = self.enrichment_pipeline.enrich(result, context)
+                    fire_event(
+                        RecordProcessingCompleteEvent(
+                            agent_name=context.agent_name,
+                            record_index=context.record_index,
+                            source_guid=source_guid,
+                            status=enriched_result.status.value,
+                        )
+                    )
+                    return enriched_result
                 # Fire RP002: Record filtered (LLM layer guard filter)
                 fire_event(
                     RecordFilteredEvent(
@@ -269,14 +315,32 @@ class RecordProcessor:
                         filter_reason="llm_layer_guard_skip",
                     )
                 )
-                return ProcessingResult.skipped(
-                    passthrough_data=response,
+                # Build a proper passthrough item for enrichment
+                passthrough_item = {
+                    "content": response,
+                    "source_guid": source_guid,
+                    "metadata": {"agent_type": "passthrough", "reason": "guard_skip"},
+                }
+                if input_record and isinstance(input_record, dict) and "target_id" in input_record:
+                    passthrough_item["target_id"] = input_record["target_id"]
+                result = ProcessingResult.skipped(
+                    passthrough_data=passthrough_item,
                     reason="guard_skip",
                     source_guid=source_guid,
                     passthrough_fields=passthrough_fields,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
                 )
+                enriched_result = self.enrichment_pipeline.enrich(result, context)
+                fire_event(
+                    RecordProcessingCompleteEvent(
+                        agent_name=context.agent_name,
+                        record_index=context.record_index,
+                        source_guid=source_guid,
+                        status=enriched_result.status.value,
+                    )
+                )
+                return enriched_result
 
         # Step 7: Transform response
         transformed = self._transform_response(

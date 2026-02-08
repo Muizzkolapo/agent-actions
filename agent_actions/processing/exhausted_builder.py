@@ -10,6 +10,37 @@ class ExhaustedRecordBuilder:
     """Build exhausted records with empty content and recovery metadata."""
 
     @staticmethod
+    def build_empty_content(agent_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Build empty content dict from action schema.
+
+        Used by processor.py and result_processor.py to construct
+        placeholder content for exhausted records before enrichment.
+
+        Args:
+            agent_config: Agent configuration with optional schema.
+
+        Returns:
+            Dict with schema fields set to type-appropriate empty values.
+        """
+        empty_content: Dict[str, Any] = {}
+        schema = agent_config.get("schema") if agent_config else None
+        if schema and isinstance(schema, dict):
+            for field_name, field_spec in schema.get("properties", {}).items():
+                field_type = field_spec.get("type", "string")
+                if field_type == "array":
+                    empty_content[field_name] = []
+                elif field_type == "object":
+                    empty_content[field_name] = {}
+                elif field_type == "boolean":
+                    empty_content[field_name] = False
+                elif field_type in ("number", "integer"):
+                    empty_content[field_name] = 0
+                else:
+                    empty_content[field_name] = None
+        return empty_content
+
+    @staticmethod
     def build_exhausted_item(
         *,
         source_guid: Optional[str],
@@ -37,22 +68,7 @@ class ExhaustedRecordBuilder:
         if resolved_source_guid is None:
             resolved_source_guid = "unknown"
 
-        empty_content: Dict[str, Any] = {}
-        schema = agent_config.get("schema") if agent_config else None
-        if schema and isinstance(schema, dict):
-            properties = schema.get("properties", {})
-            for field_name, field_spec in properties.items():
-                field_type = field_spec.get("type", "string")
-                if field_type == "array":
-                    empty_content[field_name] = []
-                elif field_type == "object":
-                    empty_content[field_name] = {}
-                elif field_type == "boolean":
-                    empty_content[field_name] = False
-                elif field_type in ("number", "integer"):
-                    empty_content[field_name] = 0
-                else:
-                    empty_content[field_name] = None
+        empty_content = ExhaustedRecordBuilder.build_empty_content(agent_config)
 
         node_id = IDGenerator.generate_node_id(action_name)
         exhausted_item: Dict[str, Any] = {

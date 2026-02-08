@@ -4,7 +4,6 @@ Agent workflow orchestration.
 
 import hashlib
 import logging
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -457,14 +456,25 @@ class AgentWorkflow:
         return 0
 
     def _generate_workflow_session_id(self) -> str:
-        """Generate a deterministic yet unique workflow session ID."""
-        timestamp = int(time.time())
+        """
+        Generate a deterministic workflow session ID.
+
+        Uses only config path + agent name (no time.time()) so the same
+        workflow always produces the same session ID. This ensures
+        version_correlation_id stays consistent across workflow restarts
+        and batch resume operations.
+        """
         config_content = f"{self.config.paths.constructor_path}:{self.agent_name}"
-        config_hash = hashlib.md5(config_content.encode()).hexdigest()[:8]
-        return f"workflow_{timestamp}_{config_hash}"
+        config_hash = hashlib.sha256(config_content.encode()).hexdigest()[:16]
+        return f"workflow_{config_hash}"
 
     def _inject_workflow_session_id(self):
         """Inject workflow session ID into all agent configurations."""
+        # Clear stale correlation IDs from previous runs to prevent unbounded growth
+        from agent_actions.utils.correlation import VersionIdGenerator
+
+        VersionIdGenerator.clear_version_correlation_registry()
+
         for agent_config in self.agent_configs.values():
             agent_config["workflow_session_id"] = self.workflow_session_id
 
