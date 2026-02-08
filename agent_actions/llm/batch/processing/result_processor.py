@@ -13,6 +13,7 @@ from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 
 logger = logging.getLogger(__name__)
@@ -530,15 +531,30 @@ class BatchResultProcessor:
                     ctx.processed_data.extend(enriched.data)
                     ctx.error_count += 1
                 else:
-                    # Regular passthrough (guard/conditional skip): Route through enrichment
+                    # Determine actual skip reason from context metadata
+                    filter_phase = original_row.get(ContextMetaKeys.FILTER_PHASE, "")
+                    if filter_phase == "upstream_unprocessed":
+                        reason = "upstream_unprocessed"
+                    elif (
+                        BatchContextMetadata.get_filter_status(original_row) == FilterStatus.SKIPPED
+                    ):
+                        reason = "guard_skipped"
+                    else:
+                        reason = "batch_not_returned"
+
                     passthrough_item = {
                         "content": original_row.get("content", original_row),
                         "source_guid": source_guid,
                         "metadata": {
-                            "agent_type": "passthrough",
-                            "skipped_by_conditional": True,
+                            "reason": reason,
                         },
                     }
+                    # Both upstream_unprocessed and batch_not_returned get _unprocessed=True
+                    # so downstream actions skip them (no wasted LLM calls). Guard-skipped
+                    # records are intentionally excluded — they have valid content and should
+                    # be processed by downstream actions with their own guards.
+                    if reason != "guard_skipped":
+                        passthrough_item["_unprocessed"] = True
                     if original_row.get("target_id"):
                         passthrough_item["target_id"] = original_row["target_id"]
 
@@ -548,11 +564,18 @@ class BatchResultProcessor:
                         record_index=record_index,
                         output_directory=ctx.output_directory,
                     )
-                    processing_result = ProcessingResult.skipped(
-                        passthrough_data=passthrough_item,
-                        reason="conditional_clause_failed",
-                        source_guid=source_guid,
-                    )
+                    if reason == "guard_skipped":
+                        processing_result = ProcessingResult.skipped(
+                            passthrough_data=passthrough_item,
+                            reason=reason,
+                            source_guid=source_guid,
+                        )
+                    else:
+                        processing_result = ProcessingResult.unprocessed(
+                            data=[passthrough_item],
+                            reason=reason,
+                            source_guid=source_guid,
+                        )
                     enriched = self._enrichment_pipeline.enrich(
                         processing_result, processing_context
                     )

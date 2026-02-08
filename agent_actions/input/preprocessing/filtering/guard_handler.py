@@ -443,7 +443,6 @@ class GuardHandler:
         processed_item["metadata"].update(
             {
                 "skipped_by_guard": True,
-                "agent_type": "passthrough",
                 "reason": "guard_not_matched",
                 "filter_status": filter_status,
             }

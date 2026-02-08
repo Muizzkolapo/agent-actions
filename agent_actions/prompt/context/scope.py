@@ -825,6 +825,9 @@ class ContextScopeProcessor:
                 "parent_target_id",
                 "root_target_id",
                 "chunk_info",
+                # System fields: excluded so they don't leak into downstream prompts
+                "_recovery",  # batch retry recovery metadata
+                "_unprocessed",  # circuit-breaker flag for upstream failures
             ]
         }
 

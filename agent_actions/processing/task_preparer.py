@@ -48,7 +48,10 @@ class TaskPreparer:
 
         prepared = preparer.prepare(item, context)
 
-        if prepared.should_execute:
+        if prepared.is_upstream_unprocessed:
+            # Upstream failed — preserve for lineage, skip all work
+            pass
+        elif prepared.should_execute:
             # Execute LLM with prepared.formatted_prompt, prepared.llm_context
             pass
         elif prepared.is_passthrough:
@@ -98,6 +101,21 @@ class TaskPreparer:
         Returns:
             PreparedTask with all preparation results
         """
+        # Step 0: Check if upstream record was unprocessed (dead/failed/skipped)
+        # Runs BEFORE normalization, context loading, or guard evaluation
+        # to avoid ALL wasted work on records that should not be sent to LLM
+        if self._is_upstream_unprocessed(item):
+            target_id = existing_target_id or self._generate_target_id()
+            source_guid = item.get("source_guid") if isinstance(item, dict) else None
+            return PreparedTask(
+                target_id=target_id,
+                source_guid=source_guid,
+                original_content=item.get("content", item) if isinstance(item, dict) else item,
+                guard_status=GuardStatus.UPSTREAM_UNPROCESSED,
+                # guard_behavior left None — the UPSTREAM_UNPROCESSED path returns
+                # before any code reads guard_behavior (processor.py:183, preparator.py:239).
+            )
+
         # Step 1: Normalize input format
         content, source_guid, source_snapshot = self._normalize_input(item, context)
         target_id = existing_target_id or self._generate_target_id()
@@ -379,6 +397,18 @@ class TaskPreparer:
             field_context=field_context,
             tools_path=context.tools_path,
         )
+
+    @staticmethod
+    def _is_upstream_unprocessed(item: Any) -> bool:
+        """Check if upstream record was unprocessed (dead/failed/skipped).
+
+        Uses strict identity (``is True``) — truthy values like 1 or "true"
+        do NOT trigger the circuit-breaker.  Callers setting this field MUST
+        use ``item["_unprocessed"] = True`` (boolean literal).
+        """
+        if not isinstance(item, dict):
+            return False
+        return item.get("_unprocessed") is True
 
     def _generate_target_id(self) -> str:
         """Generate a new target_id."""

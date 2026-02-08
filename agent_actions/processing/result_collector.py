@@ -88,6 +88,7 @@ class ResultCollector:
         filtered_count = 0
         failed_count = 0
         exhausted_count = 0
+        unprocessed_count = 0
 
         for idx, result in enumerate(results):
             if result.status == ProcessingStatus.SUCCESS:
@@ -172,6 +173,23 @@ class ResultCollector:
                         status="filtered",
                     )
                 )
+            elif result.status == ProcessingStatus.UNPROCESSED:
+                unprocessed_count += 1
+                data = result.data or []
+                if data:
+                    output.extend(data)  # Preserve in output for lineage
+                logger.debug(
+                    "Collected UNPROCESSED result source_guid=%s count=%d",
+                    result.source_guid,
+                    len(data),
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        agent_name=agent_name,
+                        result_index=idx,
+                        status="unprocessed",
+                    )
+                )
             else:
                 logger.debug("Unhandled result status=%s", result.status)
 
@@ -184,6 +202,7 @@ class ResultCollector:
                 total_filtered=filtered_count,
                 total_failed=failed_count,
                 total_exhausted=exhausted_count,
+                total_unprocessed=unprocessed_count,
             )
         )
 

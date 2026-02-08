@@ -151,6 +151,8 @@ class DataGenerator(IGenerator):
                     result.error,
                 )
                 return (None, False, result.passthrough_fields)
+            elif result.status == ProcessingStatus.UNPROCESSED:
+                return (result.data, False, result.passthrough_fields)
             elif result.status == ProcessingStatus.FAILED:
                 raise GenerationError(f"Processing failed: {result.error}")
             else:

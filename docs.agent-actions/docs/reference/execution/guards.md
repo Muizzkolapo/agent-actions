@@ -117,6 +117,36 @@ Guards can access:
     behavior: "skip"
 ```
 
+## Downstream Behavior
+
+How guard results affect downstream actions in a multi-action workflow:
+
+| Behavior | Output record | Downstream actions |
+|----------|--------------|-------------------|
+| `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
+| `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
+
+### Skipped records flow downstream
+
+When Action A skips a record (`behavior: skip`), Action B still receives it and can process it with its own LLM call. Each action's guard is independent:
+
+```yaml
+actions:
+  - name: extract_facts
+    guard:
+      clause: 'status == "active"'
+      behavior: "skip"       # Inactive records pass through with original content
+
+  - name: generate_summary
+    dependencies: extract_facts
+    # Receives ALL records from extract_facts, including skipped ones
+    # Can define its own guard or process everything
+```
+
+### Upstream failures are short-circuited
+
+When an upstream action fails for some records (e.g., batch API errors), those records are marked with `_unprocessed: true` and automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. These records are preserved in the output for lineage traceability.
+
 ## Limitations
 
 - **No external calls** - Guards can't make API requests

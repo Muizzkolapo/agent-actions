@@ -59,7 +59,7 @@ class TestOnlineSkippedEnrichment:
         passthrough_item = {
             "content": {"original": "data"},
             "source_guid": "sg_skip_1",
-            "metadata": {"agent_type": "passthrough", "reason": "guard_skip"},
+            "metadata": {"reason": "guard_skip"},
         }
         result = ProcessingResult.skipped(
             passthrough_data=passthrough_item,
@@ -84,7 +84,7 @@ class TestOnlineSkippedEnrichment:
         passthrough_item = {
             "content": {"original": "data"},
             "source_guid": "sg_skip_2",
-            "metadata": {"agent_type": "passthrough", "reason": "guard_skip"},
+            "metadata": {"reason": "guard_skip"},
         }
         result = ProcessingResult.skipped(
             passthrough_data=passthrough_item,

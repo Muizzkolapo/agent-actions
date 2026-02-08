@@ -20,6 +20,7 @@ class GuardStatus(Enum):
     PASSED = "passed"  # Guard passed, task should be executed
     SKIPPED = "skipped"  # Guard triggered skip behavior (passthrough)
     FILTERED = "filtered"  # Guard triggered filter behavior (excluded)
+    UPSTREAM_UNPROCESSED = "upstream_unprocessed"  # Upstream failed/skipped this record
 
 
 @dataclass
@@ -83,6 +84,11 @@ class PreparedTask:
     def is_filtered(self) -> bool:
         """Whether this task was filtered out (guard filter)."""
         return self.guard_status == GuardStatus.FILTERED
+
+    @property
+    def is_upstream_unprocessed(self) -> bool:
+        """Whether this task was unprocessed by upstream (dead/failed/skipped)."""
+        return self.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
 
 
 @dataclass

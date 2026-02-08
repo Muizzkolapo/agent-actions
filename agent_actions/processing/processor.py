@@ -169,6 +169,9 @@ class RecordProcessor:
         content = prepared.original_content
 
         # Fire RP001: Record processing started
+        # Fires for ALL records including unprocessed — intentional so observability
+        # sees the record was received. The immediately-following CompleteEvent with
+        # status="unprocessed" closes the span.
         fire_event(
             RecordProcessingStartedEvent(
                 agent_name=context.agent_name,
@@ -176,6 +179,30 @@ class RecordProcessor:
                 source_guid=source_guid,
             )
         )
+
+        # Handle upstream unprocessed records (dead/failed/skipped by prior action)
+        # No RecordFilteredEvent here — these records aren't filtered (they're preserved
+        # in output with lineage). RecordProcessingCompleteEvent below captures the status.
+        if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
+            preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
+            preserved_item["_unprocessed"] = True
+            result = ProcessingResult.unprocessed(
+                data=[preserved_item],
+                reason="upstream_unprocessed",
+                source_guid=source_guid,
+                source_snapshot=source_snapshot,
+                input_record=input_record,
+            )
+            enriched_result = self.enrichment_pipeline.enrich(result, context)
+            fire_event(
+                RecordProcessingCompleteEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index,
+                    source_guid=source_guid,
+                    status=enriched_result.status.value,
+                )
+            )
+            return enriched_result
 
         # Handle Phase 1 guard results (filtered/skipped)
         if prepared.guard_status == GuardStatus.FILTERED:
@@ -207,7 +234,6 @@ class RecordProcessor:
                 "content": content,
                 "source_guid": source_guid,
                 "metadata": {
-                    "agent_type": "passthrough",
                     "reason": f"guard_{prepared.guard_behavior}",
                 },
             }
@@ -319,7 +345,7 @@ class RecordProcessor:
                 passthrough_item = {
                     "content": response,
                     "source_guid": source_guid,
-                    "metadata": {"agent_type": "passthrough", "reason": "guard_skip"},
+                    "metadata": {"reason": "guard_skip"},
                 }
                 if input_record and isinstance(input_record, dict) and "target_id" in input_record:
                     passthrough_item["target_id"] = input_record["target_id"]

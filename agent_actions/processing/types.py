@@ -17,6 +17,7 @@ class ProcessingStatus(Enum):
     FAILED = "failed"  # Processing failed
     EXHAUSTED = "exhausted"  # Retry exhausted
     DEFERRED = "deferred"  # Deferred for batch execution
+    UNPROCESSED = "unprocessed"  # Upstream failed/skipped this record
 
 
 class ProcessingMode(Enum):
@@ -198,6 +199,17 @@ class ProcessingResult:
             data=data or [],
             executed=False,
             error=error,
+            **kwargs,
+        )
+
+    @classmethod
+    def unprocessed(cls, data: List[Dict], reason: str, **kwargs) -> "ProcessingResult":
+        """Factory for unprocessed (upstream dead/failed/skipped) result."""
+        return cls(
+            status=ProcessingStatus.UNPROCESSED,
+            data=data,
+            executed=False,
+            skip_reason=reason,
             **kwargs,
         )
 

@@ -75,8 +75,31 @@ The following fields are metadata and are automatically excluded when extracting
 - `lineage`
 - `metadata`
 - `chunk_info`
+- `_recovery`
+- `_unprocessed`
 
-This means when an action references upstream data, it sees the `content` fields without these metadata wrappers.
+This means when an action references upstream data, it sees the `content` fields without these wrappers or system fields.
+
+### Record Types
+
+Records fall into two categories based on whether the action's LLM/tool actually ran:
+
+| How to identify | Meaning | Content |
+|----------------|---------|---------|
+| `_unprocessed` absent | **Processed** — action ran normally | LLM/tool output |
+| `_unprocessed: true` | **Unprocessed** — upstream action failed (API error, missing batch result) | Original upstream content, preserved for lineage |
+| `metadata.reason` present | **Skipped** — guard evaluated to false (`behavior: skip`) | Original content, forwarded unchanged |
+
+### System Fields
+
+Records may carry underscore-prefixed system fields that control internal processing:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `_recovery` | `boolean` | Record was produced during batch recovery |
+| `_unprocessed` | `true` | Upstream action failed (API error, missing batch result) — automatically skipped by downstream actions |
+
+These fields are excluded from content extraction and should not be set by users.
 
 ### Content Field
 

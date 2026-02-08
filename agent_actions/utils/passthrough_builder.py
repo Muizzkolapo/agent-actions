@@ -57,7 +57,6 @@ class PassthroughItemBuilder:
                 'lineage': List[str],
                 'content': Any,
                 'metadata': {
-                    'agent_type': 'passthrough',
                     'reason': str (online) or legacy flags (batch),
                     ...
                 }
@@ -76,7 +75,7 @@ class PassthroughItemBuilder:
             ...     mode='batch'
             ... )
             >>> print(result['metadata'])
-            {'agent_type': 'passthrough', 'skipped_by_where_clause': True}
+            {'skipped_by_where_clause': True}
 
         Example (online mode):
             >>> row = {
@@ -91,7 +90,7 @@ class PassthroughItemBuilder:
             ...     mode='online'
             ... )
             >>> print(result['metadata'])
-            {'agent_type': 'passthrough', 'reason': 'where_clause_not_matched',
+            {'reason': 'where_clause_not_matched',
              'skipped_by_where_clause': True}
         """
         # Generate IDs
@@ -117,9 +116,6 @@ class PassthroughItemBuilder:
         # Ensure metadata exists
         if "metadata" not in processed_item:
             processed_item["metadata"] = {}
-
-        # Set agent_type to passthrough
-        processed_item["metadata"]["agent_type"] = "passthrough"
 
         # Add mode-specific metadata
         if mode == "online":

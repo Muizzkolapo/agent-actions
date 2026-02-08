@@ -145,7 +145,7 @@ class TestAgentWorkflowPassthroughCleanup:
             {
                 "source_guid": "test-guid-1",
                 "content": {"test": "passthrough content"},
-                "metadata": {"skipped_by_where_clause": True, "agent_type": "passthrough"},
+                "metadata": {"skipped_by_where_clause": True},
             }
         ]
         with open(data_file, "w") as f:

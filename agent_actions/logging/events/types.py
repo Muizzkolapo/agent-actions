@@ -2446,6 +2446,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
     total_filtered: int = 0
     total_failed: int = 0
     total_exhausted: int = 0
+    total_unprocessed: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
@@ -2454,7 +2455,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
             f"[{self.agent_name}] Result collection complete: "
             f"{self.total_success} success, {self.total_skipped} skipped, "
             f"{self.total_filtered} filtered, {self.total_failed} failed, "
-            f"{self.total_exhausted} exhausted"
+            f"{self.total_exhausted} exhausted, {self.total_unprocessed} unprocessed"
         )
         self.data = {
             "agent_name": self.agent_name,
@@ -2463,6 +2464,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
             "total_filtered": self.total_filtered,
             "total_failed": self.total_failed,
             "total_exhausted": self.total_exhausted,
+            "total_unprocessed": self.total_unprocessed,
         }
 
     @property

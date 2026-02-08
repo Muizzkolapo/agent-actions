@@ -236,6 +236,15 @@ class BatchTaskPreparator:
             )
 
         # 6. Handle guard results
+        if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
+            BatchContextMetadata.set_filter_status(
+                context_map_builder[custom_id], FilterStatus.SKIPPED
+            )
+            context_map_builder[custom_id][ContextMetaKeys.FILTER_PHASE] = "upstream_unprocessed"
+            stats.skipped_items += 1
+            logger.debug("Upstream unprocessed item %s", custom_id)
+            return None
+
         if prepared.guard_status == GuardStatus.FILTERED:
             BatchContextMetadata.set_filter_status(
                 context_map_builder[custom_id], FilterStatus.FILTERED
