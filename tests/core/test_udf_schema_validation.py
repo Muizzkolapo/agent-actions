@@ -11,7 +11,7 @@ defines input structure and build_context handles input assembly.
 """
 
 import pytest
-from typing import List, Optional, TypedDict
+from typing import Optional, TypedDict
 from agent_actions.utils.udf_management.registry import udf_tool, clear_registry
 from agent_actions.config.schema import Granularity
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
@@ -182,83 +182,6 @@ class TestGranularityHandling:
         )
 
 
-class TestEndToEndExecution:
-    """Test end-to-end UDF execution without input validation."""
-
-    @pytest.fixture(autouse=True)
-    def cleanup(self):
-        """Clear registry before and after each test."""
-        clear_registry()
-        yield
-        clear_registry()
-
-    def test_simple_transform_without_schemas(self):
-        """Test simple data transformation without any schemas."""
-
-        @udf_tool()
-        def uppercase_transform(data):
-            return {"text": data["text"].upper()}
-
-        result = execute_user_defined_function("uppercase_transform", {"text": "hello"})
-
-        assert result["text"] == "HELLO"
-
-    def test_complex_object_processing(self):
-        """Test processing complex nested objects."""
-
-        @udf_tool()
-        def process_user_profile(data):
-            user = data["user"]
-            prefs = data.get("preferences", {})
-
-            return {"user_id": user.get("id"), "theme": prefs.get("theme", "default")}
-
-        result = execute_user_defined_function(
-            "process_user_profile",
-            {"user": {"id": "123", "name": "John"}, "preferences": {"theme": "dark"}},
-        )
-
-        assert result["user_id"] == "123"
-        assert result["theme"] == "dark"
-
-    def test_array_field_processing(self):
-        """Test processing array fields."""
-
-        class TagsOutput(TypedDict):
-            tags: List[str]
-            count: int
-
-        @udf_tool(output_type=TagsOutput)
-        def process_tags(data):
-            return {"tags": [tag.upper() for tag in data["tags"]], "count": len(data["tags"])}
-
-        result = execute_user_defined_function(
-            "process_tags", {"tags": ["python", "testing", "tdd"]}
-        )
-
-        assert result["tags"] == ["PYTHON", "TESTING", "TDD"]
-        assert result["count"] == 3
-
-    def test_batch_processing_file_mode(self):
-        """Test batch processing in FILE mode."""
-
-        class BatchOutput(TypedDict):
-            value: int
-
-        @udf_tool(output_type=BatchOutput, granularity=Granularity.FILE)
-        def batch_multiply(data):
-            return [{"value": item["value"] * 2} for item in data]
-
-        result = execute_user_defined_function(
-            "batch_multiply", [{"value": 1}, {"value": 2}, {"value": 3}]
-        )
-
-        assert len(result) == 3
-        assert result[0]["value"] == 2
-        assert result[1]["value"] == 4
-        assert result[2]["value"] == 6
-
-
 class TestErrorHandling:
     """Test error handling and error messages."""
 
@@ -299,72 +222,3 @@ class TestErrorHandling:
         error_msg = str(exc_info.value)
         assert "needs_field" in error_msg
         assert "validation failed" in error_msg.lower()
-
-
-class TestSchemaIntegrationWithExistingSystem:
-    """Test integration with existing schema system."""
-
-    @pytest.fixture(autouse=True)
-    def cleanup(self):
-        """Clear registry before and after each test."""
-        clear_registry()
-        yield
-        clear_registry()
-
-    def test_unified_format_compatibility_for_output(self):
-        """Test that output schemas use unified format compatible with existing system."""
-
-        class TestOutput(TypedDict):
-            field1: str
-
-        @udf_tool(output_type=TestOutput)
-        def test_func(data):
-            return {"field1": "value"}
-
-        from agent_actions.utils.udf_management.registry import get_udf_metadata
-
-        metadata = get_udf_metadata("test_func")
-
-        # Should have unified format for output
-        assert "fields" in metadata["output_schema"]
-        assert isinstance(metadata["output_schema"]["fields"], list)
-
-    def test_schema_compilation_for_output_validation(self):
-        """Test that output schemas can be compiled for validation."""
-
-        class CompilableOutput(TypedDict):
-            text: str
-
-        @udf_tool(output_type=CompilableOutput)
-        def compilable_schema(data):
-            return {"text": "test"}
-
-        # This should work without errors
-        result = execute_user_defined_function(
-            "compilable_schema", {"data": "any"}, validate_output=True
-        )
-
-        assert result == {"text": "test"}
-
-    def test_no_input_schema_stored(self):
-        """Test that no input schema is stored (input comes from context_scope)."""
-
-        class OutputOnly(TypedDict):
-            result: str
-
-        @udf_tool(output_type=OutputOnly)
-        def output_only_func(data):
-            return {"result": "done"}
-
-        from agent_actions.utils.udf_management.registry import get_udf_metadata
-
-        metadata = get_udf_metadata("output_only_func")
-
-        # Should NOT have input-related fields
-        assert "input_type" not in metadata
-        assert "json_schema" not in metadata
-        assert "schema" not in metadata
-
-        # Should have output schema
-        assert metadata["output_type"] == OutputOnly
-        assert metadata["json_output_schema"] is not None

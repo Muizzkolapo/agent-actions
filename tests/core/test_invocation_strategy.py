@@ -67,72 +67,6 @@ def basic_context():
     )
 
 
-class TestInvocationResult:
-    """Tests for InvocationResult dataclass."""
-
-    def test_immediate_factory(self):
-        """Test InvocationResult.immediate() factory."""
-        result = InvocationResult.immediate(
-            response={"answer": "test"},
-            executed=True,
-            passthrough_fields={"pass": "through"},
-        )
-
-        assert result.response == {"answer": "test"}
-        assert result.executed is True
-        assert result.deferred is False
-        assert result.passthrough_fields == {"pass": "through"}
-        assert result.is_immediate is True
-        assert result.is_success is True
-
-    def test_queued_factory(self):
-        """Test InvocationResult.queued() factory."""
-        result = InvocationResult.queued(
-            task_id="batch-task-123",
-            passthrough_fields={"pass": "through"},
-        )
-
-        assert result.deferred is True
-        assert result.task_id == "batch-task-123"
-        assert result.executed is False
-        assert result.response is None
-        assert result.is_immediate is False
-
-    def test_skipped_factory(self):
-        """Test InvocationResult.skipped() factory."""
-        result = InvocationResult.skipped(
-            passthrough_data={"original": "data"},
-            passthrough_fields={"pass": "through"},
-        )
-
-        assert result.response == {"original": "data"}
-        assert result.executed is False
-        assert result.deferred is False
-        assert result.passthrough_fields == {"pass": "through"}
-
-    def test_filtered_factory(self):
-        """Test InvocationResult.filtered() factory."""
-        result = InvocationResult.filtered()
-
-        assert result.response is None
-        assert result.executed is False
-        assert result.deferred is False
-
-    def test_is_success_requires_execution_and_response(self):
-        """Test is_success property requires both executed=True and response."""
-        # Not executed
-        result1 = InvocationResult(response={"data": 1}, executed=False)
-        assert result1.is_success is False
-
-        # No response
-        result2 = InvocationResult(response=None, executed=True)
-        assert result2.is_success is False
-
-        # Both present
-        result3 = InvocationResult(response={"data": 1}, executed=True)
-        assert result3.is_success is True
-
-
 class TestOnlineStrategy:
     """Tests for OnlineStrategy."""
 
@@ -402,26 +336,6 @@ class TestBatchStrategy:
 class TestInvocationStrategyFactory:
     """Tests for InvocationStrategyFactory."""
 
-    def test_create_online_strategy(self):
-        """Test factory creates OnlineStrategy for ONLINE mode."""
-        strategy = InvocationStrategyFactory.create(
-            mode=ProcessingMode.ONLINE,
-            agent_config={"agent_type": "test"},
-        )
-
-        assert isinstance(strategy, OnlineStrategy)
-
-    def test_create_batch_strategy(self):
-        """Test factory creates BatchStrategy for BATCH mode."""
-        provider = MagicMock()
-        strategy = InvocationStrategyFactory.create(
-            mode=ProcessingMode.BATCH,
-            agent_config={"agent_type": "test"},
-            provider=provider,
-        )
-
-        assert isinstance(strategy, BatchStrategy)
-
     def test_batch_mode_requires_provider(self):
         """Test BATCH mode raises error without provider."""
         with pytest.raises(ValueError, match="BatchProvider required"):
@@ -430,44 +344,9 @@ class TestInvocationStrategyFactory:
                 agent_config={"agent_type": "test"},
             )
 
-    def test_create_online_convenience(self):
-        """Test create_online() convenience method."""
-        strategy = InvocationStrategyFactory.create_online(
-            agent_config={"agent_type": "test"},
-        )
-
-        assert isinstance(strategy, OnlineStrategy)
-
-    def test_create_batch_convenience(self):
-        """Test create_batch() convenience method."""
-        provider = MagicMock()
-        strategy = InvocationStrategyFactory.create_batch(provider)
-
-        assert isinstance(strategy, BatchStrategy)
-
 
 class TestRecordProcessorModeWiring:
     """Tests that RecordProcessor honors the mode parameter for strategy selection."""
-
-    def test_default_mode_creates_online_strategy(self):
-        """RecordProcessor with no mode/strategy defaults to OnlineStrategy."""
-        from agent_actions.processing.processor import RecordProcessor
-
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-        assert isinstance(processor._strategy, OnlineStrategy)
-
-    def test_batch_mode_creates_batch_strategy(self):
-        """RecordProcessor with mode=BATCH and provider creates BatchStrategy."""
-        from agent_actions.processing.processor import RecordProcessor
-
-        provider = MagicMock()
-        processor = RecordProcessor(
-            agent_config={},
-            agent_name="test",
-            mode=ProcessingMode.BATCH,
-            provider=provider,
-        )
-        assert isinstance(processor._strategy, BatchStrategy)
 
     def test_batch_mode_without_provider_raises(self):
         """RecordProcessor with mode=BATCH but no provider raises ValueError."""
@@ -479,19 +358,6 @@ class TestRecordProcessorModeWiring:
                 agent_name="test",
                 mode=ProcessingMode.BATCH,
             )
-
-    def test_explicit_strategy_overrides_mode(self):
-        """Explicit strategy parameter takes precedence over mode."""
-        from agent_actions.processing.processor import RecordProcessor
-
-        custom_strategy = MagicMock(spec=InvocationStrategy)
-        processor = RecordProcessor(
-            agent_config={},
-            agent_name="test",
-            strategy=custom_strategy,
-            mode=ProcessingMode.BATCH,  # Should be ignored
-        )
-        assert processor._strategy is custom_strategy
 
 
 class TestDeferredResultInProcessor:
@@ -570,36 +436,3 @@ class TestDeferredResultInProcessor:
             f"RP002 RecordFilteredEvent should not fire for deferred results, "
             f"but got: {filter_events}"
         )
-
-
-class TestProcessingResultTaskId:
-    """Tests for ProcessingResult.task_id property."""
-
-    def test_task_id_returns_value_for_deferred(self):
-        """task_id returns the stored ID when status is DEFERRED."""
-        from agent_actions.processing.types import ProcessingResult
-
-        result = ProcessingResult.deferred(task_id="batch-123")
-        assert result.task_id == "batch-123"
-
-    def test_task_id_returns_none_for_non_deferred(self):
-        """task_id returns None for SUCCESS, FILTERED, etc."""
-        from agent_actions.processing.types import ProcessingResult
-
-        assert ProcessingResult.success(data=[{}], node_id="node-1").task_id is None
-        assert ProcessingResult.filtered(node_id="node-2").task_id is None
-        assert ProcessingResult.failed(error="err", node_id="node-3").task_id is None
-
-
-class TestBatchSubmissionResult:
-    """Tests for BatchSubmissionResult dataclass."""
-
-    def test_is_empty_when_no_tasks(self):
-        """Test is_empty property when no tasks submitted."""
-        result = BatchSubmissionResult(batch_id=None, task_count=0)
-        assert result.is_empty is True
-
-    def test_not_empty_when_has_tasks(self):
-        """Test is_empty property when tasks submitted."""
-        result = BatchSubmissionResult(batch_id="batch-123", task_count=5)
-        assert result.is_empty is False

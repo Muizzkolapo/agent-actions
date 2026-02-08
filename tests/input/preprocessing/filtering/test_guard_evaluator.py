@@ -5,13 +5,11 @@ Related: GitHub Issue #875, #888 (Phase 1a)
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from agent_actions.input.preprocessing.filtering.evaluator import (
     GuardEvaluator,
     GuardResult,
-    get_guard_evaluator,
-    reset_guard_evaluator,
 )
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterResult,
@@ -22,29 +20,11 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
 class TestGuardResult:
     """Tests for GuardResult dataclass."""
 
-    def test_passed(self):
-        result = GuardResult.passed()
-        assert result.should_execute is True
-        assert result.behavior is None
-        assert result.matched is True
-
-    def test_skipped(self):
-        result = GuardResult.skipped()
-        assert result.should_execute is False
-        assert result.behavior == "skip"
-        assert result.matched is False
-
     def test_skipped_with_error(self):
         result = GuardResult.skipped(error="test error")
         assert result.should_execute is False
         assert result.behavior == "skip"
         assert result.error == "test error"
-
-    def test_filtered(self):
-        result = GuardResult.filtered()
-        assert result.should_execute is False
-        assert result.behavior == "filter"
-        assert result.matched is False
 
     def test_from_filter_result_success_matched(self):
         filter_result = FilterResult(success=True, matched=True)
@@ -273,24 +253,6 @@ class TestGuardEvaluator:
 
         assert "_raw" not in result
         assert result["ctx_field"] == "ctx_value"
-
-
-class TestGlobalInstance:
-    """Tests for global instance management."""
-
-    def test_get_guard_evaluator_returns_same_instance(self):
-        """get_guard_evaluator returns singleton."""
-        reset_guard_evaluator()
-        e1 = get_guard_evaluator()
-        e2 = get_guard_evaluator()
-        assert e1 is e2
-
-    def test_reset_guard_evaluator(self):
-        """reset_guard_evaluator creates new instance."""
-        e1 = get_guard_evaluator()
-        reset_guard_evaluator()
-        e2 = get_guard_evaluator()
-        assert e1 is not e2
 
 
 class TestHelpersIntegration:

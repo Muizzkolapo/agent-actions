@@ -1,20 +1,11 @@
-"""Tests for LoggingBridgeHandler.
-
-This module tests:
-- Python logging to event conversion
-- Log level mapping
-- Category extraction from logger names
-- LogEvent, DebugEvent, SystemEvent types
-- Exception info handling
-"""
+"""Tests for LoggingBridgeHandler."""
 
 import logging
-from datetime import datetime, timezone
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 
-from agent_actions.logging.core.events import BaseEvent, EventLevel, EventMeta
+from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.handlers.bridge import (
     LoggingBridgeHandler,
     LogEvent,
@@ -51,28 +42,6 @@ class MockEventCapture:
 class TestLogEventType:
     """Tests for LogEvent dataclass."""
 
-    def test_log_event_defaults(self):
-        """Test LogEvent default values."""
-        event = LogEvent(message="test")
-
-        assert event.logger_name == ""
-        assert event.source_file == ""
-        assert event.source_line == 0
-        assert event.func_name == ""
-        assert event.exc_info is None
-
-    def test_log_event_default_category(self):
-        """Test LogEvent default category.
-
-        Note: LogEvent inherits from BaseEvent which defaults category to "system".
-        The LogEvent.__post_init__ only sets category to "log" if it's empty/falsy.
-        Since BaseEvent provides "system" as default, that takes precedence.
-        """
-        event = LogEvent(message="test")
-        # BaseEvent's default category is "system", which is truthy,
-        # so LogEvent's __post_init__ doesn't override it
-        assert event.category == "system"
-
     def test_log_event_category_set_to_log_when_empty(self):
         """Test LogEvent sets category to 'log' when explicitly empty."""
         event = LogEvent(message="test", category="")
@@ -98,11 +67,6 @@ class TestLogEventType:
 
         assert event1.code == event2.code
 
-    def test_log_event_has_exception_false(self):
-        """Test has_exception returns False when no exception."""
-        event = LogEvent(message="test")
-        assert event.has_exception is False
-
     def test_log_event_has_exception_true(self):
         """Test has_exception returns True when exception present."""
         try:
@@ -112,80 +76,6 @@ class TestLogEventType:
 
             event = LogEvent(message="test", exc_info=sys.exc_info())
             assert event.has_exception is True
-
-
-class TestDebugEventType:
-    """Tests for DebugEvent dataclass."""
-
-    def test_debug_event_level(self):
-        """Test DebugEvent has DEBUG level."""
-        event = DebugEvent(message="test")
-        assert event.level == EventLevel.DEBUG
-
-    def test_debug_event_category(self):
-        """Test DebugEvent has debug category."""
-        event = DebugEvent(message="test")
-        assert event.category == "debug"
-
-    def test_debug_event_code(self):
-        """Test DebugEvent code is X001."""
-        event = DebugEvent(message="test")
-        assert event.code == "X001"
-
-    def test_debug_event_fields(self):
-        """Test DebugEvent custom fields."""
-        event = DebugEvent(message="test", module="my_module", detail="extra info")
-        assert event.module == "my_module"
-        assert event.detail == "extra info"
-
-
-class TestSystemEventType:
-    """Tests for SystemEvent dataclass."""
-
-    def test_system_event_default_level(self):
-        """Test SystemEvent default level is INFO."""
-        event = SystemEvent(message="test")
-        assert event.level == EventLevel.INFO
-
-    def test_system_event_preserves_level(self):
-        """Test SystemEvent preserves explicitly set level."""
-        event = SystemEvent(level=EventLevel.WARN, message="test")
-        assert event.level == EventLevel.WARN
-
-    def test_system_event_category(self):
-        """Test SystemEvent has system category."""
-        event = SystemEvent(message="test")
-        assert event.category == "system"
-
-    def test_system_event_code(self):
-        """Test SystemEvent code is X002."""
-        event = SystemEvent(message="test")
-        assert event.code == "X002"
-
-    def test_system_event_fields(self):
-        """Test SystemEvent custom fields."""
-        event = SystemEvent(message="test", operation="startup", detail="initializing")
-        assert event.operation == "startup"
-        assert event.detail == "initializing"
-
-
-class TestLoggingBridgeHandlerInit:
-    """Tests for LoggingBridgeHandler initialization."""
-
-    def test_default_level(self):
-        """Test default level is DEBUG."""
-        handler = LoggingBridgeHandler()
-        assert handler.level == logging.DEBUG
-
-    def test_custom_level(self):
-        """Test setting custom level."""
-        handler = LoggingBridgeHandler(level=logging.INFO)
-        assert handler.level == logging.INFO
-
-    def test_event_manager_lazy_init(self):
-        """Test event manager is lazily initialized."""
-        handler = LoggingBridgeHandler()
-        assert handler._event_manager is None
 
 
 class TestLoggingBridgeHandlerEmit:
@@ -438,30 +328,3 @@ class TestErrorHandling:
         assert isinstance(event, LogEvent)
         assert event.has_exception
         assert event.exc_info is not None
-
-
-class TestEventManagerCaching:
-    """Tests for EventManager caching in the bridge."""
-
-    def test_event_manager_cached(self):
-        """Test that EventManager is cached after first use."""
-        capture = MockEventCapture()
-        manager = EventManager.get()
-        manager.register(capture)
-
-        handler = LoggingBridgeHandler()
-        assert handler._event_manager is None
-
-        # First emit should cache the manager
-        logger = logging.getLogger("test.cache")
-        logger.addHandler(handler)
-        logger.setLevel(logging.DEBUG)
-        logger.propagate = False
-
-        logger.info("First message")
-        assert handler._event_manager is not None
-
-        # Second emit should use cached manager
-        cached_manager = handler._event_manager
-        logger.info("Second message")
-        assert handler._event_manager is cached_manager

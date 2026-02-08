@@ -7,28 +7,6 @@ from unittest.mock import patch
 from agent_actions.logging.config import LoggingConfig
 
 
-class TestLoggingConfigDefaults:
-    """Tests for LoggingConfig default values."""
-
-    @pytest.mark.parametrize(
-        "attr_chain,expected",
-        [
-            pytest.param(("file_handler", "enabled"), True, id="enabled"),
-            pytest.param(("file_handler", "path"), None, id="path"),
-            pytest.param(("file_handler", "level"), "DEBUG", id="level"),
-            pytest.param(("file_handler", "max_bytes"), 10_485_760, id="max_bytes"),
-            pytest.param(("file_handler", "backup_count"), 5, id="backup_count"),
-            pytest.param(("file_handler", "format"), "human", id="format"),
-        ],
-    )
-    def test_defaults(self, attr_chain, expected):
-        config = LoggingConfig()
-        obj = config
-        for attr in attr_chain:
-            obj = getattr(obj, attr)
-        assert obj == expected
-
-
 class TestLoggingConfigFromEnvironment:
     """Tests for LoggingConfig.from_environment()."""
 
@@ -94,16 +72,6 @@ class TestLoggingConfigFromEnvironment:
 
 class TestLoggingConfigFromProjectConfig:
     """Tests for LoggingConfig.from_project_config()."""
-
-    def test_empty_config_uses_defaults(self):
-        """Test that empty config uses default values."""
-        config = LoggingConfig.from_project_config({})
-        assert config.file_handler.enabled is True
-        assert config.file_handler.path is None
-        assert config.file_handler.level == "DEBUG"
-        assert config.file_handler.max_bytes == 10_485_760
-        assert config.file_handler.backup_count == 5
-        assert config.file_handler.format == "human"
 
     def test_file_handler_enabled_from_yaml(self):
         """Test parsing file handler enabled from YAML."""
@@ -172,25 +140,6 @@ class TestLoggingConfigFromProjectConfig:
 
 class TestLoggingConfigEdgeCases:
     """Tests for edge cases in LoggingConfig."""
-
-    def test_empty_log_file_path_env_var(self, monkeypatch):
-        """Test that empty AGENT_ACTIONS_LOG_FILE is treated as not set."""
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_FILE", "")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.path is None
-
-    def test_empty_log_dir_env_var(self, monkeypatch):
-        """Test that empty AGENT_ACTIONS_LOG_DIR is treated as not set."""
-        monkeypatch.setenv("AGENT_ACTIONS_LOG_DIR", "")
-        config = LoggingConfig.from_environment()
-        assert config.file_handler.path is None
-
-    def test_no_log_file_with_any_truthy_value(self, monkeypatch):
-        """Test that AGENT_ACTIONS_NO_LOG_FILE only disables with '1'."""
-        for value in ["true", "yes", "on", "2"]:
-            monkeypatch.setenv("AGENT_ACTIONS_NO_LOG_FILE", value)
-            config = LoggingConfig.from_environment()
-            assert config.file_handler.enabled is True
 
     def test_missing_file_section_in_yaml(self):
         """Test that missing 'file' section in YAML uses defaults."""

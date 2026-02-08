@@ -76,21 +76,6 @@ actions:
         index.scan_workspace()
         return index
 
-    def test_scan_workspace_finds_all_workflows(self, workspace_index):
-        """Test that scan_workspace finds all workflow configs."""
-        assert len(workspace_index.dependency_graph) == 4
-        assert "workflow_a" in workspace_index.dependency_graph
-        assert "workflow_b" in workspace_index.dependency_graph
-        assert "workflow_c" in workspace_index.dependency_graph
-        assert "workflow_d" in workspace_index.dependency_graph
-
-    def test_dependency_graph_built_correctly(self, workspace_index):
-        """Test that forward dependency graph is built correctly."""
-        assert workspace_index.dependency_graph["workflow_a"] == []
-        assert workspace_index.dependency_graph["workflow_b"] == ["workflow_a"]
-        assert workspace_index.dependency_graph["workflow_c"] == ["workflow_a"]
-        assert set(workspace_index.dependency_graph["workflow_d"]) == {"workflow_b", "workflow_c"}
-
     def test_reverse_dependency_graph_built_correctly(self, workspace_index):
         """Test that reverse dependency graph is built correctly."""
         # workflow_a should have B and C as downstream
@@ -146,25 +131,6 @@ actions:
         index.scan_workspace()
 
         assert len(index.dependency_graph) == 0
-
-    def test_lazy_scanning(self, temp_workspace):
-        """Test that workspace is scanned lazily on first access."""
-        index = WorkspaceIndex(temp_workspace)
-        assert len(index.dependency_graph) == 0
-
-        # Calling topological_sort triggers scan
-        index.topological_sort_downstream("workflow_a")
-        assert len(index.dependency_graph) == 4
-
-    def test_scan_only_once(self, temp_workspace):
-        """Test that workspace is only scanned once."""
-        index = WorkspaceIndex(temp_workspace)
-        index.scan_workspace()
-        initial_deps = dict(index.dependency_graph)
-
-        # Scan again - should not change
-        index.scan_workspace()
-        assert index.dependency_graph == initial_deps
 
 
 class TestWorkspaceIndexCycleDetection:

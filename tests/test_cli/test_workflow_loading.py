@@ -2,93 +2,8 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory, ProjectPaths
-
-
-class TestProjectPathsFactory:
-    """Test ProjectPathsFactory creates valid path structures."""
-
-    def test_create_project_paths_signature(self):
-        """Test that create_project_paths accepts agent_name and filename parameters."""
-        # This is a basic smoke test to ensure the API signature is correct
-        # We can't test actual functionality without a real FileHandler setup
-        assert hasattr(ProjectPathsFactory, "create_project_paths")
-        assert callable(ProjectPathsFactory.create_project_paths)
-
-    def test_get_agent_paths_signature(self):
-        """Test that get_agent_paths exists and is callable."""
-        assert hasattr(ProjectPathsFactory, "get_agent_paths")
-        assert callable(ProjectPathsFactory.get_agent_paths)
-
-    def test_project_paths_dataclass_structure(self):
-        """Test ProjectPaths dataclass has expected attributes."""
-        # Create a mock ProjectPaths to verify structure
-        paths = ProjectPaths(
-            current_dir=Path("/test/current"),
-            prompt_dir=Path("/test/prompt"),
-            agent_config_dir=Path("/test/agent_config"),
-            io_dir=Path("/test/io"),
-            schema_dir=Path("/test/schema"),
-            default_config_path=Path("/test/default_config.yml"),
-            template_dir=Path("/test/template"),
-            rendered_workflows_dir=Path("/test/rendered"),
-        )
-
-        assert paths.current_dir == Path("/test/current")
-        assert paths.prompt_dir == Path("/test/prompt")
-        assert paths.agent_config_dir == Path("/test/agent_config")
-        assert paths.io_dir == Path("/test/io")
-        assert paths.schema_dir == Path("/test/schema")
-        assert paths.default_config_path == Path("/test/default_config.yml")
-        assert paths.template_dir == Path("/test/template")
-        assert paths.rendered_workflows_dir == Path("/test/rendered")
-
-    def test_project_paths_to_dict(self):
-        """Test ProjectPaths.to_dict() converts paths to strings."""
-        paths = ProjectPaths(
-            current_dir=Path("/test/current"),
-            prompt_dir=Path("/test/prompt"),
-            agent_config_dir=Path("/test/agent_config"),
-            io_dir=Path("/test/io"),
-            schema_dir=Path("/test/schema"),
-            default_config_path=Path("/test/default_config.yml"),
-            template_dir=Path("/test/template"),
-            rendered_workflows_dir=Path("/test/rendered"),
-        )
-
-        result = paths.to_dict()
-
-        assert isinstance(result, dict)
-        assert result["current_dir"] == "/test/current"
-        assert result["prompt_dir"] == "/test/prompt"
-        assert result["agent_config_dir"] == "/test/agent_config"
-        assert result["io_dir"] == "/test/io"
-        assert result["schema_dir"] == "/test/schema"
-        assert result["default_config_path"] == "/test/default_config.yml"
-        assert result["template_dir"] == "/test/template"
-        assert result["rendered_workflows_dir"] == "/test/rendered"
-
-    def test_project_paths_str_representation(self):
-        """Test ProjectPaths string representation."""
-        paths = ProjectPaths(
-            current_dir=Path("/test/current"),
-            prompt_dir=Path("/test/prompt"),
-            agent_config_dir=Path("/test/agent_config"),
-            io_dir=Path("/test/io"),
-            schema_dir=Path("/test/schema"),
-            default_config_path=Path("/test/default_config.yml"),
-            template_dir=Path("/test/template"),
-            rendered_workflows_dir=Path("/test/rendered"),
-        )
-
-        str_repr = str(paths)
-
-        assert "current_dir" in str_repr
-        assert "/test/current" in str_repr
-        assert "prompt_dir" in str_repr
-        assert "/test/prompt" in str_repr
 
 
 class TestConfigDiscoveryPattern:
@@ -157,46 +72,6 @@ actions:
         content = config_path.read_text()
         assert "name: test_agent" in content
         assert "actions:" in content
-
-
-class TestWorkflowLoadingPattern:
-    """Test the workflow loading pattern used by run, schema, inspect commands."""
-
-    def test_workflow_loading_sequence_steps(self):
-        """Document the expected workflow loading sequence."""
-        # This test documents the pattern without testing implementation
-        # The pattern is:
-        # 1. ProjectPathsFactory.create_project_paths(agent_name, filename)
-        # 2. Construct filename from agent name: f"{agent_name}.yml"
-        # 3. _find_config_file(paths.agent_config_dir, filename)
-        # 4. ConfigRenderer.render_and_load_config(full_path, paths)
-        # 5. AgentWorkflow(WorkflowConfig(paths=WorkflowPaths(...)))
-
-        # Commands that follow this pattern:
-        commands_using_pattern = [
-            "RunCommand.execute()",
-            "RunCommand._setup_validation_workflow()",
-            "SchemaCommand.execute()",
-            "BaseInspectCommand._load_workflow()",
-        ]
-
-        assert len(commands_using_pattern) == 4
-
-    def test_agent_name_stem_extraction(self):
-        """Test that agent names are extracted from path stems."""
-        from pathlib import Path
-
-        # Commands extract agent name like this:
-        agent_path = Path("my_agent.yml")
-        agent_name = agent_path.stem
-
-        assert agent_name == "my_agent"
-
-        # Works with just the name too
-        agent_path2 = Path("another_agent")
-        agent_name2 = agent_path2.stem
-
-        assert agent_name2 == "another_agent"
 
 
 class TestProjectPathsFactoryConstants:

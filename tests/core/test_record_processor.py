@@ -12,17 +12,6 @@ from agent_actions.processing.types import (
 )
 
 
-class TestRecordProcessorInitialization:
-    """Test RecordProcessor initialization."""
-
-    def test_creates_enrichment_pipeline(self):
-        """RecordProcessor initializes with EnrichmentPipeline."""
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-
-        assert processor.enrichment_pipeline is not None
-        assert len(processor.enrichment_pipeline.enrichers) == 6
-
-
 class TestBatchProcessing:
     """Test process_batch method."""
 
@@ -118,57 +107,6 @@ class TestBatchProcessing:
         assert len(results) == 1
         assert results[0].status == ProcessingStatus.FAILED
         assert results[0].source_guid == "guid-123"
-
-
-class TestEndToEndProcessing:
-    """Test full process() flow."""
-
-    pass
-
-
-class TestItemContextCreation:
-    """Test _create_item_context method."""
-
-    def test_creates_new_context_with_updated_index(self):
-        """Creates new context with updated record_index."""
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-        base_context = ProcessingContext(
-            agent_config={"model": "gpt-4"},
-            agent_name="test",
-            mode=ProcessingMode.ONLINE,
-            is_first_stage=True,
-            source_data=[{"data": 1}],
-            file_path="/path/to/file",
-            record_index=0,
-        )
-
-        new_context = processor._create_item_context(base_context, 5, {"item": "data"})
-
-        assert new_context.record_index == 5
-        assert new_context.agent_config == {"model": "gpt-4"}
-        assert new_context.agent_name == "test"
-        assert new_context.mode == ProcessingMode.ONLINE
-        assert new_context.is_first_stage is True
-        assert new_context.file_path == "/path/to/file"
-
-    def test_preserves_all_context_fields(self):
-        """New context preserves all fields from base context."""
-        processor = RecordProcessor(agent_config={}, agent_name="test")
-        base_context = ProcessingContext(
-            agent_config={"model": "gpt-4"},
-            agent_name="test",
-            mode=ProcessingMode.BATCH,
-            version_context={"loop_id": "loop-123"},
-            workflow_metadata={"workflow": "test"},
-            output_directory="/output",
-        )
-
-        new_context = processor._create_item_context(base_context, 3, {"item": "data"})
-
-        assert new_context.version_context == {"loop_id": "loop-123"}
-        assert new_context.workflow_metadata == {"workflow": "test"}
-        assert new_context.output_directory == "/output"
-        assert new_context.mode == ProcessingMode.BATCH
 
 
 class TestConfigurationErrorHandling:

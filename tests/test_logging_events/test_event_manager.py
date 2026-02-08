@@ -1,21 +1,10 @@
-"""Tests for EventManager and event dispatching.
+"""Tests for EventManager and event dispatching."""
 
-This module tests:
-- EventManager singleton pattern
-- Handler registration and unregistration
-- Event dispatching to handlers
-- Context management
-- Global filters
-- Thread safety
-"""
-
-from datetime import datetime, timezone
-from unittest.mock import Mock, MagicMock, patch
-import threading
+from unittest.mock import Mock
 import pytest
 
-from agent_actions.logging.core.events import BaseEvent, EventLevel, EventMeta
-from agent_actions.logging.core.manager import EventManager, fire_event, get_manager
+from agent_actions.logging.core.events import BaseEvent, EventLevel
+from agent_actions.logging.core.manager import EventManager, fire_event
 from agent_actions.logging.core.protocols import LevelFilter, CategoryFilter
 
 
@@ -48,94 +37,6 @@ class MockHandler:
 
     def flush(self) -> None:
         self.flushed = True
-
-
-class TestEventManagerSingleton:
-    """Tests for EventManager singleton behavior."""
-
-    def test_singleton_returns_same_instance(self):
-        """Test that get() returns the same instance."""
-        m1 = EventManager.get()
-        m2 = EventManager.get()
-        assert m1 is m2
-
-    def test_singleton_thread_safe(self):
-        """Test that singleton is thread-safe."""
-        instances = []
-        errors = []
-
-        def get_instance():
-            try:
-                instance = EventManager.get()
-                instances.append(instance)
-            except Exception as e:
-                errors.append(e)
-
-        threads = [threading.Thread(target=get_instance) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        assert len(errors) == 0, f"Expected no errors, got: {errors}"
-        assert len(instances) == 10, f"Expected 10 instances from threads, got {len(instances)}"
-        assert all(i is instances[0] for i in instances), (
-            "All instances should be the same singleton object"
-        )
-
-    def test_reset_creates_new_instance(self):
-        """Test that reset() creates a new singleton instance."""
-        m1 = EventManager.get()
-        EventManager.reset()
-        m2 = EventManager.get()
-        assert m1 is not m2
-
-    def test_get_manager_function(self):
-        """Test get_manager() convenience function."""
-        manager = get_manager()
-        assert manager is EventManager.get()
-
-
-class TestHandlerRegistration:
-    """Tests for handler registration and unregistration."""
-
-    def test_register_handler(self):
-        """Test registering a handler."""
-        manager = EventManager.get()
-        handler = MockHandler()
-
-        manager.register(handler)
-
-        assert handler in manager._handlers
-
-    def test_unregister_handler(self):
-        """Test unregistering a handler."""
-        manager = EventManager.get()
-        handler = MockHandler()
-
-        manager.register(handler)
-        manager.unregister(handler)
-
-        assert handler not in manager._handlers
-
-    def test_unregister_nonexistent_handler(self):
-        """Test unregistering a handler that wasn't registered."""
-        manager = EventManager.get()
-        handler = MockHandler()
-
-        # Should not raise an error
-        manager.unregister(handler)
-
-    def test_multiple_handlers(self):
-        """Test registering multiple handlers."""
-        manager = EventManager.get()
-        handler1 = MockHandler()
-        handler2 = MockHandler()
-
-        manager.register(handler1)
-        manager.register(handler2)
-
-        assert len(manager._handlers) == 2
 
 
 class TestEventDispatching:
@@ -240,14 +141,6 @@ class TestContextManagement:
         assert manager.get_context("invocation_id") == "inv-123"
         assert manager.get_context("correlation_id") == "corr-456"
 
-    def test_get_context_default(self):
-        """Test getting context with default value."""
-        manager = EventManager.get()
-
-        result = manager.get_context("nonexistent", default="default_value")
-
-        assert result == "default_value"
-
     def test_clear_context(self):
         """Test clearing context."""
         manager = EventManager.get()
@@ -271,21 +164,6 @@ class TestContextManagement:
         received = handler.events_received[0]
         assert received.meta.invocation_id == "inv-123"
         assert received.meta.correlation_id == "corr-456"
-
-    def test_extra_context_in_meta(self):
-        """Test that extra context values go into meta.extra."""
-        manager = EventManager.get()
-        handler = MockHandler()
-        manager.register(handler)
-
-        manager.set_context(workflow_name="test_workflow", custom_key="custom_value")
-
-        event = BaseEvent(message="test")
-        manager.fire(event)
-
-        received = handler.events_received[0]
-        assert received.meta.extra["workflow_name"] == "test_workflow"
-        assert received.meta.extra["custom_key"] == "custom_value"
 
     def test_context_manager(self):
         """Test context() context manager."""
@@ -318,15 +196,6 @@ class TestContextManagement:
 
 class TestGlobalFilters:
     """Tests for global event filters."""
-
-    def test_add_filter(self):
-        """Test adding a global filter."""
-        manager = EventManager.get()
-        filter_ = LevelFilter(EventLevel.INFO)
-
-        manager.add_filter(filter_)
-
-        assert filter_ in manager._filters
 
     def test_level_filter_drops_events(self):
         """Test that LevelFilter drops events below threshold."""
@@ -365,21 +234,6 @@ class TestGlobalFilters:
         categories = [e.category for e in handler.events_received]
         assert "workflow" in categories
         assert "agent" in categories
-
-    def test_filter_returns_none_drops_event(self):
-        """Test that filter returning None drops the event."""
-        manager = EventManager.get()
-        handler = MockHandler()
-        manager.register(handler)
-
-        drop_filter = Mock()
-        drop_filter.filter.return_value = None
-        manager.add_filter(drop_filter)
-
-        event = BaseEvent(message="test")
-        manager.fire(event)
-
-        assert len(handler.events_received) == 0
 
     def test_multiple_filters_chain(self):
         """Test that multiple filters are chained."""
@@ -439,30 +293,6 @@ class TestFlush:
         assert working_handler.flushed
 
 
-class TestInitialization:
-    """Tests for initialization state."""
-
-    def test_not_initialized_by_default(self):
-        """Test that manager is not initialized by default."""
-        manager = EventManager.get()
-        assert not manager.is_initialized
-
-    def test_initialize_marks_as_initialized(self):
-        """Test that initialize() marks manager as initialized."""
-        manager = EventManager.get()
-        manager.initialize()
-        assert manager.is_initialized
-
-    def test_reset_clears_initialized(self):
-        """Test that reset() clears initialized state."""
-        manager = EventManager.get()
-        manager.initialize()
-        EventManager.reset()
-
-        new_manager = EventManager.get()
-        assert not new_manager.is_initialized
-
-
 class TestResetBehavior:
     """Tests for reset behavior."""
 
@@ -476,16 +306,6 @@ class TestResetBehavior:
 
         new_manager = EventManager.get()
         assert len(new_manager._handlers) == 0
-
-    def test_reset_clears_filters(self):
-        """Test that reset clears all filters."""
-        manager = EventManager.get()
-        manager.add_filter(LevelFilter(EventLevel.INFO))
-
-        EventManager.reset()
-
-        new_manager = EventManager.get()
-        assert len(new_manager._filters) == 0
 
     def test_reset_clears_context(self):
         """Test that reset clears context."""

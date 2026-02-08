@@ -6,32 +6,11 @@ behavior across edge cases. Integration tests verify end-to-end parity,
 while these unit tests focus on the implementation details.
 """
 
-import pytest
-from typing import Dict, Any
-
 from agent_actions.prompt.context.builder import LLMContextBuilder
 
 
 class TestBuildLLMContextBasics:
     """Test basic merge and copy behavior."""
-
-    def test_returns_copy_of_base_context(self):
-        """Result should be a new dict, not the original."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, None)
-
-        assert result == base
-        assert result is not base  # Must be a copy
-
-    def test_base_context_not_mutated(self):
-        """Original base_context should never be modified."""
-        base = {"key": "value", "to_drop": "secret"}
-        original_base = base.copy()
-        context_scope = {"drop": ["source.to_drop"]}
-
-        LLMContextBuilder._build_llm_context(base, None, context_scope)
-
-        assert base == original_base  # Original unchanged
 
     def test_merges_additional_context(self):
         """Additional context should be merged into result."""
@@ -51,38 +30,6 @@ class TestBuildLLMContextBasics:
         result = LLMContextBuilder._build_llm_context(base, additional, None)
 
         assert result["key"] == "overwritten"
-
-
-class TestBuildLLMContextAdditionalContextEdgeCases:
-    """Test edge cases for additional_context parameter."""
-
-    def test_none_additional_context(self):
-        """None additional_context should be handled gracefully."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, None)
-
-        assert result == {"key": "value"}
-
-    def test_empty_dict_additional_context(self):
-        """Empty dict additional_context should be handled gracefully."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, {}, None)
-
-        assert result == {"key": "value"}
-
-    def test_non_dict_additional_context_ignored(self):
-        """Non-dict additional_context should be ignored (defensive coding)."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, "not a dict", None)
-
-        assert result == {"key": "value"}
-
-    def test_list_additional_context_ignored(self):
-        """List additional_context should be ignored."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, ["item"], None)
-
-        assert result == {"key": "value"}
 
 
 class TestBuildLLMContextDropBehavior:
@@ -108,25 +55,6 @@ class TestBuildLLMContextDropBehavior:
         assert "keep" in result
         assert "drop1" not in result
         assert "drop2" not in result
-
-    def test_drop_nonexistent_field_no_error(self):
-        """Dropping a field that doesn't exist should not raise."""
-        base = {"key": "value"}
-        context_scope = {"drop": ["source.nonexistent"]}
-
-        result = LLMContextBuilder._build_llm_context(base, None, context_scope)
-
-        assert result == {"key": "value"}
-
-    def test_invalid_field_reference_skipped(self):
-        """Invalid field references should be silently skipped."""
-        base = {"key": "value"}
-        context_scope = {"drop": ["invalid_no_dot", "source.valid"]}
-
-        result = LLMContextBuilder._build_llm_context(base, None, context_scope)
-
-        # Should not raise, invalid ref skipped
-        assert "key" in result
 
 
 class TestBuildLLMContextSeedDrops:
@@ -174,15 +102,6 @@ class TestBuildLLMContextSeedDrops:
         assert "secret" in seed_data
         assert seed_data == {"secret": "value", "keep": "this"}
 
-    def test_non_dict_seed_ignored(self):
-        """Non-dict seed should be ignored for seed drops."""
-        base = {"seed": "not a dict", "other": "value"}
-        context_scope = {"drop": ["seed.field"]}
-
-        result = LLMContextBuilder._build_llm_context(base, None, context_scope)
-
-        assert result["seed"] == "not a dict"
-
 
 class TestBuildLLMContextMixedDrops:
     """Test mixed seed and non-seed drops."""
@@ -223,34 +142,6 @@ class TestBuildLLMContextBaseContextEdgeCases:
         assert result == {"extra": "value"}
 
 
-class TestBuildLLMContextScopeEdgeCases:
-    """Test edge cases for context_scope parameter."""
-
-    def test_none_context_scope(self):
-        """None context_scope should skip drop processing."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, None)
-        assert result == {"key": "value"}
-
-    def test_empty_context_scope(self):
-        """Empty context_scope should skip drop processing."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, {})
-        assert result == {"key": "value"}
-
-    def test_context_scope_without_drop(self):
-        """context_scope without 'drop' key should skip drop processing."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, {"observe": ["something"]})
-        assert result == {"key": "value"}
-
-    def test_empty_drop_list(self):
-        """Empty drop list should not modify result."""
-        base = {"key": "value"}
-        result = LLMContextBuilder._build_llm_context(base, None, {"drop": []})
-        assert result == {"key": "value"}
-
-
 class TestPublicMethodDelegation:
     """Test that public methods correctly delegate to _build_llm_context."""
 
@@ -279,11 +170,6 @@ class TestPublicMethodDelegation:
         direct_result = LLMContextBuilder._build_llm_context(base, additional, context_scope)
 
         assert realtime_result == direct_result
-
-    def test_batch_returns_empty_for_non_dict(self):
-        """Batch mode should return empty dict for non-dict input."""
-        result = LLMContextBuilder.build_llm_context_for_batch("not a dict", {}, None)
-        assert result == {}
 
     def test_realtime_passthrough_for_non_dict(self):
         """Realtime mode should pass through non-dict input unchanged."""

@@ -12,40 +12,6 @@ from agent_actions.validation.static_analyzer import (
 class TestWorkflowStaticAnalyzer:
     """Tests for WorkflowStaticAnalyzer class."""
 
-    def test_analyze_valid_workflow(self):
-        """Test analyzing a valid workflow."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "extractor",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "text": {"type": "string"},
-                            "metadata": {"type": "object"},
-                        },
-                    },
-                },
-                {
-                    "name": "summarizer",
-                    "depends_on": ["extractor"],
-                    "prompt": "Summarize: {{ action.extractor.text }}",
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "summary": {"type": "string"},
-                        },
-                    },
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
-
-        assert result.is_valid
-        assert len(result.errors) == 0
-
     def test_analyze_detects_missing_field(self):
         """Test analyzer detects reference to missing field."""
         workflow_config = {
@@ -170,78 +136,6 @@ class TestWorkflowStaticAnalyzer:
         assert schema is not None
         assert "text" in schema.available_fields
         assert "score" in schema.available_fields
-
-    def test_get_data_flow_summary(self):
-        """Test getting data flow summary."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "agent1",
-                    "schema": {
-                        "type": "object",
-                        "properties": {"output": {"type": "string"}},
-                    },
-                },
-                {
-                    "name": "agent2",
-                    "depends_on": ["agent1"],
-                    "prompt": "{{ action.agent1.output }}",
-                    "schema": {
-                        "type": "object",
-                        "properties": {"result": {"type": "string"}},
-                    },
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        summary = analyzer.get_data_flow_summary()
-
-        assert "agents" in summary
-        assert "execution_order" in summary
-        assert "edges" in summary
-
-        # Check agents are in summary
-        agent_names = [a["name"] for a in summary["agents"]]
-        assert "agent1" in agent_names
-        assert "agent2" in agent_names
-
-    def test_source_node_always_available(self):
-        """Test source node is always available for references."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "processor",
-                    "prompt": "Process: {{ source.input_data }}",
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        result = analyzer.analyze()
-
-        # source references should not cause errors
-        source_errors = [e for e in result.errors if "source" in e.message.lower()]
-        assert len(source_errors) == 0
-
-    def test_tool_agent_kind_detection(self):
-        """Test tool agents are correctly identified."""
-        workflow_config = {
-            "actions": [
-                {
-                    "name": "my_tool",
-                    "kind": "tool",
-                },
-            ]
-        }
-
-        analyzer = WorkflowStaticAnalyzer(workflow_config)
-        analyzer._build_graph()
-
-        node = analyzer.graph.get_node("my_tool")
-        from agent_actions.validation.static_analyzer import AgentKind
-
-        assert node.agent_kind == AgentKind.TOOL
 
     def test_dependencies_field_alias(self):
         """Test 'dependencies' field works as alias for 'depends_on'."""

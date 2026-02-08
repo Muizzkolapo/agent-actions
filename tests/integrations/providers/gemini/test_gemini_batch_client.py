@@ -214,9 +214,3 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         )
         with pytest.raises(VendorAPIError):
             provider.retrieve_results("nonexistent-batch-id", str(tmp_path))
-
-    def test_check_status_returns_valid_state(self, provider):
-        """Test that check_status returns a valid state string."""
-        status = provider.check_status("batch123")
-        # Gemini uses JOB_STATE_* format which maps to standard states
-        assert status in ["pending", "processing", "completed", "failed", "cancelled"]

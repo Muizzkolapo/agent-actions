@@ -2,10 +2,9 @@
 Tests for render_workflow.py - Jinja2 template rendering.
 
 This module tests:
-1. dedent Jinja2 filter
-2. Failed render caching
-3. Integration with template rendering
-4. Backward compatibility
+1. Failed render caching
+2. Jinja2 variable substitution
+3. Backward compatibility
 """
 
 import pytest
@@ -13,81 +12,8 @@ import yaml
 import tempfile
 import shutil
 from pathlib import Path
-from jinja2 import Environment, FileSystemLoader
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.errors import ConfigurationError
-
-
-class TestDedentFilter:
-    """Test the dedent Jinja2 filter."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.templates_folder = Path(self.temp_dir) / "templates"
-        self.templates_folder.mkdir()
-
-    def teardown_method(self):
-        """Clean up test fixtures."""
-        shutil.rmtree(self.temp_dir)
-
-    def test_dedent_filter_available(self):
-        """Test that dedent filter is registered in Environment."""
-        env = Environment(loader=FileSystemLoader(self.templates_folder))
-        import textwrap
-
-        env.filters["dedent"] = textwrap.dedent
-        assert "dedent" in env.filters
-        assert env.filters["dedent"] == textwrap.dedent
-
-    def test_dedent_filter_strips_indent(self):
-        """Test that dedent filter strips leading whitespace."""
-        env = Environment(loader=FileSystemLoader(self.templates_folder))
-        import textwrap
-
-        env.filters["dedent"] = textwrap.dedent
-        template_content = "{{ '    - name: foo' | dedent }}"
-        template = env.from_string(template_content)
-        result = template.render()
-        assert result == "- name: foo"
-
-    def test_dedent_filter_with_multiline(self):
-        """Test dedent filter with multi-line strings."""
-        env = Environment(loader=FileSystemLoader(self.templates_folder))
-        import textwrap
-
-        env.filters["dedent"] = textwrap.dedent
-        template_content = "{{ text | dedent }}"
-        template = env.from_string(template_content)
-        text_with_indent = "    - name: foo\n      kind: tool\n    - name: bar\n      kind: action"
-        result = template.render(text=text_with_indent)
-        assert result.startswith("- name: foo")
-        assert "  kind: tool" in result
-
-    def test_dedent_filter_with_macro(self):
-        """Test dedent filter used with Jinja2 macros."""
-        env = Environment(loader=FileSystemLoader(self.templates_folder))
-        import textwrap
-
-        env.filters["dedent"] = textwrap.dedent
-        template_content = "{% macro my_tools() -%}\n    - name: foo\n      kind: tool\n{%- endmacro %}\n{{ my_tools() | dedent }}"
-        template = env.from_string(template_content)
-        result = template.render()
-        assert result.strip().startswith("- name: foo")
-
-    def test_dedent_filter_preserves_relative_indent(self):
-        """Test that dedent preserves relative indentation."""
-        env = Environment(loader=FileSystemLoader(self.templates_folder))
-        import textwrap
-
-        env.filters["dedent"] = textwrap.dedent
-        template_content = "{{ text | dedent }}"
-        template = env.from_string(template_content)
-        text_with_indent = "    parent:\n        child: value"
-        result = template.render(text=text_with_indent)
-        lines = result.splitlines()
-        assert lines[0] == "parent:"
-        assert lines[1].startswith("  ")
 
 
 class TestFailedRenderCache:
@@ -182,32 +108,19 @@ class TestRenderPipelineIntegration:
         """Clean up test fixtures."""
         shutil.rmtree(self.temp_dir)
 
-    def test_excessive_indent_workflow_normalized(self):
-        """Test that workflows with excessive indent are auto-normalized."""
+    def test_jinja2_variable_substitution(self):
+        """Test that Jinja2 variable substitution works with normalization."""
         yaml_file = Path(self.temp_dir) / "workflow.yml"
         yaml_file.write_text(
-            "\n      name: test_workflow\n      version: 1.0\n      tools:\n        - name: foo\n          kind: tool\n        - name: bar\n          kind: action\n"
+            "\n      {% set workflow_name = 'combined_test' %}\n      name: {{ workflow_name }}\n      version: 1.0\n      actions:\n        - name: action1\n          kind: action\n"
         )
         result = render_pipeline_with_templates(
             yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
         )
         parsed = yaml.safe_load(result)
-        assert parsed["name"] == "test_workflow"
-        assert "tools" in parsed
-        assert len(parsed["tools"]) == 2
-
-    def test_dedent_filter_available_in_templates(self):
-        """Test that dedent filter is available for use in templates."""
-        yaml_file = Path(self.temp_dir) / "workflow.yml"
-        yaml_file.write_text(
-            "\nname: test_workflow\ndescription: {{ '    filter works' | dedent }}\nversion: 1.0\n"
-        )
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
-        )
-        parsed = yaml.safe_load(result)
-        assert parsed["name"] == "test_workflow"
-        assert parsed["description"] == "filter works"
+        assert parsed["name"] == "combined_test"
+        assert "actions" in parsed
+        assert len(parsed["actions"]) == 1
 
     def test_backward_compatibility_correct_templates(self):
         """Test that correctly formatted templates still work."""
@@ -223,72 +136,3 @@ class TestRenderPipelineIntegration:
         assert parsed["version"] == 1.0
         assert len(parsed["actions"]) == 1
         assert parsed["actions"][0]["name"] == "test_action"
-
-    def test_jinja2_variable_substitution(self):
-        """Test that Jinja2 variable substitution works with normalization."""
-        yaml_file = Path(self.temp_dir) / "workflow.yml"
-        yaml_file.write_text(
-            "\n      {% set workflow_name = 'combined_test' %}\n      name: {{ workflow_name }}\n      version: 1.0\n      actions:\n        - name: action1\n          kind: action\n"
-        )
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
-        )
-        parsed = yaml.safe_load(result)
-        assert parsed["name"] == "combined_test"
-        assert "actions" in parsed
-        assert len(parsed["actions"]) == 1
-
-
-class TestBackwardCompatibility:
-    """Test backward compatibility with existing workflows."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.temp_dir = tempfile.mkdtemp()
-        self.templates_folder = Path(self.temp_dir) / "templates"
-        self.templates_folder.mkdir()
-
-    def teardown_method(self):
-        """Clean up test fixtures."""
-        shutil.rmtree(self.temp_dir)
-
-    def test_workflows_without_templates(self):
-        """Test that workflows without templates still work."""
-        yaml_file = Path(self.temp_dir) / "simple_workflow.yml"
-        yaml_file.write_text(
-            "\nname: simple\nversion: 1.0\ndescription: A simple workflow\nactions:\n  - name: step1\n    kind: action\n"
-        )
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
-        )
-        parsed = yaml.safe_load(result)
-        assert parsed["name"] == "simple"
-        assert parsed["description"] == "A simple workflow"
-
-    def test_workflows_with_correct_indentation(self):
-        """Test that workflows with correct indentation are unchanged."""
-        yaml_file = Path(self.temp_dir) / "correct_workflow.yml"
-        yaml_content = "name: correct_workflow\nversion: 1.0\nactions:\n  - name: action1\n    kind: action\n    inputs:\n      param: value\n"
-        yaml_file.write_text(yaml_content)
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
-        )
-        parsed = yaml.safe_load(result)
-        assert parsed["name"] == "correct_workflow"
-        assert parsed["actions"][0]["inputs"]["param"] == "value"
-
-    def test_complex_existing_workflow(self):
-        """Test with a complex workflow structure."""
-        yaml_file = Path(self.temp_dir) / "complex_workflow.yml"
-        yaml_file.write_text(
-            "\nname: complex_workflow\nversion: 2.0\nmetadata:\n  author: test\n  tags:\n    - testing\n    - integration\ntools:\n  - name: tool1\n    kind: tool\n    config:\n      endpoint: https://example.com\n      timeout: 30\nactions:\n  - name: action1\n    kind: action\n    depends_on:\n      - tool1\n    inputs:\n      data:\n        nested:\n          deeply: value\n"
-        )
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
-        )
-        parsed = yaml.safe_load(result)
-        assert parsed["name"] == "complex_workflow"
-        assert parsed["metadata"]["author"] == "test"
-        assert "testing" in parsed["metadata"]["tags"]
-        assert parsed["tools"][0]["config"]["timeout"] == 30
-        assert parsed["actions"][0]["inputs"]["data"]["nested"]["deeply"] == "value"

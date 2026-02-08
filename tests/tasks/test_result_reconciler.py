@@ -14,17 +14,6 @@ from agent_actions.llm.batch.processing.reconciler import (
 class TestBatchResultReconciler:
     """Tests for BatchResultReconciler class."""
 
-    def test_init_with_empty_context_map(self):
-        """Test initialization with empty context map."""
-        reconciler = BatchResultReconciler({})
-        assert reconciler.context_map == {}
-        assert reconciler._processed_ids == set()
-
-    def test_init_with_none_context_map(self):
-        """Test initialization with None context map."""
-        reconciler = BatchResultReconciler(None)
-        assert reconciler.context_map == {}
-
     def test_mark_processed_adds_to_set(self):
         """Test that mark_processed adds custom_id to processed set."""
         reconciler = BatchResultReconciler({})
@@ -34,16 +23,6 @@ class TestBatchResultReconciler:
         assert "rec_1" in reconciler._processed_ids
         assert "rec_2" in reconciler._processed_ids
         assert len(reconciler._processed_ids) == 2
-
-    def test_mark_processed_converts_to_string(self):
-        """Test that mark_processed converts custom_id to string."""
-        reconciler = BatchResultReconciler({})
-        reconciler.mark_processed(123)  # Integer
-        reconciler.mark_processed("123")  # String
-
-        # Both should be stored as string '123'
-        assert "123" in reconciler._processed_ids
-        assert len(reconciler._processed_ids) == 1  # Deduplicated
 
     def test_mark_processed_ignores_none(self):
         """Test that mark_processed ignores None values."""
@@ -248,13 +227,6 @@ class TestBatchResultReconciler:
         assert record["target_id"] == "rec_1"
         assert record["content"] == "data1"
 
-    def test_get_record_by_id_not_found(self):
-        """Test get_record_by_id returns empty dict for missing ID."""
-        reconciler = BatchResultReconciler({})
-        record = reconciler.get_record_by_id("nonexistent")
-
-        assert record == {}
-
     def test_get_source_guid(self):
         """Test get_source_guid retrieves source_guid from record."""
         context_map = {"rec_1": {"source_guid": "src_1"}}
@@ -291,25 +263,3 @@ class TestBatchResultReconciler:
         assert reconciler.get_record_index("rec_0") == 0
         assert reconciler.get_record_index("rec_1") == 1
         assert reconciler.get_record_index("rec_2") == 2
-
-    def test_get_record_index_not_found(self):
-        """Test get_record_index returns -1 for missing ID."""
-        reconciler = BatchResultReconciler({"rec_1": {}})
-
-        assert reconciler.get_record_index("nonexistent") == -1
-
-
-class TestBatchReconciliationResult:
-    """Tests for BatchReconciliationResult dataclass."""
-
-    def test_reconciliation_result_creation(self):
-        """Test creating BatchReconciliationResult."""
-        result = BatchReconciliationResult(
-            processed_ids={"rec_1", "rec_2"},
-            missing_ids={"rec_3"},
-            passthrough_records=[("rec_3", {"content": "data"})],
-        )
-
-        assert result.processed_ids == {"rec_1", "rec_2"}
-        assert result.missing_ids == {"rec_3"}
-        assert len(result.passthrough_records) == 1

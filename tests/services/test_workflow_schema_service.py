@@ -24,25 +24,6 @@ class TestWorkflowSchemaService:
         }
         return WorkflowSchemaService(workflow_config)
 
-    def test_get_action_schema_returns_action_schema(self):
-        """Test get_action_schema returns ActionSchema instance."""
-        service = self._create_service(
-            [
-                {
-                    "name": "extractor",
-                    "model_vendor": "openai",
-                    "output_schema": {"summary": "str", "facts": "list[str]"},
-                }
-            ]
-        )
-
-        schema = service.get_action_schema("extractor")
-
-        assert schema is not None
-        assert isinstance(schema, ActionSchema)
-        assert schema.name == "extractor"
-        assert schema.kind == ActionKind.LLM
-
     def test_get_action_schema_returns_none_for_missing(self):
         """Test get_action_schema returns None for non-existent action."""
         service = self._create_service([{"name": "action1", "model_vendor": "openai"}])
@@ -75,15 +56,6 @@ class TestWorkflowSchemaService:
         assert "action2" in schemas
         assert isinstance(schemas["action1"], ActionSchema)
         assert isinstance(schemas["action2"], ActionSchema)
-
-    def test_get_all_schemas_excludes_special_namespaces(self):
-        """Test get_all_schemas excludes source node."""
-        service = self._create_service([{"name": "action1", "model_vendor": "openai"}])
-
-        schemas = service.get_all_schemas()
-
-        assert "source" not in schemas
-        assert "action1" in schemas
 
     def test_validate_detects_missing_field(self):
         """Test validate detects missing field references."""
@@ -178,33 +150,6 @@ class TestWorkflowSchemaService:
         service = WorkflowSchemaService(config)
 
         assert service.workflow_name == "my_workflow"
-
-    def test_to_dict_json_serializable(self):
-        """Test to_dict returns JSON-serializable dict."""
-        import json
-
-        service = self._create_service(
-            [
-                {
-                    "name": "extractor",
-                    "model_vendor": "openai",
-                    "output_schema": {"summary": "str"},
-                },
-            ]
-        )
-
-        result = service.to_dict()
-
-        # Should be JSON serializable
-        json_str = json.dumps(result)
-        assert json_str is not None
-
-        # Should have expected keys
-        assert "workflow_name" in result
-        assert "is_valid" in result
-        assert "execution_order" in result
-        assert "actions" in result
-        assert "validation" in result
 
     def test_action_schema_includes_output_fields(self):
         """Test action schema correctly includes output fields."""

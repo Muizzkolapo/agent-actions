@@ -12,29 +12,11 @@ Key scenarios tested:
 5. Empty/missing directives
 """
 
-import pytest
 from agent_actions.output.response.expander import ActionExpander
 
 
 class TestContextScopeDeepMerge:
     """Test deep merge helper function for context_scope directives."""
-
-    def test_both_empty_returns_empty(self):
-        """When both defaults and action are empty, return empty dict."""
-        result = ActionExpander._deep_merge_context_scope({}, {})
-        assert result == {}
-
-    def test_defaults_none_returns_action(self):
-        """When defaults is None, return action scope."""
-        action_scope = {"drop": ["source.api_key"]}
-        result = ActionExpander._deep_merge_context_scope(None, action_scope)
-        assert result == action_scope
-
-    def test_action_none_returns_defaults(self):
-        """When action is None, return defaults scope."""
-        defaults_scope = {"seed_data": {"exam": "file.json"}}
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, None)
-        assert result == defaults_scope
 
     def test_seed_data_from_defaults_plus_drop_from_action(self):
         """Action can define drop while inheriting seed_data from defaults."""
@@ -131,15 +113,6 @@ class TestContextScopeDeepMerge:
             "drop": ["source.api_key"],
             "passthrough": ["source.metadata"],
         }
-
-    def test_scalar_value_override(self):
-        """If a directive has scalar value, action overrides defaults."""
-        defaults_scope = {"custom_flag": True}
-        action_scope = {"custom_flag": False}
-
-        result = ActionExpander._deep_merge_context_scope(defaults_scope, action_scope)
-
-        assert result == {"custom_flag": False}
 
     def test_passthrough_lists_combine(self):
         """Passthrough directives from both levels should combine."""

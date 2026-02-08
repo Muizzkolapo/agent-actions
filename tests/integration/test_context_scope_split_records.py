@@ -7,15 +7,14 @@ the same source_guid and node_id but have different lineages.
 
 Tests the full integration:
     ContextScopeProcessor.build_field_context_with_history()
-        → HistoricalNodeDataLoader.load_historical_node_data()
-            → _find_record_by_identifiers() with lineage matching
+        -> HistoricalNodeDataLoader.load_historical_node_data()
+            -> _find_record_by_identifiers() with lineage matching
 """
 
 import pytest
 import json
 import tempfile
 from pathlib import Path
-from typing import Dict, List
 from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 
@@ -131,12 +130,6 @@ def context_scope_split():
             "split_operation.priority",
         ],
     }
-
-
-class TestContextScopeWithSplitRecords:
-    """Integration tests for context scope with split record scenarios."""
-
-    pass
 
 
 class TestContextScopeSplitRecordsEdgeCases:

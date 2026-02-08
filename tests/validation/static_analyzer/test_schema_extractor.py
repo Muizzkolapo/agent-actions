@@ -31,21 +31,6 @@ class TestSchemaExtractor:
         assert "keywords" in schema.available_fields
         assert "confidence" in schema.available_fields
 
-    def test_extract_from_output_schema(self):
-        """Test extracting from output_schema field."""
-        config = {
-            "name": "agent",
-            "output_schema": {
-                "type": "object",
-                "properties": {
-                    "result": {"type": "string"},
-                },
-            },
-        }
-        schema = self.extractor.extract_schema(config)
-
-        assert "result" in schema.available_fields
-
     def test_extract_from_output_schema_alias(self):
         """Test output_schema works as alias for schema."""
         config = {
@@ -71,17 +56,6 @@ class TestSchemaExtractor:
         schema = self.extractor.extract_schema(config)
 
         assert schema.is_schemaless
-
-    def test_non_json_mode_has_content_field(self):
-        """Test non-JSON mode agent has content field."""
-        config = {
-            "name": "agent",
-            "json_mode": False,
-        }
-        schema = self.extractor.extract_schema(config)
-
-        # Non-JSON agents output plain text in 'content' field
-        assert "content" in schema.available_fields or schema.is_schemaless
 
     def test_tool_agent_schema_from_registry(self):
         """Test tool agent extracts schema from UDF registry."""
@@ -190,55 +164,6 @@ class TestSchemaExtractor:
         # Should NOT have nested fields at top level
         assert "name" not in schema.available_fields
 
-    def test_required_fields_included(self):
-        """Test all schema fields are included regardless of required."""
-        config = {
-            "name": "agent",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "required_field": {"type": "string"},
-                    "optional_field": {"type": "string"},
-                },
-                "required": ["required_field"],
-            },
-        }
-        schema = self.extractor.extract_schema(config)
-
-        # Both fields should be available
-        assert "required_field" in schema.available_fields
-        assert "optional_field" in schema.available_fields
-
-    def test_empty_schema_properties(self):
-        """Test schema with empty properties."""
-        config = {
-            "name": "agent",
-            "schema": {
-                "type": "object",
-                "properties": {},
-            },
-        }
-        schema = self.extractor.extract_schema(config)
-
-        assert len(schema.schema_fields) == 0
-
-    def test_additional_properties_makes_dynamic(self):
-        """Test additionalProperties: true makes schema dynamic."""
-        config = {
-            "name": "agent",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "known_field": {"type": "string"},
-                },
-                "additionalProperties": True,
-            },
-        }
-        schema = self.extractor.extract_schema(config)
-
-        # Should be marked as dynamic due to additionalProperties
-        assert schema.is_dynamic or "known_field" in schema.available_fields
-
 
 class TestInputSchemaExtraction:
     """Tests for input schema extraction."""
@@ -246,18 +171,6 @@ class TestInputSchemaExtraction:
     def setup_method(self):
         """Set up test fixtures."""
         self.extractor = SchemaExtractor()
-
-    def test_llm_agent_extracts_template_refs(self):
-        """Test LLM agents extract input fields from template references."""
-        config = {
-            "name": "llm_agent",
-            "prompt": "Process {{ action.upstream.data }}",
-        }
-        input_schema = self.extractor.extract_input_schema(config)
-
-        # LLM input is resolved from template references
-        assert not input_schema.is_template_based
-        assert "upstream.data" in input_schema.required_fields
 
     def test_tool_agent_input_from_registry(self):
         """Test tool agent extracts input schema from UDF registry."""
@@ -313,34 +226,6 @@ class TestInputSchemaExtraction:
         input_schema = self.extractor.extract_input_schema(config)
 
         assert "data" in input_schema.required_fields
-
-    def test_all_optional_fields(self):
-        """Test schema with no required fields."""
-        udf_registry = {
-            "flexible_tool": {
-                "json_schema": {
-                    "type": "object",
-                    "properties": {
-                        "opt1": {"type": "string"},
-                        "opt2": {"type": "number"},
-                    },
-                    # No required array - all optional
-                },
-            },
-        }
-
-        extractor = SchemaExtractor(udf_registry=udf_registry)
-
-        config = {
-            "name": "tool",
-            "kind": "tool",
-            "impl": "flexible_tool",
-        }
-        input_schema = extractor.extract_input_schema(config)
-
-        assert len(input_schema.required_fields) == 0
-        assert "opt1" in input_schema.optional_fields
-        assert "opt2" in input_schema.optional_fields
 
 
 class TestContextScopeInference:

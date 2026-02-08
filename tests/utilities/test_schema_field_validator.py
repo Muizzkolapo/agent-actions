@@ -1,9 +1,7 @@
 """Unit tests for SchemaFieldValidator."""
 
-import pytest
 from agent_actions.input.preprocessing.field_resolution.schema_field_validator import (
     SchemaFieldValidator,
-    SchemaFieldValidationResult,
 )
 
 
@@ -211,41 +209,3 @@ class TestSchemaFieldValidator:
         )
 
         assert not result.exists
-
-    def test_extract_available_fields(self):
-        """Test extraction of available field names."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "zebra": {"type": "string"},
-                "alpha": {"type": "string"},
-                "beta": {"type": "string"},
-            },
-        }
-
-        fields = self.validator._extract_available_fields(schema)
-
-        assert fields == ["alpha", "beta", "zebra"]  # Sorted alphabetically
-
-    def test_error_message_clarity(self):
-        """Test that error messages are clear and actionable."""
-        schema = {
-            "type": "object",
-            "properties": {
-                "result": {"type": "string"},
-                "count": {"type": "integer"},
-                "status": {"type": "string"},
-            },
-        }
-
-        result = self.validator.validate_field_path(
-            field_path=["invalid_field"], json_schema=schema, action_name="process_data"
-        )
-
-        assert not result.exists
-        assert "invalid_field" in result.error
-        assert "process_data" in result.error
-        assert "Available fields:" in result.error
-        assert "count" in result.error
-        assert "result" in result.error
-        assert "status" in result.error

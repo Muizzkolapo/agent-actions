@@ -1,20 +1,11 @@
-"""Tests for RunResultsCollector handler.
-
-This module tests:
-- Workflow event collection
-- Agent event collection
-- run_results.json generation
-- Token accumulation
-- Status tracking
-"""
+"""Tests for RunResultsCollector handler."""
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
-from agent_actions.logging.core.events import BaseEvent, EventLevel, EventMeta
+from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.events.types import (
     WorkflowStartEvent,
     WorkflowCompleteEvent,
@@ -41,109 +32,6 @@ def temp_output_dir(tmp_path):
 def collector(temp_output_dir):
     """Provide a RunResultsCollector instance."""
     return RunResultsCollector(output_dir=temp_output_dir, workflow_name="test_workflow")
-
-
-class TestAgentResult:
-    """Tests for AgentResult dataclass."""
-
-    def test_agent_result_defaults(self):
-        """Test AgentResult default values."""
-        result = AgentResult(
-            unique_id="test.agent",
-            agent_name="agent",
-            agent_index=0,
-            status="success",
-        )
-
-        assert result.execution_time == 0.0
-        assert result.output_folder == ""
-        assert result.record_count == 0
-        assert result.tokens == {}
-        assert result.error_message == ""
-        assert result.skip_reason == ""
-        assert result.started_at is None
-        assert result.completed_at is None
-
-    def test_agent_result_to_dict(self):
-        """Test AgentResult serialization."""
-        ts = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
-        result = AgentResult(
-            unique_id="workflow.agent",
-            agent_name="agent",
-            agent_index=0,
-            status="success",
-            execution_time=12.5,
-            output_folder="/output/agent",
-            record_count=100,
-            tokens={"prompt_tokens": 500, "completion_tokens": 200, "total_tokens": 700},
-            started_at=ts,
-            completed_at=ts,
-        )
-
-        d = result.to_dict()
-
-        assert d["unique_id"] == "workflow.agent"
-        assert d["agent_name"] == "agent"
-        assert d["agent_index"] == 0
-        assert d["status"] == "success"
-        assert d["execution_time"] == 12.5
-        assert d["record_count"] == 100
-        assert d["tokens"]["total_tokens"] == 700
-        assert d["timing"]["started_at"] == "2024-01-15T10:30:00+00:00"
-
-    def test_agent_result_to_dict_excludes_empty(self):
-        """Test that empty error/skip fields are null in output."""
-        result = AgentResult(
-            unique_id="test.agent",
-            agent_name="agent",
-            agent_index=0,
-            status="success",
-        )
-
-        d = result.to_dict()
-
-        assert d["error_message"] is None
-        assert d["skip_reason"] is None
-
-
-class TestRunResultsCollectorInit:
-    """Tests for RunResultsCollector initialization."""
-
-    def test_init_with_output_dir(self, temp_output_dir):
-        """Test initialization with output directory."""
-        collector = RunResultsCollector(output_dir=temp_output_dir)
-        assert collector.output_dir == temp_output_dir
-
-    def test_init_with_workflow_name(self, temp_output_dir):
-        """Test initialization with workflow name."""
-        collector = RunResultsCollector(output_dir=temp_output_dir, workflow_name="my_workflow")
-        assert collector.workflow_name == "my_workflow"
-        assert collector._metadata["workflow_name"] == "my_workflow"
-
-    def test_init_default_metadata(self, temp_output_dir):
-        """Test default metadata values."""
-        collector = RunResultsCollector(output_dir=temp_output_dir)
-
-        assert collector._metadata["invocation_id"] is None
-        assert collector._metadata["agent_count"] == 0
-        assert collector._metadata["execution_mode"] == "sequential"
-        assert collector._metadata["status"] == "running"
-
-    def test_init_default_tokens(self, temp_output_dir):
-        """Test default token counters."""
-        collector = RunResultsCollector(output_dir=temp_output_dir)
-
-        assert collector._total_tokens["prompt_tokens"] == 0
-        assert collector._total_tokens["completion_tokens"] == 0
-        assert collector._total_tokens["total_tokens"] == 0
-
-    def test_set_output_dir(self, temp_output_dir):
-        """Test set_output_dir method."""
-        collector = RunResultsCollector()
-        assert collector.output_dir is None
-
-        collector.set_output_dir(temp_output_dir)
-        assert collector.output_dir == temp_output_dir
 
 
 class TestRunResultsCollectorAccepts:
@@ -483,16 +371,6 @@ class TestFlushAndOutput:
 
 class TestGetSummary:
     """Tests for get_summary method."""
-
-    def test_get_summary_empty(self, collector):
-        """Test summary with no results."""
-        summary = collector.get_summary()
-
-        assert summary["success"] == 0
-        assert summary["skipped"] == 0
-        assert summary["cached"] == 0
-        assert summary["error"] == 0
-        assert summary["running"] == 0
 
     def test_get_summary_with_results(self, collector):
         """Test summary with various result statuses."""

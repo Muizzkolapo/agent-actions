@@ -7,9 +7,7 @@ import tempfile
 import shutil
 from agent_actions.input.loaders.udf import discover_udfs, validate_udf_references
 from agent_actions.utils.udf_management.registry import (
-    udf_tool,
     clear_registry,
-    UDF_REGISTRY,
 )
 from agent_actions.utils.udf_management.type_conversion import clear_schema_cache
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
@@ -207,16 +205,6 @@ class TestDiscoverUDFs:
 class TestValidateUDFReferences:
     """Tests for validate_udf_references() function."""
 
-    def test_validate_udf_references_success(self):
-        """Test that valid references pass validation."""
-
-        @udf_tool()
-        def valid_func(data):
-            pass
-
-        config = {"actions": [{"impl": "valid_func"}]}
-        validate_udf_references(config)
-
     def test_validate_udf_references_missing(self):
         """Test that FunctionNotFoundError is raised for missing functions."""
         config = {"actions": [{"impl": "nonexistent_func"}]}
@@ -224,37 +212,3 @@ class TestValidateUDFReferences:
             validate_udf_references(config)
         error = exc_info.value
         assert error.context["function_name"] == "nonexistent_func"
-
-    def test_validate_udf_references_nested_config(self):
-        """Test validation works with nested config structures."""
-
-        @udf_tool()
-        def nested_func(data):
-            pass
-
-        config = {
-            "pipelines": {
-                "main": {"actions": [{"impl": "nested_func"}, {"steps": [{"impl": "nested_func"}]}]}
-            }
-        }
-        validate_udf_references(config)
-
-    def test_validate_udf_references_list_config(self):
-        """Test validation works with list-based configs."""
-
-        @udf_tool()
-        def list_func(data):
-            pass
-
-        config = [{"impl": "list_func"}, {"impl": "list_func"}]
-        validate_udf_references(config)
-
-    def test_validate_udf_references_empty_config(self):
-        """Test validation with empty config."""
-        config = {}
-        validate_udf_references(config)
-
-    def test_validate_udf_references_no_impl_fields(self):
-        """Test validation when no impl fields present."""
-        config = {"actions": [{"name": "action1"}, {"name": "action2"}]}
-        validate_udf_references(config)

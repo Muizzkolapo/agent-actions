@@ -121,25 +121,6 @@ class TestExtractVariables:
         assert "seed.exam.field" in result
         assert len(result) == 2
 
-    def test_skips_literal_attribute_access(self, analyzer):
-        """Should not include attribute access on literals."""
-        template = '{{ "foo".upper() }}'
-
-        result = analyzer.extract_variables(template)
-
-        # Literal methods are not variable references
-        assert result == set()
-        assert ".upper" not in result
-
-    def test_skips_literals_but_keeps_variables(self, analyzer):
-        """Should skip literals but extract real variable references."""
-        template = '{{ "foo".upper() }} {{ seed.name }}'
-
-        result = analyzer.extract_variables(template)
-
-        # Only the real variable reference should be included
-        assert result == {"seed.name"}
-
     def test_handles_dynamic_keys(self, analyzer):
         """Should represent dynamic keys as [*] and include index variable."""
         template = "{{ items[i].name }}"

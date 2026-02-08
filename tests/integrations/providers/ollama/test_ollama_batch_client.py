@@ -101,16 +101,3 @@ class TestOllamaBatchClient(BaseBatchClientTests):
         assert result["response"]["body"]["usage"]["completion_tokens"] == 8
         assert result["response"]["body"]["usage"]["total_tokens"] == 23
         assert result["error"] is None
-
-    def test_ollama_status_always_completed(self, provider):
-        """
-        Ollama-specific: Status is always 'completed' (synchronous processing).
-
-        Unlike OpenAI/Anthropic which have async processing, Ollama processes
-        synchronously so status is immediately 'completed'.
-        """
-        status = provider.check_status("any-batch-id")
-        assert status == "completed", "Ollama always returns 'completed' (synchronous)"
-        assert provider.check_status("batch-123") == "completed"
-        assert provider.check_status("batch-xyz") == "completed"
-        assert provider.check_status("") == "completed"

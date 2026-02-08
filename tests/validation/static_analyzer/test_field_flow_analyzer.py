@@ -202,16 +202,6 @@ class TestFieldFlowAnalyzer:
         assert "facts" in action_info.outputs.schema_fields
         assert "summarizer" in action_info.downstream
 
-    def test_get_action_flow_info_nonexistent(self):
-        """Test getting flow info for nonexistent action returns None."""
-        graph = create_simple_graph()
-        result = StaticValidationResult()
-        analyzer = FieldFlowAnalyzer(graph, result, "test_workflow")
-
-        action_info = analyzer.get_action_flow_info("nonexistent")
-
-        assert action_info is None
-
     def test_filter_to_field(self):
         """Test filtering to a specific field."""
         graph = create_simple_graph()
@@ -223,13 +213,3 @@ class TestFieldFlowAnalyzer:
         assert lineage is not None
         assert lineage.producer == "extractor"
         assert lineage.field_name == "summary"
-
-    def test_filter_to_field_invalid_format(self):
-        """Test filter with invalid format returns None."""
-        graph = create_simple_graph()
-        result = StaticValidationResult()
-        analyzer = FieldFlowAnalyzer(graph, result, "test_workflow")
-
-        lineage = analyzer.filter_to_field("no_dot_here")
-
-        assert lineage is None

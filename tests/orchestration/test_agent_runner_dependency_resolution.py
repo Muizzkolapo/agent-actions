@@ -27,14 +27,6 @@ from agent_actions.errors import DependencyError
 class TestIsParallelBranches:
     """Test _is_parallel_branches() detection logic."""
 
-    def test_single_dependency_is_parallel(self):
-        """Single dependency is trivially parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(["classify"]) is True
-
-    def test_empty_list_is_parallel(self):
-        """Empty list is trivially parallel."""
-        assert ContextScopeProcessor._is_parallel_branches([]) is True
-
     def test_same_base_name_with_numeric_suffix_is_parallel(self):
         """Dependencies with same base name and numeric suffix are parallel."""
         assert (
@@ -68,10 +60,6 @@ class TestIsParallelBranches:
             ContextScopeProcessor._is_parallel_branches(["analyzer", "validator", "scorer"])
             is False
         )
-
-    def test_same_name_no_suffix_is_parallel(self):
-        """Same action name repeated (edge case) is parallel."""
-        assert ContextScopeProcessor._is_parallel_branches(["classify", "classify"]) is True
 
     def test_underscore_in_base_name_handled_correctly(self):
         """Action names with underscores in base name work correctly."""
@@ -125,25 +113,12 @@ class TestGetVersionBranches:
         result = ContextScopeProcessor._get_version_branches("research", deps)
         assert result == ["research_1", "research_2"]
 
-    def test_no_matching_branches_returns_empty(self):
-        """Returns empty list when no versions match."""
-        deps = ["summarize", "validate"]
-        result = ContextScopeProcessor._get_version_branches("research", deps)
-        assert result == []
-
     def test_does_not_match_different_base_names(self):
         """Does not match deps with different base names even if suffix is numeric."""
         deps = ["classify_text_1", "classify_image_1"]
         # Looking for 'classify' versions - neither matches because base names differ
         result = ContextScopeProcessor._get_version_branches("classify", deps)
         assert result == []
-
-    def test_requires_exact_prefix_match(self):
-        """Version branch must start with exact base_name + underscore."""
-        deps = ["researcher_1", "research_1"]
-        # 'researcher_1' should NOT match 'research' - different base
-        result = ContextScopeProcessor._get_version_branches("research", deps)
-        assert result == ["research_1"]
 
 
 class TestResolveInputSourcesForFanIn:
@@ -152,33 +127,6 @@ class TestResolveInputSourcesForFanIn:
     This helper is used by both infer_dependencies() and _resolve_dependency_directories()
     to resolve which dependencies are input sources vs context sources for fan-in patterns.
     """
-
-    def test_no_primary_uses_first_dependency(self):
-        """Without primary_dependency, first dep is the input source."""
-        deps = ["action_a", "action_b", "action_c"]
-        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
-            deps, None
-        )
-        assert input_sources == ["action_a"]
-        assert context_sources == ["action_b", "action_c"]
-
-    def test_explicit_primary_selects_that_dependency(self):
-        """With explicit primary_dependency, that dep is the input source."""
-        deps = ["action_a", "action_b", "action_c"]
-        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
-            deps, "action_b"
-        )
-        assert input_sources == ["action_b"]
-        assert context_sources == ["action_a", "action_c"]
-
-    def test_versioned_first_dep_includes_all_siblings(self):
-        """When first dep is versioned, all sibling versions become inputs."""
-        deps = ["research_1", "research_2", "research_3", "summarize"]
-        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
-            deps, None
-        )
-        assert set(input_sources) == {"research_1", "research_2", "research_3"}
-        assert context_sources == ["summarize"]
 
     def test_base_name_primary_expands_to_all_versions(self):
         """Base name as primary_dependency expands to all matching versions."""

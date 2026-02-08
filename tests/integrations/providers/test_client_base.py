@@ -9,11 +9,10 @@ from agent_actions.errors import ConfigurationError
 class TestClientBaseAPIKeyValidation:
     """Test API key environment variable validation."""
 
-    def test_api_key_env_var_not_set(self):
+    def test_api_key_env_var_not_set(self, monkeypatch):
         """Test error when referenced env var doesn't exist."""
+        monkeypatch.delenv("NONEXISTENT_TEST_KEY_12345", raising=False)
         agent_config = {"agent_type": "test_agent", "api_key": "${NONEXISTENT_TEST_KEY_12345}"}
-        if "NONEXISTENT_TEST_KEY_12345" in os.environ:
-            del os.environ["NONEXISTENT_TEST_KEY_12345"]
         with pytest.raises(ConfigurationError) as exc_info:
             BaseClient.get_api_key(agent_config)
         error = exc_info.value
@@ -24,44 +23,32 @@ class TestClientBaseAPIKeyValidation:
         assert error.context["config_value"] == "${NONEXISTENT_TEST_KEY_12345}"
         assert "export" in error.context["hint"]
 
-    def test_api_key_env_var_empty(self):
+    def test_api_key_env_var_empty(self, monkeypatch):
         """Test error when env var is set but empty."""
+        monkeypatch.setenv("TEST_EMPTY_KEY_12345", "")
         agent_config = {"agent_type": "test_agent", "api_key": "${TEST_EMPTY_KEY_12345}"}
-        os.environ["TEST_EMPTY_KEY_12345"] = ""
-        try:
-            with pytest.raises(ConfigurationError) as exc_info:
-                BaseClient.get_api_key(agent_config)
-            error = exc_info.value
-            error_str = str(error)
-            assert "TEST_EMPTY_KEY_12345" in error_str
-            assert "empty" in error_str.lower()
-            assert error.context["env_var"] == "TEST_EMPTY_KEY_12345"
-            assert "export" in error.context["hint"]
-        finally:
-            if "TEST_EMPTY_KEY_12345" in os.environ:
-                del os.environ["TEST_EMPTY_KEY_12345"]
+        with pytest.raises(ConfigurationError) as exc_info:
+            BaseClient.get_api_key(agent_config)
+        error = exc_info.value
+        error_str = str(error)
+        assert "TEST_EMPTY_KEY_12345" in error_str
+        assert "empty" in error_str.lower()
+        assert error.context["env_var"] == "TEST_EMPTY_KEY_12345"
+        assert "export" in error.context["hint"]
 
-    def test_api_key_env_var_success(self):
+    def test_api_key_env_var_success(self, monkeypatch):
         """Test successful env var resolution with ${} syntax."""
-        os.environ["TEST_SUCCESS_KEY_12345"] = "test-api-key-value"
-        try:
-            agent_config = {"agent_type": "test_agent", "api_key": "${TEST_SUCCESS_KEY_12345}"}
-            result = BaseClient.get_api_key(agent_config)
-            assert result == "test-api-key-value"
-        finally:
-            if "TEST_SUCCESS_KEY_12345" in os.environ:
-                del os.environ["TEST_SUCCESS_KEY_12345"]
+        monkeypatch.setenv("TEST_SUCCESS_KEY_12345", "test-api-key-value")
+        agent_config = {"agent_type": "test_agent", "api_key": "${TEST_SUCCESS_KEY_12345}"}
+        result = BaseClient.get_api_key(agent_config)
+        assert result == "test-api-key-value"
 
-    def test_api_key_legacy_format_success(self):
+    def test_api_key_legacy_format_success(self, monkeypatch):
         """Test successful env var resolution with legacy format (no ${})."""
-        os.environ["TEST_LEGACY_KEY_12345"] = "legacy-api-key-value"
-        try:
-            agent_config = {"agent_type": "test_agent", "api_key": "TEST_LEGACY_KEY_12345"}
-            result = BaseClient.get_api_key(agent_config)
-            assert result == "legacy-api-key-value"
-        finally:
-            if "TEST_LEGACY_KEY_12345" in os.environ:
-                del os.environ["TEST_LEGACY_KEY_12345"]
+        monkeypatch.setenv("TEST_LEGACY_KEY_12345", "legacy-api-key-value")
+        agent_config = {"agent_type": "test_agent", "api_key": "TEST_LEGACY_KEY_12345"}
+        result = BaseClient.get_api_key(agent_config)
+        assert result == "legacy-api-key-value"
 
     def test_api_key_missing_from_config(self):
         """Test error when api_key field is missing from config."""

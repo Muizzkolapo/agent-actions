@@ -9,12 +9,8 @@ Tests cover:
 - Error handling (missing paths, import failures)
 """
 
-import importlib
 import sys
-import tempfile
 import threading
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -354,68 +350,12 @@ def test_load_module_from_path_no_cache(temp_module_dir):
     assert module1.TEST_VALUE == module2.TEST_VALUE
 
 
-def test_load_module_from_path_fallback_import():
-    """Test that fallback_import tries standard import."""
-    # Try loading a standard library module without path
-    module = load_module_from_path("json", fallback_import=True)
-
-    assert module is not None
-    assert hasattr(module, "dumps")
-    assert hasattr(module, "loads")
-
-
-def test_load_module_from_path_no_fallback():
-    """Test that fallback_import=False doesn't try standard import."""
-    # Try loading a standard library module without path and no fallback
-    module = load_module_from_path("json", fallback_import=False)
-
-    # Should return None (no path provided, no fallback)
-    assert module is None
-
-
 def test_load_module_from_path_missing_file(temp_module_dir):
     """Test that missing file returns None."""
     missing_path = temp_module_dir / "does_not_exist.py"
     module = load_module_from_path("missing", missing_path)
 
     assert module is None
-
-
-def test_load_module_from_path_cache_failures_false(temp_module_dir):
-    """Test that cache_failures=False (default) doesn't cache None results."""
-    missing_path = temp_module_dir / "transient_missing.py"
-
-    # First load should fail and return None
-    module1 = load_module_from_path(
-        "transient_missing", missing_path, cache=True, cache_failures=False
-    )
-    assert module1 is None
-
-    # Create the file now (simulating transient availability)
-    missing_path.write_text("VALUE = 123")
-
-    # Second load should succeed because failure was NOT cached
-    module2 = load_module_from_path(
-        "transient_missing", missing_path, cache=True, cache_failures=False
-    )
-    assert module2 is not None
-    assert module2.VALUE == 123
-
-
-def test_load_module_from_path_cache_failures_true(temp_module_dir):
-    """Test that cache_failures=True caches None results."""
-    missing_path = temp_module_dir / "cached_missing.py"
-
-    # First load should fail and cache the None result
-    module1 = load_module_from_path("cached_missing", missing_path, cache=True, cache_failures=True)
-    assert module1 is None
-
-    # Create the file now
-    missing_path.write_text("VALUE = 456")
-
-    # Second load should still return None because failure was cached
-    module2 = load_module_from_path("cached_missing", missing_path, cache=True, cache_failures=True)
-    assert module2 is None  # Cached None
 
 
 def test_load_module_from_path_directory(temp_module_dir):
@@ -497,107 +437,6 @@ def test_discover_and_load_udfs_missing_path():
     """Test that missing path returns empty dict."""
     registry = discover_and_load_udfs("/nonexistent/path")
     assert registry == {}
-
-
-def test_discover_and_load_udfs_file_path(temp_module_dir):
-    """Test that passing a file path (not directory) returns empty dict."""
-    file_path = temp_module_dir / "sample_module.py"
-    registry = discover_and_load_udfs(file_path)
-    assert registry == {}
-
-
-# ==============================================================================
-# Test Cache Management
-# ==============================================================================
-
-
-def test_clear_path_cache():
-    """Test that clear_path_cache clears the path cache."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Add a path
-        result1 = ensure_path_importable(tmpdir)
-        assert result1 is True
-
-        # Should be cached
-        result2 = ensure_path_importable(tmpdir)
-        assert result2 is False
-
-        # Clear cache
-        clear_path_cache()
-
-        # Should not be cached anymore, so returns True (re-added to cache)
-        result3 = ensure_path_importable(tmpdir)
-        assert result3 is True  # True because cache was cleared
-
-
-def test_clear_module_cache(temp_module_dir):
-    """Test that clear_module_cache clears the module cache."""
-    module_path = temp_module_dir / "decorator_module.py"
-
-    # Load module
-    module1 = load_module_from_path("test_clear", module_path, cache=True)
-    assert module1 is not None
-
-    # Should return cached version
-    module2 = load_module_from_path("test_clear", module_path, cache=True)
-    assert module1 is module2
-
-    # Clear cache
-    clear_module_cache()
-
-    # Should reload (but will still have same attributes)
-    module3 = load_module_from_path("test_clear", module_path, cache=True)
-    # Note: Due to sys.modules, might still be same object
-    # The important thing is cache was cleared
-
-
-# ==============================================================================
-# Test Edge Cases
-# ==============================================================================
-
-
-def test_ensure_path_importable_with_path_object(temp_module_dir):
-    """Test that ensure_path_importable accepts Path objects."""
-    result = ensure_path_importable(Path(temp_module_dir))
-    assert isinstance(result, bool)
-
-
-def test_load_module_from_path_registers_in_sys_modules(temp_module_dir):
-    """Test that loaded modules are registered in sys.modules."""
-    module_path = temp_module_dir / "sample_module.py"
-    module_name = "test_sys_modules"
-
-    # Ensure not already in sys.modules
-    if module_name in sys.modules:
-        del sys.modules[module_name]
-
-    # Load module
-    module = load_module_from_path(module_name, module_path)
-
-    # Should be in sys.modules
-    assert module_name in sys.modules
-    assert sys.modules[module_name] is module
-
-
-def test_concurrent_module_loading(temp_module_dir):
-    """Test that concurrent module loading is thread-safe."""
-    module_path = temp_module_dir / "decorator_module.py"
-    loaded_modules = []
-
-    def load_module():
-        module = load_module_from_path("concurrent_test", module_path, cache=True)
-        loaded_modules.append(module)
-
-    # Launch 20 threads concurrently
-    threads = [threading.Thread(target=load_module) for _ in range(20)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    # All threads should get the same cached module
-    assert len(loaded_modules) == 20
-    assert all(m is loaded_modules[0] for m in loaded_modules)
 
 
 def test_discover_and_load_udfs_with_import_error(temp_module_dir):

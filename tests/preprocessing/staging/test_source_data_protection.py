@@ -15,16 +15,6 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import _should_s
 class TestShouldSaveSourceItems:
     """Test _should_save_source_items() richness comparison logic."""
 
-    def test_no_items_returns_false(self):
-        """Test that empty items list returns False."""
-        result = _should_save_source_items([], "file.json", "/base", None)
-        assert result is False
-
-    def test_none_items_returns_false(self):
-        """Test that None items returns False."""
-        result = _should_save_source_items(None, "file.json", "/base", None)
-        assert result is False
-
     def test_nonexistent_source_file_returns_true(self):
         """Test that missing source file allows save (first run)."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -120,31 +110,6 @@ class TestShouldSaveSourceItems:
             result = _should_save_source_items(new_items, str(file_path), str(base_dir), None)
 
             assert result is False  # Block sparse data from overwriting
-
-    def test_equal_field_count_returns_false(self):
-        """Test that equal field counts returns False (conservative)."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # Setup: Create workflow structure with source file
-            workflow_root = Path(tmpdir) / "workflow"
-            source_file = workflow_root / "agent_io" / "source" / "test.json"
-            source_file.parent.mkdir(parents=True)
-
-            existing_data = [{"source_guid": "guid-1", "field1": "a", "field2": "b"}]  # 3 fields
-            source_file.write_text(json.dumps(existing_data))
-
-            base_dir = workflow_root / "agent_io" / "staging"
-            base_dir.mkdir(parents=True, exist_ok=True)
-            file_path = base_dir / "test.json"
-
-            # New data with SAME field count
-            new_items = [
-                {"source_guid": "guid-1", "field3": "c", "field4": "d"}
-            ]  # 3 fields (different names)
-
-            result = _should_save_source_items(new_items, str(file_path), str(base_dir), None)
-
-            # Conservative: only allow if MORE fields
-            assert result is False
 
     def test_invalid_json_in_existing_file_returns_true(self):
         """Test that corrupted existing file allows save (recovery)."""

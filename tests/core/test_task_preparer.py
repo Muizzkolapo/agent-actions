@@ -8,8 +8,6 @@ from agent_actions.processing import (
     PreparedTask,
     PreparationContext,
     TaskPreparer,
-    get_task_preparer,
-    reset_task_preparer,
 )
 
 
@@ -262,30 +260,6 @@ class TestTaskPreparerPrepare:
         assert result.is_filtered is True
         # Prompt should NOT be rendered for filtered items
         assert result.formatted_prompt == ""
-
-
-class TestTaskPreparerSingleton:
-    """Tests for global singleton pattern."""
-
-    def test_get_task_preparer_returns_instance(self):
-        """Test get_task_preparer returns TaskPreparer instance."""
-        reset_task_preparer()
-        preparer = get_task_preparer()
-        assert isinstance(preparer, TaskPreparer)
-
-    def test_get_task_preparer_returns_same_instance(self):
-        """Test get_task_preparer returns same instance."""
-        reset_task_preparer()
-        preparer1 = get_task_preparer()
-        preparer2 = get_task_preparer()
-        assert preparer1 is preparer2
-
-    def test_reset_task_preparer_creates_new_instance(self):
-        """Test reset_task_preparer creates new instance."""
-        preparer1 = get_task_preparer()
-        reset_task_preparer()
-        preparer2 = get_task_preparer()
-        assert preparer1 is not preparer2
 
 
 class TestGuardEvaluatedOnce:

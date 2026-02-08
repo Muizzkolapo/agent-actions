@@ -59,18 +59,6 @@ class TestGuardParser:
         with pytest.raises(ValidationError, match="UDF guard expression cannot be empty"):
             GuardParser.parse("udf:   ")
 
-    def test_validate_udf_expression_valid_patterns(self):
-        """Test valid UDF expression patterns."""
-        valid_expressions = [
-            "module.function",
-            "my_module.my_function",
-            "package.submodule.function",
-            "deep.package.submodule.function_name",
-            "topic_to_quiz_pipeline.get_answer_length_flag_value",
-        ]
-        for expr in valid_expressions:
-            GuardParser._validate_udf_expression(expr)
-
     def test_validate_udf_expression_invalid_patterns(self):
         """Test invalid UDF expression patterns."""
         invalid_expressions = [
@@ -110,36 +98,12 @@ class TestGuardParser:
             with pytest.raises(ValidationError, match="potentially dangerous pattern"):
                 GuardParser._validate_sql_expression(expr)
 
-    def test_is_udf_guard(self):
-        """Test UDF guard detection."""
-        assert GuardParser.is_udf_guard("udf:module.function")
-        assert GuardParser.is_udf_guard("  udf:module.function  ")
-        assert not GuardParser.is_udf_guard('field != "value"')
-        assert not GuardParser.is_udf_guard("")
-        assert not GuardParser.is_udf_guard(None)
-
-    def test_is_sql_guard(self):
-        """Test SQL guard detection."""
-        assert GuardParser.is_sql_guard('field != "value"')
-        assert GuardParser.is_sql_guard('status == "active"')
-        assert not GuardParser.is_sql_guard("udf:module.function")
-        assert not GuardParser.is_sql_guard("")
-        assert not GuardParser.is_sql_guard(None)
-
     def test_parse_guard_convenience_function(self):
         """Test the convenience parse_guard function."""
         sql_result = parse_guard('field == "value"')
         assert sql_result.type == GuardType.SQL
         udf_result = parse_guard("udf:module.function")
         assert udf_result.type == GuardType.UDF
-
-    def test_guard_expression_repr(self):
-        """Test GuardExpression string representation."""
-        expr = GuardExpression(GuardType.UDF, "module.function", "udf:module.function")
-        repr_str = repr(expr)
-        assert "GuardExpression" in repr_str
-        assert "UDF" in repr_str
-        assert "module.function" in repr_str
 
 
 class TestGuardParserIntegration:

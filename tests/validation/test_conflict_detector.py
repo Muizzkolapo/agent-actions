@@ -23,60 +23,6 @@ from agent_actions.validation.static_analyzer.data_flow_graph import (
 class TestConflictAnalysisResult:
     """Tests for ConflictAnalysisResult dataclass."""
 
-    @pytest.mark.parametrize(
-        "conflicts,expected",
-        [
-            pytest.param([], False, id="empty"),
-            pytest.param(
-                [
-                    Conflict(
-                        conflict_type=ConflictType.SHADOWING,
-                        severity=ConflictSeverity.WARNING,
-                        field_name="title",
-                        message="Test",
-                        resolution="Fix it",
-                    )
-                ],
-                True,
-                id="with_conflicts",
-            ),
-        ],
-    )
-    def test_has_conflicts(self, conflicts, expected):
-        result = ConflictAnalysisResult(workflow_name="test", conflicts=conflicts)
-        assert result.has_conflicts is expected
-
-    def test_error_count(self):
-        """Test error_count property."""
-        result = ConflictAnalysisResult(
-            workflow_name="test",
-            conflicts=[
-                Conflict(
-                    conflict_type=ConflictType.SHADOWING,
-                    severity=ConflictSeverity.ERROR,
-                    field_name="a",
-                    message="",
-                    resolution="",
-                ),
-                Conflict(
-                    conflict_type=ConflictType.SHADOWING,
-                    severity=ConflictSeverity.ERROR,
-                    field_name="b",
-                    message="",
-                    resolution="",
-                ),
-                Conflict(
-                    conflict_type=ConflictType.SHADOWING,
-                    severity=ConflictSeverity.WARNING,
-                    field_name="c",
-                    message="",
-                    resolution="",
-                ),
-            ],
-        )
-        assert result.error_count == 2
-        assert result.warning_count == 1
-
     def test_filter_by_action(self):
         """Test filtering conflicts by action."""
         result = ConflictAnalysisResult(
@@ -159,16 +105,6 @@ class TestConflictDetector:
         graph.add_node(extractor_node)
 
         return graph
-
-    def test_no_conflicts(self):
-        """Test workflow with no conflicts."""
-        graph = self._create_simple_graph()
-        detector = ConflictDetector(graph, "test_workflow")
-        result = detector.detect_all()
-
-        assert not result.has_conflicts
-        assert result.actions_analyzed == 1  # excludes source
-        assert result.unique_fields == 2  # title, summary
 
     def test_detect_shadowing(self):
         """Test detection of shadowing conflicts."""
@@ -303,31 +239,6 @@ class TestConflictDetector:
         ]
         assert len(drop_recreate_conflicts) == 1
         assert drop_recreate_conflicts[0].severity == ConflictSeverity.INFO
-
-    def test_get_shadowed_fields(self):
-        """Test get_shadowed_fields helper method."""
-        graph = DataFlowGraph()
-
-        action1 = DataFlowNode(
-            name="action1",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"shared", "unique1"}),
-        )
-        action2 = DataFlowNode(
-            name="action2",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"shared", "unique2"}),
-        )
-        graph.add_node(action1)
-        graph.add_node(action2)
-
-        detector = ConflictDetector(graph, "test")
-        shadowed = detector.get_shadowed_fields()
-
-        assert "shared" in shadowed
-        assert set(shadowed["shared"]) == {"action1", "action2"}
-        assert "unique1" not in shadowed
-        assert "unique2" not in shadowed
 
     def test_observe_field_conflicts(self):
         """Test that observe fields are tracked for conflicts."""

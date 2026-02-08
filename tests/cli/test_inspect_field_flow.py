@@ -1,9 +1,4 @@
-"""CLI integration tests for the inspect commands.
-
-Note: Tests that require full project setup are marked with pytest.mark.skip
-because the project structure is complex. The core analysis logic
-is tested in tests/validation/static_analyzer/test_field_flow_analyzer.py
-"""
+"""CLI integration tests for the inspect commands."""
 
 import os
 from pathlib import Path
@@ -106,15 +101,6 @@ class TestInspectCommandGroup:
         assert "graph" in result.output
         assert "action" in result.output
         assert "Inspect workflow structure" in result.output
-
-    def test_inspect_subcommands_available(self, cli_runner):
-        """Test that all subcommands are listed."""
-        result = cli_runner.invoke(cli, ["inspect", "--help"])
-
-        assert "dependencies" in result.output
-        assert "graph" in result.output
-        assert "action" in result.output
-        assert result.exit_code == 0
 
 
 class TestBaseInspectCommandHelpers:

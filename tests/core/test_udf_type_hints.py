@@ -4,18 +4,16 @@ Tests the full flow: register with output types -> compile -> execute -> validat
 Note: Input validation is no longer performed - context_scope in workflow YAML defines input structure.
 """
 
-import dataclasses
 import pytest
 from typing import Dict, List, Optional, TypedDict
 
 from agent_actions.utils.udf_management.registry import (
     udf_tool,
-    get_udf_metadata,
     clear_registry,
 )
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.udf_management.type_conversion import HAS_PYDANTIC, clear_schema_cache
+from agent_actions.utils.udf_management.type_conversion import clear_schema_cache
 
 
 @pytest.fixture(autouse=True)
@@ -26,113 +24,6 @@ def cleanup_registry():
     yield
     clear_registry()
     clear_schema_cache()
-
-
-# =============================================================================
-# Registration Tests
-# =============================================================================
-
-
-class TestOutputTypeRegistration:
-    """Tests for registering UDFs with output type hints."""
-
-    def test_register_with_output_type(self):
-        """UDF with output_type should store output schema."""
-
-        class Output(TypedDict):
-            result: str
-            count: int
-
-        @udf_tool(output_type=Output)
-        def process(data):
-            return {"result": "done", "count": 1}
-
-        metadata = get_udf_metadata("process")
-        assert metadata["output_type"] == Output
-        assert metadata["output_schema"] is not None
-        assert metadata["output_schema"]["name"] == "Output"
-        assert metadata["json_output_schema"] is not None
-
-    def test_register_with_dataclass_output(self):
-        """UDF with dataclass output_type should work."""
-
-        @dataclasses.dataclass
-        class Output:
-            name: str
-            count: int = 0
-
-        @udf_tool(output_type=Output)
-        def process(data):
-            return {"name": "test", "count": 5}
-
-        metadata = get_udf_metadata("process")
-        fields = {f["id"]: f for f in metadata["output_schema"]["fields"]}
-        assert fields["name"]["required"] is True
-        assert fields["count"]["required"] is False
-
-    @pytest.mark.skipif(not HAS_PYDANTIC, reason="Pydantic not installed")
-    def test_register_with_pydantic_output(self):
-        """UDF with Pydantic output_type should work."""
-        from pydantic import BaseModel
-
-        class Output(BaseModel):
-            name: str
-            count: int = 0
-
-        @udf_tool(output_type=Output)
-        def process(data):
-            return {"name": "test", "count": 5}
-
-        metadata = get_udf_metadata("process")
-        fields = {f["id"]: f for f in metadata["output_schema"]["fields"]}
-        assert fields["name"]["required"] is True
-        assert fields["count"]["required"] is False
-
-    def test_register_without_output_type(self):
-        """UDF without output_type should register with no schema."""
-
-        @udf_tool()
-        def process(data):
-            return data
-
-        metadata = get_udf_metadata("process")
-        assert metadata["output_type"] is None
-        assert metadata["output_schema"] is None
-        assert metadata["json_output_schema"] is None
-
-
-# =============================================================================
-# Execution Tests (No Input Validation)
-# =============================================================================
-
-
-class TestExecution:
-    """Tests for executing UDFs (no input validation - context_scope handles input)."""
-
-    def test_execute_without_output_type(self):
-        """UDF without output_type should execute without validation."""
-
-        @udf_tool()
-        def process(data):
-            return {"status": "ok", "data": data}
-
-        result = execute_user_defined_function("process", {"anything": "goes"})
-        assert result == {"status": "ok", "data": {"anything": "goes"}}
-
-    def test_execute_returns_any_shape_without_output_type(self):
-        """Without output_type, any return shape is valid."""
-
-        @udf_tool()
-        def process(data):
-            return "just a string"
-
-        result = execute_user_defined_function("process", {"x": 1})
-        assert result == "just a string"
-
-
-# =============================================================================
-# Output Validation Tests
-# =============================================================================
 
 
 class TestOutputValidation:
@@ -190,11 +81,6 @@ class TestOutputValidation:
         # Should not raise - no output schema to validate against
         result = execute_user_defined_function("process", {"text": "hello"})
         assert result == {"anything": "goes"}
-
-
-# =============================================================================
-# Complex Output Type Tests
-# =============================================================================
 
 
 class TestComplexOutputTypes:

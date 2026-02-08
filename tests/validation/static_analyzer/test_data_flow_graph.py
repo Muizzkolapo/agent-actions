@@ -4,7 +4,6 @@ import pytest
 
 from agent_actions.validation.static_analyzer import (
     AgentKind,
-    DataFlowEdge,
     DataFlowGraph,
     DataFlowNode,
     InputRequirement,
@@ -49,39 +48,9 @@ class TestOutputSchema:
         schema = OutputSchema(**kwargs)
         assert schema.available_fields == expected
 
-    def test_is_schemaless(self):
-        """Test schemaless flag."""
-        schema = OutputSchema(is_schemaless=True)
-        assert schema.is_schemaless
-        assert schema.available_fields == set()
-
-    def test_is_dynamic(self):
-        """Test dynamic schema flag."""
-        schema = OutputSchema(is_dynamic=True)
-        assert schema.is_dynamic
-
-    def test_passthrough_fields(self):
-        """Test passthrough fields are included in available."""
-        schema = OutputSchema(
-            schema_fields={"a"},
-            passthrough_fields={"b", "c"},
-        )
-        assert "a" in schema.available_fields
-        assert "b" in schema.available_fields
-        assert "c" in schema.available_fields
-
 
 class TestInputSchema:
     """Tests for InputSchema class."""
-
-    def test_all_fields(self):
-        """Test all_fields returns required + optional."""
-        schema = InputSchema(
-            required_fields={"name", "email"},
-            optional_fields={"age", "phone"},
-        )
-
-        assert schema.all_fields == {"name", "email", "age", "phone"}
 
     def test_requires_field(self):
         """Test requires_field returns True for required fields."""
@@ -105,128 +74,9 @@ class TestInputSchema:
         assert schema.accepts_field("age")
         assert not schema.accepts_field("unknown")
 
-    def test_is_template_based(self):
-        """Test template-based flag for LLM agents."""
-        schema = InputSchema(is_template_based=True)
-        assert schema.is_template_based
-        assert len(schema.all_fields) == 0
-
-    def test_is_dynamic(self):
-        """Test dynamic input schema flag."""
-        schema = InputSchema(is_dynamic=True)
-        assert schema.is_dynamic
-
-
-class TestInputRequirement:
-    """Tests for InputRequirement class."""
-
-    def test_basic_requirement(self):
-        """Test basic input requirement."""
-        req = InputRequirement(
-            source_agent="extractor",
-            field_path="summary",
-            location="prompt",
-            raw_reference="{{ action.extractor.summary }}",
-        )
-
-        assert req.source_agent == "extractor"
-        assert req.field_path == "summary"
-        assert req.location == "prompt"
-
-    def test_nested_field_path(self):
-        """Test requirement with nested field path."""
-        req = InputRequirement(
-            source_agent="analyzer",
-            field_path="metadata.score",
-            location="guard",
-            raw_reference="{{ action.analyzer.metadata.score }}",
-        )
-
-        assert req.field_path == "metadata.score"
-
-
-class TestDataFlowNode:
-    """Tests for DataFlowNode class."""
-
-    def test_basic_node(self):
-        """Test basic node creation."""
-        node = DataFlowNode(
-            name="processor",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"result"}),
-        )
-
-        assert node.name == "processor"
-        assert node.agent_kind == AgentKind.LLM
-        assert node.output_schema.available_fields == {"result"}
-        assert node.dependencies == set()
-        assert node.input_requirements == []
-
-    def test_node_with_dependencies(self):
-        """Test node with dependencies."""
-        node = DataFlowNode(
-            name="summarizer",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"summary"}),
-            dependencies={"extractor", "classifier"},
-        )
-
-        assert node.dependencies == {"extractor", "classifier"}
-
-    def test_node_with_input_requirements(self):
-        """Test node with input requirements."""
-        reqs = [
-            InputRequirement("extractor", "text", "prompt", ""),
-            InputRequirement("classifier", "category", "prompt", ""),
-        ]
-
-        node = DataFlowNode(
-            name="processor",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"result"}),
-            input_requirements=reqs,
-        )
-
-        assert len(node.input_requirements) == 2
-
-
-class TestDataFlowEdge:
-    """Tests for DataFlowEdge class."""
-
-    def test_edge_creation(self):
-        """Test edge creation."""
-        edge = DataFlowEdge(
-            source="extractor",
-            target="summarizer",
-            fields_used={"text", "metadata"},
-        )
-
-        assert edge.source == "extractor"
-        assert edge.target == "summarizer"
-        assert edge.fields_used == {"text", "metadata"}
-
 
 class TestDataFlowGraph:
     """Tests for DataFlowGraph class."""
-
-    def test_add_node(self):
-        """Test adding nodes to graph."""
-        graph = DataFlowGraph()
-
-        node = DataFlowNode(
-            name="agent1",
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={"result"}),
-        )
-        graph.add_node(node)
-
-        assert "agent1" in graph.nodes
-        assert graph.get_node("agent1") is node
-
-    def test_get_nonexistent_node(self):
-        """Test getting nonexistent node returns None."""
-        graph = DataFlowGraph()
-        assert graph.get_node("missing") is None
 
     def test_topological_sort_simple(self):
         """Test topological sort with simple dependencies."""

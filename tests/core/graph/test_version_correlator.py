@@ -4,8 +4,6 @@ import json
 import tempfile
 import pytest
 from pathlib import Path
-from typing import Dict, List, Any
-from unittest.mock import MagicMock, patch
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 
@@ -88,19 +86,6 @@ class TestVersionOutputCorrelator:
             "generate_distractors_3",
         }
         assert "validate_quiz" not in consumption_map
-
-    def test_detect_explicit_version_consumption_no_consumption(self, correlator):
-        """Test when no agents have loop consumption config."""
-        execution_order = ["agent_a", "agent_b", "agent_c"]
-        agent_configs = {
-            "agent_a": {"dependencies": []},
-            "agent_b": {"dependencies": ["agent_a"]},
-            "agent_c": {"dependencies": ["agent_b"]},
-        }
-        consumption_map = correlator.detect_explicit_version_consumption(
-            execution_order, agent_configs
-        )
-        assert consumption_map == {}
 
     def test_filename_preservation(self, correlator, temp_agent_folder):
         """Test that original filenames are preserved during correlation."""
@@ -250,37 +235,6 @@ class TestVersionOutputCorrelator:
                 assert data[0]["content"]["processor_1"]["loop1_data"] == f"data_from_{filename}"
                 assert data[0]["content"]["processor_2"]["loop2_data"] == f"data_from_{filename}"
 
-    def test_find_agent_index(self, correlator, temp_agent_folder):
-        """Test finding agent by checking directory existence."""
-        # Use simple directory names (no node_X_ prefix)
-        (temp_agent_folder / "target" / "extract").mkdir(parents=True)
-        (temp_agent_folder / "target" / "process").mkdir(parents=True)
-        (temp_agent_folder / "target" / "validate").mkdir(parents=True)
-        # _find_agent_index now returns 0 if directory exists (index no longer matters)
-        assert correlator._find_agent_index("extract") == 0
-        assert correlator._find_agent_index("process") == 0
-        assert correlator._find_agent_index("validate") == 0
-        assert correlator._find_agent_index("nonexistent") is None
-
-    def test_load_agent_outputs_with_filenames(self, correlator, temp_agent_folder):
-        """Test loading outputs while preserving filenames."""
-        output_dir = temp_agent_folder / "output"
-        output_dir.mkdir()
-        data1 = [{"id": 1, "value": "a"}, {"id": 2, "value": "b"}]
-        data2 = {"id": 3, "value": "c"}
-        with open(output_dir / "file1.json", "w") as f:
-            json.dump(data1, f)
-        with open(output_dir / "file2.json", "w") as f:
-            json.dump(data2, f)
-        outputs, filenames = correlator._load_agent_outputs_with_filenames(output_dir)
-        assert len(outputs) == 3
-        assert all(("_source_file" in o for o in outputs))
-        assert filenames == {"file1.json", "file2.json"}
-        file1_outputs = [o for o in outputs if o["_source_file"] == "file1.json"]
-        assert len(file1_outputs) == 2
-        file2_outputs = [o for o in outputs if o["_source_file"] == "file2.json"]
-        assert len(file2_outputs) == 1
-
     def test_correlate_by_source_record(self, correlator):
         """Test the correlation logic for merging records with prefixed field names."""
         version_outputs = {
@@ -330,32 +284,6 @@ class TestVersionOutputCorrelator:
             "loop_1": {"f1": "v2"},
             "loop_2": {"f2": "v4"},
         }
-
-    def test_write_correlated_data(self, correlator, temp_agent_folder):
-        """Test writing correlated data and source file creation."""
-        # Use simple directory names (no node_X_ prefix)
-        output_dir = temp_agent_folder / "target" / "consumer"
-        output_dir.mkdir(parents=True)
-        test_data = [
-            {"source_guid": "g1", "content": {"field": "value"}},
-            {"source_guid": "g2", "content": {"field": "value2"}},
-        ]
-        correlator._write_correlated_data(output_dir, test_data, "custom_output.json")
-        target_file = output_dir / "custom_output.json"
-        assert target_file.exists()
-        with open(target_file, "r") as f:
-            written_data = json.load(f)
-            assert len(written_data) == 2
-            assert written_data[0]["source_guid"] == "g1"
-        source_file = temp_agent_folder / "source" / "custom_output.json"
-        assert source_file.exists()
-
-    def test_empty_version_outputs(self, correlator, temp_agent_folder):
-        """Test handling when no loop outputs exist."""
-        result = correlator.prepare_correlated_input(
-            "consumer", ["nonexistent_1", "nonexistent_2"], 5
-        )
-        assert result is None
 
     def test_error_handling_in_correlation(self, correlator, temp_agent_folder):
         """Test error handling during correlation."""

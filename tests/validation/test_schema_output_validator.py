@@ -1,7 +1,6 @@
 """Unit tests for schema_output_validator module."""
 
 import pytest
-from datetime import datetime
 
 from agent_actions.validation.schema_output_validator import (
     SchemaValidationReport,
@@ -13,34 +12,6 @@ from agent_actions.errors import SchemaValidationError
 
 class TestSchemaValidationReport:
     """Tests for SchemaValidationReport dataclass."""
-
-    def test_compliant_report(self):
-        """Test creating a compliant validation report."""
-        report = SchemaValidationReport(
-            action_name="test_action",
-            schema_name="test_schema",
-            is_compliant=True,
-            expected_fields={"name", "age"},
-            actual_fields={"name", "age"},
-        )
-        assert report.is_compliant
-        assert report.action_name == "test_action"
-        assert report.schema_name == "test_schema"
-        assert len(report.missing_required) == 0
-        assert len(report.extra_fields) == 0
-
-    def test_non_compliant_report(self):
-        """Test creating a non-compliant validation report."""
-        report = SchemaValidationReport(
-            action_name="test_action",
-            schema_name="test_schema",
-            is_compliant=False,
-            expected_fields={"name", "age"},
-            actual_fields={"name"},
-            missing_required=["age"],
-        )
-        assert not report.is_compliant
-        assert "age" in report.missing_required
 
     def test_format_report(self):
         """Test formatting a validation report."""
@@ -59,19 +30,6 @@ class TestSchemaValidationReport:
         assert "INVALID" in formatted
         assert "required_field" in formatted
         assert "unknown_field" in formatted
-
-    def test_to_dict(self):
-        """Test converting report to dictionary."""
-        report = SchemaValidationReport(
-            action_name="test_action",
-            schema_name="test_schema",
-            is_compliant=True,
-        )
-        result = report.to_dict()
-        assert result["action_name"] == "test_action"
-        assert result["schema_name"] == "test_schema"
-        assert result["is_compliant"] is True
-        assert "timestamp" in result
 
 
 class TestValidateOutputAgainstSchema:

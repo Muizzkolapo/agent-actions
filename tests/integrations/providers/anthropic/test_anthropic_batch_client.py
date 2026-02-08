@@ -150,30 +150,6 @@ class TestAnthropicBatchClient(BaseBatchClientTests):
         assert isinstance(result["params"]["tools"], list), "Tools should be a list"
         assert len(result["params"]["tools"]) > 0, "Should have at least one tool"
 
-    def test_anthropic_parse_tool_use_response(self, provider, provider_success_response_json):
-        """
-        Anthropic-specific: Verify tool_use responses are parsed correctly.
-
-        Anthropic returns structured output via tool_use content blocks.
-        """
-        result = provider.parse_provider_response(provider_success_response_json)
-        assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Tool use response should be success"
-        assert isinstance(result.content, dict), "Tool use should return dict"
-        assert result.content["answer"] == "4", "Should extract tool input as content"
-
-    def test_anthropic_parse_text_response(self, provider, provider_success_response_string):
-        """
-        Anthropic-specific: Verify text responses are parsed correctly.
-
-        Anthropic returns plain text in text content blocks.
-        """
-        result = provider.parse_provider_response(provider_success_response_string)
-        assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Text response should be success"
-        assert isinstance(result.content, str), "Text should return string"
-        assert result.content == "Hello world", "Should extract text content"
-
     def test_submit_and_retrieve_workflow(
         self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode
     ):

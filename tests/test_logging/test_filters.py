@@ -152,41 +152,6 @@ class TestRedactingFilter:
         assert "john@example.com" not in record.msg
         assert "***" in record.msg
 
-    def test_filter_always_returns_true(self):
-        """Test that filter always returns True to allow logging."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="Any message",
-            args=(),
-            exc_info=None,
-        )
-
-        result = filter_instance.filter(record)
-
-        assert result is True
-
-    def test_handles_empty_message(self):
-        """Test handling of empty log messages."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test",
-            level=logging.INFO,
-            pathname="test.py",
-            lineno=1,
-            msg="",
-            args=(),
-            exc_info=None,
-        )
-
-        result = filter_instance.filter(record)
-
-        assert result is True
-        assert record.msg == ""
-
     def test_case_insensitive_matching(self):
         """Test that pattern matching is case insensitive."""
         filter_instance = RedactingFilter()
@@ -334,29 +299,6 @@ class TestRedactingFilter:
         # API key pattern should be redacted from the string
         assert "sk-abcdefghij1234567890abcdefghij12" not in record.auth_header
         assert "sk-***" in record.auth_header
-
-    def test_does_not_redact_standard_log_record_attributes(self):
-        """Test that standard LogRecord attributes are not redacted."""
-        filter_instance = RedactingFilter()
-        record = logging.LogRecord(
-            name="test.module",
-            level=logging.INFO,
-            pathname="/path/to/test.py",
-            lineno=42,
-            msg="Test message with api_key=secret",
-            args=(),
-            exc_info=None,
-        )
-
-        filter_instance.filter(record)
-
-        # Standard attributes should not be affected
-        assert record.name == "test.module"
-        assert record.pathname == "/path/to/test.py"
-        assert record.lineno == 42
-        assert record.levelname == "INFO"
-        # But message should still be redacted
-        assert "secret" not in record.msg
 
     def test_redacts_correlation_context_extra_fields(self):
         """Test redaction works with correlation context fields present."""

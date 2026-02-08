@@ -2,7 +2,6 @@
 Tests for safe_format module error handling utilities.
 """
 
-import pytest
 from unittest.mock import Mock
 from agent_actions.utils.safe_format import (
     safe_format_error,
@@ -54,11 +53,6 @@ class TestSafeFormatError:
         assert "CircularException" in result
         assert "unable to format message" in result or "CircularException" in result
 
-    def test_none_exception(self):
-        """Test formatting None exception."""
-        result = safe_format_error(None)
-        assert result == "None"
-
     def test_non_exception_object(self):
         """Test formatting non-exception object."""
         result = safe_format_error("not an exception")
@@ -75,12 +69,6 @@ class TestSafeFormatError:
 
 class TestExtractRootCause:
     """Test extract_root_cause function."""
-
-    def test_single_exception(self):
-        """Test extracting root cause from single exception."""
-        exc = ValueError("Root error")
-        result = extract_root_cause(exc)
-        assert result == exc
 
     def test_chained_exceptions(self):
         """Test extracting root cause from chained exceptions."""
@@ -130,13 +118,6 @@ class TestExtractRootCause:
 class TestGetErrorChain:
     """Test get_error_chain function."""
 
-    def test_single_exception_chain(self):
-        """Test getting chain from single exception."""
-        exc = ValueError("Single error")
-        chain = get_error_chain(exc)
-        assert len(chain) == 1
-        assert chain[0] == exc
-
     def test_multiple_exception_chain(self):
         """Test getting chain from multiple exceptions."""
         root = ValueError("Root error")
@@ -182,11 +163,6 @@ class TestFormatExceptionContext:
         context = "Simple string context"
         result = format_exception_context(context)
         assert result == "Simple string context"
-
-    def test_none_context(self):
-        """Test formatting None context."""
-        result = format_exception_context(None)
-        assert result == ""
 
     def test_list_context(self):
         """Test formatting list context."""

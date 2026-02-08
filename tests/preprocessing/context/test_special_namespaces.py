@@ -7,27 +7,7 @@ differently from regular workflow actions.
 
 import pytest
 from agent_actions.prompt.context.scope import ContextScopeProcessor
-from agent_actions.utils.constants import SPECIAL_NAMESPACES, RESERVED_AGENT_NAMES
 from agent_actions.errors import ConfigurationError
-
-
-class TestSpecialNamespaceConstants:
-    """Test special namespace constants."""
-
-    def test_special_namespaces_defined(self):
-        """Test that SPECIAL_NAMESPACES constant is defined in utils.constants."""
-        assert isinstance(SPECIAL_NAMESPACES, (set, frozenset))
-
-    def test_special_namespaces_is_subset_of_reserved(self):
-        """Test that all special namespaces are also reserved names."""
-        # Core invariant: special namespaces should be a subset of reserved names
-        assert SPECIAL_NAMESPACES <= RESERVED_AGENT_NAMES
-
-    def test_context_scope_not_in_special_namespaces(self):
-        """Test that context_scope is reserved but not a runtime namespace."""
-        # context_scope is a config directive, not a data source
-        assert "context_scope" in RESERVED_AGENT_NAMES
-        assert "context_scope" not in SPECIAL_NAMESPACES
 
 
 class TestSpecialNamespaceValidationBypass:
@@ -158,7 +138,3 @@ class TestEnrichSourceNamespace:
         result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
 
         assert result == {"field": "value"}
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

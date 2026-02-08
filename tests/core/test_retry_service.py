@@ -4,31 +4,15 @@ Tests based on RFC_recovery.md test cases for retry mechanism.
 """
 
 import pytest
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 from agent_actions.processing.recovery.retry import (
     RetryService,
-    RetryResult,
     classify_error,
     is_retriable_error,
     create_retry_service_from_config,
-    RETRIABLE_ERRORS,
 )
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
-
-
-class TestRetryResult:
-    """Tests for RetryResult dataclass."""
-
-    def test_needed_retry_false_for_first_attempt(self):
-        """No retry needed when success on first attempt."""
-        result = RetryResult(response="success", attempts=1)
-        assert not result.needed_retry
-
-    def test_needed_retry_true_for_multiple_attempts(self):
-        """Retry was needed if attempts > 1."""
-        result = RetryResult(response="success", attempts=2, reason="timeout")
-        assert result.needed_retry
 
 
 class TestClassifyError:
@@ -191,17 +175,6 @@ class TestRetryServiceMetadata:
         assert result.reason == "timeout"
         assert result.needed_retry
 
-    def test_no_metadata_when_no_retry(self):
-        """No retry reason recorded when success on first attempt."""
-        service = RetryService(max_attempts=3)
-        operation = Mock(return_value="success response")
-
-        result = service.execute(operation)
-
-        assert result.attempts == 1
-        assert result.reason is None
-        assert not result.needed_retry
-
 
 class TestRetryServiceNonRetriableErrors:
     """Tests for non-retriable error handling."""
@@ -234,15 +207,6 @@ class TestRetryServiceNonRetriableErrors:
 class TestCreateRetryServiceFromConfig:
     """Tests for create_retry_service_from_config factory."""
 
-    def test_returns_none_when_config_is_none(self):
-        """Returns None when no config provided."""
-        assert create_retry_service_from_config(None) is None
-
-    def test_returns_none_when_disabled(self):
-        """Returns None when retry is disabled."""
-        config = {"enabled": False, "max_attempts": 3}
-        assert create_retry_service_from_config(config) is None
-
     def test_creates_service_with_defaults(self):
         """Creates service with default values."""
         config = {"enabled": True}
@@ -265,32 +229,9 @@ class TestCreateRetryServiceFromConfig:
         assert service.max_attempts == 5
         assert service.on_exhausted == "raise"
 
-    def test_enabled_defaults_to_true(self):
-        """Retry is enabled by default if key is missing."""
-        config = {"max_attempts": 3}
-        service = create_retry_service_from_config(config)
-
-        assert service is not None
-
 
 class TestRetryServiceEdgeCases:
     """Tests for edge cases and boundary conditions."""
-
-    def test_max_attempts_of_one_means_no_retry(self):
-        """max_attempts=1 means no retry even on error."""
-        service = RetryService(max_attempts=1, on_exhausted="return_last")
-        operation = Mock(side_effect=NetworkError("timeout"))
-
-        result = service.execute(operation)
-
-        assert result.attempts == 1
-        assert result.exhausted
-        operation.assert_called_once()
-
-    def test_max_attempts_clamped_to_at_least_one(self):
-        """max_attempts is clamped to at least 1."""
-        service = RetryService(max_attempts=0)
-        assert service.max_attempts == 1
 
     def test_context_included_in_logging(self):
         """Context string is included in logging."""

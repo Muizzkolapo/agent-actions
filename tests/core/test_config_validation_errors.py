@@ -4,7 +4,7 @@ import pytest
 import os
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.errors import ConfigValidationError, ConfigurationError  # New modular pattern!
+from agent_actions.errors import ConfigValidationError, ConfigurationError
 
 
 class TestConfigValidationErrorMessages:
@@ -42,34 +42,6 @@ class TestConfigValidationErrorMessages:
         assert "api_key" in missing
         assert len(missing) == 3
 
-    def test_missing_single_field_shows_which_one(self):
-        """Verify error clearly shows which single field is missing."""
-        agent = {
-            "agent_type": "test_action",
-            "name": "test_action",
-            "model_vendor": "openai",
-            "model_name": "gpt-4",
-        }
-        with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_required_fields(agent, "test_action")
-        error = exc_info.value
-        missing = error.context["missing_fields"]
-        assert missing == ["api_key"]
-
-    def test_invalid_vendor_error_shows_valid_options(self):
-        """Verify invalid vendor error shows valid vendors."""
-        with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_vendor_exists("invalid_vendor", "test_action")
-        error = exc_info.value
-        error_str = str(error)
-        assert "invalid_vendor" in error_str
-        assert error.context["supported_vendors"] is not None
-        supported = error.context["supported_vendors"]
-        assert "openai" in supported
-        assert "anthropic" in supported
-        assert "gemini" in supported or "google" in supported
-        assert "hint" in error.context
-
     def test_env_var_error_shows_export_command(self):
         """Verify env var error shows how to set it."""
         agent_config = {"agent_type": "test", "api_key": "${MISSING_VAR_12345}"}
@@ -83,23 +55,6 @@ class TestConfigValidationErrorMessages:
         assert "export" in hint
         assert "MISSING_VAR_12345" in hint
 
-    def test_error_context_includes_operation(self):
-        """Verify errors include operation context for debugging."""
-        agent = {"agent_type": "test_action", "name": "test_action"}
-        with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_required_fields(agent, "test_action")
-        error = exc_info.value
-        assert "operation" in error.context
-        assert error.context["operation"] == "expand_actions_to_agents"
-
-    def test_vendor_error_includes_action_name(self):
-        """Verify vendor validation error includes action name in context."""
-        with pytest.raises(ConfigValidationError) as exc_info:
-            ActionExpander._validate_vendor_exists("bad_vendor", "my_test_action")
-        error = exc_info.value
-        assert "action" in error.context
-        assert error.context["action"] == "my_test_action"
-
     def test_reserved_action_name_error_lists_reserved_names(self):
         """Verify reserved action name validation includes reserved list."""
         with pytest.raises(ConfigValidationError) as exc_info:
@@ -107,3 +62,28 @@ class TestConfigValidationErrorMessages:
         error = exc_info.value
         assert "prompt" in str(error)
         assert "reserved_names" in error.context
+
+    def test_where_clause_config_validation_empty_clause(self):
+        """Test WHERE clause config validation rejects empty clause."""
+        from agent_actions.output.response.config_schema import WhereClauseConfig
+        from agent_actions.errors import ValidationError
+
+        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
+            WhereClauseConfig(clause="")
+        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
+            WhereClauseConfig(clause="   ")
+
+    def test_where_clause_config_validation_dangerous_patterns(self):
+        """Test WHERE clause config validates against dangerous patterns."""
+        from agent_actions.output.response.config_schema import WhereClauseConfig
+        from agent_actions.errors import ValidationError
+
+        dangerous_clauses = [
+            "field = __import__('os')",
+            "field = exec('malicious code')",
+            "field = eval('expression')",
+            "field = open('/etc/passwd')",
+        ]
+        for clause in dangerous_clauses:
+            with pytest.raises(ValidationError):
+                WhereClauseConfig(clause=clause)

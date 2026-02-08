@@ -127,52 +127,24 @@ class TestExpandInlineSchema:
 class TestIsInlineSchemaDict:
     """Tests for _is_inline_schema_dict function."""
 
-    def test_detects_inline_schema(self):
+    @pytest.mark.parametrize(
+        "schema,expected",
+        [
+            pytest.param({"field1": "string", "field2": "number"}, True, id="inline_schema"),
+            pytest.param(
+                {"name": "TestSchema", "fields": [{"id": "field1", "type": "string"}]},
+                False,
+                id="unified_format",
+            ),
+            pytest.param({}, False, id="empty_dict"),
+            pytest.param({"field1": ["string", "null"]}, False, id="non_string_values"),
+            pytest.param({"field1": "invalid_type"}, False, id="invalid_types"),
+            pytest.param({"tags": "array[string]", "count": "integer"}, True, id="array_types"),
+        ],
+    )
+    def test_inline_schema_detection(self, schema, expected):
         """Test detection of inline schema format."""
-        inline_schema = {
-            "field1": "string",
-            "field2": "number",
-        }
-
-        assert _is_inline_schema_dict(inline_schema) is True
-
-    def test_rejects_unified_format(self):
-        """Test that unified format is not detected as inline."""
-        unified_schema = {
-            "name": "TestSchema",
-            "fields": [{"id": "field1", "type": "string"}],
-        }
-
-        assert _is_inline_schema_dict(unified_schema) is False
-
-    def test_rejects_empty_dict(self):
-        """Test that empty dict is not detected as inline."""
-        assert _is_inline_schema_dict({}) is False
-
-    def test_rejects_non_string_values(self):
-        """Test that dicts with non-string values are not inline schemas."""
-        not_inline = {
-            "field1": ["string", "null"],  # List value
-        }
-
-        assert _is_inline_schema_dict(not_inline) is False
-
-    def test_rejects_invalid_types(self):
-        """Test that dicts with invalid type strings are not inline schemas."""
-        invalid_types = {
-            "field1": "invalid_type",
-        }
-
-        assert _is_inline_schema_dict(invalid_types) is False
-
-    def test_accepts_array_types(self):
-        """Test that array[type] format is accepted."""
-        with_arrays = {
-            "tags": "array[string]",
-            "count": "integer",
-        }
-
-        assert _is_inline_schema_dict(with_arrays) is True
+        assert _is_inline_schema_dict(schema) is expected
 
 
 class TestCompileActionSchemas:
@@ -309,40 +281,34 @@ class TestCompileWorkflowSchemasStrict:
 class TestSchemaUtilsShared:
     """Tests for shared schema_utils module."""
 
-    def test_is_compiled_schema(self):
+    @pytest.mark.parametrize(
+        "schema,expected",
+        [
+            pytest.param({"name": "foo", "fields": []}, True, id="fields_based"),
+            pytest.param({"type": "object", "properties": {}}, True, id="json_schema_object"),
+            pytest.param({"type": "array", "items": {}}, True, id="json_schema_array"),
+            pytest.param({"field1": "string"}, False, id="inline_shorthand"),
+            pytest.param("schema_name", False, id="non_dict"),
+        ],
+    )
+    def test_is_compiled_schema(self, schema, expected):
         """Test is_compiled_schema detection."""
         from agent_actions.utils.schema_utils import is_compiled_schema
 
-        # Fields-based format
-        assert is_compiled_schema({"name": "foo", "fields": []}) is True
+        assert is_compiled_schema(schema) is expected
 
-        # JSON Schema object format
-        assert is_compiled_schema({"type": "object", "properties": {}}) is True
-
-        # JSON Schema array format
-        assert is_compiled_schema({"type": "array", "items": {}}) is True
-
-        # Inline shorthand (not compiled)
-        assert is_compiled_schema({"field1": "string"}) is False
-
-        # Non-dict
-        assert is_compiled_schema("schema_name") is False
-
-    def test_is_inline_schema_shorthand(self):
+    @pytest.mark.parametrize(
+        "schema,expected",
+        [
+            pytest.param({"field1": "string", "field2": "number"}, True, id="basic_shorthand"),
+            pytest.param({"required": "string!"}, True, id="required_marker"),
+            pytest.param({"tags": "array[string]"}, True, id="array_type"),
+            pytest.param({"name": "foo", "fields": []}, False, id="compiled_format"),
+            pytest.param("schema_name", False, id="non_dict"),
+        ],
+    )
+    def test_is_inline_schema_shorthand(self, schema, expected):
         """Test is_inline_schema_shorthand detection."""
         from agent_actions.utils.schema_utils import is_inline_schema_shorthand
 
-        # Inline shorthand
-        assert is_inline_schema_shorthand({"field1": "string", "field2": "number"}) is True
-
-        # With required marker
-        assert is_inline_schema_shorthand({"required": "string!"}) is True
-
-        # With array type
-        assert is_inline_schema_shorthand({"tags": "array[string]"}) is True
-
-        # Compiled format (not shorthand)
-        assert is_inline_schema_shorthand({"name": "foo", "fields": []}) is False
-
-        # Non-dict
-        assert is_inline_schema_shorthand("schema_name") is False
+        assert is_inline_schema_shorthand(schema) is expected
