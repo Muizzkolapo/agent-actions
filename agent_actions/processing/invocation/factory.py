@@ -4,7 +4,7 @@ Factory for creating invocation strategies.
 Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from agent_actions.processing.invocation.batch import BatchStrategy
 from agent_actions.processing.invocation.online import OnlineStrategy
@@ -80,13 +80,55 @@ class InvocationStrategyFactory:
         retry_config = agent_config.get("retry")
         reprompt_config = agent_config.get("reprompt")
 
+        validator = InvocationStrategyFactory._build_validator(agent_config)
+
         retry_service = create_retry_service_from_config(retry_config)
-        reprompt_service = create_reprompt_service_from_config(reprompt_config)
+        reprompt_service = create_reprompt_service_from_config(reprompt_config, validator=validator)
 
         return OnlineStrategy(
             retry_service=retry_service,
             reprompt_service=reprompt_service,
         )
+
+    @staticmethod
+    def _build_validator(agent_config: Dict[str, Any]) -> Optional[Any]:
+        """Compose a ``ResponseValidator`` from agent config.
+
+        Combines UDF validation (``reprompt.validation``) and schema
+        validation (``on_schema_mismatch: reprompt``) into a single
+        validator.  Returns *None* when neither is configured.
+        """
+        from agent_actions.processing.helpers import _resolve_schema_mismatch_mode
+        from agent_actions.processing.recovery.response_validator import (
+            ComposedValidator,
+            SchemaValidator,
+            UdfValidator,
+        )
+        from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
+
+        validators: List[Any] = []
+
+        # UDF validator (from reprompt config)
+        reprompt_config = agent_config.get("reprompt")
+        if reprompt_config:
+            validation_name = reprompt_config.get("validation")
+            if validation_name:
+                validators.append(UdfValidator(validation_name))
+
+        # Schema validator (when on_schema_mismatch == "reprompt")
+        schema = agent_config.get(SCHEMA_KEY)
+        if schema and isinstance(schema, dict):
+            mode = _resolve_schema_mismatch_mode(agent_config)
+            if mode == "reprompt":
+                action_name = agent_config.get("name", "unknown")
+                strict = agent_config.get(STRICT_SCHEMA_KEY, False)
+                validators.append(SchemaValidator(schema, action_name, strict_mode=strict))
+
+        if not validators:
+            return None
+        if len(validators) == 1:
+            return validators[0]
+        return ComposedValidator(validators)
 
     @staticmethod
     def create_online(

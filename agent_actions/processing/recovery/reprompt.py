@@ -5,14 +5,18 @@ Validates LLM responses using UDFs and re-executes with feedback
 when validation fails.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Callable, Any, Optional, Tuple, Dict
+from typing import Callable, Any, Optional, Tuple, Dict, TYPE_CHECKING
 import logging
-import json
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import RepromptValidationFailedEvent
-from .validation import get_validation_function
+from .response_validator import UdfValidator, build_validation_feedback
+
+if TYPE_CHECKING:
+    from .response_validator import ResponseValidator
 
 logger = logging.getLogger(__name__)
 
@@ -42,24 +46,30 @@ class RepromptService:
 
     def __init__(
         self,
-        validation_name: str,
+        validation_name: str = "",
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
+        validator: Optional[ResponseValidator] = None,
     ):
         """
         Initialize reprompt service.
 
+        Accepts either a ``validation_name`` (legacy -- wraps in ``UdfValidator``)
+        or a pre-built ``validator`` implementing the ``ResponseValidator`` protocol.
+        At least one must be provided.
+
         Args:
-            validation_name: Name of validation UDF
+            validation_name: Name of validation UDF (legacy path)
             max_attempts: Maximum reprompt attempts (default: 2)
             on_exhausted: Behavior when exhausted ("return_last" | "raise")
+            validator: Pre-built ResponseValidator (preferred path)
 
         Raises:
-            ValueError: If validation_name is empty, max_attempts < 1,
-                       on_exhausted is invalid, or validation UDF not found
+            ValueError: If neither validation_name nor validator provided,
+                       max_attempts < 1, or on_exhausted is invalid
         """
-        # Validate validation_name
-        if not validation_name or not validation_name.strip():
+        # Must have at least one validation source
+        if validator is None and (not validation_name or not validation_name.strip()):
             raise ValueError("validation_name cannot be empty")
 
         # Validate max_attempts
@@ -73,12 +83,26 @@ class RepromptService:
                 f"on_exhausted must be one of {valid_exhausted_options}, got: '{on_exhausted}'"
             )
 
-        self.validation_name = validation_name
         self.max_attempts = max_attempts
         self.on_exhausted = on_exhausted
 
-        # Get validation function and feedback message from registry
-        self.validation_func, self.feedback_message = get_validation_function(validation_name)
+        # Build validator -- prefer explicit validator, fall back to UDF lookup
+        if validator is not None:
+            self._validator = validator
+        else:
+            self._validator = UdfValidator(validation_name)
+
+        # When a validator is explicitly provided, use its name so composed
+        # validators (e.g. "check_positive+schema:my_action") are accurately
+        # reported in metadata and error messages.
+        if validator is not None:
+            self.validation_name = self._validator.name
+        else:
+            self.validation_name = validation_name
+
+        # Backward-compat attributes used by existing code / tests
+        self.validation_func = self._validator.validate
+        self.feedback_message = self._validator.feedback_message
 
     def execute(
         self,
@@ -137,12 +161,12 @@ class RepromptService:
 
             # Validate response
             try:
-                is_valid = self.validation_func(response)
+                is_valid = self._validator.validate(response)
             except Exception as e:
                 # Log validator exception with full context and traceback
                 # This helps distinguish validator bugs from actual validation failures
                 logger.warning(
-                    f"[{context}] Validation UDF '{self.validation_name}' raised exception "
+                    f"[{context}] Validation '{self.validation_name}' raised exception "
                     f"(treating as validation failure): {e.__class__.__name__}: {e}",
                     exc_info=True,
                 )
@@ -171,7 +195,7 @@ class RepromptService:
                 break
 
             # Prepare feedback message for next attempt
-            feedback = self._build_feedback_message(response)
+            feedback = build_validation_feedback(response, self._validator.feedback_message)
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
         # Exhausted all attempts
@@ -204,51 +228,30 @@ class RepromptService:
         )
 
     def _build_feedback_message(self, failed_response: Any) -> str:
+        """Build feedback message to append to prompt.
+
+        Thin backward-compat wrapper around ``build_validation_feedback()``.
         """
-        Build feedback message to append to prompt.
-
-        Args:
-            failed_response: The response that failed validation
-
-        Returns:
-            Formatted feedback message
-
-        Example:
-            ---
-            Your response failed validation: Response must not contain 'boy'
-
-            Your response: {"description": "A boy and his dog"}
-
-            Please correct and respond again.
-        """
-        # Format response as JSON for clarity
-        try:
-            response_str = json.dumps(failed_response, indent=2)
-        except Exception:
-            response_str = str(failed_response)
-
-        return f"""---
-Your response failed validation: {self.feedback_message}
-
-Your response: {response_str}
-
-Please correct and respond again."""
+        return build_validation_feedback(failed_response, self._validator.feedback_message)
 
 
 def create_reprompt_service_from_config(
     reprompt_config: Optional[Dict],
+    validator: Optional[ResponseValidator] = None,
 ) -> Optional[RepromptService]:
     """
     Create RepromptService from action config.
 
     Args:
         reprompt_config: Reprompt configuration dict (or None)
+        validator: Pre-built ResponseValidator (optional).
+                   When provided, ``reprompt_config["validation"]`` is not required.
 
     Returns:
         RepromptService instance or None if not enabled
 
     Raises:
-        ValueError: If required 'validation' key is missing from config
+        ValueError: If required 'validation' key is missing and no validator provided
 
     Example:
         config = {
@@ -259,17 +262,21 @@ def create_reprompt_service_from_config(
         service = create_reprompt_service_from_config(config)
     """
     if not reprompt_config:
+        # Even with a validator, we need reprompt_config for max_attempts etc.
+        if validator is not None:
+            return RepromptService(validator=validator)
         return None
 
-    # Validate required "validation" key
-    if "validation" not in reprompt_config:
+    # Validate required "validation" key when no validator provided
+    if validator is None and "validation" not in reprompt_config:
         raise ValueError(
             "Reprompt configuration missing required 'validation' field. "
             "Example: {'validation': 'check_no_forbidden_words', 'max_attempts': 2}"
         )
 
     return RepromptService(
-        validation_name=reprompt_config["validation"],
+        validation_name=reprompt_config.get("validation", ""),
         max_attempts=reprompt_config.get("max_attempts", 2),
         on_exhausted=reprompt_config.get("on_exhausted", "return_last"),
+        validator=validator,
     )

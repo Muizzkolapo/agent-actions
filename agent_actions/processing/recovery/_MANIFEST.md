@@ -10,5 +10,6 @@ failures and gather metrics for documentation.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `reprompt.py` | Module | Tracks reprompt attempts and transitions when validation errors occur. | `reprompting`, `validation` |
+| `response_validator.py` | Module | Shared `ResponseValidator` protocol (`UdfValidator`, `SchemaValidator`, `ComposedValidator`) and `build_validation_feedback()`. | `validation`, `schema` |
 | `retry.py` | Module | Retry helpers with backoff used across processing pipelines. | `retry`, `logging` |
 | `validation.py` | Module | Validates that retry/reprompt policies are well-formed before runs. | `validation` |

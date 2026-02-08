@@ -8,7 +8,7 @@ from agent_actions.utils.udf_management.tooling import execute_user_defined_func
 from agent_actions.llm.realtime import builder as agent_builder
 from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
 from agent_actions.utils.transformation import PassthroughTransformer
-from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
+from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY, ON_SCHEMA_MISMATCH_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ def run_dynamic_agent(
     source_content: Optional[Any] = None,
     llm_context: Optional[Any] = None,
     skip_guard_eval: bool = False,
+    skip_schema_validation: bool = False,
 ) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
@@ -82,6 +83,9 @@ def run_dynamic_agent(
                      If not provided, uses context for both guards and LLM.
         skip_guard_eval: If True, skip guard evaluation (already done by caller).
                         Used when guard was evaluated early (before prompt rendering).
+        skip_schema_validation: If True, skip schema validation inside this function.
+                        Set by callers that handle schema validation externally (e.g.,
+                        the online reprompt loop via SchemaValidator).
 
     Returns:
         Tuple of (response/context, was_executed):
@@ -124,17 +128,45 @@ def run_dynamic_agent(
     # (via DataTransformer.update_schema_objects)
 
     # Validate LLM output against schema if enabled
-    response = _validate_llm_output_schema(response, agent_config, agent_name)
+    response = _validate_llm_output_schema(
+        response, agent_config, agent_name, skip_schema_validation=skip_schema_validation
+    )
 
     return (response, True)
+
+
+def _resolve_schema_mismatch_mode(agent_config: Dict) -> str:
+    """Determine schema mismatch handling mode from config.
+
+    Resolution order:
+    1. ``on_schema_mismatch`` explicit key → "warn" | "reprompt" | "reject"
+    2. ``strict_schema: true`` → "reject" (backward compat alias)
+    3. Default → "warn"
+    """
+    explicit = agent_config.get(ON_SCHEMA_MISMATCH_KEY)
+    if explicit in ("warn", "reprompt", "reject"):
+        return explicit
+
+    if agent_config.get(STRICT_SCHEMA_KEY, False):
+        return "reject"
+
+    return "warn"
 
 
 def _validate_llm_output_schema(
     response: Any,
     agent_config: Dict,
     agent_name: str,
+    *,
+    skip_schema_validation: bool = False,
 ) -> Any:
     """Validate LLM output against expected schema if schema is defined.
+
+    When ``on_schema_mismatch`` is ``"reprompt"`` **and** the caller has set
+    ``skip_schema_validation=True`` (indicating an outer reprompt loop will
+    handle schema checks), this function returns early.  If the caller did
+    *not* set the flag (e.g. file-mode tools), ``"reprompt"`` falls back to
+    ``"warn"`` behaviour so mismatches are still surfaced.
 
     When strict_schema is enabled, raises SchemaValidationError if:
     - Required fields are missing
@@ -145,6 +177,7 @@ def _validate_llm_output_schema(
         response: The LLM response to validate
         agent_config: Agent configuration with schema and strict_schema settings
         agent_name: Name of the agent for error reporting
+        skip_schema_validation: If True, skip validation entirely (caller handles it).
 
     Returns:
         The original response (validation is informational unless strict_schema is True)
@@ -156,7 +189,17 @@ def _validate_llm_output_schema(
     if not schema or not isinstance(schema, dict):
         return response
 
-    strict_mode = agent_config.get(STRICT_SCHEMA_KEY, False)
+    mismatch_mode = _resolve_schema_mismatch_mode(agent_config)
+
+    # Only skip when the caller explicitly says a reprompt loop is active
+    if mismatch_mode == "reprompt" and skip_schema_validation:
+        return response
+
+    # Fall back to warn when reprompt is configured but no reprompt loop is active
+    if mismatch_mode == "reprompt":
+        mismatch_mode = "warn"
+
+    strict_mode = mismatch_mode == "reject"
 
     try:
         from agent_actions.validation.schema_output_validator import (
@@ -203,7 +246,7 @@ def _validate_llm_output_schema(
         raise
     except Exception as e:
         # Log unexpected errors but don't swallow them in strict mode
-        if agent_config.get(STRICT_SCHEMA_KEY, False):
+        if strict_mode:
             raise SchemaValidationError(
                 f"Schema validation failed unexpectedly for action '{agent_name}': {e}",
                 action_name=agent_name,

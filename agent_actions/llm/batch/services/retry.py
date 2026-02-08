@@ -323,6 +323,7 @@ class BatchRetryService:
             Consolidated list of batch results (original passes + reprompt results)
         """
         from agent_actions.processing.recovery.validation import get_validation_function
+        from agent_actions.processing.recovery.response_validator import build_validation_feedback
         from agent_actions.processing.types import RepromptMetadata
         from agent_actions.llm.batch.processing.preparator import (
             BatchTaskPreparator,
@@ -460,7 +461,7 @@ class BatchRetryService:
 
                 original_record = context_map[custom_id].copy()
 
-                feedback = _build_reprompt_feedback(
+                feedback = build_validation_feedback(
                     failed_response=failed_result.content,
                     feedback_message=feedback_message,
                 )
@@ -662,28 +663,3 @@ def _import_validation_module(validation_module: str, validation_path: Optional[
             )
     except Exception as e:
         logger.warning("Failed to import validation module '%s': %s", validation_module, e)
-
-
-def _build_reprompt_feedback(failed_response: Any, feedback_message: str) -> str:
-    """Build feedback message for reprompt batch.
-
-    Args:
-        failed_response: The response that failed validation
-        feedback_message: Message from validation UDF decorator
-
-    Returns:
-        Formatted feedback message
-    """
-    import json
-
-    try:
-        response_str = json.dumps(failed_response, indent=2)
-    except Exception:
-        response_str = str(failed_response)
-
-    return f"""---
-Your response failed validation: {feedback_message}
-
-Your response: {response_str}
-
-Please correct and respond again."""
