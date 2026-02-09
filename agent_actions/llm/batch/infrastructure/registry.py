@@ -92,6 +92,25 @@ class BatchRegistryManager:
             # Fire cache update event
             fire_event(CacheUpdateEvent(cache_type="batch_registry", key=file_name))
 
+    def remove_batch_job(self, file_name: str) -> bool:
+        """
+        Remove a batch job entry from the registry.
+
+        Args:
+            file_name: File name key to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        with self._lock:
+            self._ensure_cache_loaded()
+            if file_name not in self._cache:
+                return False
+            del self._cache[file_name]
+            self._persist_registry(self._cache)
+            logger.info("Removed batch job entry for %s", file_name)
+            return True
+
     def get_batch_job(self, file_name: str) -> Optional[BatchJobEntry]:
         """
         Retrieve batch job entry by file name.

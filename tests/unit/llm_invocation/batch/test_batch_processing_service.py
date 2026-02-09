@@ -365,9 +365,14 @@ class TestProcessAllBatchResults:
         entry = MagicMock()
         entry.batch_id = "batch_123"
         entry.status = BatchStatus.IN_PROGRESS
+        entry.parent_file_name = None
+
+        stats = MagicMock()
+        stats.in_progress = 0
 
         manager = MagicMock()
         manager.get_all_jobs.return_value = {"file1.jsonl": entry}
+        manager.get_registry_stats.return_value = stats
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.IN_PROGRESS
@@ -399,6 +404,8 @@ class TestProcessAllBatchResults:
         entry = MagicMock()
         entry.batch_id = "batch_123"
         entry.record_count = 1
+        entry.parent_file_name = None
+        entry.recovery_type = None
 
         manager = MagicMock()
         manager.get_all_jobs.return_value = {"file1.jsonl": entry}
@@ -409,6 +416,7 @@ class TestProcessAllBatchResults:
         result1 = MagicMock()
         result1.custom_id = "record_1"
         result1.content = {"answer": "test"}
+        result1.success = True
         provider.retrieve_results.return_value = [result1]
 
         client_resolver = MagicMock()
@@ -474,3 +482,277 @@ class TestProcessBatchResults:
             )
 
         assert "not completed" in str(exc_info.value)
+
+
+# ---------------------------------------------------------------------------
+# Recovery-aware processing (#942)
+# ---------------------------------------------------------------------------
+
+
+class TestProcessAllBatchResultsSkipsRecoveryEntries:
+    """Tests for recovery entry skipping in process_all_batch_results."""
+
+    def test_skips_entries_with_parent_file_name(self, tmp_path):
+        """Should skip recovery entries (parent_file_name is set)."""
+        from agent_actions.llm.batch.services.processing import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+
+        # Original entry — completed
+        original_entry = MagicMock(spec=BatchJobEntry)
+        original_entry.batch_id = "batch_orig"
+        original_entry.parent_file_name = None
+        original_entry.recovery_type = None
+        original_entry.record_count = 1
+
+        # Recovery entry — should be skipped
+        recovery_entry = MagicMock(spec=BatchJobEntry)
+        recovery_entry.batch_id = "batch_retry_1"
+        recovery_entry.parent_file_name = "original.json"
+        recovery_entry.recovery_type = "retry"
+        recovery_entry.record_count = 1
+
+        manager = MagicMock()
+        manager.get_all_jobs.return_value = {
+            "original.json": original_entry,
+            "original.json_retry_1": recovery_entry,
+        }
+
+        provider = MagicMock()
+        provider.check_status.return_value = BatchStatus.COMPLETED
+        provider.retrieve_results.return_value = [
+            MagicMock(custom_id="a", content="ok", success=True)
+        ]
+
+        client_resolver = MagicMock()
+        client_resolver.get_for_batch_id.return_value = provider
+
+        context_manager = MagicMock()
+        context_manager.load_batch_context_map.return_value = {}
+
+        result_processor = MagicMock()
+        result_processor.process.return_value = [{"id": "1"}]
+
+        mock_storage = MagicMock()
+        mock_storage.write_target = MagicMock()
+
+        service = BatchProcessingService(
+            client_resolver=client_resolver,
+            context_manager=context_manager,
+            result_processor=result_processor,
+            registry_manager_factory=MagicMock(return_value=manager),
+            storage_backend=mock_storage,
+            node_name="test",
+        )
+
+        result = service.process_all_batch_results(str(tmp_path))
+
+        # Only original should be processed
+        assert len(result) == 1
+
+
+class TestProcessAllBatchResultsToleratesEmptyWhenRecoveryPending:
+    """Tests for empty tolerance when recovery batches are in flight."""
+
+    def test_returns_empty_list_when_recovery_in_progress(self, tmp_path):
+        """Should return [] without raising when recovery batches are pending."""
+        from agent_actions.llm.batch.services.processing import (
+            BatchProcessingService,
+        )
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.core.batch_models import (
+            BatchJobEntry,
+            BatchRegistryStats,
+        )
+
+        # Recovery entry still in progress
+        recovery_entry = MagicMock(spec=BatchJobEntry)
+        recovery_entry.batch_id = "batch_retry_1"
+        recovery_entry.parent_file_name = "original.json"
+        recovery_entry.recovery_type = "retry"
+
+        manager = MagicMock()
+        manager.get_all_jobs.return_value = {
+            "original.json_retry_1": recovery_entry,
+        }
+        manager.get_registry_stats.return_value = BatchRegistryStats(
+            total_jobs=1, completed=0, failed=0, in_progress=1, cancelled=0
+        )
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(return_value=manager),
+        )
+
+        # Should NOT raise — recovery is pending
+        result = service.process_all_batch_results(str(tmp_path))
+        assert result == []
+
+
+class TestCheckAndSubmitReprompt:
+    """Tests for _check_and_submit_reprompt bool return."""
+
+    def test_returns_true_when_no_reprompt_config(self):
+        """Should return True (continue) when reprompt is not configured."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+
+        result = service._check_and_submit_reprompt(
+            batch_results=[],
+            context_map={},
+            output_directory="/tmp",
+            file_name="test",
+            entry=MagicMock(),
+            agent_config=None,
+            manager=MagicMock(),
+            provider=MagicMock(),
+        )
+
+        assert result is True
+
+    def test_returns_true_when_all_pass_validation(self):
+        """Should return True when all results pass validation."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+        # validate_results returns no failures
+        service._retry_service = MagicMock()
+        service._retry_service.validate_results.return_value = ([], "check")
+
+        result = service._check_and_submit_reprompt(
+            batch_results=[MagicMock()],
+            context_map={},
+            output_directory="/tmp",
+            file_name="test",
+            entry=MagicMock(),
+            agent_config={"reprompt": {"validation": "check", "max_attempts": 2}},
+            manager=MagicMock(),
+            provider=MagicMock(),
+        )
+
+        assert result is True
+
+    def test_returns_false_when_reprompt_submitted(self):
+        """Should return False when a reprompt batch is submitted."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+        from agent_actions.llm.batch.infrastructure.recovery_state import (
+            RecoveryStateManager,
+        )
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+
+        failed = MagicMock()
+        failed.custom_id = "x"
+        service._retry_service = MagicMock()
+        service._retry_service.validate_results.return_value = ([failed], "check")
+        service._retry_service.submit_reprompt_batch.return_value = (
+            "reprompt-1",
+            1,
+        )
+
+        with patch.object(RecoveryStateManager, "save"):
+            result = service._check_and_submit_reprompt(
+                batch_results=[failed],
+                context_map={"x": {}},
+                output_directory="/tmp",
+                file_name="test",
+                entry=MagicMock(provider="openai"),
+                agent_config={"reprompt": {"validation": "check", "max_attempts": 2}},
+                manager=MagicMock(),
+                provider=MagicMock(),
+            )
+
+        assert result is False
+
+    def test_returns_true_when_reprompt_exhausted(self):
+        """Should return True and apply metadata when attempts exhausted."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+        from agent_actions.llm.batch.infrastructure.recovery_state import (
+            RecoveryState,
+        )
+
+        service = BatchProcessingService(
+            client_resolver=MagicMock(),
+            context_manager=MagicMock(),
+            result_processor=MagicMock(),
+            registry_manager_factory=MagicMock(),
+        )
+
+        failed = MagicMock()
+        failed.custom_id = "x"
+        service._retry_service = MagicMock()
+        service._retry_service.validate_results.return_value = ([failed], "check")
+
+        state = RecoveryState(phase="reprompt", reprompt_attempt=2)
+
+        result = service._check_and_submit_reprompt(
+            batch_results=[failed],
+            context_map={"x": {}},
+            output_directory="/tmp",
+            file_name="test",
+            entry=MagicMock(provider="openai"),
+            agent_config={"reprompt": {"validation": "check", "max_attempts": 2}},
+            manager=MagicMock(),
+            provider=MagicMock(),
+            recovery_state=state,
+        )
+
+        assert result is True
+        service._retry_service.apply_exhausted_reprompt_metadata.assert_called_once()
+
+
+class TestCleanupRecoveryEntries:
+    """Tests for _cleanup_recovery_entries after finalization."""
+
+    def test_removes_linked_recovery_entries(self):
+        """Should remove all recovery entries linked to the parent file."""
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
+
+        parent_entry = MagicMock()
+        parent_entry.parent_file_name = None
+
+        retry_entry = MagicMock()
+        retry_entry.parent_file_name = "original.jsonl"
+
+        reprompt_entry = MagicMock()
+        reprompt_entry.parent_file_name = "original.jsonl"
+
+        unrelated_entry = MagicMock()
+        unrelated_entry.parent_file_name = "other.jsonl"
+
+        manager = MagicMock()
+        manager.get_all_jobs.return_value = {
+            "original.jsonl": parent_entry,
+            "original.jsonl_retry_1": retry_entry,
+            "original.jsonl_reprompt_1": reprompt_entry,
+            "other.jsonl_retry_1": unrelated_entry,
+        }
+
+        BatchProcessingService._cleanup_recovery_entries(manager, "original.jsonl")
+
+        assert manager.remove_batch_job.call_count == 2
+        removed = {c.args[0] for c in manager.remove_batch_job.call_args_list}
+        assert removed == {
+            "original.jsonl_retry_1",
+            "original.jsonl_reprompt_1",
+        }

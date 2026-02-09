@@ -5,6 +5,9 @@ Covers:
 - retrieve_results_with_retry filters failed results from missing_ids
 - retrieve_results_with_retry returns exhausted_recovery for still-missing records
 - _resubmit_missing_records returns [] on failure (no crash)
+- Non-blocking async methods: submit_retry_batch, process_retry_results,
+  validate_results, submit_reprompt_batch, process_reprompt_results,
+  serialize/deserialize_results
 """
 
 import pytest
@@ -284,3 +287,208 @@ class TestBatchJobEntryValidation:
             provider="custom",
         )
         assert entry.status == "provider_specific_status"
+
+
+# ---------------------------------------------------------------------------
+# Non-blocking async methods (#942)
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitRetryBatch:
+    """Tests for submit_retry_batch (non-blocking)."""
+
+    def test_returns_batch_id_and_count(self):
+        """Should return (batch_id, record_count) on successful submission."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        service = BatchRetryService()
+        provider = MagicMock()
+        provider.submit_batch.return_value = ("retry-batch-1", "submitted")
+
+        with patch(
+            "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
+        ) as mock_prep_cls:
+            mock_prep = MagicMock()
+            mock_prep.prepare_tasks.return_value = MagicMock(tasks=[{"body": "task"}])
+            mock_prep_cls.return_value = mock_prep
+
+            result = service.submit_retry_batch(
+                provider=provider,
+                missing_ids={"a"},
+                context_map={"a": {"target_id": "a"}},
+                output_directory="/tmp/out",
+                file_name="test",
+                agent_config={},
+            )
+
+        assert result == ("retry-batch-1", 1)
+
+    def test_returns_none_when_no_records_in_context_map(self):
+        """Should return None when missing IDs not in context_map."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        service = BatchRetryService()
+        provider = MagicMock()
+
+        result = service.submit_retry_batch(
+            provider=provider,
+            missing_ids={"missing"},
+            context_map={},
+            output_directory="/tmp/out",
+            file_name="test",
+            agent_config={},
+        )
+
+        assert result is None
+
+    def test_returns_none_on_exception(self):
+        """Should return None when submission fails."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        service = BatchRetryService()
+        provider = MagicMock()
+
+        with patch(
+            "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
+        ) as mock_prep_cls:
+            mock_prep_cls.side_effect = RuntimeError("prep failed")
+
+            result = service.submit_retry_batch(
+                provider=provider,
+                missing_ids={"a"},
+                context_map={"a": {"target_id": "a"}},
+                output_directory="/tmp/out",
+                file_name="test",
+                agent_config={},
+            )
+
+        assert result is None
+
+
+class TestProcessRetryResults:
+    """Tests for process_retry_results."""
+
+    def _make_result(self, custom_id, success=True):
+        return BatchResult(
+            custom_id=custom_id,
+            content="ok" if success else "error",
+            success=success,
+        )
+
+    def test_merges_successful_results_and_reduces_missing(self):
+        """Should merge results and remove successful IDs from missing."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        service = BatchRetryService()
+
+        accumulated = [self._make_result("a")]
+        retry_results = [self._make_result("b")]
+
+        merged, still_missing, counts, exhausted = service.process_retry_results(
+            results=retry_results,
+            accumulated_results=accumulated,
+            context_map={"a": {}, "b": {}},
+            record_failure_counts={"b": 1},
+            missing_ids={"b"},
+        )
+
+        assert len(merged) == 2
+        assert still_missing == set()
+        assert exhausted is None
+
+    def test_failed_results_stay_in_missing(self):
+        """Failed retry results should NOT reduce missing_ids."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        service = BatchRetryService()
+
+        accumulated = [self._make_result("a")]
+        retry_results = [self._make_result("b", success=False)]
+
+        merged, still_missing, counts, _ = service.process_retry_results(
+            results=retry_results,
+            accumulated_results=accumulated,
+            context_map={"a": {}, "b": {}},
+            record_failure_counts={"b": 1},
+            missing_ids={"b"},
+        )
+
+        assert "b" in still_missing
+        assert counts["b"] == 2  # incremented
+
+
+class TestSerializeDeserializeResults:
+    """Tests for serialize_results / deserialize_results round-trip."""
+
+    def test_round_trip(self):
+        """Should serialize and deserialize back to equivalent BatchResults."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+        from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+
+        result = BatchResult(custom_id="a", content="hello", success=True)
+        result.recovery_metadata = RecoveryMetadata(
+            retry=RetryMetadata(attempts=2, failures=1, succeeded=True, reason="missing")
+        )
+
+        serialized = BatchRetryService.serialize_results([result])
+        deserialized = BatchRetryService.deserialize_results(serialized)
+
+        assert len(deserialized) == 1
+        r = deserialized[0]
+        assert r.custom_id == "a"
+        assert r.content == "hello"
+        assert r.success is True
+        assert r.recovery_metadata is not None
+        assert r.recovery_metadata.retry.attempts == 2
+        assert r.recovery_metadata.retry.succeeded is True
+
+    def test_round_trip_without_recovery_metadata(self):
+        """Should handle results without recovery metadata."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+
+        result = BatchResult(custom_id="b", content="world", success=False)
+
+        serialized = BatchRetryService.serialize_results([result])
+        deserialized = BatchRetryService.deserialize_results(serialized)
+
+        assert len(deserialized) == 1
+        assert deserialized[0].recovery_metadata is None
+
+
+class TestBatchJobEntryRecoveryFields:
+    """Tests for recovery fields on BatchJobEntry."""
+
+    def test_recovery_fields_default_to_none(self):
+        """Recovery fields should be None by default (backward compatible)."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="b-1",
+            status="completed",
+            timestamp="2024-01-01",
+            provider="openai",
+        )
+        assert entry.parent_file_name is None
+        assert entry.recovery_type is None
+        assert entry.recovery_attempt is None
+
+    def test_recovery_fields_serialize_round_trip(self):
+        """Recovery fields should survive to_dict/from_dict round-trip."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+
+        entry = BatchJobEntry(
+            batch_id="b-1",
+            status="submitted",
+            timestamp="2024-01-01",
+            provider="openai",
+            parent_file_name="original.json",
+            recovery_type="retry",
+            recovery_attempt=2,
+        )
+
+        d = entry.to_dict()
+        restored = BatchJobEntry.from_dict(d)
+
+        assert restored.parent_file_name == "original.json"
+        assert restored.recovery_type == "retry"
+        assert restored.recovery_attempt == 2

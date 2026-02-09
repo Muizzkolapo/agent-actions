@@ -66,6 +66,10 @@ class BatchLifecycleManager:
         if registry_status == "completed":
             fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
+            # Re-check — processing may have submitted recovery batches
+            new_status = self.batch_service.get_batch_registry_status(output_directory)
+            if new_status != "completed":
+                return (None, "in_progress")
             fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
             return (output_directory, "completed")
 
@@ -74,6 +78,10 @@ class BatchLifecycleManager:
             if self.batch_service.are_all_batch_jobs_completed(output_directory):
                 fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
+                # Re-check — processing may have submitted recovery batches
+                new_status = self.batch_service.get_batch_registry_status(output_directory)
+                if new_status != "completed":
+                    return (None, "in_progress")
                 fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
                 return (output_directory, "completed")
             return (None, "in_progress")
@@ -114,9 +122,11 @@ class BatchLifecycleManager:
             processed_files = self.batch_service.process_all_batch_results(
                 output_directory, agent_config=agent_config, node_name=agent_name
             )
-
             if not processed_files:
-                raise ProcessingError("No batch results were successfully processed")
+                logger.info(
+                    "No files processed for %s — recovery batches may be pending",
+                    agent_name,
+                )
 
         except ProcessingError as e:
             fire_event(

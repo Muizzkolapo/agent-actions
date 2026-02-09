@@ -5,7 +5,7 @@ Defines structured types for batch registry entries and related data.
 """
 
 from dataclasses import dataclass, asdict, field
-from typing import Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
@@ -34,6 +34,10 @@ class BatchJobEntry:
     # Version context fields for loop correlation
     is_versioned_agent: Optional[bool] = None
     version_base_name: Optional[str] = None
+    # Recovery fields for async retry/reprompt batches
+    parent_file_name: Optional[str] = None  # links to original batch's file_name key
+    recovery_type: Optional[Literal["retry", "reprompt"]] = None
+    recovery_attempt: Optional[int] = None  # attempt number (1, 2, 3...)
 
     def __post_init__(self):
         """Validate that status is a recognized BatchStatus value.
