@@ -94,3 +94,11 @@ editors/vscode/out/
 editors/vscode/package-lock.json
 editors/vscode/*.vsix
 tasks/todo.md
+
+# Next.js frontend (source in tooling/docs/frontend)
+agent_actions/tooling/docs/frontend/node_modules/
+agent_actions/tooling/docs/frontend/.next/
+agent_actions/tooling/docs/frontend/out/
+
+# docs_site build output — MUST be committed so it ships with the pip package.
+# Rebuild with: bash agent_actions/tooling/docs/build_frontend.sh

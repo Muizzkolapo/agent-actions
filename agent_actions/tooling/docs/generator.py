@@ -100,6 +100,13 @@ class CatalogGenerator:
         tool_functions_data: Optional[Dict[str, Any]] = None,
         runs_data: Optional[Dict[str, Any]] = None,
         logs_data: Optional[Dict[str, Any]] = None,
+        vendors_data: Optional[Dict[str, Any]] = None,
+        error_types_data: Optional[Dict[str, Any]] = None,
+        event_types_data: Optional[Dict[str, Any]] = None,
+        examples_data: Optional[Dict[str, Any]] = None,
+        data_loaders_data: Optional[Dict[str, Any]] = None,
+        processing_states_data: Optional[Dict[str, Any]] = None,
+        workflow_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
@@ -127,6 +134,13 @@ class CatalogGenerator:
             "tool_functions": tool_functions_data or {},
             "runs": runs_data or {},  # Workflow run data and metrics
             "logs": logs_data or {},  # Global CLI logs and validation events
+            "vendors": vendors_data or {},  # LLM vendor configurations
+            "error_types": error_types_data or {},  # Error class hierarchy
+            "event_types": event_types_data or {},  # Event type definitions
+            "examples": examples_data or {},  # Example projects
+            "data_loaders": data_loaders_data or {},  # Data loader implementations
+            "processing_states": processing_states_data or {},  # Processing enums/types
+            "workflow_data": workflow_data or {},  # Workflow output data previews
             "stats": {
                 "total_workflows": 0,
                 "total_actions": 0,
@@ -138,6 +152,13 @@ class CatalogGenerator:
                 "total_runs": 0,
                 "validation_errors": 0,
                 "validation_warnings": 0,
+                "total_vendors": 0,
+                "total_error_types": 0,
+                "total_event_types": 0,
+                "total_examples": 0,
+                "total_data_loaders": 0,
+                "total_processing_states": 0,
+                "total_data_nodes": 0,
             },
         }
 
@@ -251,6 +272,23 @@ class CatalogGenerator:
             catalog["stats"]["validation_errors"] = len(logs_data.get("validation_errors", []))
             catalog["stats"]["validation_warnings"] = len(logs_data.get("validation_warnings", []))
 
+        # Update stats for new categories
+        catalog["stats"]["total_vendors"] = len(vendors_data) if vendors_data else 0
+        catalog["stats"]["total_error_types"] = sum(
+            cat.get("error_count", 0) for cat in (error_types_data or {}).values()
+        )
+        catalog["stats"]["total_event_types"] = sum(
+            cat.get("event_count", 0) for cat in (event_types_data or {}).values()
+        )
+        catalog["stats"]["total_examples"] = len(examples_data) if examples_data else 0
+        catalog["stats"]["total_data_loaders"] = len(data_loaders_data) if data_loaders_data else 0
+        catalog["stats"]["total_processing_states"] = (
+            len(processing_states_data) if processing_states_data else 0
+        )
+        catalog["stats"]["total_data_nodes"] = sum(
+            len(wf.get("nodes", {})) for wf in (workflow_data or {}).values()
+        )
+
         return catalog
 
 
@@ -288,6 +326,27 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Step 1f: Scan global logs
     logs_data = scanner.scan_logs()
 
+    # Step 1g: Scan vendors
+    vendors_data = scanner.scan_vendors()
+
+    # Step 1h: Scan error types
+    error_types_data = scanner.scan_error_types()
+
+    # Step 1i: Scan event types
+    event_types_data = scanner.scan_event_types()
+
+    # Step 1j: Scan examples
+    examples_data = scanner.scan_examples()
+
+    # Step 1k: Scan data loaders
+    data_loaders_data = scanner.scan_data_loaders()
+
+    # Step 1l: Scan processing states
+    processing_states_data = scanner.scan_processing_states()
+
+    # Step 1m: Scan workflow output data (SQLite target DBs)
+    workflow_data = scanner.scan_workflow_data()
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
     catalog = catalog_gen.generate(
@@ -296,6 +355,13 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         tool_functions_data=tool_functions_data,
         runs_data=runs_data,
         logs_data=logs_data,
+        vendors_data=vendors_data,
+        error_types_data=error_types_data,
+        event_types_data=event_types_data,
+        examples_data=examples_data,
+        data_loaders_data=data_loaders_data,
+        processing_states_data=processing_states_data,
+        workflow_data=workflow_data,
     )
 
     # Step 3: Write data files
@@ -315,14 +381,22 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
             json.dump(_empty_runs_data(), f, indent=2)
 
     # Print summary
-    total_workflows = catalog["stats"]["total_workflows"]
-    total_actions = catalog["stats"]["total_actions"]
-    total_prompts = catalog["stats"]["total_prompts"]
-    total_schemas = catalog["stats"]["total_schemas"]
-    total_tool_functions = catalog["stats"]["total_tool_functions"]
-    total_runs = catalog["stats"]["total_runs"]
-    validation_errors = catalog["stats"].get("validation_errors", 0)
-    validation_warnings = catalog["stats"].get("validation_warnings", 0)
+    stats = catalog["stats"]
+    total_workflows = stats["total_workflows"]
+    total_actions = stats["total_actions"]
+    total_prompts = stats["total_prompts"]
+    total_schemas = stats["total_schemas"]
+    total_tool_functions = stats["total_tool_functions"]
+    total_runs = stats["total_runs"]
+    validation_errors = stats.get("validation_errors", 0)
+    validation_warnings = stats.get("validation_warnings", 0)
+    total_vendors = stats.get("total_vendors", 0)
+    total_error_types = stats.get("total_error_types", 0)
+    total_event_types = stats.get("total_event_types", 0)
+    total_examples = stats.get("total_examples", 0)
+    total_data_loaders = stats.get("total_data_loaders", 0)
+    total_processing_states = stats.get("total_processing_states", 0)
+    total_data_nodes = stats.get("total_data_nodes", 0)
 
     # Show path relative to CWD if possible, otherwise absolute
     try:
@@ -342,6 +416,24 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     if validation_errors > 0 or validation_warnings > 0:
         print(
             f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}"
+        )
+    if total_vendors > 0:
+        print(f"  Scanned {total_vendors} vendor{'s' if total_vendors != 1 else ''}")
+    if total_error_types > 0:
+        print(f"  Cataloged {total_error_types} error type{'s' if total_error_types != 1 else ''}")
+    if total_event_types > 0:
+        print(f"  Mapped {total_event_types} event type{'s' if total_event_types != 1 else ''}")
+    if total_examples > 0:
+        print(f"  Found {total_examples} example project{'s' if total_examples != 1 else ''}")
+    if total_data_loaders > 0:
+        print(f"  Indexed {total_data_loaders} data loader{'s' if total_data_loaders != 1 else ''}")
+    if total_processing_states > 0:
+        print(
+            f"  Parsed {total_processing_states} processing type{'s' if total_processing_states != 1 else ''}"
+        )
+    if total_data_nodes > 0:
+        print(
+            f"  Exported {total_data_nodes} data node{'s' if total_data_nodes != 1 else ''} with previews"
         )
     print(f"\nDone. Documentation compiled to {display_path}/")
 

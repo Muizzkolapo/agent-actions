@@ -7,6 +7,8 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+import yaml
+
 from agent_actions.output.response.loader import SchemaLoader
 from .parser import extract_fields_for_docs
 
@@ -158,6 +160,83 @@ class ProjectScanner:
             }
 
         return schemas
+
+    def scan_workflow_data(self) -> Dict[str, Any]:
+        """
+        Scan project for SQLite target databases and export preview data.
+
+        Iterates agent_io/target/ directories, opens each {workflow}.db via
+        SQLiteBackend, and returns storage stats + sample records per node.
+
+        Returns:
+            Dict mapping workflow names to data summaries:
+            {
+                'workflow_name': {
+                    'db_path': '...',
+                    'db_size': '56.0 KB',
+                    'source_count': 1,
+                    'target_count': 3,
+                    'nodes': {
+                        'node_name': {
+                            'record_count': 10,
+                            'files': ['file.json'],
+                            'preview': [{ ... }]
+                        }
+                    }
+                }
+            }
+        """
+        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
+
+        workflow_data = {}
+        artefact_dir = self.project_root / "artefact"
+
+        for agent_io_dir in self.project_root.rglob("agent_io"):
+            if artefact_dir in agent_io_dir.parents or agent_io_dir == artefact_dir:
+                continue
+
+            target_dir = agent_io_dir / "target"
+            if not target_dir.exists():
+                continue
+
+            for db_file in target_dir.glob("*.db"):
+                workflow_name = db_file.stem
+
+                try:
+                    backend = SQLiteBackend(
+                        db_path=str(db_file),
+                        workflow_name=workflow_name,
+                    )
+                    stats = backend.get_storage_stats()
+                except Exception:
+                    continue
+
+                nodes = {}
+                node_counts = stats.get("nodes", {})
+                for node_name, record_count in node_counts.items():
+                    try:
+                        preview_result = backend.preview_target(node_name, limit=20)
+                        nodes[node_name] = {
+                            "record_count": record_count,
+                            "files": preview_result.get("files", []),
+                            "preview": preview_result.get("records", []),
+                        }
+                    except Exception:
+                        nodes[node_name] = {
+                            "record_count": record_count,
+                            "files": [],
+                            "preview": [],
+                        }
+
+                workflow_data[workflow_name] = {
+                    "db_path": str(db_file),
+                    "db_size": stats.get("db_size_human", "0 B"),
+                    "source_count": stats.get("source_count", 0),
+                    "target_count": stats.get("target_count", 0),
+                    "nodes": nodes,
+                }
+
+        return workflow_data
 
     def scan_runs(self) -> Dict[str, Any]:
         """
@@ -637,3 +716,646 @@ class ProjectScanner:
 
         except (SyntaxError, AttributeError, TypeError, IndexError, ValueError):
             return None
+
+    # =========================================================================
+    # New scan methods: vendors, errors, events, examples, loaders, processing
+    # =========================================================================
+
+    def scan_vendors(self) -> Dict[str, Any]:
+        """
+        Scan for LLM vendor configurations.
+
+        Parses agent_actions/llm/config/vendor.py using AST to extract the
+        VendorType enum and per-vendor config classes.
+
+        Returns:
+            Dict mapping vendor name to vendor data:
+            {
+                'openai': {
+                    'id': 'openai',
+                    'enum_value': 'openai',
+                    'config_class': 'OpenAIConfig',
+                    'fields': [{'name': 'api_key_env_name', 'default': 'OPENAI_API_KEY'}, ...],
+                    'docstring': '...'
+                }
+            }
+        """
+        vendors = {}
+        vendor_file = self.project_root.parent / "agent_actions" / "llm" / "config" / "vendor.py"
+
+        # Also check if we're inside agent_actions already
+        if not vendor_file.exists():
+            vendor_file = (
+                Path(__file__).resolve().parent.parent.parent / "llm" / "config" / "vendor.py"
+            )
+
+        if not vendor_file.exists():
+            return vendors
+
+        try:
+            source = vendor_file.read_text()
+            tree = ast.parse(source)
+
+            # Extract VendorType enum values and config classes
+            enum_values = {}
+            config_classes = {}
+
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+
+                # Check for VendorType enum
+                is_enum = any(
+                    (isinstance(b, ast.Name) and b.id in ("Enum", "str")) for b in node.bases
+                )
+                if node.name == "VendorType" and is_enum:
+                    for item in node.body:
+                        if isinstance(item, ast.Assign):
+                            for target in item.targets:
+                                if isinstance(target, ast.Name) and isinstance(
+                                    item.value, ast.Constant
+                                ):
+                                    enum_values[target.id] = item.value.value
+
+                # Check for *Config classes inheriting from BaseVendorConfig
+                is_config = any(
+                    (isinstance(b, ast.Name) and b.id == "BaseVendorConfig") for b in node.bases
+                )
+                if is_config:
+                    docstring = ast.get_docstring(node) or ""
+                    fields = []
+                    for item in node.body:
+                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                            field_name = item.target.id
+                            default_val = None
+                            if item.value:
+                                # Try to get the constant default
+                                if isinstance(item.value, ast.Constant):
+                                    default_val = item.value.value
+                                elif isinstance(item.value, ast.Call):
+                                    # Field(...) - extract default keyword
+                                    for kw in item.value.keywords:
+                                        if kw.arg == "default" and isinstance(
+                                            kw.value, ast.Constant
+                                        ):
+                                            default_val = kw.value.value
+                            fields.append({"name": field_name, "default": default_val})
+                    config_classes[node.name] = {
+                        "fields": fields,
+                        "docstring": docstring,
+                    }
+
+            # Map enum values to config classes by matching vendor_type
+            config_map = {
+                "OPENAI": "OpenAIConfig",
+                "ANTHROPIC": "AnthropicConfig",
+                "GOOGLE": "GoogleConfig",
+                "GEMINI": "GoogleConfig",
+                "GROQ": "GroqConfig",
+                "COHERE": "CohereConfig",
+                "MISTRAL": "MistralConfig",
+                "OLLAMA": "OllamaConfig",
+                "TOOL": "ToolVendorConfig",
+                "AGAC_PROVIDER": "AgacProviderConfig",
+            }
+
+            for enum_name, enum_val in enum_values.items():
+                config_cls_name = config_map.get(enum_name, "")
+                config_info = config_classes.get(config_cls_name, {})
+                vendors[enum_val] = {
+                    "id": enum_val,
+                    "enum_name": enum_name,
+                    "enum_value": enum_val,
+                    "config_class": config_cls_name,
+                    "fields": config_info.get("fields", []),
+                    "docstring": config_info.get("docstring", ""),
+                }
+
+        except (SyntaxError, UnicodeDecodeError, IOError):
+            pass
+
+        return vendors
+
+    def scan_error_types(self) -> Dict[str, Any]:
+        """
+        Scan for error/exception class hierarchy.
+
+        Parses agent_actions/errors/*.py using AST to extract the exception
+        class hierarchy organized by domain category.
+
+        Returns:
+            Dict mapping category to error data:
+            {
+                'configuration': {
+                    'id': 'configuration',
+                    'base_class': 'ConfigurationError',
+                    'errors': [
+                        {'name': 'ConfigValidationError', 'parent': 'ConfigurationError',
+                         'docstring': '...', 'source_file': 'configuration.py'}
+                    ]
+                }
+            }
+        """
+        error_types = {}
+        errors_dir = Path(__file__).resolve().parent.parent.parent / "errors"
+
+        if not errors_dir.exists():
+            return error_types
+
+        # Category mapping based on file names
+        category_map = {
+            "base.py": "base",
+            "common.py": "common",
+            "configuration.py": "configuration",
+            "validation.py": "validation",
+            "processing.py": "processing",
+            "external_services.py": "external_services",
+            "filesystem.py": "filesystem",
+            "resources.py": "resources",
+            "operations.py": "operations",
+            "preflight.py": "preflight",
+        }
+
+        for py_file in errors_dir.glob("*.py"):
+            if py_file.name == "__init__.py":
+                continue
+
+            category = category_map.get(py_file.name, py_file.stem)
+            errors_list = []
+            base_class = None
+
+            try:
+                source = py_file.read_text()
+                tree = ast.parse(source)
+
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.ClassDef):
+                        continue
+
+                    # Get parent class name
+                    parent_name = None
+                    for base in node.bases:
+                        if isinstance(base, ast.Name):
+                            parent_name = base.id
+                            break
+
+                    docstring = ast.get_docstring(node) or ""
+
+                    error_info = {
+                        "name": node.name,
+                        "parent": parent_name,
+                        "docstring": docstring,
+                        "source_file": py_file.name,
+                        "line": node.lineno,
+                    }
+                    errors_list.append(error_info)
+
+                    # First class in non-base files is the category's base class
+                    if base_class is None and category != "base":
+                        base_class = node.name
+
+                if errors_list:
+                    error_types[category] = {
+                        "id": category,
+                        "base_class": base_class or errors_list[0]["name"],
+                        "source_file": py_file.name,
+                        "errors": errors_list,
+                        "error_count": len(errors_list),
+                    }
+
+            except (SyntaxError, UnicodeDecodeError, IOError):
+                continue
+
+        return error_types
+
+    def scan_event_types(self) -> Dict[str, Any]:
+        """
+        Scan for event type definitions.
+
+        Parses agent_actions/logging/events/types.py using AST to extract
+        event dataclasses and their categories.
+
+        Returns:
+            Dict mapping category to event data:
+            {
+                'workflow': {
+                    'id': 'workflow',
+                    'events': [
+                        {'name': 'WorkflowStartEvent', 'code': 'W001',
+                         'docstring': '...', 'fields': [...]}
+                    ]
+                }
+            }
+        """
+        event_types = {}
+        events_file = (
+            Path(__file__).resolve().parent.parent.parent / "logging" / "events" / "types.py"
+        )
+
+        if not events_file.exists():
+            return event_types
+
+        try:
+            source = events_file.read_text()
+            tree = ast.parse(source)
+
+            # First extract EventCategories class values
+            categories_map = {}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == "EventCategories":
+                    for item in node.body:
+                        if isinstance(item, ast.Assign):
+                            for target in item.targets:
+                                if isinstance(target, ast.Name) and isinstance(
+                                    item.value, ast.Constant
+                                ):
+                                    categories_map[target.id] = item.value.value
+
+            # Then extract event dataclasses
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+
+                # Check if it inherits from BaseEvent
+                is_event = any(
+                    (isinstance(b, ast.Name) and b.id == "BaseEvent") for b in node.bases
+                )
+                if not is_event:
+                    continue
+
+                docstring = ast.get_docstring(node) or ""
+
+                # Extract fields (annotations on the class body)
+                fields = []
+                for item in node.body:
+                    if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                        field_name = item.target.id
+                        field_type = ast.unparse(item.annotation) if item.annotation else "Any"
+                        fields.append({"name": field_name, "type": field_type})
+
+                # Extract event code from the code property
+                event_code = ""
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name == "code":
+                        for stmt in ast.walk(item):
+                            if isinstance(stmt, ast.Return) and isinstance(
+                                stmt.value, ast.Constant
+                            ):
+                                event_code = stmt.value.value
+
+                # Determine category from __post_init__ body
+                category = "unknown"
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef) and item.name == "__post_init__":
+                        for stmt in ast.walk(item):
+                            if (
+                                isinstance(stmt, ast.Assign)
+                                and len(stmt.targets) == 1
+                                and isinstance(stmt.targets[0], ast.Attribute)
+                                and stmt.targets[0].attr == "category"
+                            ):
+                                # EventCategories.WORKFLOW → "workflow"
+                                if isinstance(stmt.value, ast.Attribute):
+                                    cat_key = stmt.value.attr
+                                    category = categories_map.get(cat_key, cat_key.lower())
+
+                event_info = {
+                    "name": node.name,
+                    "code": event_code,
+                    "docstring": docstring,
+                    "fields": fields,
+                    "line": node.lineno,
+                }
+
+                if category not in event_types:
+                    event_types[category] = {
+                        "id": category,
+                        "events": [],
+                    }
+                event_types[category]["events"].append(event_info)
+
+            # Add counts
+            for cat_data in event_types.values():
+                cat_data["event_count"] = len(cat_data["events"])
+
+        except (SyntaxError, UnicodeDecodeError, IOError):
+            pass
+
+        return event_types
+
+    def scan_examples(self) -> Dict[str, Any]:
+        """
+        Scan for example projects in the examples/ directory.
+
+        Looks for example project directories that contain agent_actions.yml
+        and scans their structure (workflows, prompts, schemas, tools).
+
+        Returns:
+            Dict mapping example name to project data:
+            {
+                'book_catalog_enrichment': {
+                    'id': 'book_catalog_enrichment',
+                    'name': 'book_catalog_enrichment',
+                    'path': 'examples/book_catalog_enrichment',
+                    'has_workflows': True,
+                    'workflows': ['workflow_name'],
+                    'has_prompts': True,
+                    'has_schemas': True,
+                    'has_tools': True,
+                    'description': '...'
+                }
+            }
+        """
+        examples = {}
+        examples_dir = self.project_root.parent / "examples"
+
+        if not examples_dir.exists():
+            # Try sibling
+            examples_dir = self.project_root / "examples"
+        if not examples_dir.exists():
+            # Try parent's parent (common layout)
+            examples_dir = self.project_root.parent.parent / "examples"
+        if not examples_dir.exists():
+            return examples
+
+        for example_dir in sorted(examples_dir.iterdir()):
+            if not example_dir.is_dir():
+                continue
+
+            # Must have agent_actions.yml to be a valid example
+            config_file = example_dir / "agent_actions.yml"
+            if not config_file.exists():
+                continue
+
+            example_name = example_dir.name
+
+            # Parse agent_actions.yml for description
+            description = ""
+            try:
+                config_content = yaml.safe_load(config_file.read_text())
+                if isinstance(config_content, dict):
+                    description = config_content.get("description", "")
+            except Exception:
+                pass
+
+            # Scan for workflows
+            workflow_dir = example_dir / "agent_workflow"
+            workflows = []
+            if workflow_dir.exists():
+                for wf_dir in workflow_dir.iterdir():
+                    if wf_dir.is_dir():
+                        workflows.append(wf_dir.name)
+
+            # Check for other artifacts
+            has_prompts = (example_dir / "prompt_store").exists()
+            has_schemas = (example_dir / "schema").exists()
+            has_tools = (example_dir / "tools").exists()
+
+            # Count schemas and prompts
+            schema_count = 0
+            if has_schemas:
+                schema_count = len(list((example_dir / "schema").glob("*.yml")))
+
+            prompt_count = 0
+            if has_prompts:
+                prompt_count = len(list((example_dir / "prompt_store").glob("*.md")))
+
+            tool_count = 0
+            if has_tools:
+                tool_count = len(list((example_dir / "tools").glob("*.py")))
+
+            examples[example_name] = {
+                "id": example_name,
+                "name": example_name,
+                "path": str(example_dir.relative_to(examples_dir.parent)),
+                "description": description,
+                "has_workflows": bool(workflows),
+                "workflows": workflows,
+                "workflow_count": len(workflows),
+                "has_prompts": has_prompts,
+                "prompt_count": prompt_count,
+                "has_schemas": has_schemas,
+                "schema_count": schema_count,
+                "has_tools": has_tools,
+                "tool_count": tool_count,
+            }
+
+        return examples
+
+    def scan_data_loaders(self) -> Dict[str, Any]:
+        """
+        Scan for data loader implementations.
+
+        Parses agent_actions/input/loaders/*.py using AST to extract
+        BaseLoader subclasses and their supported file types.
+
+        Returns:
+            Dict mapping loader name to loader data:
+            {
+                'JsonLoader': {
+                    'id': 'JsonLoader',
+                    'name': 'JsonLoader',
+                    'source_file': 'json.py',
+                    'docstring': '...',
+                    'supported_types': ['.json'],
+                    'base_class': 'BaseLoader'
+                }
+            }
+        """
+        loaders = {}
+        loaders_dir = Path(__file__).resolve().parent.parent.parent / "input" / "loaders"
+
+        if not loaders_dir.exists():
+            return loaders
+
+        for py_file in loaders_dir.glob("*.py"):
+            if py_file.name == "__init__.py":
+                continue
+
+            try:
+                source = py_file.read_text()
+                tree = ast.parse(source)
+
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.ClassDef):
+                        continue
+
+                    # Check if it has BaseLoader, ISourceDataLoader, or ABC parent
+                    parent_names = []
+                    for base in node.bases:
+                        if isinstance(base, ast.Name):
+                            parent_names.append(base.id)
+                        elif isinstance(base, ast.Subscript):
+                            # BaseLoader[T] pattern
+                            if isinstance(base.value, ast.Name):
+                                parent_names.append(base.value.id)
+
+                    is_loader = any(
+                        n in ("BaseLoader", "ISourceDataLoader", "IDataLoader")
+                        for n in parent_names
+                    )
+                    if not is_loader:
+                        continue
+
+                    docstring = ast.get_docstring(node) or ""
+
+                    # Try to extract supported file types from supports_filetype method
+                    supported_types = []
+                    for item in node.body:
+                        if isinstance(item, ast.FunctionDef) and item.name == "supports_filetype":
+                            for stmt in ast.walk(item):
+                                if isinstance(stmt, ast.Constant) and isinstance(stmt.value, str):
+                                    val = stmt.value
+                                    if val.startswith(".") or val in (
+                                        "json",
+                                        "csv",
+                                        "tsv",
+                                        "xml",
+                                        "txt",
+                                        "yaml",
+                                        "yml",
+                                    ):
+                                        supported_types.append(val)
+
+                    # Extract methods
+                    methods = []
+                    for item in node.body:
+                        if isinstance(item, ast.FunctionDef) and not item.name.startswith("_"):
+                            methods.append(item.name)
+
+                    loaders[node.name] = {
+                        "id": node.name,
+                        "name": node.name,
+                        "source_file": py_file.name,
+                        "docstring": docstring,
+                        "supported_types": supported_types,
+                        "base_class": parent_names[0] if parent_names else "",
+                        "methods": methods,
+                        "line": node.lineno,
+                    }
+
+            except (SyntaxError, UnicodeDecodeError, IOError):
+                continue
+
+        return loaders
+
+    def scan_processing_states(self) -> Dict[str, Any]:
+        """
+        Scan for processing state/status enums and types.
+
+        Parses agent_actions/processing/types.py using AST to extract
+        ProcessingStatus, ProcessingMode enums and key dataclasses.
+
+        Returns:
+            Dict with processing type data:
+            {
+                'ProcessingStatus': {
+                    'id': 'ProcessingStatus',
+                    'type': 'enum',
+                    'values': [
+                        {'name': 'SUCCESS', 'value': 'success', 'docstring': '...'}
+                    ]
+                },
+                'ProcessingMode': {...},
+                'ProcessingResult': {
+                    'id': 'ProcessingResult',
+                    'type': 'dataclass',
+                    'fields': [...],
+                    'factory_methods': [...]
+                }
+            }
+        """
+        processing_types = {}
+        types_file = Path(__file__).resolve().parent.parent.parent / "processing" / "types.py"
+
+        if not types_file.exists():
+            return processing_types
+
+        try:
+            source = types_file.read_text()
+            tree = ast.parse(source)
+
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ClassDef):
+                    continue
+
+                docstring = ast.get_docstring(node) or ""
+
+                # Check if Enum
+                is_enum = any((isinstance(b, ast.Name) and b.id == "Enum") for b in node.bases)
+
+                if is_enum:
+                    values = []
+                    for item in node.body:
+                        if isinstance(item, ast.Assign):
+                            for target in item.targets:
+                                if isinstance(target, ast.Name):
+                                    val = None
+                                    comment = ""
+                                    if isinstance(item.value, ast.Constant):
+                                        val = item.value.value
+                                    # Extract inline comment from source
+                                    if hasattr(item, "end_lineno"):
+                                        line = source.splitlines()[item.lineno - 1]
+                                        if "#" in line:
+                                            comment = line.split("#", 1)[1].strip()
+                                    values.append(
+                                        {
+                                            "name": target.id,
+                                            "value": val,
+                                            "description": comment,
+                                        }
+                                    )
+
+                    processing_types[node.name] = {
+                        "id": node.name,
+                        "type": "enum",
+                        "docstring": docstring,
+                        "values": values,
+                        "value_count": len(values),
+                    }
+                    continue
+
+                # Check if dataclass (has @dataclass decorator)
+                is_dataclass = any(
+                    (isinstance(d, ast.Name) and d.id == "dataclass") for d in node.decorator_list
+                )
+
+                if is_dataclass:
+                    fields = []
+                    factory_methods = []
+
+                    for item in node.body:
+                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                            field_name = item.target.id
+                            field_type = ast.unparse(item.annotation) if item.annotation else "Any"
+                            fields.append({"name": field_name, "type": field_type})
+
+                        elif isinstance(item, ast.FunctionDef):
+                            # Collect classmethod factories
+                            is_classmethod = any(
+                                (isinstance(d, ast.Name) and d.id == "classmethod")
+                                for d in item.decorator_list
+                            )
+                            if is_classmethod:
+                                method_doc = ast.get_docstring(item) or ""
+                                factory_methods.append(
+                                    {
+                                        "name": item.name,
+                                        "docstring": method_doc,
+                                    }
+                                )
+
+                    processing_types[node.name] = {
+                        "id": node.name,
+                        "type": "dataclass",
+                        "docstring": docstring,
+                        "fields": fields,
+                        "field_count": len(fields),
+                        "factory_methods": factory_methods,
+                    }
+
+        except (SyntaxError, UnicodeDecodeError, IOError):
+            pass
+
+        return processing_types
