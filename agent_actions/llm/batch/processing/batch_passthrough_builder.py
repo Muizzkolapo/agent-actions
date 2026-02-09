@@ -28,7 +28,7 @@ class BatchPassthroughBuilder:
             processed_data.append(item)
 
         return {
-            "type": "passthrough",
+            "type": "tombstone",
             "data": processed_data,
             "output_directory": self.output_directory,
         }
@@ -42,7 +42,7 @@ class BatchPassthroughBuilder:
                 processed_data.append(item)
 
         return {
-            "type": "passthrough",
+            "type": "tombstone",
             "data": processed_data,
             "output_directory": self.output_directory,
         }

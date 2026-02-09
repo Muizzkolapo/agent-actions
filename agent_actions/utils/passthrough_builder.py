@@ -127,6 +127,10 @@ class PassthroughItemBuilder:
             flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
             processed_item["metadata"][flag_name] = True
 
+        # Mark as tombstone — dead records excluded from downstream processing
+        processed_item["metadata"]["agent_type"] = "tombstone"
+        processed_item["_unprocessed"] = True
+
         return processed_item
 
     @staticmethod

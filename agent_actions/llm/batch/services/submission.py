@@ -215,7 +215,7 @@ class BatchSubmissionService:
         behavior = where_config.get("behavior", "filter")
 
         if behavior == "filter":
-            return {"type": "passthrough", "data": [], "output_directory": output_directory}
+            return {"type": "tombstone", "data": [], "output_directory": output_directory}
         if behavior == "skip":
             return BatchPassthroughBuilder(output_directory).from_context(
                 context_map, reason="where_clause_not_matched"

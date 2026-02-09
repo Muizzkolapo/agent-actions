@@ -508,7 +508,8 @@ class BatchResultProcessor:
                     exhausted_item = {
                         "content": empty_content,
                         "source_guid": source_guid,
-                        "metadata": {"retry_exhausted": True},
+                        "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
+                        "_unprocessed": True,
                     }
                     if original_row.get("target_id"):
                         exhausted_item["target_id"] = original_row["target_id"]
@@ -547,14 +548,10 @@ class BatchResultProcessor:
                         "source_guid": source_guid,
                         "metadata": {
                             "reason": reason,
+                            "agent_type": "tombstone",
                         },
+                        "_unprocessed": True,
                     }
-                    # Both upstream_unprocessed and batch_not_returned get _unprocessed=True
-                    # so downstream actions skip them (no wasted LLM calls). Guard-skipped
-                    # records are intentionally excluded — they have valid content and should
-                    # be processed by downstream actions with their own guards.
-                    if reason != "guard_skipped":
-                        passthrough_item["_unprocessed"] = True
                     if original_row.get("target_id"):
                         passthrough_item["target_id"] = original_row["target_id"]
 
@@ -564,18 +561,11 @@ class BatchResultProcessor:
                         record_index=record_index,
                         output_directory=ctx.output_directory,
                     )
-                    if reason == "guard_skipped":
-                        processing_result = ProcessingResult.skipped(
-                            passthrough_data=passthrough_item,
-                            reason=reason,
-                            source_guid=source_guid,
-                        )
-                    else:
-                        processing_result = ProcessingResult.unprocessed(
-                            data=[passthrough_item],
-                            reason=reason,
-                            source_guid=source_guid,
-                        )
+                    processing_result = ProcessingResult.unprocessed(
+                        data=[passthrough_item],
+                        reason=reason,
+                        source_guid=source_guid,
+                    )
                     enriched = self._enrichment_pipeline.enrich(
                         processing_result, processing_context
                     )

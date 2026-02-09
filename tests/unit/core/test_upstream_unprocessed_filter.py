@@ -303,7 +303,7 @@ class TestBatchPathReasonDetection:
         assert len(result_ctx.processed_data) >= 1
         item = result_ctx.processed_data[0]
         assert item["metadata"]["reason"] == "upstream_unprocessed"
-        assert "agent_type" not in item["metadata"]
+        assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
 
     def test_guard_skipped_reason(self):
@@ -321,8 +321,8 @@ class TestBatchPathReasonDetection:
         assert len(result_ctx.processed_data) >= 1
         item = result_ctx.processed_data[0]
         assert item["metadata"]["reason"] == "guard_skipped"
-        assert "agent_type" not in item["metadata"]
-        assert "_unprocessed" not in item
+        assert item["metadata"]["agent_type"] == "tombstone"
+        assert item.get("_unprocessed") is True
 
     def test_batch_not_returned_reason(self):
         """Records without filter metadata get reason=batch_not_returned."""
@@ -336,7 +336,7 @@ class TestBatchPathReasonDetection:
         assert len(result_ctx.processed_data) >= 1
         item = result_ctx.processed_data[0]
         assert item["metadata"]["reason"] == "batch_not_returned"
-        assert "agent_type" not in item["metadata"]
+        assert item["metadata"]["agent_type"] == "tombstone"
         assert item.get("_unprocessed") is True
 
     def test_upstream_unprocessed_uses_unprocessed_status(self):

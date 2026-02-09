@@ -75,8 +75,9 @@ class ExhaustedRecordBuilder:
             "source_guid": resolved_source_guid,
             "content": empty_content,
             "node_id": node_id,
-            "metadata": {"retry_exhausted": True},
+            "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
             "_recovery": recovery_metadata.to_dict(),
+            "_unprocessed": True,
         }
 
         if isinstance(original_row, dict):

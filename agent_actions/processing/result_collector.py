@@ -206,4 +206,18 @@ class ResultCollector:
             )
         )
 
+        # Log tombstone summary (dead records quarantined from downstream processing)
+        tombstone_count = skipped_count + exhausted_count + unprocessed_count
+        if tombstone_count > 0:
+            total = len(results)
+            logger.info(
+                "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
+                agent_name,
+                tombstone_count,
+                total,
+                skipped_count,
+                exhausted_count,
+                unprocessed_count,
+            )
+
         return output

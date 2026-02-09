@@ -713,7 +713,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if isinstance(result, dict) and result.get("type") == "passthrough":
+    if isinstance(result, dict) and result.get("type") == "tombstone":
         _write_passthrough_result(
             output_file_path,
             result["data"],

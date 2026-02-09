@@ -445,8 +445,10 @@ class GuardHandler:
                 "skipped_by_guard": True,
                 "reason": "guard_not_matched",
                 "filter_status": filter_status,
+                "agent_type": "tombstone",
             }
         )
+        processed_item["_unprocessed"] = True
 
         return processed_item
 

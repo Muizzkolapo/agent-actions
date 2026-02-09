@@ -186,6 +186,10 @@ class RecordProcessor:
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
             preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
             preserved_item["_unprocessed"] = True
+            if not isinstance(preserved_item.get("metadata"), dict):
+                preserved_item["metadata"] = {}
+            if "agent_type" not in preserved_item["metadata"]:
+                preserved_item["metadata"]["agent_type"] = "tombstone"
             result = ProcessingResult.unprocessed(
                 data=[preserved_item],
                 reason="upstream_unprocessed",
@@ -235,15 +239,16 @@ class RecordProcessor:
                 "source_guid": source_guid,
                 "metadata": {
                     "reason": f"guard_{prepared.guard_behavior}",
+                    "agent_type": "tombstone",
                 },
+                "_unprocessed": True,
             }
             if input_record and isinstance(input_record, dict) and "target_id" in input_record:
                 passthrough_item["target_id"] = input_record["target_id"]
-            result = ProcessingResult.skipped(
-                passthrough_data=passthrough_item,
+            result = ProcessingResult.unprocessed(
+                data=[passthrough_item],
                 reason=f"guard_{prepared.guard_behavior}",
                 source_guid=source_guid,
-                passthrough_fields=prepared.passthrough_fields,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
             )
@@ -290,7 +295,8 @@ class RecordProcessor:
                     exhausted_item = {
                         "content": empty_content,
                         "source_guid": source_guid,
-                        "metadata": {"retry_exhausted": True},
+                        "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
+                        "_unprocessed": True,
                     }
                     if (
                         input_record
@@ -345,15 +351,15 @@ class RecordProcessor:
                 passthrough_item = {
                     "content": response,
                     "source_guid": source_guid,
-                    "metadata": {"reason": "guard_skip"},
+                    "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
+                    "_unprocessed": True,
                 }
                 if input_record and isinstance(input_record, dict) and "target_id" in input_record:
                     passthrough_item["target_id"] = input_record["target_id"]
-                result = ProcessingResult.skipped(
-                    passthrough_data=passthrough_item,
+                result = ProcessingResult.unprocessed(
+                    data=[passthrough_item],
                     reason="guard_skip",
                     source_guid=source_guid,
-                    passthrough_fields=passthrough_fields,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
                 )

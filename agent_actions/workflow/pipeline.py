@@ -181,7 +181,7 @@ class ProcessingPipeline:
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
-        if isinstance(result, dict) and result.get("type") == "passthrough":
+        if isinstance(result, dict) and result.get("type") == "tombstone":
             # Only create directory if not using storage backend
             if params.storage_backend is None:
                 output_file_path.parent.mkdir(parents=True, exist_ok=True)

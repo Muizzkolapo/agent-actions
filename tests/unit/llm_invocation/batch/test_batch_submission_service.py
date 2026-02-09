@@ -224,8 +224,8 @@ class TestSubmitBatchJob:
 
         assert result == "new_batch_123"
 
-    def test_returns_passthrough_when_no_tasks(self):
-        """Should return passthrough dict when no tasks after filtering."""
+    def test_returns_tombstone_when_no_tasks(self):
+        """Should return tombstone dict when no tasks after filtering."""
         from agent_actions.llm.batch.services.submission import (
             BatchSubmissionService,
         )
@@ -260,7 +260,7 @@ class TestSubmitBatchJob:
             output_directory="/tmp/output",
         )
 
-        assert result["type"] == "passthrough"
+        assert result["type"] == "tombstone"
 
     def test_submits_batch_and_saves_to_registry(self):
         """Should submit batch and save entry to registry."""
