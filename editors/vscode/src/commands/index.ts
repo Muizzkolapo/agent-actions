@@ -11,26 +11,27 @@ import * as vscode from 'vscode';
 import { ActionInfo } from '../model/types';
 import { WorkflowModel } from '../model/workflowModel';
 import { DagWebview } from '../views/dagWebview';
-import { DataPreviewProvider, openDataPreview, DATA_PREVIEW_SCHEME, createPreviewUri } from '../providers/dataPreviewProvider';
+import { QueryResultsPanel } from '../views/queryResultsPanel';
+import { createStorageReader, isPreviewError } from '../utils/storageReader';
 
 interface CommandContext {
     context: vscode.ExtensionContext;
     model: WorkflowModel;
     dagWebview: DagWebview;
-    dataPreviewProvider: DataPreviewProvider;
+    queryResultsPanel: QueryResultsPanel;
 }
 
 /**
  * Register all workflow navigator commands
  */
-export function registerCommands({ context, model, dagWebview, dataPreviewProvider }: CommandContext): void {
+export function registerCommands({ context, model, dagWebview, queryResultsPanel }: CommandContext): void {
     context.subscriptions.push(
         // Open action config and navigate to definition
         vscode.commands.registerCommand('agentActions.openConfig', openConfig),
 
-        // Preview action data from storage backend
+        // Preview action data from storage backend (renders in Query Results panel)
         vscode.commands.registerCommand('agentActions.previewData', (action: ActionInfo) =>
-            previewData(model, action)
+            previewData(model, queryResultsPanel, action)
         ),
 
         // Quick pick to jump to any action
@@ -45,12 +46,18 @@ export function registerCommands({ context, model, dagWebview, dataPreviewProvid
         // Focus the workflow tree view
         vscode.commands.registerCommand('agentActions.showWorkflowTree', showWorkflowTree),
 
+        // Open documentation in browser
+        vscode.commands.registerCommand('agentActions.openDocs', openDocs),
+
+        // Open extension settings
+        vscode.commands.registerCommand('agentActions.openSettings', openSettings),
+
         // Pagination commands for data preview
         vscode.commands.registerCommand('agentActions.nextPage', () =>
-            navigatePreviewPage(model, 'next')
+            navigatePreviewPage(model, queryResultsPanel, 'next')
         ),
         vscode.commands.registerCommand('agentActions.previousPage', () =>
-            navigatePreviewPage(model, 'previous')
+            navigatePreviewPage(model, queryResultsPanel, 'previous')
         ),
     );
 }
@@ -116,68 +123,89 @@ async function goToAction(model: WorkflowModel): Promise<void> {
 }
 
 /**
- * Focus the workflow tree view in explorer
+ * Focus the workflow tree view in the Agent Actions sidebar
  */
 async function showWorkflowTree(): Promise<void> {
-    await vscode.commands.executeCommand('workbench.view.explorer');
-    await vscode.commands.executeCommand('agentActionsWorkflow.focus');
+    await vscode.commands.executeCommand('workbench.view.extension.agentActions');
 }
 
 /**
- * Navigate to next or previous page in data preview
+ * Open Agent Actions documentation in the browser
  */
-async function navigatePreviewPage(model: WorkflowModel, direction: 'next' | 'previous'): Promise<void> {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) {
-        vscode.window.showInformationMessage('No active preview document');
+async function openDocs(): Promise<void> {
+    await vscode.env.openExternal(
+        vscode.Uri.parse('https://github.com/qanalabs/agent-actions#readme'),
+    );
+}
+
+/**
+ * Open Agent Actions extension settings
+ */
+async function openSettings(): Promise<void> {
+    await vscode.commands.executeCommand('workbench.action.openSettings', 'agentActions');
+}
+
+/**
+ * Navigate to next or previous page in data preview (Query Results panel)
+ */
+async function navigatePreviewPage(
+    model: WorkflowModel,
+    panel: QueryResultsPanel,
+    direction: 'next' | 'previous'
+): Promise<void> {
+    const pagination = panel.getPagination();
+    if (!pagination) {
+        vscode.window.showInformationMessage('No active preview to paginate');
         return;
     }
 
-    const uri = editor.document.uri;
-    if (uri.scheme !== DATA_PREVIEW_SCHEME) {
-        vscode.window.showInformationMessage('This command only works in data preview documents');
-        return;
-    }
-
-    // Parse current parameters from URI
-    const params = new URLSearchParams(uri.query);
-    const workflowPath = params.get('workflowPath') || '';
-    const workflowName = params.get('workflowName') || '';
-    const actionName = uri.path.replace(/^\//, '').replace(/\.json$/, '');
-    const limit = parseInt(params.get('limit') || '50', 10);
-    const currentOffset = parseInt(params.get('offset') || '0', 10);
+    const { actionName, workflowPath, workflowName, limit, offset, totalCount } = pagination;
 
     // Calculate new offset
     const newOffset = direction === 'next'
-        ? currentOffset + limit
-        : Math.max(0, currentOffset - limit);
+        ? offset + limit
+        : Math.max(0, offset - limit);
 
-    if (direction === 'previous' && currentOffset === 0) {
+    if (direction === 'previous' && offset === 0) {
         vscode.window.showInformationMessage('Already at the first page');
         return;
     }
 
-    // Find workflow and action to create new URI
-    const workflows = model.getWorkflows();
-    const workflow = workflows.find((w) => w.name === workflowName && w.rootPath === workflowPath);
-    const action = workflow?.actions.find((a) => a.name === actionName);
-
-    if (!workflow || !action) {
-        vscode.window.showErrorMessage(`Could not find workflow or action for pagination`);
+    if (direction === 'next' && offset + limit >= totalCount) {
+        vscode.window.showInformationMessage('Already at the last page');
         return;
     }
 
-    // Open new preview with updated offset
-    await openDataPreview(workflow, action, limit, newOffset);
+    const reader = createStorageReader(workflowPath, workflowName);
+    const result = await reader.previewAction(actionName, limit, newOffset);
+
+    if (!result) {
+        panel.showError(actionName, 'Failed to load data from storage backend');
+        return;
+    }
+
+    if (isPreviewError(result)) {
+        panel.showError(actionName, result.error, result.traceback ?? result.stderr);
+        return;
+    }
+
+    panel.showResults(result, actionName, workflowPath, workflowName, limit, newOffset);
 }
 
 /**
  * Preview action data from storage backend
  *
+ * Fetches data directly via StorageReader and renders it in the
+ * Query Results bottom panel as an HTML table.
+ *
  * Note: When called from context menu, VS Code passes the TreeItem (ActionNode),
  * not the ActionInfo directly. We handle both cases.
  */
-async function previewData(model: WorkflowModel, arg: ActionInfo | { action: ActionInfo }): Promise<void> {
+async function previewData(
+    model: WorkflowModel,
+    panel: QueryResultsPanel,
+    arg: ActionInfo | { action: ActionInfo }
+): Promise<void> {
     // Handle both ActionInfo and ActionNode (which has an 'action' property)
     const action: ActionInfo | undefined = 'action' in arg ? arg.action : arg;
 
@@ -197,6 +225,22 @@ async function previewData(model: WorkflowModel, arg: ActionInfo | { action: Act
         return;
     }
 
-    // Open the data preview
-    await openDataPreview(workflow, action);
+    const config = vscode.workspace.getConfiguration('agentActions');
+    const limit = config.get<number>('previewPageSize', 50);
+    const offset = 0;
+
+    const reader = createStorageReader(workflow.rootPath, workflow.name);
+    const result = await reader.previewAction(action.name, limit, offset);
+
+    if (!result) {
+        panel.showError(action.name, 'Failed to load data from storage backend');
+        return;
+    }
+
+    if (isPreviewError(result)) {
+        panel.showError(action.name, result.error, result.traceback ?? result.stderr);
+        return;
+    }
+
+    panel.showResults(result, action.name, workflow.rootPath, workflow.name, limit, offset);
 }

@@ -198,6 +198,47 @@ actions:
 | 🔎 **Preview Output** | Preview action output from storage backend |
 | Status indicator | Shows current status, click to open DAG |
 
+### Query Results Panel
+
+The Query Results Panel provides an interactive view of your action's output data, displaying results from the storage backend in a rich table or JSON format.
+
+**Features:**
+- **Table View**: HTML table with sticky column headers, row counts, and column counts
+- **JSON View**: Formatted JSON display with metadata
+- **View Toggle**: Switch between table and JSON modes via toolbar buttons
+- **Pagination**: Navigate through large datasets with next/previous page controls (50 rows per page)
+- **Theme Integration**: Automatically adapts to VS Code light/dark themes
+
+**How to Access:**
+1. **From Tree View**: Right-click any action in the Workflow Navigator → "Preview Data"
+2. **From CodeLens**: Click 🔎 **Preview Output** above action definitions in YAML files
+3. **From Command Palette**: `Cmd+Shift+P` → "Agent Actions: Preview Data"
+
+The panel opens in a new editor tab beside your current file, allowing side-by-side comparison with your workflow configuration.
+
+**Pagination Controls:**
+- Click **Next Page** / **Previous Page** buttons in the panel header
+- Page size: 50 rows
+- Shows current offset and total row count
+
+**Requirements:**
+For data preview to work, the extension needs to locate the `agent_actions` Python module. In most cases this happens automatically, but for monorepos or complex setups, you may need to set `agentActions.modulePath`:
+
+```json
+{
+  "agentActions.modulePath": "/path/to/agent-actions"
+}
+```
+
+**Caching:**
+Preview data is cached for 5 seconds by default to improve performance. Adjust with:
+
+```json
+{
+  "agentActions.previewCacheTTL": 5000  // milliseconds, 0 to disable
+}
+```
+
 ### File Decorations
 
 Action folders in `agent_io/target/` display badges:
@@ -234,22 +275,26 @@ Configure the Workflow Navigator in VS Code settings:
 ```json
 {
   "agentActions.pythonPath": "",
+  "agentActions.modulePath": "",
   "agentActions.showStatusBar": true,
   "agentActions.showCodeLens": true,
   "agentActions.showFileDecorations": true,
   "agentActions.dagLayout": "vertical",
-  "agentActions.refreshInterval": 0
+  "agentActions.refreshInterval": 0,
+  "agentActions.previewCacheTTL": 5000
 }
 ```
 
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `pythonPath` | `""` | Python interpreter path. Empty = auto-detect from Python extension. |
+| `modulePath` | `""` | Path to agent-actions module directory. Required for data preview in monorepos. |
 | `showStatusBar` | `true` | Show workflow progress in status bar. |
 | `showCodeLens` | `true` | Show action links (Preview Output, Status) in YAML files. |
 | `showFileDecorations` | `true` | Show execution order badges on action folders. |
 | `dagLayout` | `"vertical"` | DAG direction: `"vertical"` (top-down) or `"horizontal"` (left-right). |
 | `refreshInterval` | `0` | Polling interval in ms. `0` = rely on file watchers only. Set to `2000` for 2-second polling. |
+| `previewCacheTTL` | `5000` | Cache duration in ms for data preview. `0` = disable caching. |
 
 ### Data Sources
 
@@ -435,6 +480,54 @@ If the DAG panel shows nothing:
 1. Ensure you have at least one workflow with actions
 2. Check that action `dependencies` are correctly defined
 3. Reload the window and try again
+
+### Data Preview Not Working
+
+If clicking "Preview Data" shows errors or doesn't display data:
+
+**"Module import failed" or "Failed to load data from storage backend":**
+
+The extension can't find the `agent_actions` Python module. Set the module path explicitly:
+
+```json
+{
+  "agentActions.modulePath": "/path/to/agent-actions"
+}
+```
+
+To find the correct path:
+```bash
+pip show agent-actions | grep Location
+# Use the path shown (e.g., /Users/you/.venv/lib/python3.11/site-packages)
+```
+
+**No data appears in table:**
+
+1. Ensure the action has completed and written output data
+2. Check the storage backend is configured correctly in your workflow
+3. Verify the action's output directory exists in `agent_io/target/`
+4. Look for errors in the Output panel → "Agent Actions"
+
+**Reinstalling the Extension:**
+
+If preview features aren't working after updates, completely reinstall:
+
+```bash
+cd editors/vscode
+
+# Remove any globally installed version
+rm -rf ~/.vscode/extensions/agent-actions.agent-actions-lsp-*
+
+# Clean and rebuild
+rm -rf out/
+npm run compile
+npx @vscode/vsce package --allow-missing-repository
+
+# Install fresh
+code --install-extension agent-actions-lsp-0.3.0.vsix --force
+```
+
+Then reload VS Code: `Cmd+Shift+P` → "Developer: Reload Window"
 
 ## See Also
 

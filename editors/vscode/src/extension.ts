@@ -28,9 +28,12 @@ import { WorkflowCodeLensProvider } from './providers/codeLensProvider';
 import { ActionDecorationProvider } from './providers/decorationProvider';
 import { WorkflowStatusBar } from './providers/statusBarProvider';
 import { DataPreviewProvider, DATA_PREVIEW_SCHEME } from './providers/dataPreviewProvider';
+import { ExtensionInfoProvider } from './providers/extensionInfoProvider';
+import { HelpProvider } from './providers/helpProvider';
 
 // Views
 import { DagWebview } from './views/dagWebview';
+import { QueryResultsPanel } from './views/queryResultsPanel';
 
 // Commands
 import { registerCommands } from './commands/index';
@@ -132,11 +135,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const dagWebview = new DagWebview(context, workflowModel);
     context.subscriptions.push(dagWebview);
 
-    // Data Preview Provider (for viewing storage backend data)
+    // Query Results Panel (webview table for data preview)
+    const queryResultsPanel = new QueryResultsPanel(context.extensionUri, context);
+    context.subscriptions.push(queryResultsPanel);
+
+    // Data Preview Provider (legacy, kept for backward compatibility)
+    // NOTE: The previewData command now uses QueryResultsPanel directly.
+    // This provider remains registered to support the agent-actions-data:// URI scheme
+    // in case any external extensions or user workflows reference it.
     const dataPreviewProvider = new DataPreviewProvider();
     context.subscriptions.push(
         dataPreviewProvider,
         vscode.workspace.registerTextDocumentContentProvider(DATA_PREVIEW_SCHEME, dataPreviewProvider)
+    );
+
+    // Extension Info Panel
+    const infoProvider = new ExtensionInfoProvider(client, context);
+    context.subscriptions.push(
+        infoProvider,
+        vscode.window.registerTreeDataProvider('agentActionsInfo', infoProvider),
+    );
+
+    // Help Panel
+    const helpProvider = new HelpProvider();
+    context.subscriptions.push(
+        vscode.window.registerTreeDataProvider('agentActionsHelp', helpProvider),
     );
 
     // ========================================
@@ -146,8 +169,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         context,
         model: workflowModel,
         dagWebview,
-        dataPreviewProvider,
+        queryResultsPanel,
     });
+
+    // ========================================
+    // 5. Auto-reveal sidebar (after all providers are registered)
+    // ========================================
+    const config = vscode.workspace.getConfiguration('agentActions');
+    const autoRevealSidebar = config.get<boolean>('autoRevealSidebar', false);
+
+    if (autoRevealSidebar && workflowModel.hasAgentProject()) {
+        vscode.commands.executeCommand('workbench.view.extension.agentActions');
+    }
 
     logger.info('Agent Actions extension activated');
 }

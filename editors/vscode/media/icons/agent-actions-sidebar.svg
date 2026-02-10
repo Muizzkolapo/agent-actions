@@ -1,0 +1,10 @@
+<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monochrome activity bar icon: three connected graph nodes -->
+  <circle cx="7" cy="7" r="3" fill="currentColor"/>
+  <circle cx="17" cy="7" r="3" fill="currentColor"/>
+  <circle cx="12" cy="18" r="3" fill="currentColor"/>
+
+  <!-- Connecting lines -->
+  <line x1="7" y1="10" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="17" y1="10" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+</svg>

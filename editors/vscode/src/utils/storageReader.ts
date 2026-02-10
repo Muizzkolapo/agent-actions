@@ -28,6 +28,13 @@ export interface PreviewError {
 }
 
 /**
+ * Type guard to check if a result is a PreviewError
+ */
+export function isPreviewError(result: PreviewResult | PreviewError): result is PreviewError {
+    return 'error' in result;
+}
+
+/**
  * Storage statistics
  */
 export interface StorageStats {

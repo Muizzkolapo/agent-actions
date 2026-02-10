@@ -30,6 +30,42 @@ code --install-extension agent-actions-lsp-0.3.0.vsix
 2. Press F5 to launch Extension Development Host
 3. Open a project with `agent_config/*.yml`
 
+### Reinstall / Update Extension
+
+If you're developing the extension and need to test changes:
+
+**Option 1: Development (F5) — Recommended for quick iteration**
+```bash
+cd editors/vscode
+
+# Remove any globally installed version (to avoid conflicts)
+rm -rf ~/.vscode/extensions/agent-actions.agent-actions-lsp-*
+
+# Clean and recompile
+rm -rf out/
+npm run compile
+
+# Close VS Code completely (Cmd+Q), then reopen and press F5
+```
+
+**Option 2: Build & Install VSIX — For testing as real extension**
+```bash
+cd editors/vscode
+
+# Remove old installation
+rm -rf ~/.vscode/extensions/agent-actions.agent-actions-lsp-*
+
+# Clean, compile, and package
+rm -rf out/
+npm run compile
+npx @vscode/vsce package --allow-missing-repository
+
+# Install the new VSIX
+code --install-extension agent-actions-lsp-0.3.0.vsix --force
+```
+
+Then reload VS Code: `Cmd+Shift+P` > "Developer: Reload Window"
+
 ## Features
 
 ### Language Features
