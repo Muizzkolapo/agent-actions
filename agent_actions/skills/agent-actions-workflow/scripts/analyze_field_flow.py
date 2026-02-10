@@ -76,7 +76,7 @@ def load_node_data(node_dir: Path) -> dict[str, str] | None:
     return extract_fields(data)
 
 
-def parse_node_name(dirname: str) -> tuple[int, str]:
+def parse_action_name(dirname: str) -> tuple[int, str]:
     """Parse node directory name into (node_number, action_name)."""
     parts = dirname.split("_", 2)
     if len(parts) >= 3 and parts[0] == "node":
@@ -95,7 +95,7 @@ def analyze_workflow(target_dir: Path) -> None:
         if not node_dir.is_dir():
             continue
 
-        node_num, action_name = parse_node_name(node_dir.name)
+        node_num, action_name = parse_action_name(node_dir.name)
         fields = load_node_data(node_dir)
 
         if fields is not None:

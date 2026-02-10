@@ -479,13 +479,13 @@ def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
 
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.ClassDef)):
-                    node_name = node.name
+                    action_name = node.name
                     start_line = node.lineno
                     end_line = node.end_lineno or start_line
                     span = end_line - start_line + 1
 
                     for item in items:
-                        if item.item_name == node_name and item.line_number == start_line:
+                        if item.item_name == action_name and item.line_number == start_line:
                             item.size_lines = span
 
         except Exception:

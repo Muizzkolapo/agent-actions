@@ -308,11 +308,11 @@ class DataFlowGraph:
             result.append(name)
 
             # Reduce in-degree for dependent nodes
-            for node_name, node in self.nodes.items():
+            for action_name, node in self.nodes.items():
                 if name in node.dependencies:
-                    in_degree[node_name] -= 1
-                    if in_degree[node_name] == 0:
-                        queue.append(node_name)
+                    in_degree[action_name] -= 1
+                    if in_degree[action_name] == 0:
+                        queue.append(action_name)
 
         if len(result) != len(self.nodes):
             # Cycle detected

@@ -113,7 +113,7 @@ Remove index prefix from directory names (`node_13_validate_answer_1/` → `vali
 
 ### Task 5.1: Update Field Flow Analyzer
 - [ ] File: `agent_actions/skills/agent-actions-workflow/scripts/analyze_field_flow.py`
-- [ ] Lines 63-65, 79-87, 94: Update `parse_node_name()` and analysis
+- [ ] Lines 63-65, 79-87, 94: Update `parse_action_name()` and analysis
 
 ---
 

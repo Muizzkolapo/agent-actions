@@ -68,9 +68,9 @@ class StaticTypeChecker:
             )
             return result
 
-        for node_name in order:
-            node = self.graph.get_node(node_name)
-            if node and not self.graph.is_special_namespace(node_name):
+        for action_name in order:
+            node = self.graph.get_node(action_name)
+            if node and not self.graph.is_special_namespace(action_name):
                 self._check_node(node, result)
 
         return result
@@ -246,8 +246,8 @@ class StaticTypeChecker:
         """
         warnings: List[StaticTypeWarning] = []
 
-        for node_name, node in self.graph.nodes.items():
-            if self.graph.is_special_namespace(node_name):
+        for action_name, node in self.graph.nodes.items():
+            if self.graph.is_special_namespace(action_name):
                 continue
 
             # Get all referenced actions from requirements
@@ -264,7 +264,7 @@ class StaticTypeChecker:
                     StaticTypeWarning(
                         message=f"Dependency '{dep}' is declared but never referenced",
                         location=FieldLocation(
-                            agent_name=node_name,
+                            agent_name=action_name,
                             config_field="depends_on",
                             raw_reference=dep,
                         ),
@@ -288,8 +288,8 @@ class StaticTypeChecker:
         """
         warnings: List[StaticTypeWarning] = []
 
-        for node_name, node in self.graph.nodes.items():
-            if self.graph.is_special_namespace(node_name):
+        for action_name, node in self.graph.nodes.items():
+            if self.graph.is_special_namespace(action_name):
                 continue
 
             # Get all referenced actions
@@ -309,7 +309,7 @@ class StaticTypeChecker:
                             StaticTypeWarning(
                                 message=f"Implicit dependency on '{agent}' (not in depends_on)",
                                 location=FieldLocation(
-                                    agent_name=node_name,
+                                    agent_name=action_name,
                                     config_field=req.location,
                                     raw_reference=req.raw_reference,
                                 ),

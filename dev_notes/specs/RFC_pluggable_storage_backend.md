@@ -72,12 +72,12 @@ class StorageBackend(ABC):
         pass
 
     @abstractmethod
-    def write_source(self, run_id: str, node_name: str, data: List[Dict]) -> str:
+    def write_source(self, run_id: str, action_name: str, data: List[Dict]) -> str:
         """Write source data."""
         pass
 
     @abstractmethod
-    def read_source(self, run_id: str, node_name: str) -> List[Dict]:
+    def read_source(self, run_id: str, action_name: str) -> List[Dict]:
         """Read source data."""
         pass
 
@@ -133,7 +133,7 @@ class DuckDBBackend(StorageBackend):
     Tables:
         runs: run_id, workflow_name, started_at, status
         outputs: run_id, action_name, data (JSON), created_at
-        sources: run_id, node_name, data (JSON), created_at
+        sources: run_id, action_name, data (JSON), created_at
     """
 
     def __init__(self, db_path: str = "./agent_io/workflows.duckdb"):
@@ -171,7 +171,7 @@ class DuckDBBackend(StorageBackend):
             CREATE TABLE IF NOT EXISTS sources (
                 id INTEGER PRIMARY KEY,
                 run_id VARCHAR NOT NULL,
-                node_name VARCHAR NOT NULL,
+                action_name VARCHAR NOT NULL,
                 data JSON NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -195,26 +195,26 @@ class DuckDBBackend(StorageBackend):
         ).fetchone()
         return json.loads(result[0]) if result else []
 
-    def write_source(self, run_id: str, node_name: str, data: List[Dict]) -> str:
+    def write_source(self, run_id: str, action_name: str, data: List[Dict]) -> str:
         self._ensure_run(run_id)
         # Dedup by source_guid
-        existing = self.read_source(run_id, node_name)
+        existing = self.read_source(run_id, action_name)
         existing_guids = {r.get("source_guid") for r in existing}
         new_records = [r for r in data if r.get("source_guid") not in existing_guids]
 
         if new_records:
             all_data = existing + new_records
-            self.conn.execute("DELETE FROM sources WHERE run_id = ? AND node_name = ?", [run_id, node_name])
+            self.conn.execute("DELETE FROM sources WHERE run_id = ? AND action_name = ?", [run_id, action_name])
             self.conn.execute(
-                "INSERT INTO sources (run_id, node_name, data, created_at) VALUES (?, ?, ?, ?)",
-                [run_id, node_name, json.dumps(all_data), datetime.utcnow()]
+                "INSERT INTO sources (run_id, action_name, data, created_at) VALUES (?, ?, ?, ?)",
+                [run_id, action_name, json.dumps(all_data), datetime.utcnow()]
             )
-        return f"duckdb://{self.db_path}?run={run_id}&source={node_name}"
+        return f"duckdb://{self.db_path}?run={run_id}&source={action_name}"
 
-    def read_source(self, run_id: str, node_name: str) -> List[Dict]:
+    def read_source(self, run_id: str, action_name: str) -> List[Dict]:
         result = self.conn.execute(
-            "SELECT data FROM sources WHERE run_id = ? AND node_name = ?",
-            [run_id, node_name]
+            "SELECT data FROM sources WHERE run_id = ? AND action_name = ?",
+            [run_id, action_name]
         ).fetchone()
         return json.loads(result[0]) if result else []
 

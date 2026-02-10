@@ -77,7 +77,7 @@ agent_io/target/
     └── document_1.json
 ```
 
-In SQLite mode, the same data is stored in the `target_data` table with `node_name` and `relative_path` columns.
+In SQLite mode, the same data is stored in the `target_data` table with `action_name` and `relative_path` columns.
 
 ## Data Flow
 
@@ -113,7 +113,7 @@ The database contains two main tables:
 | Table | Purpose |
 |-------|---------|
 | `source_data` | Stores source records with deduplication by `source_guid` |
-| `target_data` | Stores action outputs organized by `node_name` |
+| `target_data` | Stores action outputs organized by `action_name` |
 
 ### Querying the Database
 
@@ -123,13 +123,13 @@ You can inspect workflow data directly using SQLite:
 sqlite3 my_workflow/agent_io/my_workflow.db
 
 -- List all actions with output
-SELECT DISTINCT node_name FROM target_data;
+SELECT DISTINCT action_name FROM target_data;
 
 -- Count records per action
-SELECT node_name, SUM(record_count) FROM target_data GROUP BY node_name;
+SELECT action_name, SUM(record_count) FROM target_data GROUP BY action_name;
 
 -- Preview data from an action
-SELECT data FROM target_data WHERE node_name = 'extract_facts' LIMIT 1;
+SELECT data FROM target_data WHERE action_name = 'extract_facts' LIMIT 1;
 ```
 
 ### Benefits

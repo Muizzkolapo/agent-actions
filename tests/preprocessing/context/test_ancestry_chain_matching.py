@@ -76,12 +76,12 @@ def parallel_branch_temp_dir(parallel_branch_records):
         branch_c = parallel_branch_records[3]
 
         # Create directories and write records
-        for node_name, records in [
+        for action_name, records in [
             ("generate_seo", [branch_a]),
             ("generate_recommendations", [branch_b]),
             ("assess_reading_level", [branch_c]),
         ]:
-            node_dir = target_dir / node_name
+            node_dir = target_dir / action_name
             node_dir.mkdir(parents=True)
             with open(node_dir / "test.json", "w") as f:
                 json.dump(records, f, indent=2)

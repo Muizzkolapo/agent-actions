@@ -124,7 +124,7 @@ export interface ValidationGroup {
 
 // Data Explorer types (populated from catalog.json workflow_data)
 export interface DataNode {
-  id: string             // "workflow.node_name"
+  id: string             // "workflow.action_name"
   node: string           // "extract_raw_qa_3"
   workflow: string        // "qanalabs_quiz_gen_fake"
   recordCount: number
