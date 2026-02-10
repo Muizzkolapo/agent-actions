@@ -21,17 +21,17 @@ class OutputHandler:
     def __init__(
         self,
         storage_backend: Optional["StorageBackend"] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ):
         """
         Initialize output handler.
 
         Args:
             storage_backend: Optional storage backend for database persistence
-            node_name: Node name for backend writes (required if storage_backend provided)
+            action_name: Node name for backend writes (required if storage_backend provided)
         """
         self.storage_backend = storage_backend
-        self.node_name = node_name
+        self.action_name = action_name
 
     def save_main_output(
         self,
@@ -60,7 +60,7 @@ class OutputHandler:
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=self.storage_backend,
-                node_name=self.node_name,
+                action_name=self.action_name,
                 output_directory=output_directory,
             )
             file_writer.write_target(data)

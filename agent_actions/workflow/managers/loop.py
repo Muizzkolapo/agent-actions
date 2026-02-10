@@ -188,7 +188,7 @@ class VersionOutputCorrelator:
         version_outputs: Dict[str, List[Dict[str, Any]]],
         version_filenames: set,
         correlation_dir: Path,
-        node_name: str,
+        action_name: str,
     ):
         """Process and correlate outputs by file."""
         for filename in version_filenames:
@@ -200,7 +200,7 @@ class VersionOutputCorrelator:
             if file_version_outputs:
                 correlated_data = self._correlate_by_source_record(file_version_outputs)
                 self._write_correlated_data(
-                    correlation_dir, correlated_data, filename, node_name=node_name
+                    correlation_dir, correlated_data, filename, action_name=action_name
                 )
 
     def prepare_correlated_input(
@@ -229,7 +229,7 @@ class VersionOutputCorrelator:
                 return None
 
             self._process_version_files(
-                version_outputs, version_filenames, correlation_dir, node_name=agent_name
+                version_outputs, version_filenames, correlation_dir, action_name=agent_name
             )
             return str(correlation_dir)
         except (OSError, IOError, ValueError, KeyError) as e:
@@ -465,7 +465,7 @@ class VersionOutputCorrelator:
         output_dir: Path,
         correlated_data: List[Dict[str, Any]],
         filename: str = "correlated_data.json",
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ):
         """Write correlated data to the output directory and create corresponding source data.
 
@@ -482,19 +482,19 @@ class VersionOutputCorrelator:
         ]
 
         # Write to storage backend if available, otherwise write to filesystem
-        if self.storage_backend is not None and node_name:
+        if self.storage_backend is not None and action_name:
             try:
-                self.storage_backend.write_target(node_name, filename, cleaned_data)
+                self.storage_backend.write_target(action_name, filename, cleaned_data)
                 logger.debug(
                     "Wrote %d correlated records to storage backend for %s/%s",
                     len(cleaned_data),
-                    node_name,
+                    action_name,
                     filename,
                 )
             except Exception as e:
                 logger.warning(
                     "Failed to write correlated data to storage backend for %s: %s",
-                    node_name,
+                    action_name,
                     e,
                 )
         else:

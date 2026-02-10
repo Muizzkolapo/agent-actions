@@ -83,7 +83,7 @@ export class StorageReader {
         offset: number = 0
     ): Promise<PreviewResult | PreviewError | null> {
         const result = await this.runStorageCommand('preview', {
-            node_name: nodeName,
+            action_name: nodeName,
             limit,
             offset,
         });
@@ -264,7 +264,7 @@ try:
 
     elif command == 'preview':
         result = backend.preview_target(
-            node_name=args['node_name'],
+            action_name=args['action_name'],
             limit=args.get('limit', 50),
             offset=args.get('offset', 0),
         )

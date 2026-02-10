@@ -65,7 +65,7 @@ class BatchService:
         job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
         source_handler: Optional[Any] = None,  # BatchSourceHandler
         storage_backend: Optional["StorageBackend"] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ):
         """Initialize batch service facade with optional pre-built services."""
         from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
@@ -99,7 +99,7 @@ class BatchService:
         )
         self._source_handler = source_handler or BatchSourceHandler()
         self._storage_backend = storage_backend
-        self._node_name = node_name
+        self._action_name = action_name
 
         # Registry manager factory (shared across services)
         self._registry_manager_factory = _create_registry_manager_factory()
@@ -162,7 +162,7 @@ class BatchService:
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
                 storage_backend=self._storage_backend,
-                node_name=self._node_name,
+                action_name=self._action_name,
             )
         return self._processing_service
 
@@ -224,11 +224,11 @@ class BatchService:
         self,
         output_directory: str,
         agent_config: Optional[Dict[str, Any]] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs (delegates to processing service)."""
         return self._get_processing_service().process_all_batch_results(
-            output_directory, agent_config, node_name=node_name
+            output_directory, agent_config, action_name=action_name
         )
 
     # =========================================================================

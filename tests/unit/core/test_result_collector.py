@@ -1,6 +1,7 @@
 """Tests for ResultCollector and ExhaustedRecordBuilder."""
 
 from typing import Any, Dict
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -219,6 +220,37 @@ def test_result_collector_on_exhausted_raise():
     assert exc_info.value.context["exhausted_records"] == 1
 
 
+def test_result_collector_on_exhausted_raise_writes_disposition_before_raising():
+    """Disposition must be written even when on_exhausted=raise crashes the pipeline."""
+    agent_config = {
+        "agent_type": "test_action",
+        "retry": {"on_exhausted": "raise"},
+    }
+    exhausted = ProcessingResult.exhausted(
+        error="Retry exhausted",
+        source_guid="src-raise",
+        recovery_metadata=_retry_metadata(),
+        input_record={"target_id": "t-1"},
+    )
+
+    mock_backend = MagicMock()
+
+    with pytest.raises(AgentActionsException):
+        ResultCollector.collect_results(
+            [exhausted],
+            agent_config,
+            "test_agent",
+            is_first_stage=True,
+            storage_backend=mock_backend,
+        )
+
+    # Disposition should have been written before the raise
+    mock_backend.set_disposition.assert_called_once_with(
+        "test_agent", "src-raise", "exhausted",
+        reason="exhausted_after_2_attempts",
+    )
+
+
 def test_result_collector_on_exhausted_return_last_does_not_raise():
     """Test that on_exhausted=return_last (default) does not raise."""
     agent_config = {
@@ -250,3 +282,182 @@ def test_result_collector_on_exhausted_return_last_does_not_raise():
 
     assert len(output) == 1
     assert output[0]["source_guid"] == "src-return"
+
+
+# ---------------------------------------------------------------------------
+# Per-record disposition write tests
+# ---------------------------------------------------------------------------
+
+
+class TestResultCollectorDispositions:
+    """Tests for per-record disposition writes in ResultCollector."""
+
+    def _make_backend(self):
+        backend = MagicMock()
+        backend.set_disposition = MagicMock()
+        return backend
+
+    def test_filtered_result_writes_disposition(self):
+        backend = self._make_backend()
+        filtered = ProcessingResult.filtered(source_guid="src-f1")
+        filtered.skip_reason = "low_confidence"
+
+        ResultCollector.collect_results(
+            [filtered], {}, "my_agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "my_agent", "src-f1", "filtered", reason="low_confidence",
+        )
+
+    def test_filtered_result_default_reason(self):
+        backend = self._make_backend()
+        filtered = ProcessingResult.filtered(source_guid="src-f2")
+
+        ResultCollector.collect_results(
+            [filtered], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-f2", "filtered", reason="guard_filter",
+        )
+
+    def test_failed_result_writes_disposition(self):
+        backend = self._make_backend()
+        failed = ProcessingResult.failed(error="timeout", source_guid="src-fail")
+
+        ResultCollector.collect_results(
+            [failed], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-fail", "failed", reason="timeout",
+        )
+
+    def test_failed_result_default_reason(self):
+        """When error field is empty string, falls back to 'processing_error'."""
+        backend = self._make_backend()
+        failed = ProcessingResult(
+            status=ProcessingStatus.FAILED,
+            data=[], executed=False, error="", source_guid="src-fail2",
+        )
+
+        ResultCollector.collect_results(
+            [failed], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-fail2", "failed", reason="processing_error",
+        )
+
+    def test_skipped_result_writes_disposition(self):
+        backend = self._make_backend()
+        skipped = ProcessingResult.skipped(
+            passthrough_data={"content": {}}, reason="guard_skip", source_guid="src-sk",
+        )
+
+        ResultCollector.collect_results(
+            [skipped], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-sk", "skipped", reason="guard_skip",
+        )
+
+    def test_exhausted_result_writes_disposition(self):
+        backend = self._make_backend()
+        exhausted = ProcessingResult.exhausted(
+            error="Retry exhausted", source_guid="src-ex",
+            recovery_metadata=_retry_metadata(),
+        )
+        exhausted.data = [{"source_guid": "src-ex", "content": {}}]
+
+        ResultCollector.collect_results(
+            [exhausted], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-ex", "exhausted",
+            reason="exhausted_after_2_attempts",
+        )
+
+    def test_unprocessed_result_writes_disposition(self):
+        backend = self._make_backend()
+        unprocessed = ProcessingResult(
+            status=ProcessingStatus.UNPROCESSED,
+            source_guid="src-un",
+            data=[{"content": {}}],
+            skip_reason="where_clause",
+        )
+
+        ResultCollector.collect_results(
+            [unprocessed], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_called_once_with(
+            "agent", "src-un", "unprocessed", reason="where_clause",
+        )
+
+    def test_success_result_no_disposition(self):
+        backend = self._make_backend()
+        success = ProcessingResult.success(
+            data=[{"content": {"v": 1}}], source_guid="src-ok",
+        )
+
+        ResultCollector.collect_results(
+            [success], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_not_called()
+
+    def test_no_storage_backend_no_crash(self):
+        """Dispositions are skipped gracefully when storage_backend is None."""
+        filtered = ProcessingResult.filtered(source_guid="src-f")
+        failed = ProcessingResult.failed(error="boom", source_guid="src-fail")
+
+        # Should not raise
+        output = ResultCollector.collect_results(
+            [filtered, failed], {}, "agent",
+            is_first_stage=False, storage_backend=None,
+        )
+        assert output == []
+
+    def test_no_source_guid_no_disposition(self):
+        """Records without source_guid should not attempt disposition writes."""
+        backend = self._make_backend()
+        filtered = ProcessingResult.filtered(source_guid=None)
+
+        ResultCollector.collect_results(
+            [filtered], {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        backend.set_disposition.assert_not_called()
+
+    def test_mixed_statuses_write_correct_dispositions(self):
+        """Multiple statuses in one batch write the right dispositions."""
+        backend = self._make_backend()
+
+        results = [
+            ProcessingResult.success(data=[{"content": {}}], source_guid="ok"),
+            ProcessingResult.filtered(source_guid="filt"),
+            ProcessingResult.failed(error="err", source_guid="fail"),
+        ]
+
+        ResultCollector.collect_results(
+            results, {}, "agent",
+            is_first_stage=False, storage_backend=backend,
+        )
+
+        assert backend.set_disposition.call_count == 2
+        calls = backend.set_disposition.call_args_list
+        assert calls[0] == (("agent", "filt", "filtered"), {"reason": "guard_filter"})
+        assert calls[1] == (("agent", "fail", "failed"), {"reason": "err"})

@@ -17,12 +17,12 @@ from typing import Dict, Any, List, Optional
 class MockBatchService:
     """Mock BatchService for testing helper methods in isolation."""
 
-    def __init__(self, storage_backend=None, node_name=None):
+    def __init__(self, storage_backend=None, action_name=None):
         self.check_status = MagicMock()
         self._context_manager = MagicMock()
         self._client_resolver = MagicMock()
         self._storage_backend = storage_backend
-        self._node_name = node_name
+        self._action_name = action_name
 
     def _is_batch_ready_for_processing(self, batch_id: str, output_directory: str) -> bool:
         """Check if batch is ready for processing (completed status)."""
@@ -65,7 +65,7 @@ class MockBatchService:
         FileWriter(
             str(output_file),
             storage_backend=self._storage_backend,
-            node_name=self._node_name,
+            action_name=self._action_name,
             output_directory=output_directory,
         ).write_target(main_output)
 
@@ -183,12 +183,12 @@ class TestWriteBatchOutput:
         mock_storage = MagicMock()
         written_data = []
 
-        def capture_write(node_name, relative_path, data):
-            written_data.append({"node_name": node_name, "path": relative_path, "data": data})
+        def capture_write(action_name, relative_path, data):
+            written_data.append({"action_name": action_name, "path": relative_path, "data": data})
 
         mock_storage.write_target = capture_write
 
-        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
+        service = MockBatchService(storage_backend=mock_storage, action_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         output_file = tmp_path / "output.json"
 
@@ -201,7 +201,7 @@ class TestWriteBatchOutput:
 
         # Verify storage backend was called with correct data
         assert len(written_data) == 1
-        assert written_data[0]["node_name"] == "test_node"
+        assert written_data[0]["action_name"] == "test_node"
         assert written_data[0]["path"] == "output.json"
         assert written_data[0]["data"] == main_output
 
@@ -211,7 +211,7 @@ class TestWriteBatchOutput:
         mock_storage = MagicMock()
         mock_storage.write_target = MagicMock()
 
-        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
+        service = MockBatchService(storage_backend=mock_storage, action_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         side_output_data = [{"id": "2", "skipped": True}]
 
@@ -240,7 +240,7 @@ class TestWriteBatchOutput:
         mock_storage = MagicMock()
         mock_storage.write_target = MagicMock()
 
-        service = MockBatchService(storage_backend=mock_storage, node_name="test_node")
+        service = MockBatchService(storage_backend=mock_storage, action_name="test_node")
         main_output = [{"id": "1", "result": "success"}]
         output_file = tmp_path / "output.json"
 

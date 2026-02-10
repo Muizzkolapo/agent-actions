@@ -244,12 +244,12 @@ class HistoricalNodeDataLoader:
         try:
             # First try: load with the derived file name (fast path)
             logger.debug(
-                "[STORAGE_BACKEND] Loading from storage: node_name=%s, relative_path=%s",
+                "[STORAGE_BACKEND] Loading from storage: action_name=%s, relative_path=%s",
                 action_name,
                 file_name,
             )
             data = storage_backend.read_target(
-                node_name=action_name,
+                action_name=action_name,
                 relative_path=file_name,
             )
             logger.debug(

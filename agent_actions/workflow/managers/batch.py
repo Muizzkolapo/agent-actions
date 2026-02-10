@@ -7,9 +7,9 @@ Extracted from agent_workflow.py to consolidate batch handling logic.
 
 import logging
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional, Dict, Any, TYPE_CHECKING
 from rich.console import Console
-from agent_actions.errors import ProcessingError
+from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.events import (
     BatchProcessingCompleteEvent,
@@ -18,6 +18,11 @@ from agent_actions.logging.events import (
     BatchPassthroughEvent,
     BatchStatusEvent,
 )
+
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +38,29 @@ class BatchLifecycleManager:
     - Provide unified batch status reporting
     """
 
-    def __init__(self, batch_service, console: Optional[Console] = None):
+    def __init__(
+        self,
+        batch_service,
+        console: Optional[Console] = None,
+        storage_backend: Optional["StorageBackend"] = None,
+    ):
         """
         Initialize batch lifecycle manager.
 
         Args:
             batch_service: BatchService instance for registry/result operations
             console: Rich console for output
+            storage_backend: Storage backend for disposition tracking (required; raises if None)
         """
+        if storage_backend is None:
+            raise ConfigurationError(
+                "BatchLifecycleManager requires a storage_backend. "
+                "Disposition tracking is not optional.",
+                context={"component": "BatchLifecycleManager"},
+            )
         self.batch_service = batch_service
         self.console = console or Console()
+        self.storage_backend = storage_backend
 
     def handle_batch_agent(
         self, agent_name: str, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
@@ -88,8 +106,10 @@ class BatchLifecycleManager:
 
         # Case 3: No batches found, check for passthrough
         if registry_status == "no_batches":
-            passthrough_marker = Path(output_directory) / ".passthrough_processed"
-            if passthrough_marker.exists():
+            has_passthrough = self.storage_backend.has_disposition(
+                agent_name, DISPOSITION_PASSTHROUGH
+            )
+            if has_passthrough:
                 fire_event(BatchPassthroughEvent(agent_name=agent_name))
                 return (output_directory, "completed")
             fire_event(
@@ -120,7 +140,7 @@ class BatchLifecycleManager:
         """
         try:
             processed_files = self.batch_service.process_all_batch_results(
-                output_directory, agent_config=agent_config, node_name=agent_name
+                output_directory, agent_config=agent_config, action_name=agent_name
             )
             if not processed_files:
                 logger.info(
@@ -164,38 +184,15 @@ class BatchLifecycleManager:
         # Use simple directory name (no index prefix)
         node_output_dir = agent_io_path / "target" / agent_name
         registry_file = node_output_dir / "batch" / ".batch_registry.json"
-        passthrough_marker = node_output_dir / ".passthrough_processed"
 
         if registry_file.exists():
             return "batch_submitted"
-        if passthrough_marker.exists():
+
+        # Check passthrough disposition
+        if self.storage_backend.has_disposition(agent_name, DISPOSITION_PASSTHROUGH):
             return "passthrough"
+
         if node_output_dir.exists():
             # Output dir exists but no batch registry or passthrough
             return "no_batches"
         return None
-
-    def cleanup_passthrough_marker(self, output_dir: Path):
-        """
-        Remove passthrough marker after processing.
-
-        Args:
-            output_dir: Path to output directory
-        """
-        passthrough_marker = output_dir / ".passthrough_processed"
-        try:
-            if passthrough_marker.exists():
-                passthrough_marker.unlink()
-        except FileNotFoundError:
-            pass  # Already removed
-        except (OSError, PermissionError) as e:
-            logger.warning(
-                "Could not remove passthrough file %s: %s",
-                passthrough_marker,
-                e,
-                exc_info=True,
-                extra={
-                    "passthrough_marker": str(passthrough_marker),
-                    "operation": "cleanup_passthrough_marker",
-                },
-            )

@@ -177,7 +177,7 @@ class ProjectScanner:
                     'source_count': 1,
                     'target_count': 3,
                     'nodes': {
-                        'node_name': {
+                        'action_name': {
                             'record_count': 10,
                             'files': ['file.json'],
                             'preview': [{ ... }]
@@ -213,16 +213,16 @@ class ProjectScanner:
 
                 nodes = {}
                 node_counts = stats.get("nodes", {})
-                for node_name, record_count in node_counts.items():
+                for action_name, record_count in node_counts.items():
                     try:
-                        preview_result = backend.preview_target(node_name, limit=20)
-                        nodes[node_name] = {
+                        preview_result = backend.preview_target(action_name, limit=20)
+                        nodes[action_name] = {
                             "record_count": record_count,
                             "files": preview_result.get("files", []),
                             "preview": preview_result.get("records", []),
                         }
                     except Exception:
-                        nodes[node_name] = {
+                        nodes[action_name] = {
                             "record_count": record_count,
                             "files": [],
                             "preview": [],

@@ -16,6 +16,31 @@ from .operator_registry import OperatorRegistry, get_global_registry
 
 logger = logging.getLogger(__name__)
 
+# Deduplicate missing-field warnings so we log once per field name, not once per record.
+# This is module-level (process-lifetime) because WhereClauseEvaluator is created per-record
+# via WhereClauseAST.evaluate(), so instance-level scoping would re-warn on every record.
+# Trade-off: in long-running processes, a field name warned once is suppressed forever,
+# even across unrelated workflows with different schemas.
+_warned_missing_fields: set = set()
+
+
+def _field_exists(data: Any, field_path: str) -> bool:
+    """Check if a field path exists in the data (distinguishes None value from missing).
+
+    Note: This re-walks the same nested dict path that context.get_field_value() already
+    traverses. The double-walk is necessary because get_field_value() returns None for both
+    "field exists with value None" and "field is missing" — we need to distinguish them to
+    avoid false warnings on intentionally-null fields.
+    """
+    keys = field_path.split(".")
+    current = data
+    for key in keys:
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return False
+    return True
+
 
 class NodeType(Enum):
     """Types of AST nodes in the WHERE clause tree."""
@@ -324,7 +349,19 @@ class WhereClauseEvaluator(ASTVisitor):
 
     def visit_field(self, node: FieldNode) -> Any:
         """Get the value of a field from the context data."""
-        return self.context.get_field_value(node.field_path)
+        value = self.context.get_field_value(node.field_path)
+        if value is None and not _field_exists(self.context.data, node.field_path):
+            if node.field_path not in _warned_missing_fields:
+                _warned_missing_fields.add(node.field_path)
+                logger.warning(
+                    "Guard condition references field '%s' which does not exist in the data. "
+                    "Available fields: %s",
+                    node.field_path,
+                    ", ".join(sorted(self.context.data.keys()))
+                    if isinstance(self.context.data, dict)
+                    else "(non-dict data)",
+                )
+        return value
 
     def visit_literal(self, node: LiteralNode) -> Any:
         """Return the literal value."""

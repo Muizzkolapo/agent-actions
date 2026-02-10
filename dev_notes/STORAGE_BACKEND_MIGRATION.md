@@ -94,13 +94,13 @@ backend.initialize()
 target_dir = workflow_path / "agent_io" / "target"
 for node_dir in target_dir.iterdir():
     if node_dir.is_dir():
-        node_name = node_dir.name
+        action_name = node_dir.name
         for json_file in node_dir.glob("*.json"):
             with open(json_file) as f:
                 data = json.load(f)
             relative_path = json_file.name
-            backend.write_target(node_name, relative_path, data)
-            print(f"Migrated target: {node_name}/{relative_path}")
+            backend.write_target(action_name, relative_path, data)
+            print(f"Migrated target: {action_name}/{relative_path}")
 
 # Migrate source data
 source_dir = workflow_path / "agent_io" / "source_data"
@@ -124,13 +124,13 @@ Query the database to verify data was migrated correctly:
 sqlite3 /path/to/workflow/agent_io/workflow.db
 
 -- Check target data
-SELECT node_name, relative_path, record_count FROM target_data;
+SELECT action_name, relative_path, record_count FROM target_data;
 
 -- Check source data count
 SELECT relative_path, COUNT(*) as records FROM source_data GROUP BY relative_path;
 
 -- Preview actual data
-SELECT data FROM target_data WHERE node_name = 'extract' LIMIT 1;
+SELECT data FROM target_data WHERE action_name = 'extract' LIMIT 1;
 ```
 
 ### Step 4: Clean Up Old Files (Optional)
@@ -154,14 +154,14 @@ Common queries:
 
 ```sql
 -- List all nodes
-SELECT DISTINCT node_name FROM target_data;
+SELECT DISTINCT action_name FROM target_data;
 
 -- Count records per node
-SELECT node_name, SUM(record_count) as total FROM target_data GROUP BY node_name;
+SELECT action_name, SUM(record_count) as total FROM target_data GROUP BY action_name;
 
 -- Get records for a specific node/file
 SELECT json_extract(data, '$[0].content') FROM target_data
-WHERE node_name = 'extract' AND relative_path = 'batch_001.json';
+WHERE action_name = 'extract' AND relative_path = 'batch_001.json';
 
 -- Search within JSON data
 SELECT * FROM target_data
@@ -220,13 +220,13 @@ The VS Code extension provides a "Preview Data" option in the workflow tree view
 | Column | Type | Description |
 |--------|------|-------------|
 | id | INTEGER | Auto-incrementing primary key |
-| node_name | TEXT | Action/node name (e.g., "extract") |
+| action_name | TEXT | Action/node name (e.g., "extract") |
 | relative_path | TEXT | Original file path (e.g., "batch_001.json") |
 | data | TEXT | JSON-encoded array of records |
 | record_count | INTEGER | Number of records in data array |
 | created_at | TEXT | Timestamp of insertion |
 
-**Unique constraint:** (node_name, relative_path)
+**Unique constraint:** (action_name, relative_path)
 
 ## Troubleshooting
 
@@ -253,7 +253,7 @@ For large databases:
 ANALYZE;
 
 -- Check index usage
-EXPLAIN QUERY PLAN SELECT * FROM target_data WHERE node_name = 'extract';
+EXPLAIN QUERY PLAN SELECT * FROM target_data WHERE action_name = 'extract';
 ```
 
 ## Rollback
@@ -285,7 +285,7 @@ class MyCustomBackend(StorageBackend):
         # Setup storage
         pass
 
-    def write_target(self, node_name, relative_path, data):
+    def write_target(self, action_name, relative_path, data):
         # Write implementation
         pass
 

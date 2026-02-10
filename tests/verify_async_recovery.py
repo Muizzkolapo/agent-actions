@@ -302,7 +302,7 @@ class TestRegistrySkipsRecoveryEntries(unittest.TestCase):
             result_processor=result_processor,
             registry_manager_factory=MagicMock(return_value=manager),
             storage_backend=mock_storage,
-            node_name="test",
+            action_name="test",
         )
 
         result = service.process_all_batch_results("/tmp/test")

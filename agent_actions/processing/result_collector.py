@@ -1,7 +1,7 @@
 """Shared result aggregation for processing output records."""
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.errors import AgentActionsException
@@ -12,8 +12,41 @@ from agent_actions.logging.events import (
     ResultCollectionCompleteEvent,
     ExhaustedRecordEvent,
 )
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_SKIPPED,
+    DISPOSITION_UNPROCESSED,
+)
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_set_disposition(
+    backend: "StorageBackend",
+    action_name: str,
+    record_id: str,
+    disposition: str,
+    **kwargs: Any,
+) -> None:
+    """Write a disposition record, logging and swallowing errors.
+
+    Disposition writes are telemetry — they must not crash the data pipeline.
+    """
+    try:
+        backend.set_disposition(action_name, record_id, disposition, **kwargs)
+    except Exception:
+        logger.warning(
+            "Failed to write disposition action=%s record=%s disp=%s",
+            action_name,
+            record_id,
+            disposition,
+            exc_info=True,
+        )
 
 
 class ResultCollector:
@@ -26,6 +59,7 @@ class ResultCollector:
         agent_name: str,
         *,
         is_first_stage: bool,
+        storage_backend: Optional["StorageBackend"] = None,
     ) -> List[Dict[str, Any]]:
         """
         Flatten ProcessingResult entries into output records.
@@ -35,6 +69,7 @@ class ResultCollector:
             agent_config: Agent configuration for schema hints.
             agent_name: Agent name for exhausted record lineage.
             is_first_stage: True for staging, False for downstream.
+            storage_backend: Optional storage backend for writing per-record dispositions.
         Returns:
             List of output records.
         Raises:
@@ -63,6 +98,21 @@ class ResultCollector:
             )
 
             if on_exhausted == "raise":
+                # Write dispositions for all exhausted records before raising
+                if storage_backend:
+                    for er in exhausted_results:
+                        if er.source_guid:
+                            er_attempts = (
+                                er.recovery_metadata.retry.attempts
+                                if er.recovery_metadata and er.recovery_metadata.retry
+                                else "unknown"
+                            )
+                            _safe_set_disposition(
+                                storage_backend,
+                                agent_name, er.source_guid, DISPOSITION_EXHAUSTED,
+                                reason=f"exhausted_after_{er_attempts}_attempts",
+                            )
+
                 exhausted_record = exhausted_results[0]
                 attempts = (
                     exhausted_record.recovery_metadata.retry.attempts
@@ -127,6 +177,12 @@ class ResultCollector:
                         status="skipped",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name, result.source_guid, DISPOSITION_SKIPPED,
+                        reason=result.skip_reason or "guard_skip",
+                    )
             elif result.status == ProcessingStatus.EXHAUSTED:
                 exhausted_count += 1
                 data = result.data or []
@@ -151,6 +207,12 @@ class ResultCollector:
                         reason=f"exhausted_after_{attempts}_attempts",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name, result.source_guid, DISPOSITION_EXHAUSTED,
+                        reason=f"exhausted_after_{attempts}_attempts",
+                    )
             elif result.status == ProcessingStatus.FAILED:
                 failed_count += 1
                 logger.error("Processing failed: %s", result.error)
@@ -162,6 +224,12 @@ class ResultCollector:
                         status="failed",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name, result.source_guid, DISPOSITION_FAILED,
+                        reason=result.error or "processing_error",
+                    )
             elif result.status == ProcessingStatus.FILTERED:
                 filtered_count += 1
                 logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
@@ -173,6 +241,12 @@ class ResultCollector:
                         status="filtered",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name, result.source_guid, DISPOSITION_FILTERED,
+                        reason=result.skip_reason or "guard_filter",
+                    )
             elif result.status == ProcessingStatus.UNPROCESSED:
                 unprocessed_count += 1
                 data = result.data or []
@@ -190,6 +264,12 @@ class ResultCollector:
                         status="unprocessed",
                     )
                 )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name, result.source_guid, DISPOSITION_UNPROCESSED,
+                        reason=result.skip_reason or "unprocessed",
+                    )
             else:
                 logger.debug("Unhandled result status=%s", result.status)
 

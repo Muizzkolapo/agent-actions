@@ -187,7 +187,7 @@ class AgentWorkflow:
             agent_indices=self.agent_indices,
             dependency_configs=self.agent_configs,
             storage_backend=self.storage_backend,
-            node_name=self.agent_name,
+            action_name=self.agent_name,
         )
 
         # Get agent folder and store for retry tracking
@@ -204,7 +204,9 @@ class AgentWorkflow:
         # Initialize modular components
         state_manager = AgentStateManager(status_file, self.execution_order)
         skip_evaluator = SkipEvaluator(self.console)
-        batch_manager = BatchLifecycleManager(batch_service, self.console)
+        batch_manager = BatchLifecycleManager(
+            batch_service, self.console, storage_backend=self.storage_backend
+        )
         output_manager = AgentOutputManager(
             OutputManagerConfig(
                 agent_folder=agent_folder,

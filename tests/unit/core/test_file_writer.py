@@ -23,7 +23,7 @@ class TestFileWriterRelativePath:
         writer = FileWriter(
             str(file_path),
             storage_backend=mock_backend,
-            node_name="agent_name",
+            action_name="agent_name",
             output_directory=str(output_dir),
         )
 
@@ -45,7 +45,7 @@ class TestFileWriterRelativePath:
         writer = FileWriter(
             str(file_path),
             storage_backend=mock_backend,
-            node_name="agent_name",
+            action_name="agent_name",
             # No output_directory provided
         )
 
@@ -65,7 +65,7 @@ class TestFileWriterRelativePath:
         writer = FileWriter(
             str(file_path),
             storage_backend=mock_backend,
-            node_name="agent_name",
+            action_name="agent_name",
             output_directory=str(output_dir),
         )
 
@@ -86,7 +86,7 @@ class TestFileWriterRelativePath:
         writer_a = FileWriter(
             str(file_path_a),
             storage_backend=mock_backend,
-            node_name="agent_name",
+            action_name="agent_name",
             output_directory=str(output_dir),
         )
         writer_a.write_target([{"source": "a"}])
@@ -96,7 +96,7 @@ class TestFileWriterRelativePath:
         writer_b = FileWriter(
             str(file_path_b),
             storage_backend=mock_backend,
-            node_name="agent_name",
+            action_name="agent_name",
             output_directory=str(output_dir),
         )
         writer_b.write_target([{"source": "b"}])

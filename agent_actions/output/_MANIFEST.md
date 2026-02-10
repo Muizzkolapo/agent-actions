@@ -29,7 +29,7 @@ The `FileWriter` class supports database-backed persistence via storage backends
 FileWriter(
     file_path: str,
     storage_backend: Optional[StorageBackend] = None,
-    node_name: Optional[str] = None,
+    action_name: Optional[str] = None,
     output_directory: Optional[str] = None,
 )
 ```
@@ -38,7 +38,7 @@ FileWriter(
 |-----------|-------------|
 | `file_path` | Full path to the output file |
 | `storage_backend` | Optional storage backend for database persistence |
-| `node_name` | Node/agent name for backend writes (required if storage_backend provided) |
+| `action_name` | Node/agent name for backend writes (required if storage_backend provided) |
 | `output_directory` | Base directory for computing relative paths (preserves subdirectory structure) |
 
 ### Relative Path Preservation

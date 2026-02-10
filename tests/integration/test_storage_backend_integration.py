@@ -12,6 +12,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
@@ -258,7 +259,7 @@ class TestPreviewAndStats:
 
         assert len(result["records"]) == 5
         assert result["total_count"] == 25  # 15 + 10 from both batches
-        assert result["node_name"] == "extract"
+        assert result["action_name"] == "extract"
         assert len(result["files"]) == 2
         assert result["limit"] == 5
         assert result["offset"] == 0
@@ -558,3 +559,117 @@ class TestWorkflowIntegration:
                 result = backend.read_target("merge", "batch.json")
                 assert len(result) == 2
                 assert {r["src"] for r in result} == {"a", "b"}
+
+
+class TestDispositionLifecycle:
+    """Test full disposition lifecycle: write -> read -> cleanup."""
+
+    def test_passthrough_lifecycle(self):
+        """Passthrough disposition can be set, queried, and cleared."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
+                backend.initialize()
+
+                # 1. Set passthrough disposition
+                backend.set_disposition(
+                    "extract", NODE_LEVEL_RECORD_ID, "passthrough", reason="All records tombstoned"
+                )
+
+                # 2. Verify it exists
+                assert backend.has_disposition("extract", "passthrough") is True
+                records = backend.get_disposition("extract", disposition="passthrough")
+                assert len(records) == 1
+                assert records[0]["reason"] == "All records tombstoned"
+
+                # 3. Clear it
+                deleted = backend.clear_disposition("extract", "passthrough")
+                assert deleted == 1
+
+                # 4. Verify it's gone
+                assert backend.has_disposition("extract", "passthrough") is False
+
+    def test_skip_disposition_lifecycle(self):
+        """Skip disposition works end-to-end."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
+                backend.initialize()
+
+                # Set skip disposition
+                backend.set_disposition(
+                    "classify", NODE_LEVEL_RECORD_ID, "skipped", reason="WHERE clause filtered"
+                )
+
+                # Query it
+                assert backend.has_disposition("classify", "skipped") is True
+                records = backend.get_disposition("classify")
+                assert len(records) == 1
+                assert records[0]["disposition"] == "skipped"
+
+    def test_multiple_nodes_independent(self):
+        """Dispositions for different nodes are independent."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
+                backend.initialize()
+
+                backend.set_disposition("node_a", NODE_LEVEL_RECORD_ID, "passthrough")
+                backend.set_disposition("node_b", NODE_LEVEL_RECORD_ID, "skipped")
+
+                assert backend.has_disposition("node_a", "passthrough") is True
+                assert backend.has_disposition("node_a", "skipped") is False
+                assert backend.has_disposition("node_b", "skipped") is True
+                assert backend.has_disposition("node_b", "passthrough") is False
+
+                # Clearing node_a doesn't affect node_b
+                backend.clear_disposition("node_a")
+                assert backend.has_disposition("node_b", "skipped") is True
+
+    def test_per_record_dispositions(self):
+        """Individual record dispositions work alongside node-level ones."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
+                backend.initialize()
+
+                # Node-level
+                backend.set_disposition("extract", NODE_LEVEL_RECORD_ID, "passthrough")
+
+                # Per-record
+                backend.set_disposition(
+                    "extract", "rec_1", "exhausted", reason="Retry limit reached"
+                )
+                backend.set_disposition(
+                    "extract", "rec_2", "filtered", reason="Below threshold"
+                )
+
+                # Query all for node
+                all_dispositions = backend.get_disposition("extract")
+                assert len(all_dispositions) == 3
+
+                # Query only exhausted
+                exhausted = backend.get_disposition("extract", disposition="exhausted")
+                assert len(exhausted) == 1
+                assert exhausted[0]["record_id"] == "rec_1"
+
+    def test_disposition_stats_in_storage_stats(self):
+        """Storage stats include disposition count."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "workflow.db"
+
+            with SQLiteBackend(str(db_path), "my_workflow") as backend:
+                backend.initialize()
+
+                # Write some target data and dispositions
+                backend.write_target("node1", "batch.json", [{"id": 1}])
+                backend.set_disposition("node1", NODE_LEVEL_RECORD_ID, "passthrough")
+                backend.set_disposition("node1", "rec_1", "filtered")
+
+                stats = backend.get_storage_stats()
+                assert stats["disposition_count"] == 2
+                assert stats["target_count"] == 1

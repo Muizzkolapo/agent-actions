@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
 
 from agent_actions.logging import fire_event
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_SKIPPED,
+)
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -68,7 +74,7 @@ class BatchProcessingService:
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         storage_backend: Optional["StorageBackend"] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ):
         """Initialize processing service with dependencies.
 
@@ -81,7 +87,7 @@ class BatchProcessingService:
             agent_indices: Dict mapping agent names to node indices (for reprompt)
             dependency_configs: Dict mapping dependency names to configs (for reprompt)
             storage_backend: Optional storage backend for database persistence
-            node_name: Node name for backend writes (required if storage_backend provided)
+            action_name: Node name for backend writes (required if storage_backend provided)
         """
         self._client_resolver = client_resolver
         self._context_manager = context_manager
@@ -91,7 +97,7 @@ class BatchProcessingService:
         self._agent_indices = agent_indices or {}
         self._dependency_configs = dependency_configs or {}
         self._storage_backend = storage_backend
-        self._node_name = node_name
+        self._action_name = action_name
         self._retry_service = BatchRetryService(
             agent_indices=self._agent_indices,
             dependency_configs=self._dependency_configs,
@@ -155,6 +161,11 @@ class BatchProcessingService:
                 output_directory=output_directory,
                 agent_config=agent_config,
             )
+
+            # Write per-record dispositions for dead records
+            if self._storage_backend and self._action_name:
+                self._write_record_dispositions(processed_data, self._action_name)
+
             main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
             # Save source data before writing output
@@ -177,7 +188,7 @@ class BatchProcessingService:
             FileWriter(
                 str(output_file),
                 storage_backend=self._storage_backend,
-                node_name=self._node_name,
+                action_name=self._action_name,
                 output_directory=output_directory,
             ).write_target(main_output)
 
@@ -200,7 +211,7 @@ class BatchProcessingService:
         self,
         output_directory: str,
         agent_config: Optional[Dict[str, Any]] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> List[str]:
         """Process all completed batch jobs in the registry.
 
@@ -210,7 +221,7 @@ class BatchProcessingService:
         Args:
             output_directory: Output directory path
             agent_config: Agent configuration
-            node_name: Override node_name for storage backend writes (uses self._node_name if not provided)
+            action_name: Override action_name for storage backend writes (uses self._action_name if not provided)
 
         Returns:
             List of output file paths
@@ -225,8 +236,8 @@ class BatchProcessingService:
                 "No batch registry found", context={"output_directory": output_directory}
             )
 
-        # Use provided node_name or fall back to instance default
-        effective_node_name = node_name or self._node_name
+        # Use provided action_name or fall back to instance default
+        effective_action_name = action_name or self._action_name
 
         processed_files = []
         for file_name, entry in all_jobs.items():
@@ -251,7 +262,7 @@ class BatchProcessingService:
                     output_directory=output_directory,
                     agent_config=agent_config,
                     manager=manager,
-                    node_name=effective_node_name,
+                    action_name=effective_action_name,
                 )
                 if output_file:
                     processed_files.append(output_file)
@@ -324,7 +335,7 @@ class BatchProcessingService:
         main_output: List[Dict[str, Any]],
         side_output_data: Optional[List[Dict[str, Any]]],
         output_directory: str,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> None:
         """Write main and side output files.
 
@@ -333,7 +344,7 @@ class BatchProcessingService:
             main_output: Main output data to write
             side_output_data: Optional side output data
             output_directory: Directory for side output
-            node_name: Override node_name for storage backend writes
+            action_name: Override action_name for storage backend writes
         """
         # Only create directory if not using storage backend
         if self._storage_backend is None:
@@ -341,7 +352,7 @@ class BatchProcessingService:
         FileWriter(
             str(output_file),
             storage_backend=self._storage_backend,
-            node_name=node_name or self._node_name,
+            action_name=action_name or self._action_name,
             output_directory=output_directory,
         ).write_target(main_output)
 
@@ -358,7 +369,7 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> Optional[str]:
         """Process a single batch file and return output path.
 
@@ -376,7 +387,7 @@ class BatchProcessingService:
             output_directory: Output directory path
             agent_config: Agent configuration (may include retry settings)
             manager: Registry manager instance
-            node_name: Override node_name for storage backend writes
+            action_name: Override action_name for storage backend writes
 
         Returns:
             Output file path if successful, None if recovery is pending
@@ -390,7 +401,7 @@ class BatchProcessingService:
                 output_directory=output_directory,
                 agent_config=agent_config,
                 manager=manager,
-                node_name=node_name,
+                action_name=action_name,
             )
 
         # Branch A: Original batch
@@ -401,7 +412,7 @@ class BatchProcessingService:
             output_directory=output_directory,
             agent_config=agent_config,
             manager=manager,
-            node_name=node_name,
+            action_name=action_name,
         )
 
     def _process_original_batch(
@@ -412,7 +423,7 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> Optional[str]:
         """Process an original (non-recovery) batch file.
 
@@ -529,7 +540,7 @@ class BatchProcessingService:
             batch_id=batch_id,
             agent_config=agent_config,
             manager=manager,
-            node_name=node_name,
+            action_name=action_name,
             start_time=start_time,
         )
 
@@ -541,7 +552,7 @@ class BatchProcessingService:
         output_directory: str,
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
     ) -> Optional[str]:
         """Process a recovery batch (retry or reprompt).
 
@@ -593,7 +604,7 @@ class BatchProcessingService:
                 agent_config=agent_config,
                 manager=manager,
                 provider=provider,
-                node_name=node_name,
+                action_name=action_name,
                 start_time=start_time,
             )
         elif entry.recovery_type == "reprompt":
@@ -608,7 +619,7 @@ class BatchProcessingService:
                 agent_config=agent_config,
                 manager=manager,
                 provider=provider,
-                node_name=node_name,
+                action_name=action_name,
                 start_time=start_time,
             )
 
@@ -627,7 +638,7 @@ class BatchProcessingService:
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
         provider: Any,
-        node_name: Optional[str],
+        action_name: Optional[str],
         start_time: float,
     ) -> Optional[str]:
         """Handle retry recovery batch completion."""
@@ -711,7 +722,7 @@ class BatchProcessingService:
             batch_id=entry.batch_id,
             agent_config=agent_config,
             manager=manager,
-            node_name=node_name,
+            action_name=action_name,
             start_time=start_time,
         )
 
@@ -727,7 +738,7 @@ class BatchProcessingService:
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
         provider: Any,
-        node_name: Optional[str],
+        action_name: Optional[str],
         start_time: float,
     ) -> Optional[str]:
         """Handle reprompt recovery batch completion."""
@@ -815,7 +826,7 @@ class BatchProcessingService:
             batch_id=entry.batch_id,
             agent_config=agent_config,
             manager=manager,
-            node_name=node_name,
+            action_name=action_name,
             start_time=start_time,
         )
 
@@ -928,6 +939,48 @@ class BatchProcessingService:
         )
         return False  # Recovery pending — caller should return None
 
+    def _write_record_dispositions(self, items: List[Dict[str, Any]], action_name: str) -> None:
+        """Write dispositions for non-success records in batch output.
+
+        Called from both process_batch_results() (single-batch legacy API) and
+        _finalize_batch_output() (multi-batch collection path).  These are
+        mutually exclusive entry points — a given batch never flows through both.
+
+        Disposition writes are telemetry — errors are logged but never propagated.
+        """
+        if not self._storage_backend:
+            return
+        for item in items:
+            source_guid = item.get("source_guid")
+            if not source_guid:
+                continue
+            metadata = item.get("metadata", {})
+
+            try:
+                if metadata.get("retry_exhausted"):
+                    self._storage_backend.set_disposition(
+                        action_name, source_guid, DISPOSITION_EXHAUSTED,
+                        reason="retry_exhausted",
+                    )
+                elif item.get("_unprocessed"):
+                    reason = metadata.get("reason", "unprocessed")
+                    if metadata.get("skipped_by_where_clause"):
+                        disposition = DISPOSITION_FILTERED
+                    else:
+                        disposition = DISPOSITION_SKIPPED
+                    self._storage_backend.set_disposition(
+                        action_name, source_guid, disposition, reason=reason,
+                    )
+                elif item.get("error"):
+                    self._storage_backend.set_disposition(
+                        action_name, source_guid, DISPOSITION_FAILED,
+                        reason=str(item["error"])[:500],
+                    )
+            except Exception:
+                logger.warning(
+                    "Failed to write disposition for record %s", source_guid, exc_info=True,
+                )
+
     def _finalize_batch_output(
         self,
         batch_results: List[BatchResult],
@@ -938,7 +991,7 @@ class BatchProcessingService:
         batch_id: str,
         agent_config: Optional[Dict[str, Any]],
         manager: BatchRegistryManager,
-        node_name: Optional[str],
+        action_name: Optional[str],
         start_time: float,
     ) -> str:
         """Finalize batch processing: convert, write output, fire events."""
@@ -950,11 +1003,15 @@ class BatchProcessingService:
             exhausted_recovery=exhausted_recovery,
         )
 
+        # Write per-record dispositions for dead records
+        if self._storage_backend and self._action_name:
+            self._write_record_dispositions(processed_data, self._action_name)
+
         main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
         output_file = self._determine_output_path(output_directory, file_name, batch_id)
         self._write_batch_output(
-            output_file, main_output, side_output_data, output_directory, node_name
+            output_file, main_output, side_output_data, output_directory, action_name
         )
 
         elapsed_time = time.time() - start_time

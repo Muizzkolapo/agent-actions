@@ -83,7 +83,7 @@ def _build_service(tmp_path, provider, context_map, result_processor=None):
         result_processor=rp,
         registry_manager_factory=registry_factory,
         storage_backend=mock_storage,
-        node_name="test_agent",
+        action_name="test_agent",
     )
 
     return service, shared_manager
@@ -203,7 +203,7 @@ class TestRetryLifecycleE2E:
                 output_directory=str(tmp_path),
                 agent_config=agent_config,
                 manager=manager,
-                node_name="test_agent",
+                action_name="test_agent",
             )
 
         assert output is None, "Pass 1 should return None (recovery pending)"
@@ -234,7 +234,7 @@ class TestRetryLifecycleE2E:
             output_directory=str(tmp_path),
             agent_config=agent_config,
             manager=manager,
-            node_name="test_agent",
+            action_name="test_agent",
         )
 
         assert output is not None, f"Pass 2 should return output path, got None"
@@ -317,7 +317,7 @@ class TestRetryExhaustionE2E:
             output_directory=str(tmp_path),
             agent_config=agent_config,
             manager=manager,
-            node_name="test_agent",
+            action_name="test_agent",
         )
 
         assert output is not None, "Should produce output even with exhausted retries"
@@ -397,7 +397,7 @@ class TestRepromptLifecycleE2E:
                 output_directory=str(tmp_path),
                 agent_config=agent_config,
                 manager=manager,
-                node_name="test_agent",
+                action_name="test_agent",
             )
 
         assert output is None, "Should return None (reprompt pending)"
@@ -482,7 +482,7 @@ class TestRecoveryCleanupE2E:
             output_directory=str(tmp_path),
             agent_config={"retry": {"enabled": True, "max_attempts": 2}},
             manager=manager,
-            node_name="test_agent",
+            action_name="test_agent",
         )
 
         assert output is not None
@@ -526,7 +526,7 @@ class TestWorkflowManagerRecheck:
         ]
         batch_service.process_all_batch_results.return_value = []
 
-        lifecycle = BatchLifecycleManager(batch_service)
+        lifecycle = BatchLifecycleManager(batch_service, storage_backend=MagicMock())
 
         output_folder, status = lifecycle.handle_batch_agent(
             agent_name="test_agent",

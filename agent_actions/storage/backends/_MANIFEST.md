@@ -11,7 +11,7 @@ architecture designed for future backends (S3, DuckDB, PostgreSQL, etc.).
 |------|------|-------------|---------|
 | `__init__.py` | Module | Package exports for backend implementations. | `typing` |
 | `sqlite_backend.py` | Module | SQLite implementation of `StorageBackend` using WAL mode for concurrency. | `sqlite3`, `json`, `storage.backend` |
-| `SQLiteBackend` | Class | Stores source/target data in SQLite with deduplication by `source_guid`. Tables: `source_data`, `target_data`. | `storage.backend` |
+| `SQLiteBackend` | Class | Stores source/target data in SQLite with deduplication by `source_guid`. Tables: `source_data`, `target_data`, `record_disposition`. | `storage.backend` |
 
 ## SQLite Schema
 
@@ -27,12 +27,23 @@ CREATE TABLE source_data (
 
 CREATE TABLE target_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    node_name TEXT NOT NULL,
+    action_name TEXT NOT NULL,
     relative_path TEXT NOT NULL,
     data TEXT NOT NULL,  -- JSON blob
     record_count INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(node_name, relative_path)
+    UNIQUE(action_name, relative_path)
+);
+
+CREATE TABLE record_disposition (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action_name TEXT NOT NULL,
+    record_id TEXT NOT NULL,  -- "__node__" for node-level signals
+    disposition TEXT NOT NULL, -- "passthrough", "skipped", "filtered", "exhausted", "failed", "unprocessed"
+    reason TEXT,
+    relative_path TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(action_name, record_id, disposition)
 );
 ```
 

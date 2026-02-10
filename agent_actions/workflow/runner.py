@@ -590,7 +590,7 @@ class AgentRunner:
 
                 # Use the first upstream directory as the base for path structure
                 # This ensures the path contains 'agent_io' which source_loader expects
-                # The source_loader expects: agent_io/target/{node_name}/{filename}
+                # The source_loader expects: agent_io/target/{action_name}/{filename}
                 # So we write the merged file to the first upstream directory
                 first_upstream = Path(params.upstream_data_dirs[0])
                 merged_file = first_upstream / relative_path
@@ -655,11 +655,11 @@ class AgentRunner:
 
         # Collect data from all upstream nodes, grouped by relative path
         # This enables merge behavior for parallel branches
-        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}  # path -> [(node_name, data), ...]
+        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}  # path -> [(action_name, data), ...]
 
         for input_directory in params.upstream_data_dirs:
             input_path = Path(input_directory)
-            node_name = input_path.name
+            action_name = input_path.name
 
             # Skip staging directories - those are still file-based
             if "staging" in str(input_path):
@@ -667,25 +667,25 @@ class AgentRunner:
 
             # Query backend for files from this node
             try:
-                target_files = self.storage_backend.list_target_files(node_name)
+                target_files = self.storage_backend.list_target_files(action_name)
             except Exception as e:
                 logger.debug(
                     "Could not list target files from backend for %s: %s",
-                    node_name,
+                    action_name,
                     e,
                 )
                 continue
 
             for relative_path in target_files:
                 try:
-                    data = self.storage_backend.read_target(node_name, relative_path)
+                    data = self.storage_backend.read_target(action_name, relative_path)
                     if relative_path not in data_by_path:
                         data_by_path[relative_path] = []
-                    data_by_path[relative_path].append((node_name, data))
+                    data_by_path[relative_path].append((action_name, data))
                 except Exception as e:
                     logger.warning(
                         "Failed to read backend entry %s/%s: %s",
-                        node_name,
+                        action_name,
                         relative_path,
                         e,
                     )
@@ -786,7 +786,6 @@ class AgentRunner:
         explicitly excluding:
         - Any directory named 'batch'
         - Hidden files (starting with '.')
-        - Marker files (e.g., .passthrough_processed)
 
         When a storage backend is available, reads from the database instead of filesystem.
 

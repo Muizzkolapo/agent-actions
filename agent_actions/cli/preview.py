@@ -106,8 +106,8 @@ class PreviewCommand:
             table.add_column("Action", style="cyan")
             table.add_column("Records", justify="right", style="green")
 
-            for node_name, count in sorted(stats["nodes"].items()):
-                table.add_row(node_name, str(count or 0))
+            for action_name, count in sorted(stats["nodes"].items()):
+                table.add_row(action_name, str(count or 0))
 
             self.console.print(table)
 
@@ -125,9 +125,9 @@ class PreviewCommand:
         table.add_column("Records", justify="right", style="green")
         table.add_column("Files", justify="right")
 
-        for idx, (node_name, count) in enumerate(sorted(stats["nodes"].items()), 1):
-            files = backend.list_target_files(node_name)
-            table.add_row(str(idx), node_name, str(count or 0), str(len(files)))
+        for idx, (action_name, count) in enumerate(sorted(stats["nodes"].items()), 1):
+            files = backend.list_target_files(action_name)
+            table.add_row(str(idx), action_name, str(count or 0), str(len(files)))
 
         self.console.print(table)
         self.console.print(
@@ -137,7 +137,7 @@ class PreviewCommand:
     def _preview_action(self, backend) -> None:
         """Preview data for a specific action."""
         result = backend.preview_target(
-            node_name=self.action,
+            action_name=self.action,
             limit=self.limit,
             offset=self.offset,
         )
@@ -153,7 +153,7 @@ class PreviewCommand:
         # Show header info
         self.console.print(
             Panel(
-                f"[bold]Action:[/bold] {result['node_name']}\n"
+                f"[bold]Action:[/bold] {result['action_name']}\n"
                 f"[bold]Total Records:[/bold] {result['total_count']}\n"
                 f"[bold]Showing:[/bold] {self.offset + 1}-{min(self.offset + self.limit, result['total_count'])} of {result['total_count']}\n"
                 f"[bold]Files:[/bold] {len(result['files'])}",

@@ -5,6 +5,8 @@ Tests that all ComparisonOperator enum values work correctly through
 the refactored visit_comparison() method using the operator registry.
 """
 
+from unittest.mock import patch
+
 import pytest
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
     ComparisonNode,
@@ -16,6 +18,8 @@ from agent_actions.input.preprocessing.parsing.ast_nodes import (
     WhereClauseEvaluator,
     EvaluationContext,
     WhereClauseAST,
+    _field_exists,
+    _warned_missing_fields,
 )
 
 
@@ -290,3 +294,77 @@ class TestOperatorCachingPerformance:
 
         # Verify cache was populated once during __init__
         assert len(evaluator._operator_cache) == 16
+
+
+class TestFieldExistsHelper:
+    """Test _field_exists helper that distinguishes None value from missing field."""
+
+    def test_existing_field_returns_true(self):
+        assert _field_exists({"name": "John"}, "name") is True
+
+    def test_missing_field_returns_false(self):
+        assert _field_exists({"name": "John"}, "age") is False
+
+    def test_none_value_returns_true(self):
+        """A field that exists but has value None should return True."""
+        assert _field_exists({"balance": None}, "balance") is True
+
+    def test_nested_field_exists(self):
+        assert _field_exists({"user": {"id": 1}}, "user.id") is True
+
+    def test_nested_field_missing(self):
+        assert _field_exists({"user": {"id": 1}}, "user.role") is False
+
+    def test_non_dict_data_returns_false(self):
+        assert _field_exists("not a dict", "field") is False
+
+
+class TestMissingFieldWarning:
+    """Test that visit_field warns on missing fields with deduplication."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_warning_cache(self):
+        """Clear the module-level warning cache before each test."""
+        _warned_missing_fields.clear()
+        yield
+        _warned_missing_fields.clear()
+
+    _LOGGER_PATH = "agent_actions.input.preprocessing.parsing.ast_nodes.logger"
+
+    def test_missing_field_logs_warning(self):
+        """Accessing a missing field logs a warning with available fields."""
+        data = {"name": "John", "age": 25}
+        context = EvaluationContext(data)
+        evaluator = WhereClauseEvaluator(context)
+
+        with patch(self._LOGGER_PATH) as mock_logger:
+            evaluator.visit_field(FieldNode("nonexistent_xyz"))
+
+        mock_logger.warning.assert_called_once()
+        args = mock_logger.warning.call_args[0]
+        assert "nonexistent_xyz" in args  # field name passed as format arg
+        assert "Available fields" in args[0]  # format string
+
+    def test_warning_deduplicated(self):
+        """Same missing field only warns once across multiple evaluations."""
+        data = {"name": "John"}
+
+        with patch(self._LOGGER_PATH) as mock_logger:
+            for _ in range(3):
+                context = EvaluationContext(data)
+                evaluator = WhereClauseEvaluator(context)
+                evaluator.visit_field(FieldNode("dedup_test_field"))
+
+        # Should be called exactly once despite 3 evaluations
+        assert mock_logger.warning.call_count == 1
+
+    def test_existing_none_field_no_warning(self):
+        """A field that exists with None value should NOT warn."""
+        data = {"balance": None}
+        context = EvaluationContext(data)
+        evaluator = WhereClauseEvaluator(context)
+
+        with patch(self._LOGGER_PATH) as mock_logger:
+            evaluator.visit_field(FieldNode("balance"))
+
+        mock_logger.warning.assert_not_called()

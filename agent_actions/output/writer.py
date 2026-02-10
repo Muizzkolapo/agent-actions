@@ -32,7 +32,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self,
         file_path: str,
         storage_backend: StorageBackend | None = None,
-        node_name: str | None = None,
+        action_name: str | None = None,
         output_directory: str | None = None,
     ):
         """Initialize file writer.
@@ -40,14 +40,14 @@ class FileWriter(ProcessorErrorHandlerMixin):
         Args:
             file_path: Path to the output file
             storage_backend: Optional storage backend for database persistence
-            node_name: Node name for backend writes (required if storage_backend provided)
+            action_name: Node name for backend writes (required if storage_backend provided)
             output_directory: Base directory for computing relative paths (preserves subdirs)
         """
         super().__init__()
         self.file_path = file_path
         self.file_type = Path(file_path).suffix.lower()
         self.storage_backend = storage_backend
-        self.node_name = node_name
+        self.action_name = action_name
         self.output_directory = output_directory
 
     def _execute_write(self, operation_name: str, write_fn: Callable[[], int]) -> None:
@@ -125,7 +125,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """
 
         def do_write() -> int:
-            if self.storage_backend is None or self.node_name is None:
+            if self.storage_backend is None or self.action_name is None:
                 raise ValueError(
                     f"Storage backend not configured for write_target. "
                     f"Configure a storage backend (sqlite, tinydb) in your workflow. "
@@ -139,7 +139,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     relative_path = file_path.name
             else:
                 relative_path = file_path.name
-            self.storage_backend.write_target(self.node_name, relative_path, data)
+            self.storage_backend.write_target(self.action_name, relative_path, data)
             return len(json.dumps(data))
 
         self._execute_write("Write target file", do_write)

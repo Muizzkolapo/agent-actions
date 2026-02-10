@@ -3,6 +3,7 @@
 import pytest
 
 from agent_actions.storage import get_storage_backend, BACKENDS
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
 
@@ -59,6 +60,7 @@ class TestSQLiteBackend:
 
         assert "source_data" in tables
         assert "target_data" in tables
+        assert "record_disposition" in tables
         backend.close()
 
     def test_write_and_read_target(self, backend):
@@ -176,3 +178,131 @@ class TestSQLiteBackend:
 
         data = backend.read_target("node_1", "file.json")
         assert data == [{"v": "updated"}]
+
+
+class TestDispositionMethods:
+    """Test record disposition CRUD operations."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        """Create a fresh SQLite backend for testing."""
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_set_and_get_disposition(self, backend):
+        """Test writing and reading a disposition record."""
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough", reason="All tombstoned")
+
+        results = backend.get_disposition("node_1")
+        assert len(results) == 1
+        assert results[0]["action_name"] == "node_1"
+        assert results[0]["record_id"] == NODE_LEVEL_RECORD_ID
+        assert results[0]["disposition"] == "passthrough"
+        assert results[0]["reason"] == "All tombstoned"
+
+    def test_set_disposition_upserts(self, backend):
+        """Test that setting the same disposition replaces it."""
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough", reason="first")
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough", reason="second")
+
+        results = backend.get_disposition("node_1")
+        assert len(results) == 1
+        assert results[0]["reason"] == "second"
+
+    def test_get_disposition_filters_by_record_id(self, backend):
+        """Test filtering dispositions by record_id."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_2", "filtered")
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+
+        results = backend.get_disposition("node_1", record_id="rec_1")
+        assert len(results) == 1
+        assert results[0]["record_id"] == "rec_1"
+
+    def test_get_disposition_filters_by_disposition(self, backend):
+        """Test filtering dispositions by disposition type."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+
+        results = backend.get_disposition("node_1", disposition="passthrough")
+        assert len(results) == 1
+        assert results[0]["disposition"] == "passthrough"
+
+    def test_has_disposition_returns_true(self, backend):
+        """Test has_disposition returns True when disposition exists."""
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+        assert backend.has_disposition("node_1", "passthrough") is True
+
+    def test_has_disposition_returns_false(self, backend):
+        """Test has_disposition returns False when disposition does not exist."""
+        assert backend.has_disposition("node_1", "passthrough") is False
+
+    def test_has_disposition_with_record_id(self, backend):
+        """Test has_disposition filters by record_id."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+
+        assert backend.has_disposition("node_1", "filtered", record_id="rec_1") is True
+        assert backend.has_disposition("node_1", "filtered", record_id="rec_2") is False
+
+    def test_clear_disposition_all_for_node(self, backend):
+        """Test clearing all dispositions for a node."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+        backend.set_disposition("node_2", NODE_LEVEL_RECORD_ID, "passthrough")
+
+        deleted = backend.clear_disposition("node_1")
+        assert deleted == 2
+
+        # node_1 should be empty
+        assert backend.get_disposition("node_1") == []
+        # node_2 should be untouched
+        assert len(backend.get_disposition("node_2")) == 1
+
+    def test_clear_disposition_by_type(self, backend):
+        """Test clearing specific disposition type for a node."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+
+        deleted = backend.clear_disposition("node_1", disposition="passthrough")
+        assert deleted == 1
+
+        remaining = backend.get_disposition("node_1")
+        assert len(remaining) == 1
+        assert remaining[0]["disposition"] == "filtered"
+
+    def test_clear_disposition_by_record_id(self, backend):
+        """Test clearing dispositions for a specific record."""
+        backend.set_disposition("node_1", "rec_1", "filtered")
+        backend.set_disposition("node_1", "rec_2", "filtered")
+
+        deleted = backend.clear_disposition("node_1", record_id="rec_1")
+        assert deleted == 1
+
+        remaining = backend.get_disposition("node_1")
+        assert len(remaining) == 1
+        assert remaining[0]["record_id"] == "rec_2"
+
+    def test_set_disposition_with_relative_path(self, backend):
+        """Test that relative_path is stored correctly."""
+        backend.set_disposition(
+            "node_1", "rec_1", "exhausted", reason="Retry limit reached", relative_path="batch_001.json"
+        )
+
+        results = backend.get_disposition("node_1")
+        assert results[0]["relative_path"] == "batch_001.json"
+
+    def test_disposition_in_storage_stats(self, backend):
+        """Test that storage stats include disposition count."""
+        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough")
+        backend.set_disposition("node_1", "rec_1", "filtered")
+
+        stats = backend.get_storage_stats()
+        assert stats["disposition_count"] == 2
+
+    def test_empty_disposition_returns_empty_list(self, backend):
+        """Test get_disposition returns empty list for non-existent node."""
+        results = backend.get_disposition("nonexistent")
+        assert results == []

@@ -8,14 +8,19 @@ Extracted from agent_workflow.py to consolidate output handling.
 import json
 import logging
 import os
-import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, Union, TYPE_CHECKING
+from typing import Dict, Any, List, Optional, Callable, Tuple, Union, TYPE_CHECKING
 from rich.console import Console
 
+from agent_actions.errors import ConfigurationError
+from agent_actions.storage.backend import (
+    NODE_LEVEL_RECORD_ID,
+    DISPOSITION_PASSTHROUGH,
+    DISPOSITION_SKIPPED,
+)
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
-from agent_actions.workflow.merge import merge_json_files
+from agent_actions.workflow.merge import merge_records_by_key
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -55,6 +60,12 @@ class AgentOutputManager:
         Args:
             config: OutputManagerConfig with all required parameters
         """
+        if config.storage_backend is None:
+            raise ConfigurationError(
+                "AgentOutputManager requires a storage_backend. "
+                "Disposition tracking is not optional.",
+                context={"component": "AgentOutputManager"},
+            )
         self.agent_folder = config.agent_folder
         self.execution_order = config.execution_order
         self.agent_configs = config.agent_configs
@@ -79,37 +90,6 @@ class AgentOutputManager:
                 agent_output["errors"].append(f"Failed to read {json_file.name}: {file_error}")
         return outputs
 
-    def _read_marker_file(self, marker_path: Path, marker_type: str, agent_name: str) -> str:
-        """Read a marker file and return its content."""
-        try:
-            with open(marker_path, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except (OSError, IOError, PermissionError) as e:
-            logger.warning(
-                "Could not read %s marker, using 'Unknown'",
-                marker_type,
-                extra={
-                    "operation": f"read_{marker_type}_marker",
-                    "file": str(marker_path),
-                    "agent": agent_name,
-                    "error": str(e),
-                },
-            )
-            return "Unknown"
-        except (ValueError, TypeError, UnicodeDecodeError) as e:
-            logger.exception(
-                "Unexpected error reading %s marker",
-                marker_type,
-                extra={
-                    "operation": f"read_{marker_type}_marker",
-                    "file": str(marker_path),
-                    "agent": agent_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-            )
-            return "Unknown"
-
     def _process_agent_output(self, output_dir: Path, prev_agent_name: str) -> Dict[str, Any]:
         """Process output directory for a single agent."""
         agent_output = {
@@ -121,33 +101,41 @@ class AgentOutputManager:
             "errors": [],
         }
 
-        if not output_dir.exists():
-            return agent_output
+        # Try storage backend first
+        outputs, backend_files = self._load_outputs_from_backend(prev_agent_name)
+        if backend_files:
+            agent_output["output_files"] = backend_files
 
-        json_files = list(output_dir.glob("*.json"))
-        agent_output["output_files"] = [str(f.name) for f in json_files]
+        # Fall back to filesystem if backend had no data
+        if not outputs and output_dir.exists():
+            json_files = list(output_dir.glob("*.json"))
+            agent_output["output_files"] = [str(f.name) for f in json_files]
+            if json_files:
+                outputs = self._load_json_files(json_files, agent_output)
 
-        if json_files:
-            outputs = self._load_json_files(json_files, agent_output)
-            agent_output["data"] = outputs
-            agent_output["output_count"] = len(outputs)
-            agent_output["has_data"] = len(outputs) > 0
+        agent_output["data"] = outputs
+        agent_output["output_count"] = len(outputs)
+        agent_output["has_data"] = len(outputs) > 0
 
-        # Check for passthrough marker
-        passthrough_marker = output_dir / ".passthrough_processed"
-        if passthrough_marker.exists():
+        # Check for node-level passthrough disposition
+        passthrough_rows = self.storage_backend.get_disposition(
+            prev_agent_name,
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_PASSTHROUGH,
+        )
+        if passthrough_rows:
             agent_output["passthrough"] = True
-            agent_output["passthrough_reason"] = self._read_marker_file(
-                passthrough_marker, "passthrough", prev_agent_name
-            )
+            agent_output["passthrough_reason"] = passthrough_rows[0].get("reason", "")
 
-        # Check for skip marker
-        skip_marker = output_dir / ".agent_skipped"
-        if skip_marker.exists():
+        # Check for node-level skip disposition
+        skip_rows = self.storage_backend.get_disposition(
+            prev_agent_name,
+            record_id=NODE_LEVEL_RECORD_ID,
+            disposition=DISPOSITION_SKIPPED,
+        )
+        if skip_rows:
             agent_output["skipped"] = True
-            agent_output["skip_reason"] = self._read_marker_file(
-                skip_marker, "skip", prev_agent_name
-            )
+            agent_output["skip_reason"] = skip_rows[0].get("reason", "")
 
         return agent_output
 
@@ -204,109 +192,110 @@ class AgentOutputManager:
         """
         Create passthrough output for a skipped agent.
 
-        Copies input files from ALL upstream directories to output directory
-        and creates skip marker. When the same JSON file exists in multiple
-        upstream directories (parallel branches), merges records by reduce_key.
+        Reads upstream data from storage backend (or filesystem fallback),
+        merges parallel branches by reduce_key, and writes to storage backend.
 
         Args:
             idx: Index of the agent
             agent_type: Type/name of the agent
         """
         upstream_dirs = self.get_upstream_directories(idx)
-        # Use simple directory name (no index prefix)
-        output_dir = self.agent_folder / "target" / agent_type
-        # Only create directory when not using storage backend
-        if self.storage_backend is None:
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Get reduce_key from agent config for JSON merging
         agent_config = self.agent_configs.get(agent_type, {})
         reduce_key = agent_config.get("reduce_key")
 
-        # Collect files by name to detect duplicates that need merging
-        files_by_name: Dict[str, List[str]] = {}
+        # Collect data by relative_path from all upstream nodes
+        data_by_path: Dict[str, List[List[Dict]]] = {}
+        target_prefix = str(self.agent_folder / "target") + os.sep
+
         for input_dir in upstream_dirs:
-            if not input_dir or not os.path.exists(input_dir):
-                continue
-            for item in os.listdir(input_dir):
-                if item.startswith("."):
+            # Only query backend for paths under target/ (agent output dirs).
+            # Start-node paths (staging/, local folders, API cache) are not
+            # agent outputs and have no backend entries.
+            if input_dir.startswith(target_prefix):
+                action_name = Path(input_dir).name
+                target_files = self._read_upstream_from_backend(action_name)
+                if target_files:
+                    for relative_path, data in target_files.items():
+                        data_by_path.setdefault(relative_path, []).append(data)
                     continue
-                src = os.path.join(input_dir, item)
-                if os.path.isfile(src):
-                    if item not in files_by_name:
-                        files_by_name[item] = []
-                    files_by_name[item].append(src)
 
-        # Process each file - copy or merge as needed
-        for filename, source_paths in files_by_name.items():
-            dst = output_dir / filename
+            # Filesystem: start-node dirs or backend had no data
+            for relative_path, data in self._read_upstream_from_filesystem(input_dir):
+                data_by_path.setdefault(relative_path, []).append(data)
 
-            if len(source_paths) == 1:
-                # Single source - just copy
-                try:
-                    shutil.copy2(source_paths[0], dst)
-                except (OSError, IOError, shutil.Error) as e:
-                    logger.warning(
-                        "Could not copy %s to %s: %s",
-                        filename,
-                        dst,
-                        e,
-                        exc_info=True,
-                        extra={
-                            "source": source_paths[0],
-                            "destination": str(dst),
-                            "operation": "passthrough_file_copy",
-                        },
-                    )
-            elif filename.endswith(".json"):
-                # Multiple JSON sources - merge by reduce_key
-                try:
-                    merged_data = self._merge_json_files(source_paths, reduce_key)
-                    with open(dst, "w", encoding="utf-8") as f:
-                        json.dump(merged_data, f)
-                    logger.debug(
-                        "Merged %d JSON files into %s (reduce_key=%s)",
-                        len(source_paths),
-                        filename,
-                        reduce_key or "auto",
-                    )
-                except (OSError, IOError, json.JSONDecodeError) as e:
-                    logger.warning(
-                        "Could not merge JSON files for %s: %s",
-                        filename,
-                        e,
-                    )
+        # Write each file to storage backend
+        for relative_path, data_sources in data_by_path.items():
+            if len(data_sources) == 1:
+                data = data_sources[0]
             else:
-                # Multiple non-JSON sources - copy first (first occurrence wins)
-                try:
-                    shutil.copy2(source_paths[0], dst)
-                except (OSError, IOError, shutil.Error) as e:
-                    logger.warning(
-                        "Could not copy %s to %s: %s",
-                        filename,
-                        dst,
-                        e,
-                    )
+                all_records: List[Any] = []
+                for source_data in data_sources:
+                    all_records.extend(source_data)
+                data = merge_records_by_key(all_records, reduce_key)
+            self.storage_backend.write_target(agent_type, relative_path, data)
 
-        # Create skip marker
-        skip_marker = output_dir / ".agent_skipped"
-        with open(skip_marker, "w", encoding="utf-8") as f:
-            f.write(f"Agent {agent_type} skipped due to WHERE clause condition")
+        # Record skip disposition
+        reason = f"Agent {agent_type} skipped due to WHERE clause condition"
+        self.storage_backend.set_disposition(
+            agent_type, NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED, reason=reason
+        )
 
-    def _merge_json_files(
-        self, file_paths: List[str], reduce_key: Optional[str] = None
-    ) -> List[Dict]:
-        """
-        Merge JSON files from multiple parallel branches by correlation key.
+    def _read_upstream_from_backend(self, action_name: str) -> Dict[str, List[Dict]]:
+        """Read all target files for a node from storage backend."""
+        try:
+            target_files = self.storage_backend.list_target_files(action_name)
+        except Exception:
+            return {}
+        result: Dict[str, List[Dict]] = {}
+        for relative_path in target_files:
+            try:
+                result[relative_path] = self.storage_backend.read_target(action_name, relative_path)
+            except Exception as e:
+                logger.warning("Failed to read backend entry %s/%s: %s", action_name, relative_path, e)
+        return result
 
-        Args:
-            file_paths: List of JSON file paths to merge
-            reduce_key: Field to correlate records by (falls back to parent_target_id -> source_guid)
+    def _read_upstream_from_filesystem(self, input_dir: str) -> List[Tuple[str, List[Dict]]]:
+        """Read JSON files from a filesystem directory."""
+        results: List[Tuple[str, List[Dict]]] = []
+        if not input_dir or not os.path.exists(input_dir):
+            return results
+        for item in os.listdir(input_dir):
+            if item.startswith(".") or not item.endswith(".json"):
+                continue
+            src = os.path.join(input_dir, item)
+            if not os.path.isfile(src):
+                continue
+            try:
+                with open(src, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, list):
+                    data = [data]
+                results.append((item, data))
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("Could not read %s: %s", src, e)
+        return results
+
+    def _load_outputs_from_backend(self, action_name: str) -> Tuple[List[Any], List[str]]:
+        """Load all target data for a node from storage backend.
 
         Returns:
-            List of merged records
+            Tuple of (flattened records, list of relative_path strings).
         """
-        return merge_json_files([Path(p) for p in file_paths], reduce_key)
+        try:
+            target_files = self.storage_backend.list_target_files(action_name)
+        except Exception:
+            return [], []
+        outputs: List[Any] = []
+        for relative_path in target_files:
+            try:
+                data = self.storage_backend.read_target(action_name, relative_path)
+                if isinstance(data, list):
+                    outputs.extend(data)
+                else:
+                    outputs.append(data)
+            except Exception as e:
+                logger.warning("Failed to read backend target %s/%s: %s", action_name, relative_path, e)
+        return outputs, list(target_files)
 
     def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
         """
@@ -456,9 +445,6 @@ class AgentOutputManager:
                 # Setup output directory (simple name, no index prefix)
                 agent_type = agent_config["agent_type"]
                 output_directory = Path(agent_folder) / "target" / agent_type
-                # Only create directory when not using storage backend
-                if self.storage_backend is None:
-                    output_directory.mkdir(parents=True, exist_ok=True)
                 # Return list of directories (not a single string) to match setup_directories signature
                 return ([str(input_directory)], str(output_directory))
 

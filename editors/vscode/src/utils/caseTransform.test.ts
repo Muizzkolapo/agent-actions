@@ -5,7 +5,7 @@ describe('snakeToCamel', () => {
     it('converts snake_case to camelCase', () => {
         expect(snakeToCamel('total_count')).toBe('totalCount');
         expect(snakeToCamel('db_size_bytes')).toBe('dbSizeBytes');
-        expect(snakeToCamel('node_name')).toBe('nodeName');
+        expect(snakeToCamel('action_name')).toBe('actionName');
     });
 
     it('handles single words', () => {
@@ -20,8 +20,8 @@ describe('snakeToCamel', () => {
 
 describe('transformKeys', () => {
     it('transforms object keys', () => {
-        const input = { total_count: 10, node_name: 'foo' };
-        expect(transformKeys(input)).toEqual({ totalCount: 10, nodeName: 'foo' });
+        const input = { total_count: 10, action_name: 'foo' };
+        expect(transformKeys(input)).toEqual({ totalCount: 10, actionName: 'foo' });
     });
 
     it('handles nested objects', () => {

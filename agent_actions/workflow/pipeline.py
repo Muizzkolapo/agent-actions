@@ -10,6 +10,7 @@ from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.output.writer import FileWriter
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID, DISPOSITION_PASSTHROUGH
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.llm.batch.service import BatchService
 from agent_actions.config.di.container import ProcessorFactory
@@ -138,7 +139,7 @@ class ProcessingPipeline:
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
             storage_backend=config.storage_backend,
-            node_name=config.agent_name,
+            action_name=config.agent_name,
         )
 
     @staticmethod
@@ -156,7 +157,7 @@ class ProcessingPipeline:
             agent_indices=agent_indices,
             dependency_configs=params.batch_agent_configs,
             storage_backend=params.storage_backend,
-            node_name=params.pipeline_agent_name,
+            action_name=params.pipeline_agent_name,
         )
         # Use pre-loaded data if available (storage backend), otherwise read from file
         if params.data is not None:
@@ -182,18 +183,20 @@ class ProcessingPipeline:
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
         if isinstance(result, dict) and result.get("type") == "tombstone":
-            # Only create directory if not using storage backend
-            if params.storage_backend is None:
-                output_file_path.parent.mkdir(parents=True, exist_ok=True)
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=params.storage_backend,
-                node_name=params.pipeline_agent_name,
+                action_name=params.pipeline_agent_name,
                 output_directory=params.batch_output_directory,
             )
             file_writer.write_target(result["data"])
-            marker = output_file_path.parent / ".passthrough_processed"
-            marker.touch()
+            if params.storage_backend:
+                params.storage_backend.set_disposition(
+                    params.pipeline_agent_name,
+                    NODE_LEVEL_RECORD_ID,
+                    DISPOSITION_PASSTHROUGH,
+                    reason="All records tombstoned",
+                )
             return str(output_file_path)
 
         # Batch job placeholder - always JSON (tracking file, not data)
@@ -453,6 +456,7 @@ class ProcessingPipeline:
             self.config.agent_config,
             self.config.agent_name,
             is_first_stage=False,
+            storage_backend=self.config.storage_backend,
         )
 
         # Determine output type (Main vs Side Output)

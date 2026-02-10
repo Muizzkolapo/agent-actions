@@ -658,7 +658,7 @@ class TestVersionCorrelationFailureError:
                 agent_status={},
                 version_correlator=version_correlator,
                 console=MagicMock(),  # Mock console to avoid print errors
-                storage_backend=None,
+                storage_backend=MagicMock(),
             )
             output_manager = AgentOutputManager(config)
 

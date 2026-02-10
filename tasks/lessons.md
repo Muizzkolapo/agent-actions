@@ -8,6 +8,14 @@
 
 **Prevention rule:** When a runtime error is caused by user config, **tell the user first** with the exact fix. Only add coercion/tolerance code if it's genuinely better DX, and always flag the root cause regardless.
 
+## 2026-02-09: Removing dead-code guards can break live side effects
+
+**Failure mode:** `create_passthrough_output` had `if self.storage_backend is None: output_dir.mkdir(...)`. After making storage_backend mandatory (ConfigurationError in constructor), the guard became always-false dead code. Removed it as "cosmetically correct" — but the `mkdir` was still needed for the `shutil.copy2` calls that follow. Result: passthrough file copies silently failed (FileNotFoundError swallowed by try/except), downstream agents got empty input.
+
+**Detection signal:** External audit traced the full call path and noticed the directory was never created.
+
+**Prevention rule:** When removing a conditional guard, trace all code that *depended on* the guarded side effect, not just the guard condition. Ask: "what was the side effect, and does anything downstream still need it?"
+
 ## 2026-02-09: No backwards compatibility shims, no TODO litter
 
 **Failure mode:** Tombstone PR (#943) added legacy fallback checks in `_is_upstream_unprocessed()` to detect old production data missing `_unprocessed` flag. Also planned to add TODO deprecation comments on dead code paths. Both violated AGENTS.md principles.

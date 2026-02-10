@@ -17,7 +17,7 @@ Usage:
 
     # Use the backend
     backend.initialize()
-    backend.write_target("node_1", "batch_001.json", data)
+    backend.write_target("action_1", "batch_001.json", data)
     records = backend.read_source("batch_001.json")
 """
 

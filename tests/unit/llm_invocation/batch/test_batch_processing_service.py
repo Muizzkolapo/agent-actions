@@ -189,8 +189,8 @@ class TestWriteBatchOutput:
         mock_storage = MagicMock()
         written_data = []
 
-        def capture_write(node_name, relative_path, data):
-            written_data.append({"node_name": node_name, "path": relative_path, "data": data})
+        def capture_write(action_name, relative_path, data):
+            written_data.append({"action_name": action_name, "path": relative_path, "data": data})
 
         mock_storage.write_target = capture_write
 
@@ -200,7 +200,7 @@ class TestWriteBatchOutput:
             result_processor=MagicMock(),
             registry_manager_factory=MagicMock(),
             storage_backend=mock_storage,
-            node_name="test_node",
+            action_name="test_node",
         )
 
         main_output = [{"id": "1", "result": "success"}]
@@ -215,7 +215,7 @@ class TestWriteBatchOutput:
 
         # Verify storage backend was called with correct data
         assert len(written_data) == 1
-        assert written_data[0]["node_name"] == "test_node"
+        assert written_data[0]["action_name"] == "test_node"
         assert written_data[0]["path"] == "output.json"
         assert written_data[0]["data"] == main_output
 
@@ -438,7 +438,7 @@ class TestProcessAllBatchResults:
             result_processor=result_processor,
             registry_manager_factory=MagicMock(return_value=manager),
             storage_backend=mock_storage,
-            node_name="test_node",
+            action_name="test_node",
         )
 
         result = service.process_all_batch_results(str(tmp_path))
@@ -544,7 +544,7 @@ class TestProcessAllBatchResultsSkipsRecoveryEntries:
             result_processor=result_processor,
             registry_manager_factory=MagicMock(return_value=manager),
             storage_backend=mock_storage,
-            node_name="test",
+            action_name="test",
         )
 
         result = service.process_all_batch_results(str(tmp_path))

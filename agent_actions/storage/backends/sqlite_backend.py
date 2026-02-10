@@ -21,7 +21,7 @@ class SQLiteBackend(StorageBackend):
 
     Tables:
         source_data: Stores source records with deduplication by source_guid
-        target_data: Stores target records organized by node_name
+        target_data: Stores target records organized by action_name
 
     Thread Safety:
         Uses WAL mode for better concurrency. Each connection should be
@@ -44,12 +44,26 @@ class SQLiteBackend(StorageBackend):
     TARGET_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS target_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            node_name TEXT NOT NULL,
+            action_name TEXT NOT NULL,
             relative_path TEXT NOT NULL,
             data TEXT NOT NULL,
             record_count INTEGER,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(node_name, relative_path)
+            UNIQUE(action_name, relative_path)
+        )
+    """
+
+    # SQL schema for record_disposition table
+    DISPOSITION_TABLE_SQL = """
+        CREATE TABLE IF NOT EXISTS record_disposition (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action_name TEXT NOT NULL,
+            record_id TEXT NOT NULL,
+            disposition TEXT NOT NULL,
+            reason TEXT,
+            relative_path TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(action_name, record_id, disposition)
         )
     """
 
@@ -58,7 +72,16 @@ class SQLiteBackend(StorageBackend):
         CREATE INDEX IF NOT EXISTS idx_source_path ON source_data(relative_path)
     """
     TARGET_INDEX_SQL = """
-        CREATE INDEX IF NOT EXISTS idx_target_node_path ON target_data(node_name, relative_path)
+        CREATE INDEX IF NOT EXISTS idx_target_node_path ON target_data(action_name, relative_path)
+    """
+    DISPOSITION_INDEX_ACTION_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_disp_action ON record_disposition(action_name)
+    """
+    DISPOSITION_INDEX_ACTION_DISP_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_disp_action_disp ON record_disposition(action_name, disposition)
+    """
+    DISPOSITION_INDEX_ACTION_RECORD_SQL = """
+        CREATE INDEX IF NOT EXISTS idx_disp_action_record ON record_disposition(action_name, record_id)
     """
 
     # Valid characters for identifiers (node names, paths)
@@ -137,8 +160,12 @@ class SQLiteBackend(StorageBackend):
             try:
                 cursor.execute(self.SOURCE_TABLE_SQL)
                 cursor.execute(self.TARGET_TABLE_SQL)
+                cursor.execute(self.DISPOSITION_TABLE_SQL)
                 cursor.execute(self.SOURCE_INDEX_SQL)
                 cursor.execute(self.TARGET_INDEX_SQL)
+                cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
+                cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
+                cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
                 self.connection.commit()
                 logger.info(
                     "Initialized SQLite storage backend: %s",
@@ -153,22 +180,22 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def write_target(self, node_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
+    def write_target(self, action_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
         """
         Write target data for a specific node.
 
         Uses INSERT OR REPLACE to handle updates to existing records.
 
         Args:
-            node_name: Name of the processing node
+            action_name: Name of the processing node
             relative_path: Relative path within target directory
             data: List of records to write
 
         Returns:
-            Identifier string: "node_name:relative_path"
+            Identifier string: "action_name:relative_path"
         """
         # Validate and normalize inputs
-        node_name = self._validate_identifier(node_name, "node_name")
+        action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
         data_json = json.dumps(data, ensure_ascii=False)
@@ -180,38 +207,38 @@ class SQLiteBackend(StorageBackend):
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO target_data
-                    (node_name, relative_path, data, record_count, created_at)
+                    (action_name, relative_path, data, record_count, created_at)
                     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                    (node_name, relative_path, data_json, record_count),
+                    (action_name, relative_path, data_json, record_count),
                 )
                 self.connection.commit()
                 logger.debug(
                     "Wrote %d target records: %s/%s",
                     record_count,
-                    node_name,
+                    action_name,
                     relative_path,
                     extra={"workflow_name": self.workflow_name},
                 )
-                return f"{node_name}:{relative_path}"
+                return f"{action_name}:{relative_path}"
             except sqlite3.Error as e:
                 logger.error(
                     "Failed to write target data: %s",
                     e,
                     extra={
-                        "node_name": node_name,
+                        "action_name": action_name,
                         "relative_path": relative_path,
                         "workflow_name": self.workflow_name,
                     },
                 )
                 raise
 
-    def read_target(self, node_name: str, relative_path: str) -> List[Dict[str, Any]]:
+    def read_target(self, action_name: str, relative_path: str) -> List[Dict[str, Any]]:
         """
         Read target data for a specific node.
 
         Args:
-            node_name: Name of the processing node
+            action_name: Name of the processing node
             relative_path: Relative path within target directory
 
         Returns:
@@ -220,17 +247,17 @@ class SQLiteBackend(StorageBackend):
         Raises:
             FileNotFoundError: If no data exists for the given path
         """
-        node_name = self._validate_identifier(node_name, "node_name")
+        action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
         cursor = self.connection.cursor()
         cursor.execute(
-            "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
-            (node_name, relative_path),
+            "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
+            (action_name, relative_path),
         )
         row = cursor.fetchone()
 
         if row is None:
-            raise FileNotFoundError(f"No target data found for {node_name}/{relative_path}")
+            raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
         return json.loads(row["data"])
 
@@ -341,21 +368,21 @@ class SQLiteBackend(StorageBackend):
 
         return [json.loads(row["data"]) for row in rows]
 
-    def list_target_files(self, node_name: str) -> List[str]:
+    def list_target_files(self, action_name: str) -> List[str]:
         """
         List all target files for a specific node.
 
         Args:
-            node_name: Name of the processing node
+            action_name: Name of the processing node
 
         Returns:
             List of relative paths
         """
-        node_name = self._validate_identifier(node_name, "node_name")
+        action_name = self._validate_identifier(action_name, "action_name")
         cursor = self.connection.cursor()
         cursor.execute(
-            "SELECT DISTINCT relative_path FROM target_data WHERE node_name = ? ORDER BY relative_path",
-            (node_name,),
+            "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? ORDER BY relative_path",
+            (action_name,),
         )
         return [row["relative_path"] for row in cursor.fetchall()]
 
@@ -372,7 +399,7 @@ class SQLiteBackend(StorageBackend):
 
     def preview_target(
         self,
-        node_name: str,
+        action_name: str,
         limit: int = 10,
         offset: int = 0,
         relative_path: Optional[str] = None,
@@ -386,15 +413,15 @@ class SQLiteBackend(StorageBackend):
         - Only fetches data for files that contain needed records
 
         Args:
-            node_name: Name of the processing node (action)
+            action_name: Name of the processing node (action)
             limit: Maximum number of records to return (max 1000)
             offset: Number of records to skip
             relative_path: Optional specific file to preview
 
         Returns:
-            Dict with records, total_count, node_name, and files
+            Dict with records, total_count, action_name, and files
         """
-        node_name = self._validate_identifier(node_name, "node_name")
+        action_name = self._validate_identifier(action_name, "action_name")
         if relative_path is not None:
             relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -410,10 +437,10 @@ class SQLiteBackend(StorageBackend):
             """
             SELECT relative_path, COALESCE(record_count, 0) as record_count
             FROM target_data
-            WHERE node_name = ?
+            WHERE action_name = ?
             ORDER BY relative_path
             """,
-            (node_name,),
+            (action_name,),
         )
         file_metadata = cursor.fetchall()
 
@@ -426,9 +453,9 @@ class SQLiteBackend(StorageBackend):
                 return {
                     "records": [],
                     "total_count": 0,
-                    "node_name": node_name,
+                    "action_name": action_name,
                     "files": files,
-                    "error": f"File '{relative_path}' not found for node '{node_name}'",
+                    "error": f"File '{relative_path}' not found for node '{action_name}'",
                 }
             # Filter to just the requested file
             file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
@@ -456,8 +483,8 @@ class SQLiteBackend(StorageBackend):
 
             # Fetch data only for files we need records from
             cursor.execute(
-                "SELECT data FROM target_data WHERE node_name = ? AND relative_path = ?",
-                (node_name, file_path),
+                "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
+                (action_name, file_path),
             )
             data_row = cursor.fetchone()
             if not data_row:
@@ -486,7 +513,7 @@ class SQLiteBackend(StorageBackend):
         return {
             "records": paginated_records,
             "total_count": total_count,
-            "node_name": node_name,
+            "action_name": action_name,
             "files": files,
             "limit": limit,
             "offset": offset,
@@ -508,13 +535,13 @@ class SQLiteBackend(StorageBackend):
         # Get target count and breakdown by node
         cursor.execute(
             """
-            SELECT node_name, SUM(record_count) as count
+            SELECT action_name, SUM(record_count) as count
             FROM target_data
-            GROUP BY node_name
-            ORDER BY node_name
+            GROUP BY action_name
+            ORDER BY action_name
             """
         )
-        nodes = {row["node_name"]: row["count"] for row in cursor.fetchall()}
+        nodes = {row["action_name"]: row["count"] for row in cursor.fetchall()}
 
         # Get total target records
         cursor.execute("SELECT SUM(record_count) as count FROM target_data")
@@ -524,14 +551,163 @@ class SQLiteBackend(StorageBackend):
         # Get database file size
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
 
+        # Get disposition count
+        cursor.execute("SELECT COUNT(*) as count FROM record_disposition")
+        disposition_count = cursor.fetchone()["count"]
+
         return {
             "db_path": str(self.db_path),
             "db_size_bytes": db_size,
             "db_size_human": self._format_size(db_size),
             "source_count": source_count,
             "target_count": target_count,
+            "disposition_count": disposition_count,
             "nodes": nodes,
         }
+
+    # ------------------------------------------------------------------
+    # Record disposition tracking
+    # Writes hold self._lock; reads don't (WAL mode handles concurrent
+    # reads safely). This matches read_target/read_source above.
+    # ------------------------------------------------------------------
+
+    def set_disposition(
+        self,
+        action_name: str,
+        record_id: str,
+        disposition: str,
+        reason: Optional[str] = None,
+        relative_path: Optional[str] = None,
+    ) -> None:
+        """Write a disposition record (INSERT OR REPLACE)."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO record_disposition
+                    (action_name, record_id, disposition, reason, relative_path, created_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (action_name, record_id, disposition, reason, relative_path),
+                )
+                self.connection.commit()
+                logger.debug(
+                    "Set disposition: action=%s record=%s disp=%s",
+                    action_name,
+                    record_id,
+                    disposition,
+                    extra={"workflow_name": self.workflow_name},
+                )
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to set disposition: %s",
+                    e,
+                    extra={
+                        "action_name": action_name,
+                        "record_id": record_id,
+                        "disposition": disposition,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+                raise
+
+    def get_disposition(
+        self,
+        action_name: str,
+        record_id: Optional[str] = None,
+        disposition: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Query disposition records with optional filters."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        query = (
+            "SELECT action_name, record_id, disposition, reason, relative_path, created_at"
+            " FROM record_disposition WHERE action_name = ?"
+        )
+        params: list = [action_name]
+
+        if record_id is not None:
+            query += " AND record_id = ?"
+            params.append(record_id)
+        if disposition is not None:
+            query += " AND disposition = ?"
+            params.append(disposition)
+
+        query += " ORDER BY id"
+
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def has_disposition(
+        self,
+        action_name: str,
+        disposition: str,
+        record_id: Optional[str] = None,
+    ) -> bool:
+        """Check whether at least one matching disposition exists."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        query = "SELECT 1 FROM record_disposition WHERE action_name = ? AND disposition = ?"
+        params: list = [action_name, disposition]
+
+        if record_id is not None:
+            query += " AND record_id = ?"
+            params.append(record_id)
+
+        query += " LIMIT 1"
+
+        cursor = self.connection.cursor()
+        cursor.execute(query, params)
+        return cursor.fetchone() is not None
+
+    def clear_disposition(
+        self,
+        action_name: str,
+        disposition: Optional[str] = None,
+        record_id: Optional[str] = None,
+    ) -> int:
+        """Delete matching disposition records. Returns count deleted."""
+        action_name = self._validate_identifier(action_name, "action_name")
+
+        query = "DELETE FROM record_disposition WHERE action_name = ?"
+        params: list = [action_name]
+
+        if disposition is not None:
+            query += " AND disposition = ?"
+            params.append(disposition)
+        if record_id is not None:
+            query += " AND record_id = ?"
+            params.append(record_id)
+
+        with self._lock:
+            cursor = self.connection.cursor()
+            try:
+                cursor.execute(query, params)
+                self.connection.commit()
+                deleted = cursor.rowcount
+                logger.debug(
+                    "Cleared %d dispositions: action=%s disp=%s",
+                    deleted,
+                    action_name,
+                    disposition,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                return deleted
+            except sqlite3.Error as e:
+                logger.error(
+                    "Failed to clear dispositions: %s",
+                    e,
+                    extra={
+                        "action_name": action_name,
+                        "disposition": disposition,
+                        "workflow_name": self.workflow_name,
+                    },
+                )
+                raise
 
     @staticmethod
     def _format_size(size_bytes: int) -> str:

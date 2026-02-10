@@ -73,7 +73,7 @@ class PathManager:
         PathType.AGENT_CONFIG: "{agent_name}/agent_config",
         PathType.AGENT_IO: "{agent_name}/agent_io",
         PathType.SOURCE: "{agent_name}/agent_io/source",
-        PathType.TARGET: "{agent_name}/agent_io/target/{node_name}",
+        PathType.TARGET: "{agent_name}/agent_io/target/{action_name}",
         PathType.SCHEMA: "schema",
         PathType.PROMPT_STORE: "prompt_store",
         PathType.TEMPLATES: "templates",
@@ -141,7 +141,7 @@ class PathManager:
         self,
         path_type: PathType,
         agent_name: Optional[str] = None,
-        node_name: Optional[str] = None,
+        action_name: Optional[str] = None,
         **template_vars,
     ) -> Path:
         """
@@ -150,14 +150,14 @@ class PathManager:
         Args:
             path_type: Type of path to generate
             agent_name: Agent name for agent-specific paths
-            node_name: Node name for target paths
+            action_name: Node name for target paths
             **template_vars: Additional template variables
 
         Returns:
             Resolved path for the requested type
         """
         cache_key = (
-            f"{path_type.value}:{agent_name}:{node_name}:{hash(frozenset(template_vars.items()))}"
+            f"{path_type.value}:{agent_name}:{action_name}:{hash(frozenset(template_vars.items()))}"
         )
 
         if cache_key in self._path_cache and self.config.cache_paths:
@@ -169,7 +169,7 @@ class PathManager:
             path = project_root
         elif path_type in self.PATH_TEMPLATES:
             template = self.PATH_TEMPLATES[path_type]
-            format_vars = {"agent_name": agent_name, "node_name": node_name, **template_vars}
+            format_vars = {"agent_name": agent_name, "action_name": action_name, **template_vars}
 
             # Filter out None values
             format_vars = {k: v for k, v in format_vars.items() if v is not None}

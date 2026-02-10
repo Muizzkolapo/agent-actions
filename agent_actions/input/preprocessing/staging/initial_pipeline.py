@@ -18,6 +18,7 @@ import uuid
 import asyncio
 
 from agent_actions.errors import AgentActionsException
+from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID, DISPOSITION_PASSTHROUGH
 
 from agent_actions.output.writer import FileWriter
 from agent_actions.output.saver import UnifiedSourceDataSaver
@@ -663,26 +664,30 @@ def _get_batch_id_from_chunk(data_chunk):
 
 
 def _write_passthrough_result(
-    output_file_path, result_data, storage_backend=None, node_name=None, output_directory=None
+    output_file_path, result_data, storage_backend=None, action_name=None, output_directory=None
 ):
-    """Write passthrough result and create marker file."""
-    if storage_backend is None or node_name is None:
+    """Write passthrough result and record disposition."""
+    if storage_backend is None or action_name is None:
         raise AgentActionsException(
             "Storage backend is required for passthrough writes.",
             context={
                 "file_path": str(output_file_path),
-                "node_name": node_name,
+                "action_name": action_name,
             },
         )
     file_writer = FileWriter(
         str(output_file_path),
         storage_backend=storage_backend,
-        node_name=node_name,
+        action_name=action_name,
         output_directory=output_directory,
     )
     file_writer.write_target(result_data)
-    passthrough_marker = output_file_path.parent / ".passthrough_processed"
-    passthrough_marker.touch()
+    storage_backend.set_disposition(
+        action_name,
+        NODE_LEVEL_RECORD_ID,
+        DISPOSITION_PASSTHROUGH,
+        reason="All records tombstoned (initial stage)",
+    )
 
 
 def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_name):
@@ -718,7 +723,7 @@ def _process_batch_mode(ctx: BatchProcessingContext):
             output_file_path,
             result["data"],
             storage_backend=ctx.storage_backend,
-            node_name=ctx.agent_name,
+            action_name=ctx.agent_name,
             output_directory=ctx.output_directory,
         )
     else:
@@ -762,6 +767,7 @@ def _process_realtime_mode_with_record_processor(
         ctx.agent_config,
         ctx.agent_name,
         is_first_stage=True,
+        storage_backend=ctx.storage_backend,
     )
 
     if ctx.storage_backend is None:
@@ -777,7 +783,7 @@ def _process_realtime_mode_with_record_processor(
     file_writer = FileWriter(
         str(output_file_path),
         storage_backend=ctx.storage_backend,
-        node_name=ctx.agent_name,
+        action_name=ctx.agent_name,
         output_directory=str(output_directory),
     )
     file_writer.write_target(processed_items)
