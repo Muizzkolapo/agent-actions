@@ -18,6 +18,6 @@ metadata.
 |------|------|-------------|---------|
 | `builder.py` | Module | Constructs the realtime workflow builder that wires agents, guards, and prompts. | `workflow`, `preprocessing` |
 | `cleaner.py` | Module | Removes temporary directories during `agac clean`. | `cli`, `file_io` |
-| `config.py` | Module | Realtime-specific configuration options and defaults. | `validation`, `llm` |
+| `config.py` | Module | Realtime-specific configuration options/defaults with kind-to-vendor normalization. | `validation`, `llm` |
 | `handlers.py` | Module | Response/stream handlers for processing realtime outputs and streaming events. | `logging`, `output` |
 | `output.py` | Module | Emits realtime outputs, handling side outputs, metadata, and retry loops. | `output`, `processing` |

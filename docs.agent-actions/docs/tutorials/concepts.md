@@ -40,7 +40,7 @@ This structure guarantees:
 
 ## Actions
 
-An action is a single step in your agentic workflow—either an LLM call or a tool call (e.g., a Python function).
+An action is a single step in your agentic workflow—either an LLM call, a tool call (e.g., a Python function), or a human review gate (HITL).
 
 **Why define actions in YAML instead of chaining API calls directly?**
 
@@ -76,8 +76,9 @@ actions:
 | **dependencies** | Actions that must complete first |
 | **schema** | JSON Schema name for output validation |
 | **prompt** | LLM instructions (inline or `$workflow.PromptName` reference) |
-| **kind** | `llm` (default) or `tool` for Python functions |
+| **kind** | `llm` (default), `tool` for Python functions, or `hitl` for human review gates |
 | **impl** | For tool actions, the function name to call |
+| **hitl** | For hitl actions, configuration block (port, instructions, timeout, etc.) |
 | **context_scope** | Progressive context disclosure—control exactly what data flows into this action (`observe`, `drop`, `passthrough`) |
 | **reprompt** | Auto-retry config when validation fails |
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
@@ -88,6 +89,48 @@ actions:
 **Configuration inheritance:** Agent Actions uses a hierarchical config system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. You only need to specify fields at the action level if you want to override the inherited values.
 
 Actions are stateless—they receive input, process it, and produce validated output. This makes them easy to test, retry, and reason about.
+
+### Action Kinds
+
+Agent Actions supports three kinds of actions:
+
+| Kind | When to Use | Example |
+|------|-------------|---------|
+| **`llm`** | Call an LLM to generate, classify, or transform data | Summarize text, extract entities, classify categories |
+| **`tool`** | Execute Python functions for deterministic operations | Data validation, API calls, file I/O |
+| **`hitl`** | Pause workflow for human review and approval | Quality gates, manual data verification, compliance checks |
+
+**Example: Combining all three kinds**
+
+```yaml
+actions:
+  - name: generate_report
+    kind: llm  # LLM generates initial report
+    prompt: "Generate a compliance report from the data..."
+
+  - name: validate_report
+    kind: tool  # Python validates report structure
+    impl: validate_compliance_report
+    dependencies: [generate_report]
+
+  - name: review_report
+    kind: hitl  # Human reviews before publishing
+    dependencies: [validate_report]
+    hitl:
+      instructions: "Review the compliance report for accuracy"
+    observe:
+      - validate_report.*
+
+  - name: publish_report
+    kind: tool  # Publish if approved
+    impl: publish_to_portal
+    dependencies: [review_report]
+    guard:
+      condition: "review_report.hitl_status == 'approved'"
+      behavior: skip
+```
+
+See the [Human-in-the-Loop guide](../guides/human-in-the-loop.md) for more details on HITL actions.
 
 ### Dependency Types
 

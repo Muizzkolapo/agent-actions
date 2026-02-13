@@ -17,10 +17,10 @@ Agent Actions.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `coordinator.py` | Module | Coordinates workflow execution order, dependencies, and validation. | `validation`, `workflow` |
-| `executor.py` | Module | Handles running actions (LLM/tool) and interfacing with processors. | `llm`, `workflow` |
+| `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. | `workflow`, `processing` |
 | `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, AgentWorkflow). | `typing`, `workflow` |
-| `pipeline.py` | Module | Builds execution pipelines for run modes (batch/realtime). | `llm.batch`, `processing` |
+| `pipeline.py` | Module | Builds execution pipelines for run modes (batch/realtime) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
 | `runner.py` | Module | High-level runner (BatchRunner/RealtimeRunner) entrypoints. | `llm`, `workflow` |
 | `schema_service.py` | Module | `WorkflowSchemaService` that exposes input/output schema mapping. | `schema`, `output` |
 | `strategies.py` | Module | Pluggable strategies for action execution (loop/parallel). | `workflow`, `validation` |

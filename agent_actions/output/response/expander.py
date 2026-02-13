@@ -280,8 +280,11 @@ class ActionExpander:
         This enables guard field reference validation against LLM output schemas,
         providing the same compile-time validation that UDFs receive.
         """
-        # Skip tool actions (handled by _process_tool_action)
-        if action.get("kind") == "tool" or agent.get("model_vendor") == "tool":
+        # Skip non-LLM actions (tool/HITL)
+        if action.get("kind") in {"tool", "hitl"} or agent.get("model_vendor") in {
+            "tool",
+            "hitl",
+        }:
             return
 
         # Skip if already has json_output_schema
@@ -481,10 +484,15 @@ class ActionExpander:
         inherit_simple_fields(agent, action, defaults)
         agent["is_operational"] = is_operational
 
+        action_kind = action.get("kind", "llm")
+        # HITL is a non-LLM action type and should always route to the HITL client,
+        # regardless of inherited/default model_vendor.
+        if action_kind == "hitl":
+            agent["model_vendor"] = "hitl"
+
         # Validate configuration
         ActionExpander._validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
-        action_kind = action.get("kind", "llm")
-        if action_kind != "tool":
+        if action_kind not in {"tool", "hitl"}:
             ActionExpander._validate_required_fields(agent, action.get("name", "unknown"))
 
         # Process schema configuration
@@ -500,12 +508,35 @@ class ActionExpander:
         # Process tool actions
         run_mode = agent["run_mode"]
         ActionExpander._process_tool_action(agent, action, run_mode)
+        if action_kind == "hitl":
+            hitl_config = action.get("hitl")
+            if not hitl_config or not isinstance(hitl_config, dict):
+                raise ConfigurationError(
+                    f"HITL action '{action.get('name', '?')}' requires a 'hitl' configuration block",
+                    context={"action": action.get("name")},
+                )
+            if not hitl_config.get("instructions"):
+                raise ConfigurationError(
+                    f"HITL action '{action.get('name', '?')}' requires 'instructions' in hitl config",
+                    context={"action": action.get("name")},
+                )
+            agent["hitl"] = hitl_config
 
         # Add output schema for LLM actions (enables guard field validation)
         ActionExpander._add_llm_output_schema(agent, action)
 
         # Process granularity
-        granularity = action.get("granularity", defaults.get("granularity", "record"))
+        # HITL reviews should see the full dataset in one step, so default to FILE.
+        if action_kind == "hitl":
+            granularity = action.get("granularity", "file")
+            if granularity.lower() == "record":
+                logger.warning(
+                    "HITL action '%s' uses record granularity — this launches a separate "
+                    "approval UI per record. Consider using 'file' granularity instead.",
+                    action.get("name", "?"),
+                )
+        else:
+            granularity = action.get("granularity", defaults.get("granularity", "record"))
         if granularity:
             agent["granularity"] = (
                 granularity.capitalize() if isinstance(granularity, str) else granularity

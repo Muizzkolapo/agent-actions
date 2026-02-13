@@ -15,12 +15,14 @@ class ActionKind(Enum):
         TOOL: Tool/UDF action (calls external function)
         SOURCE: Source data (workflow input data)
         SEED: Seed data (static data defined in config)
+        HITL: Human-in-the-loop action (blocks for human approval)
     """
 
     LLM = "llm"
     TOOL = "tool"
     SOURCE = "source"
     SEED = "seed"
+    HITL = "hitl"
 
 
 class FieldSource(Enum):

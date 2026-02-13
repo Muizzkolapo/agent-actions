@@ -1,5 +1,45 @@
 # Lessons Learned
 
+## 2026-02-12: Do not reuse generic `status` aliases in HITL payload paths
+
+**Failure mode:** Keeping backward-compat `status` fallbacks in HITL server/pipeline created a collision risk with business data fields named `status`, making approval flows appear to mutate domain status.
+
+**Detection signal:** User reported that status changed on approval.
+
+**Prevention rule:** HITL paths must use `hitl_status` as the only decision key; when merging HITL decisions into records, whitelist HITL metadata keys instead of passing through arbitrary response keys.
+
+## 2026-02-12: Use domain-specific status keys in cross-stage payloads
+
+**Failure mode:** HITL decision payload used generic `status`, which can collide with existing record fields and make guard expressions ambiguous.
+
+**Detection signal:** User explicitly requested `hitl_status` instead of `status`.
+
+**Prevention rule:** For stage-specific control fields, use namespaced keys (`hitl_status`, `batch_status`, etc.) and normalize legacy aliases only at boundaries.
+
+## 2026-02-12: Separate record actions from final workflow submission in HITL
+
+**Failure mode:** Mapped Approve/Reject buttons directly to final submit, which blocked per-record review flow and made users manually navigate without decision state.
+
+**Detection signal:** User asked for automatic next-object progression immediately after approving current object.
+
+**Prevention rule:** For multi-record HITL UX, treat record-level decisions and final workflow release as two distinct actions: mark record (auto-advance) then submit all.
+
+## 2026-02-12: FILE-level decisions still need per-record output propagation
+
+**Failure mode:** Implemented FILE-mode HITL to emit a single decision output record, which unintentionally dropped the original dataset cardinality for downstream stages.
+
+**Detection signal:** User noticed only one record was written as approved.
+
+**Prevention rule:** For FILE-level gate/review actions, separate "decision cardinality" from "output cardinality": one decision can apply to many records, but downstream record streams must be preserved unless explicitly aggregated.
+
+## 2026-02-12: File-level HITL needs navigable review UX, not a raw blob
+
+**Failure mode:** Treated FILE-mode HITL as "show one full JSON payload" in UI, which made large reviews unusable even though backend file-level semantics were correct.
+
+**Detection signal:** User clarified they need to move record-by-record ("go to next record each time") while keeping HITL at file level.
+
+**Prevention rule:** For any FILE-level human review step, verify UX requirements separately from backend granularity: reviewers must be able to navigate records even when final decision is single-shot.
+
 ## 2026-02-07: Flag config errors before writing coercion code
 
 **Failure mode:** User YAML had `file_type: json` (string) where `file_type: [json]` (list) was expected. Instead of telling the user their config was wrong, wrote a Pydantic validator to silently coerce string to list.

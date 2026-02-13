@@ -20,6 +20,7 @@ class VendorType(str, Enum):
     MISTRAL = "mistral"
     OLLAMA = "ollama"
     TOOL = "tool"
+    HITL = "hitl"
     AGAC_PROVIDER = "agac-provider"
 
 
@@ -111,11 +112,29 @@ class OllamaConfig(BaseVendorConfig):
 
 
 class ToolVendorConfig(BaseVendorConfig):
-    """Configuration for tool-based vendors (non-LLM)."""
+    """Configuration for tool-based vendors (non-LLM).
+
+    Tool actions run local Python functions, so api_key_env_name is a
+    no-op placeholder required by the base class.
+    """
 
     vendor_type: Literal[VendorType.TOOL] = VendorType.TOOL
-    api_key_env_name: str = "TOOL_API_KEY"
+    api_key_env_name: str = "TOOL_NO_KEY_REQUIRED"
+    model_name: str = "tool"
     json_mode: bool = False
+
+
+class HitlVendorConfig(BaseVendorConfig):
+    """Configuration for HITL workflow vendor (non-LLM).
+
+    HITL actions do not call external APIs, so api_key_env_name is a
+    no-op placeholder required by the base class.
+    """
+
+    vendor_type: Literal[VendorType.HITL] = VendorType.HITL
+    api_key_env_name: str = "HITL_NO_KEY_REQUIRED"
+    model_name: str = "hitl"
+    json_mode: bool = True
 
 
 class AgacProviderConfig(BaseVendorConfig):
@@ -135,6 +154,7 @@ VendorConfig = Union[
     MistralConfig,
     OllamaConfig,
     ToolVendorConfig,
+    HitlVendorConfig,
     AgacProviderConfig,
 ]
 
@@ -188,6 +208,7 @@ __all__ = [
     "MistralConfig",
     "OllamaConfig",
     "ToolVendorConfig",
+    "HitlVendorConfig",
     "AgacProviderConfig",
     "VendorConfig",
     "VendorRegistry",

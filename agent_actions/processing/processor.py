@@ -89,16 +89,16 @@ class RecordProcessor:
         self.agent_name = agent_name
 
         # Validate granularity setting
-        # kind: "tool" = tool action, "llm" = LLM action (default)
+        # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action (default)
         granularity = agent_config.get("granularity", "record")
         action_kind = (agent_config.get("kind") or "").lower()
 
-        # FILE granularity only allowed for tool actions
+        # FILE granularity only allowed for tool and HITL actions
         is_file_granularity = isinstance(granularity, str) and granularity.lower() == "file"
         if is_file_granularity:
-            if action_kind != "tool":
+            if action_kind not in ["tool", "hitl"]:
                 raise ConfigurationError(
-                    "FILE granularity is only supported for tool actions (kind: tool). "
+                    "FILE granularity is only supported for tool and hitl actions. "
                     "LLM actions must use RECORD granularity.",
                     context={
                         "agent_name": agent_name,
@@ -107,7 +107,7 @@ class RecordProcessor:
                     },
                 )
 
-            # Guards not supported in FILE mode (tool processes entire array at once)
+            # Guards not supported in FILE mode (processes entire array at once)
             guard_config = agent_config.get("guard")
             if guard_config:
                 raise ConfigurationError(

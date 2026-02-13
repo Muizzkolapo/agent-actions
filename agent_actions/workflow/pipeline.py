@@ -24,11 +24,13 @@ from agent_actions.processing.types import (
     ProcessingStatus,
 )
 from agent_actions.processing.helpers import run_dynamic_agent
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 TOOL_VENDOR = "tool"
+HITL_VENDOR = "hitl"
 SOURCE_FOLDER = "source"
 logger = logging.getLogger(__name__)
 
@@ -119,8 +121,9 @@ class ProcessingPipeline:
         self.action_kind = (config.agent_config.get("kind") or "").lower()
         self.granularity = (config.agent_config.get("granularity") or "").lower()
         self.side_output_enabled = config.agent_config.get("side_output", False)
-        # kind: "tool" = tool action, "llm" = LLM action
+        # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action
         self.is_tool_action = self.action_kind == "tool"
+        self.is_hitl_action = self.action_kind == "hitl"
         if processor_factory is None:
             raise DependencyError(
                 "ProcessingPipeline requires processor_factory",
@@ -234,10 +237,14 @@ class ProcessingPipeline:
                     "agent_name": params.agent_name,
                 },
             )
-        # Tool actions run synchronously regardless of run_mode (they're Python functions, not LLM calls)
-        is_tool_action = params.agent_config.get("model_vendor") == TOOL_VENDOR
+        # Tool and HITL actions run synchronously regardless of run_mode
+        # (tools are Python functions, HITL blocks for human input)
+        is_synchronous = params.agent_config.get("model_vendor") in [
+            TOOL_VENDOR,
+            HITL_VENDOR,
+        ] or params.agent_config.get("kind") in ["tool", "hitl"]
 
-        if params.agent_config.get("run_mode") == "batch" and not is_tool_action:
+        if params.agent_config.get("run_mode") == "batch" and not is_synchronous:
             return ProcessingPipeline._handle_batch_generation(
                 BatchPipelineParams(
                     pipeline_agent_config=params.agent_config,
@@ -384,20 +391,23 @@ class ProcessingPipeline:
                 # Should be a list, but handle single dict if returned
                 source_data = [loaded_source] if loaded_source else []
 
-            logger.info(f"Loaded source data via SourceDataLoader for {file_path}")
+            logger.info("Loaded source data via SourceDataLoader for %s", file_path)
 
         except Exception as e:
             logger.error(
-                f"SourceDataLoader failed to resolve source for '{file_path}': {e}. "
-                f"Agent: {self.config.agent_name}. "
+                "SourceDataLoader failed to resolve source for '%s': %s. "
+                "Agent: %s. "
                 "Falling back to using input data as source context. "
-                "This will likely cause 'undefined variable' errors if templates expect source fields."
+                "This will likely cause 'undefined variable' errors if templates expect source fields.",
+                file_path,
+                e,
+                self.config.agent_name,
             )
             # source_data remains 'data' (the fallback)
 
-        # Batch mode check (tools run synchronously, not in batch)
+        # Batch mode check (tools and HITL run synchronously, not in batch)
         run_mode = self.config.agent_config.get("run_mode")
-        if run_mode == "batch" and not self.is_tool_action:
+        if run_mode == "batch" and not (self.is_tool_action or self.is_hitl_action):
             self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 
@@ -440,12 +450,17 @@ class ProcessingPipeline:
         )
 
         # Process via RecordProcessor
-        # Check if FILE mode for tools - bypass record loop
         if self.granularity == "file" and self.is_tool_action:
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
             context.source_data = data
-            results = self._process_file_mode_tool(data, context)
+            filtered = self._apply_observe_filter(data, self.config.agent_config)
+            results = self._process_file_mode_tool(filtered, data, context)
+        elif self.granularity == "file" and self.is_hitl_action:
+            # For FILE mode HITL, present the entire dataset for one decision
+            context.source_data = data
+            filtered = self._apply_observe_filter(data, self.config.agent_config)
+            results = self._process_file_mode_hitl(filtered, data, context)
         else:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
@@ -463,7 +478,47 @@ class ProcessingPipeline:
         # Note: Side output logic removed as per cleanup.
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
-    def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:
+    @staticmethod
+    def _apply_observe_filter(data: List[Dict], agent_config: Dict[str, Any]) -> List[Dict]:
+        """Filter records to context_scope.observe fields in defined order.
+
+        Returns filtered copy; original data is unchanged.
+        If no observe is configured, returns data as-is.
+        """
+        context_scope = agent_config.get("context_scope") or {}
+        observe_refs = context_scope.get("observe")
+        if not observe_refs:
+            return data
+
+        field_names = ContextScopeProcessor.extract_field_names_from_references(observe_refs)
+        if not field_names:
+            return data
+
+        # Wildcard or prefix pattern → no filtering needed
+        if "*" in field_names or "_" in field_names:
+            return data
+
+        filtered = []
+        for item in data:
+            if not isinstance(item, dict):
+                filtered.append(item)
+                continue
+            content = item.get("content", item) if isinstance(item.get("content"), dict) else item
+            ordered = {k: content[k] for k in field_names if k in content}
+            missing = [k for k in field_names if k not in content]
+            if missing:
+                logger.warning(
+                    "[OBSERVE FILTER] Fields %s not found in record. "
+                    "Available: %s. Check that observe field names match the actual data.",
+                    missing,
+                    list(content.keys()),
+                )
+            filtered.append(ordered)
+        return filtered
+
+    def _process_file_mode_tool(
+        self, data: List[Dict], original_data: List[Dict], context: ProcessingContext
+    ) -> List:
         """
         Process tool in FILE granularity mode.
 
@@ -473,7 +528,8 @@ class ProcessingPipeline:
         Enrichment assigns new IDs/lineage to each output.
 
         Args:
-            data: Full array of input records
+            data: Observe-filtered records (passed to tool)
+            original_data: Unfiltered records (available for enrichment)
             context: Processing context
 
         Returns:
@@ -544,7 +600,137 @@ class ProcessingPipeline:
 
         except Exception as e:
             # Error handling
-            logger.error(f"Error in FILE mode tool processing: {e}")
+            logger.error("Error in FILE mode tool processing: %s", e)
+            error_result = ProcessingResult(
+                status=ProcessingStatus.FAILED,
+                data=[],
+                source_guid=None,
+                error=str(e),
+                executed=False,
+            )
+            return [error_result]
+
+    def _process_file_mode_hitl(
+        self, data: List[Dict], original_data: List[Dict], context: ProcessingContext
+    ) -> List:
+        """
+        Process HITL action in FILE granularity mode.
+
+        Invokes HITL once with the full array and applies the single file-level
+        decision payload to every record so downstream stages retain full dataset
+        cardinality.
+
+        Args:
+            data: Observe-filtered records (shown to HITL UI)
+            original_data: Unfiltered records (used for merge to preserve all fields)
+            context: Processing context
+        """
+        try:
+            raw_response, executed = run_dynamic_agent(
+                agent_config=context.agent_config,
+                agent_name=context.agent_name,
+                context=data,
+                formatted_prompt="",
+                tools_path=context.agent_config.get("tools_path"),
+            )
+
+            # Unwrap single-item list from invocation service
+            if isinstance(raw_response, list) and len(raw_response) == 1:
+                decision_payload = raw_response[0]
+            elif isinstance(raw_response, list):
+                raise ValueError(
+                    "FILE mode HITL must return a single decision payload, "
+                    f"got {len(raw_response)} items"
+                )
+            else:
+                decision_payload = raw_response
+
+            if not isinstance(decision_payload, dict):
+                raise ValueError(
+                    "FILE mode HITL must return an object payload, "
+                    f"got {type(decision_payload).__name__}"
+                )
+
+            record_reviews = (
+                decision_payload.get("record_reviews")
+                if isinstance(decision_payload.get("record_reviews"), list)
+                else None
+            )
+            # Only propagate HITL decision metadata. Keep source business fields
+            # (for example `status`) intact.
+            decision_common = {
+                key: value
+                for key, value in decision_payload.items()
+                if key in {"hitl_status", "user_comment", "timestamp"}
+            }
+
+            # Propagate one file-level decision across all input records so
+            # downstream processing keeps record cardinality intact.
+            # Use original_data for the merge to preserve all upstream fields.
+            structured_data = []
+            if original_data:
+                reserved_fields = {
+                    "source_guid",
+                    "target_id",
+                    "node_id",
+                    "lineage",
+                    "metadata",
+                    "content",
+                    "_unprocessed",
+                    "_recovery",
+                }
+                for idx, item in enumerate(original_data):
+                    if isinstance(item, dict):
+                        if isinstance(item.get("content"), dict):
+                            base_content = dict(item["content"])
+                        else:
+                            base_content = {
+                                key: value
+                                for key, value in item.items()
+                                if key not in reserved_fields
+                            }
+                            raw_content = item.get("content")
+                            if not base_content and raw_content is not None:
+                                base_content = {"value": raw_content}
+                    else:
+                        base_content = {"value": item}
+
+                    merged_content = dict(base_content)
+                    merged_content.update(decision_common)
+                    if record_reviews and idx < len(record_reviews):
+                        review_payload = record_reviews[idx]
+                        if isinstance(review_payload, dict):
+                            normalized_review_payload = {
+                                key: value
+                                for key, value in review_payload.items()
+                                if key in {"hitl_status", "user_comment"}
+                            }
+                            merged_content.update(normalized_review_payload)
+                    structured_item = {"content": merged_content}
+                    if isinstance(item, dict):
+                        for field in (
+                            "source_guid",
+                            "target_id",
+                            "_unprocessed",
+                            "_recovery",
+                            "metadata",
+                        ):
+                            if field in item:
+                                structured_item[field] = item[field]
+                    structured_data.append(structured_item)
+
+            result = ProcessingResult(
+                status=ProcessingStatus.SUCCESS,
+                data=structured_data,
+                source_guid=None,
+                raw_response=raw_response,
+                executed=executed,
+            )
+
+            result = self.record_processor.enrichment_pipeline.enrich(result, context)
+            return [result]
+        except Exception as e:
+            logger.error("Error in FILE mode HITL processing: %s", e)
             error_result = ProcessingResult(
                 status=ProcessingStatus.FAILED,
                 data=[],

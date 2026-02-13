@@ -237,7 +237,17 @@ class AgentExecutor:
     def _track_action_start(self, params: AgentRunParams) -> None:
         """Track action start if run_tracker is available."""
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
-            action_type = "tool" if params.agent_config.get("model_vendor") == "tool" else "llm"
+            # Determine action type from model_vendor or kind
+            model_vendor = params.agent_config.get("model_vendor", "")
+            action_kind = params.agent_config.get("kind", "")
+
+            if model_vendor == "tool" or action_kind == "tool":
+                action_type = "tool"
+            elif model_vendor == "hitl" or action_kind == "hitl":
+                action_type = "hitl"
+            else:
+                action_type = "llm"
+
             self.run_tracker.record_action_start(
                 run_id=self.run_id,
                 action_name=params.agent_name,

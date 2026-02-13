@@ -15,6 +15,7 @@ from agent_actions.llm.providers.anthropic.client import AnthropicClient
 from agent_actions.llm.providers.groq.client import GroqClient
 from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.llm.providers.agac.client import AgacClient
+from agent_actions.llm.providers.hitl.client import HitlClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ CLIENT_REGISTRY: Dict[str, Any] = {
     "groq": GroqClient,
     "tool": ToolClient,
     "agac-provider": AgacClient,
+    "hitl": HitlClient,
 }
 
 # All providers now normalise their return type to List[Dict] internally,
@@ -88,6 +90,13 @@ class ClientInvocationService:
             return client.invoke(
                 agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
+
+        # HITL client has same signature as tool client; wrap for List consistency
+        if model_vendor == "hitl":
+            result = client.invoke(
+                agent_config, context_data, tool_args=tool_args, source_content=source_content
+            )
+            return [result]
 
         # Groq client has special invocation signature
         if model_vendor == "groq":

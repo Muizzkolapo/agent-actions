@@ -20,6 +20,17 @@ class TestFileGranularityValidation:
         processor = RecordProcessor(agent_config=agent_config, agent_name="test_tool")
         assert processor is not None
 
+    def test_file_granularity_allowed_for_kind_hitl(self):
+        """FILE granularity allowed when kind is 'hitl'."""
+        agent_config = {
+            "granularity": "file",
+            "kind": "hitl",
+        }
+
+        # Should not raise
+        processor = RecordProcessor(agent_config=agent_config, agent_name="test_hitl")
+        assert processor is not None
+
     def test_file_granularity_blocked_for_kind_llm(self):
         """FILE granularity blocked when kind is 'llm'."""
         agent_config = {
@@ -31,7 +42,7 @@ class TestFileGranularityValidation:
         with pytest.raises(ConfigurationError) as exc_info:
             RecordProcessor(agent_config=agent_config, agent_name="test_llm")
 
-        assert "FILE granularity is only supported for tool actions" in str(exc_info.value)
+        assert "FILE granularity is only supported for tool and hitl actions" in str(exc_info.value)
 
     def test_file_granularity_blocked_when_kind_not_set(self):
         """FILE granularity blocked when kind is not set (defaults to llm behavior)."""
@@ -43,7 +54,7 @@ class TestFileGranularityValidation:
         with pytest.raises(ConfigurationError) as exc_info:
             RecordProcessor(agent_config=agent_config, agent_name="test_no_kind")
 
-        assert "FILE granularity is only supported for tool actions" in str(exc_info.value)
+        assert "FILE granularity is only supported for tool and hitl actions" in str(exc_info.value)
 
     def test_file_granularity_with_guard_blocked(self):
         """FILE granularity with guard is blocked (guards not supported in FILE mode)."""
@@ -72,7 +83,7 @@ class TestFileGranularityValidation:
 
     def test_record_granularity_allowed_for_all_kinds(self):
         """RECORD granularity allowed for any kind."""
-        for kind in ["tool", "llm", ""]:
+        for kind in ["tool", "hitl", "llm", ""]:
             agent_config = {
                 "granularity": "record",
                 "kind": kind,

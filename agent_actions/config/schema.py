@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.guard_parser import GuardParser
@@ -15,6 +15,7 @@ class ActionKind(str, Enum):
 
     LLM = "llm"
     TOOL = "tool"
+    HITL = "hitl"
 
 
 class Granularity(str, Enum):
@@ -86,6 +87,32 @@ class RepromptConfig(BaseModel):
     )
 
 
+class HitlConfig(BaseModel):
+    """Configuration for Human-in-the-Loop actions."""
+
+    port: int = Field(
+        default=3001,
+        ge=1024,
+        le=65535,
+        description="Port for approval UI server",
+    )
+    instructions: str = Field(
+        ...,
+        min_length=1,
+        description="Instructions displayed to user in review UI",
+    )
+    timeout: int = Field(
+        default=300,
+        ge=5,
+        le=3600,
+        description="Timeout in seconds (default 5 min, max 1 hour, min 5s)",
+    )
+    require_comment_on_reject: bool = Field(
+        default=True,
+        description="Require comment when rejecting",
+    )
+
+
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
 
@@ -136,6 +163,17 @@ class ActionConfig(BaseModel):
         default=None,
         description="Key for aggregation pattern (groups merged outputs by this field)",
     )
+    hitl: Optional[HitlConfig] = Field(
+        default=None,
+        description="HITL configuration (required when kind=hitl)",
+    )
+
+    @model_validator(mode="after")
+    def validate_hitl_config(self):
+        """Ensure HITL config is present when kind=hitl."""
+        if self.kind == ActionKind.HITL and self.hitl is None:
+            raise ValueError("HITL actions require 'hitl' configuration block")
+        return self
 
     @field_validator("guard")
     @classmethod
@@ -209,6 +247,7 @@ class WorkflowConfigV2(BaseModel):
 __all__ = [
     "ActionKind",
     "Granularity",
+    "HitlConfig",
     "VersionConfig",
     "RetryConfig",
     "ActionConfig",

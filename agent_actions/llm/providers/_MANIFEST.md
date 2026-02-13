@@ -25,4 +25,5 @@ shared utilities (mixins, usage tracking) for each supported LLM vendor.
 | `mistral/__init__.py` | Module | Mistral provider integration. | `llm.providers`, `mistral` |
 | `ollama/__init__.py` | Module | Ollama provider connector for local inference. | `llm.providers`, `ollama` |
 | `openai/__init__.py` | Module | OpenAI provider adapter with tool/window shaping. | `llm.providers`, `openai` |
-| `tools/__init__.py` | Module | Tool discovery/registration for OpenAI function calling formats. | `llm.providers`, `tools`
+| `tools/__init__.py` | Module | Tool discovery/registration for OpenAI function calling formats. | `llm.providers`, `tools` |
+| `hitl/__init__.py` | Module | Human-in-the-loop provider for synchronous approval/rejection workflows. | `llm.providers`, `hitl` |

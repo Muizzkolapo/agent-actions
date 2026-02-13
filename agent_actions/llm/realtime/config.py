@@ -316,6 +316,15 @@ class ConfigManager:
             for field, default_value in string_fields_with_defaults.items():
                 if field in config_dict and config_dict[field] is None:
                     config_dict[field] = default_value
+
+            # Normalize kind to model_vendor for tool and hitl actions.
+            # This intentionally overrides inherited/default vendors (e.g., openai)
+            # so kind-specific actions always route to the correct client.
+            if config_dict.get("kind") == "tool":
+                config_dict["model_vendor"] = "tool"
+            if config_dict.get("kind") == "hitl":
+                config_dict["model_vendor"] = "hitl"
+
             result[agent_type] = config_dict
         return result
 
