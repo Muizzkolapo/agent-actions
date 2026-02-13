@@ -10,10 +10,10 @@ import sys
 from typing import Dict, Any, Optional, List, Union
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.module_loader import ensure_path_importable
+from agent_actions.output.response.schema import prepare_schema_unified
 from .services import (
     PromptService,
     ContextService,
-    SchemaService,
     ClientInvocationService,
 )
 
@@ -97,7 +97,7 @@ def create_dynamic_agent(
             prompt_config = f"{prompt_config}\n\n{context_msg}"
 
     # Prepare schema with dispatch support
-    schema, schema_results = SchemaService.prepare_schema(
+    schema, schema_results = prepare_schema_unified(
         agent_config, model_vendor, tools_path=tools_path, context_data=context_data
     )
 

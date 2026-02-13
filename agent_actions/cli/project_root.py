@@ -8,7 +8,7 @@ agent_actions.yml marker file in the current directory and parent directories.
 from pathlib import Path
 import os
 from typing import Optional
-from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
+from agent_actions.errors import ProjectNotFoundError
 
 PROJECT_MARKER_FILE = "agent_actions.yml"
 MAX_PARENT_LEVELS = 100
@@ -74,33 +74,3 @@ def ensure_in_project() -> Path:
             context={"marker_file": PROJECT_MARKER_FILE, "search_path": os.getcwd()},
         )
     return project_root
-
-
-def get_project_root_or_cwd() -> Path:
-    """
-    Get project root if in a project, otherwise return current directory.
-
-    Useful for commands that can work both inside and outside projects.
-
-    Returns:
-        Path to project root if found, otherwise current working directory
-
-    Example:
-        >>> root = get_project_root_or_cwd()
-        >>> # Will be project root if in project, CWD otherwise
-    """
-    return find_project_root() or Path.cwd()
-
-
-def is_in_project() -> bool:
-    """
-    Check if current directory is within an agent-actions project.
-
-    Returns:
-        True if in a project, False otherwise
-
-    Example:
-        >>> if is_in_project():
-        ...     print("In project!")
-    """
-    return find_project_root() is not None

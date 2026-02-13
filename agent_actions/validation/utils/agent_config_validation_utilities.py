@@ -63,7 +63,7 @@ class AgentConfigValidationUtilities:
         "tool": {MODEL_NAME_KEY},
     }
 
-    _VALID_BATCH_VENDORS: Set[str] = {"openai", "gemini", "anthropic"}
+    _VALID_BATCH_VENDORS: Set[str] = {"openai", "gemini", "anthropic", "groq", "mistral"}
 
     _VALID_GRANULARITY_VALUES: Set[str] = {"record", "file"}
 

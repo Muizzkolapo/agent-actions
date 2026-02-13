@@ -8,7 +8,7 @@ eliminating duplicate code across different provider implementations.
 import json
 import logging
 from typing import Any, Union, Dict, List, Optional
-from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.errors import VendorAPIError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import LLMJSONParseErrorEvent
 

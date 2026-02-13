@@ -57,7 +57,7 @@ class AnthropicBatchClient(BaseBatchClient):
         except ImportError as e:
             from agent_actions.errors import (
                 ConfigurationError,
-            )  # New modular pattern!
+            )
 
             raise ConfigurationError(
                 "Required package not installed",
@@ -67,7 +67,7 @@ class AnthropicBatchClient(BaseBatchClient):
         except Exception as e:
             from agent_actions.errors import (
                 ConfigurationError,
-            )  # New modular pattern!
+            )
 
             raise ConfigurationError(
                 "Failed to initialize Anthropic client",
@@ -293,7 +293,7 @@ class AnthropicBatchClient(BaseBatchClient):
             logger.info("Status: %s", status)
             return (batch_id, status)
         except self.anthropic.APIError as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Anthropic API error during batch submission",
@@ -301,7 +301,7 @@ class AnthropicBatchClient(BaseBatchClient):
                 cause=e,
             ) from e
         except self.anthropic.AuthenticationError as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Anthropic authentication failed during batch submission",
@@ -313,7 +313,7 @@ class AnthropicBatchClient(BaseBatchClient):
                 cause=e,
             ) from e
         except Exception as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Failed to submit batch to Anthropic",
@@ -378,7 +378,7 @@ class AnthropicBatchClient(BaseBatchClient):
                         f.write(json.dumps(entry) + "\n")
             return batch_results
         except self.anthropic.APIError as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Anthropic API error retrieving batch results",
@@ -386,7 +386,7 @@ class AnthropicBatchClient(BaseBatchClient):
                 cause=e,
             ) from e
         except self.anthropic.AuthenticationError as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Anthropic authentication failed during retrieve results",
@@ -398,7 +398,7 @@ class AnthropicBatchClient(BaseBatchClient):
                 cause=e,
             ) from e
         except Exception as e:
-            from agent_actions.errors import AnthropicError  # New modular pattern!
+            from agent_actions.errors import AnthropicError
 
             raise AnthropicError(
                 "Failed to retrieve Anthropic batch results",

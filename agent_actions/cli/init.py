@@ -18,7 +18,7 @@ from agent_actions.errors import (
     ValidationError,
     FileSystemError,
     ConfigurationError,
-)  # New modular pattern!
+)
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     ProjectInitializationStartEvent,

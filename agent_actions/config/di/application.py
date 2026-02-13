@@ -5,13 +5,11 @@ This module provides the main application container that sets up all dependencie
 and provides factory methods for creating key application components.
 """
 
-from datetime import datetime, timezone
 import logging
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from agent_actions.config.di.configurator import DIConfigurator, ConfigurationProfile
 from agent_actions.config.interfaces import (
-    IDataLoader,
     IDataProcessor,
     IGenerator,
     ISourceDataLoader,
@@ -193,30 +191,3 @@ class ApplicationContainer:
         app_container.container = container
         app_container.processor_factory = ProcessorFactory(container, registry)
         return app_container
-
-    def health_check(self) -> Dict[str, Any]:
-        """
-        Perform health check on all registered services.
-
-        Returns:
-            Health check results.
-        """
-        results = {"status": "healthy", "services": {}, "timestamp": None}
-        try:
-            self.container.get(IDataLoader)
-            results["services"]["data_loader"] = "healthy"
-            self.container.get(IDataProcessor)
-            results["services"]["data_processor"] = "healthy"
-            self.container.get(IGenerator)
-            results["services"]["generator"] = "healthy"
-            # BatchService not registered, create instance for health check
-            # Import here to avoid circular dependency
-            from agent_actions.llm.batch.service import BatchService
-
-            BatchService()
-            results["services"]["batch_service"] = "healthy"
-        except (KeyError, ValueError, AttributeError, TypeError, RuntimeError, ImportError) as e:
-            results["status"] = "unhealthy"
-            results["error"] = str(e)
-        results["timestamp"] = datetime.now(timezone.utc).isoformat()
-        return results

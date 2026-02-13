@@ -372,8 +372,3 @@ class LoggerFactory:
             cls._event_manager.register(handler)
 
         return handler
-
-    # Backwards compatibility aliases
-    initialize_events = initialize
-    set_event_context = set_context
-    flush_events = flush

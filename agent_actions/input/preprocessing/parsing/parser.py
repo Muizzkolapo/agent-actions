@@ -605,30 +605,3 @@ class SafeExpressionEvaluator:
             return False
 
         return True
-
-
-# Global parser instance for convenience
-_GLOBAL_PARSER = None
-
-
-def get_global_parser() -> WhereClauseParser:
-    """Get the global WHERE clause parser instance."""
-    global _GLOBAL_PARSER
-    if _GLOBAL_PARSER is None:
-        _GLOBAL_PARSER = WhereClauseParser()
-    return _GLOBAL_PARSER
-
-
-def evaluate_safe_expression(expression: str, context: Dict[str, Any]) -> Any:
-    """
-    Safely evaluate an expression (replacement for eval()).
-
-    Args:
-        expression: The expression to evaluate
-        context: Context variables for the expression
-
-    Returns:
-        The result of the evaluation
-    """
-    evaluator = SafeExpressionEvaluator()
-    return evaluator.evaluate(expression, context)

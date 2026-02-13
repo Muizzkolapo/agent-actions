@@ -3,7 +3,7 @@
 from typing import Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from agent_actions.errors import ConfigValidationError
@@ -113,44 +113,4 @@ class EnvironmentConfig(BaseSettings):
         return LogLevel.WARNING
 
 
-class APIConfig(BaseModel):
-    """API-specific configuration extracted from environment config."""
-
-    openai_api_key: Optional[SecretStr] = None
-    anthropic_api_key: Optional[SecretStr] = None
-    gemini_api_key: Optional[SecretStr] = None
-    default_timeout: int = 120
-    max_retries: int = 3
-
-    @classmethod
-    def from_environment(cls, env_config: EnvironmentConfig) -> "APIConfig":
-        """Create API config from environment configuration."""
-        return cls(
-            openai_api_key=env_config.openai_api_key,
-            anthropic_api_key=env_config.anthropic_api_key,
-            gemini_api_key=env_config.gemini_api_key,
-            default_timeout=env_config.default_api_timeout,
-            max_retries=env_config.default_max_retries,
-        )
-
-
-class PerformanceConfig(BaseModel):
-    """Performance-specific configuration extracted from environment config."""
-
-    batch_size: int = 100
-    enable_parallel_processing: bool = True
-    max_concurrency: int = 10
-    cache_ttl: int = 300
-
-    @classmethod
-    def from_environment(cls, env_config: EnvironmentConfig) -> "PerformanceConfig":
-        """Create performance config from environment configuration."""
-        return cls(
-            batch_size=env_config.default_batch_size,
-            enable_parallel_processing=env_config.enable_parallel_processing,
-            max_concurrency=env_config.max_concurrency,
-            cache_ttl=env_config.cache_ttl,
-        )
-
-
-__all__ = ["EnvironmentConfig", "APIConfig", "PerformanceConfig", "Environment", "LogLevel"]
+__all__ = ["EnvironmentConfig", "Environment", "LogLevel"]

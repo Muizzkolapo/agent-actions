@@ -69,15 +69,10 @@ def get_storage_backend(
     backend_class = BACKENDS[backend_type]
 
     # Build backend-specific configuration
-    if backend_type == "sqlite":
-        # SQLite: {workflow}/agent_io/target/{workflow_name}.db
-        workflow_dir = Path(workflow_path)
-        db_path = workflow_dir / "agent_io" / "target" / f"{workflow_name}.db"
-        backend = backend_class(str(db_path), workflow_name)
-    else:
-        # Future backends may have different initialization
-        # This is where we'd add S3, DuckDB, etc. configuration
-        raise NotImplementedError(f"Backend '{backend_type}' initialization not implemented")
+    # SQLite: {workflow}/agent_io/target/{workflow_name}.db
+    workflow_dir = Path(workflow_path)
+    db_path = workflow_dir / "agent_io" / "target" / f"{workflow_name}.db"
+    backend = backend_class(str(db_path), workflow_name)
 
     return backend
 

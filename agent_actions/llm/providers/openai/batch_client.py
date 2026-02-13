@@ -120,7 +120,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         """Fetch raw results from OpenAI API."""
         batch_job = self.client.batches.retrieve(batch_id)
         if batch_job.status != "completed":
-            from agent_actions.errors import ValidationError  # New modular pattern!
+            from agent_actions.errors import ValidationError
 
             raise ValidationError(
                 "Batch job is not completed",
@@ -153,7 +153,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         result_content = self.client.files.content(result_file_id).content
 
         if not result_content or len(result_content) == 0:
-            from agent_actions.errors import VendorAPIError  # New modular pattern!
+            from agent_actions.errors import VendorAPIError
 
             raise VendorAPIError(
                 vendor="openai",

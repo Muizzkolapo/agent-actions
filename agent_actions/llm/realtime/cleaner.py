@@ -7,7 +7,7 @@ from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.errors import (
     AgentNotFoundError,
     FileSystemError as AgentFileSystemError,
-)  # New modular pattern!
+)
 
 logger = logging.getLogger(__name__)
 

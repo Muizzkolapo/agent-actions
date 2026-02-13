@@ -4,7 +4,6 @@ Module for prompt formatting and loading.
 
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.constants import PROMPT_KEY
-from agent_actions.prompt.prompt_utils import PromptUtils
 
 
 class PromptFormatter:
@@ -40,38 +39,6 @@ class PromptFormatter:
                     "field": "raw_prompt",
                     "agent_config": str(agent_config),
                     "operation": "get_raw_prompt",
-                },
-                cause=e,
-            ) from e
-
-    @staticmethod
-    def format_prompt(raw_prompt, field_context=None):
-        """
-        Replace {reference.field} patterns in the prompt.
-
-        Parameters:
-            raw_prompt: Template prompt with field references
-            field_context: Dict with field references (source, agent outputs, loop, workflow)
-
-        Returns:
-            Formatted prompt with all {reference.field} patterns replaced
-
-        Raises:
-            ValueError: If prompt formatting fails
-        """
-        try:
-            if field_context:
-                return PromptUtils.replace_field_references(raw_prompt, field_context)
-            return raw_prompt
-        except Exception as e:
-            from agent_actions.errors import PromptValidationError
-
-            raise PromptValidationError(
-                f"Failed to format prompt: {str(e)}",
-                context={
-                    "field": "formatted_prompt",
-                    "raw_prompt": str(raw_prompt)[:100],
-                    "operation": "format_prompt",
                 },
                 cause=e,
             ) from e

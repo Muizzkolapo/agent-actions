@@ -23,8 +23,6 @@ decoders to schema validators and preflight checks.
 | `batch_validator.py` | Module | Validator that ensures batch CLI arguments conform to expectations. | `validation`, `llm.batch` |
 | `clean_validator.py` | Module | `CleanCommandArgs` pydantic model used by the CLI. | `validation` |
 | `config_validator.py` | Module | Central config parser/validator used across startup flows. | `configuration`, `validation` |
-| `directory_validator.py` | Module | Ensures directories exist and enforce fixture conventions. | `validation` |
-| `docs_validator.py` | Module | CLI validator for `agac docs` commands. | `validation` |
 | `init_validator.py` | Module | `InitCommandArgs` pydantic model used by the CLI. | `validation` |
 | `path_validator.py` | Module | Path validation utilities conforming to BaseValidator interface. | `validation` |
 | `prompt_ast.py` | Module | Jinja2 AST parser for extracting template variables. | `prompt_generation` |
@@ -33,6 +31,5 @@ decoders to schema validators and preflight checks.
 | `run_validator.py` | Module | `RunCommandArgs` and pre-flight gating. | `validation` |
 | `schema_output_validator.py` | Module | Validates output data against JSON schemas. | `validation`, `schema` |
 | `schema_validator.py` | Module | Schema validation with event firing support. | `validation` |
-| `startup_validator.py` | Module | Validator used during environment bootstrap. | `validation` |
 | `status_validator.py` | Module | `StatusCommandArgs` definition. | `validation` |
 | `validate_udfs.py` | Module | Validates that UDFs referenced in configs exist. | `utils.udf_management`, `validation` |

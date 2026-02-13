@@ -15,7 +15,7 @@ import click
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.tooling.docs.run_tracker import RunTracker
-from agent_actions.errors import FileLoadError  # New modular pattern!
+from agent_actions.errors import FileLoadError
 from agent_actions.logging import LoggerFactory
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer

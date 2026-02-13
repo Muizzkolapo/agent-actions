@@ -36,10 +36,9 @@ orchestration, prompts, and processing to concrete implementations.
 
 ```mermaid
 flowchart TD
-    A[EnvironmentConfig] -->|validate_startup| B[Startup Validation]
-    B --> C[ApplicationContainer]
-    C --> D[DI Registrations]
-    D --> E[AgentRunner]
+    A[EnvironmentConfig] --> B[ApplicationContainer]
+    B --> C[DI Registrations]
+    C --> D[AgentRunner]
 ```
 
 Key Functions

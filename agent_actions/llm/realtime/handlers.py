@@ -1,7 +1,5 @@
-import json
 import shutil
-from typing import Callable, Optional, Dict, Any
-from agent_actions.output.file_handler import FileHandler
+from typing import Optional
 from pathlib import Path
 from agent_actions.errors import AgentNotFoundError
 import logging
@@ -35,68 +33,6 @@ class AgentManager:
                 return current
             current = current.parent
         return None
-
-    @staticmethod
-    def clean_agent_directories(agent_name: str) -> bool:
-        """
-        Deletes all files under the source and target folders for the specified agent.
-
-        Args:
-            agent_name: Name of the agent whose directories should be cleaned
-
-        Returns:
-            bool: True if directories were successfully cleaned, False otherwise
-        """
-        current_dir = Path.cwd()
-        agent_folder = FileHandler.find_specific_folder(str(current_dir), agent_name, "agent_io")
-        if agent_folder is None:
-            print(f"Agent folder not found for agent: {agent_name}")
-            return False
-        source_dir = Path(agent_folder) / "source"
-        target_dir = Path(agent_folder) / "target"
-        for directory in [source_dir, target_dir]:
-            if directory.exists():
-                shutil.rmtree(directory)
-                print(f"Deleted directory: {directory}")
-            else:
-                print(f"Directory not found: {directory}")
-        return True
-
-    @staticmethod
-    def clean_agent_output(agent_name: str, agent_type: str, function_name: str) -> int:
-        """
-        Cleans the agent output by applying a specified function to each JSON file
-        in the target directory of the agent.
-
-        Args:
-            agent_name: Name of the agent
-            agent_type: Type of the agent
-            function_name: Name of the function to apply to the JSON data
-
-        Returns:
-            int: Number of files successfully processed
-        """
-        project_root = Path.cwd()
-        input_directory = project_root / "agent_io" / agent_name / "target" / agent_type
-        function_call: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = globals().get(
-            function_name
-        )
-        processed_count = 0
-        if function_call and callable(function_call):
-            for root, _, files in os.walk(str(input_directory)):
-                for file_name in files:
-                    if file_name.endswith(".json"):
-                        file_path = Path(root) / file_name
-                        try:
-                            with open(file_path, "r", encoding="utf-8") as file:
-                                data = json.load(file)
-                            processed_data = function_call(data)
-                            with open(file_path, "w", encoding="utf-8") as file:
-                                json.dump(processed_data, file, indent=4)
-                            processed_count += 1
-                        except (json.JSONDecodeError, IOError) as e:
-                            print(f"Error processing file {file_path}: {str(e)}")
-        return processed_count
 
     @staticmethod
     def agent_exists(agent_name: str) -> bool:

@@ -21,4 +21,3 @@ processing.
 | `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing discovered modules and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |
 | `xml.py` | Module | `XmlLoader` that parses XML text into `ElementTree` roots, exposes helper for turning elements to dicts, and surfaces parse metadata. | `errors`, `xml` |
 | `data_source.py` | Module | `DataSourceType` enum, `DataSourceConfig` model, and resolver that maps `data_source` config values to concrete directories (staging, local, API). | `config`, `errors`, `pydantic` |
-| `yaml.py` | Module | `TemplateYamlLoader` that pre-processes Jinja-like template syntax before safe-loading YAML so legacy templates can still parse. | `yaml`, `errors`, `re` |

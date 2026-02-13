@@ -56,8 +56,6 @@
 | `project_root.py` | Module | Project root detection utilities. | `errors` |
 | `find_project_root` | Function | Find the project root by walking up directories to locate agent_actions.yml. | - |
 | `ensure_in_project` | Function | Ensure the current working directory is within an agent-actions project. | - |
-| `get_project_root_or_cwd` | Function | Get project root if in a project, otherwise return current directory. | - |
-| `is_in_project` | Function | Check if current directory is within an agent-actions project. | - |
 | `run.py` | Module | Run command for the Agent Actions CLI. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |

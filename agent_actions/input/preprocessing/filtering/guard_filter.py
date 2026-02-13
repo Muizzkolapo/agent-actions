@@ -4,7 +4,7 @@ Guard filter service.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 from dataclasses import dataclass
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -57,17 +57,6 @@ class FilterItemRequest:
     condition: str
     timeout: Optional[int] = None
     functions: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class FilterBatchRequest:
-    """Request parameters for filtering a batch of items."""
-
-    data_items: List[Dict[str, Any]]
-    condition: str
-    timeout: Optional[int] = None
-    functions: Optional[Dict[str, Any]] = None
-    passthrough_on_error: bool = True
 
 
 class GuardFilter:
@@ -167,35 +156,6 @@ class GuardFilter:
                 self._update_metrics(False, execution_time, False)
 
             return FilterResult(success=False, error=error_msg, execution_time=execution_time)
-
-    def filter_batch(self, request: FilterBatchRequest) -> List[Dict[str, Any]]:
-        """
-        Filter a batch of data items using a guard condition.
-
-        Args:
-            request: FilterBatchRequest containing all parameters
-
-        Returns:
-            List of items that match the guard condition
-        """
-        filtered_items = []
-
-        for item in request.data_items:
-            item_request = FilterItemRequest(
-                data=item,
-                condition=request.condition,
-                timeout=request.timeout,
-                functions=request.functions,
-            )
-            result = self.filter_item(item_request)
-
-            if result.success and result.matched:
-                filtered_items.append(item)
-            elif not result.success and request.passthrough_on_error:
-                # Include items that failed evaluation if passthrough is enabled
-                filtered_items.append(item)
-
-        return filtered_items
 
     def _parse_condition_cached(self, condition: str) -> ParseResult:
         """Parse guard condition with caching."""

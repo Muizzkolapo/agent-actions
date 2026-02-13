@@ -562,7 +562,7 @@ class BaseBatchClient(ABC):
         if not file_path.exists():
             from agent_actions.errors import (
                 VendorAPIError,
-            )  # New modular pattern!
+            )
 
             raise VendorAPIError(
                 vendor=self.__class__.__name__,
