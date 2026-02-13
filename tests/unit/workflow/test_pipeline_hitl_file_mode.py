@@ -308,9 +308,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     ]
 
     # Apply the filter as _process_by_strategy would
-    filtered = ProcessingPipeline._apply_observe_filter(
-        original_data, pipeline.config.agent_config
-    )
+    filtered = ProcessingPipeline._apply_observe_filter(original_data, pipeline.config.agent_config)
 
     # Filtered records should only contain observe fields in defined order
     assert list(filtered[0].keys()) == ["question", "answer"]

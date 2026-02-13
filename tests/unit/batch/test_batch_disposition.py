@@ -40,7 +40,10 @@ class TestBatchWriteRecordDispositions:
         service._write_record_dispositions(items, "extract")
 
         backend.set_disposition.assert_called_once_with(
-            "extract", "guid-1", "exhausted", reason="retry_exhausted",
+            "extract",
+            "guid-1",
+            "exhausted",
+            reason="retry_exhausted",
         )
 
     def test_unprocessed_skipped_item_writes_skipped(self):
@@ -59,7 +62,10 @@ class TestBatchWriteRecordDispositions:
         service._write_record_dispositions(items, "classify")
 
         backend.set_disposition.assert_called_once_with(
-            "classify", "guid-2", "skipped", reason="not_applicable",
+            "classify",
+            "guid-2",
+            "skipped",
+            reason="not_applicable",
         )
 
     def test_where_clause_filtered_writes_filtered(self):
@@ -81,7 +87,10 @@ class TestBatchWriteRecordDispositions:
         service._write_record_dispositions(items, "classify")
 
         backend.set_disposition.assert_called_once_with(
-            "classify", "guid-3", "filtered", reason="WHERE clause filtered",
+            "classify",
+            "guid-3",
+            "filtered",
+            reason="WHERE clause filtered",
         )
 
     def test_error_item_writes_failed(self):
@@ -100,7 +109,10 @@ class TestBatchWriteRecordDispositions:
         service._write_record_dispositions(items, "extract")
 
         backend.set_disposition.assert_called_once_with(
-            "extract", "guid-4", "failed", reason="API timeout after 30s",
+            "extract",
+            "guid-4",
+            "failed",
+            reason="API timeout after 30s",
         )
 
     def test_error_reason_truncated_to_500_chars(self):

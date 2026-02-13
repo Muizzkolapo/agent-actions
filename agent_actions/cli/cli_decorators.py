@@ -97,8 +97,7 @@ def requires_project(func):
     before executing the command. Provides user feedback about the
     detected project root.
 
-    This allows commands to be run from any subdirectory within a project,
-    similar to how git, dbt, and npm work.
+    This allows commands to be run from any subdirectory within a project.
 
     Usage:
         @click.command()

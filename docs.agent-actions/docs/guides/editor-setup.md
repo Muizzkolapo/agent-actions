@@ -8,7 +8,7 @@ sidebar_position: 4
 
 What happens when you Ctrl+Click on `$prompts.Extract_Facts` in your workflow YAML? Without editor integration, nothing. You'd manually search for the prompt file, scroll to find the right `{prompt}` block, and lose your train of thought. With the Agent Actions LSP, you jump directly to the definition—just like navigating code.
 
-The Language Server Protocol (LSP) brings IDE-quality navigation to your agentic workflows. It's bundled with agent-actions, so you get it automatically with `pip install agent-actions`.
+The Language Server Protocol (LSP) brings IDE-quality navigation to your agentic workflows. It's bundled with agent-actions, so you get it automatically with `uv pip install agent-actions`.
 
 ## What You Get
 
@@ -59,7 +59,7 @@ The LSP understands agent-actions references and resolves them to file locations
 The LSP comes bundled with agent-actions. Install the package and you get `agac-lsp`:
 
 ```bash
-pip install agent-actions
+uv pip install agent-actions
 
 # Verify it's available
 agac-lsp --help
@@ -431,14 +431,14 @@ The LSP command isn't in your PATH:
 
 ```bash
 # Check if agent-actions is installed
-pip show agent-actions
+uv pip show agent-actions
 
 # Find where agac-lsp is
-pip show agent-actions | grep Location
+uv pip show agent-actions | grep Location
 # Then check: <location>/agent_actions/lsp/
 
 # Reinstall if needed
-pip install --force-reinstall agent-actions
+uv pip install --force-reinstall agent-actions
 ```
 
 ### Extension Not Activating
@@ -497,7 +497,7 @@ The extension can't find the `agent_actions` Python module. Set the module path 
 
 To find the correct path:
 ```bash
-pip show agent-actions | grep Location
+uv pip show agent-actions | grep Location
 # Use the path shown (e.g., /Users/you/.venv/lib/python3.11/site-packages)
 ```
 

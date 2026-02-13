@@ -1,8 +1,7 @@
 """
 Run results collector handler.
 
-Collects workflow execution data and outputs a run_results.json artifact
-similar to dbt's run_results.json. This artifact is useful for:
+Collects workflow execution data and outputs a run_results.json artifact useful for:
 - CI/CD integration (check success/failure status)
 - Analytics and performance tracking
 - Debugging and troubleshooting

@@ -12,7 +12,7 @@ Beyond running agentic workflows, `agac` provides commands for project setup, de
 
 **What does your agentic workflow configuration look like after compilation?**
 
-The `render` command compiles your workflow configuration and shows you the final, fully-resolved YAML without executing it. This is similar to how `dbt compile` shows compiled SQL before execution.
+The `render` command compiles your workflow configuration and shows you the final, fully-resolved YAML without executing it. This shows you the fully-resolved configuration before execution.
 
 ```bash
 agac render -a <workflow-name> [options]

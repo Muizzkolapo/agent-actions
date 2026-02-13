@@ -36,8 +36,7 @@ from agent_actions.logging.events import (
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
 from agent_actions.logging.errors import format_user_error
 from agent_actions.utils.safe_format import format_exception_chain_for_debug
-
-__version__ = "1.0.0"
+from agent_actions.__version__ import __version__
 
 
 class CLI:
@@ -75,7 +74,7 @@ class CLI:
         """Register all available commands with the CLI."""
         self.logger.debug("Registering CLI commands")
         self.click_group.add_command(clean)
-        self.click_group.add_command(compile)  # Alias for render (dbt-style)
+        self.click_group.add_command(compile)  # Alias for render
         self.click_group.add_command(init)
         self.click_group.add_command(inspect)
         self.click_group.add_command(preview)  # Preview data from SQLite storage
@@ -118,7 +117,7 @@ class CLI:
         Configure logging based on command-line arguments.
 
         Uses the unified LoggerFactory which routes all logging through
-        the event system for consistent dbt-style output.
+        the event system for consistent structured output.
 
         Args:
             argv: Command-line arguments

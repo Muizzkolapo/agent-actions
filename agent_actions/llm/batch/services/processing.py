@@ -959,7 +959,9 @@ class BatchProcessingService:
             try:
                 if metadata.get("retry_exhausted"):
                     self._storage_backend.set_disposition(
-                        action_name, source_guid, DISPOSITION_EXHAUSTED,
+                        action_name,
+                        source_guid,
+                        DISPOSITION_EXHAUSTED,
                         reason="retry_exhausted",
                     )
                 elif item.get("_unprocessed"):
@@ -969,16 +971,23 @@ class BatchProcessingService:
                     else:
                         disposition = DISPOSITION_SKIPPED
                     self._storage_backend.set_disposition(
-                        action_name, source_guid, disposition, reason=reason,
+                        action_name,
+                        source_guid,
+                        disposition,
+                        reason=reason,
                     )
                 elif item.get("error"):
                     self._storage_backend.set_disposition(
-                        action_name, source_guid, DISPOSITION_FAILED,
+                        action_name,
+                        source_guid,
+                        DISPOSITION_FAILED,
                         reason=str(item["error"])[:500],
                     )
             except Exception:
                 logger.warning(
-                    "Failed to write disposition for record %s", source_guid, exc_info=True,
+                    "Failed to write disposition for record %s",
+                    source_guid,
+                    exc_info=True,
                 )
 
     def _finalize_batch_output(

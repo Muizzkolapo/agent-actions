@@ -4,8 +4,6 @@ Event manager for centralized event dispatching.
 The EventManager is a singleton that receives all events via fire_event()
 and routes them to registered handlers. This is the central hub of the
 logging system.
-
-Inspired by dbt's fire_event() pattern.
 """
 
 from __future__ import annotations

@@ -66,29 +66,32 @@ jobs:
       - name: Run unit tests
         run: task test:unit
 
-  # Build verification - disabled for now
-  # build:
-  #   name: Build Package
-  #   runs-on: ubuntu-24.04
-  #   permissions:
-  #     contents: read
-  #   needs: test
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup Python
-  #       uses: ./.github/actions/setup-python
-  #
-  #     - name: Install go-task
-  #       run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-  #
-  #     - name: Build package
-  #       run: task build
-  #
-  #     - name: Upload build artifacts
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: dist
-  #         path: dist/
-  #         retention-days: 7
+  # Build verification
+  build:
+    name: Build Package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Install go-task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Build package
+        run: task build
+
+      - name: Verify py.typed marker included
+        run: unzip -l dist/agent_actions-*.whl | grep py.typed
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7

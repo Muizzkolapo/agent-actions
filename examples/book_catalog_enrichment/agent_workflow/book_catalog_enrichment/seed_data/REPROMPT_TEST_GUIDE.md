@@ -217,8 +217,8 @@ The model is generating good content! Try:
 
 Make sure agent-actions is installed:
 ```bash
-cd /Users/muizz/Documents/codeshop/agent-actions
-pip install -e .
+cd /path/to/agent-actions
+uv pip install -e .
 ```
 
 ## Next Steps

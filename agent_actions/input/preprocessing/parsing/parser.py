@@ -34,7 +34,7 @@ try:
 except ImportError as exc:
     raise ImportError(
         "pyparsing library is required for WHERE clause parsing. "
-        "Install it with: pip install pyparsing"
+        "Install it with: uv pip install pyparsing"
     ) from exc
 
 from .ast_nodes import (

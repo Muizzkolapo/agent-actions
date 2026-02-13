@@ -4,8 +4,7 @@ Base event types for the centralized logging system.
 This module defines the foundational event classes that all domain-specific
 events inherit from. It uses only Python stdlib - no external dependencies.
 
-Inspired by dbt's event system but using dataclasses instead of protobufs
-for simplicity.
+Uses dataclasses for simplicity.
 """
 
 from dataclasses import dataclass, field
@@ -124,7 +123,7 @@ class BaseEvent:
     @property
     def code(self) -> str:
         """
-        Return a short event code (dbt-style).
+        Return a short event code.
 
         Override in subclasses to provide codes like 'W001', 'A002'.
         Default implementation uses first letter of category + hash.

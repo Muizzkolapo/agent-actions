@@ -644,9 +644,7 @@ class TestDispositionLifecycle:
                 backend.set_disposition(
                     "extract", "rec_1", "exhausted", reason="Retry limit reached"
                 )
-                backend.set_disposition(
-                    "extract", "rec_2", "filtered", reason="Below threshold"
-                )
+                backend.set_disposition("extract", "rec_2", "filtered", reason="Below threshold")
 
                 # Query all for node
                 all_dispositions = backend.get_disposition("extract")

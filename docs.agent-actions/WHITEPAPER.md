@@ -41,8 +41,6 @@ The market offers tools, but each has limitations:
 
 **LangChain/LlamaIndex**: Python-first frameworks with extensive abstractions. Powerful for complex agentic applications, but the abstraction layers can obscure what's actually happening. Debugging requires understanding framework internals. Configuration lives in Python code, making non-developer review difficult.
 
-**Prefect/Airflow**: General-purpose workflow orchestration. Excellent for DAG execution but no native LLM support. Teams must build validation, reprompting, and schema enforcement from scratch.
-
 **Custom Solutions**: Many teams build internal tools. This works but requires ongoing maintenance, and lessons learned don't transfer between organizations.
 
 The gap: a framework purpose-built for LLM data pipelines—declarative enough for auditing, opinionated enough to solve common problems, flexible enough for real-world complexity.

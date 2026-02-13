@@ -61,7 +61,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
             raise ConfigurationError(
                 "Required package not installed",
-                context={"package": "anthropic", "install_command": "pip install anthropic"},
+                context={"package": "anthropic", "install_command": "uv pip install anthropic"},
                 cause=e,
             ) from e
         except Exception as e:

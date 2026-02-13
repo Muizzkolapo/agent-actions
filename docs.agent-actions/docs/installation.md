@@ -15,22 +15,22 @@ Agent Actions is available on PyPI and can be installed with pip, pipx, or uv. L
 
 ## Quick Install
 
+### Using uv (recommended)
+
+```bash
+uv pip install agent-actions
+```
+
 ### Using pip
 
 ```bash
 pip install agent-actions
 ```
 
-### Using pipx (recommended for CLI tools)
+### Using pipx (for CLI tools)
 
 ```bash
 pipx install agent-actions
-```
-
-### Using uv
-
-```bash
-uv pip install agent-actions
 ```
 
 ## Verify Installation
@@ -41,7 +41,7 @@ agac --version
 
 You should see output like:
 ```
-agent-actions 0.1.0
+agent-actions 2.0.0
 ```
 
 ## Provider Configuration
@@ -104,6 +104,9 @@ ollama pull llama3.1
 ## Upgrading
 
 ```bash
+uv pip install --upgrade agent-actions
+
+# Or with pip
 pip install --upgrade agent-actions
 ```
 
@@ -115,11 +118,11 @@ For contributing to Agent Actions:
 git clone https://github.com/Muizzkolapo/agent-actions.git
 cd agent-actions
 
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Or using uv
+# Install with dev dependencies (recommended)
 uv sync --dev
+
+# Or with pip
+pip install -e ".[dev]"
 ```
 
 ## Next Steps

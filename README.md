@@ -53,6 +53,10 @@ Want to know more about how it works? Check out our [documentation](https://muiz
 ## Installation
 
 ```bash
+# Recommended
+uv pip install agent-actions
+
+# Or with pip
 pip install agent-actions
 ```
 
@@ -160,7 +164,7 @@ This catches schema errors, circular dependencies, template issues, missing UDFs
 
 ## Logging and Observability
 
-agent-actions uses an event-based logging system inspired by dbt, providing both user-friendly CLI output and detailed structured logs for debugging.
+agent-actions uses an event-based logging system providing both user-friendly CLI output and detailed structured logs for debugging.
 
 ### Execution Output
 

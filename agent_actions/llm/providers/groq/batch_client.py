@@ -57,7 +57,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 "GroqBatchProvider requires groq package",
                 context={
                     "package": "groq",
-                    "install_command": "pip install groq",
+                    "install_command": "uv pip install groq",
                     "vendor": "groq",
                 },
                 cause=e,

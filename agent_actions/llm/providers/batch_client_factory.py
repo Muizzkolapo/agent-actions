@@ -52,7 +52,7 @@ def _require_class(cls, available: bool, client_type: str, package: str):
             context={
                 "client_type": client_type,
                 "package": package,
-                "install_command": f"pip install {package}",
+                "install_command": f"uv pip install {package}",
             },
         )
     return cls

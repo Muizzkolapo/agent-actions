@@ -8,7 +8,7 @@ This module provides two logging approaches:
    - Good for debug output and file logging
 
 2. Event-based logging (EventManager, fire_event):
-   - dbt-style centralized event system
+   - Centralized event system
    - Typed events with structured data
    - Clean console output with run_results.json artifact
 

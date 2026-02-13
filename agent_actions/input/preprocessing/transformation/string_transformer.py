@@ -254,14 +254,14 @@ class Tokenizer:
         """
         Split text using spaCy's sentence tokenization.
 
-        Requires spaCy to be installed: pip install agent-actions[nlp]
+        Requires spaCy to be installed: uv pip install agent-actions[nlp]
         And the language model: python -m spacy download en_core_web_sm
         """
         if not HAS_SPACY:
             raise ConfigurationError(
                 "spaCy is not installed. "
-                "Install with: pip install agent-actions[nlp] "
-                "or pip install spacy>=3.0.0",
+                "Install with: uv pip install agent-actions[nlp] "
+                "or uv pip install spacy>=3.0.0",
                 context={"operation": "_split_with_spacy", "split_method": "spacy"},
             )
         try:

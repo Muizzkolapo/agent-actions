@@ -1,7 +1,7 @@
 """
 Core event infrastructure for centralized logging.
 
-This module provides a reusable event-based logging system inspired by dbt.
+This module provides a reusable event-based logging system.
 It has ZERO dependencies on agent_actions domain code, making it portable
 to other projects.
 

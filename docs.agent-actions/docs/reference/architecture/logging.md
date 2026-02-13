@@ -1,6 +1,6 @@
 # Logging Architecture
 
-agent-actions uses an event-based logging architecture inspired by dbt, providing both user-friendly CLI output and detailed structured logs for debugging and analytics.
+agent-actions uses an event-based logging architecture providing both user-friendly CLI output and detailed structured logs for debugging and analytics.
 
 ## Overview
 
@@ -175,7 +175,7 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
 
 **Location:** `agent_actions/logging/events/handlers/run_results.py`
 
-Collects workflow execution data and outputs a `run_results.json` artifact similar to dbt's run_results.json.
+Collects workflow execution data and outputs a `run_results.json` artifact.
 
 **Features:**
 - Tracks agent execution status, timing, and token usage

@@ -16,6 +16,9 @@ An agentic workflow engine that runs in your terminal. Define LLM pipelines in Y
 **Install Agent Actions:**
 
 ```bash
+uv pip install agent-actions
+
+# Or with pip
 pip install agent-actions
 ```
 

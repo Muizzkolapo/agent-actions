@@ -1,7 +1,7 @@
 """
 Agent-actions specific event formatters.
 
-Custom formatters for dbt-style console output of agent-actions events.
+Custom formatters for structured console output of agent-actions events.
 These formatters produce clean, scannable output for the CLI.
 """
 
@@ -20,7 +20,7 @@ class AgentActionsFormatter:
     """
     Formatter for agent-actions events.
 
-    Produces dbt-style console output:
+    Produces structured console output:
         10:30:45 | Running workflow my_workflow (5 agents)
         10:30:46 | 1/5 OK extract_data in 12.34s (1700 tokens)
         10:30:47 | 2/5 SKIP transform (cached)

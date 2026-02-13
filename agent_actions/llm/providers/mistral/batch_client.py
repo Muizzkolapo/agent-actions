@@ -56,7 +56,7 @@ class MistralBatchClient(BaseBatchClient):
                 "MistralBatchProvider requires mistralai package",
                 context={
                     "package": "mistralai",
-                    "install_command": "pip install mistralai",
+                    "install_command": "uv pip install mistralai",
                     "vendor": "mistral",
                 },
                 cause=e,

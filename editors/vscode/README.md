@@ -4,10 +4,10 @@ Language support and workflow navigation for Agent Actions projects in VS Code.
 
 ## Prerequisites
 
-Install agent-actions with pip:
+Install agent-actions:
 
 ```bash
-pip install agent-actions
+uv pip install agent-actions
 ```
 
 This includes the `agac-lsp` command used by this extension.
@@ -168,7 +168,7 @@ File watchers automatically refresh the UI when these files change.
 Ensure agent-actions is installed and in PATH:
 
 ```bash
-pip install agent-actions
+uv pip install agent-actions
 which agac-lsp
 ```
 

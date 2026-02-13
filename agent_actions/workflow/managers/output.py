@@ -251,7 +251,9 @@ class AgentOutputManager:
             try:
                 result[relative_path] = self.storage_backend.read_target(action_name, relative_path)
             except Exception as e:
-                logger.warning("Failed to read backend entry %s/%s: %s", action_name, relative_path, e)
+                logger.warning(
+                    "Failed to read backend entry %s/%s: %s", action_name, relative_path, e
+                )
         return result
 
     def _read_upstream_from_filesystem(self, input_dir: str) -> List[Tuple[str, List[Dict]]]:
@@ -294,7 +296,9 @@ class AgentOutputManager:
                 else:
                     outputs.append(data)
             except Exception as e:
-                logger.warning("Failed to read backend target %s/%s: %s", action_name, relative_path, e)
+                logger.warning(
+                    "Failed to read backend target %s/%s: %s", action_name, relative_path, e
+                )
         return outputs, list(target_files)
 
     def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:

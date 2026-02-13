@@ -1,7 +1,7 @@
 """
 Console event handler for user-facing output.
 
-Provides clean, dbt-style console output using Rich for formatting.
+Provides clean, structured console output using Rich for formatting.
 This handler shows high-level progress and errors to the user,
 filtering out debug noise.
 """
@@ -22,7 +22,7 @@ class ConsoleEventHandler:
     """
     Handler that outputs events to the console.
 
-    Provides dbt-style output with timestamps and status indicators.
+    Provides structured output with timestamps and status indicators.
     Uses Rich for colored output when available.
 
     Output format:
@@ -120,7 +120,7 @@ class ConsoleEventHandler:
 
     def _default_format(self, event: BaseEvent) -> str:
         """
-        Default event formatting (dbt-style).
+        Default event formatting.
 
         Args:
             event: Event to format

@@ -35,9 +35,7 @@ class TestHandleBatchAgentPassthrough:
         mock_batch_service.get_batch_registry_status.return_value = "no_batches"
         mock_storage_backend.has_disposition.return_value = True
 
-        manager = BatchLifecycleManager(
-            mock_batch_service, storage_backend=mock_storage_backend
-        )
+        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
         output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
 
         mock_storage_backend.has_disposition.assert_called_once_with("extract", "passthrough")
@@ -51,9 +49,7 @@ class TestHandleBatchAgentPassthrough:
         mock_batch_service.get_batch_registry_status.return_value = "no_batches"
         mock_storage_backend.has_disposition.return_value = False
 
-        manager = BatchLifecycleManager(
-            mock_batch_service, storage_backend=mock_storage_backend
-        )
+        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
         output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
 
         assert status == "failed"
@@ -72,9 +68,7 @@ class TestCheckBatchSubmission:
         """Returns 'passthrough' when DB has passthrough disposition."""
         mock_storage_backend.has_disposition.return_value = True
 
-        manager = BatchLifecycleManager(
-            mock_batch_service, storage_backend=mock_storage_backend
-        )
+        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
         # Create a tmp dir that exists but has no registry file
         agent_io = Path("/tmp/fake_agent_io")
 
@@ -88,9 +82,7 @@ class TestCheckBatchSubmission:
         """When DB has no passthrough, falls through to check output dir."""
         mock_storage_backend.has_disposition.return_value = False
 
-        manager = BatchLifecycleManager(
-            mock_batch_service, storage_backend=mock_storage_backend
-        )
+        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
         agent_io = Path("/tmp/fake_agent_io")
 
         with patch.object(Path, "exists", return_value=False):

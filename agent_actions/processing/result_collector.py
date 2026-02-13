@@ -109,7 +109,9 @@ class ResultCollector:
                             )
                             _safe_set_disposition(
                                 storage_backend,
-                                agent_name, er.source_guid, DISPOSITION_EXHAUSTED,
+                                agent_name,
+                                er.source_guid,
+                                DISPOSITION_EXHAUSTED,
                                 reason=f"exhausted_after_{er_attempts}_attempts",
                             )
 
@@ -180,7 +182,9 @@ class ResultCollector:
                 if storage_backend and result.source_guid:
                     _safe_set_disposition(
                         storage_backend,
-                        agent_name, result.source_guid, DISPOSITION_SKIPPED,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_SKIPPED,
                         reason=result.skip_reason or "guard_skip",
                     )
             elif result.status == ProcessingStatus.EXHAUSTED:
@@ -210,7 +214,9 @@ class ResultCollector:
                 if storage_backend and result.source_guid:
                     _safe_set_disposition(
                         storage_backend,
-                        agent_name, result.source_guid, DISPOSITION_EXHAUSTED,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_EXHAUSTED,
                         reason=f"exhausted_after_{attempts}_attempts",
                     )
             elif result.status == ProcessingStatus.FAILED:
@@ -227,7 +233,9 @@ class ResultCollector:
                 if storage_backend and result.source_guid:
                     _safe_set_disposition(
                         storage_backend,
-                        agent_name, result.source_guid, DISPOSITION_FAILED,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_FAILED,
                         reason=result.error or "processing_error",
                     )
             elif result.status == ProcessingStatus.FILTERED:
@@ -244,7 +252,9 @@ class ResultCollector:
                 if storage_backend and result.source_guid:
                     _safe_set_disposition(
                         storage_backend,
-                        agent_name, result.source_guid, DISPOSITION_FILTERED,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_FILTERED,
                         reason=result.skip_reason or "guard_filter",
                     )
             elif result.status == ProcessingStatus.UNPROCESSED:
@@ -267,7 +277,9 @@ class ResultCollector:
                 if storage_backend and result.source_guid:
                     _safe_set_disposition(
                         storage_backend,
-                        agent_name, result.source_guid, DISPOSITION_UNPROCESSED,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_UNPROCESSED,
                         reason=result.skip_reason or "unprocessed",
                     )
             else:

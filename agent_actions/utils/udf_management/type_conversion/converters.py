@@ -217,7 +217,7 @@ def _from_pydantic(tp: Type) -> Dict[str, Any]:
     """Convert Pydantic BaseModel to unified schema format."""
     if not HAS_PYDANTIC:
         raise ConfigurationError(
-            "Pydantic is not installed. Install with: pip install pydantic",
+            "Pydantic is not installed. Install with: uv pip install pydantic",
             context={"operation": "pydantic_type_conversion"},
         )
 

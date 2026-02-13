@@ -1,3 +1,0 @@
-include agent_actions/docs/agent_dags/templates/*.html
-recursive-include agent_actions/docs/agent_dags/static *
-include agent_actions/py.typed

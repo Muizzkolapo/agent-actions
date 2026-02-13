@@ -194,7 +194,9 @@ class TestDispositionMethods:
 
     def test_set_and_get_disposition(self, backend):
         """Test writing and reading a disposition record."""
-        backend.set_disposition("node_1", NODE_LEVEL_RECORD_ID, "passthrough", reason="All tombstoned")
+        backend.set_disposition(
+            "node_1", NODE_LEVEL_RECORD_ID, "passthrough", reason="All tombstoned"
+        )
 
         results = backend.get_disposition("node_1")
         assert len(results) == 1
@@ -288,7 +290,11 @@ class TestDispositionMethods:
     def test_set_disposition_with_relative_path(self, backend):
         """Test that relative_path is stored correctly."""
         backend.set_disposition(
-            "node_1", "rec_1", "exhausted", reason="Retry limit reached", relative_path="batch_001.json"
+            "node_1",
+            "rec_1",
+            "exhausted",
+            reason="Retry limit reached",
+            relative_path="batch_001.json",
         )
 
         results = backend.get_disposition("node_1")

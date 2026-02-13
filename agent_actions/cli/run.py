@@ -139,7 +139,7 @@ class RunCommand:
         workflow.services.core.agent_executor.run_tracker = tracker
         workflow.services.core.agent_executor.run_id = run_id
 
-        # Initialize unified logging system (event-based, dbt-style output)
+        # Initialize unified logging system (event-based)
         agent_folder = workflow.services.core.agent_runner.get_agent_folder(self.agent_name)
         LoggerFactory.initialize(
             output_dir=agent_folder,
@@ -171,7 +171,7 @@ class RunCommand:
 
         except Exception:
             status = "FAILED"
-            # Capture full traceback for better debugging (like Airflow)
+            # Capture full traceback for better debugging
             error_message = traceback.format_exc()
             raise  # Re-raise to maintain existing error handling
 

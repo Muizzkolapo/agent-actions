@@ -535,7 +535,7 @@ def render_pipeline_with_templates(
     """
     Render and compile a YAML pipeline configuration.
 
-    This is the single compilation step for workflows, similar to `dbt compile`.
+    This is the single compilation step for workflows.
     After this function, the YAML is fully self-contained with:
     - All Jinja2 templates resolved
     - All prompt references ($prompt_name) resolved

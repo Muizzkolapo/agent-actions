@@ -246,7 +246,9 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
 
     # Disposition should have been written before the raise
     mock_backend.set_disposition.assert_called_once_with(
-        "test_agent", "src-raise", "exhausted",
+        "test_agent",
+        "src-raise",
+        "exhausted",
         reason="exhausted_after_2_attempts",
     )
 
@@ -303,12 +305,18 @@ class TestResultCollectorDispositions:
         filtered.skip_reason = "low_confidence"
 
         ResultCollector.collect_results(
-            [filtered], {}, "my_agent",
-            is_first_stage=False, storage_backend=backend,
+            [filtered],
+            {},
+            "my_agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "my_agent", "src-f1", "filtered", reason="low_confidence",
+            "my_agent",
+            "src-f1",
+            "filtered",
+            reason="low_confidence",
         )
 
     def test_filtered_result_default_reason(self):
@@ -316,12 +324,18 @@ class TestResultCollectorDispositions:
         filtered = ProcessingResult.filtered(source_guid="src-f2")
 
         ResultCollector.collect_results(
-            [filtered], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [filtered],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-f2", "filtered", reason="guard_filter",
+            "agent",
+            "src-f2",
+            "filtered",
+            reason="guard_filter",
         )
 
     def test_failed_result_writes_disposition(self):
@@ -329,12 +343,18 @@ class TestResultCollectorDispositions:
         failed = ProcessingResult.failed(error="timeout", source_guid="src-fail")
 
         ResultCollector.collect_results(
-            [failed], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [failed],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-fail", "failed", reason="timeout",
+            "agent",
+            "src-fail",
+            "failed",
+            reason="timeout",
         )
 
     def test_failed_result_default_reason(self):
@@ -342,48 +362,71 @@ class TestResultCollectorDispositions:
         backend = self._make_backend()
         failed = ProcessingResult(
             status=ProcessingStatus.FAILED,
-            data=[], executed=False, error="", source_guid="src-fail2",
+            data=[],
+            executed=False,
+            error="",
+            source_guid="src-fail2",
         )
 
         ResultCollector.collect_results(
-            [failed], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [failed],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-fail2", "failed", reason="processing_error",
+            "agent",
+            "src-fail2",
+            "failed",
+            reason="processing_error",
         )
 
     def test_skipped_result_writes_disposition(self):
         backend = self._make_backend()
         skipped = ProcessingResult.skipped(
-            passthrough_data={"content": {}}, reason="guard_skip", source_guid="src-sk",
+            passthrough_data={"content": {}},
+            reason="guard_skip",
+            source_guid="src-sk",
         )
 
         ResultCollector.collect_results(
-            [skipped], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [skipped],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-sk", "skipped", reason="guard_skip",
+            "agent",
+            "src-sk",
+            "skipped",
+            reason="guard_skip",
         )
 
     def test_exhausted_result_writes_disposition(self):
         backend = self._make_backend()
         exhausted = ProcessingResult.exhausted(
-            error="Retry exhausted", source_guid="src-ex",
+            error="Retry exhausted",
+            source_guid="src-ex",
             recovery_metadata=_retry_metadata(),
         )
         exhausted.data = [{"source_guid": "src-ex", "content": {}}]
 
         ResultCollector.collect_results(
-            [exhausted], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [exhausted],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-ex", "exhausted",
+            "agent",
+            "src-ex",
+            "exhausted",
             reason="exhausted_after_2_attempts",
         )
 
@@ -397,23 +440,33 @@ class TestResultCollectorDispositions:
         )
 
         ResultCollector.collect_results(
-            [unprocessed], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [unprocessed],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_called_once_with(
-            "agent", "src-un", "unprocessed", reason="where_clause",
+            "agent",
+            "src-un",
+            "unprocessed",
+            reason="where_clause",
         )
 
     def test_success_result_no_disposition(self):
         backend = self._make_backend()
         success = ProcessingResult.success(
-            data=[{"content": {"v": 1}}], source_guid="src-ok",
+            data=[{"content": {"v": 1}}],
+            source_guid="src-ok",
         )
 
         ResultCollector.collect_results(
-            [success], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [success],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_not_called()
@@ -425,8 +478,11 @@ class TestResultCollectorDispositions:
 
         # Should not raise
         output = ResultCollector.collect_results(
-            [filtered, failed], {}, "agent",
-            is_first_stage=False, storage_backend=None,
+            [filtered, failed],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=None,
         )
         assert output == []
 
@@ -436,8 +492,11 @@ class TestResultCollectorDispositions:
         filtered = ProcessingResult.filtered(source_guid=None)
 
         ResultCollector.collect_results(
-            [filtered], {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            [filtered],
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         backend.set_disposition.assert_not_called()
@@ -453,8 +512,11 @@ class TestResultCollectorDispositions:
         ]
 
         ResultCollector.collect_results(
-            results, {}, "agent",
-            is_first_stage=False, storage_backend=backend,
+            results,
+            {},
+            "agent",
+            is_first_stage=False,
+            storage_backend=backend,
         )
 
         assert backend.set_disposition.call_count == 2

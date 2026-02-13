@@ -93,9 +93,9 @@ def _execute_render(agent_name: str, template_dir: Optional[str] = None) -> None
 @requires_project
 def render(agent_name: str, template_dir: Optional[str] = None) -> None:
     """
-    Compile and render workflow configuration (dbt-style).
+    Compile and render workflow configuration.
 
-    This is the single compilation step for workflows, similar to `dbt compile`.
+    This is the single compilation step for workflows.
     After rendering, the YAML is fully self-contained with:
 
     \b
@@ -125,7 +125,7 @@ def render(agent_name: str, template_dir: Optional[str] = None) -> None:
 @requires_project
 def compile(agent_name: str, template_dir: Optional[str] = None) -> None:
     """
-    Alias for 'render' - compile workflow configuration (dbt-style).
+    Alias for 'render' - compile workflow configuration.
 
     See 'agac render --help' for full documentation.
 

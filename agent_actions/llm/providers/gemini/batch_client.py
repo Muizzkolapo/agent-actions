@@ -39,7 +39,7 @@ class GeminiBatchClient(BaseBatchClient):
                 "GeminiBatchProvider requires google-genai package",
                 context={
                     "package": "google-genai",
-                    "install_command": "pip install google-genai",
+                    "install_command": "uv pip install google-genai",
                     "vendor": "gemini",
                 },
             )

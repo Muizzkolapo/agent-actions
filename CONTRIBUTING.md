@@ -83,7 +83,7 @@ We use multiple tools to catch logging issues:
 
 ## Event-Based Logging System
 
-agent-actions uses an event-driven architecture inspired by dbt for user-facing output and observability.
+agent-actions uses an event-driven architecture for user-facing output and observability.
 
 ### System Architecture
 
@@ -271,6 +271,47 @@ task test:fast
 - 100 character line length
 - Type hints encouraged
 - Run `task check` before committing
+
+## Changelog Management
+
+We use [changie](https://changie.dev) to manage changelog entries. Every PR that changes user-facing behavior should include a changelog entry.
+
+### Adding a Changelog Entry
+
+```bash
+# Interactive — prompts for kind, description, and optional issue number
+task changelog:new
+```
+
+This creates a YAML fragment in `.changes/unreleased/`. Commit it with your PR.
+
+### Releasing a Version (Maintainers)
+
+```bash
+# Batch unreleased entries into a version (e.g., 2.1.0)
+task changelog:batch -- 2.1.0
+
+# Merge all versions into CHANGELOG.md
+task changelog:merge
+```
+
+`changie batch` also updates the version in `pyproject.toml` and `agent_actions/__version__.py` via the replacements configured in `.changie.yaml`.
+
+## PyPI Publishing (Maintainers)
+
+Packages are published to PyPI automatically when a GitHub Release is created.
+
+### Prerequisites
+
+1. **OIDC Trusted Publishing** must be configured on [pypi.org](https://pypi.org/manage/project/agent-actions/settings/publishing/)
+2. Version in git tag, `pyproject.toml`, and `agent_actions/__version__.py` must all match
+
+### Release Steps
+
+1. Ensure all changelog entries are batched: `task changelog:batch -- X.Y.Z`
+2. Merge to `main`
+3. Create a GitHub Release with tag `vX.Y.Z`
+4. The `publish.yml` workflow validates versions and publishes to PyPI
 
 ## Pull Request Process
 

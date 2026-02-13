@@ -121,9 +121,7 @@ class TestPassthroughFromBackend:
         # Paths must be under target/ so backend is queried
         branch_a = str(tmp_path / "target" / "branch_a")
         branch_b = str(tmp_path / "target" / "branch_b")
-        with patch.object(
-            mgr, "get_upstream_directories", return_value=[branch_a, branch_b]
-        ):
+        with patch.object(mgr, "get_upstream_directories", return_value=[branch_a, branch_b]):
             mgr.create_passthrough_output(2, "merge_node")
 
         # Should have written merged data
@@ -212,9 +210,7 @@ class TestPassthroughStartNode:
             execution_order=["extract"],
             agent_configs={"extract": {}},
         )
-        with patch.object(
-            mgr, "get_upstream_directories", return_value=[str(staging_dir)]
-        ):
+        with patch.object(mgr, "get_upstream_directories", return_value=[str(staging_dir)]):
             mgr.create_passthrough_output(0, "extract")
 
         # Backend should NOT have been queried with "staging" as node name
@@ -234,9 +230,7 @@ class TestPassthroughStartNode:
             execution_order=["ingest"],
             agent_configs={"ingest": {}},
         )
-        with patch.object(
-            mgr, "get_upstream_directories", return_value=[str(data_dir)]
-        ):
+        with patch.object(mgr, "get_upstream_directories", return_value=[str(data_dir)]):
             mgr.create_passthrough_output(0, "ingest")
 
         mock_storage_backend.list_target_files.assert_not_called()
@@ -267,7 +261,9 @@ class TestProcessAgentOutputBackend:
         assert result["output_count"] == 1
         assert result["data"][0]["val"] == "from_backend"
 
-    def test_output_files_populated_from_backend(self, tmp_path, make_manager, mock_storage_backend):
+    def test_output_files_populated_from_backend(
+        self, tmp_path, make_manager, mock_storage_backend
+    ):
         """output_files is populated even when data comes from backend."""
         mock_storage_backend.list_target_files.return_value = [
             "batch_0.json",
@@ -294,9 +290,7 @@ class TestProcessAgentOutputBackend:
 
         output_dir = tmp_path / "target" / "extract"
         output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(
-            json.dumps([{"id": "1", "val": "from_fs"}])
-        )
+        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "from_fs"}]))
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
@@ -349,9 +343,7 @@ class TestProcessAgentOutputBackend:
 
         output_dir = tmp_path / "target" / "extract"
         output_dir.mkdir(parents=True)
-        (output_dir / "batch_0.json").write_text(
-            json.dumps([{"id": "1", "val": "fallback"}])
-        )
+        (output_dir / "batch_0.json").write_text(json.dumps([{"id": "1", "val": "fallback"}]))
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
