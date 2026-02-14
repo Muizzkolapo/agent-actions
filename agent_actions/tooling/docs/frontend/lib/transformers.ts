@@ -223,6 +223,7 @@ export function transformPrompts(catalog: RawCatalogJson): Prompt[] {
       length: categorizeLength(raw.length ?? raw.content?.length ?? 0),
       usedBy: (raw.used_by ?? []).map((u) => u.action),
       preview: raw.content ? raw.content.slice(0, 200) : "",
+      content: raw.content ?? "",
     }
   })
 }

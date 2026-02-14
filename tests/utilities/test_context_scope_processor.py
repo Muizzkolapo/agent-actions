@@ -302,3 +302,169 @@ class TestDependencyDeclarationEnforcement:
             )
 
         assert "no context_scope defined" in str(exc.value)
+
+
+class TestNestedDictFieldResolution:
+    """Tests for nested dict field resolution in context_scope."""
+
+    def test_extract_field_value_nested_dot_path(self):
+        """extract_field_value traverses nested dicts via dot-separated path."""
+        field_context = {
+            "action_a": {"target_word_counts": {"correct_answer_words": 8, "distractor_words": 5}}
+        }
+        result = ContextScopeProcessor.extract_field_value(
+            field_context, "action_a", "target_word_counts.correct_answer_words"
+        )
+        assert result == 8
+
+    def test_extract_field_value_flat_key_unchanged(self):
+        """Flat key lookup still works as before (backward compat)."""
+        field_context = {"action_a": {"simple_field": "hello"}}
+        result = ContextScopeProcessor.extract_field_value(
+            field_context, "action_a", "simple_field"
+        )
+        assert result == "hello"
+
+    def test_extract_field_value_literal_dotted_key_priority(self):
+        """If a literal dotted key exists, it takes priority over nested traversal."""
+        field_context = {
+            "action_a": {
+                "a.b": "literal_value",
+                "a": {"b": "nested_value"},
+            }
+        }
+        result = ContextScopeProcessor.extract_field_value(field_context, "action_a", "a.b")
+        assert result == "literal_value"
+
+    def test_filter_and_store_fields_nested_path(self):
+        """Nested path in allowed_fields loads the root key."""
+        field_context = {}
+        data = {"target_word_counts": {"correct_answer_words": 8}, "other": "val"}
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["target_word_counts.correct_answer_words"],
+            source_type="test",
+        )
+        # Root key loaded so Jinja2 can traverse
+        assert "target_word_counts" in field_context["action_a"]
+        assert field_context["action_a"]["target_word_counts"]["correct_answer_words"] == 8
+        # Unrelated keys excluded
+        assert "other" not in field_context["action_a"]
+
+    def test_filter_and_store_fields_flat_key_unchanged(self):
+        """Flat key filtering still works as before."""
+        field_context = {}
+        data = {"field1": "val1", "field2": "val2"}
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["field1"],
+            source_type="test",
+        )
+        assert field_context["action_a"] == {"field1": "val1"}
+
+    def test_filter_and_store_fields_no_false_warning_for_nested(self, caplog):
+        """warn_missing should NOT warn when root key exists for nested path."""
+        import logging
+
+        field_context = {}
+        data = {"target_word_counts": {"correct_answer_words": 8}}
+        with caplog.at_level(logging.WARNING):
+            ContextScopeProcessor._filter_and_store_fields(
+                field_context,
+                "action_a",
+                data,
+                allowed_fields=["target_word_counts.correct_answer_words"],
+                source_type="test",
+                warn_missing=True,
+            )
+        # No warning about missing fields
+        assert "not found" not in caplog.text
+
+    def test_filter_and_store_fields_multiple_nested_same_root(self):
+        """Multiple nested paths sharing a root key load the root once."""
+        field_context = {}
+        data = {
+            "counts": {"a": 1, "b": 2, "c": 3},
+            "other": "excluded",
+        }
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["counts.a", "counts.b"],
+            source_type="test",
+        )
+        assert field_context["action_a"]["counts"] == {"a": 1, "b": 2}
+        assert "other" not in field_context["action_a"]
+
+    def test_apply_context_scope_nested_field_observe(self):
+        """End-to-end: observe with nested path populates llm_context."""
+        # field_context as _filter_and_store_fields would produce after the fix:
+        # only the declared subfield is stored, not the entire root object.
+        field_context = {
+            "suggest_distractor_counts": {
+                "target_word_counts": {"correct_answer_words": 8},
+            }
+        }
+        context_scope = {
+            "observe": ["suggest_distractor_counts.target_word_counts.correct_answer_words"]
+        }
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        # The nested value should be extracted into llm_context
+        assert llm_context["target_word_counts.correct_answer_words"] == 8
+        # prompt_context should have only the declared nested value
+        assert prompt_context["suggest_distractor_counts"]["target_word_counts"] == {
+            "correct_answer_words": 8
+        }
+
+    def test_apply_context_scope_nested_field_passthrough(self):
+        """End-to-end: passthrough with nested path populates passthrough_fields."""
+        field_context = {
+            "action_a": {
+                "nested": {"deep_value": 42},
+            }
+        }
+        context_scope = {"passthrough": ["action_a.nested.deep_value"]}
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope
+        )
+
+        assert passthrough_fields["nested.deep_value"] == 42
+        assert llm_context == {}
+
+    def test_nested_field_does_not_leak_siblings(self):
+        """Only declared nested fields should appear — siblings must not leak."""
+        field_context = {}
+        data = {"user": {"name": "Alice", "ssn": "secret", "email": "a@b.com"}}
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["user.name"],
+            source_type="test",
+        )
+        assert field_context["action_a"]["user"] == {"name": "Alice"}
+        assert "ssn" not in field_context["action_a"]["user"]
+
+    def test_nested_field_preserves_none_value(self):
+        """A nested field with an explicit None value must be preserved, not dropped."""
+        field_context = {}
+        data = {"user": {"name": None, "ssn": "secret"}}
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["user.name"],
+            source_type="test",
+        )
+        assert field_context["action_a"]["user"] == {"name": None}
+        assert "ssn" not in field_context["action_a"].get("user", {})

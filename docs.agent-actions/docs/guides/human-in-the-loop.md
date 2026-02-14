@@ -193,14 +193,18 @@ HITL actions return decisions in a standardized format:
 
 ### Accessing HITL Decisions Downstream
 
-Reference HITL decisions in downstream actions:
+HITL decision fields (`hitl_status`, `user_comment`, `timestamp`) are merged directly into each record's content. Downstream actions receive these fields at the **top level** of each item.
+
+#### Guards
+
+Guards evaluate against the item's content fields directly — **do not prefix with the action name**:
 
 ```yaml
 - name: process_approved_data
   dependencies: [review_data]
   guard:
-    condition: "review_data.hitl_status == 'approved'"
-    behavior: skip  # Skip if HITL rejected
+    condition: "hitl_status == 'approved'"
+    on_false: skip  # Skip processing if HITL rejected
   prompt: |
     Process the approved data:
     {{ review_data.* }}
@@ -208,24 +212,37 @@ Reference HITL decisions in downstream actions:
     Reviewer comment: {{ review_data.user_comment }}
 ```
 
+:::warning Guard field resolution
+Guards evaluate against the **flattened item content**. The HITL fields (`hitl_status`, `user_comment`) are top-level keys in each record, not nested under the action name.
+
+```yaml
+# Correct - field is at the top level of each item
+condition: "hitl_status == 'approved'"
+
+# Wrong - tries to look up data["review_data"]["hitl_status"], which doesn't exist
+condition: "review_data.hitl_status == 'approved'"
+```
+
+Note: Prompt templates (`{{ review_data.user_comment }}`) use a different resolution mechanism (context scope) and **do** use the action name prefix. Guards do not.
+:::
+
 **Common guard patterns:**
 
 ```yaml
-# Skip downstream if rejected
+# Only process approved items (filter out rejected/timeout)
 guard:
-  condition: "review_data.hitl_status == 'approved'"
-  behavior: skip
+  condition: "hitl_status == 'approved'"
+  on_false: filter
 
-# Fail workflow if rejected
+# Skip downstream if rejected (passthrough original content)
 guard:
-  condition: "review_data.hitl_status == 'rejected'"
-  behavior: error
-  error_message: "Human reviewer rejected the data"
+  condition: "hitl_status == 'approved'"
+  on_false: skip
 
 # Handle timeout
 guard:
-  condition: "review_data.hitl_status != 'timeout'"
-  behavior: skip
+  condition: "hitl_status != 'timeout'"
+  on_false: skip
 ```
 
 ## Usage Patterns
@@ -253,8 +270,8 @@ actions:
     dependencies: [review_summary]
     intent: "Publish approved summary"
     guard:
-      condition: "review_summary.hitl_status == 'approved'"
-      behavior: skip
+      condition: "hitl_status == 'approved'"
+      on_false: skip
     prompt: "Publish the summary..."
 ```
 
@@ -304,11 +321,38 @@ actions:
   - name: stage_2_enrichment
     dependencies: [checkpoint_review]
     guard:
-      condition: "checkpoint_review.hitl_status == 'approved'"
-      behavior: error  # Fail workflow if stage 1 was rejected
+      condition: "hitl_status == 'approved'"
+      on_false: filter  # Exclude items if stage 1 was rejected
 ```
 
 ## Debugging & Troubleshooting
+
+### Guard Filters or Skips All Items
+
+If your downstream guard filters/skips **every** item (even approved ones), the most common causes are:
+
+**1. Using action name prefix in the guard condition**
+
+```yaml
+# Wrong - guard evaluates against flattened item content, not namespaced context
+condition: "review_data.hitl_status == 'approved'"
+
+# Correct - hitl_status is a top-level field in each item
+condition: "hitl_status == 'approved'"
+```
+
+The guard evaluator flattens the item's `content` dict into a top-level namespace. Fields like `hitl_status` are accessed directly, not under the action name. See the [guard field resolution warning](#guards) above.
+
+**2. Wrong field name**
+
+Field names are case-sensitive. Verify the exact field name in your data:
+- The HITL server produces `hitl_status` (snake_case)
+- Your storage layer may display it as `hitlStatus` (camelCase)
+- Use the field name as it appears **during processing**, which is `hitl_status`
+
+**3. Default passthrough behavior**
+
+With `passthrough_on_error: true` (the default), if the guard condition **errors** (e.g., field not found), the item passes through. But if the field resolves to `None` and the comparison simply evaluates to `False`, that's not an error — the `on_false` behavior applies to all items.
 
 ### Check Server Logs
 
@@ -386,9 +430,8 @@ After timeout:
 
 ```yaml
 guard:
-  condition: "review_data.hitl_status != 'timeout'"
-  behavior: error
-  error_message: "Review timed out - manual intervention required"
+  condition: "hitl_status != 'timeout'"
+  on_false: filter
 ```
 
 ## Advanced Topics

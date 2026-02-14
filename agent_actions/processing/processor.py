@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
@@ -13,6 +14,7 @@ from agent_actions.logging.events.types import (
     RecordFilteredEvent,
     RecordTransformedEvent,
     RecordProcessingCompleteEvent,
+    RecordEmptyOutputEvent,
     BatchProcessingStartedEvent,
     BatchProcessingProgressEvent,
     BatchProcessingCompleteEvent,
@@ -30,6 +32,15 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_empty_output(response: Any) -> bool:
+    """Check if a tool/LLM response is effectively empty."""
+    if response is None:
+        return True
+    if isinstance(response, (dict, list)) and len(response) == 0:
+        return True
+    return False
 
 
 class RecordProcessor:
@@ -379,6 +390,34 @@ class RecordProcessor:
             response, content, source_guid, passthrough_fields, context
         )
 
+        # Step 7b: Detect empty output
+        if _is_empty_output(response):
+            on_empty = context.agent_config.get("on_empty", "warn")
+            input_field_count = len(content) if isinstance(content, dict) else 0
+
+            # Always fire the event for observability; on_empty controls severity
+            fire_event(
+                RecordEmptyOutputEvent(
+                    agent_name=context.agent_name,
+                    record_index=context.record_index,
+                    source_guid=source_guid,
+                    input_field_count=input_field_count,
+                    output=response,
+                    on_empty=on_empty,
+                )
+            )
+
+            if on_empty == "error":
+                raise EmptyOutputError(
+                    f"Action '{context.agent_name}' produced empty output for record "
+                    f"'{source_guid}' (on_empty=error)",
+                    context={
+                        "agent_name": context.agent_name,
+                        "source_guid": source_guid,
+                        "output": str(response),
+                    },
+                )
+
         # Fire RP003: Record transformed
         input_size = 1 if not isinstance(response, list) else len(response)
         output_size = len(transformed) if isinstance(transformed, list) else 1
@@ -475,6 +514,10 @@ class RecordProcessor:
             except ConfigurationError:
                 # ConfigurationError indicates a fundamental workflow misconfiguration
                 # Re-raise immediately to fail the workflow - these cannot be recovered
+                raise
+            except EmptyOutputError:
+                # EmptyOutputError means on_empty=error was configured — user explicitly
+                # wants the workflow to stop when an action produces empty output
                 raise
             except TemplateVariableError as e:
                 # TemplateVariableError indicates a code bug (undefined template variables)

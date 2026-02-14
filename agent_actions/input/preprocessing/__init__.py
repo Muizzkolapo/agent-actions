@@ -13,19 +13,14 @@ from .parsing.ast_nodes import (
     NodeType,
     LogicalOperator,
     ComparisonOperator,
-    ASTVisitor,
-    EvaluationContext,
     WhereClauseAST,
-    WhereClauseEvaluator,
-    ASTFormatter,
+    evaluate_node,
+    format_node,
 )
 from .parsing.parser import WhereClauseParser
-from .parsing.operator_registry import OperatorRegistry
 
 # Filtering submodule
 from .filtering.guard_filter import GuardFilter, FilterResult, FilterMetrics
-from .filtering.service import FilterService, FilterStatus
-from .filtering.guard_handler import GuardHandler, GuardConfig, FilterBehavior
 
 # Chunking submodule
 from .chunking.field_chunking import FieldChunker, FieldAnalyzer, FieldAnalysisResult
@@ -64,22 +59,14 @@ __all__ = [
     "NodeType",
     "LogicalOperator",
     "ComparisonOperator",
-    "ASTVisitor",
-    "EvaluationContext",
     "WhereClauseAST",
-    "WhereClauseEvaluator",
-    "ASTFormatter",
+    "evaluate_node",
+    "format_node",
     "WhereClauseParser",
-    "OperatorRegistry",
     # Filtering
     "GuardFilter",
     "FilterResult",
     "FilterMetrics",
-    "FilterService",
-    "FilterStatus",
-    "GuardHandler",
-    "GuardConfig",
-    "FilterBehavior",
     # Chunking
     "FieldChunker",
     "FieldAnalyzer",

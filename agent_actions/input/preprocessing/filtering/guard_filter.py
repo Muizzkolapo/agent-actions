@@ -14,8 +14,7 @@ from agent_actions.logging.events.types import (
     GuardEvaluationTimeoutEvent,
     GuardEvaluationErrorEvent,
 )
-from agent_actions.utils.dict import get_nested_value
-from ..parsing.parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
+from ..parsing.parser import WhereClauseParser, ParseResult
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +82,7 @@ class GuardFilter:
             default_timeout: Default timeout for evaluations in seconds
             enable_metrics: Whether to collect performance metrics
         """
-        self.parser = WhereClauseParser()  # Parser name kept for now
-        self.safe_evaluator = SafeExpressionEvaluator()
+        self.parser = WhereClauseParser()
         self.cache_size = cache_size
         self.default_timeout = default_timeout
         self.enable_metrics = enable_metrics
@@ -143,7 +141,7 @@ class GuardFilter:
         except ValueError as e:
             execution_time = time.time() - start_time
             error_msg = f"Error evaluating guard condition: {str(e)}"
-            logger.debug(error_msg, exc_info=True)
+            logger.warning(error_msg, exc_info=True)
 
             fire_event(
                 GuardEvaluationErrorEvent(
@@ -214,118 +212,6 @@ class GuardFilter:
             self.metrics.total_execution_time / self.metrics.total_evaluations
         )
 
-    def _evaluate_previous_outputs_empty(
-        self, condition_config: Dict[str, Any], context: Dict[str, Any]
-    ) -> bool:
-        """Evaluate 'previous_outputs_empty' condition."""
-        agent_name = condition_config.get("agent_name")
-        if not agent_name:
-            return False
-
-        previous_outputs = context.get("previous_outputs", {})
-        agent_outputs = previous_outputs.get(agent_name, [])
-        return len(agent_outputs) == 0
-
-    def _evaluate_previous_outputs_count(
-        self, condition_config: Dict[str, Any], context: Dict[str, Any]
-    ) -> bool:
-        """Evaluate 'previous_outputs_count' condition."""
-        agent_name = condition_config.get("agent_name")
-        threshold = condition_config.get("threshold", 0)
-        comparison = condition_config.get("comparison", "==")
-
-        if not agent_name:
-            return False
-
-        previous_outputs = context.get("previous_outputs", {})
-        agent_outputs = previous_outputs.get(agent_name, [])
-        count = len(agent_outputs)
-
-        comparisons = {
-            "==": count == threshold,
-            "!=": count != threshold,
-            "<": count < threshold,
-            "<=": count <= threshold,
-            ">": count > threshold,
-            ">=": count >= threshold,
-        }
-
-        if comparison in comparisons:
-            return comparisons[comparison]
-
-        logger.warning("Unknown comparison operator: %s", comparison)
-        return False
-
-    def _evaluate_field_condition(
-        self, condition_config: Dict[str, Any], context: Dict[str, Any]
-    ) -> bool:
-        """Evaluate 'field_condition' type."""
-        field_path = condition_config.get("field_path")
-        expected_value = condition_config.get("expected_value")
-
-        if not field_path:
-            return False
-
-        value = self._get_nested_value(context, field_path)
-        return value == expected_value
-
-    def _evaluate_custom_condition(
-        self, condition_config: Dict[str, Any], context: Dict[str, Any]
-    ) -> bool:
-        """Evaluate 'custom' condition type."""
-        expression = condition_config.get("expression")
-        if not expression:
-            return False
-
-        return self.safe_evaluator.evaluate(expression, context)
-
-    def evaluate_safe_skip_condition(
-        self, condition_config: Dict[str, Any], context: Dict[str, Any]
-    ) -> bool:
-        """
-        Safely evaluate a skip condition without using eval().
-
-        Args:
-            condition_config: Skip condition configuration
-            context: Evaluation context (e.g., previous_outputs)
-
-        Returns:
-            True if the agent should be skipped, False otherwise
-        """
-        condition_type = condition_config.get("condition_type")
-
-        try:
-            condition_handlers = {
-                "previous_outputs_empty": self._evaluate_previous_outputs_empty,
-                "previous_outputs_count": self._evaluate_previous_outputs_count,
-                "field_condition": self._evaluate_field_condition,
-                "custom": self._evaluate_custom_condition,
-            }
-
-            handler = condition_handlers.get(condition_type)
-            if handler:
-                return handler(condition_config, context)
-
-            logger.warning("Unknown skip condition type: %s", condition_type)
-            return False
-
-        except ValueError as e:
-            logger.error("Error evaluating skip condition: %s", e)
-            return False
-
-    def _get_nested_value(self, data: Dict[str, Any], field_path: str) -> Any:
-        """
-        Get a nested value from a dictionary using dot notation.
-
-        Args:
-            data: The data dictionary
-            field_path: The field path (e.g., 'user.profile.name')
-
-        Returns:
-            The field value or None if not found
-        """
-        return get_nested_value(data, field_path)
-
     def get_cache_info(self) -> Dict[str, Any]:
         """Get cache statistics."""
         parser_cache = self.parser.get_cache_info()
@@ -365,18 +251,3 @@ def get_global_guard_filter() -> GuardFilter:
     if _GLOBAL_GUARD_FILTER is None:
         _GLOBAL_GUARD_FILTER = GuardFilter()
     return _GLOBAL_GUARD_FILTER
-
-
-def evaluate_safe_skip_condition(condition_config: Dict[str, Any], context: Dict[str, Any]) -> bool:
-    """
-    Safely evaluate a skip condition.
-
-    Args:
-        condition_config: Skip condition configuration
-        context: Evaluation context
-
-    Returns:
-        True if the condition indicates the agent should be skipped
-    """
-    guard_filter = get_global_guard_filter()
-    return guard_filter.evaluate_safe_skip_condition(condition_config, context)

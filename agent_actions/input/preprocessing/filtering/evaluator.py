@@ -77,13 +77,15 @@ class GuardResult:
         # Evaluation failed
         if not filter_result.success:
             if passthrough_on_error:
-                logger.debug(
-                    "Guard: condition evaluation failed, proceeding (passthrough_on_error=True)"
+                logger.warning(
+                    "Guard: condition evaluation failed, proceeding (passthrough_on_error=True): %s",
+                    filter_result.error,
                 )
                 return cls.passed()
-            logger.debug(
-                "Guard: condition evaluation failed, applying behavior '%s' (passthrough_on_error=False)",
+            logger.warning(
+                "Guard: condition evaluation failed, applying behavior '%s' (passthrough_on_error=False): %s",
                 behavior,
+                filter_result.error,
             )
             if behavior == "skip":
                 return cls.skipped(error=filter_result.error)

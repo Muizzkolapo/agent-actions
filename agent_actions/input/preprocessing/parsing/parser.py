@@ -47,7 +47,7 @@ from .ast_nodes import (
     LogicalOperator,
     WhereClauseAST,
 )
-from .operator_registry import get_global_registry, OperatorRegistry
+from .operators import list_operators, get_operator_info
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +91,8 @@ class WhereClauseParser:
     - LRU caching for performance
     """
 
-    def __init__(self, operator_registry: Optional[OperatorRegistry] = None):
-        """
-        Initialize the parser.
-
-        Args:
-            operator_registry: Optional custom operator registry
-        """
-        self.registry = operator_registry or get_global_registry()
+    def __init__(self):
+        """Initialize the parser."""
         self._grammar = None
         self._build_grammar()
 
@@ -192,10 +186,10 @@ class WhereClauseParser:
         ParserElement.enablePackrat()
 
     def _collect_comparison_operators(self):
-        """Collect and sort comparison operators from the registry."""
+        """Collect and sort comparison operators from the module."""
         comparison_ops = [
             (info.symbol, info.name)
-            for info in self.registry.list_operators()
+            for info in list_operators()
             if info.operator_type.value == "comparison" and info.arity in (1, 2)
         ]
         # Sort by length (longest first) to avoid partial matches
@@ -273,13 +267,15 @@ class WhereClauseParser:
 
             # Map operator name to enum
             try:
-                operator_enum = ComparisonOperator(
-                    self.registry.get_operator_info(operator_name).symbol
+                info = get_operator_info(operator_name)
+                operator_enum = (
+                    ComparisonOperator(info.symbol)
+                    if info
+                    else self._map_operator_name(operator_name)
                 )
             except (ValueError, AttributeError) as e:
-                # Handle special cases or custom operators
                 logger.warning(
-                    "Failed to map operator '%s' from registry, using fallback mapping: %s",
+                    "Failed to map operator '%s', using fallback mapping: %s",
                     operator_name,
                     e,
                     extra={"operator_name": operator_name},

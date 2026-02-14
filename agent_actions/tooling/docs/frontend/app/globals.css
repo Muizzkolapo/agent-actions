@@ -9,82 +9,85 @@
 }
 
 @layer base {
+  /* ─── LIGHT MODE ─── */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 220 14% 10%;
+    --background: 220 14% 96%;
+    --foreground: 220 20% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 220 14% 10%;
+    --card-foreground: 220 20% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 220 14% 10%;
-    --primary: 172 66% 40%;
+    --popover-foreground: 220 20% 10%;
+    --primary: 215 72% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 215 14% 95%;
-    --secondary-foreground: 215 14% 20%;
-    --muted: 215 14% 95%;
-    --muted-foreground: 215 15% 45%;
-    --accent: 215 14% 95%;
-    --accent-foreground: 215 14% 10%;
+    --secondary: 220 14% 92%;
+    --secondary-foreground: 220 15% 20%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 220 8% 46%;
+    --accent: 220 14% 92%;
+    --accent-foreground: 220 20% 10%;
     --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 10% 88%;
-    --input: 220 10% 88%;
-    --ring: 172 66% 40%;
-    --chart-1: 172 66% 40%;
-    --chart-2: 217 91% 50%;
-    --chart-3: 47 96% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 87%;
+    --input: 220 13% 87%;
+    --ring: 215 72% 50%;
+    --chart-1: 215 72% 50%;
+    --chart-2: 250 55% 57%;
+    --chart-3: 160 55% 42%;
     --chart-4: 0 72% 51%;
-    --chart-5: 262 83% 50%;
+    --chart-5: 280 55% 55%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 215 15% 35%;
-    --sidebar-primary: 172 66% 40%;
+    --sidebar-background: 220 14% 97%;
+    --sidebar-foreground: 220 8% 35%;
+    --sidebar-primary: 215 72% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 14% 95%;
-    --sidebar-accent-foreground: 215 14% 10%;
-    --sidebar-border: 220 10% 90%;
-    --sidebar-ring: 172 66% 40%;
-    --success: 152 69% 36%;
-    --success-foreground: 0 0% 98%;
-    --warning: 38 92% 45%;
-    --warning-foreground: 0 0% 4%;
-  }
-  .dark {
-    --background: 220 14% 4%;
-    --foreground: 210 20% 95%;
-    --card: 220 13% 7%;
-    --card-foreground: 210 20% 95%;
-    --popover: 220 13% 7%;
-    --popover-foreground: 210 20% 95%;
-    --primary: 172 66% 50%;
-    --primary-foreground: 220 14% 4%;
-    --secondary: 215 14% 12%;
-    --secondary-foreground: 210 15% 80%;
-    --muted: 215 14% 10%;
-    --muted-foreground: 215 15% 50%;
-    --accent: 215 14% 14%;
-    --accent-foreground: 210 20% 95%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 10% 14%;
-    --input: 220 10% 14%;
-    --ring: 172 66% 50%;
-    --chart-1: 172 66% 50%;
-    --chart-2: 217 91% 60%;
-    --chart-3: 47 96% 53%;
-    --chart-4: 0 72% 51%;
-    --chart-5: 262 83% 58%;
-    --sidebar-background: 220 14% 5%;
-    --sidebar-foreground: 215 15% 65%;
-    --sidebar-primary: 172 66% 50%;
-    --sidebar-primary-foreground: 220 14% 4%;
-    --sidebar-accent: 215 14% 10%;
-    --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 220 10% 12%;
-    --sidebar-ring: 172 66% 50%;
-    --success: 152 69% 41%;
-    --success-foreground: 0 0% 98%;
+    --sidebar-accent: 220 14% 93%;
+    --sidebar-accent-foreground: 220 20% 10%;
+    --sidebar-border: 220 13% 90%;
+    --sidebar-ring: 215 72% 50%;
+    --success: 152 56% 38%;
+    --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 4%;
+    --warning-foreground: 0 0% 8%;
+  }
+
+  /* ─── DARK MODE ─── */
+  .dark {
+    --background: 224 24% 7%;
+    --foreground: 210 20% 93%;
+    --card: 224 20% 10%;
+    --card-foreground: 210 20% 93%;
+    --popover: 224 20% 10%;
+    --popover-foreground: 210 20% 93%;
+    --primary: 215 72% 56%;
+    --primary-foreground: 224 24% 7%;
+    --secondary: 224 16% 14%;
+    --secondary-foreground: 210 15% 78%;
+    --muted: 224 14% 15%;
+    --muted-foreground: 218 10% 50%;
+    --accent: 224 14% 15%;
+    --accent-foreground: 210 20% 93%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 224 14% 16%;
+    --input: 224 14% 16%;
+    --ring: 215 72% 56%;
+    --chart-1: 215 72% 56%;
+    --chart-2: 250 55% 62%;
+    --chart-3: 160 55% 48%;
+    --chart-4: 0 72% 55%;
+    --chart-5: 280 55% 62%;
+    --sidebar-background: 224 24% 8%;
+    --sidebar-foreground: 218 10% 55%;
+    --sidebar-primary: 215 72% 56%;
+    --sidebar-primary-foreground: 224 24% 7%;
+    --sidebar-accent: 224 14% 12%;
+    --sidebar-accent-foreground: 210 20% 93%;
+    --sidebar-border: 224 14% 14%;
+    --sidebar-ring: 215 72% 56%;
+    --success: 152 56% 46%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 54%;
+    --warning-foreground: 0 0% 5%;
   }
 }
 
@@ -92,7 +95,85 @@
   * {
     @apply border-border;
   }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-size: 13px;
+  }
+
+  /* Smooth transitions when toggling themes */
+  html.transitioning,
+  html.transitioning *,
+  html.transitioning *::before,
+  html.transitioning *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.15s ease, box-shadow 0.3s ease !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* ─── Card elevation ─── */
+@layer components {
+  :root .card-elevated {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  }
+  .dark .card-elevated {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
+  }
+}
+
+/* ─── Custom scrollbar ─── */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+}
+
+/* ─── Focus ring ─── */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ─── Table density ─── */
+@layer components {
+  .dense-table th,
+  .dense-table td {
+    @apply px-3 py-2 text-xs;
+  }
+  .dense-table th {
+    @apply text-[10px] uppercase tracking-wider text-muted-foreground font-semibold bg-secondary/40;
+  }
+  .dense-table tr {
+    @apply border-b border-border;
+  }
+  .dense-table tr:last-child {
+    @apply border-0;
+  }
+}
+
+/* ─── Metric text ─── */
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }

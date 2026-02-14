@@ -2309,6 +2309,39 @@ class RecordProcessingCompleteEvent(BaseEvent):
         return "RP004"
 
 
+@dataclass
+class RecordEmptyOutputEvent(BaseEvent):
+    """Fired when an action produces empty output for a record."""
+
+    agent_name: str = ""
+    record_index: int = 0
+    source_guid: str = ""
+    input_field_count: int = 0
+    output: Any = None
+    on_empty: str = "warn"
+
+    def __post_init__(self) -> None:
+        self.level = EventLevel.WARN
+        self.category = EventCategories.DATA_PROCESSING
+        self.message = (
+            f"[{self.agent_name}] Record {self.record_index} produced empty output "
+            f"(source_guid={self.source_guid}, input had {self.input_field_count} fields). "
+            f"Downstream actions depending on this will receive no data."
+        )
+        self.data = {
+            "agent_name": self.agent_name,
+            "record_index": self.record_index,
+            "source_guid": self.source_guid,
+            "input_field_count": self.input_field_count,
+            "output": str(self.output),
+            "on_empty": self.on_empty,
+        }
+
+    @property
+    def code(self) -> str:
+        return "RP005"
+
+
 # =============================================================================
 # Batch Processing Events (BP prefix - data processing)
 # =============================================================================

@@ -8,24 +8,20 @@ import {
   FileJson,
   HardDrive,
   Search,
-  ChevronDown,
-  ChevronUp,
   Rows3,
+  ChevronRight,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { DataNode, WorkflowDataSummary } from "@/lib/mock-data"
 
-const NODES_PER_PAGE = 6
 const RECORDS_PER_PAGE = 5
 
 export function DataScreen() {
   const { workflowData } = useCatalogData()
-  const [selected, setSelected] = useState<DataNode | null>(null)
-  const [search, setSearch] = useState("")
-  const [workflowFilter, setWorkflowFilter] = useState<string>("all")
-  const [expandedWorkflows, setExpandedWorkflows] = useState<Record<string, boolean>>({})
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDataSummary | null>(null)
+  const [selectedNode, setSelectedNode] = useState<DataNode | null>(null)
 
   const allNodes = useMemo(
     () => workflowData.flatMap((wf) => wf.nodes),
@@ -37,39 +33,39 @@ export function DataScreen() {
     [allNodes],
   )
 
-  // Filter nodes by search
-  const filteredWorkflows = useMemo(() => {
-    return workflowData
-      .filter((wf) => workflowFilter === "all" || wf.workflow === workflowFilter)
-      .map((wf) => {
-        if (!search) return wf
-        const filteredNodes = wf.nodes.filter(
-          (n) =>
-            n.node.toLowerCase().includes(search.toLowerCase()) ||
-            n.files.some((f) => f.toLowerCase().includes(search.toLowerCase())),
-        )
-        return { ...wf, nodes: filteredNodes }
-      })
-      .filter((wf) => wf.nodes.length > 0)
-  }, [workflowData, search, workflowFilter])
-
-  const filteredNodeCount = filteredWorkflows.reduce((s, wf) => s + wf.nodes.length, 0)
-
-  if (selected) {
-    const parentWf = workflowData.find((wf) => wf.workflow === selected.workflow)
-    return <NodeDetail node={selected} workflow={parentWf} onBack={() => setSelected(null)} />
+  // Node detail view
+  if (selectedNode && selectedWorkflow) {
+    return (
+      <NodeDetail
+        node={selectedNode}
+        workflow={selectedWorkflow}
+        onBack={() => setSelectedNode(null)}
+      />
+    )
   }
 
+  // Workflow drill-down: show action nodes for selected workflow
+  if (selectedWorkflow) {
+    return (
+      <WorkflowDetail
+        wf={selectedWorkflow}
+        onBack={() => setSelectedWorkflow(null)}
+        onSelectNode={setSelectedNode}
+      />
+    )
+  }
+
+  // Top level: workflow list
   if (allNodes.length === 0) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Data Explorer</h1>
-          <p className="text-sm text-muted-foreground mt-1">No data found</p>
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">Data Explorer</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">No data found</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <Database className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">
+        <div className="rounded-lg border border-border bg-card p-8 text-center">
+          <Database className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-xs text-muted-foreground">
             No workflow output data available. Run a workflow first, then regenerate docs.
           </p>
         </div>
@@ -77,176 +73,179 @@ export function DataScreen() {
     )
   }
 
-  const toggleWorkflow = (wf: string) => {
-    setExpandedWorkflows((prev) => ({ ...prev, [wf]: !prev[wf] }))
-  }
-
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Data Explorer</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {allNodes.length} node{allNodes.length !== 1 ? "s" : ""} across{" "}
-          {workflowData.length} workflow{workflowData.length !== 1 ? "s" : ""}
-          <span className="text-muted-foreground/60">
-            {" "}{"\u00B7"} {totalRecords.toLocaleString()} total records
-          </span>
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">Data Explorer</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {workflowData.length} workflow{workflowData.length !== 1 ? "s" : ""} &middot;{" "}
+          {allNodes.length} nodes &middot; {totalRecords.toLocaleString()} records
         </p>
       </div>
 
-      {/* Search + workflow filter */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filter by node name or file..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
-          />
-        </div>
-        <div className="flex gap-1">
-          <FilterChip
-            label="all"
-            count={allNodes.length}
-            active={workflowFilter === "all"}
-            onClick={() => setWorkflowFilter("all")}
-          />
-          {workflowData.map((wf) => (
-            <FilterChip
-              key={wf.workflow}
-              label={wf.workflow}
-              count={wf.nodes.length}
-              active={workflowFilter === wf.workflow}
-              onClick={() => setWorkflowFilter(wf.workflow)}
-            />
-          ))}
-        </div>
+      {/* Workflow cards */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <table className="w-full dense-table">
+          <thead>
+            <tr>
+              <th className="text-left">Workflow</th>
+              <th className="text-right w-20">Nodes</th>
+              <th className="text-right w-20">Targets</th>
+              <th className="text-right w-20">Sources</th>
+              <th className="text-right w-24">DB Size</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {workflowData.map((wf) => {
+              const wfRecords = wf.nodes.reduce((s, n) => s + n.recordCount, 0)
+              return (
+                <tr
+                  key={wf.workflow}
+                  className="hover:bg-accent/30 transition-colors cursor-pointer"
+                  onClick={() => setSelectedWorkflow(wf)}
+                >
+                  <td>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[hsl(var(--primary))]/10 shrink-0">
+                        <HardDrive className="h-3 w-3 text-[hsl(var(--primary))]" />
+                      </div>
+                      <div>
+                        <span className="font-mono font-medium text-foreground">{wf.workflow}</span>
+                        <span className="text-[10px] text-muted-foreground ml-2">{wfRecords.toLocaleString()} records</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="text-right font-mono tabular-nums">{wf.nodes.length}</td>
+                  <td className="text-right font-mono tabular-nums">{wf.targetCount}</td>
+                  <td className="text-right font-mono tabular-nums">{wf.sourceCount}</td>
+                  <td className="text-right font-mono tabular-nums">{wf.dbSize}</td>
+                  <td>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
       </div>
-
-      {/* Results */}
-      {filteredWorkflows.length === 0 ? (
-        <div className="rounded-xl border border-border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">No nodes match the current filters</p>
-        </div>
-      ) : (
-        filteredWorkflows.map((wf) => (
-          <WorkflowSection
-            key={wf.workflow}
-            wf={wf}
-            expanded={expandedWorkflows[wf.workflow] ?? false}
-            onToggle={() => toggleWorkflow(wf.workflow)}
-            onSelect={setSelected}
-          />
-        ))
-      )}
-
-      {search && (
-        <p className="text-xs text-muted-foreground text-center">
-          Showing {filteredNodeCount} of {allNodes.length} nodes
-        </p>
-      )}
     </div>
   )
 }
 
-/* ─── Workflow Section with pagination ────────────────────────────────────── */
+/* ─── Workflow Detail: action nodes list ─────────────────────────────────── */
 
-function WorkflowSection({
+function WorkflowDetail({
   wf,
-  expanded,
-  onToggle,
-  onSelect,
+  onBack,
+  onSelectNode,
 }: {
   wf: WorkflowDataSummary
-  expanded: boolean
-  onToggle: () => void
-  onSelect: (n: DataNode) => void
+  onBack: () => void
+  onSelectNode: (n: DataNode) => void
 }) {
-  const visibleNodes = expanded ? wf.nodes : wf.nodes.slice(0, NODES_PER_PAGE)
-  const hasMore = wf.nodes.length > NODES_PER_PAGE
+  const [search, setSearch] = useState("")
+
+  const filteredNodes = useMemo(() => {
+    if (!search) return wf.nodes
+    return wf.nodes.filter(
+      (n) =>
+        n.node.toLowerCase().includes(search.toLowerCase()) ||
+        n.files.some((f) => f.toLowerCase().includes(search.toLowerCase())),
+    )
+  }, [wf.nodes, search])
+
+  const totalRecords = wf.nodes.reduce((s, n) => s + n.recordCount, 0)
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Workflow header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
-          <HardDrive className="h-3.5 w-3.5 text-[hsl(var(--primary))]" />
+    <div className="flex flex-col gap-4">
+      {/* Back + header */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to Workflows
+      </button>
+
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-foreground font-mono">{wf.workflow}</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {wf.nodes.length} nodes &middot; {totalRecords.toLocaleString()} records &middot; {wf.dbSize}
+          </p>
         </div>
-        <div className="flex-1">
-          <h2 className="text-sm font-mono font-medium text-foreground">{wf.workflow}</h2>
-          <span className="text-[10px] text-muted-foreground">
-            {wf.dbSize} {"\u00B7"} {wf.nodes.length} node{wf.nodes.length !== 1 ? "s" : ""}
-            {" "}{"\u00B7"} {wf.targetCount} target{wf.targetCount !== 1 ? "s" : ""}
-            {wf.sourceCount > 0 && (
-              <>{" "}{"\u00B7"} {wf.sourceCount} source{wf.sourceCount !== 1 ? "s" : ""}</>
-            )}
-          </span>
+        <div className="flex gap-2">
+          <Badge variant="secondary" className="text-[10px] font-mono rounded">
+            {wf.targetCount} targets
+          </Badge>
+          {wf.sourceCount > 0 && (
+            <Badge variant="secondary" className="text-[10px] font-mono rounded">
+              {wf.sourceCount} sources
+            </Badge>
+          )}
         </div>
-        <Badge variant="secondary" className="text-[10px] font-mono font-normal rounded-md">
-          {wf.dbSize}
-        </Badge>
+      </div>
+
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Filter nodes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9 h-8 bg-secondary border-0 text-xs placeholder:text-muted-foreground"
+        />
       </div>
 
       {/* Node table */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        {/* Table header */}
-        <div className="grid grid-cols-[1fr_100px_1fr_40px] items-center gap-4 px-5 py-2.5 bg-secondary/30">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Node</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold text-right">Records</span>
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Files</span>
-          <span className="w-4" />
-        </div>
-
-        {/* Rows */}
-        <div className="divide-y divide-border">
-          {visibleNodes.map((node) => (
-            <button
-              key={node.id}
-              className="grid grid-cols-[1fr_100px_1fr_40px] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
-              onClick={() => onSelect(node)}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-lg shrink-0"
-                  style={{ backgroundColor: "hsl(var(--primary) / 0.1)" }}
-                >
-                  <Database className="h-3.5 w-3.5 text-[hsl(var(--primary))]" />
-                </div>
-                <span className="text-sm font-mono text-foreground truncate">{node.node}</span>
-              </div>
-              <span className="text-sm font-mono tabular-nums text-foreground text-right">
-                {node.recordCount.toLocaleString()}
-              </span>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <FileJson className="h-3.5 w-3.5 text-[hsl(var(--primary))] shrink-0" />
-                <span className="text-xs font-mono text-muted-foreground truncate">
-                  {node.files[0] ?? "\u2014"}
-                </span>
-                {node.files.length > 1 && (
-                  <Badge variant="secondary" className="text-[10px] font-mono font-normal rounded-md shrink-0">
-                    +{node.files.length - 1}
-                  </Badge>
-                )}
-              </div>
-              <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
-            </button>
-          ))}
-        </div>
-
-        {/* Show more / less */}
-        {hasMore && (
-          <button
-            onClick={onToggle}
-            className="flex items-center justify-center gap-1.5 w-full px-5 py-2.5 text-xs text-[hsl(var(--primary))] hover:bg-accent/30 transition-colors border-t border-border"
-          >
-            {expanded ? (
-              <>Show less <ChevronUp className="h-3 w-3" /></>
-            ) : (
-              <>Show all {wf.nodes.length} nodes <ChevronDown className="h-3 w-3" /></>
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <table className="w-full dense-table">
+          <thead>
+            <tr>
+              <th className="text-left">Action Node</th>
+              <th className="text-right w-24">Records</th>
+              <th className="text-left">Files</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {filteredNodes.map((node) => (
+              <tr
+                key={node.id}
+                className="hover:bg-accent/30 transition-colors cursor-pointer"
+                onClick={() => onSelectNode(node)}
+              >
+                <td>
+                  <div className="flex items-center gap-2">
+                    <Database className="h-3.5 w-3.5 text-[hsl(var(--primary))] shrink-0" />
+                    <span className="font-mono font-medium text-foreground">{node.node}</span>
+                  </div>
+                </td>
+                <td className="text-right font-mono tabular-nums">{node.recordCount.toLocaleString()}</td>
+                <td>
+                  <div className="flex items-center gap-1.5">
+                    <FileJson className="h-3 w-3 text-[hsl(var(--primary))] shrink-0" />
+                    <span className="font-mono text-muted-foreground truncate">{node.files[0] ?? "\u2014"}</span>
+                    {node.files.length > 1 && (
+                      <Badge variant="secondary" className="text-[10px] font-mono rounded shrink-0">
+                        +{node.files.length - 1}
+                      </Badge>
+                    )}
+                  </div>
+                </td>
+                <td>
+                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40" />
+                </td>
+              </tr>
+            ))}
+            {filteredNodes.length === 0 && (
+              <tr>
+                <td colSpan={4} className="text-center text-muted-foreground py-8">No nodes match filter</td>
+              </tr>
             )}
-          </button>
-        )}
+          </tbody>
+        </table>
       </div>
     </div>
   )
@@ -260,13 +259,12 @@ function NodeDetail({
   onBack,
 }: {
   node: DataNode
-  workflow?: WorkflowDataSummary
+  workflow: WorkflowDataSummary
   onBack: () => void
 }) {
   const [page, setPage] = useState(0)
   const [viewMode, setViewMode] = useState<"table" | "json">("table")
 
-  // Extract columns from preview records
   const columns = useMemo(() => {
     if (node.preview.length === 0) return []
     const colSet = new Set<string>()
@@ -285,80 +283,60 @@ function NodeDetail({
   )
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
+      {/* Back */}
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Back to {workflow.workflow}
+      </button>
+
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBack}
-          className="flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
-              style={{ backgroundColor: "hsl(var(--primary) / 0.1)" }}
-            >
-              <Database className="h-4 w-4 text-[hsl(var(--primary))]" />
-            </div>
-            <h1 className="text-xl font-mono font-semibold text-foreground">{node.node}</h1>
-          </div>
-          <p className="text-sm text-muted-foreground mt-1">
-            {node.workflow} {"\u00B7"} {node.recordCount.toLocaleString()} records
-            {workflow && <> {"\u00B7"} DB: {workflow.dbSize}</>}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight text-foreground font-mono">{node.node}</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {node.workflow} &middot; {node.recordCount.toLocaleString()} records &middot; {workflow.dbSize}
           </p>
         </div>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <InfoCard label="Records" value={node.recordCount.toLocaleString()} />
-        <InfoCard label="Files" value={String(node.files.length)} />
-        <InfoCard label="Workflow" value={node.workflow} />
-        <InfoCard label="DB Size" value={workflow?.dbSize ?? "\u2014"} />
-      </div>
-
       {/* Files */}
       {node.files.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-            Source Files
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {node.files.map((file) => (
-              <div
-                key={file}
-                className="flex items-center gap-1.5 rounded-lg bg-secondary/50 border border-border/50 px-3 py-1.5"
-              >
-                <FileJson className="h-3 w-3 text-[hsl(var(--primary))]" />
-                <span className="text-xs font-mono text-foreground">{file}</span>
-              </div>
-            ))}
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {node.files.map((file) => (
+            <div
+              key={file}
+              className="flex items-center gap-1.5 rounded-md bg-secondary/50 border border-border/50 px-2.5 py-1"
+            >
+              <FileJson className="h-3 w-3 text-[hsl(var(--primary))]" />
+              <span className="text-[11px] font-mono text-foreground">{file}</span>
+            </div>
+          ))}
         </div>
       )}
 
       {/* Data preview */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5 bg-secondary/30">
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <div className="flex items-center gap-2">
             <Rows3 className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="text-[10px] font-mono text-muted-foreground">
-              Showing {node.preview.length > 0 ? page * RECORDS_PER_PAGE + 1 : 0}
+            <span className="text-xs font-semibold text-foreground">Records</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">
+              {node.preview.length > 0 ? page * RECORDS_PER_PAGE + 1 : 0}
               {"\u2013"}
-              {Math.min((page + 1) * RECORDS_PER_PAGE, node.preview.length)} of{" "}
-              {node.preview.length} preview records
+              {Math.min((page + 1) * RECORDS_PER_PAGE, node.preview.length)} of {node.preview.length}
               {node.recordCount > node.preview.length && (
-                <span className="text-muted-foreground/50"> ({node.recordCount} total in DB)</span>
+                <> ({node.recordCount} total)</>
               )}
             </span>
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode("table")}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+              className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
                 viewMode === "table"
                   ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))]"
                   : "text-muted-foreground hover:text-foreground"
@@ -368,7 +346,7 @@ function NodeDetail({
             </button>
             <button
               onClick={() => setViewMode("json")}
-              className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
+              className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
                 viewMode === "json"
                   ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))]"
                   : "text-muted-foreground hover:text-foreground"
@@ -379,40 +357,29 @@ function NodeDetail({
           </div>
         </div>
 
-        {/* Content */}
         {node.preview.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm text-muted-foreground">No preview records available</p>
+            <p className="text-xs text-muted-foreground">No preview records available</p>
           </div>
         ) : viewMode === "table" ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
+            <table className="w-full dense-table">
               <thead>
-                <tr className="border-b border-border bg-secondary/20">
-                  <th className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold w-10">
-                    #
-                  </th>
+                <tr>
+                  <th className="text-left w-10">#</th>
                   {columns.map((col) => (
-                    <th
-                      key={col}
-                      className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap"
-                    >
-                      {col}
-                    </th>
+                    <th key={col} className="text-left whitespace-nowrap">{col}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody>
                 {pageRecords.map((row, i) => (
-                  <tr
-                    key={page * RECORDS_PER_PAGE + i}
-                    className="hover:bg-accent/20 transition-colors"
-                  >
-                    <td className="px-4 py-2.5 text-[10px] font-mono text-muted-foreground tabular-nums">
+                  <tr key={page * RECORDS_PER_PAGE + i} className="hover:bg-accent/20 transition-colors">
+                    <td className="font-mono text-muted-foreground tabular-nums">
                       {page * RECORDS_PER_PAGE + i + 1}
                     </td>
                     {columns.map((col) => (
-                      <td key={col} className="px-4 py-2.5 max-w-[300px]">
+                      <td key={col} className="max-w-[300px]">
                         <CellValue value={row[col]} />
                       </td>
                     ))}
@@ -422,7 +389,7 @@ function NodeDetail({
             </table>
           </div>
         ) : (
-          <div className="p-5 overflow-x-auto max-h-[500px] overflow-y-auto">
+          <div className="p-4 overflow-x-auto max-h-[500px] overflow-y-auto">
             <pre className="text-xs font-mono text-foreground/80 leading-relaxed whitespace-pre-wrap">
               {JSON.stringify(pageRecords, null, 2)}
             </pre>
@@ -431,22 +398,22 @@ function NodeDetail({
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-border px-4 py-2.5 bg-secondary/20">
+          <div className="flex items-center justify-between border-t border-border px-4 py-2">
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <ArrowLeft className="h-3 w-3" /> Previous
+              <ArrowLeft className="h-3 w-3" /> Prev
             </button>
             <div className="flex items-center gap-1">
               {Array.from({ length: totalPages }, (_, i) => (
                 <button
                   key={i}
                   onClick={() => setPage(i)}
-                  className={`flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-mono font-medium transition-all ${
+                  className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-mono transition-all ${
                     page === i
-                      ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
+                      ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))]"
                       : "text-muted-foreground hover:bg-accent"
                   }`}
                 >
@@ -457,7 +424,7 @@ function NodeDetail({
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page === totalPages - 1}
-              className="flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
               Next <ArrowRight className="h-3 w-3" />
             </button>
@@ -468,7 +435,7 @@ function NodeDetail({
   )
 }
 
-/* ─── Shared components ──────────────────────────────────────────────────── */
+/* ─── Shared ─────────────────────────────────────────────────────────────── */
 
 function CellValue({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
@@ -489,55 +456,20 @@ function CellValue({ value }: { value: unknown }) {
     )
   }
   if (typeof value === "number") {
-    return <span className="text-xs font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
+    return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
   }
   if (typeof value === "object") {
     const str = JSON.stringify(value)
     return (
-      <span className="text-xs font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
+      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
         {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
       </span>
     )
   }
   const str = String(value)
   return (
-    <span className="text-xs font-mono text-foreground truncate block max-w-[300px]" title={str}>
+    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
       {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
     </span>
-  )
-}
-
-function FilterChip({
-  label,
-  count,
-  active,
-  onClick,
-}: {
-  label: string
-  count: number
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-        active
-          ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-          : "text-muted-foreground hover:bg-accent hover:text-foreground"
-      }`}
-    >
-      <span className="font-mono truncate max-w-[120px]">{label}</span>
-      <span className="text-[10px] tabular-nums opacity-60">{count}</span>
-    </button>
-  )
-}
-
-function InfoCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{label}</span>
-      <p className="text-sm font-mono text-foreground mt-1 truncate">{value}</p>
-    </div>
   )
 }

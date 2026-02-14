@@ -126,8 +126,8 @@ actions:
     impl: publish_to_portal
     dependencies: [review_report]
     guard:
-      condition: "review_report.hitl_status == 'approved'"
-      behavior: skip
+      condition: "hitl_status == 'approved'"
+      on_false: skip
 ```
 
 See the [Human-in-the-Loop guide](../guides/human-in-the-loop.md) for more details on HITL actions.

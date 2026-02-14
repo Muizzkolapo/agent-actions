@@ -38,8 +38,8 @@ actions:
   - name: final_processing
     dependencies: [review_extraction]
     guard:
-      condition: "review_extraction.hitl_status == 'approved'"
-      behavior: skip
+      condition: "hitl_status == 'approved'"
+      on_false: skip
     intent: "Process approved data (only runs if approved)"
     schema: test/final
     prompt: |

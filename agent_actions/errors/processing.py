@@ -32,3 +32,9 @@ class SerializationError(ProcessingError):
     """Raised when serialization/deserialization fails."""
 
     pass
+
+
+class EmptyOutputError(ProcessingError):
+    """Raised when an action produces empty output and on_empty=error."""
+
+    pass

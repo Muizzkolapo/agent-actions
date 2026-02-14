@@ -35,6 +35,7 @@ from agent_actions.errors.processing import (
     GenerationError,
     WorkflowError,
     SerializationError,
+    EmptyOutputError,
 )
 
 # External service errors
@@ -109,6 +110,7 @@ __all__ = [
     "GenerationError",
     "WorkflowError",
     "SerializationError",
+    "EmptyOutputError",
     # External Services
     "ExternalServiceError",
     "VendorAPIError",

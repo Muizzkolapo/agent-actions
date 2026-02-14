@@ -167,6 +167,10 @@ class ActionConfig(BaseModel):
         default=None,
         description="HITL configuration (required when kind=hitl)",
     )
+    on_empty: Literal["warn", "error", "skip"] = Field(
+        default="warn",
+        description="Behavior when action produces empty output: warn (log warning), error (fail workflow), skip (continue, emit event)",
+    )
 
     @model_validator(mode="after")
     def validate_hitl_config(self):

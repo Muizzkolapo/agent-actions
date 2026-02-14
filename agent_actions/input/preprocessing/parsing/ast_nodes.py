@@ -1,36 +1,28 @@
 """
 Abstract Syntax Tree nodes for WHERE clause parsing.
 
-This module defines the AST nodes that represent parsed WHERE clause expressions.
-Each node can be evaluated against data using the visitor pattern.
+This module defines the AST nodes that represent parsed WHERE clause expressions,
+plus recursive evaluate_node() and format_node() functions.
 """
 
 import logging
-from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
 from agent_actions.utils.dict import get_nested_value
-from .operator_registry import OperatorRegistry, get_global_registry
+from .operators import OPERATORS, FUNCTIONS
 
 logger = logging.getLogger(__name__)
-
-# Deduplicate missing-field warnings so we log once per field name, not once per record.
-# This is module-level (process-lifetime) because WhereClauseEvaluator is created per-record
-# via WhereClauseAST.evaluate(), so instance-level scoping would re-warn on every record.
-# Trade-off: in long-running processes, a field name warned once is suppressed forever,
-# even across unrelated workflows with different schemas.
-_warned_missing_fields: set = set()
 
 
 def _field_exists(data: Any, field_path: str) -> bool:
     """Check if a field path exists in the data (distinguishes None value from missing).
 
-    Note: This re-walks the same nested dict path that context.get_field_value() already
-    traverses. The double-walk is necessary because get_field_value() returns None for both
+    Note: This re-walks the same nested dict path that get_nested_value() already
+    traverses. The double-walk is necessary because get_nested_value() returns None for both
     "field exists with value None" and "field is missing" — we need to distinguish them to
-    avoid false warnings on intentionally-null fields.
+    raise errors only for truly missing fields.
     """
     keys = field_path.split(".")
     current = data
@@ -82,14 +74,10 @@ class ComparisonOperator(Enum):
 
 
 @dataclass
-class ASTNode(ABC):
+class ASTNode:
     """Base class for all AST nodes."""
 
     node_type: NodeType
-
-    @abstractmethod
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        """Accept a visitor to process this node."""
 
 
 @dataclass
@@ -103,9 +91,6 @@ class FieldNode(ASTNode):
         super().__init__(node_type)
         self.field_path = field_path
 
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        return visitor.visit_field(self)
-
 
 @dataclass
 class LiteralNode(ASTNode):
@@ -117,9 +102,6 @@ class LiteralNode(ASTNode):
     def __init__(self, value: Any, node_type: NodeType = NodeType.LITERAL):
         super().__init__(node_type)
         self.value = value
-
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        return visitor.visit_literal(self)
 
 
 @dataclass
@@ -143,9 +125,6 @@ class ComparisonNode(ASTNode):
         self.operator = operator
         self.right = right
 
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        return visitor.visit_comparison(self)
-
 
 @dataclass
 class LogicalNode(ASTNode):
@@ -168,9 +147,6 @@ class LogicalNode(ASTNode):
         self.left = left
         self.right = right
 
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        return visitor.visit_logical(self)
-
 
 @dataclass
 class FunctionNode(ASTNode):
@@ -187,311 +163,173 @@ class FunctionNode(ASTNode):
         self.function_name = function_name
         self.arguments = arguments
 
-    def accept(self, visitor: "ASTVisitor") -> Any:
-        return visitor.visit_function(self)
+
+# ---------------------------------------------------------------------------
+# evaluate_node — recursive evaluator replacing WhereClauseEvaluator + ASTVisitor
+# ---------------------------------------------------------------------------
 
 
-class ASTVisitor(ABC):
-    """Visitor interface for processing AST nodes."""
+def evaluate_node(
+    node: ASTNode,
+    data: Dict[str, Any],
+    functions: Optional[Dict[str, Callable[..., Any]]] = None,
+) -> Any:
+    """Recursively evaluate an AST node against data.
 
-    @abstractmethod
-    def visit_field(self, node: FieldNode) -> Any:
-        """Visit a field node."""
+    Args:
+        node: The AST node to evaluate
+        data: Data dictionary to evaluate against
+        functions: Optional custom functions (merged with built-in FUNCTIONS)
 
-    @abstractmethod
-    def visit_literal(self, node: LiteralNode) -> Any:
-        """Visit a literal node."""
+    Returns:
+        Evaluation result (bool for comparison/logical, value for field/literal/function)
+    """
+    if isinstance(node, FieldNode):
+        value = get_nested_value(data, node.field_path)
+        if value is None and not _field_exists(data, node.field_path):
+            available = (
+                ", ".join(sorted(data.keys())) if isinstance(data, dict) else "(non-dict data)"
+            )
+            raise ValueError(
+                f"Guard condition references field '{node.field_path}' which does not exist "
+                f"in the data. Available top-level fields: {available}"
+            )
+        return value
 
-    @abstractmethod
-    def visit_comparison(self, node: ComparisonNode) -> Any:
-        """Visit a comparison node."""
+    if isinstance(node, LiteralNode):
+        return node.value
 
-    @abstractmethod
-    def visit_logical(self, node: LogicalNode) -> Any:
-        """Visit a logical node."""
+    if isinstance(node, ComparisonNode):
+        try:
+            left_value = evaluate_node(node.left, data, functions)
+        except ValueError as e:
+            # Only treat missing-field errors as NULL; re-raise everything else
+            if "does not exist in the data" in str(e):
+                if node.operator == ComparisonOperator.IS_NULL:
+                    return True
+                if node.operator == ComparisonOperator.IS_NOT_NULL:
+                    return False
+            raise
 
-    @abstractmethod
-    def visit_function(self, node: FunctionNode) -> Any:
-        """Visit a function node."""
+        op_fn = OPERATORS.get(node.operator.name)
+        if not op_fn:
+            raise ValueError(f"Unknown comparison operator: {node.operator}")
 
+        # Unary operators (IS NULL, IS NOT NULL)
+        if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
+            right_value = None
+        elif node.right is None:
+            raise ValueError(f"Binary operator {node.operator} requires a right operand")
+        else:
+            right_value = evaluate_node(node.right, data, functions)
 
-class EvaluationContext:
-    """Context for evaluating WHERE clause expressions."""
+        try:
+            return op_fn(left_value, right_value)
+        except (TypeError, ValueError):
+            return False
 
-    def __init__(
-        self,
-        data: Dict[str, Any],
-        functions: Optional[Dict[str, Callable[..., Any]]] = None,
-        debug: bool = False,
-    ):
-        """
-        Initialize evaluation context.
+    if isinstance(node, LogicalNode):
+        left_result = evaluate_node(node.left, data, functions)
 
-        Args:
-            data: The data dictionary to evaluate against
-            functions: Optional dictionary of available functions
-            debug: Enable debug logging for comparison failures (default: False)
-        """
-        self.data = data
-        self.functions = functions or {}
-        self.debug = debug
+        if node.operator == LogicalOperator.NOT:
+            return not left_result
+        if node.operator == LogicalOperator.AND:
+            if not left_result:
+                return False
+            if node.right is None:
+                raise ValueError("AND operator requires a right operand")
+            return evaluate_node(node.right, data, functions)
+        if node.operator == LogicalOperator.OR:
+            if left_result:
+                return True
+            if node.right is None:
+                raise ValueError("OR operator requires a right operand")
+            return evaluate_node(node.right, data, functions)
+        raise ValueError(f"Unknown logical operator: {node.operator}")
 
-    def get_field_value(self, field_path: str) -> Any:
-        """
-        Get the value of a field using dot notation.
-
-        Args:
-            field_path: Field path like 'user.name' or 'score'
-
-        Returns:
-            The field value or None if not found
-        """
-        return get_nested_value(self.data, field_path)
-
-    def call_function(self, function_name: str, args: List[Any]) -> Any:
-        """
-        Call a registered function.
-
-        Args:
-            function_name: Name of the function to call
-            args: Arguments to pass to the function
-
-        Returns:
-            The function result
-
-        Raises:
-            ValueError: If function is not registered
-        """
-        if function_name not in self.functions:
-            raise ValueError(f"Function '{function_name}' is not registered")
-
-        func = self.functions[function_name]
+    if isinstance(node, FunctionNode):
+        args = [evaluate_node(arg, data, functions) for arg in node.arguments]
+        # Check custom functions first, then built-in FUNCTIONS
+        all_funcs = {**FUNCTIONS, **(functions or {})}
+        if node.function_name not in all_funcs:
+            raise ValueError(f"Function '{node.function_name}' is not registered")
+        func = all_funcs[node.function_name]
+        # Built-in functions expect a list arg; custom functions expect *args
+        if func is FUNCTIONS.get(node.function_name):
+            return func(args)
         return func(*args)
+
+    raise ValueError(f"Unknown node type: {type(node)}")
+
+
+# ---------------------------------------------------------------------------
+# format_node — recursive formatter replacing ASTFormatter
+# ---------------------------------------------------------------------------
+
+
+def _format_literal_value(value: Any) -> str:
+    """Format a literal value for string representation."""
+    if value is None:
+        return "NULL"
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (list, tuple)):
+        items = [_format_literal_value(item) for item in value]
+        return f"[{', '.join(items)}]"
+    return str(value)
+
+
+def format_node(node: ASTNode) -> str:
+    """Recursively format an AST node to a string representation."""
+    if isinstance(node, FieldNode):
+        return node.field_path
+
+    if isinstance(node, LiteralNode):
+        return _format_literal_value(node.value)
+
+    if isinstance(node, ComparisonNode):
+        left_str = format_node(node.left)
+        if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
+            return f"{left_str} {node.operator.value}"
+        if node.right is None:
+            raise ValueError(f"Binary operator {node.operator.value} requires a right operand")
+        right_str = format_node(node.right)
+        return f"{left_str} {node.operator.value} {right_str}"
+
+    if isinstance(node, LogicalNode):
+        left_str = format_node(node.left)
+        if node.operator == LogicalOperator.NOT:
+            return f"NOT ({left_str})"
+        if node.right is None:
+            raise ValueError(f"Binary operator {node.operator.value} requires a right operand")
+        right_str = format_node(node.right)
+        return f"({left_str} {node.operator.value} {right_str})"
+
+    if isinstance(node, FunctionNode):
+        args_str = ", ".join(format_node(arg) for arg in node.arguments)
+        return f"{node.function_name}({args_str})"
+
+    raise ValueError(f"Unknown node type: {type(node)}")
+
+
+# ---------------------------------------------------------------------------
+# WhereClauseAST — container with evaluate() and __str__()
+# ---------------------------------------------------------------------------
 
 
 class WhereClauseAST:
     """Container for a WHERE clause AST with evaluation capabilities."""
 
     def __init__(self, root: ASTNode):
-        """
-        Initialize the AST.
-
-        Args:
-            root: The root node of the AST
-        """
         self.root = root
 
     def evaluate(
         self, data: Dict[str, Any], functions: Optional[Dict[str, Callable[..., Any]]] = None
     ) -> bool:
-        """
-        Evaluate the WHERE clause against the given data.
-
-        Args:
-            data: Data dictionary to evaluate against
-            functions: Optional dictionary of available functions
-
-        Returns:
-            True if the WHERE clause matches, False otherwise
-        """
-        context = EvaluationContext(data, functions)
-        evaluator = WhereClauseEvaluator(context)
-        return self.root.accept(evaluator)
+        """Evaluate the WHERE clause against the given data."""
+        return evaluate_node(self.root, data, functions)
 
     def __str__(self) -> str:
-        """Return a string representation of the AST."""
-        formatter = ASTFormatter()
-        return self.root.accept(formatter)
-
-
-class WhereClauseEvaluator(ASTVisitor):
-    """Evaluates WHERE clause AST nodes against data."""
-
-    def __init__(
-        self, context: EvaluationContext, operator_registry: Optional[OperatorRegistry] = None
-    ):
-        """
-        Initialize the evaluator.
-
-        Args:
-            context: Evaluation context containing data and functions
-            operator_registry: Optional operator registry (uses global if not provided)
-        """
-        self.context = context
-        self.registry = operator_registry or get_global_registry()
-
-        # Map ComparisonOperator enum values to operator registry names
-        self._operator_map = {
-            ComparisonOperator.EQ: "EQ",
-            ComparisonOperator.NE: "NE",
-            ComparisonOperator.LT: "LT",
-            ComparisonOperator.LE: "LE",
-            ComparisonOperator.GT: "GT",
-            ComparisonOperator.GE: "GE",
-            ComparisonOperator.IN: "IN",
-            ComparisonOperator.NOT_IN: "NOT_IN",
-            ComparisonOperator.CONTAINS: "CONTAINS",
-            ComparisonOperator.NOT_CONTAINS: "NOT_CONTAINS",
-            ComparisonOperator.LIKE: "LIKE",
-            ComparisonOperator.NOT_LIKE: "NOT_LIKE",
-            ComparisonOperator.BETWEEN: "BETWEEN",
-            ComparisonOperator.NOT_BETWEEN: "NOT_BETWEEN",
-            ComparisonOperator.IS_NULL: "IS_NULL",
-            ComparisonOperator.IS_NOT_NULL: "IS_NOT_NULL",
-        }
-
-        # Performance optimization: Pre-cache operator instances to eliminate registry lookups
-        # This reduces overhead on every comparison evaluation
-        self._operator_cache = {
-            op_enum: self.registry.get_operator(name)
-            for op_enum, name in self._operator_map.items()
-        }
-
-    def visit_field(self, node: FieldNode) -> Any:
-        """Get the value of a field from the context data."""
-        value = self.context.get_field_value(node.field_path)
-        if value is None and not _field_exists(self.context.data, node.field_path):
-            if node.field_path not in _warned_missing_fields:
-                _warned_missing_fields.add(node.field_path)
-                logger.warning(
-                    "Guard condition references field '%s' which does not exist in the data. "
-                    "Available fields: %s",
-                    node.field_path,
-                    ", ".join(sorted(self.context.data.keys()))
-                    if isinstance(self.context.data, dict)
-                    else "(non-dict data)",
-                )
-        return value
-
-    def visit_literal(self, node: LiteralNode) -> Any:
-        """Return the literal value."""
-        return node.value
-
-    def visit_comparison(self, node: ComparisonNode) -> bool:
-        """
-        Evaluate a comparison operation using the operator registry.
-
-        This method delegates to the operator registry for evaluation,
-        reducing complexity from CC 27 to CC 3.
-
-        Improvements:
-        - Uses pre-cached operator instances (eliminates registry lookups)
-        - Explicit null safety for unary vs binary operators
-        - Passes evaluation context to operators for future extensibility
-        - Graceful error handling with optional debug logging
-
-        Example:
-            node = ComparisonNode(FieldNode("age"), ComparisonOperator.GT, LiteralNode(21))
-            result = evaluator.visit_comparison(node)  # Delegates to GreaterThanOperator
-
-        Args:
-            node: ComparisonNode to evaluate
-
-        Returns:
-            Boolean result of the comparison
-
-        Raises:
-            ValueError: If operator is unknown or not found in cache
-        """
-        left_value = node.left.accept(self)
-
-        # Get operator from pre-cached instances (performance optimization)
-        operator = self._operator_cache.get(node.operator)
-        if not operator:
-            raise ValueError(f"Unknown comparison operator: {node.operator}")
-
-        # Null safety: Explicit handling for unary vs binary operators
-        if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
-            # Unary operators don't need a right operand
-            right_value = None
-        elif node.right is None:
-            # Binary operators require a right operand
-            raise ValueError(f"Binary operator {node.operator} requires a right operand")
-        else:
-            # Evaluate right operand for binary operators
-            right_value = node.right.accept(self)
-
-        try:
-            # Pass context to operators for future extensibility
-            return operator.evaluate(left_value, right_value, context=self.context)
-        except (TypeError, ValueError) as e:
-            # Handle type errors gracefully (e.g., comparing string to number)
-            # Optional debug logging if enabled
-            if hasattr(self.context, "debug") and self.context.debug:
-                logger.debug(
-                    "Comparison failed: %s on %r, %r: %s", node.operator, left_value, right_value, e
-                )
-            # Maintain backward-compatible fail-safe behavior
-            return False
-
-    def visit_logical(self, node: LogicalNode) -> bool:
-        """Evaluate a logical operation."""
-        left_result = node.left.accept(self)
-
-        if node.operator == LogicalOperator.NOT:
-            return not left_result
-        if node.operator == LogicalOperator.AND:
-            if not left_result:
-                return False  # Short-circuit evaluation
-            if node.right is None:
-                raise ValueError("AND operator requires a right operand")
-            return node.right.accept(self)
-        if node.operator == LogicalOperator.OR:
-            if left_result:
-                return True  # Short-circuit evaluation
-            if node.right is None:
-                raise ValueError("OR operator requires a right operand")
-            return node.right.accept(self)
-        raise ValueError(f"Unknown logical operator: {node.operator}")
-
-    def visit_function(self, node: FunctionNode) -> Any:
-        """Evaluate a function call."""
-        args = [arg.accept(self) for arg in node.arguments]
-        return self.context.call_function(node.function_name, args)
-
-
-class ASTFormatter(ASTVisitor):
-    """Formats AST nodes back to string representation."""
-
-    def visit_field(self, node: FieldNode) -> str:
-        return node.field_path
-
-    def visit_literal(self, node: LiteralNode) -> str:
-        if node.value is None:
-            return "NULL"
-        if isinstance(node.value, str):
-            return f'"{node.value}"'
-        if isinstance(node.value, bool):
-            return "TRUE" if node.value else "FALSE"
-        if isinstance(node.value, (list, tuple)):
-            items = [self.visit_literal(LiteralNode(item)) for item in node.value]
-            return f"[{', '.join(items)}]"
-        return str(node.value)
-
-    def visit_comparison(self, node: ComparisonNode) -> str:
-        left_str = node.left.accept(self)
-
-        if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
-            return f"{left_str} {node.operator.value}"
-
-        if node.right is None:
-            raise ValueError(f"Binary operator {node.operator.value} requires a right operand")
-
-        right_str = node.right.accept(self)
-        return f"{left_str} {node.operator.value} {right_str}"
-
-    def visit_logical(self, node: LogicalNode) -> str:
-        left_str = node.left.accept(self)
-
-        if node.operator == LogicalOperator.NOT:
-            return f"NOT ({left_str})"
-
-        if node.right is None:
-            raise ValueError(f"Binary operator {node.operator.value} requires a right operand")
-
-        right_str = node.right.accept(self)
-        return f"({left_str} {node.operator.value} {right_str})"
-
-    def visit_function(self, node: FunctionNode) -> str:
-        args_str = ", ".join(arg.accept(self) for arg in node.arguments)
-        return f"{node.function_name}({args_str})"
+        return format_node(self.root)

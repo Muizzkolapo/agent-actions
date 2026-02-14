@@ -99,6 +99,7 @@ export interface Prompt {
   length: string
   usedBy: string[]
   preview: string
+  content: string
 }
 
 export interface ToolFunction {

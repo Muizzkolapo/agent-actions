@@ -13,6 +13,7 @@ import { PromptsScreen, SchemasScreen, ToolsScreen, SettingsScreen } from "@/com
 import { Separator } from "@/components/ui/separator"
 import { useCatalog, useCatalogRetry, useCatalogData } from "@/lib/catalog-context"
 import { AlertTriangle, RefreshCw, Zap, Loader2 } from "lucide-react"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 export default function Page() {
   const catalogState = useCatalog()
@@ -27,12 +28,9 @@ function Dashboard() {
   const [activeSection, setActiveSection] = useState("home")
   const { workflows } = useCatalogData()
 
-  // Derive project name from the first workflow path (parent directory)
   const projectName = (() => {
     if (workflows.length === 0) return "project"
     const p = workflows[0].path || ""
-    // path is like "/Users/.../my_project/artefact/rendered_workflows/wf.yml"
-    // or "agent_config/wf.yml" — take the grandparent directory name
     const parts = p.replace(/\\/g, "/").split("/").filter(Boolean)
     const artefactIdx = parts.indexOf("artefact")
     if (artefactIdx > 0) return parts[artefactIdx - 1]
@@ -58,21 +56,22 @@ function Dashboard() {
     <SidebarProvider>
       <AppSidebar activeSection={activeSection} onNavigate={setActiveSection} />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/50 backdrop-blur-sm px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
           <SidebarTrigger className="-ml-1 h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" />
           <Separator orientation="vertical" className="mr-2 h-4 bg-border/50" />
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground">{sectionTitles[activeSection]}</span>
+            <span className="text-sm font-semibold text-foreground tracking-tight">{sectionTitles[activeSection]}</span>
             {activeSection !== "home" && (
               <span className="text-[10px] font-mono text-muted-foreground/50 hidden sm:inline">
                 / {projectName}
               </span>
             )}
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
             <div className="hidden sm:flex items-center gap-2 rounded-lg bg-secondary/60 px-3 py-1.5">
               <span className="text-[10px] font-mono font-medium text-foreground">{projectName}</span>
             </div>
+            <ThemeToggle />
           </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
@@ -95,7 +94,6 @@ function Dashboard() {
 function LoadingSkeleton() {
   return (
     <div className="flex h-screen bg-background">
-      {/* Sidebar skeleton */}
       <div className="w-64 border-r border-border bg-card/50 p-4 flex flex-col gap-6">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-secondary animate-pulse" />
@@ -110,7 +108,6 @@ function LoadingSkeleton() {
           ))}
         </div>
       </div>
-      {/* Main content skeleton */}
       <div className="flex-1 p-6 flex flex-col gap-6">
         <div className="h-12 border-b border-border" />
         <div className="flex items-center gap-3">
@@ -141,7 +138,7 @@ function ErrorState({ message }: { message: string }) {
           <h1 className="text-xl font-semibold text-foreground">Catalog Not Available</h1>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{message}</p>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4 w-full">
+        <div className="rounded-xl border border-border bg-card p-4 w-full shadow-sm">
           <div className="flex items-center gap-2 mb-2">
             <Zap className="h-4 w-4 text-[hsl(var(--primary))]" />
             <span className="text-xs font-medium text-foreground">Quick fix</span>
@@ -152,7 +149,7 @@ function ErrorState({ message }: { message: string }) {
         </div>
         <button
           onClick={retry}
-          className="flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-medium text-[hsl(var(--primary-foreground))] hover:opacity-90 transition-opacity"
+          className="flex items-center gap-2 rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background hover:opacity-90 transition-opacity"
         >
           <RefreshCw className="h-4 w-4" />
           Retry

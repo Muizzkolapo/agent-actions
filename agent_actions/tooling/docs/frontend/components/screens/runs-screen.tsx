@@ -264,15 +264,11 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
         </div>
       )}
 
-      {/* Artifacts tab */}
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-2.5 bg-secondary/30">
-          <div className="flex gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--destructive))]/60" />
-            <div className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--warning))]/60" />
-            <div className="h-2.5 w-2.5 rounded-full bg-[hsl(var(--success))]/60" />
-          </div>
-          <span className="text-[10px] font-mono text-muted-foreground ml-2">run-summary.json</span>
+      {/* Run Summary */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <span className="text-xs font-semibold text-foreground">Run Summary</span>
+          <span className="text-[10px] font-mono text-muted-foreground">JSON</span>
         </div>
         <div className="p-5">
           <pre className="text-xs font-mono text-foreground/80 leading-relaxed">

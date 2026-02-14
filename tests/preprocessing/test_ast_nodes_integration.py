@@ -1,30 +1,27 @@
 """
-Integration tests for AST nodes and visit_comparison() method.
+Integration tests for AST nodes and evaluate_node() function.
 
 Tests that all ComparisonOperator enum values work correctly through
-the refactored visit_comparison() method using the operator registry.
+the evaluate_node() recursive evaluator.
 """
-
-from unittest.mock import patch
 
 import pytest
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
     ComparisonNode,
     FieldNode,
+    FunctionNode,
     LiteralNode,
     LogicalNode,
     ComparisonOperator,
     LogicalOperator,
-    WhereClauseEvaluator,
-    EvaluationContext,
     WhereClauseAST,
+    evaluate_node,
     _field_exists,
-    _warned_missing_fields,
 )
 
 
-class TestVisitComparisonIntegration:
-    """Integration tests for visit_comparison() with all operators."""
+class TestEvaluateNodeIntegration:
+    """Integration tests for evaluate_node() with all operators."""
 
     @pytest.fixture
     def sample_data(self):
@@ -40,196 +37,160 @@ class TestVisitComparisonIntegration:
             "user": {"id": 123, "role": "admin"},
         }
 
-    @pytest.fixture
-    def evaluator(self, sample_data):
-        """Create an evaluator with sample data."""
-        context = EvaluationContext(sample_data)
-        return WhereClauseEvaluator(context)
+    # Test all comparison operators through evaluate_node()
 
-    # Test all comparison operators through visit_comparison()
-
-    def test_equal_operator_integration(self, evaluator):
-        """Test EQ operator through visit_comparison()."""
+    def test_equal_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.EQ, LiteralNode(25))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_not_equal_operator_integration(self, evaluator):
-        """Test NE operator through visit_comparison()."""
+    def test_not_equal_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.NE, LiteralNode(30))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_less_than_operator_integration(self, evaluator):
-        """Test LT operator through visit_comparison()."""
+    def test_less_than_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.LT, LiteralNode(30))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_less_equal_operator_integration(self, evaluator):
-        """Test LE operator through visit_comparison()."""
+    def test_less_equal_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.LE, LiteralNode(25))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_greater_than_operator_integration(self, evaluator):
-        """Test GT operator through visit_comparison()."""
+    def test_greater_than_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.GT, LiteralNode(20))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_greater_equal_operator_integration(self, evaluator):
-        """Test GE operator through visit_comparison()."""
+    def test_greater_equal_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.GE, LiteralNode(25))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_in_operator_integration(self, evaluator):
-        """Test IN operator through visit_comparison()."""
+    def test_in_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.IN, LiteralNode([20, 25, 30]))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
-    def test_not_in_operator_integration(self, evaluator):
-        """Test NOT_IN operator through visit_comparison()."""
+    def test_not_in_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("age"), ComparisonOperator.NOT_IN, LiteralNode([10, 15, 20])
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("age"), ComparisonOperator.NOT_IN, LiteralNode([20, 25, 30])
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_contains_operator_integration(self, evaluator):
-        """Test CONTAINS operator through visit_comparison()."""
+    def test_contains_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.CONTAINS, LiteralNode("@example.com")
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.CONTAINS, LiteralNode("@gmail.com")
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_not_contains_operator_integration(self, evaluator):
-        """Test NOT_CONTAINS operator through visit_comparison()."""
+    def test_not_contains_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.NOT_CONTAINS, LiteralNode("@gmail.com")
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.NOT_CONTAINS, LiteralNode("@example.com")
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_like_operator_integration(self, evaluator):
-        """Test LIKE operator through visit_comparison()."""
+    def test_like_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.LIKE, LiteralNode("%@example.com")
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(FieldNode("name"), ComparisonOperator.LIKE, LiteralNode("John%"))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.LIKE, LiteralNode("%@gmail.com")
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_not_like_operator_integration(self, evaluator):
-        """Test NOT_LIKE operator through visit_comparison()."""
+    def test_not_like_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.NOT_LIKE, LiteralNode("%@gmail.com")
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("email"), ComparisonOperator.NOT_LIKE, LiteralNode("%@example.com")
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_between_operator_integration(self, evaluator):
-        """Test BETWEEN operator through visit_comparison()."""
+    def test_between_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.BETWEEN, LiteralNode([20, 30]))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.BETWEEN, LiteralNode([30, 40]))
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_not_between_operator_integration(self, evaluator):
-        """Test NOT_BETWEEN operator through visit_comparison()."""
+    def test_not_between_operator_integration(self, sample_data):
         node = ComparisonNode(
             FieldNode("age"), ComparisonOperator.NOT_BETWEEN, LiteralNode([30, 40])
         )
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(
             FieldNode("age"), ComparisonOperator.NOT_BETWEEN, LiteralNode([20, 30])
         )
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_is_null_operator_integration(self, evaluator):
-        """Test IS_NULL operator through visit_comparison()."""
+    def test_is_null_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("balance"), ComparisonOperator.IS_NULL)
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.IS_NULL)
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_is_not_null_operator_integration(self, evaluator):
-        """Test IS_NOT_NULL operator through visit_comparison()."""
+    def test_is_not_null_operator_integration(self, sample_data):
         node = ComparisonNode(FieldNode("age"), ComparisonOperator.IS_NOT_NULL)
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(FieldNode("balance"), ComparisonOperator.IS_NOT_NULL)
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
     # Test nested field access
 
-    def test_nested_field_comparison(self, evaluator):
-        """Test comparison with nested field access."""
+    def test_nested_field_comparison(self, sample_data):
         node = ComparisonNode(FieldNode("user.id"), ComparisonOperator.EQ, LiteralNode(123))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
         node = ComparisonNode(FieldNode("user.role"), ComparisonOperator.EQ, LiteralNode("admin"))
-        assert evaluator.visit_comparison(node) is True
+        assert evaluate_node(node, sample_data) is True
 
     # Test edge cases
 
-    def test_type_mismatch_handled_gracefully(self, evaluator):
-        """Test that type mismatches are handled gracefully."""
-        # Comparing string to number should return False, not raise error
+    def test_type_mismatch_handled_gracefully(self, sample_data):
+        """Type mismatches return False, not raise."""
         node = ComparisonNode(FieldNode("name"), ComparisonOperator.GT, LiteralNode(100))
-        assert evaluator.visit_comparison(node) is False
+        assert evaluate_node(node, sample_data) is False
 
-    def test_missing_field_returns_none(self, evaluator):
-        """Test that missing fields return None and comparisons handle it."""
+    def test_missing_field_raises_value_error(self, sample_data):
+        """Missing field raises ValueError instead of silently returning None."""
         node = ComparisonNode(FieldNode("nonexistent"), ComparisonOperator.EQ, LiteralNode("value"))
-        # None == 'value' is False
-        assert evaluator.visit_comparison(node) is False
+        with pytest.raises(ValueError, match="does not exist"):
+            evaluate_node(node, sample_data)
 
-    def test_null_safety_unary_operator(self, evaluator):
-        """Test that unary operators don't require right operand."""
-        # IS_NULL should work without right operand
-        node = ComparisonNode(
-            FieldNode("balance"),
-            ComparisonOperator.IS_NULL,
-            None,  # No right operand
-        )
-        assert evaluator.visit_comparison(node) is True
+    def test_null_safety_unary_operator(self, sample_data):
+        node = ComparisonNode(FieldNode("balance"), ComparisonOperator.IS_NULL, None)
+        assert evaluate_node(node, sample_data) is True
 
-    def test_null_safety_binary_operator_missing_right(self, evaluator):
-        """Test that binary operators raise error if right operand is missing."""
-        # EQ requires right operand
-        node = ComparisonNode(
-            FieldNode("age"),
-            ComparisonOperator.EQ,
-            None,  # Missing right operand
-        )
+    def test_null_safety_binary_operator_missing_right(self, sample_data):
+        node = ComparisonNode(FieldNode("age"), ComparisonOperator.EQ, None)
         with pytest.raises(ValueError, match="requires a right operand"):
-            evaluator.visit_comparison(node)
+            evaluate_node(node, sample_data)
 
     # Test with full AST evaluation
 
-    def test_full_ast_with_logical_operators(self, evaluator):
+    def test_full_ast_with_logical_operators(self, sample_data):
         """Test complex AST with logical operators."""
         # age > 20 AND status == 'active'
         ast_node = LogicalNode(
@@ -237,8 +198,7 @@ class TestVisitComparisonIntegration:
             ComparisonNode(FieldNode("age"), ComparisonOperator.GT, LiteralNode(20)),
             ComparisonNode(FieldNode("status"), ComparisonOperator.EQ, LiteralNode("active")),
         )
-        result = ast_node.accept(evaluator)
-        assert result is True
+        assert evaluate_node(ast_node, sample_data) is True
 
     def test_full_ast_complex_expression(self, sample_data):
         """Test complex WHERE clause through full AST."""
@@ -256,44 +216,6 @@ class TestVisitComparisonIntegration:
         ast = WhereClauseAST(ast_root)
         result = ast.evaluate(sample_data)
         assert result is True
-
-    def test_operator_cache_performance(self, sample_data):
-        """Test that operator cache is used (no registry lookups)."""
-        context = EvaluationContext(sample_data)
-        evaluator = WhereClauseEvaluator(context)
-
-        # Verify cache is populated
-        assert len(evaluator._operator_cache) == 16  # All comparison operators
-
-        # Verify all operators are cached
-        for op_enum in ComparisonOperator:
-            assert op_enum in evaluator._operator_cache
-            assert evaluator._operator_cache[op_enum] is not None
-
-
-class TestOperatorCachingPerformance:
-    """Test that operator caching improves performance."""
-
-    def test_cache_eliminates_registry_lookups(self):
-        """Test that cached operators don't trigger registry lookups."""
-        data = {"value": 42}
-        context = EvaluationContext(data)
-        evaluator = WhereClauseEvaluator(context)
-
-        # Create multiple comparison nodes
-        nodes = [
-            ComparisonNode(FieldNode("value"), ComparisonOperator.EQ, LiteralNode(42)),
-            ComparisonNode(FieldNode("value"), ComparisonOperator.GT, LiteralNode(40)),
-            ComparisonNode(FieldNode("value"), ComparisonOperator.LT, LiteralNode(50)),
-        ]
-
-        # All evaluations should use cached operators
-        for node in nodes:
-            result = evaluator.visit_comparison(node)
-            assert isinstance(result, bool)
-
-        # Verify cache was populated once during __init__
-        assert len(evaluator._operator_cache) == 16
 
 
 class TestFieldExistsHelper:
@@ -319,52 +241,64 @@ class TestFieldExistsHelper:
         assert _field_exists("not a dict", "field") is False
 
 
-class TestMissingFieldWarning:
-    """Test that visit_field warns on missing fields with deduplication."""
+class TestMissingFieldError:
+    """Test that evaluate_node raises ValueError on missing fields."""
 
-    @pytest.fixture(autouse=True)
-    def _clear_warning_cache(self):
-        """Clear the module-level warning cache before each test."""
-        _warned_missing_fields.clear()
-        yield
-        _warned_missing_fields.clear()
-
-    _LOGGER_PATH = "agent_actions.input.preprocessing.parsing.ast_nodes.logger"
-
-    def test_missing_field_logs_warning(self):
-        """Accessing a missing field logs a warning with available fields."""
+    def test_missing_field_raises_with_available_fields(self):
+        """Accessing a missing field raises ValueError listing available fields."""
         data = {"name": "John", "age": 25}
-        context = EvaluationContext(data)
-        evaluator = WhereClauseEvaluator(context)
 
-        with patch(self._LOGGER_PATH) as mock_logger:
-            evaluator.visit_field(FieldNode("nonexistent_xyz"))
+        with pytest.raises(ValueError, match="does not exist") as exc_info:
+            evaluate_node(FieldNode("nonexistent_xyz"), data)
 
-        mock_logger.warning.assert_called_once()
-        args = mock_logger.warning.call_args[0]
-        assert "nonexistent_xyz" in args  # field name passed as format arg
-        assert "Available fields" in args[0]  # format string
+        error_msg = str(exc_info.value)
+        assert "nonexistent_xyz" in error_msg
+        assert "age" in error_msg
+        assert "name" in error_msg
 
-    def test_warning_deduplicated(self):
-        """Same missing field only warns once across multiple evaluations."""
+    def test_missing_field_raises_every_call(self):
+        """Each call with a missing field raises independently (no dedup)."""
         data = {"name": "John"}
 
-        with patch(self._LOGGER_PATH) as mock_logger:
-            for _ in range(3):
-                context = EvaluationContext(data)
-                evaluator = WhereClauseEvaluator(context)
-                evaluator.visit_field(FieldNode("dedup_test_field"))
+        for _ in range(3):
+            with pytest.raises(ValueError, match="does not exist"):
+                evaluate_node(FieldNode("missing_field"), data)
 
-        # Should be called exactly once despite 3 evaluations
-        assert mock_logger.warning.call_count == 1
-
-    def test_existing_none_field_no_warning(self):
-        """A field that exists with None value should NOT warn."""
+    def test_existing_none_field_no_error(self):
+        """A field that exists with None value should NOT raise."""
         data = {"balance": None}
-        context = EvaluationContext(data)
-        evaluator = WhereClauseEvaluator(context)
+        result = evaluate_node(FieldNode("balance"), data)
+        assert result is None
 
-        with patch(self._LOGGER_PATH) as mock_logger:
-            evaluator.visit_field(FieldNode("balance"))
+    def test_missing_field_is_null_returns_true(self):
+        """IS_NULL on a missing field returns True (missing is conceptually null)."""
+        data = {"name": "John"}
+        node = ComparisonNode(FieldNode("missing"), ComparisonOperator.IS_NULL)
+        assert evaluate_node(node, data) is True
 
-        mock_logger.warning.assert_not_called()
+    def test_missing_field_is_not_null_returns_false(self):
+        """IS_NOT_NULL on a missing field returns False."""
+        data = {"name": "John"}
+        node = ComparisonNode(FieldNode("missing"), ComparisonOperator.IS_NOT_NULL)
+        assert evaluate_node(node, data) is False
+
+    def test_is_null_with_function_error_does_not_swallow(self):
+        """IS_NULL should not swallow non-missing-field ValueErrors."""
+        data = {"name": "John"}
+        # A function that raises a non-missing-field ValueError
+        bad_func = FunctionNode("UNKNOWN_FUNC", [LiteralNode("x")])
+        node = ComparisonNode(bad_func, ComparisonOperator.IS_NULL)
+        with pytest.raises(ValueError, match="not registered"):
+            evaluate_node(node, data)
+
+    def test_custom_function_overrides_builtin(self):
+        """Custom function overriding a built-in name should receive *args, not list."""
+        data = {"name": "hello"}
+
+        # Override LENGTH with a custom function that expects *args
+        def custom_length(val):
+            return len(str(val)) * 10  # distinguishable from built-in
+
+        node = FunctionNode("LENGTH", [FieldNode("name")])
+        result = evaluate_node(node, data, functions={"LENGTH": custom_length})
+        assert result == 50  # len("hello") * 10

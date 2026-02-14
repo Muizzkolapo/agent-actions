@@ -117,6 +117,7 @@ from agent_actions.logging.events.types import (
     RecordFilteredEvent,
     RecordTransformedEvent,
     RecordProcessingCompleteEvent,
+    RecordEmptyOutputEvent,
     # Batch Processing events (data processing)
     BatchProcessingStartedEvent,
     BatchProcessingProgressEvent,
@@ -248,6 +249,7 @@ __all__ = [
     "RecordFilteredEvent",
     "RecordTransformedEvent",
     "RecordProcessingCompleteEvent",
+    "RecordEmptyOutputEvent",
     # Batch Processing (data processing)
     "BatchProcessingStartedEvent",
     "BatchProcessingProgressEvent",

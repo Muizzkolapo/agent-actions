@@ -1,6 +1,6 @@
 # Agent Actions: Declarative Framework for Agentic LLM Workflows
 
-**From Internal Tool to Open-Source Framework**
+**By Muizz Kolapo**
 
 ---
 
@@ -13,6 +13,7 @@ The framework emerged from a simple observation: building reliable LLM workflows
 This whitepaper traces the journey from internal tool to open-source framework, explaining the design decisions, architectural choices, and lessons learned along the way.
 
 ---
+* avoiding issues like context leak, progressive data exposure, schema validation
 
 ## The Problem: LLM Workflows at Scale
 

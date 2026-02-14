@@ -24,6 +24,7 @@ from agent_actions.logging.events.types import (
     ContextDependencyInferredEvent,
 )
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
+from agent_actions.utils.dict import get_nested_value, nested_field_exists, set_nested_value
 
 logger = logging.getLogger(__name__)
 
@@ -584,7 +585,15 @@ class ContextScopeProcessor:
         if not isinstance(action_data, dict):
             return None
 
-        return action_data.get(field_name)
+        # Exact key match first (backward compat for flat fields and literal dotted keys)
+        if field_name in action_data:
+            return action_data[field_name]
+
+        # Nested path traversal for dot-separated paths
+        if "." in field_name:
+            return get_nested_value(action_data, field_name)
+
+        return None
 
     @staticmethod
     def extract_action_fields(field_context: Dict, action_name: str) -> Optional[Dict]:
@@ -995,9 +1004,23 @@ class ContextScopeProcessor:
             )
         else:
             # Specific fields: Filter
-            filtered_data = {field: data[field] for field in allowed_fields if field in data}
+            filtered_data = {}
+            for field in allowed_fields:
+                if field in data:
+                    # Exact key match (flat field or literal dotted key)
+                    filtered_data[field] = data[field]
+                elif "." in field:
+                    # Nested path: extract only the declared subfield
+                    if nested_field_exists(data, field):
+                        set_nested_value(filtered_data, field, get_nested_value(data, field))
             if warn_missing:
-                missing_fields = set(allowed_fields) - set(data.keys())
+                missing_fields = set()
+                for field in allowed_fields:
+                    if field in data:
+                        continue
+                    if "." in field and field.split(".")[0] in data:
+                        continue
+                    missing_fields.add(field)
                 if missing_fields:
                     logger.warning(
                         "[%s] '%s': fields %s not found. Available: %s",

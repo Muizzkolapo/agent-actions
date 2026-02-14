@@ -31,6 +31,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { useCatalogData } from "@/lib/catalog-context"
+import { ThemeToggleSidebar } from "@/components/theme-toggle"
 
 interface AppSidebarProps {
   activeSection: string
@@ -63,13 +64,13 @@ export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-4">
-        <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]">
+        <div className="flex items-center gap-2.5 group-data-[collapsible=icon]:justify-center">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground text-background">
             <Zap className="h-4 w-4" />
           </div>
           <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-            <span className="text-sm font-semibold text-foreground">Agent Actions</span>
-            <span className="text-xs text-muted-foreground">QanaLabs</span>
+            <span className="text-sm font-semibold tracking-tight text-foreground">Agent Actions</span>
+            <span className="text-[10px] text-muted-foreground tracking-wide uppercase">QanaLabs</span>
           </div>
         </div>
       </SidebarHeader>
@@ -170,8 +171,11 @@ export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="group-data-[collapsible=icon]:hidden px-3 py-3">
-        <div className="rounded-lg border border-border bg-secondary/30 px-3 py-2.5">
+      <SidebarFooter className="px-3 py-3">
+        <div className="group-data-[collapsible=icon]:hidden">
+          <ThemeToggleSidebar />
+        </div>
+        <div className="group-data-[collapsible=icon]:hidden rounded-lg border border-border bg-secondary/30 px-3 py-2.5 mt-1">
           <div className="flex items-center gap-2">
             <div className="relative">
               <div className="h-2 w-2 rounded-full bg-[hsl(var(--success))]" />

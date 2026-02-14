@@ -129,8 +129,8 @@ export function buildDAGNodesAndEdges(actions: Record<string, Action>, workflowI
         source: dep,
         target: name,
         type: "smoothstep",
-        animated: true,
-        style: { stroke: "hsl(var(--primary))", strokeWidth: 2 },
+        animated: false,
+        style: { stroke: "hsl(var(--muted-foreground) / 0.3)", strokeWidth: 1.5 },
       })
     }
   }
@@ -180,8 +180,8 @@ function buildFieldToFieldEdges(
             target: actionName,
             targetHandle: `input-${mapping.displayField}`,
             type: "smoothstep",
-            animated: true,
-            style: { stroke: "hsl(var(--success))", strokeWidth: 2 },
+            animated: false,
+            style: { stroke: "hsl(var(--success) / 0.5)", strokeWidth: 1.5 },
           })
         }
       } else {
@@ -199,8 +199,8 @@ function buildFieldToFieldEdges(
               target: actionName,
               targetHandle: `input-${inputField}`,
               type: "smoothstep",
-              animated: true,
-              style: { stroke: "hsl(var(--success))", strokeWidth: 2 },
+              animated: false,
+              style: { stroke: "hsl(var(--success) / 0.5)", strokeWidth: 1.5 },
             })
           } else {
             // Nested match: "source.page_content" → "page_content"
@@ -214,10 +214,10 @@ function buildFieldToFieldEdges(
                 target: actionName,
                 targetHandle: `input-${inputField}`,
                 type: "smoothstep",
-                animated: true,
+                animated: false,
                 style: {
-                  stroke: "hsl(var(--chart-5))",
-                  strokeWidth: 2,
+                  stroke: "hsl(var(--chart-5) / 0.4)",
+                  strokeWidth: 1.5,
                   strokeDasharray: "6,3",
                 },
               })
@@ -303,7 +303,7 @@ export function applyDagreLayout<T extends Record<string, unknown>>(
 
 export function transformWorkflowToReactFlow(actions: Record<string, Action>, workflowId: string) {
   const { nodes, edges } = buildDAGNodesAndEdges(actions, workflowId)
-  return applyDagreLayout(nodes, edges, { nodeWidth: 320, nodeHeight: 140, nodesep: 120, ranksep: 200 })
+  return applyDagreLayout(nodes, edges, { nodeWidth: 280, nodeHeight: 80, nodesep: 80, ranksep: 180 })
 }
 
 export function transformWorkflowToFieldLineage(actions: Record<string, Action>, workflowId: string) {

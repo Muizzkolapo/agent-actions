@@ -34,6 +34,7 @@ class AgentResult:
     tokens: dict[str, int] = field(default_factory=dict)
     error_message: str = ""
     skip_reason: str = ""
+    empty_output_records: int = 0
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
@@ -50,6 +51,7 @@ class AgentResult:
             "tokens": self.tokens,
             "error_message": self.error_message if self.error_message else None,
             "skip_reason": self.skip_reason if self.skip_reason else None,
+            "empty_output_records": self.empty_output_records,
             "timing": {
                 "started_at": self.started_at.isoformat() if self.started_at else None,
                 "completed_at": self.completed_at.isoformat() if self.completed_at else None,
@@ -132,8 +134,13 @@ class RunResultsCollector:
         Returns:
             True for workflow/agent events we track
         """
-        # Accept workflow and agent category events
-        return event.category in ("workflow", "agent")
+        # Accept workflow, agent, and data_processing events (for empty output tracking)
+        if event.category in ("workflow", "agent"):
+            return True
+        # Only accept RecordEmptyOutputEvent from data_processing
+        if event.event_type == "RecordEmptyOutputEvent":
+            return True
+        return False
 
     def handle(self, event: BaseEvent) -> None:
         """
@@ -165,6 +172,8 @@ class RunResultsCollector:
             self._handle_agent_cached(event)
         elif event_type == "AgentFailedEvent":
             self._handle_agent_failed(event)
+        elif event_type == "RecordEmptyOutputEvent":
+            self._handle_empty_output(event)
 
     def flush(self) -> None:
         """Write run_results.json to disk."""
@@ -310,6 +319,12 @@ class RunResultsCollector:
                 error_message=event.data.get("error_message", ""),
                 completed_at=event.meta.timestamp,
             )
+
+    def _handle_empty_output(self, event: BaseEvent) -> None:
+        """Handle RecordEmptyOutputEvent."""
+        agent_name = event.data.get("agent_name", "")
+        if agent_name in self._results:
+            self._results[agent_name].empty_output_records += 1
 
     def get_summary(self) -> dict[str, int]:
         """
