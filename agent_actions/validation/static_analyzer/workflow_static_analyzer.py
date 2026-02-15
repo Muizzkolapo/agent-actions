@@ -283,13 +283,23 @@ class WorkflowStaticAnalyzer:
                 schema_errors = validator.validate_schema(schema, action_name, "schema")
                 errors.extend(schema_errors)
 
-            # Check output_schema if present
+            # Reject deprecated output_schema key
             output_schema = action.get("output_schema")
-            if output_schema and isinstance(output_schema, dict):
-                schema_errors = validator.validate_schema(
-                    output_schema, action_name, "output_schema"
+            if output_schema:
+                errors.append(
+                    StaticTypeError(
+                        message=(
+                            f"'output_schema' is deprecated and ignored. Use 'schema:' instead."
+                        ),
+                        location=FieldLocation(
+                            agent_name=action_name,
+                            config_field="output_schema",
+                        ),
+                        referenced_agent=action_name,
+                        referenced_field="output_schema",
+                        hint="Replace 'output_schema:' with 'schema:' in your config.",
+                    )
                 )
-                errors.extend(schema_errors)
 
         return errors
 

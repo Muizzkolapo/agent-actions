@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from agent_actions.errors import ConfigurationError
+from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.logging import fire_event
@@ -529,6 +529,10 @@ class RecordProcessor:
                         error_message=str(e),
                     )
                 )
+                raise
+            except SchemaValidationError:
+                # SchemaValidationError means the output doesn't match the declared schema.
+                # This is a systemic error — every record will fail the same way.
                 raise
             except Exception as e:
                 # Create failed result instead of propagating exception

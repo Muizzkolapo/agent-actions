@@ -15,7 +15,7 @@ class SchemaExtractor:
     """Extracts output schemas from various action types.
 
     Handles:
-    - LLM actions: from `schema` or `output_schema` field
+    - LLM actions: from `schema` field
     - Tool/UDF actions: from Python files via AST parsing (using impl field)
     - Non-JSON actions: assume `content` field
 
@@ -328,8 +328,8 @@ class SchemaExtractor:
         schema_loader: Optional[Any],
     ) -> None:
         """Extract schema from LLM action."""
-        # Get schema definition (supports 'schema', 'output_schema', and 'schema_name')
-        schema_def = config.get("schema") or config.get("output_schema")
+        # Get schema definition (supports 'schema' and 'schema_name')
+        schema_def = config.get("schema")
         schema_name = config.get("schema_name")
 
         # If no inline schema but has schema_name, try to load external schema
@@ -407,43 +407,50 @@ class SchemaExtractor:
         config: Dict[str, Any],
         output: OutputSchema,
     ) -> None:
-        """Extract schema from tool/UDF action using impl field."""
-        # impl may be stored as 'impl' or 'model_name' depending on config processing
-        impl = config.get("impl") or config.get("model_name") or ""
+        """Extract schema from tool/UDF action using YAML config."""
+        # Resolve schema from YAML config (single source of truth)
+        schema_def = config.get("schema")
+        schema_name = config.get("schema_name")
 
-        # Try to get schema from Python files via scanner (using impl as function name)
-        if impl:
-            tool_schemas = self._get_tool_schemas()
-            if impl in tool_schemas:
-                tool_info = tool_schemas[impl]
-                output_schema = tool_info.get("output_schema")
-                if output_schema and output_schema.get("fields"):
-                    json_schema = self._convert_fields_to_json_schema(output_schema["fields"])
-                    output.json_schema = json_schema
-                    output.schema_fields = self._extract_fields_from_json_schema(json_schema)
-                    return
-
-        # Fallback: try UDF registry (for backward compatibility)
-        impl_key = impl.lower() if impl else ""
-        if impl_key and impl_key in self.udf_registry:
-            udf_info = self.udf_registry[impl_key]
-            json_schema = udf_info.get("json_output_schema")
-            if json_schema:
-                output.json_schema = json_schema
-                output.schema_fields = self._extract_fields_from_json_schema(json_schema)
+        # Named schema reference — load from schema file
+        if not schema_def and schema_name:
+            try:
+                loaded = SchemaLoader.load_schema(schema_name, self.schema_dir)
+            except FileNotFoundError:
+                loaded = None
+            if loaded:
+                output.json_schema = loaded
+                output.schema_fields = self._extract_fields_from_json_schema(loaded)
                 return
 
-        # Check for inline schema on tool config
-        schema_def = config.get("schema") or config.get("output_schema")
-        if schema_def:
-            if isinstance(schema_def, dict):
-                output.json_schema = schema_def
-                output.schema_fields = self._extract_fields_from_json_schema(schema_def)
+        if not schema_def:
+            output.is_schemaless = True
+            return
+
+        if isinstance(schema_def, str):
+            # String reference to schema file
+            try:
+                loaded = SchemaLoader.load_schema(schema_def, self.schema_dir)
+            except FileNotFoundError:
+                loaded = None
+            if loaded:
+                output.json_schema = loaded
+                output.schema_fields = self._extract_fields_from_json_schema(loaded)
             else:
                 output.is_dynamic = True
+        elif isinstance(schema_def, dict):
+            output.json_schema = schema_def
+            output.schema_fields = self._extract_fields_from_json_schema(schema_def)
+        elif isinstance(schema_def, list):
+            # List-style unified format: [{id: "name", type: "string"}, ...]
+            output.json_schema = {"type": "array", "items": schema_def}
+            for item in schema_def:
+                if isinstance(item, dict) and "id" in item:
+                    output.schema_fields.add(item["id"])
+                elif isinstance(item, dict) and "name" in item:
+                    output.schema_fields.add(item["name"])
         else:
-            # Tool without schema - could return anything
-            output.is_schemaless = True
+            output.is_dynamic = True
 
     def _apply_context_scope(self, config: Dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema.

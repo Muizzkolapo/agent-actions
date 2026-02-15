@@ -35,6 +35,8 @@ class TemplateVariableError(TemplateRenderingError):
         cause: Exception,
         namespace_context: dict = None,
         template_line: int = None,
+        field_context_metadata: dict = None,
+        storage_hints: dict = None,
     ):
         """
         Initialize TemplateVariableError.
@@ -47,6 +49,9 @@ class TemplateVariableError(TemplateRenderingError):
             cause: Original Jinja2 exception
             namespace_context: Dict mapping namespace names to their available fields
             template_line: Line number in template where error occurred
+            field_context_metadata: Metadata about stored vs loaded fields per namespace
+            storage_hints: Dict mapping var names to storage info when field exists
+                in storage but wasn't loaded (missing schema declaration)
         """
         self.missing_variables = missing_variables
         self.available_variables = available_variables
@@ -54,6 +59,8 @@ class TemplateVariableError(TemplateRenderingError):
         self.mode = mode
         self.namespace_context = namespace_context or {}
         self.template_line = template_line
+        self.field_context_metadata = field_context_metadata or {}
+        self.storage_hints = storage_hints or {}
 
         ctx = {
             "missing_variables": missing_variables,
@@ -65,6 +72,10 @@ class TemplateVariableError(TemplateRenderingError):
             ctx["namespace_context"] = namespace_context
         if template_line is not None:
             ctx["template_line"] = template_line
+        if field_context_metadata:
+            ctx["field_context_metadata"] = field_context_metadata
+        if storage_hints:
+            ctx["storage_hints"] = storage_hints
 
         msg = f"Template for '{agent_name}' references undefined variables: {', '.join(missing_variables)}"
         super().__init__(msg, context=ctx, cause=cause)

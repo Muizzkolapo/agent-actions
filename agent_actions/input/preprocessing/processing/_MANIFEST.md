@@ -11,4 +11,4 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Package docstring for the processing helpers. | `preprocessing` |
-| `data_processor.py` | Module | `DataProcessor` class (registered via DI) that runs `transform_with_passthrough`, handles errors, and splits main/side outputs. | `processing`, `output`, `validation` |
+| `data_processor.py` | Module | `DataProcessor` class (registered via DI) that runs `transform_with_passthrough` and handles errors. | `processing`, `output`, `validation` |

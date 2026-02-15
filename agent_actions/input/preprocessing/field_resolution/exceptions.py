@@ -46,5 +46,5 @@ class SchemaFieldValidationError(FieldResolutionError):
     This occurs when:
     - The field doesn't exist in the action's output schema
     - The field path is malformed for the schema structure
-    - A UDF with field references lacks an output_type definition (BREAKING)
+    - A UDF with field references lacks a YAML schema: definition (BREAKING)
     """

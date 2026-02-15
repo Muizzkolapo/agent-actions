@@ -6,7 +6,7 @@ functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 """
 
 import json
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, List, Optional, Union
 
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
@@ -16,38 +16,38 @@ class ToolClient:
     """Client for executing user-defined functions as LLM clients."""
 
     @staticmethod
-    def _strip_internal_fields(data: Union[str, Dict]) -> Union[str, Dict]:
+    def _strip_internal_fields(data: Union[str, Dict, List]) -> Union[str, Dict, List]:
         """Strip internal metadata fields from context data before UDF invocation.
 
         Internal fields like batch_id, source_guid, node_id, _batch_filter_status
         are tracking metadata and should not be passed to user-defined functions.
 
         Args:
-            data: Context data (str or dict)
+            data: Context data (str, dict, or list of dicts for FILE mode)
 
         Returns:
             Cleaned data with internal fields removed
         """
+        from agent_actions.llm.batch.core.batch_context_metadata import (
+            BatchContextMetadata,
+        )
+
+        strip = BatchContextMetadata.strip_internal_fields
+
+        if isinstance(data, list):
+            return [strip(item) if isinstance(item, dict) else item for item in data]
+
         if isinstance(data, str):
             try:
                 parsed = json.loads(data)
                 if isinstance(parsed, dict):
-                    from agent_actions.llm.batch.core.batch_context_metadata import (
-                        BatchContextMetadata,
-                    )
-
-                    cleaned = BatchContextMetadata.strip_internal_fields(parsed)
-                    return json.dumps(cleaned)
+                    return json.dumps(strip(parsed))
                 return data
             except (json.JSONDecodeError, TypeError):
                 return data
 
         if isinstance(data, dict):
-            from agent_actions.llm.batch.core.batch_context_metadata import (
-                BatchContextMetadata,
-            )
-
-            return BatchContextMetadata.strip_internal_fields(data)
+            return strip(data)
 
         return data
 
@@ -77,14 +77,13 @@ class ToolClient:
         # Strip internal metadata fields before passing to UDF
         clean_context = ToolClient._strip_internal_fields(context_data)
 
-        side_output = agent_config.get("side_output", False)
         udf_kwargs = tool_args if tool_args is not None else {}
-        response = execute_user_defined_function(model_name, clean_context, **udf_kwargs)
-        if side_output:
-            condition, result = response
-            if condition:
-                return {"result": json.loads(result), "side_output": True}
-            return json.loads(result)
+        response = execute_user_defined_function(
+            model_name,
+            clean_context,
+            json_output_schema=agent_config.get("json_output_schema"),
+            **udf_kwargs,
+        )
         if isinstance(response, str):
             return json.loads(response)
         return response

@@ -9,7 +9,6 @@ from agent_actions.input.loaders.udf import discover_udfs, validate_udf_referenc
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
 )
-from agent_actions.utils.udf_management.type_conversion import clear_schema_cache
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
 
 
@@ -19,9 +18,8 @@ _test_modules_to_clean = set()
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():
-    """Clear registry, schema cache, and test modules before and after each test."""
+    """Clear registry and test modules before and after each test."""
     clear_registry()
-    clear_schema_cache()
     # Clean up any modules added by previous tests
     test_module_names = [
         "file1",
@@ -45,7 +43,6 @@ def cleanup_registry():
             del sys.modules[mod_name]
     yield
     clear_registry()
-    clear_schema_cache()
     # Clean up again after test
     for mod_name in test_module_names:
         if mod_name in sys.modules:

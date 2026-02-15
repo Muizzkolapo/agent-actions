@@ -25,6 +25,7 @@ class TemplateErrorFormatter(ErrorFormatter):
 
         # Get namespace_context from exception (dict types aren't extracted by ErrorContextService)
         namespace_context = getattr(exc, "namespace_context", {}) or {}
+        storage_hints = getattr(exc, "storage_hints", {}) or {}
 
         details_lines: List[str] = [
             f"Template rendering failed for agent '{agent_name}'",
@@ -32,7 +33,9 @@ class TemplateErrorFormatter(ErrorFormatter):
         ]
 
         for var in missing:
-            details_lines.extend(self._format_variable_diagnostic(var, namespace_context))
+            details_lines.extend(
+                self._format_variable_diagnostic(var, namespace_context, storage_hints)
+            )
 
         # If no missing variables were parsed, show generic message with available info
         if not missing:
@@ -42,7 +45,7 @@ class TemplateErrorFormatter(ErrorFormatter):
                 details_lines.append(f"  Available namespaces: {', '.join(namespaces)}")
 
         # Generate hint based on error type
-        hint = self._generate_hint(missing, namespace_context)
+        hint = self._generate_hint(missing, namespace_context, storage_hints)
 
         return UserError(
             category="Template Error",
@@ -60,10 +63,14 @@ class TemplateErrorFormatter(ErrorFormatter):
         )
 
     def _format_variable_diagnostic(
-        self, var: str, namespace_context: Dict[str, List[str]]
+        self,
+        var: str,
+        namespace_context: Dict[str, List[str]],
+        storage_hints: Optional[Dict[str, Any]] = None,
     ) -> List[str]:
         """Format diagnostic information for a single missing variable."""
         lines: List[str] = []
+        storage_hints = storage_hints or {}
 
         if "." in var:
             ns, field = var.split(".", 1)
@@ -84,6 +91,23 @@ class TemplateErrorFormatter(ErrorFormatter):
                     )
                     lines.append(f"  Available in '{ns}': {', '.join(display_fields)}{suffix}")
 
+                # Check if field exists in storage but wasn't loaded
+                hint = storage_hints.get(var)
+                if hint:
+                    lines.append("")
+                    lines.append(
+                        f"  FOUND IN STORAGE: Field '{hint['field']}' exists in "
+                        f"stored data for '{hint['namespace']}'"
+                    )
+                    lines.append(
+                        f"    Storage has {hint['stored_count']} fields, but only "
+                        f"{hint['loaded_count']} were loaded into template context."
+                    )
+                    lines.append(
+                        "    The field was produced by the tool but not declared "
+                        "in any upstream schema."
+                    )
+
                 # Suggest similar field
                 suggestion = self._find_similar(field, fields_in_ns)
                 if suggestion:
@@ -95,8 +119,28 @@ class TemplateErrorFormatter(ErrorFormatter):
                     namespaces = list(namespace_context.keys())
                     lines.append(f"  Available namespaces: {', '.join(namespaces)}")
         else:
-            # Top-level variable (no namespace)
-            lines.append(f"  Missing variable: '{var}'")
+            # Leaf-only variable (Jinja reports "has no attribute 'field'")
+            hint = storage_hints.get(var)
+            if hint:
+                ns = hint["namespace"]
+                field = hint["field"]
+                lines.append(f"  Reference: {ns}.{field}  (reported as '{var}')")
+                lines.append(f"  Namespace '{ns}' exists: YES")
+                lines.append(f"  Field '{field}' in namespace: NO")
+                lines.append("")
+                lines.append(
+                    f"  FOUND IN STORAGE: Field '{field}' exists in stored data for '{ns}'"
+                )
+                lines.append(
+                    f"    Storage has {hint['stored_count']} fields, but only "
+                    f"{hint['loaded_count']} were loaded into template context."
+                )
+                lines.append(
+                    "    The field was produced by the tool but not declared "
+                    "in any upstream schema."
+                )
+            else:
+                lines.append(f"  Missing variable: '{var}'")
             if namespace_context:
                 namespaces = list(namespace_context.keys())
                 lines.append(f"  Available namespaces: {', '.join(namespaces)}")
@@ -117,14 +161,31 @@ class TemplateErrorFormatter(ErrorFormatter):
                 best_match = candidate
         return best_match
 
-    def _generate_hint(self, missing: List[str], namespace_context: Dict[str, List[str]]) -> str:
+    def _generate_hint(
+        self,
+        missing: List[str],
+        namespace_context: Dict[str, List[str]],
+        storage_hints: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Generate actionable hint based on error type."""
         if not missing:
             return "Check template syntax."
 
+        storage_hints = storage_hints or {}
+
+        # Use first missing var for hint — a single actionable suggestion is
+        # clearer than listing all missing variables.
         var = missing[0]
+        # Check storage hints first (works for both dotted and leaf-only vars)
+        if var in storage_hints:
+            field = storage_hints[var]["field"]
+            return (
+                f"Add a schema to the action that produces this field:\n"
+                f"  schema:\n"
+                f"    {field}: <type>"
+            )
         if "." in var:
-            ns, _ = var.split(".", 1)
+            ns, _field = var.split(".", 1)
             if ns not in namespace_context:
                 return f"Add '{ns}' to dependencies or check action name spelling."
             return f"Check that '{ns}' produces the referenced field."

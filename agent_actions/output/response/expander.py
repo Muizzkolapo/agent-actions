@@ -8,14 +8,17 @@ handling loop expansion, template variables, and dependency mapping.
 import logging
 from typing import Dict, Any, Optional
 
-from agent_actions.errors import ConfigValidationError, ConfigurationError
+from agent_actions.errors import ConfigValidationError, ConfigurationError, SchemaValidationError
 from agent_actions.llm.config.vendor import VendorType
 from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
 from agent_actions.output.response.schema import compile_unified_schema
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES
+from agent_actions.utils.constants import (
+    RESERVED_AGENT_NAMES,
+    HITL_OUTPUT_SCHEMA,
+    HITL_OUTPUT_JSON_SCHEMA,
+)
 from agent_actions.utils.schema_utils import is_compiled_schema
-from agent_actions.utils.udf_management import get_udf_metadata
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_fields import inherit_simple_fields
@@ -171,7 +174,7 @@ class ActionExpander:
         If the schema is already compiled (from render step), use it directly.
         Otherwise, apply template replacement and set appropriately.
         """
-        schema_value = action.get("schema") or action.get("output_schema")
+        schema_value = action.get("schema")
         if schema_value:
             # If already compiled (unified format from render step), use directly
             if is_compiled_schema(schema_value):
@@ -241,22 +244,6 @@ class ActionExpander:
         agent["model_vendor"] = "tool"
         agent["model_name"] = action.get("impl", action.get("name"))
 
-        # Add UDF output schema to agent config (REQUIRED for schema validation)
-        impl_name = action.get("impl")
-        if impl_name:
-            try:
-                udf_metadata = get_udf_metadata(impl_name)
-
-                # BREAKING: output_type is now effectively required for type safety
-                # UDFs without output_type will pass here but fail during field validation
-                if udf_metadata.get("json_output_schema"):
-                    agent["output_schema"] = udf_metadata["output_schema"]
-                    agent["json_output_schema"] = udf_metadata["json_output_schema"]
-            except (ValueError, KeyError, ImportError):
-                # UDF not found or not yet registered - continue without schema
-                # Schema validation will fail later if fields are referenced
-                pass
-
         if run_mode == "batch" and action.get("run_mode") == "batch":
             action_name = action.get("name", "unknown")
             raise ConfigurationError(
@@ -273,20 +260,31 @@ class ActionExpander:
         if run_mode == "batch":
             agent["run_mode"] = "online"
 
+        # Tool actions MUST declare an output schema.
+        # Ordering: runs BEFORE _compile_output_schema (which populates
+        # json_output_schema from schema:). Reads from the raw action dict.
+        if not agent.get("json_output_schema") and not action.get("schema"):
+            action_name = action.get("name", "unknown")
+            raise ConfigValidationError(
+                "schema",
+                f"Tool action '{action_name}' has no output schema",
+                context={
+                    "action": action_name,
+                    "kind": "tool",
+                    "hint": (
+                        "Add schema: in YAML to declare the tool's output fields. "
+                        "(output_type on @udf_tool was removed in this version)"
+                    ),
+                },
+            )
+
     @staticmethod
-    def _add_llm_output_schema(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
-        """Add output schema to agent config for LLM actions with schemas.
+    def _compile_output_schema(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
+        """Compile YAML schema: to json_output_schema for any action type.
 
-        This enables guard field reference validation against LLM output schemas,
-        providing the same compile-time validation that UDFs receive.
+        Skips if json_output_schema is already set (e.g. from HITL
+        auto-injection), so action-type-specific schemas take precedence.
         """
-        # Skip non-LLM actions (tool/HITL)
-        if action.get("kind") in {"tool", "hitl"} or agent.get("model_vendor") in {
-            "tool",
-            "hitl",
-        }:
-            return
-
         # Skip if already has json_output_schema
         if agent.get("json_output_schema"):
             return
@@ -312,15 +310,35 @@ class ActionExpander:
         else:
             return
 
+        # For array-type schemas, json_output_schema describes a single item.
+        # The full unified schema is kept in output_schema for LLM providers.
+        if (
+            isinstance(schema_fields, dict)
+            and schema_fields.get("type") == "array"
+            and "items" in schema_fields
+            and "fields" not in schema_fields
+        ):
+            items_schema = schema_fields["items"]
+            if isinstance(items_schema, dict) and items_schema.get("type") == "object":
+                items_schema.setdefault("additionalProperties", False)
+            agent["output_schema"] = unified_schema
+            agent["json_output_schema"] = items_schema
+            return
+
         # Compile to JSON Schema for validation
         try:
             # Use 'openai' format as canonical JSON Schema
             compiled = compile_unified_schema(unified_schema, "openai")
             agent["output_schema"] = unified_schema
             agent["json_output_schema"] = compiled.get("schema", compiled)
-        except (ValueError, KeyError, TypeError):
-            # Schema compilation failed - skip validation for this action
-            pass
+        except (ValueError, KeyError, TypeError) as e:
+            raise SchemaValidationError(
+                f"Failed to compile output schema for action '{agent_name}'",
+                schema_name=agent_name,
+                validation_type="compilation",
+                hint="Check that schema: fields have valid 'id' and 'type' entries.",
+                cause=e,
+            ) from e
 
     @staticmethod
     def _process_chunk_config(
@@ -521,9 +539,13 @@ class ActionExpander:
                     context={"action": action.get("name")},
                 )
             agent["hitl"] = hitl_config
+            agent["output_schema"] = HITL_OUTPUT_SCHEMA
+            agent["json_output_schema"] = HITL_OUTPUT_JSON_SCHEMA
 
-        # Add output schema for LLM actions (enables guard field validation)
-        ActionExpander._add_llm_output_schema(agent, action)
+        # Compile YAML schema: to json_output_schema (all action types).
+        # NOTE: Must run AFTER HITL schema injection above — _compile_output_schema
+        # skips when json_output_schema is already set, preserving the canonical HITL schema.
+        ActionExpander._compile_output_schema(agent, action)
 
         # Process granularity
         # HITL reviews should see the full dataset in one step, so default to FILE.

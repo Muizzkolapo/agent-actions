@@ -12,10 +12,7 @@ class MyInput(TypedDict):
     text: str
     count: int
 
-class MyOutput(TypedDict):
-    result: str
-
-@udf_tool(input_type=MyInput, output_type=MyOutput)
+@udf_tool(input_type=MyInput)
 def my_function(data: dict) -> dict:
     """Process data and return result."""
     return {"result": f"Processed: {data['text']}"}
@@ -26,7 +23,6 @@ def my_function(data: dict) -> dict:
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `input_type` | type | Yes | TypedDict, Pydantic model, or dataclass |
-| `output_type` | type | No | Type for output validation |
 | `granularity` | Granularity | No | `RECORD` (default) or `FILE` |
 
 ## Directory Structure
@@ -232,11 +228,7 @@ class SearchInput(TypedDict, total=False):
     query: str
     filters: List[str]
 
-class SearchOutput(TypedDict, total=False):
-    results: List[ResultItem]
-    metadata: OperationMetadata
-
-@udf_tool(input_type=SearchInput, output_type=SearchOutput)
+@udf_tool(input_type=SearchInput)
 def search_items(data: dict) -> dict:
     return {
         "results": [

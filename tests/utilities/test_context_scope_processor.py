@@ -468,3 +468,66 @@ class TestNestedDictFieldResolution:
         )
         assert field_context["action_a"]["user"] == {"name": None}
         assert "ssn" not in field_context["action_a"].get("user", {})
+
+
+class TestFilterAndStoreFieldsMetadataCollector:
+    """Tests for metadata_collector parameter in _filter_and_store_fields."""
+
+    def test_metadata_collector_records_gap_for_filtered_fields(self):
+        """When allowed_fields filters out some fields, collector records the gap."""
+        field_context = {}
+        collector = {}
+        data = {"question_type": "MCQ", "answer_text": "42", "score": 0.9}
+
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "classify",
+            data,
+            allowed_fields=["question_type"],
+            source_type="TEST",
+            metadata_collector=collector,
+        )
+
+        assert "classify" in collector
+        meta = collector["classify"]
+        assert meta["stored_fields"] == ["answer_text", "question_type", "score"]
+        assert meta["loaded_fields"] == ["question_type"]
+        assert meta["stored_count"] == 3
+        assert meta["loaded_count"] == 1
+
+    def test_metadata_collector_wildcard_records_all_fields(self):
+        """When allowed_fields is None (wildcard), stored == loaded."""
+        field_context = {}
+        collector = {}
+        data = {"question_type": "MCQ", "answer_text": "42"}
+
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "classify",
+            data,
+            allowed_fields=None,
+            source_type="TEST",
+            metadata_collector=collector,
+        )
+
+        assert "classify" in collector
+        meta = collector["classify"]
+        assert meta["stored_fields"] == meta["loaded_fields"]
+        assert meta["stored_count"] == 2
+        assert meta["loaded_count"] == 2
+
+    def test_metadata_collector_none_by_default_no_regression(self):
+        """When metadata_collector is not passed (default None), behavior is unchanged."""
+        field_context = {}
+        data = {"question_type": "MCQ", "answer_text": "42"}
+
+        # Should not raise or change behavior
+        ContextScopeProcessor._filter_and_store_fields(
+            field_context,
+            "classify",
+            data,
+            allowed_fields=["question_type"],
+            source_type="TEST",
+        )
+
+        assert field_context["classify"] == {"question_type": "MCQ"}

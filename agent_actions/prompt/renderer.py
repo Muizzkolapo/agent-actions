@@ -216,7 +216,7 @@ class ConfigRenderingService:
             agent_entry["model_vendor"] = "tool"
             agent_entry["model_name"] = action.get("impl", action.get("name"))
 
-        schema_value = action.get("schema") or action.get("output_schema")
+        schema_value = action.get("schema")
         if schema_value:
             key = "schema_name" if isinstance(schema_value, str) else "schema"
             agent_entry[key] = schema_value

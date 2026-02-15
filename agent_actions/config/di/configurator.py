@@ -93,7 +93,6 @@ class DIConfigurator:
         def processor_factory():
             m = Mock()
             m.process_item.return_value = []
-            m.separate_side_output.return_value = ([], [])
             return m
 
         def generator_factory():

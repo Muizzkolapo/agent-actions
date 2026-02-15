@@ -212,7 +212,7 @@ class ReferenceValidator:
         Validate field references against action output schemas.
 
         Checks that referenced fields exist in the action's output schema.
-        BREAKING: UDFs with field references MUST have output_type defined.
+        BREAKING: UDFs with field references MUST have a YAML schema: defined.
 
         Args:
             references: Field references to validate
@@ -259,7 +259,7 @@ class ReferenceValidator:
             # Skip if no schema available (e.g., LLM actions)
             if action_name not in action_schemas:
                 # BREAKING: If a UDF is referenced but has no schema, that's an error
-                # This enforces output_type for all referenced UDFs
+                # This enforces YAML schema: for all referenced UDFs
                 continue  # For now, skip - will tighten this later
 
             # Validate field path against schema

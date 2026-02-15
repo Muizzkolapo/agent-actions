@@ -32,8 +32,6 @@ SIMPLE_CONFIG_FIELDS = {
     "max_tokens": None,  # Default: None (use provider default)
     "top_p": None,  # Default: None (use provider default)
     "stop": None,  # Default: None (no stop sequences)
-    # Tool configuration
-    "side_output": False,  # Default: False (tool-specific conditional output)
     # Reprompt configuration
     "reprompt": False,  # Default: False (reprompting disabled)
     "constraints": [],  # Default: empty list (no constraints)

@@ -46,18 +46,11 @@ class MockBatchService:
         self,
         output_file: Path,
         main_output: List[Dict[str, Any]],
-        side_output_data: Optional[List[Dict[str, Any]]],
         output_directory: str,
     ) -> None:
-        """Write main and side output files."""
-        from agent_actions.utils.path_utils import (
-            ensure_directory_exists,
-            create_side_output_directory,
-        )
+        """Write batch output file."""
+        from agent_actions.utils.path_utils import ensure_directory_exists
         from agent_actions.output.writer import FileWriter
-        from agent_actions.llm.batch.processing.side_output import (
-            BatchSideOutputHandler,
-        )
 
         # Only create directory if not using storage backend
         if self._storage_backend is None:
@@ -68,11 +61,6 @@ class MockBatchService:
             action_name=self._action_name,
             output_directory=output_directory,
         ).write_target(main_output)
-
-        if side_output_data:
-            side_output_dir = create_side_output_directory(output_directory)
-            side_output_file = side_output_dir / output_file.name
-            BatchSideOutputHandler.save(side_output_data, side_output_file)
 
 
 class TestIsBatchReadyForProcessing:
@@ -195,7 +183,6 @@ class TestWriteBatchOutput:
         service._write_batch_output(
             output_file=output_file,
             main_output=main_output,
-            side_output_data=None,
             output_directory=str(tmp_path),
         )
 
@@ -204,53 +191,3 @@ class TestWriteBatchOutput:
         assert written_data[0]["action_name"] == "test_node"
         assert written_data[0]["path"] == "output.json"
         assert written_data[0]["data"] == main_output
-
-    def test_writes_side_output_when_present(self, tmp_path):
-        """Should write side output to side_output directory."""
-        # Create mock storage backend
-        mock_storage = MagicMock()
-        mock_storage.write_target = MagicMock()
-
-        service = MockBatchService(storage_backend=mock_storage, action_name="test_node")
-        main_output = [{"id": "1", "result": "success"}]
-        side_output_data = [{"id": "2", "skipped": True}]
-
-        # Create a subdirectory to match real usage pattern
-        output_dir = tmp_path / "node_1_agent"
-        output_dir.mkdir(parents=True)
-        output_file = output_dir / "output.json"
-
-        service._write_batch_output(
-            output_file=output_file,
-            main_output=main_output,
-            side_output_data=side_output_data,
-            output_directory=str(output_dir),
-        )
-
-        # Check storage backend was called
-        mock_storage.write_target.assert_called_once()
-
-        # Check side output directory was created (at parent level)
-        side_output_dir = tmp_path / "side_output"
-        assert side_output_dir.exists()
-
-    def test_does_not_create_side_output_when_empty(self, tmp_path):
-        """Should not create side_output directory when no side output."""
-        # Create mock storage backend
-        mock_storage = MagicMock()
-        mock_storage.write_target = MagicMock()
-
-        service = MockBatchService(storage_backend=mock_storage, action_name="test_node")
-        main_output = [{"id": "1", "result": "success"}]
-        output_file = tmp_path / "output.json"
-
-        service._write_batch_output(
-            output_file=output_file,
-            main_output=main_output,
-            side_output_data=None,
-            output_directory=str(tmp_path),
-        )
-
-        # Side output directory should not be created
-        side_output_dir = tmp_path / "side_output"
-        assert not side_output_dir.exists()

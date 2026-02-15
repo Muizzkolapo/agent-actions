@@ -291,7 +291,7 @@ class TestActionSchemas:
         assert "text" in schemas["extractor"]["output"]["fields"]
         assert "score" in schemas["extractor"]["output"]["fields"]
 
-    def test_get_action_schemas_tool_with_registry(self):
+    def test_get_action_schemas_tool_with_yaml_schema(self):
         """Test get_action_schemas returns correct info for tool agents."""
         udf_registry = {
             "my_tool": {
@@ -302,12 +302,6 @@ class TestActionSchemas:
                     },
                     "required": ["input_data"],
                 },
-                "json_output_schema": {
-                    "type": "object",
-                    "properties": {
-                        "result": {"type": "string"},
-                    },
-                },
             },
         }
 
@@ -317,6 +311,12 @@ class TestActionSchemas:
                     "name": "tool_action",
                     "kind": "tool",
                     "impl": "my_tool",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "result": {"type": "string"},
+                        },
+                    },
                 },
             ]
         }
@@ -339,12 +339,6 @@ class TestActionSchemas:
                         "text": {"type": "string"},
                     },
                     "required": ["text"],
-                },
-                "json_output_schema": {
-                    "type": "object",
-                    "properties": {
-                        "processed": {"type": "string"},
-                    },
                 },
             },
         }

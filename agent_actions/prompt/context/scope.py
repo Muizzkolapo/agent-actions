@@ -981,6 +981,7 @@ class ContextScopeProcessor:
         allowed_fields: Optional[List[str]],
         source_type: str = "FIELD",
         warn_missing: bool = False,
+        metadata_collector: Optional[Dict] = None,
     ) -> None:
         """
         Filter data by allowed_fields and store in field_context.
@@ -992,7 +993,12 @@ class ContextScopeProcessor:
             allowed_fields: Fields to include (None = wildcard, all fields)
             source_type: Log prefix for debug messages (e.g., "INPUT SOURCE")
             warn_missing: If True, log warning for missing fields
+            metadata_collector: Optional dict to record stored vs loaded field metadata.
+                When provided, records {name: {stored_fields, loaded_fields, stored_count, loaded_count}}
+                for downstream diagnostics (e.g. detecting fields produced by tools but not in schema).
         """
+        stored_fields = set(data.keys())
+
         if allowed_fields is None:
             # Wildcard: Load all fields
             field_context[name] = data
@@ -1002,6 +1008,13 @@ class ContextScopeProcessor:
                 name,
                 len(data),
             )
+            if metadata_collector is not None:
+                metadata_collector[name] = {
+                    "stored_fields": sorted(stored_fields),
+                    "loaded_fields": sorted(stored_fields),
+                    "stored_count": len(stored_fields),
+                    "loaded_count": len(stored_fields),
+                }
         else:
             # Specific fields: Filter
             filtered_data = {}
@@ -1037,6 +1050,14 @@ class ContextScopeProcessor:
                 len(filtered_data),
                 list(filtered_data.keys()),
             )
+            if metadata_collector is not None:
+                loaded_fields = sorted(filtered_data.keys())
+                metadata_collector[name] = {
+                    "stored_fields": sorted(stored_fields),
+                    "loaded_fields": loaded_fields,
+                    "stored_count": len(stored_fields),
+                    "loaded_count": len(loaded_fields),
+                }
 
     @staticmethod
     def _extract_allowed_fields_per_dependency(
@@ -1191,6 +1212,7 @@ class ContextScopeProcessor:
         context_scope: Optional[Dict] = None,
         output_directory: Optional[str] = None,
         storage_backend: Optional["StorageBackend"] = None,
+        metadata_collector: Optional[Dict] = None,
     ) -> Dict:
         """
         Build field context with explicit namespace structure.
@@ -1345,6 +1367,7 @@ class ContextScopeProcessor:
                             version_data,
                             allowed_fields,
                             source_type="VERSION NAMESPACE",
+                            metadata_collector=metadata_collector,
                         )
 
                     # Load parallel version sources via historical lookup
@@ -1385,6 +1408,7 @@ class ContextScopeProcessor:
                                     historical_data,
                                     allowed_fields,
                                     source_type="PARALLEL VERSION",
+                                    metadata_collector=metadata_collector,
                                 )
                             else:
                                 logger.warning(
@@ -1410,6 +1434,7 @@ class ContextScopeProcessor:
                             allowed_fields,
                             source_type="INPUT SOURCE",
                             warn_missing=True,
+                            metadata_collector=metadata_collector,
                         )
 
             # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
@@ -1518,6 +1543,7 @@ class ContextScopeProcessor:
                         allowed_fields,
                         source_type="CONTEXT SOURCE",
                         warn_missing=True,
+                        metadata_collector=metadata_collector,
                     )
 
         else:

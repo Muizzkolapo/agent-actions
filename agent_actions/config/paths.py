@@ -30,7 +30,6 @@ class PathType(Enum):
     TEMPLATES = "templates"
     RENDERED_WORKFLOWS = "rendered_workflows"
     BATCH = "batch"
-    SIDE_OUTPUT = "side_output"
     SEED_DATA = "seed_data"
 
 
@@ -79,7 +78,6 @@ class PathManager:
         PathType.TEMPLATES: "templates",
         PathType.RENDERED_WORKFLOWS: "artefact/rendered_workflows",
         PathType.BATCH: "batch",
-        PathType.SIDE_OUTPUT: "side_output",
         PathType.SEED_DATA: "seed_data",
     }
 

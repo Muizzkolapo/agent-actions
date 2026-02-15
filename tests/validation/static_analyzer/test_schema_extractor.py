@@ -31,8 +31,8 @@ class TestSchemaExtractor:
         assert "keywords" in schema.available_fields
         assert "confidence" in schema.available_fields
 
-    def test_extract_from_output_schema_alias(self):
-        """Test output_schema works as alias for schema."""
+    def test_output_schema_alias_no_longer_accepted(self):
+        """output_schema alias was removed — schema: is the single source."""
         config = {
             "name": "agent",
             "output_schema": {
@@ -44,7 +44,9 @@ class TestSchemaExtractor:
         }
         schema = self.extractor.extract_schema(config)
 
-        assert "output" in schema.available_fields
+        # output_schema is ignored; agent is treated as schemaless
+        assert "output" not in schema.schema_fields
+        assert schema.is_schemaless
 
     def test_schemaless_agent(self):
         """Test agent without schema is marked schemaless."""
@@ -57,27 +59,21 @@ class TestSchemaExtractor:
 
         assert schema.is_schemaless
 
-    def test_tool_agent_schema_from_registry(self):
-        """Test tool agent extracts schema from UDF registry."""
-        # Create mock UDF registry
-        udf_registry = {
-            "my_tool_impl": {
-                "json_output_schema": {
-                    "type": "object",
-                    "properties": {
-                        "tool_result": {"type": "string"},
-                        "status": {"type": "boolean"},
-                    },
-                },
-            },
-        }
-
-        extractor = SchemaExtractor(udf_registry=udf_registry)
+    def test_tool_agent_schema_from_yaml(self):
+        """Test tool agent extracts schema from YAML config."""
+        extractor = SchemaExtractor()
 
         config = {
             "name": "my_tool",
             "kind": "tool",
-            "impl": "my_tool_impl",  # 'impl' is used to lookup in registry
+            "impl": "my_tool_impl",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "tool_result": {"type": "string"},
+                    "status": {"type": "boolean"},
+                },
+            },
         }
         schema = extractor.extract_schema(config)
 

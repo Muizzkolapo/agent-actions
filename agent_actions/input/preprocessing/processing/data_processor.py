@@ -8,7 +8,6 @@ from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.errors import TransformationError
 from agent_actions.config.interfaces import IDataProcessor, ProcessingMode
 from agent_actions.config.di.container import registry
-from agent_actions.utils.output_splitter import split_main_and_side_outputs
 
 
 @dataclass
@@ -83,15 +82,3 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
                 item_count=len(generated_data) if isinstance(generated_data, list) else 1,
             )
             return None
-
-    def separate_side_output(self, processed_items: List[Dict]) -> tuple[List[Dict], List[Dict]]:
-        """
-        Separate main output from side output.
-
-        Args:
-            processed_items: List of processed items
-
-        Returns:
-            Tuple of (main_output, side_output)
-        """
-        return split_main_and_side_outputs(processed_items)

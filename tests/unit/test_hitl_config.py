@@ -113,3 +113,25 @@ def test_action_config_non_hitl_with_hitl_config():
 
     assert config.kind == ActionKind.LLM
     assert config.hitl is not None
+
+
+def test_hitl_output_schema_constant_matches_server_fields():
+    """Validate that HITL_OUTPUT_SCHEMA fields match _make_terminal_response output."""
+    from agent_actions.utils.constants import HITL_OUTPUT_SCHEMA, HITL_OUTPUT_JSON_SCHEMA
+
+    # The three core fields from _make_terminal_response in hitl/server.py
+    expected_fields = {"hitl_status", "user_comment", "timestamp"}
+
+    # Check unified schema fields
+    schema_field_ids = {f["id"] for f in HITL_OUTPUT_SCHEMA["fields"]}
+    assert schema_field_ids == expected_fields
+
+    # Check JSON schema properties
+    json_props = set(HITL_OUTPUT_JSON_SCHEMA["properties"].keys())
+    assert json_props == expected_fields
+
+    # Check required fields (user_comment is optional)
+    assert set(HITL_OUTPUT_JSON_SCHEMA["required"]) == {"hitl_status", "timestamp"}
+
+    # Verify additionalProperties is False (strict schema)
+    assert HITL_OUTPUT_JSON_SCHEMA["additionalProperties"] is False

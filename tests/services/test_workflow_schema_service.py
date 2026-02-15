@@ -64,7 +64,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "extractor",
                     "model_vendor": "openai",
-                    "output_schema": {"text": "str"},
+                    "schema": {"text": "str"},
                 },
                 {
                     "name": "consumer",
@@ -158,7 +158,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "extractor",
                     "model_vendor": "openai",
-                    "output_schema": {"summary": "str", "facts": "list[str]"},
+                    "schema": {"summary": "str", "facts": "list[str]"},
                 }
             ]
         )
@@ -181,7 +181,7 @@ class TestWorkflowSchemaService:
                 {
                     "name": "extractor",
                     "model_vendor": "openai",
-                    "output_schema": {"text": "str"},
+                    "schema": {"text": "str"},
                 },
                 {
                     "name": "consumer",

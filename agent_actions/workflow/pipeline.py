@@ -120,7 +120,6 @@ class ProcessingPipeline:
         self.model_vendor = (config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
         self.action_kind = (config.agent_config.get("kind") or "").lower()
         self.granularity = (config.agent_config.get("granularity") or "").lower()
-        self.side_output_enabled = config.agent_config.get("side_output", False)
         # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action
         self.is_tool_action = self.action_kind == "tool"
         self.is_hitl_action = self.action_kind == "hitl"
@@ -474,8 +473,6 @@ class ProcessingPipeline:
             storage_backend=self.config.storage_backend,
         )
 
-        # Determine output type (Main vs Side Output)
-        # Note: Side output logic removed as per cleanup.
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
@@ -549,10 +546,19 @@ class ProcessingPipeline:
                 tools_path=tools_path,
             )
 
+            # Safety net: unwrap FileUDFResult if it wasn't already unwrapped
+            # during validation in _validate_udf_output. Handles the case where
+            # validation is skipped (validate_output=False or no json_output_schema).
+            from agent_actions.utils.udf_management.registry import FileUDFResult
+
+            if isinstance(raw_response, FileUDFResult):
+                raw_response = raw_response.outputs
+
             # Tool should return array
             if not isinstance(raw_response, list):
                 raise ValueError(
-                    f"FILE mode tool must return array, got {type(raw_response).__name__}"
+                    f"FILE mode tool must return a list (or FileUDFResult), "
+                    f"got {type(raw_response).__name__}"
                 )
 
             # Reserved framework fields that go at top level, not in content
@@ -599,16 +605,19 @@ class ProcessingPipeline:
             return [result]
 
         except Exception as e:
-            # Error handling
-            logger.error("Error in FILE mode tool processing: %s", e)
-            error_result = ProcessingResult(
-                status=ProcessingStatus.FAILED,
-                data=[],
-                source_guid=None,
-                error=str(e),
-                executed=False,
-            )
-            return [error_result]
+            # NOTE: Intentional behavioral change — FILE mode tool errors now raise
+            # instead of returning FAILED silently. Workflows relying on partial-failure
+            # tolerance should use try/except or error handling at the caller level.
+            logger.error("FILE mode tool '%s' failed: %s", context.agent_name, e)
+            raise AgentActionsException(
+                f"FILE mode tool '{context.agent_name}' failed: {e}",
+                context={
+                    "agent_name": context.agent_name,
+                    "record_count": len(data),
+                    "operation": "file_mode_tool",
+                },
+                cause=e,
+            ) from e
 
     def _process_file_mode_hitl(
         self, data: List[Dict], original_data: List[Dict], context: ProcessingContext

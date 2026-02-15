@@ -1,20 +1,13 @@
 """Tests for UDF registry and @udf_tool decorator."""
 
 import pytest
-from typing import TypedDict
 from agent_actions.utils.udf_management.registry import (
     udf_tool,
     get_udf,
-    list_udfs,
     clear_registry,
     UDF_REGISTRY,
 )
 from agent_actions.errors import FunctionNotFoundError
-
-
-# Default test type for output schema validation
-class SimpleOutput(TypedDict):
-    text: str
 
 
 @pytest.fixture(autouse=True)
@@ -110,31 +103,3 @@ class TestExceptionContext:
             assert "available1" in e.context["available_functions"]
             assert "available2" in e.context["available_functions"]
             assert len(e.context["available_functions"]) == 2
-
-
-class TestOutputSchemaValidation:
-    """Tests for output schema configuration (input is defined by context_scope in workflow YAML)."""
-
-    def test_udf_with_output_schema_name(self):
-        """Test that UDF can be registered with output_schema (file reference)."""
-
-        @udf_tool(output_schema="MyOutputSchema")
-        def schema_file_func(data):
-            return {"result": data}
-
-        assert "schema_file_func" in UDF_REGISTRY
-        meta = UDF_REGISTRY["schema_file_func"]
-        assert meta["output_schema_name"] == "MyOutputSchema"
-        assert meta["json_output_schema"] is None  # Resolved at runtime
-
-    def test_cannot_specify_both_output_type_and_output_schema(self):
-        """Test that specifying both output_type and output_schema raises error."""
-        from agent_actions.errors import ConfigurationError
-
-        with pytest.raises(ConfigurationError) as exc_info:
-
-            @udf_tool(output_type=SimpleOutput, output_schema="MyOutput")
-            def conflicting_func(data):
-                return {"text": "test"}
-
-        assert "Cannot specify both output_schema and output_type" in str(exc_info.value)

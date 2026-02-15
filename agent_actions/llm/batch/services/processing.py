@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 from agent_actions.logging.events import BatchCompleteEvent
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.output.writer import FileWriter
-from agent_actions.utils.path_utils import ensure_directory_exists, create_side_output_directory
+from agent_actions.utils.path_utils import ensure_directory_exists
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.context import (
     BatchContextManager,
@@ -43,9 +43,6 @@ from agent_actions.llm.batch.infrastructure.recovery_state import (
 )
 from agent_actions.llm.batch.processing.result_processor import (
     BatchResultProcessor,
-)
-from agent_actions.llm.batch.processing.side_output import (
-    BatchSideOutputHandler,
 )
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
@@ -166,12 +163,10 @@ class BatchProcessingService:
             if self._storage_backend and self._action_name:
                 self._write_record_dispositions(processed_data, self._action_name)
 
-            main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
-
             # Save source data before writing output
             if self._source_handler:
                 self._source_handler.save_task_source(
-                    main_output,
+                    processed_data,
                     file_path,
                     base_directory,
                     output_directory,
@@ -190,14 +185,7 @@ class BatchProcessingService:
                 storage_backend=self._storage_backend,
                 action_name=self._action_name,
                 output_directory=output_directory,
-            ).write_target(main_output)
-
-            if side_output_data:
-                side_output_file = (
-                    create_side_output_directory(output_directory)
-                    / Path(file_path).relative_to(base_directory).name
-                )
-                BatchSideOutputHandler.save(side_output_data, side_output_file)
+            ).write_target(processed_data)
 
             return str(output_file)
         except ProcessingError:
@@ -333,17 +321,15 @@ class BatchProcessingService:
         self,
         output_file: Path,
         main_output: List[Dict[str, Any]],
-        side_output_data: Optional[List[Dict[str, Any]]],
         output_directory: str,
         action_name: Optional[str] = None,
     ) -> None:
-        """Write main and side output files.
+        """Write batch output file.
 
         Args:
             output_file: Path to write main output
             main_output: Main output data to write
-            side_output_data: Optional side output data
-            output_directory: Directory for side output
+            output_directory: Output directory path
             action_name: Override action_name for storage backend writes
         """
         # Only create directory if not using storage backend
@@ -355,11 +341,6 @@ class BatchProcessingService:
             action_name=action_name or self._action_name,
             output_directory=output_directory,
         ).write_target(main_output)
-
-        if side_output_data:
-            side_output_dir = create_side_output_directory(output_directory)
-            side_output_file = side_output_dir / output_file.name
-            BatchSideOutputHandler.save(side_output_data, side_output_file)
 
     def _process_single_batch_file(
         self,
@@ -1016,12 +997,8 @@ class BatchProcessingService:
         if self._storage_backend and self._action_name:
             self._write_record_dispositions(processed_data, self._action_name)
 
-        main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
-
         output_file = self._determine_output_path(output_directory, file_name, batch_id)
-        self._write_batch_output(
-            output_file, main_output, side_output_data, output_directory, action_name
-        )
+        self._write_batch_output(output_file, processed_data, output_directory, action_name)
 
         elapsed_time = time.time() - start_time
         total_count = len(batch_results)

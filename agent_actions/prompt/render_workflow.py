@@ -304,11 +304,6 @@ def _compile_action_schemas(
         action["schema"] = _expand_inline_schema(schema_value)
         logger.debug("Expanded inline schema for action '%s'", action_name)
 
-    # Also handle output_schema if present (legacy support)
-    output_schema = action.get("output_schema")
-    if output_schema and _is_inline_schema_dict(output_schema):
-        action["output_schema"] = _expand_inline_schema(output_schema)
-
     return action
 
 

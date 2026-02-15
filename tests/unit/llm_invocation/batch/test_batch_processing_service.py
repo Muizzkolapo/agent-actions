@@ -209,7 +209,6 @@ class TestWriteBatchOutput:
         service._write_batch_output(
             output_file=output_file,
             main_output=main_output,
-            side_output_data=None,
             output_directory=str(tmp_path),
         )
 

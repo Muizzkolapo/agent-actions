@@ -59,3 +59,27 @@ DANGEROUS_PATTERNS_UDF = DANGEROUS_PATTERNS | {"__"}
 # - Field resolution validators
 # - Context scope processor
 SPECIAL_NAMESPACES = RESERVED_AGENT_NAMES - {"context_scope"}
+
+# Canonical output schema for HITL actions.
+# Fields match _make_terminal_response() in hitl/server.py.
+# Pre-compiled here (rather than calling compile_unified_schema) to avoid
+# circular imports at module load time.
+HITL_OUTPUT_SCHEMA = {
+    "name": "hitl_response",
+    "fields": [
+        {"id": "hitl_status", "type": "string", "required": True},
+        {"id": "user_comment", "type": "string", "required": False},
+        {"id": "timestamp", "type": "string", "required": True},
+    ],
+}
+
+HITL_OUTPUT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "hitl_status": {"type": "string"},
+        "user_comment": {"type": "string"},
+        "timestamp": {"type": "string"},
+    },
+    "required": ["hitl_status", "timestamp"],
+    "additionalProperties": False,
+}

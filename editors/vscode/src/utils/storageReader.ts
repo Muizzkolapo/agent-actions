@@ -397,16 +397,19 @@ except Exception as e:
         fallbackNodeName: string,
         fallbackStoragePath: string
     ): PreviewResult {
-        const data = transformKeys<Record<string, unknown>>(parsed);
-        const records = Array.isArray(data.records) ? data.records : [];
+        // Extract records BEFORE transformKeys — user data keys must not be altered.
+        // transformKeys is for the metadata envelope only (total_count → totalCount, etc.)
+        const records = Array.isArray(parsed.records) ? parsed.records : [];
+        const { records: _records, ...envelope } = parsed;
+        const meta = transformKeys<Record<string, unknown>>(envelope);
 
         return {
             records,
-            totalCount: getNumber(data, 'totalCount', records.length),
-            nodeName: getString(data, 'nodeName', fallbackNodeName),
-            files: Array.isArray(data.files) ? data.files.map(String) : [],
-            storagePath: getString(data, 'storagePath', fallbackStoragePath),
-            backendType: getString(data, 'backendType', 'sqlite'),
+            totalCount: getNumber(meta, 'totalCount', records.length),
+            nodeName: getString(meta, 'nodeName', fallbackNodeName),
+            files: Array.isArray(meta.files) ? meta.files.map(String) : [],
+            storagePath: getString(meta, 'storagePath', fallbackStoragePath),
+            backendType: getString(meta, 'backendType', 'sqlite'),
         };
     }
 }

@@ -356,7 +356,7 @@ class SearchCatalogOutput(TypedDict, total=False):
     results: List[ResultItem]  # Use nested TypedDict, NOT Dict[str, Any]
     metadata: SearchMetadata
 
-@udf_tool(input_type=SearchInput, output_type=SearchCatalogOutput)
+@udf_tool(input_type=SearchInput)
 def search_catalog(data: dict) -> dict:
     # Load from seed_data, vector DB, or SQL
     catalog = load_catalog()

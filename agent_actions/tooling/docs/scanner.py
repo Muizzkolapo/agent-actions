@@ -670,7 +670,6 @@ class ProjectScanner:
                 "line_end": end_line,
                 "is_udf": False,
                 "input_schema": None,
-                "output_schema": None,
             }
 
             # Check for @udf_tool decorator
@@ -700,14 +699,6 @@ class ProjectScanner:
                         result["input_schema"] = {
                             "name": input_type_name,
                             "fields": typed_dicts[input_type_name],
-                        }
-
-                    # Resolve output_type to TypedDict fields
-                    output_type_name = decorator_args.get("output_type")
-                    if output_type_name and typed_dicts and output_type_name in typed_dicts:
-                        result["output_schema"] = {
-                            "name": output_type_name,
-                            "fields": typed_dicts[output_type_name],
                         }
 
                     break  # Found the UDF decorator, no need to check others

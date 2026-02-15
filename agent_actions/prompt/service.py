@@ -355,6 +355,7 @@ class PromptPreparationService:
 
         # Step 2: Build field context with historical node loading
         # Pass context_scope to control which fields are loaded (progressive data exposure)
+        field_context_metadata: Dict[str, Any] = {}
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents=request.contents if isinstance(request.contents, dict) else {},
             agent_name=request.agent_name,
@@ -369,6 +370,7 @@ class PromptPreparationService:
             context_scope=context_scope,  # NEW: Controls which fields to load
             output_directory=request.output_directory,  # For storage backend lookup
             storage_backend=request.storage_backend,  # For loading historical data from SQLite/TinyDB
+            metadata_collector=field_context_metadata,
         )
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
@@ -419,6 +421,7 @@ class PromptPreparationService:
             prompt_context,
             agent_name=request.agent_name,
             mode=request.mode,
+            field_context_metadata=field_context_metadata,
         )
 
         # Step 6: Inject function outputs (all modes)
@@ -467,6 +470,7 @@ class PromptPreparationService:
         *,
         agent_name: Optional[str] = None,
         mode: Optional[str] = None,
+        field_context_metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Render Jinja2 template with the given context.
@@ -476,6 +480,8 @@ class PromptPreparationService:
             prompt_context: Context dict for template rendering
             agent_name: Optional agent name for error context
             mode: Optional execution mode for error context
+            field_context_metadata: Optional metadata from build_field_context_with_history
+                recording stored vs loaded field gaps per namespace
 
         Returns:
             Rendered prompt string
@@ -573,6 +579,45 @@ class PromptPreparationService:
                         )
                     )
 
+            # Cross-reference missing variables against field_context_metadata
+            # to detect fields that exist in storage but weren't loaded (no schema)
+            storage_hints: Dict[str, Any] = {}
+            if field_context_metadata and missing:
+                for var in missing:
+                    if "." in var:
+                        # Fully-qualified: classify.answer_text
+                        ns, field = var.split(".", 1)
+                        ns_meta = field_context_metadata.get(ns)
+                        if ns_meta is None:
+                            continue
+                        stored = ns_meta.get("stored_fields", [])
+                        loaded = ns_meta.get("loaded_fields", [])
+                        if field in stored and field not in loaded:
+                            storage_hints[var] = {
+                                "namespace": ns,
+                                "field": field,
+                                "stored_count": ns_meta.get("stored_count", 0),
+                                "loaded_count": ns_meta.get("loaded_count", 0),
+                            }
+                    else:
+                        # Leaf-only (Jinja reports "has no attribute 'field'").
+                        # Search every namespace for a stored-but-not-loaded match.
+                        # NOTE: Takes first matching namespace. If a bare field exists in
+                        # multiple namespaces, this may point to the wrong one. Low
+                        # probability — most fields have unique names across namespaces.
+                        field = var
+                        for ns, ns_meta in field_context_metadata.items():
+                            stored = ns_meta.get("stored_fields", [])
+                            loaded = ns_meta.get("loaded_fields", [])
+                            if field in stored and field not in loaded:
+                                storage_hints[var] = {
+                                    "namespace": ns,
+                                    "field": field,
+                                    "stored_count": ns_meta.get("stored_count", 0),
+                                    "loaded_count": ns_meta.get("loaded_count", 0),
+                                }
+                                break
+
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
@@ -580,6 +625,8 @@ class PromptPreparationService:
                 mode=mode,
                 cause=e,
                 namespace_context=namespace_context,
+                field_context_metadata=field_context_metadata if field_context_metadata else None,
+                storage_hints=storage_hints if storage_hints else None,
             ) from e
 
     @staticmethod

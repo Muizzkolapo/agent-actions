@@ -46,24 +46,6 @@ def ensure_directory_exists(path: Union[str, Path], is_file: bool = False) -> Pa
     return get_path_manager().ensure_path_exists(Path(path), is_file=is_file)
 
 
-def create_side_output_directory(output_directory: Union[str, Path]) -> Path:
-    """
-    Create side output directory following the standard pattern.
-
-    This replaces the duplicated pattern:
-    side_output_dir = Path(output_directory).parent / 'side_output'
-
-    Args:
-        output_directory: Base output directory path
-
-    Returns:
-        Path to side output directory
-    """
-    output_path = Path(output_directory)
-    side_output_dir = output_path.parent / "side_output"
-    return ensure_directory_exists(side_output_dir)
-
-
 def resolve_absolute_path(path: Union[str, Path]) -> Path:
     """
     Resolve path to absolute Path object.
@@ -274,7 +256,6 @@ def create_agent_directory_structure(
 
 DEFAULT_MARKER_FILE = "agent_actions.yml"
 COMMON_EXTENSIONS = [".json", ".yml", ".yaml", ".txt", ".py"]
-SIDE_OUTPUT_DIR_NAME = "side_output"
 
 
 def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
