@@ -4,6 +4,10 @@ description: Task-oriented how-to guides for Agent Actions
 sidebar_position: 1
 ---
 
+<div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
+  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="48" height="48" />
+</div>
+
 # Guides
 
 Practical guides for common tasks and workflows.

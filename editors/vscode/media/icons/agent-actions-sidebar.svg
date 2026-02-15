@@ -1,10 +1,7 @@
-<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-  <!-- Monochrome activity bar icon: three connected graph nodes -->
-  <circle cx="7" cy="7" r="3" fill="currentColor"/>
-  <circle cx="17" cy="7" r="3" fill="currentColor"/>
-  <circle cx="12" cy="18" r="3" fill="currentColor"/>
-
-  <!-- Connecting lines -->
-  <line x1="7" y1="10" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="17" y1="10" x2="12" y2="15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+<svg width="24" height="24" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Domino tiles using currentColor for VS Code theme compatibility -->
+  <rect x="8" y="20" width="13" height="54" rx="4" fill="currentColor" opacity="0.7" transform="rotate(-30 14 68)"/>
+  <rect x="28" y="22" width="13" height="56" rx="4" fill="currentColor" opacity="0.4" transform="rotate(-15 34 76)"/>
+  <rect x="50" y="22" width="13" height="60" rx="4" fill="currentColor" opacity="0.6" transform="rotate(-5 56 80)"/>
+  <rect x="72" y="18" width="15" height="68" rx="4" fill="currentColor"/>
 </svg>

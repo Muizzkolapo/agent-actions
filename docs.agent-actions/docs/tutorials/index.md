@@ -4,6 +4,10 @@ description: Step-by-step tutorials for learning Agent Actions
 sidebar_position: 1
 ---
 
+<div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
+  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="48" height="48" />
+</div>
+
 # Tutorials
 
 Learn Agent Actions through hands-on tutorials.

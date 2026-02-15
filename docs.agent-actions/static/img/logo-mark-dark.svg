@@ -1,21 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 0 116 132" fill="none">
-  <!-- Top input nodes -->
-  <circle cx="28" cy="16" r="8" fill="#d6d3d1" opacity="0.5"/>
-  <circle cx="70" cy="10" r="9" fill="#e7e5e4" opacity="0.9"/>
-  <circle cx="112" cy="16" r="8" fill="#d6d3d1" opacity="0.5"/>
-
-  <!-- Flow lines to hub -->
-  <path d="M28 18 C28 40, 48 52, 58 62" stroke="#d6d3d1" stroke-width="10" stroke-linecap="round" opacity="0.35"/>
-  <path d="M70 12 C70 32, 70 46, 70 58" stroke="#e7e5e4" stroke-width="11" stroke-linecap="round" opacity="0.85"/>
-  <path d="M112 18 C112 40, 92 52, 82 62" stroke="#d6d3d1" stroke-width="10" stroke-linecap="round" opacity="0.35"/>
-
-  <!-- Hub node -->
-  <circle cx="70" cy="72" r="14" stroke="#d6d3d1" stroke-width="3.5" opacity="0.5"/>
-  <circle cx="70" cy="72" r="6" fill="#e7e5e4" opacity="0.85"/>
-
-  <!-- Output stem -->
-  <path d="M70 85 L70 114" stroke="#e7e5e4" stroke-width="12" stroke-linecap="round" opacity="0.85"/>
-
-  <!-- Output arrow -->
-  <path d="M56 104 L70 122 L84 104" stroke="#e7e5e4" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100" fill="none">
+  <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+  <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+  <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+  <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
 </svg>
