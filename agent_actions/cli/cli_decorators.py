@@ -117,7 +117,7 @@ def requires_project(func):
         >>> #   src/utils/
         >>>
         >>> # Running from /my-project/src/utils/
-        >>> $ agent-actions run -a my_agent
+        >>> $ agac run -a my_agent
         >>> 📁 Project root: ../..
         >>> ✅ Running workflow...
     """

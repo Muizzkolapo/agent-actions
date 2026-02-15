@@ -14,8 +14,6 @@ from .models import Location, ProjectIndex, ReferenceType
 from .resolver import get_reference_at_position, resolve_reference
 from .utils import is_in_dependencies_context, uri_to_path
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 SEMANTIC_TOKEN_TYPES = [

@@ -245,10 +245,10 @@ def run(
     the workflow and processing results.
 
     Examples:
-        agent-actions run -a my_agent
-        agent-actions run -a my_agent --upstream
-        agent-actions run -a my_agent --downstream
-        agent-actions run -a my_agent --execution-mode parallel
+        agac run -a my_agent
+        agac run -a my_agent --upstream
+        agac run -a my_agent --downstream
+        agac run -a my_agent --execution-mode parallel
     """
     # Let @handles_user_errors decorator handle all exceptions
     # for consistent error formatting

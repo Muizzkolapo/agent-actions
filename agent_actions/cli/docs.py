@@ -36,8 +36,8 @@ def generate(output: str):
 
     \b
     Examples:
-        agent-actions docs generate
-        agent-actions docs generate --output ./custom-artefact
+        agac docs generate
+        agac docs generate --output ./custom-artefact
     """
     # Use current working directory as project path
     project_path = Path.cwd()
@@ -71,9 +71,9 @@ def serve(port: int, artefact: str):
 
     \b
     Examples:
-        agent-actions docs serve
-        agent-actions docs serve --port 3000
-        agent-actions docs serve --artefact ./my-docs
+        agac docs serve
+        agac docs serve --port 3000
+        agac docs serve --artefact ./my-docs
     """
     success = serve_docs(port, artefact_path=artefact)
     if not success:
@@ -102,9 +102,9 @@ def run_tests(test_suite: str, port: int):
 
     \b
     Examples:
-        agent-actions docs test
-        agent-actions docs test --test schemas
-        agent-actions docs test --port 3000
+        agac docs test
+        agac docs test --test schemas
+        agac docs test --port 3000
     """
     # Check if playwright is available
     try:
@@ -165,7 +165,7 @@ def dev():
 
     \b
     Example:
-        agent-actions docs dev
+        agac docs dev
     """
     click.echo("🚧 Development mode coming soon!")
     click.echo("\nFor now, use:")

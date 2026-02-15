@@ -77,7 +77,7 @@ class TestFailedRenderCache:
                 yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
             )
         error_message = str(exc_info.value)
-        assert "agent-actions render" in error_message
+        assert "agac render" in error_message
         assert "test_workflow" in error_message
 
     def test_cache_directory_created_automatically(self):

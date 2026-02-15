@@ -62,7 +62,7 @@ actions:
 # Save this file as: workflows/summarize.yml
 #
 # Then run:
-#   agent-actions run summarize --input data.jsonl
+#   agac run summarize --input data.jsonl
 #
 # Input data format (data.jsonl):
 #   {"text": "Long article text here..."}

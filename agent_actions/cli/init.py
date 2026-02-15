@@ -222,7 +222,7 @@ class InitCommand:
         click.echo(f"Project created at: {self.project_dir}")
         click.echo("\nNext steps:")
         click.echo(f"  cd {self.args.project_name}")
-        click.echo("  agent-actions run -a sample_agent")
+        click.echo("  agac run -a sample_agent")
 
 
 @click.command()
@@ -255,9 +255,9 @@ def init(
     templates needed to start working with Agent Actions.
 
     Examples:
-        agent-actions init my_project
-        agent-actions init my_project --template minimal
-        agent-actions init my_project --output-dir /path/to/dir
+        agac init my_project
+        agac init my_project --template minimal
+        agac init my_project --output-dir /path/to/dir
     """
     args = InitCommandArgs(
         project_name=project_name, output_dir=output_dir, template=template, force=force

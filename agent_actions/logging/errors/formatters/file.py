@@ -44,7 +44,7 @@ class FileErrorFormatter(ErrorFormatter):
                     fix=(
                         f"1. Create agents/{agent}.yaml\n"
                         "     2. Or use an existing agent: "
-                        "agent-actions run --agent <existing-agent>"
+                        "agac run --agent <existing-agent>"
                     ),
                     context=context,
                     docs_url="https://docs.agent-actions.com/agents/create",

@@ -6,7 +6,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/agent-actions)](https://pypi.org/project/agent-actions/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg)](https://github.com/Muizzkolapo/agent-actions/actions)
-[![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 agent-actions is a **declarative YAML-based framework** for orchestrating LLM workflows. Define multi-step pipelines in YAML, execute with one command, and let the framework handle dependency resolution, parallel execution, batch processing, and multi-vendor LLM support.
 
@@ -74,7 +74,7 @@ agac validate
 agac run
 ```
 
-That's it! Your first workflow is running. Check out the [Getting Started guide](https://muizzkolapo.github.io/docs.agent-actions/getting-started) for more details.
+That's it! Your first workflow is running. Check out the [Installation guide](https://muizzkolapo.github.io/docs.agent-actions/installation) for more details.
 
 ## Example Workflow
 
@@ -218,11 +218,11 @@ See the [Logging Architecture](https://muizzkolapo.github.io/docs.agent-actions/
 
 ## Documentation
 
-- [Getting Started](https://muizzkolapo.github.io/docs.agent-actions/getting-started) - Installation and first workflow
-- [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration-schema) - Full YAML schema documentation
+- [Installation](https://muizzkolapo.github.io/docs.agent-actions/installation) - Install and bootstrap your first project
+- [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) - Full YAML schema documentation
 - [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) - All CLI commands and options
-- [Reprompting Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/reprompting) - Output validation and retry
-- [UDF Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/udfs) - Custom Python functions
+- [Reprompting Guide](https://muizzkolapo.github.io/docs.agent-actions/reference/validation/reprompting) - Output validation and retry
+- [Custom Tools Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/custom-tools) - Build custom Python tool functions
 
 ## Upcoming Features
 
@@ -261,9 +261,10 @@ If you have any questions or feedback, please feel free to reach out:
 
 - **GitHub Issues** - [Report bugs or request features](https://github.com/Muizzkolapo/agent-actions/issues)
 - **Discussions** - [Ask questions and share ideas](https://github.com/Muizzkolapo/agent-actions/discussions)
+- **Security** - [Report vulnerabilities privately](SECURITY.md)
 
 Thank you for exploring agent-actions! We're constantly working to improve the framework and expand its capabilities. Your feedback helps us make agent-actions even better. Don't forget to check back for updates and new features!
 
 ## License
 
-This project is licensed under the [Elastic License 2.0](LICENSE). You can use it freely for internal business purposes, modify it, and distribute copies. The only restriction is you cannot provide it as a hosted/managed service.
+This project is licensed under the [MIT License](LICENSE).

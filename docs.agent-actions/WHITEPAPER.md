@@ -1648,7 +1648,7 @@ This separation of *transformation logic* from *domain content* enables:
 
 This isn't the right tool for every LLM application. Chatbots, RAG systems, and highly dynamic agents may be better served by other approaches. But for structured data extraction at scale—processing documents, generating content, enriching datasets—the declarative model offers maintainability, auditability, and reliability that code-first approaches struggle to match.
 
-Agent Actions is open source under the Elastic License 2.0. We welcome contributions, feedback, and real-world use cases that push the framework forward.
+Agent Actions is open source under the MIT License. We welcome contributions, feedback, and real-world use cases that push the framework forward.
 
 ---
 

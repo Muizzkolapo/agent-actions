@@ -164,7 +164,7 @@ actions:
 # Save this file as: workflows/analyze.yml
 #
 # Then run:
-#   agent-actions run analyze --input articles.jsonl
+#   agac run analyze --input articles.jsonl
 #
 # Input data format (articles.jsonl):
 #   {"raw_text": "Article text here..."}

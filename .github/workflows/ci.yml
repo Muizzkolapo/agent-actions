@@ -89,6 +89,12 @@ jobs:
       - name: Verify py.typed marker included
         run: unzip -l dist/agent_actions-*.whl | grep py.typed
 
+      - name: Verify console entrypoints from built wheel
+        run: |
+          uv pip install --force-reinstall dist/*.whl
+          uv run agac --help > /dev/null
+          uv run agac-lsp --help > /dev/null
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:

@@ -435,7 +435,7 @@ uv pip show agent-actions
 
 # Find where agac-lsp is
 uv pip show agent-actions | grep Location
-# Then check: <location>/agent_actions/lsp/
+# Then check: <location>/agent_actions/tooling/lsp/
 
 # Reinstall if needed
 uv pip install --force-reinstall agent-actions

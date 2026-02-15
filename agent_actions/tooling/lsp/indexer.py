@@ -78,8 +78,7 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
     if not workflow_dir.exists():
         return
 
-    yaml = YAML()
-    yaml.preserve_quotes = True
+    yaml = YAML(typ="safe")
 
     for workflow_path in workflow_dir.iterdir():
         if not workflow_path.is_dir():
@@ -577,7 +576,7 @@ def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
 def _extract_schema_fields(schema_file: Path) -> list[str]:
     """Extract schema fields for diagnostics and completions."""
     try:
-        yaml = YAML()
+        yaml = YAML(typ="safe")
         data = yaml.load(schema_file.read_text())
     except Exception:
         return []

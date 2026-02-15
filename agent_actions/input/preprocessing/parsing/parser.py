@@ -26,8 +26,8 @@ try:
         CaselessKeyword,
         ParserElement,
         ParseException,
-        infixNotation,
-        opAssoc,
+        infix_notation,
+        OpAssoc,
         pyparsing_common,
         Suppress,
     )
@@ -108,17 +108,17 @@ class WhereClauseParser:
 
     def _build_literals(self):
         """Build literal parsers (string, number, boolean, null)."""
-        string_literal = QuotedString('"', escChar="\\") | QuotedString("'", escChar="\\")
-        string_literal.setParseAction(lambda t: LiteralNode(t[0]))
+        string_literal = QuotedString('"', esc_char="\\") | QuotedString("'", esc_char="\\")
+        string_literal.set_parse_action(lambda t: LiteralNode(t[0]))
 
         number = pyparsing_common.number()
-        number.setParseAction(lambda t: LiteralNode(t[0]))
+        number.set_parse_action(lambda t: LiteralNode(t[0]))
 
         boolean = CaselessKeyword("TRUE") | CaselessKeyword("FALSE")
-        boolean.setParseAction(lambda t: LiteralNode(t[0].upper() == "TRUE"))
+        boolean.set_parse_action(lambda t: LiteralNode(t[0].upper() == "TRUE"))
 
         null = CaselessKeyword("NULL")
-        null.setParseAction(lambda t: LiteralNode(None))
+        null.set_parse_action(lambda t: LiteralNode(None))
 
         return string_literal, number, boolean, null
 
@@ -129,7 +129,7 @@ class WhereClauseParser:
 
         # Field identifier (with dot notation support)
         field_name = Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-        field_name.setParseAction(lambda t: FieldNode(field_path=t[0]))
+        field_name.set_parse_action(lambda t: FieldNode(field_path=t[0]))
 
         # Literals
         string_literal, number, boolean, null = self._build_literals()
@@ -143,7 +143,7 @@ class WhereClauseParser:
             + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
             + tokens["rbracket"]
         )
-        array_literal.setParseAction(self._parse_array)
+        array_literal.set_parse_action(self._parse_array)
 
         # Function calls
         function_name = Word(alphas.upper(), alphanums + "_")
@@ -155,7 +155,7 @@ class WhereClauseParser:
         )
 
         function_call = function_name + function_args
-        function_call.setParseAction(self._parse_function)
+        function_call.set_parse_action(self._parse_function)
 
         # Operands (field references, literals, function calls)
         operand = (
@@ -165,17 +165,17 @@ class WhereClauseParser:
         # Comparison operators
         comparison_ops = self._build_comparison_operators()
 
-        # Build expression using infixNotation for proper precedence
-        where_expr = infixNotation(
+        # Build expression using infix_notation for proper precedence
+        where_expr = infix_notation(
             operand,
             [
                 # Unary operators (highest precedence)
-                (CaselessKeyword("NOT"), 1, opAssoc.RIGHT, self._parse_not),
+                (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
                 # Comparison operators
-                (comparison_ops, 2, opAssoc.LEFT, self._parse_comparison),
+                (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
                 # Logical operators (lower precedence)
-                (CaselessKeyword("AND"), 2, opAssoc.LEFT, self._parse_and),
-                (CaselessKeyword("OR"), 2, opAssoc.LEFT, self._parse_or),
+                (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
+                (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
             ],
         )
 
@@ -183,7 +183,7 @@ class WhereClauseParser:
         self._grammar = where_expr
 
         # Enable packrat parsing for better performance
-        ParserElement.enablePackrat()
+        ParserElement.enable_packrat()
 
     def _collect_comparison_operators(self):
         """Collect and sort comparison operators from the module."""
@@ -207,7 +207,7 @@ class WhereClauseParser:
         else:
             # Single operators like "==", "!="
             op_literal = Literal(symbol)
-        op_literal.setParseAction(lambda t, name=name: name)
+        op_literal.set_parse_action(lambda t, name=name: name)
         return op_literal
 
     def _build_comparison_operators(self):

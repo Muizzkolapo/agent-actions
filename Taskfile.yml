@@ -96,7 +96,7 @@ tasks:
       - |
         if [ -z "{{.STREAM}}" ]; then
           echo "Usage: task test:stream STREAM=<stream_name>"
-          echo "Available streams: cli, core, tasks, agents, utils"
+          echo "Available streams: cli, core, tasks, agents, utilities, unit, integration"
         else
           uv run pytest tests/{{.STREAM}}/
         fi
@@ -132,19 +132,19 @@ tasks:
     cmds:
       - echo "Running test streams in parallel..."
       - |
-        uv run pytest tests/test_cli.py tests/core/ & \
+        uv run pytest tests/test_cli/ tests/cli/ & \
         uv run pytest tests/tasks/ & \
         uv run pytest tests/agents/ & \
-        uv run pytest tests/utils/ & \
+        uv run pytest tests/unit/ & \
         wait
       - echo "All parallel test streams completed"
 
   test:quick:
     desc: Quick smoke test of critical paths
     cmds:
-      - uv run pytest tests/test_cli.py::TestCLIVersionHandling -v
-      - uv run pytest tests/tasks/test_init.py::TestInitCommand::test_init_creates_expected_structure -v
-      - uv run pytest tests/agents/test_base.py::TestAgentBuilder::test_create_dynamic_agent_builds_correct_components -v
+      - uv run pytest tests/test_cli/test_command_registration.py::TestCommandErrorHandling::test_run_missing_agent_argument -v
+      - uv run pytest tests/tasks/test_result_reconciler.py -v
+      - uv run pytest tests/core/test_parser.py -v
 
   # Linting and type checking
   lint:
@@ -219,12 +219,12 @@ tasks:
   agent:run:
     desc: Run the agent CLI
     cmds:
-      - uv run agent {{.CLI_ARGS}}
+      - uv run agac {{.CLI_ARGS}}
 
   agent:help:
     desc: Show agent CLI help
     cmds:
-      - uv run agent --help
+      - uv run agac --help
 
   # Changelog tasks (requires changie: https://changie.dev)
   changelog:new:

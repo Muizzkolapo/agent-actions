@@ -64,6 +64,9 @@ jobs:
           ls -la dist/
           # Ensure py.typed marker is included
           unzip -l dist/agent_actions-*.whl | grep py.typed
+          uv pip install --force-reinstall dist/*.whl
+          uv run agac --help > /dev/null
+          uv run agac-lsp --help > /dev/null
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

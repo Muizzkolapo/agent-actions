@@ -347,7 +347,7 @@ actions:
 #   export DEEPSEEK_API_KEY=...
 #
 # Then run:
-#   agent-actions run multi-vendor-analysis --input articles.jsonl
+#   agac run multi-vendor-analysis --input articles.jsonl
 #
 # Each action will use its specified vendor, leveraging their unique strengths
 

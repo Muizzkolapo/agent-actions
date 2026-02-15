@@ -370,20 +370,20 @@ For testing, Ollama supports failure injection via environment variables:
 REPROMPT_TEST_MODE=malformed_json \
 REPROMPT_FAILURE_RATE=1.0 \
 REPROMPT_SUCCESS_AFTER=2 \
-agent-actions run my_action
+agac run my_action
 
 # To actually trigger reprompt (bypass JSON repair in client)
 REPROMPT_TEST_MODE=malformed_json \
 SKIP_JSON_REPAIR_IN_CLIENT=true \
 REPROMPT_FAILURE_RATE=1.0 \
 REPROMPT_SUCCESS_AFTER=2 \
-agent-actions run my_action
+agac run my_action
 
 # Inject missing fields response
 REPROMPT_TEST_MODE=missing_fields \
 REPROMPT_FAILURE_RATE=1.0 \
 REPROMPT_SUCCESS_AFTER=2 \
-agent-actions run my_action
+agac run my_action
 ```
 
 | Variable | Description |

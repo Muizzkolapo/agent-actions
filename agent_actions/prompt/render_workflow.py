@@ -83,7 +83,7 @@ def _save_failed_render(rendered_yaml_content, workflow_name):
             f.write(rendered_yaml_content)
         return (
             f"\nRendered output saved to: {failed_render_path}\n"
-            f"Debug with: agent-actions render {workflow_name}"
+            f"Debug with: agac render {workflow_name}"
         )
     except IOError:
         return ""

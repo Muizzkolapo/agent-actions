@@ -247,7 +247,7 @@ actions:
 #   temperature: 0.7
 #
 # Then run:
-#   agent-actions run hierarchy-demo --input data.jsonl
+#   agac run hierarchy-demo --input data.jsonl
 #
 # Observe how different actions use different configurations
 # despite starting from the same project defaults

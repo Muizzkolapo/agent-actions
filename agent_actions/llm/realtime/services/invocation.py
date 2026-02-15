@@ -3,12 +3,12 @@
 Handles client routing and invocation for different LLM providers.
 """
 
+import importlib
 import logging
 from typing import Dict, Any, Optional, List, Union
 
 from agent_actions.llm.providers.openai.client import OpenAIClient
 from agent_actions.llm.providers.ollama.client import OllamaClient
-from agent_actions.llm.providers.gemini.client import GeminiClient
 from agent_actions.llm.providers.cohere.client import CohereClient
 from agent_actions.llm.providers.mistral.client import MistralClient
 from agent_actions.llm.providers.anthropic.client import AnthropicClient
@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 CLIENT_REGISTRY: Dict[str, Any] = {
     "openai": OpenAIClient,
     "ollama": OllamaClient,
-    "gemini": GeminiClient,
+    # Lazy import avoids deprecated SDK warnings for non-Gemini commands.
+    "gemini": "agent_actions.llm.providers.gemini.client:GeminiClient",
     "cohere": CohereClient,
     "mistral": MistralClient,
     "anthropic": AnthropicClient,
@@ -36,6 +37,17 @@ CLIENT_REGISTRY: Dict[str, Any] = {
 # All providers now normalise their return type to List[Dict] internally,
 # so no wrapping is needed here.
 SINGLE_RESPONSE_CLIENTS: set = set()
+
+
+def _resolve_client(model_vendor: str) -> Any:
+    """Resolve provider client from registry, importing lazy entries on demand."""
+    entry = CLIENT_REGISTRY[model_vendor]
+    if isinstance(entry, str):
+        module_path, class_name = entry.split(":", 1)
+        cls = getattr(importlib.import_module(module_path), class_name)
+        CLIENT_REGISTRY[model_vendor] = cls
+        return cls
+    return entry
 
 
 class ClientInvocationService:
@@ -83,7 +95,7 @@ class ClientInvocationService:
         if model_vendor not in CLIENT_REGISTRY:
             raise ValueError(f"Unsupported model vendor: {model_vendor}")
 
-        client = CLIENT_REGISTRY[model_vendor]
+        client = _resolve_client(model_vendor)
 
         # Tool client has different parameters
         if model_vendor == "tool":
