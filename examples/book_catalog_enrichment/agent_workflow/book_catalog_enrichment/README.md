@@ -241,12 +241,6 @@ Reference data in `seed_data/`:
 ```bash
 # Run the pipeline
 agac run -a book_catalog_enrichment
-
-# With debug output
-agac run -a book_catalog_enrichment --debug --verbose
-
-# Test reprompt behavior
-agac run -a book_catalog_enrichment --prompt-debug
 ```
 
 ## Tools

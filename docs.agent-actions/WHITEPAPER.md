@@ -696,7 +696,7 @@ A critical pattern for production workflows: **never let LLMs hallucinate data t
 **Implementation Pattern:**
 
 ```python
-@udf_tool(input_type=SearchInput)
+@udf_tool()
 def search_book_catalog(data: dict) -> dict:
     """
     Abstraction layer - swap backends without workflow changes.

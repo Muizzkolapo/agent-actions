@@ -152,18 +152,8 @@ cat tools/qanalabs-quiz-gen/flatten_questions.py | head -40
 from agent_actions.tools.udf_tool import udf_tool
 from typing import TypedDict
 
-class FlattenInput(TypedDict):
-    questions: list
-
-class FlattenOutput(TypedDict):
-    flattened: list
-
-@udf_tool(
-    input_type=FlattenInput,
-    output_type=FlattenOutput,
-    granularity="file"
-)
-def flatten_questions(data: FlattenInput) -> FlattenOutput:
+@udf_tool(granularity=Granularity.FILE)
+def flatten_questions(data: list) -> list:
     ...
 ```
 
@@ -175,7 +165,7 @@ def flatten_questions(data: FlattenInput) -> FlattenOutput:
   granularity: file
 ```
 
-**Verify:** [ ] @udf_tool decorator works [ ] TypedDict input/output types [ ] granularity parameter (record/file) [ ] impl references function name
+**Verify:** [ ] @udf_tool decorator works [ ] granularity parameter (record/file) [ ] impl references function name [ ] schemas defined via YAML schema: field
 
 ---
 
@@ -389,7 +379,7 @@ cat agent_workflow/qanalabs_quiz_gen/agent_io/.agent_status.json
 **Test:**
 ```bash
 # Trigger an error intentionally
-agac run -a qanalabs_quiz_gen --debug --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a qanalabs_quiz_gen
 ```
 
 **Verify:** [ ] Error messages are actionable [ ] Debug mode shows full traceback [ ] Context fields (source_guid, action_name) included
@@ -417,7 +407,7 @@ Run tests in order:
 | 13 | CLI Commands | Run each command | [ ] |
 | 14 | Run Modes | Test online and batch | [ ] |
 | 15 | Artifacts | Check runs.json | [ ] |
-| 16 | Error Messages | Trigger error with --debug | [ ] |
+| 16 | Error Messages | Trigger error with AGENT_ACTIONS_LOG_LEVEL=DEBUG | [ ] |
 
 ---
 

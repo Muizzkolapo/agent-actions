@@ -6,7 +6,7 @@
 [![Downloads](https://img.shields.io/pypi/dm/agent-actions)](https://pypi.org/project/agent-actions/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg)](https://github.com/Muizzkolapo/agent-actions/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 agent-actions is a **declarative YAML-based framework** for orchestrating LLM workflows. Define multi-step pipelines in YAML, execute with one command, and let the framework handle dependency resolution, parallel execution, batch processing, and multi-vendor LLM support.
 
@@ -267,4 +267,4 @@ Thank you for exploring agent-actions! We're constantly working to improve the f
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [Apache License 2.0](LICENSE).

@@ -178,6 +178,6 @@ def check_description_word_count(response) -> bool:
     # Count words - validation PASSES when >= 50 words
     word_count = len(description.split())
     print(f"[Validation] Word count: {word_count}, Required: >= 50")
-    is_valid = word_count <= 10
+    is_valid = word_count >= 50
     print(f"[Validation] Result: {'PASS' if is_valid else 'FAIL'}")
     return is_valid

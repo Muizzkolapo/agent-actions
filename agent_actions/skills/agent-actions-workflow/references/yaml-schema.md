@@ -76,9 +76,7 @@ actions:
 | `guard` | object | Conditional execution |
 | `prompt_debug` | boolean | Log rendered prompts |
 | `reprompt` | false/object | Validation retry (requires explicit config) |
-| `few_shot` | integer | Number of few-shot examples |
-| `constraints` | list | Response validation constraints |
-| `loop` | object | Loop execution config |
+| `versions` | object | Version execution config |
 | `is_operational` | boolean | Whether action is active (default: true) |
 | `ephemeral` | boolean | Ephemeral execution mode |
 | `max_tokens` | integer | Maximum tokens for LLM response |

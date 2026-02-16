@@ -200,7 +200,7 @@ class RunCommand:
 )
 @click.option(
     "-u",
-    "--user_code",
+    "--user-code",
     required=False,
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     help="Path to the user's code folder containing UDFs",

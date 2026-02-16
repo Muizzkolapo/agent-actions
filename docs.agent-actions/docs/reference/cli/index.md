@@ -14,57 +14,6 @@ Let's explore what `agac` can do for you.
 
 These flags work with all commands and help you understand what's happening inside your agentic workflows:
 
-### `--debug`
-
-**What happens when an agentic workflow fails?** By default, you get a summary error message. But sometimes you need to see the full picture - which action failed, what context it had, and where exactly things went wrong.
-
-Debug mode gives you complete visibility:
-
-```bash
-agac run my-workflow.yaml --debug
-```
-
-**Debug mode shows:**
-- Structured exception chains with full context
-- Complete Python tracebacks for errors
-- Detailed logging from all processors
-- File paths, operation names, and timestamps
-
-This means you can trace errors from the symptom (a failed action) back to the root cause (a misconfigured field reference, invalid model name, etc.).
-
-**Example output:**
-```
---- Debug Information ---
-
-Exception Chain:
-Level 1: ConfigurationError - Invalid model specified
-  Context: {'agent': 'my-agent', 'field': 'model', 'file_path': 'agents/my-agent.yaml'}
-
-Level 2: ValueError - Model 'gpt-5' not found in provider catalog
-
-Full Traceback:
-Traceback (most recent call last):
-  ...
-```
-
-### `--verbose` / `-v`
-
-Verbose mode shows you the agentic workflow's progress as it runs - which actions are executing, what configuration loaded, and how data flows between steps.
-
-```bash
-agac run my-workflow.yaml --verbose
-# or
-agac run my-workflow.yaml -v
-```
-
-**Verbose mode shows:**
-- Progress updates for each action
-- Configuration loading messages
-- Action execution status
-- File operations and validations
-
-Use verbose mode when you want to monitor progress without the full diagnostic detail of `--debug`.
-
 ### `--version` / `-V`
 
 Display the Agent Actions version.
@@ -170,8 +119,8 @@ Here's what each command does - organized by what you're trying to accomplish:
 | [`inspect`](./inspect) | Analyze workflow structure, dependencies, and data flow |
 | [`schema`](./schema) | Display input/output schemas and analyze field dependencies |
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
-| [`list-tools`](./tools#list-tools) | List discovered tools |
-| [`validate-tools`](./tools#validate-tools) | Validate tool references |
+| [`list-udfs`](./tools#list-udfs) | List discovered tools |
+| [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
 | [`render`](./utilities#render) | Render Jinja2 templates (useful for debugging) |
 
 **Project management:**

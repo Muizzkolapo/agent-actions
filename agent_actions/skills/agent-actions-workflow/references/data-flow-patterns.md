@@ -207,7 +207,7 @@ Node 12: { + syllabus_alignment_score }
 UDFs should preserve and enrich, not replace:
 
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def my_function(data: dict) -> dict:
     data['new_field'] = compute_something(data)  # Add
     return data  # Return all fields
@@ -356,7 +356,7 @@ class SearchCatalogOutput(TypedDict, total=False):
     results: List[ResultItem]  # Use nested TypedDict, NOT Dict[str, Any]
     metadata: SearchMetadata
 
-@udf_tool(input_type=SearchInput)
+@udf_tool()
 def search_catalog(data: dict) -> dict:
     # Load from seed_data, vector DB, or SQL
     catalog = load_catalog()

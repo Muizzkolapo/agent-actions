@@ -143,7 +143,7 @@ agac inspect context -a my_workflow generate_question
 ```
 
 The output shows:
-- **Namespaces loaded**: Available data namespaces (source, dependencies, loop, workflow)
+- **Namespaces loaded**: Available data namespaces (source, dependencies, versions, workflow)
 - **Context scope applied**: Which fields are observed, passed through, or dropped
 - **Template variables available**: Variables you can use in your prompt templates
 - **Dependencies**: Input sources and context sources

@@ -288,7 +288,6 @@ done
 ```bash
 agac run -a my_workflow              # Run workflow
 agac run -a my_workflow --upstream   # With upstream deps
-agac run -a my_workflow --debug      # Debug mode
 ```
 
 ## Project Structure

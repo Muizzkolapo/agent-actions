@@ -121,8 +121,8 @@ Use tables when comparing options, listing parameters, or showing protocol opera
 ```markdown
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--verbose` | Show progress output | `false` |
-| `--debug` | Enable debug logging | `false` |
+| `--quiet` | Suppress non-essential output | `false` |
+| `--execution-mode` | Execution mode: `auto`, `parallel`, `sequential` | `auto` |
 ```
 
 ### Code Blocks

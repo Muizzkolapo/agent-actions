@@ -108,14 +108,16 @@ For splitting a document into chunks, processing each, then aggregating results:
 ```yaml
 actions:
   - name: chunk_document
-    granularity: splits
+    kind: tool
+    impl: chunk_document
 
   - name: process_chunk
     dependencies: chunk_document
 
   - name: aggregate_results
     dependencies: process_chunk
-    granularity: collect
+    kind: tool
+    impl: aggregate_results
 ```
 
 **How matching works:** All chunks preserve the original document's `root_target_id`. The aggregate action queries by `root_target_id` to collect all descendants.

@@ -356,7 +356,7 @@ This is an error because the system cannot determine which `title` you mean. Fix
 
 ### Reserved Name (WARNING)
 
-Agent Actions uses certain names for system purposes: `source`, `seed`, `loop`, `workflow`, `action`. If you produce a field with one of these names, it may conflict with system namespaces:
+Agent Actions uses certain names for system purposes: `source`, `seed`, `versions`, `workflow`, `action`. If you produce a field with one of these names, it may conflict with system namespaces:
 
 ```mermaid
 flowchart LR
@@ -561,7 +561,7 @@ prompt: |
 
 ### Avoid Reserved Names
 
-Don't name output fields `source`, `seed`, `loop`, `workflow`, or `action`. These conflict with system namespaces and cause confusion.
+Don't name output fields `source`, `seed`, `versions`, `workflow`, or `action`. These conflict with system namespaces and cause confusion.
 
 ### Integrate into CI/CD
 

@@ -277,8 +277,9 @@ defaults:
 
 actions:
   - name: chunk_document
-    granularity: splits
-    prompt: $prompts.chunk_document
+    kind: tool
+    impl: chunk_document
+    intent: "Split document into manageable chunks"
 
   - name: analyze_chunk
     dependencies: [chunk_document]
@@ -296,7 +297,6 @@ actions:
 
   - name: aggregate_analysis
     dependencies: [analyze_chunk]
-    granularity: collect
     kind: tool
     impl: aggregate_chunk_analyses
     intent: "Combine chunk analyses into unified report"
@@ -314,7 +314,7 @@ The `root_target_id` field preserves document identity through all splits, enabl
 
 **Use cases:** Large document analysis, batch processing, distributed computation
 
-See [Granularity](../reference/execution/granularity) for splits and collect modes.
+See [Granularity](../reference/execution/granularity) for record and file modes.
 
 ---
 
@@ -826,7 +826,7 @@ Most real workflows combine multiple patterns. An incident triage system might u
 Explore the features that make these patterns possible:
 
 - **[Guards](../reference/execution/guards)** — Conditional execution
-- **[Granularity](../reference/execution/granularity)** — Record, file, splits, and collect modes
+- **[Granularity](../reference/execution/granularity)** — Record and file modes
 - **[Context Scope](../reference/context/context-scope)** — Data flow control
 - **[Workflow Dependencies](../reference/execution/workflow-dependencies)** — Chain workflows together
 - **[Reprompting](../reference/validation/reprompting)** — Automatic refinement on failures

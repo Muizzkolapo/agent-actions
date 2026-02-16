@@ -100,16 +100,16 @@ Events are dataclasses that represent specific occurrences in the system:
 **Common Events:**
 - `WorkflowStartEvent` - Workflow execution begins
 - `WorkflowCompleteEvent` - Workflow execution completes
-- `WorkflowErrorEvent` - Workflow execution fails
+- `WorkflowFailedEvent` - Workflow execution fails
 - `AgentStartEvent` - Agent begins processing
 - `AgentCompleteEvent` - Agent completes successfully
-- `AgentSkippedEvent` - Agent skipped (guard condition)
+- `AgentSkipEvent` - Agent skipped (guard condition)
 - `AgentFailedEvent` - Agent fails with error
 - `BatchSubmittedEvent` - Batch job submitted
 - `BatchCompleteEvent` - Batch job completes
 - `ValidationStartEvent` - Validation begins
-- `ValidationPassEvent` - Validation passes
-- `ValidationFailEvent` - Validation fails
+- `ValidationCompleteEvent` - Validation passes
+- `ValidationErrorEvent` - Validation fails
 
 ### Handlers
 
@@ -396,7 +396,7 @@ Console verbosity can be controlled:
 agac run
 
 # Verbose: DEBUG level, all categories
-agac run --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run
 
 # Quiet: WARN level and above (coming in next release)
 agac run --quiet

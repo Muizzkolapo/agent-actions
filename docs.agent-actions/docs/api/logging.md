@@ -614,8 +614,6 @@ fire_event(BatchCompleteEvent(
 - `failed` (int): Failed requests
 - `elapsed_time` (float): Total time in seconds
 - `total_tokens` (int): Total tokens used
-- `execution_time` (float): Total time in seconds
-- `tokens` (Dict[str, int]): Token usage
 
 ---
 
@@ -663,14 +661,14 @@ fire_event(ValidationStartEvent(
 
 ---
 
-#### ValidationPassEvent
+#### ValidationCompleteEvent
 
-Emitted when validation passes.
+Emitted when validation completes successfully.
 
 ```python
-from agent_actions.logging.events import ValidationPassEvent
+from agent_actions.logging.events import ValidationCompleteEvent
 
-fire_event(ValidationPassEvent(
+fire_event(ValidationCompleteEvent(
     message="Validation passed",
     target="extract_data_schema",
 ))
@@ -681,23 +679,25 @@ fire_event(ValidationPassEvent(
 
 ---
 
-#### ValidationFailEvent
+#### ValidationErrorEvent
 
-Emitted when validation fails.
+Emitted when validation finds an error.
 
 ```python
-from agent_actions.logging.events import ValidationFailEvent
+from agent_actions.logging.events import ValidationErrorEvent
 
-fire_event(ValidationFailEvent(
-    message="Validation failed",
+fire_event(ValidationErrorEvent(
     target="extract_data_schema",
-    errors=["Missing required field 'title'", "Invalid type for 'price'"],
+    field="title",
+    error="Missing required field",
 ))
 ```
 
 **Fields:**
 - `target` (str): What was validated
-- `errors` (List[str]): Validation error messages
+- `field` (str): Which field failed
+- `error` (str): Error description
+- `value` (Any): The invalid value (optional)
 
 ---
 
@@ -709,15 +709,17 @@ Emitted for validation warnings.
 from agent_actions.logging.events import ValidationWarningEvent
 
 fire_event(ValidationWarningEvent(
-    message="Validation warning",
     target="extract_data_schema",
-    warnings=["Optional field 'description' is missing"],
+    field="description",
+    warning="Optional field is missing",
 ))
 ```
 
 **Fields:**
 - `target` (str): What was validated
-- `warnings` (List[str]): Warning messages
+- `field` (str): Which field triggered the warning
+- `warning` (str): Warning message
+- `value` (Any): The problematic value (optional)
 
 ---
 

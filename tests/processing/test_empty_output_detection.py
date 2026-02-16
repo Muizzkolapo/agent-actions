@@ -376,13 +376,13 @@ class TestAgentResultEmptyOutputTracking:
         assert collector.accepts(event) is True
 
     def test_collector_increments_empty_output_count(self):
-        from agent_actions.logging.events.types import AgentStartEvent
+        from agent_actions.logging.events.types import AgentCompleteEvent
 
         collector = RunResultsCollector(workflow_name="test")
 
-        # Start agent first so it exists in results
-        start_event = AgentStartEvent(agent_name="agent1", agent_index=0)
-        collector.handle(start_event)
+        # Complete agent first so it exists in results
+        complete_event = AgentCompleteEvent(agent_name="agent1", agent_index=0)
+        collector.handle(complete_event)
 
         # Fire two empty output events
         event1 = RecordEmptyOutputEvent(agent_name="agent1", record_index=0)
@@ -393,9 +393,30 @@ class TestAgentResultEmptyOutputTracking:
 
         assert collector._results["agent1"].empty_output_records == 2
 
-    def test_collector_ignores_empty_output_for_unknown_agent(self):
-        """Empty output event for unknown agent should not crash."""
+    def test_collector_creates_entry_for_empty_output_before_complete(self):
+        """Empty output event before AgentCompleteEvent should create entry and track count."""
         collector = RunResultsCollector(workflow_name="test")
-        event = RecordEmptyOutputEvent(agent_name="unknown_agent", record_index=0)
-        # Should not raise
+
+        # Fire empty output BEFORE complete (real event ordering)
+        event = RecordEmptyOutputEvent(agent_name="agent1", record_index=0)
         collector.handle(event)
+
+        assert "agent1" in collector._results
+        assert collector._results["agent1"].empty_output_records == 1
+
+    def test_collector_empty_output_count_survives_completion(self):
+        """Empty output count set before complete should persist after AgentCompleteEvent."""
+        from agent_actions.logging.events.types import AgentCompleteEvent
+
+        collector = RunResultsCollector(workflow_name="test")
+
+        # Empty output fires during processing (before complete)
+        collector.handle(RecordEmptyOutputEvent(agent_name="agent1", record_index=0))
+        collector.handle(RecordEmptyOutputEvent(agent_name="agent1", record_index=1))
+
+        # Then agent completes — should update status but preserve empty count
+        collector.handle(AgentCompleteEvent(agent_name="agent1", agent_index=0))
+
+        result = collector._results["agent1"]
+        assert result.status == "success"
+        assert result.empty_output_records == 2

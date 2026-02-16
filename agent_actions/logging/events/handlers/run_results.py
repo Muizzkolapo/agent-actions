@@ -158,14 +158,10 @@ class RunResultsCollector:
             self._handle_workflow_complete(event)
         elif event_type == "WorkflowFailedEvent":
             self._handle_workflow_failed(event)
-        elif event_type == "AgentStartEvent":
-            self._handle_agent_start(event)
         elif event_type == "AgentCompleteEvent":
             self._handle_agent_complete(event)
         elif event_type == "AgentSkipEvent":
             self._handle_agent_skip(event)
-        elif event_type == "AgentCachedEvent":
-            self._handle_agent_cached(event)
         elif event_type == "AgentFailedEvent":
             self._handle_agent_failed(event)
         elif event_type == "RecordEmptyOutputEvent":
@@ -235,62 +231,43 @@ class RunResultsCollector:
         }
         self.flush()
 
-    def _handle_agent_start(self, event: BaseEvent) -> None:
-        """Handle AgentStartEvent."""
-        agent_name = event.data.get("agent_name", "")
-        unique_id = f"{self.workflow_name}.{agent_name}"
-
-        self._results[agent_name] = AgentResult(
-            unique_id=unique_id,
-            agent_name=agent_name,
-            agent_index=event.data.get("agent_index", 0),
-            status="running",
-            started_at=event.meta.timestamp,
-        )
-
     def _handle_agent_complete(self, event: BaseEvent) -> None:
         """Handle AgentCompleteEvent."""
         agent_name = event.data.get("agent_name", "")
 
-        if agent_name in self._results:
-            result = self._results[agent_name]
-            result.status = "success"
-            result.execution_time = event.data.get("execution_time", 0.0)
-            result.output_folder = event.data.get("output_path", "")
-            result.record_count = event.data.get("record_count", 0)
-            result.tokens = event.data.get("tokens", {})
-            result.completed_at = event.meta.timestamp
+        if agent_name not in self._results:
+            unique_id = f"{self.workflow_name}.{agent_name}"
+            self._results[agent_name] = AgentResult(
+                unique_id=unique_id,
+                agent_name=agent_name,
+                agent_index=event.data.get("agent_index", 0),
+                status="success",
+            )
 
-            # Accumulate tokens
-            tokens = event.data.get("tokens", {})
-            self._total_tokens["prompt_tokens"] += tokens.get("prompt_tokens", 0)
-            self._total_tokens["completion_tokens"] += tokens.get("completion_tokens", 0)
-            self._total_tokens["total_tokens"] += tokens.get("total_tokens", 0)
+        result = self._results[agent_name]
+        result.status = "success"
+        result.execution_time = event.data.get("execution_time", 0.0)
+        result.output_folder = event.data.get("output_path", "")
+        result.record_count = event.data.get("record_count", 0)
+        result.tokens = event.data.get("tokens", {})
+        result.completed_at = event.meta.timestamp
+
+        # Accumulate tokens
+        tokens = event.data.get("tokens", {})
+        self._total_tokens["prompt_tokens"] += tokens.get("prompt_tokens", 0)
+        self._total_tokens["completion_tokens"] += tokens.get("completion_tokens", 0)
+        self._total_tokens["total_tokens"] += tokens.get("total_tokens", 0)
 
     def _handle_agent_skip(self, event: BaseEvent) -> None:
         """Handle AgentSkipEvent."""
         agent_name = event.data.get("agent_name", "")
         unique_id = f"{self.workflow_name}.{agent_name}"
-
         self._results[agent_name] = AgentResult(
             unique_id=unique_id,
             agent_name=agent_name,
             agent_index=event.data.get("agent_index", 0),
             status="skipped",
             skip_reason=event.data.get("skip_reason", ""),
-            completed_at=event.meta.timestamp,
-        )
-
-    def _handle_agent_cached(self, event: BaseEvent) -> None:
-        """Handle AgentCachedEvent."""
-        agent_name = event.data.get("agent_name", "")
-        unique_id = f"{self.workflow_name}.{agent_name}"
-
-        self._results[agent_name] = AgentResult(
-            unique_id=unique_id,
-            agent_name=agent_name,
-            agent_index=event.data.get("agent_index", 0),
-            status="cached",
             completed_at=event.meta.timestamp,
         )
 
@@ -319,8 +296,17 @@ class RunResultsCollector:
     def _handle_empty_output(self, event: BaseEvent) -> None:
         """Handle RecordEmptyOutputEvent."""
         agent_name = event.data.get("agent_name", "")
-        if agent_name in self._results:
-            self._results[agent_name].empty_output_records += 1
+        if agent_name not in self._results:
+            unique_id = f"{self.workflow_name}.{agent_name}"
+            # agent_index defaults to 0 — RecordEmptyOutputEvent doesn't carry it.
+            # AgentCompleteEvent will overwrite with the real index when it arrives.
+            self._results[agent_name] = AgentResult(
+                unique_id=unique_id,
+                agent_name=agent_name,
+                agent_index=0,
+                status="running",
+            )
+        self._results[agent_name].empty_output_records += 1
 
     def get_summary(self) -> dict[str, int]:
         """

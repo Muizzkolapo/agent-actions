@@ -10,18 +10,18 @@ Agent Actions provides actionable error messages and multiple debugging options.
 
 ## Logging Levels
 
-| Flag | Level | Shows |
-|------|-------|-------|
-| (none) | `CRITICAL` | Only critical system errors |
-| `--verbose` / `-v` | `INFO` | Progress and status updates |
-| `--debug` | `DEBUG` | Full exception chains, context, and tracebacks |
+| Environment Variable | Level | Shows |
+|---------------------|-------|-------|
+| (default) | `CRITICAL` | Only critical system errors |
+| `AGENT_ACTIONS_LOG_LEVEL=INFO` | `INFO` | Progress and status updates |
+| `AGENT_ACTIONS_LOG_LEVEL=DEBUG` | `DEBUG` | Full exception chains, context, and tracebacks |
 
 ## Debug Mode
 
-Use `--debug` to see full error context:
+Set the `AGENT_ACTIONS_LOG_LEVEL` environment variable to see full error context:
 
 ```bash
-agac run -a my_workflow --debug
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 ```
 
 Debug mode reveals:
@@ -30,7 +30,7 @@ Debug mode reveals:
 - Complete Python tracebacks
 
 :::tip
-Redirect debug output to a file for complex issues: `agac run -a my_workflow --debug > debug.log 2>&1`
+Redirect debug output to a file for complex issues: `AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow > debug.log 2>&1`
 :::
 
 ## Environment Variables
@@ -55,8 +55,8 @@ Redirect debug output to a file for complex issues: `agac run -a my_workflow --d
 
 ## Debugging Process
 
-1. Start with `--verbose` to see execution flow
-2. Use `--debug` to investigate specific errors
+1. Start with `AGENT_ACTIONS_LOG_LEVEL=INFO` to see execution flow
+2. Use `AGENT_ACTIONS_LOG_LEVEL=DEBUG` to investigate specific errors
 3. Check exception chains for root causes
 4. Review context information (file paths, action names, operations)
 

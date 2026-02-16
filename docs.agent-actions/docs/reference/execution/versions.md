@@ -13,7 +13,6 @@ Version actions generate multiple agent instances from a single configuration, e
 actions:
   - name: extract_raw_qa
     versions:
-      param: i              # Loop variable name (default: i)
       range: [1, 3]         # Inclusive range - creates _1, _2, _3
       mode: parallel        # or "sequential"
     prompt: |
@@ -24,7 +23,6 @@ actions:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `param` | string | `i` | Variable name for loop counter |
 | `range` | array | Required | `[start, end]` - inclusive range |
 | `mode` | string | `parallel` | `parallel` or `sequential` |
 

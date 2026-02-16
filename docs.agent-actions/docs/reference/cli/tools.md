@@ -10,12 +10,12 @@ Custom tools let you extend Agent Actions with deterministic logic. They handle 
 
 Commands for discovering and validating tools:
 
-## list-tools
+## list-udfs
 
 **What tools are available in my project?** This command scans your code directory for Python functions decorated with `@udf_tool`.
 
 ```bash
-agac list-tools -u <user-code-path> [options]
+agac list-udfs -u <user-code-path> [options]
 ```
 
 Discovers all tools and displays their metadata - location, file path, and documentation.
@@ -31,25 +31,25 @@ Discovers all tools and displays their metadata - location, file path, and docum
 
 ```bash
 # List tools in table format
-agac list-tools -u user_code/
+agac list-udfs -u user_code/
 
 # Output as JSON
-agac list-tools -u user_code/ --json
+agac list-udfs -u user_code/ --json
 
 # Show full details (signatures, docstrings)
-agac list-tools -u user_code/ --verbose
+agac list-udfs -u user_code/ --verbose
 ```
 
 :::tip
 Use this command to verify which tools were discovered from your code directory before running your agentic workflow.
 :::
 
-## validate-tools
+## validate-udfs
 
 **Will my agentic workflow find all the tools it needs?** Validates that every `impl` reference in your configuration points to a real, properly decorated function.
 
 ```bash
-agac validate-tools -a <agentic-workflow> -u <user-code-path> [options]
+agac validate-udfs -a <agentic-workflow> -u <user-code-path> [options]
 ```
 
 Catches misspelled function names or missing `@udf_tool` decorators before execution begins.
@@ -70,7 +70,7 @@ Catches misspelled function names or missing `@udf_tool` decorators before execu
 
 ```bash
 # Validate agentic workflow config references
-agac validate-tools -a my_workflow -u user_code/
+agac validate-udfs -a my_workflow -u user_code/
 ```
 
 :::tip When to Use

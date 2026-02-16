@@ -50,7 +50,7 @@ The output shows:
 - **Input**: Fields the action requires from upstream actions or source data
 - **Output**: Fields the action produces for downstream actions
 - **(none)**: No input fields required
-- **(schemaless)**: Output schema not defined (tool without `output_type`)
+- **(schemaless)**: Output schema not defined (tool without a YAML `schema:` field)
 - **(dynamic)**: Schema determined at runtime
 
 **Schema Sources by Action Type:**
@@ -58,7 +58,7 @@ The output shows:
 | Action Type | Input Schema Source | Output Schema Source |
 |-------------|---------------------|----------------------|
 | LLM | Template references and context_scope | `schema` field |
-| Tool | `input_type` from `@udf_tool` decorator | `output_type` from `@udf_tool` decorator |
+| Tool | `context_scope` in workflow YAML | `schema` field in workflow YAML |
 
 ## See Also
 

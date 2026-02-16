@@ -85,7 +85,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
             "messages": [{"role": "system", "content": prompt_dedent}],
             "model": model_name,
             "response_format": {"type": "json_object"},
-            **extract_generation_params(agent_config),
+            **extract_generation_params(
+                agent_config, extra_params=("frequency_penalty", "presence_penalty")
+            ),
         }
 
         start_time = datetime.now()

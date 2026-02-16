@@ -42,7 +42,7 @@ agac run -a my_workflow --downstream
 | Option | Description |
 |--------|-------------|
 | `-a, --agent NAME` | Agentic workflow name (required) |
-| `-u, --user_code DIRECTORY` | Path to user's code folder containing tools |
+| `-u, --user-code DIRECTORY` | Path to user's code folder containing tools |
 | `--use-tools` | Enable tool usage for actions |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent actions (default: 5, range: 1-50) |

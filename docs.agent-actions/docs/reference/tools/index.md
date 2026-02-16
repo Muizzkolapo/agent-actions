@@ -12,13 +12,9 @@ Tool actions let you execute custom Python functions alongside LLM actions in yo
 ## Quick Example
 
 ```python
-from typing import TypedDict
 from agent_actions import udf_tool
 
-class MyOutput(TypedDict):
-    result: str
-
-@udf_tool(output_type=MyOutput)
+@udf_tool()
 def process_text(data: dict, **kwargs) -> dict:
     return {"result": data["text"].upper()}
 ```
@@ -38,16 +34,10 @@ The `@udf_tool` decorator registers a Python function as a tool action.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `output_type` | type | No | TypedDict, Pydantic model, or dataclass for output validation |
-| `output_schema` | str | No | Schema file name for output validation (e.g., `"ValidationResult"`) |
 | `granularity` | Granularity | No | `RECORD` (default) or `FILE` processing |
 
-:::warning Mutually Exclusive
-You cannot specify both `output_type` and `output_schema`. Use one or the other.
-:::
-
-:::info Input Schema
-Input structure is defined by `context_scope` in your workflow YAML, not in the decorator. The decorator only handles output validation.
+:::info Schema Definition
+Input and output schemas are defined in the workflow YAML `schema:` field, not in the decorator.
 :::
 
 ### Minimal Decorator
@@ -61,50 +51,6 @@ def simple_transform(data: dict, **kwargs) -> dict:
     return data
 ```
 
-## Output Type Definitions
-
-### TypedDict (Recommended)
-
-```python
-from typing import TypedDict, Optional
-
-class QuestionOutput(TypedDict, total=False):
-    question_status: str
-    status_reason: str
-    processed_at: Optional[str]
-```
-
-The `total=False` makes all fields optional.
-
-### Pydantic Model
-
-```python
-from pydantic import BaseModel
-
-class QuestionOutput(BaseModel):
-    question_status: str
-    status_reason: str
-```
-
-### Dataclass
-
-```python
-from dataclasses import dataclass
-
-@dataclass
-class QuestionOutput:
-    question_status: str
-    status_reason: str
-```
-
-### External Schema File
-
-```python
-@udf_tool(output_schema="ValidationResult")
-def validate_data(data: dict, **kwargs) -> dict:
-    return {"valid": True, "errors": []}
-```
-
 ## Granularity
 
 | Granularity | Processing | Use Case |
@@ -115,7 +61,7 @@ def validate_data(data: dict, **kwargs) -> dict:
 ### Record Granularity (Default)
 
 ```python
-@udf_tool(output_type=FilterOutput)
+@udf_tool()
 def filter_questions_by_score(data: dict, **kwargs) -> dict:
     score = data.get('syllabus_alignment_score', 0)
     if score >= 85:
@@ -242,10 +188,10 @@ Tool discovery is thread-safe and cached. Concurrent discovery calls are properl
 
 ```bash
 # List all discovered tools
-agac list-tools -u ./tools
+agac list-udfs -u ./tools
 
 # Validate tool references in workflow
-agac validate-tools -a my_workflow -u ./tools
+agac validate-udfs -a my_workflow -u ./tools
 ```
 
 ## Best Practices
@@ -281,14 +227,6 @@ def validate_phone(data): ...
 ```
 
 ## Error Handling
-
-### Both output_type and output_schema Specified
-
-```
-ConfigurationError: Cannot specify both output_schema and output_type for 'my_function'.
-```
-
-Choose one or the other.
 
 ### Duplicate Function Names
 

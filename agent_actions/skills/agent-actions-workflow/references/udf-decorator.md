@@ -5,14 +5,9 @@ The `@udf_tool` decorator registers Python functions as tool actions in workflow
 ## Syntax
 
 ```python
-from typing import TypedDict
 from agent_actions import udf_tool
 
-class MyInput(TypedDict):
-    text: str
-    count: int
-
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def my_function(data: dict) -> dict:
     """Process data and return result."""
     return {"result": f"Processed: {data['text']}"}
@@ -22,8 +17,9 @@ def my_function(data: dict) -> dict:
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `input_type` | type | Yes | TypedDict, Pydantic model, or dataclass |
 | `granularity` | Granularity | No | `RECORD` (default) or `FILE` |
+
+Input and output schemas are defined via the YAML `schema:` field in the workflow configuration, not in the decorator.
 
 ## Directory Structure
 
@@ -49,49 +45,6 @@ project/
   granularity: record
 ```
 
-## Input Type Definition
-
-### TypedDict (Recommended)
-
-```python
-from typing import TypedDict, List, Optional
-
-class QuestionInput(TypedDict, total=False):
-    """Input schema for question processing."""
-    syllabus_alignment_score: int
-    question: str
-    options: List[str]
-    answer: str
-    reasoning: Optional[str]
-```
-
-`total=False` makes all fields optional.
-
-### Pydantic Model
-
-```python
-from pydantic import BaseModel
-from typing import List
-
-class QuestionInput(BaseModel):
-    question: str
-    options: List[str]
-    answer: str
-```
-
-### Dataclass
-
-```python
-from dataclasses import dataclass
-from typing import List
-
-@dataclass
-class QuestionInput:
-    question: str
-    options: List[str]
-    answer: str
-```
-
 ## Granularity
 
 ### Record (Default)
@@ -99,7 +52,7 @@ class QuestionInput:
 Process one record at a time:
 
 ```python
-@udf_tool(input_type=FilterInput)
+@udf_tool()
 def filter_questions_by_score(data: dict) -> dict:
     score = data.get('syllabus_alignment_score', 0)
     if score >= 85:
@@ -123,7 +76,7 @@ Process all records at once:
 ```python
 from agent_actions.configuration.new_format_schema import Granularity
 
-@udf_tool(input_type=FactInput, granularity=Granularity.FILE)
+@udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     unique = []
@@ -151,7 +104,7 @@ Track which inputs produced which outputs:
 ```python
 from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
-@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
+@udf_tool(granularity=Granularity.FILE)
 def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
     seen = {}
     outputs = []
@@ -228,7 +181,7 @@ class SearchInput(TypedDict, total=False):
     query: str
     filters: List[str]
 
-@udf_tool(input_type=SearchInput)
+@udf_tool()
 def search_items(data: dict) -> dict:
     return {
         "results": [
@@ -260,7 +213,7 @@ class Input1(TypedDict):
 ### 2. Document Expected Input
 
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def my_function(data: dict) -> dict:
     """
     Process data for downstream consumption.
@@ -278,7 +231,7 @@ def my_function(data: dict) -> dict:
 ### 3. Handle Missing Fields
 
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def safe_function(data: dict) -> dict:
     score = data.get('score', 0)  # Use .get() with defaults
     text = data.get('text', '')
@@ -288,19 +241,13 @@ def safe_function(data: dict) -> dict:
 ### 4. Return Complete Records
 
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def augment_data(data: dict) -> dict:
     data['new_field'] = 'computed_value'  # Add, don't replace
     return data
 ```
 
 ## Error Handling
-
-**Missing Input Type:**
-```
-ConfigurationError: udf_tool requires input_type parameter.
-```
-Always specify `input_type`.
 
 **Duplicate Function Names:**
 ```

@@ -95,7 +95,7 @@ class MyToolInput(TypedDict, total=False):
     output_field: str
 
 
-@udf_tool(input_type=MyToolInput)
+@udf_tool()
 def my_tool_function(data: dict) -> dict:
     """Process data and return modified dict.
 

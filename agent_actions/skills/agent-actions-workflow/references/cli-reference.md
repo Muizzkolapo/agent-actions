@@ -6,8 +6,6 @@ Agent Actions CLI commands for running workflows and debugging.
 
 | Flag | Description |
 |------|-------------|
-| `--debug` | Enable debug mode with detailed logging |
-| `--verbose` / `-v` | Enable verbose output |
 | `--version` / `-V` | Display version |
 | `-h` / `--help` | Show help |
 
@@ -42,10 +40,7 @@ agac run -a my_agent --upstream
 agac run -a my_agent --downstream
 
 # Force parallel execution
-agac run -a my_agent --parallel
-
-# Debug mode
-agac run -a my_agent --debug
+agac run -a my_agent --execution-mode parallel
 ```
 
 **Options:**
@@ -55,11 +50,7 @@ agac run -a my_agent --debug
 | `-a, --agent TEXT` | Agent configuration file name (required) |
 | `-u, --user_code DIRECTORY` | Path to UDF code folder |
 | `--use-tools` | Enable tool usage |
-| `--force` | Force execution despite warnings |
-| `--debug` | Enable debug mode |
-| `--verbose` | Enable verbose output |
-| `--parallel` | Force parallel execution |
-| `--no-parallel` | Force sequential execution |
+| `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent agents (1-50, default: 5) |
 | `--upstream` | Execute upstream workflows first |
 | `--downstream` | Execute downstream workflows after |
@@ -73,10 +64,10 @@ Actions at the same dependency level execute concurrently:
 agac run -a my_workflow
 
 # Force parallel
-agac run -a my_workflow --parallel
+agac run -a my_workflow --execution-mode parallel
 
 # Force sequential
-agac run -a my_workflow --no-parallel
+agac run -a my_workflow --execution-mode sequential
 
 # Limit concurrency
 agac run -a my_workflow --concurrency-limit 3
@@ -134,10 +125,12 @@ List all registered UDF tools:
 agac list-udfs
 ```
 
-## Debug Mode
+## Debugging
+
+Use environment variables for debug-level logging:
 
 ```bash
-agac run -a my_workflow --debug
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 ```
 
 **Shows:**
@@ -177,7 +170,7 @@ export AGENT_ACTIONS_LOG_LEVEL="DEBUG"
 
 ```bash
 # Debug failing workflow
-agac run -a my_workflow --debug --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 # Production: full pipeline
 agac run -a final_workflow --upstream

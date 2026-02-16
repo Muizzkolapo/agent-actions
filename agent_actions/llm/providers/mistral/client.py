@@ -80,7 +80,9 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "model": model_name,
                 "response_format": {"type": "json_object"},
                 "messages": messages,
-                **extract_generation_params(agent_config),
+                **extract_generation_params(
+                    agent_config, extra_params=("frequency_penalty", "presence_penalty")
+                ),
             }
             chat_response = client.chat.complete(**json_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):
@@ -165,7 +167,9 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             non_json_kwargs = {
                 "model": model_name,
                 "messages": messages,
-                **extract_generation_params(agent_config),
+                **extract_generation_params(
+                    agent_config, extra_params=("frequency_penalty", "presence_penalty")
+                ),
             }
             chat_response = client.chat.complete(**non_json_kwargs)
         except (RateLimitError, NetworkError, VendorAPIError):

@@ -17,7 +17,7 @@ This workflow demonstrates production-ready incident management automation using
                     ┌───────────┴─────────────┐
                     │    classify_severity    │
                     │   (LLM - 3x parallel)   │
-                    │  [loop: classifier_id]  │
+                    │  [versions: 1-3]        │
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
@@ -66,19 +66,18 @@ This workflow demonstrates production-ready incident management automation using
 
 ## Key Patterns Demonstrated
 
-### 1. Parallel Evaluation with Loop
+### 1. Parallel Evaluation with Versions
 Multiple independent classifiers evaluate severity simultaneously:
 ```yaml
-loop:
-  param: classifier_id
-  range: [1, 2, 3]
+versions:
+  range: [1, 3]
   mode: parallel
 ```
 
 ### 2. Aggregation with Consensus
 Tool action aggregates parallel results using weighted voting:
 ```yaml
-loop_consumption:
+version_consumption:
   source: classify_severity
   pattern: merge
 ```
@@ -169,9 +168,6 @@ Reference data in `seed_data/`:
 ```bash
 # Run the workflow
 agac run -a incident_triage
-
-# With debug output
-agac run -a incident_triage --debug --verbose
 
 ```
 

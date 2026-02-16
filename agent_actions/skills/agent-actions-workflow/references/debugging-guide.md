@@ -115,7 +115,7 @@ generate_explanation:  0 records  ← All filtered!
 agac render -a my_workflow
 
 # Run with debug output
-agac run -a my_workflow --debug --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 
 # Execute with upstream dependencies
 agac run -a my_workflow --upstream

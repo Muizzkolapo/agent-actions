@@ -85,7 +85,7 @@ class BatchClientResolver:
                 "'tool' vendor does not support batch processing",
                 context={
                     "client_type": client_type,
-                    "supported_clients": ["openai", "gemini", "anthropic"],
+                    "supported_clients": ["openai", "gemini", "anthropic", "groq", "mistral"],
                 },
             )
 

@@ -243,7 +243,7 @@ target_word_counts: dict
 
 **Fix:** Ensure tool returns all required fields:
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def my_function(data: dict) -> dict:
     return {
         'question': data.get('question', ''),  # Always include
@@ -301,7 +301,7 @@ cat agent_io/target/node_5_*/data.json | head -100
 Get detailed tracebacks:
 
 ```bash
-agac run -a my_workflow --debug --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a my_workflow
 ```
 
 ### Step 5: Enable Prompt Debug
@@ -393,7 +393,7 @@ answer_text: Union[str, List[str]]
 ### Always Use `.get()` with Defaults
 
 ```python
-@udf_tool(input_type=MyInput)
+@udf_tool()
 def safe_function(data: dict) -> dict:
     value = data.get('field', '')  # Never KeyError
     items = data.get('items', [])
@@ -482,10 +482,7 @@ These commands and patterns are your debugging toolkit.
 
 ```bash
 # Debug mode (full tracebacks)
-agac run -a workflow --debug
-
-# Verbose output
-agac run -a workflow --debug --verbose
+AGENT_ACTIONS_LOG_LEVEL=DEBUG agac run -a workflow
 ```
 
 ### Common Fixes Cheatsheet
@@ -507,7 +504,7 @@ When debugging agentic workflow errors, work through this checklist:
 3. [ ] Compare data before/after failing action
 4. [ ] Check TypedDict matches actual data shape
 5. [ ] Enable `prompt_debug: true` for LLM actions
-6. [ ] Run with `--debug --verbose` for tracebacks
+6. [ ] Run with `AGENT_ACTIONS_LOG_LEVEL=DEBUG` for tracebacks
 7. [ ] Consider enabling reprompt with `use_llm_critique: true` for LLM schema failures
 
 Most errors fall into one of two categories: schema mismatches (the data structure doesn't match expectations) or missing fields (required data wasn't provided). The checklist above helps you identify which category you're dealing with.

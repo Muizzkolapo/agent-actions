@@ -49,7 +49,7 @@ This workflow demonstrates a Dataiku-inspired AutoML pipeline that handles data 
                     ┌───────────┴─────────────┐
                     │   select_best_model     │
                     │        (Tool)           │
-                    │  [loop_consumption]     │
+                    │  [version_consumption]  │
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
@@ -84,16 +84,15 @@ guard:
 ### 2. Parallel Model Training
 Train multiple algorithms simultaneously:
 ```yaml
-loop:
-  param: algorithm
+versions:
   range: ["random_forest", "gradient_boosting", "neural_network"]
   mode: parallel
 ```
 
-### 3. Model Selection via Loop Consumption
+### 3. Model Selection via Version Consumption
 Aggregate parallel results for champion selection:
 ```yaml
-loop_consumption:
+version_consumption:
   source: evaluate_model
   pattern: merge
 ```
@@ -220,9 +219,6 @@ Reference data in `seed_data/`:
 # Run the pipeline
 agac run -a automated_ml_pipeline
 
-# With debug output
-agac run -a automated_ml_pipeline --debug --verbose
-
 ```
 
 ## Tools
@@ -240,7 +236,7 @@ agac run -a automated_ml_pipeline --debug --verbose
 - **Quality thresholds**: Modify constants in `validate_data_quality_threshold.py`
 - **Model selection weights**: Update `METRIC_WEIGHTS` in `select_champion_model.py`
 - **Deployment checks**: Adjust guard conditions in workflow YAML
-- **Add algorithms**: Extend the `loop.range` array with new algorithm names
+- **Add algorithms**: Extend the `versions.range` array with new algorithm names
 
 ## Recommended Datasets
 

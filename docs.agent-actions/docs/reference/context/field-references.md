@@ -46,7 +46,7 @@ Action names cannot use reserved namespaces. The following names are disallowed:
 
 - `action`
 - `context_scope`
-- `loop`
+- `versions`
 - `prompt`
 - `schema`
 - `seed`
@@ -164,6 +164,6 @@ See [Version Actions](../execution/versions) for complete documentation.
 
 ## See Also
 
-- [Version Actions](../execution/versions) - Loop configuration and field prefix patterns
+- [Version Actions](../execution/versions) - Version configuration and field prefix patterns
 - [Context Scope](./context-scope) - Field visibility and flow control
 - [Workflow Dependencies](../execution/workflow-dependencies) - Dependency patterns

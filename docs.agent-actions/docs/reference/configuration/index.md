@@ -170,7 +170,6 @@ actions:
 |-------|------|-------------|
 | `json_mode` | boolean | Enable structured JSON output |
 | `reprompt` | object/false | Reprompt configuration for validation failures (see [Reprompting](../validation/reprompting.md)) |
-| `constraints` | list | Additional validation rules |
 
 ### Tool Action Fields
 

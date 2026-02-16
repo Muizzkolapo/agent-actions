@@ -27,7 +27,7 @@ This workflow demonstrates a CausalLens-inspired approach to RCA that uses paral
                     ┌───────────┴─────────────┐
                     │    rank_hypotheses      │
                     │        (Tool)           │
-                    │  [loop_consumption]     │
+                    │  [version_consumption]  │
                     │  [weighted scoring]     │
                     └───────────┬─────────────┘
                                 │
@@ -63,8 +63,7 @@ This workflow demonstrates a CausalLens-inspired approach to RCA that uses paral
 ### 1. Multi-Strategy Hypothesis Generation
 Parallel reasoning with different approaches:
 ```yaml
-loop:
-  param: reasoning_strategy
+versions:
   range: ["data_driven", "topology_driven", "pattern_matching"]
   mode: parallel
 ```
@@ -77,7 +76,7 @@ loop:
 ### 2. Weighted Hypothesis Ranking
 Tool aggregates and scores hypotheses:
 ```yaml
-loop_consumption:
+version_consumption:
   source: generate_hypotheses
   pattern: merge
 ```
@@ -238,9 +237,6 @@ Reference data in `seed_data/`:
 # Run the analysis
 agac run -a root_cause_analysis
 
-# With debug output
-agac run -a root_cause_analysis --debug --verbose
-
 ```
 
 ## Tools
@@ -253,7 +249,7 @@ agac run -a root_cause_analysis --debug --verbose
 
 ## Customization
 
-- **Reasoning strategies**: Add/modify strategies in loop range
+- **Reasoning strategies**: Add/modify strategies in versions range
 - **Scoring weights**: Adjust in `rank_causal_hypotheses.py`
 - **Historical matching**: Update similarity logic in `generate_remediation_plan.py`
 - **Add seed data**: Expand topology, incidents, and patterns files

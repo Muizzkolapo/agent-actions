@@ -118,10 +118,10 @@ def calculate_order_totals(data: Dict[str, Any]) -> Dict[str, Any]:
 
 ```bash
 # List discovered tools
-agac list-tools -u tools/
+agac list-udfs -u tools/
 
 # Validate tool references in workflow
-agac validate-tools -a my_workflow -u tools/
+agac validate-udfs -a my_workflow -u tools/
 ```
 
 ## Learn More

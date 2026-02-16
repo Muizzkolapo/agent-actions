@@ -10,10 +10,8 @@ from agent_actions.logging.events.types import (
     WorkflowStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
-    AgentStartEvent,
     AgentCompleteEvent,
     AgentSkipEvent,
-    AgentCachedEvent,
     AgentFailedEvent,
 )
 from agent_actions.logging.events.handlers.run_results import (
@@ -44,7 +42,7 @@ class TestRunResultsCollectorAccepts:
 
     def test_accepts_agent_events(self, collector):
         """Test that agent events are accepted."""
-        event = AgentStartEvent(agent_name="test")
+        event = AgentCompleteEvent(agent_name="test", agent_index=0)
         assert collector.accepts(event)
 
     def test_rejects_other_events(self, collector):
@@ -132,32 +130,8 @@ class TestWorkflowEventHandling:
 class TestAgentEventHandling:
     """Tests for agent event handling."""
 
-    def test_handle_agent_start(self, collector):
-        """Test AgentStartEvent handling."""
-        event = AgentStartEvent(
-            agent_name="extract_data",
-            agent_index=0,
-            total_agents=3,
-            agent_type="extractor",
-        )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-
-        collector.handle(event)
-
-        assert "extract_data" in collector._results
-        result = collector._results["extract_data"]
-        assert result.agent_name == "extract_data"
-        assert result.agent_index == 0
-        assert result.status == "running"
-        assert result.started_at is not None
-
     def test_handle_agent_complete(self, collector):
         """Test AgentCompleteEvent handling."""
-        # First start the agent
-        start_event = AgentStartEvent(agent_name="transform", agent_index=1)
-        collector.handle(start_event)
-
-        # Then complete it
         event = AgentCompleteEvent(
             agent_name="transform",
             agent_index=1,
@@ -177,42 +151,27 @@ class TestAgentEventHandling:
         assert result.record_count == 100
         assert result.tokens["total_tokens"] == 700
 
-    def test_handle_agent_skip(self, collector):
-        """Test AgentSkipEvent handling."""
-        event = AgentSkipEvent(
-            agent_name="already_done",
+    def test_handle_agent_complete_creates_entry(self, collector):
+        """Test AgentCompleteEvent creates new result entry."""
+        event = AgentCompleteEvent(
+            agent_name="extract_data",
             agent_index=0,
             total_agents=3,
-            skip_reason="output exists",
         )
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
 
         collector.handle(event)
 
-        assert "already_done" in collector._results
-        result = collector._results["already_done"]
-        assert result.status == "skipped"
-        assert result.skip_reason == "output exists"
-
-    def test_handle_agent_cached(self, collector):
-        """Test AgentCachedEvent handling."""
-        event = AgentCachedEvent(
-            agent_name="cached_agent",
-            agent_index=0,
-            total_agents=3,
-            cache_key="abc123",
-        )
-
-        collector.handle(event)
-
-        assert "cached_agent" in collector._results
-        result = collector._results["cached_agent"]
-        assert result.status == "cached"
+        assert "extract_data" in collector._results
+        result = collector._results["extract_data"]
+        assert result.agent_name == "extract_data"
+        assert result.agent_index == 0
+        assert result.status == "success"
 
     def test_handle_agent_failed_existing(self, collector):
-        """Test AgentFailedEvent for an agent that was started."""
-        # Start the agent
-        start_event = AgentStartEvent(agent_name="failing", agent_index=0)
-        collector.handle(start_event)
+        """Test AgentFailedEvent for an agent that was completed."""
+        # Complete the agent first
+        collector.handle(AgentCompleteEvent(agent_name="failing", agent_index=0))
 
         # Fail it
         event = AgentFailedEvent(
@@ -264,7 +223,6 @@ class TestTokenAccumulation:
                 ("agent3", {"prompt_tokens": 300, "completion_tokens": 150, "total_tokens": 450}),
             ]
         ):
-            collector.handle(AgentStartEvent(agent_name=name, agent_index=i))
             collector.handle(AgentCompleteEvent(agent_name=name, agent_index=i, tokens=tokens))
 
         assert collector._total_tokens["prompt_tokens"] == 600
@@ -285,7 +243,6 @@ class TestFlushAndOutput:
     def test_flush_writes_run_results_json(self, collector, temp_output_dir):
         """Test that flush writes run_results.json."""
         collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=1))
-        collector.handle(AgentStartEvent(agent_name="agent1", agent_index=0))
         collector.handle(
             AgentCompleteEvent(
                 agent_name="agent1",
@@ -309,7 +266,6 @@ class TestFlushAndOutput:
     def test_output_structure(self, collector, temp_output_dir):
         """Test the structure of run_results.json."""
         collector.handle(WorkflowStartEvent(workflow_name="my_workflow", agent_count=2))
-        collector.handle(AgentStartEvent(agent_name="agent1", agent_index=0))
         collector.handle(
             AgentCompleteEvent(
                 agent_name="agent1",
@@ -318,13 +274,14 @@ class TestFlushAndOutput:
                 tokens={"total_tokens": 100},
             )
         )
-        collector.handle(AgentSkipEvent(agent_name="agent2", agent_index=1, skip_reason="cached"))
+        collector.handle(
+            AgentFailedEvent(agent_name="agent2", agent_index=1, error_message="failed")
+        )
         collector.handle(
             WorkflowCompleteEvent(
                 workflow_name="my_workflow",
                 elapsed_time=5.0,
                 agents_completed=1,
-                agents_skipped=1,
             )
         )
 
@@ -356,7 +313,6 @@ class TestFlushAndOutput:
 
         # Add agents out of order
         for name, idx in [("third", 2), ("first", 0), ("second", 1)]:
-            collector.handle(AgentStartEvent(agent_name=name, agent_index=idx))
             collector.handle(AgentCompleteEvent(agent_name=name, agent_index=idx))
 
         collector.handle(WorkflowCompleteEvent(workflow_name="test"))
@@ -374,29 +330,18 @@ class TestGetSummary:
 
     def test_get_summary_with_results(self, collector):
         """Test summary with various result statuses."""
-        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=5))
+        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=3))
 
         # Add various result types
-        collector.handle(AgentStartEvent(agent_name="success1", agent_index=0))
         collector.handle(AgentCompleteEvent(agent_name="success1", agent_index=0))
-
-        collector.handle(AgentStartEvent(agent_name="success2", agent_index=1))
         collector.handle(AgentCompleteEvent(agent_name="success2", agent_index=1))
-
-        collector.handle(AgentSkipEvent(agent_name="skipped1", agent_index=2))
-
-        collector.handle(AgentCachedEvent(agent_name="cached1", agent_index=3))
-
-        collector.handle(AgentStartEvent(agent_name="failed1", agent_index=4))
         collector.handle(
-            AgentFailedEvent(agent_name="failed1", agent_index=4, error_message="Error")
+            AgentFailedEvent(agent_name="failed1", agent_index=2, error_message="Error")
         )
 
         summary = collector.get_summary()
 
         assert summary["success"] == 2
-        assert summary["skipped"] == 1
-        assert summary["cached"] == 1
         assert summary["error"] == 1
 
 
@@ -406,7 +351,7 @@ class TestUniqueIdGeneration:
     def test_unique_id_format(self, collector):
         """Test that unique_id follows workflow.agent_name format."""
         collector.handle(WorkflowStartEvent(workflow_name="my_workflow", agent_count=1))
-        collector.handle(AgentStartEvent(agent_name="my_agent", agent_index=0))
+        collector.handle(AgentCompleteEvent(agent_name="my_agent", agent_index=0))
 
         result = collector._results["my_agent"]
         assert result.unique_id == "my_workflow.my_agent"
@@ -415,7 +360,39 @@ class TestUniqueIdGeneration:
         """Test that unique_id uses workflow name from start event."""
         # Handle workflow start which sets the workflow_name
         collector.handle(WorkflowStartEvent(workflow_name="actual_workflow", agent_count=1))
-        collector.handle(AgentStartEvent(agent_name="agent", agent_index=0))
+        collector.handle(AgentCompleteEvent(agent_name="agent", agent_index=0))
 
         result = collector._results["agent"]
         assert result.unique_id == "actual_workflow.agent"
+
+
+class TestAgentSkipHandling:
+    """Tests for AgentSkipEvent handling."""
+
+    def test_handle_agent_skip(self, collector):
+        """Test AgentSkipEvent creates a skipped result with timestamp."""
+        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=2))
+        event = AgentSkipEvent(
+            agent_name="cached_agent",
+            agent_index=0,
+            total_agents=2,
+            skip_reason="already completed",
+        )
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        collector.handle(event)
+
+        assert "cached_agent" in collector._results
+        result = collector._results["cached_agent"]
+        assert result.status == "skipped"
+        assert result.skip_reason == "already completed"
+        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+
+    def test_skip_counted_in_summary(self, collector):
+        """Test that skipped agents appear in summary."""
+        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=2))
+        collector.handle(AgentSkipEvent(agent_name="skip1", agent_index=0, skip_reason="done"))
+        collector.handle(AgentCompleteEvent(agent_name="run1", agent_index=1))
+
+        summary = collector.get_summary()
+        assert summary["skipped"] == 1
+        assert summary["success"] == 1
