@@ -71,12 +71,13 @@ class ErrorTranslator:
             root_message,
         )
 
-        # Find first formatter that can handle this error
+        # Find first formatter that can handle this error.
+        # GenericErrorFormatter (last in chain) always matches, so this loop
+        # is guaranteed to return.
         for formatter in self.formatters:
             if formatter.can_handle(exc, root_cause, root_message):
                 logger.debug("Using formatter: %s", type(formatter).__name__)
                 return formatter.format(exc, root_cause, root_message, merged_context)
 
-        # Should never reach here since GenericErrorFormatter always matches
-        logger.warning("No formatter matched - using fallback")
-        return self.formatters[-1].format(exc, root_cause, root_message, merged_context)
+        # Unreachable: formatters is non-empty and GenericErrorFormatter always matches.
+        raise AssertionError("No formatter matched — formatters chain is misconfigured")

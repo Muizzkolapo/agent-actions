@@ -68,6 +68,33 @@ class TestLoggerFactoryInitialize:
         manager = LoggerFactory.get_event_manager()
         assert manager.get_context("invocation_id") == "my-inv-id"
 
+    def test_force_reinitialize_does_not_accumulate_handlers(self):
+        """Regression: force=True must clear handlers before re-registering."""
+        manager = LoggerFactory.initialize()
+        handler_count_first = len(manager._handlers)
+
+        manager = LoggerFactory.initialize(force=True)
+        handler_count_second = len(manager._handlers)
+
+        assert handler_count_second == handler_count_first, (
+            f"Handler count grew from {handler_count_first} to {handler_count_second} "
+            "after force re-init — handlers are accumulating"
+        )
+
+    def test_force_reinitialize_restores_handlers_on_failure(self):
+        """Failed force re-init must restore previous handlers."""
+        manager = LoggerFactory.initialize()
+        handlers_before = list(manager._handlers)
+        assert len(handlers_before) > 0
+
+        # Patch _register_handlers to raise after handlers were cleared
+        with patch.object(LoggerFactory, "_register_handlers", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError, match="boom"):
+                LoggerFactory.initialize(force=True)
+
+        # Previous handlers should be restored
+        assert manager._handlers == handlers_before
+
 
 class TestLoggerFactoryConfig:
     """Tests for LoggerFactory configuration handling."""

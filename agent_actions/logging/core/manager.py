@@ -112,6 +112,15 @@ class EventManager:
         if handler in self._handlers:
             self._handlers.remove(handler)
 
+    def clear_handlers(self) -> None:
+        """
+        Remove all registered handlers.
+
+        Used by LoggerFactory when re-initializing with force=True
+        to prevent handler accumulation.
+        """
+        self._handlers.clear()
+
     def add_filter(self, filter_: EventFilter) -> None:
         """
         Add a global event filter.

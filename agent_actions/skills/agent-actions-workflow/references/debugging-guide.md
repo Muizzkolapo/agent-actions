@@ -117,9 +117,6 @@ agac render -a my_workflow
 # Run with debug output
 agac run -a my_workflow --debug --verbose
 
-# Validate without executing
-agac run -a my_workflow --validate-only
-
 # Execute with upstream dependencies
 agac run -a my_workflow --upstream
 ```

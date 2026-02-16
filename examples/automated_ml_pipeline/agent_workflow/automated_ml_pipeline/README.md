@@ -223,8 +223,6 @@ agac run -a automated_ml_pipeline
 # With debug output
 agac run -a automated_ml_pipeline --debug --verbose
 
-# Validate configuration only
-agac run -a automated_ml_pipeline --validate-only
 ```
 
 ## Tools

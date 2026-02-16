@@ -41,9 +41,6 @@ agac run -a my_agent --upstream
 # Trigger downstream workflows after
 agac run -a my_agent --downstream
 
-# Validate only (no execution)
-agac run -a my_agent --validate-only
-
 # Force parallel execution
 agac run -a my_agent --parallel
 
@@ -59,7 +56,6 @@ agac run -a my_agent --debug
 | `-u, --user_code DIRECTORY` | Path to UDF code folder |
 | `--use-tools` | Enable tool usage |
 | `--force` | Force execution despite warnings |
-| `--validate-only` / `-v` | Run validation only |
 | `--debug` | Enable debug mode |
 | `--verbose` | Enable verbose output |
 | `--parallel` | Force parallel execution |
@@ -138,18 +134,6 @@ List all registered UDF tools:
 agac list-udfs
 ```
 
-## validate
-
-Validate configuration without execution:
-
-```bash
-# Validate workflow
-agac run -a my_workflow --validate-only
-
-# Validate UDF schemas
-agac validate --udfs
-```
-
 ## Debug Mode
 
 ```bash
@@ -192,14 +176,8 @@ export AGENT_ACTIONS_LOG_LEVEL="DEBUG"
 ## Common Workflows
 
 ```bash
-# Development: validate then run
-agac run -a my_workflow --validate-only && agac run -a my_workflow
-
 # Debug failing workflow
 agac run -a my_workflow --debug --verbose
-
-# CI/CD validation
-agac run -a my_workflow --validate-only
 
 # Production: full pipeline
 agac run -a final_workflow --upstream

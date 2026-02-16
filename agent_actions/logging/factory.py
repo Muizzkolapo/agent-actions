@@ -121,6 +121,62 @@ class LoggerFactory:
         manager = EventManager.get()
         cls._event_manager = manager
 
+        # On force re-init, flush buffered events then stash old handlers.
+        # If setup below fails, we restore them so logging isn't left degraded.
+        previous_handlers = None
+        if force:
+            manager.flush()
+            previous_handlers = list(manager._handlers)
+            manager.clear_handlers()
+
+        try:
+            cls._register_handlers(
+                manager,
+                config=cls._config,
+                output_dir=output_dir,
+                workflow_name=workflow_name,
+                invocation_id=invocation_id,
+                verbose=verbose,
+                console_level_str=console_level_str,
+            )
+        except Exception:
+            if previous_handlers is not None:
+                manager.clear_handlers()
+                for handler in previous_handlers:
+                    manager.register(handler)
+            raise
+
+        # Setup Python logging bridge
+        # This converts all logger.* calls to events
+        cls._setup_logging_bridge()
+
+        # Mark as initialized
+        manager.initialize()
+        cls._initialized = True
+
+        return manager
+
+    @classmethod
+    def _register_handlers(
+        cls,
+        manager,
+        *,
+        config,
+        output_dir,
+        workflow_name,
+        invocation_id,
+        verbose,
+        console_level_str,
+    ) -> None:
+        """Build and register all event handlers on the manager."""
+        from agent_actions.logging.core import (
+            ConsoleEventHandler,
+            EventLevel,
+            JSONFileHandler,
+        )
+        from agent_actions.logging.events import AgentActionsFormatter
+        from agent_actions.logging.events.handlers import RunResultsCollector
+
         # Generate invocation ID if not provided
         if not invocation_id:
             invocation_id = str(uuid.uuid4())[:8]
@@ -169,7 +225,7 @@ class LoggerFactory:
                 buffer_size=5,
             )
             manager.register(json_handler)
-        elif cls._config.file_handler.enabled:
+        elif config.file_handler.enabled:
             # Use configured log file path
             log_file_path = cls._get_log_file_path()
             if log_file_path:
@@ -187,16 +243,6 @@ class LoggerFactory:
         )
         manager.register(run_results)
         cls._run_results_collector = run_results
-
-        # Setup Python logging bridge
-        # This converts all logger.* calls to events
-        cls._setup_logging_bridge()
-
-        # Mark as initialized
-        manager.initialize()
-        cls._initialized = True
-
-        return manager
 
     @classmethod
     def _setup_logging_bridge(cls) -> None:

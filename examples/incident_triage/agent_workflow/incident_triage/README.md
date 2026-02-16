@@ -173,8 +173,6 @@ agac run -a incident_triage
 # With debug output
 agac run -a incident_triage --debug --verbose
 
-# Validate only (no execution)
-agac run -a incident_triage --validate-only
 ```
 
 ## Tools

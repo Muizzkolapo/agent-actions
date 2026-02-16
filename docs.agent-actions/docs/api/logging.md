@@ -817,7 +817,6 @@ collector = RunResultsCollector(
 **Output:** `{output_dir}/target/run_results.json`
 
 **Methods:**
-- `set_output_dir(output_dir)`: Set output directory after initialization
 - `accepts(event)`: Returns True for workflow/agent category events
 - `handle(event)`: Process event and update internal state
 - `flush()`: Write run_results.json to disk

@@ -120,10 +120,6 @@ class RunResultsCollector:
             "total_tokens": 0,
         }
 
-    def set_output_dir(self, output_dir: str | Path) -> None:
-        """Set the output directory after initialization."""
-        self.output_dir = Path(output_dir)
-
     def accepts(self, event: BaseEvent) -> bool:
         """
         Accept workflow and agent events for collection.

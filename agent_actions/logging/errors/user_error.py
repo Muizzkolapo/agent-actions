@@ -27,7 +27,6 @@ _SKIP_FIELDS = {
     "upstream",
     "use_tools",
     "user_code",  # CLI flags
-    "validate_only",  # CLI flags
     "all_issues",
     "total_errors",
     "total_warnings",  # Validation internals

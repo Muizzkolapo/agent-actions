@@ -241,8 +241,6 @@ agac run -a root_cause_analysis
 # With debug output
 agac run -a root_cause_analysis --debug --verbose
 
-# Validate configuration only
-agac run -a root_cause_analysis --validate-only
 ```
 
 ## Tools
