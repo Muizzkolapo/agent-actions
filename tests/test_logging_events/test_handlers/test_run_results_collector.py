@@ -328,21 +328,24 @@ class TestFlushAndOutput:
 class TestGetSummary:
     """Tests for get_summary method."""
 
-    def test_get_summary_with_results(self, collector):
-        """Test summary with various result statuses."""
-        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=3))
+    def test_get_summary_all_statuses(self, collector):
+        """Test summary covers all status types: success, skipped, error, running."""
+        collector.handle(WorkflowStartEvent(workflow_name="test", agent_count=4))
 
-        # Add various result types
-        collector.handle(AgentCompleteEvent(agent_name="success1", agent_index=0))
-        collector.handle(AgentCompleteEvent(agent_name="success2", agent_index=1))
-        collector.handle(
-            AgentFailedEvent(agent_name="failed1", agent_index=2, error_message="Error")
-        )
+        collector.handle(AgentCompleteEvent(agent_name="ok", agent_index=0))
+        collector.handle(AgentSkipEvent(agent_name="skip1", agent_index=1, skip_reason="done"))
+        collector.handle(AgentFailedEvent(agent_name="fail1", agent_index=2, error_message="boom"))
+        # Simulate a running agent (created by RecordEmptyOutputEvent before completion)
+        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+
+        collector.handle(RecordEmptyOutputEvent(agent_name="still_running", record_index=0))
 
         summary = collector.get_summary()
 
-        assert summary["success"] == 2
+        assert summary["success"] == 1
+        assert summary["skipped"] == 1
         assert summary["error"] == 1
+        assert summary["running"] == 1
 
 
 class TestUniqueIdGeneration:

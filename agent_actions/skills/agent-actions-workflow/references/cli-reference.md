@@ -48,7 +48,7 @@ agac run -a my_agent --execution-mode parallel
 | Option | Description |
 |--------|-------------|
 | `-a, --agent TEXT` | Agent configuration file name (required) |
-| `-u, --user_code DIRECTORY` | Path to UDF code folder |
+| `-u, --user-code DIRECTORY` | Path to UDF code folder |
 | `--use-tools` | Enable tool usage |
 | `-e, --execution-mode` | Execution mode: `auto` (default), `parallel`, or `sequential` |
 | `--concurrency-limit` | Max concurrent agents (1-50, default: 5) |

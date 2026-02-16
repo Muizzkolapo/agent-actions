@@ -27,7 +27,7 @@ class AgentResult:
     unique_id: str
     agent_name: str
     agent_index: int
-    status: str  # "success", "skipped", "error", "cached"
+    status: str  # "success", "skipped", "error", "running"
     execution_time: float = 0.0
     output_folder: str = ""
     record_count: int = 0
@@ -261,15 +261,22 @@ class RunResultsCollector:
     def _handle_agent_skip(self, event: BaseEvent) -> None:
         """Handle AgentSkipEvent."""
         agent_name = event.data.get("agent_name", "")
-        unique_id = f"{self.workflow_name}.{agent_name}"
-        self._results[agent_name] = AgentResult(
-            unique_id=unique_id,
-            agent_name=agent_name,
-            agent_index=event.data.get("agent_index", 0),
-            status="skipped",
-            skip_reason=event.data.get("skip_reason", ""),
-            completed_at=event.meta.timestamp,
-        )
+
+        if agent_name in self._results:
+            result = self._results[agent_name]
+            result.status = "skipped"
+            result.skip_reason = event.data.get("skip_reason", "")
+            result.completed_at = event.meta.timestamp
+        else:
+            unique_id = f"{self.workflow_name}.{agent_name}"
+            self._results[agent_name] = AgentResult(
+                unique_id=unique_id,
+                agent_name=agent_name,
+                agent_index=event.data.get("agent_index", 0),
+                status="skipped",
+                skip_reason=event.data.get("skip_reason", ""),
+                completed_at=event.meta.timestamp,
+            )
 
     def _handle_agent_failed(self, event: BaseEvent) -> None:
         """Handle AgentFailedEvent."""
@@ -313,9 +320,9 @@ class RunResultsCollector:
         Get a summary of agent results.
 
         Returns:
-            Dict with counts: success, skipped, cached, error
+            Dict with counts: success, skipped, error, running
         """
-        summary = {"success": 0, "skipped": 0, "cached": 0, "error": 0, "running": 0}
+        summary = {"success": 0, "skipped": 0, "error": 0, "running": 0}
         for result in self._results.values():
             if result.status in summary:
                 summary[result.status] += 1
