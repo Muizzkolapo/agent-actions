@@ -16,6 +16,7 @@ from agent_actions.errors import (
     ConfigurationError,
     TemplateRenderingError,
     AgentExecutionError,
+    get_error_detail,
 )
 from agent_actions.logging.errors import format_user_error
 
@@ -59,14 +60,16 @@ class ErrorHandler:
         Raises:
             The specified error type or AgentActionsException if not specified.
         """
-        error_details = {"error": str(error), **(context or {})}
+        error_details = {"error": get_error_detail(error), **(context or {})}
         # Only log at DEBUG level (to avoid duplicate error logs)
         # The top-level error handler (main.py) will log at ERROR level
-        logger.debug("%s: %s", message, str(error), extra=error_details)
+        logger.debug("%s: %s", message, get_error_detail(error), extra=error_details)
         if error_type:
-            raise error_type(f"{message}: {str(error)}", context=context, cause=error)
+            raise error_type(f"{message}: {get_error_detail(error)}", context=context, cause=error)
 
-        raise AgentActionsException(f"{message}: {str(error)}", context=context, cause=error)
+        raise AgentActionsException(
+            f"{message}: {get_error_detail(error)}", context=context, cause=error
+        )
 
     @staticmethod
     def handle_validation_error(

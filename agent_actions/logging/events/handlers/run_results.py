@@ -282,11 +282,13 @@ class RunResultsCollector:
         """Handle AgentFailedEvent."""
         agent_name = event.data.get("agent_name", "")
 
+        error_msg = event.data.get("error_detail") or event.data.get("error_message", "")
+
         if agent_name in self._results:
             result = self._results[agent_name]
             result.status = "error"
             result.execution_time = event.data.get("execution_time", 0.0)
-            result.error_message = event.data.get("error_message", "")
+            result.error_message = error_msg
             result.completed_at = event.meta.timestamp
         else:
             unique_id = f"{self.workflow_name}.{agent_name}"
@@ -296,7 +298,7 @@ class RunResultsCollector:
                 agent_index=event.data.get("agent_index", 0),
                 status="error",
                 execution_time=event.data.get("execution_time", 0.0),
-                error_message=event.data.get("error_message", ""),
+                error_message=error_msg,
                 completed_at=event.meta.timestamp,
             )
 

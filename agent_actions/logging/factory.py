@@ -1,22 +1,4 @@
-"""
-Logger factory for centralized logging configuration.
-
-This module provides a unified logging system that routes ALL logging
-through the event system. Python's standard logging (logger.info(), etc.)
-is automatically bridged to events.
-
-Architecture:
-    Application Code
-           │
-           ├── logger.info("msg")  ──┐
-           │                         │
-           └── fire_event(Event)  ───┼──► EventManager
-                                     │         │
-                                     │    ┌────┴────┐
-                                     │    │         │
-                                     ▼    ▼         ▼
-                              Console  JSON File  run_results.json
-"""
+"""Logger factory for centralized logging configuration."""
 
 from __future__ import annotations
 
@@ -225,8 +207,19 @@ class LoggerFactory:
                 buffer_size=5,
             )
             manager.register(json_handler)
+
+            # Register error-only JSON handler
+            errors_file = output_path / "target" / "errors.json"
+            errors_handler = JSONFileHandler(
+                file_path=errors_file,
+                min_level=EventLevel.ERROR,
+                buffer_size=1,  # flush immediately for errors
+            )
+            manager.register(errors_handler)
         elif config.file_handler.enabled:
             # Use configured log file path
+            # NOTE: errors.json is only written when output_dir is provided (workflow runs).
+            # Config-based file handler path does not get a separate errors.json.
             log_file_path = cls._get_log_file_path()
             if log_file_path:
                 json_handler = JSONFileHandler(

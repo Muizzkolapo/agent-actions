@@ -21,6 +21,7 @@ from agent_actions.logging.events import (
     BatchSubmittedEvent,
     BatchCompleteEvent,
 )
+from agent_actions.errors import get_error_detail
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 
 logger = logging.getLogger(__name__)
@@ -382,7 +383,7 @@ class AgentExecutor:
                 "agent_idx": params.agent_idx,
                 "duration": duration,
                 "is_last_agent": params.is_last_agent,
-                "error": str(error),
+                "error": get_error_detail(error),
                 "error_type": type(error).__name__,
             },
         )
@@ -390,6 +391,7 @@ class AgentExecutor:
             AgentFailedEvent(
                 agent_name=params.agent_name,
                 error_message=str(error),
+                error_detail=get_error_detail(error),
                 error_type=type(error).__name__,
             )
         )
@@ -401,7 +403,7 @@ class AgentExecutor:
                 action_name=params.agent_name,
                 status="failed",
                 duration_seconds=duration,
-                error=str(error),
+                error=get_error_detail(error),
             )
             self.run_tracker.record_action_complete(config=config)
 

@@ -22,6 +22,7 @@ from xml.etree import ElementTree as ET
 import yaml
 
 from agent_actions.errors import ProcessingError as ProcessorError
+from agent_actions.errors import get_error_detail
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
 
@@ -93,10 +94,10 @@ class ProcessorErrorHandlerMixin:
         """
         context = self.get_error_context(operation, **context_kwargs)
         context["error_type"] = error.__class__.__name__
-        context["error_message"] = str(error)
+        context["error_message"] = get_error_detail(error)
         log_entry = {
             "level": "ERROR",
-            "message": f"{operation} failed: {str(error)}",
+            "message": f"{operation} failed: {get_error_detail(error)}",
             "context": context,
             "traceback": traceback.format_exc(),
         }
@@ -126,7 +127,7 @@ class ProcessorErrorHandlerMixin:
                 DataParsingErrorEvent(
                     file_path=str(file_path) if file_path else "unknown",
                     format=format_type,
-                    error=str(error),
+                    error=get_error_detail(error),
                 )
             )
         else:
@@ -134,15 +135,15 @@ class ProcessorErrorHandlerMixin:
             fire_event(
                 DataLoadingErrorEvent(
                     file_path=str(file_path) if file_path else "unknown",
-                    error=str(error),
+                    error=get_error_detail(error),
                 )
             )
 
         if reraise:
             if error_type:
-                raise error_type(f"{operation} failed: {str(error)}") from error
+                raise error_type(f"{operation} failed: {get_error_detail(error)}") from error
             else:
-                raise ProcessorError(f"{operation} failed: {str(error)}") from error
+                raise ProcessorError(f"{operation} failed: {get_error_detail(error)}") from error
 
     def handle_validation_error(
         self,

@@ -21,9 +21,8 @@ class TestConfigValidationErrorMessages:
         with pytest.raises(ConfigValidationError) as exc_info:
             ActionExpander._validate_required_fields(agent, "test_action")
         error = exc_info.value
-        error_str = str(error)
-        assert "test_action" in error_str
         assert error.context is not None
+        assert error.context["action_name"] == "test_action"
         assert "action_name" in error.context
         assert "missing_fields" in error.context
         assert "hint" in error.context

@@ -6,6 +6,8 @@
 |------|------|-------------|---------|
 | `base.py` | Module | Base exception classes for agent-actions. | `utilities` |
 | `AgentActionsError` | Class | Base exception for all agent-actions errors. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `detailed_str` | Method | Return message with full context dict — use at debug/event boundaries. | - |
+| `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
 | `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |
 | `configuration.py` | Module | Configuration-related errors. | `errors` |

@@ -44,7 +44,11 @@ class AgentActionsError(Exception):
             self.__cause__ = cause
 
     def __str__(self) -> str:
-        """Return string representation including context if available."""
+        """Return concise error message without context dump."""
+        return super().__str__()
+
+    def detailed_str(self) -> str:
+        """Return message with full context — use for debug logging."""
         try:
             from agent_actions.utils.safe_format import format_exception_context
 
@@ -58,5 +62,11 @@ class AgentActionsError(Exception):
             return base_msg
 
         except Exception:
-            # Fallback if formatting fails
             return super().__str__()
+
+
+def get_error_detail(error: Exception) -> str:
+    """Return detailed_str() for AgentActionsError, else str()."""
+    if isinstance(error, AgentActionsError):
+        return error.detailed_str()
+    return str(error)

@@ -157,6 +157,7 @@ class WorkflowFailedEvent(BaseEvent):
 
     workflow_name: str = ""
     error_message: str = ""
+    error_detail: str = ""
     error_type: str = ""
     elapsed_time: float = 0.0
     failed_agent: str = ""
@@ -168,6 +169,7 @@ class WorkflowFailedEvent(BaseEvent):
         self.data = {
             "workflow_name": self.workflow_name,
             "error_message": self.error_message,
+            "error_detail": self.error_detail or self.error_message,
             "error_type": self.error_type,
             "elapsed_time": self.elapsed_time,
             "failed_agent": self.failed_agent,
@@ -280,6 +282,7 @@ class AgentFailedEvent(BaseEvent):
     agent_index: int = 0
     total_agents: int = 0
     error_message: str = ""
+    error_detail: str = ""
     error_type: str = ""
     execution_time: float = 0.0
     suggestion: str = ""
@@ -294,6 +297,7 @@ class AgentFailedEvent(BaseEvent):
             "agent_index": self.agent_index,
             "total_agents": self.total_agents,
             "error_message": self.error_message,
+            "error_detail": self.error_detail or self.error_message,
             "error_type": self.error_type,
             "execution_time": self.execution_time,
             "suggestion": self.suggestion,

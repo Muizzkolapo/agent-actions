@@ -12,6 +12,7 @@ from uuid import uuid4
 from rich.console import Console
 
 from agent_actions.config.factory import create_agent_runner
+from agent_actions.errors import get_error_detail
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.utils.module_loader import ensure_path_importable
@@ -759,6 +760,9 @@ class AgentWorkflow:
                     agent_index=params.idx,
                     total_agents=params.total_agents,
                     error_message=str(params.result.error) if params.result.error else "",
+                    error_detail=get_error_detail(params.result.error)
+                    if params.result.error
+                    else "",
                     error_type=type(params.result.error).__name__ if params.result.error else "",
                     execution_time=params.duration,
                 )
@@ -793,6 +797,7 @@ class AgentWorkflow:
             WorkflowFailedEvent(
                 workflow_name=self.agent_name,
                 error_message=str(error),
+                error_detail=get_error_detail(error),
                 error_type=type(error).__name__,
                 elapsed_time=elapsed_time,
                 failed_agent=get_manager().get_context("agent_name") or "",
@@ -801,7 +806,7 @@ class AgentWorkflow:
 
         # Mark workflow as failed in manifest
         if self.services.support.manifest_manager:
-            self.services.support.manifest_manager.mark_workflow_failed(str(error))
+            self.services.support.manifest_manager.mark_workflow_failed(get_error_detail(error))
 
         # Mark running agent as failed
         self.services.core.state_manager.mark_running_as_failed()
