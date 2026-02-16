@@ -1,101 +1,114 @@
-<div align="center">
+<p align="center">
   <a href="https://muizzkolapo.github.io/docs.agent-actions">
     <picture>
-      <source media="(prefers-color-scheme: light)" srcset="docs.agent-actions/static/img/logo-mark-dark.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="docs.agent-actions/static/img/logo-mark-light.svg">
-      <img alt="Agent Actions Logo" src="docs.agent-actions/static/img/logo-mark.svg" width="60%">
+      <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-text-dark.svg">
+      <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-text-light.svg">
+      <img alt="Agent Actions" src=".github/images/logo-text-light.svg" height="80">
     </picture>
   </a>
-</div>
+</p>
 
-<div align="center">
-  <h3>Declarative LLM workflow orchestration.</h3>
-</div>
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+  <a href="https://pypi.org/project/agent-actions/"><img src="https://img.shields.io/pypi/v/agent-actions" alt="PyPI"></a>
+  <a href="https://pypistats.org/packages/agent-actions"><img src="https://img.shields.io/pypi/dm/agent-actions" alt="Downloads"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python"></a>
+  <a href="https://github.com/Muizzkolapo/agent-actions/actions"><img src="https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+</p>
 
-<div align="center">
-  <a href="LICENSE" target="_blank"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-  <a href="https://pypistats.org/packages/agent-actions" target="_blank"><img src="https://img.shields.io/pypi/dm/agent-actions" alt="PyPI - Downloads"></a>
-  <a href="https://pypi.org/project/agent-actions/#history" target="_blank"><img src="https://img.shields.io/pypi/v/agent-actions?label=%20" alt="Version"></a>
-  <a href="https://www.python.org/downloads/" target="_blank"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
-  <a href="https://github.com/Muizzkolapo/agent-actions/actions" target="_blank"><img src="https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/Muizzkolapo/agent-actions/stargazers" target="_blank"><img src="https://img.shields.io/github/stars/Muizzkolapo/agent-actions?style=social" alt="GitHub stars"></a>
-</div>
+Define LLM workflows in YAML. Run them with one command. Agent Actions handles dependency resolution, parallel execution, batch processing, and multi-vendor LLM support.
 
-<br>
+```yaml
+actions:
+  - name: extract_features
+    intent: Extract key product features and target audience
+    model_vendor: anthropic
+    model_name: claude-3-haiku
 
-Agent Actions is a framework for orchestrating LLM workflows using declarative YAML. Define multi-step pipelines, and let the framework handle dependency resolution, parallel execution, batch processing, and multi-vendor LLM support — all without writing orchestration code.
+  - name: generate_seo
+    intent: Write an SEO-optimized product description
+    dependencies: [extract_features]
+    observe: [extract_features.features]
+    model_vendor: openai
+    model_name: gpt-4o-mini
+```
 
 ```bash
 pip install agent-actions
+agac run -a my_workflow
 ```
 
-For agent orchestration with dependency graphs, parallel execution, and batch APIs, check out the [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration).
-
----
-
-**Documentation**:
-
-- [docs.agent-actions](https://muizzkolapo.github.io/docs.agent-actions) — Guides, tutorials, and conceptual overviews
-- [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) — All CLI commands and options
-- [API Reference](https://muizzkolapo.github.io/docs.agent-actions/api/logging) — Internal API documentation
-
-**Community**: Visit [GitHub Discussions](https://github.com/Muizzkolapo/agent-actions/discussions) to ask questions, share ideas, and connect with other users.
-
-## Why use Agent Actions?
-
-Agent Actions helps teams build reproducible, auditable LLM pipelines through a standard YAML interface for workflows, schemas, and execution.
-
-Use Agent Actions for:
-
-- **Declarative YAML configuration**. Define complex multi-step workflows without writing orchestration code. Describe what you want and let Agent Actions figure out the execution order, parallelism, and data flow.
-- **Multi-vendor LLM support**. Use OpenAI, Anthropic, Google Gemini, Groq, Mistral, Cohere, or Ollama. Switch providers with a single config change — no code modifications needed.
-- **DAG-based parallel execution**. Automatic dependency resolution with parallel execution. Actions run as soon as their dependencies complete, maximizing throughput.
-- **Batch processing at scale**. Process thousands of records through provider batch APIs. Perfect for bulk data enrichment, classification, and extraction tasks.
-- **Pre-flight validation**. Catch schema errors, missing dependencies, template issues, and credential problems before making a single LLM call. Never waste tokens on broken configs.
-- **Version control friendly**. Workflows, prompts, and schemas are plain YAML files. Track changes with git, review diffs in PRs, and roll back when needed. No black-box configs.
-
-## Supported LLM providers
-
-| Provider | Models | Batch API |
-|----------|--------|-----------|
-| **OpenAI** | GPT-4o, GPT-4o-mini, GPT-4-turbo | Yes |
-| **Anthropic** | Claude 3.5 Sonnet, Claude 3 Haiku/Opus | Yes |
-| **Google** | Gemini 1.5 Pro, Gemini 1.5 Flash | Yes |
-| **Groq** | Llama 3.1, Mixtral | Yes |
-| **Mistral** | Mistral Large, Mistral Small | Yes |
-| **Cohere** | Command R, Command R+ | Realtime only |
-| **Ollama** | Llama, Mistral, Phi (local) | Realtime only |
-
-## Quick start
+## Get started
 
 ```bash
-# Initialize a new project
-agac init my-project
-cd my-project
-
-# Validate your workflow (catch errors before LLM calls)
-agac validate
-
-# Run the workflow
-agac run
+agac init my-project && cd my-project    # scaffold a project
+agac validate                            # catch errors before LLM calls
+agac run                                 # execute the workflow
 ```
 
-## Agent Actions ecosystem
+Read the [Installation Guide](https://muizzkolapo.github.io/docs.agent-actions/installation) or jump to the [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration).
 
-While the core framework handles workflow orchestration, Agent Actions includes additional tools for the full development lifecycle:
+## How it works
 
-- **[Interactive Docs Site](https://muizzkolapo.github.io/docs.agent-actions/guides/docs-site)** — Auto-generate a visual dashboard showing your workflow DAG, action details, schemas, and run history with `agac docs serve`.
-- **[User-Defined Functions](https://muizzkolapo.github.io/docs.agent-actions/guides/custom-tools)** — Extend workflows with custom Python tool functions. Pre-process inputs, post-process outputs, or add custom logic anywhere in the pipeline.
-- **[Reprompting & Validation](https://muizzkolapo.github.io/docs.agent-actions/reference/validation/reprompting)** — Built-in output validation with automatic LLM retry. Define schemas and let the framework ensure outputs match expectations.
-- **[Observability](https://muizzkolapo.github.io/docs.agent-actions/reference/architecture/logging)** — Track every LLM call, token usage, and execution time. Debug workflows with structured event logs and `run_results.json` artifacts.
+Write a YAML file describing your actions, their dependencies, and which LLM to use. Agent Actions builds a DAG, resolves execution order, runs independent actions in parallel, and writes structured output.
 
-## Additional resources
+```
+                  extract_features
+                   /            \
+          generate_seo    sentiment_analysis
+                   \            /
+                  aggregate_results
+```
 
-- [Installation Guide](https://muizzkolapo.github.io/docs.agent-actions/installation) — Install and bootstrap your first project.
-- [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) — Full YAML schema documentation.
-- [Contributing Guide](CONTRIBUTING.md) — Learn how to contribute to Agent Actions.
-- [Security Policy](SECURITY.md) — Report vulnerabilities privately.
+- **Actions** are individual LLM calls with an intent, model, and output schema.
+- **Dependencies** declare data flow — an action can `observe` fields from upstream actions.
+- **Execution** is automatic: the framework figures out what can run in parallel.
+- **Validation** catches broken configs, missing deps, and bad templates before any LLM call.
+
+## Providers
+
+| Provider | Batch API | Provider | Batch API |
+|----------|-----------|----------|-----------|
+| OpenAI | Yes | Groq | Yes |
+| Anthropic | Yes | Mistral | Yes |
+| Google Gemini | Yes | Cohere | Realtime |
+| Ollama (local) | Realtime | | |
+
+Switch providers by changing `model_vendor` — no code changes needed.
+
+## Key capabilities
+
+**Pre-flight validation** — `agac validate` catches schema errors, circular deps, template issues, missing UDFs, and credential problems before a single token is spent.
+
+**Batch processing** — Route thousands of records through provider batch APIs for bulk enrichment, classification, and extraction.
+
+**User-defined functions** — Drop Python functions into your project to pre-process inputs, post-process outputs, or add custom tool logic. [Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/custom-tools)
+
+**Reprompting** — Define output schemas and let the framework auto-retry when LLM responses don't match. [Guide](https://muizzkolapo.github.io/docs.agent-actions/reference/validation/reprompting)
+
+**Observability** — Every run produces `run_results.json` with per-action status, timing, and token counts. Structured event logs for debugging and analytics. [Architecture](https://muizzkolapo.github.io/docs.agent-actions/reference/architecture/logging)
+
+**Interactive docs** — `agac docs serve` generates a visual dashboard of your workflow DAG, action details, and schemas. [Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/docs-site)
+
+## Documentation
+
+| | |
+|---|---|
+| [docs.agent-actions](https://muizzkolapo.github.io/docs.agent-actions) | Guides, tutorials, conceptual overviews |
+| [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) | Full YAML schema docs |
+| [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) | All commands and options |
+| [API Reference](https://muizzkolapo.github.io/docs.agent-actions/api/logging) | Internal API docs |
+
+## Contributing
+
+```bash
+git clone https://github.com/Muizzkolapo/agent-actions.git && cd agent-actions
+pip install -e ".[dev]"
+pytest
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details. Report bugs or request features via [GitHub Issues](https://github.com/Muizzkolapo/agent-actions/issues). Questions and ideas welcome in [Discussions](https://github.com/Muizzkolapo/agent-actions/discussions).
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE)
