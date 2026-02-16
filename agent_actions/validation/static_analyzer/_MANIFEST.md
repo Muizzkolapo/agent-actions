@@ -23,7 +23,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detect_all` | Method | Detect all conflicts in the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_shadowed_fields` | Method | Get mapping of shadowed fields to their producers. | - |
 | `data_flow_graph.py` | Module | Data flow graph for workflow static analysis. | - |
-| `AgentKind` | Class | Type of agent node. | - |
+| `AgentKind` | Class | Type of agent node (LLM, TOOL, HITL, SOURCE, SEED). | - |
 | `OutputSchema` | Class | Represents the output schema of an agent. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `has_field` | Method | Check if field is available in output. | - |
@@ -87,7 +87,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_agent` | Method | Extract all field references from an agent configuration. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_referenced_agents` | Method | Get set of all agents referenced (excluding special namespaces). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_workflow` | Method | Extract references from all agents in a workflow. | - |
-| `schema_extractor.py` | Module | Extract output schemas from agent configurations. | `docs`, `response_processing` |
+| `schema_extractor.py` | Module | Extract output schemas from agent configurations (LLM, tool, HITL). | `docs`, `response_processing` |
 | `SchemaExtractor` | Class | Extracts output schemas from various agent types. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_schema` | Method | Extract output schema from agent config. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_input_schema` | Method | Extract input schema from agent config. | - |

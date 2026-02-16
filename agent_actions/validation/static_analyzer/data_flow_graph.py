@@ -16,6 +16,7 @@ class AgentKind(Enum):
 
     LLM = "llm"
     TOOL = "tool"
+    HITL = "hitl"
     SOURCE = "source"  # Special: workflow input data
     SEED = "seed"  # Special: static seed data
 
@@ -136,7 +137,7 @@ class DataFlowNode:
 
     Attributes:
         name: Action name
-        agent_kind: Type of action (LLM, TOOL, SOURCE, etc.)
+        agent_kind: Type of action (LLM, TOOL, HITL, SOURCE, etc.)
         output_schema: What fields this action produces
         input_schema: What fields this action expects as input
         input_requirements: What fields this action consumes from upstream

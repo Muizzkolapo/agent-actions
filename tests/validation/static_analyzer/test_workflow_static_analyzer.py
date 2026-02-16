@@ -163,6 +163,69 @@ class TestWorkflowStaticAnalyzer:
         dep_errors = [e for e in result.errors if "not declared in dependencies" in e.message]
         assert len(dep_errors) == 0
 
+    def test_get_action_schemas_hitl(self):
+        """Test get_action_schemas classifies HITL actions with canonical schema."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "review",
+                    "kind": "hitl",
+                    "model_vendor": "hitl",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schemas = analyzer.get_action_schemas()
+
+        assert schemas["review"]["kind"] == "hitl"
+        assert "hitl_status" in schemas["review"]["output"]["fields"]
+        assert "user_comment" in schemas["review"]["output"]["fields"]
+        assert "timestamp" in schemas["review"]["output"]["fields"]
+
+    @pytest.mark.parametrize(
+        "kind,model_vendor",
+        [
+            ("hitl", "hitl"),
+            ("hitl", ""),
+            ("llm", "hitl"),
+        ],
+    )
+    def test_hitl_classified_with_either_kind_or_model_vendor(self, kind, model_vendor):
+        """Test HITL is recognized when either kind or model_vendor is 'hitl'."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "review",
+                    "kind": kind,
+                    "model_vendor": model_vendor,
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schemas = analyzer.get_action_schemas()
+
+        assert schemas["review"]["kind"] == "hitl"
+
+    def test_kind_precedence_tool_over_hitl(self):
+        """Test classification precedence: tool > hitl > llm."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "ambiguous",
+                    "kind": "hitl",
+                    "model_vendor": "tool",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schemas = analyzer.get_action_schemas()
+
+        # tool check comes first, so model_vendor="tool" wins
+        assert schemas["ambiguous"]["kind"] == "tool"
+
 
 class TestAnalyzeWorkflowFunction:
     """Tests for the analyze_workflow convenience function."""

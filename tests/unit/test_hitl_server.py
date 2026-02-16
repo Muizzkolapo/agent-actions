@@ -257,12 +257,20 @@ def test_shutdown_endpoint_sets_flag_and_triggers_event():
     assert server.response["hitl_status"] == "timeout"
 
 
-def test_server_startup_failure_signals_error():
+def test_server_startup_failure_signals_error(monkeypatch):
     """Test Flask startup failure unblocks workflow thread with error status."""
     import threading
 
+    def fail_make_server(*args, **kwargs):
+        raise OSError("address already in use")
+
+    monkeypatch.setattr(
+        "agent_actions.llm.providers.hitl.server.make_server",
+        fail_make_server,
+    )
+
     server = HitlServer(
-        port=80,  # Privileged port - will fail without root
+        port=3001,
         instructions="Test",
         context_data={"value": 1},
         timeout=30,
@@ -271,8 +279,8 @@ def test_server_startup_failure_signals_error():
     # Ensure event not set initially
     assert not server.response_event.is_set()
 
-    # Run server in thread (will fail)
-    server_thread = threading.Thread(target=server._run_server, args=(80,), daemon=True)
+    # Run server in thread (will fail deterministically)
+    server_thread = threading.Thread(target=server._run_server, args=(3001,), daemon=True)
     server_thread.start()
 
     # Wait for error signal (should be fast)

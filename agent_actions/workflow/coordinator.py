@@ -377,14 +377,6 @@ class AgentWorkflow:
             backend.initialize()
 
             db_path = workflow_dir / "agent_io" / "target" / f"{self.metadata.agent_name}.db"
-            logger.info(
-                "Initialized SQLite storage backend: %s",
-                db_path,
-                extra={
-                    "workflow_name": self.metadata.agent_name,
-                    "db_path": str(db_path),
-                },
-            )
             self.console.print(f"[cyan]📦 Storage backend: {db_path}[/cyan]")
             return backend
         except (OSError, ValueError) as e:

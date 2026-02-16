@@ -160,6 +160,32 @@ class TestSchemaExtractor:
         # Should NOT have nested fields at top level
         assert "name" not in schema.available_fields
 
+    def test_hitl_agent_uses_canonical_hitl_schema(self):
+        """Test HITL action uses the canonical HITL output schema."""
+        config = {
+            "name": "review",
+            "kind": "hitl",
+            "model_vendor": "hitl",
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert not schema.is_schemaless
+        assert "hitl_status" in schema.available_fields
+        assert "user_comment" in schema.available_fields
+        assert "timestamp" in schema.available_fields
+
+    def test_hitl_agent_input_schema_is_empty(self):
+        """Test HITL action has no input schema (receives context_data at runtime)."""
+        config = {
+            "name": "review",
+            "kind": "hitl",
+            "model_vendor": "hitl",
+        }
+        input_schema = self.extractor.extract_input_schema(config)
+
+        assert not input_schema.required_fields
+        assert not input_schema.optional_fields
+
 
 class TestInputSchemaExtraction:
     """Tests for input schema extraction."""

@@ -199,6 +199,26 @@ class TestWorkflowSchemaService:
         assert ref.source_agent == "extractor"
         assert ref.field_name == "text"
 
+    def test_hitl_action_schema_preserves_hitl_kind(self):
+        """Test HITL action is classified as HITL kind with canonical output fields."""
+        service = self._create_service(
+            [
+                {
+                    "name": "review",
+                    "kind": "hitl",
+                    "model_vendor": "hitl",
+                }
+            ]
+        )
+
+        schema = service.get_action_schema("review")
+
+        assert schema.kind == ActionKind.HITL
+        # Canonical HITL fields from HITL_OUTPUT_JSON_SCHEMA
+        assert "hitl_status" in schema.available_outputs
+        assert "user_comment" in schema.available_outputs
+        assert "timestamp" in schema.available_outputs
+
     def test_action_schema_includes_dependencies(self):
         """Test action schema includes declared dependencies."""
         service = self._create_service(

@@ -10,8 +10,17 @@ from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies i
 class TestEnhancedMetadataStrategy:
     """Tests for EnhancedMetadataStrategy."""
 
-    def test_create_enhanced_metadata_with_token_counts(self):
+    @staticmethod
+    def _fake_token_count(value: str, _: str = "") -> int:
+        """Deterministic token counter that avoids network calls to tiktoken."""
+        return len(value.split())
+
+    def test_create_enhanced_metadata_with_token_counts(self, monkeypatch: pytest.MonkeyPatch):
         """Test enhanced metadata with token count information."""
+        monkeypatch.setattr(
+            "agent_actions.input.preprocessing.chunking.strategies.metadata_strategies.Tokenizer.num_tokens_from_string",
+            self._fake_token_count,
+        )
         config = {"add_token_counts": True, "add_chunk_info": True}
         strategy = EnhancedMetadataStrategy(config, "cl100k_base")
 
@@ -56,8 +65,12 @@ class TestEnhancedMetadataStrategy:
         assert metadata["chunk_size_chars"] == 100
         assert metadata["original_field_size_chars"] == 1000
 
-    def test_create_enhanced_metadata_with_all_features(self):
+    def test_create_enhanced_metadata_with_all_features(self, monkeypatch: pytest.MonkeyPatch):
         """Test enhanced metadata with all features enabled."""
+        monkeypatch.setattr(
+            "agent_actions.input.preprocessing.chunking.strategies.metadata_strategies.Tokenizer.num_tokens_from_string",
+            self._fake_token_count,
+        )
         config = {
             "chunk_id_field": "chunk_id",
             "original_record_id": "parent_id",

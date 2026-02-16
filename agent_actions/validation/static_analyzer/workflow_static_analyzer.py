@@ -330,6 +330,8 @@ class WorkflowStaticAnalyzer:
 
         if kind == "tool" or model_vendor == "tool":
             agent_kind = AgentKind.TOOL
+        elif kind == "hitl" or model_vendor == "hitl":
+            agent_kind = AgentKind.HITL
         else:
             agent_kind = AgentKind.LLM
 
@@ -432,7 +434,7 @@ class WorkflowStaticAnalyzer:
         Returns a dictionary mapping action names to their schemas:
         {
             "action_name": {
-                "kind": "llm" | "tool",
+                "kind": "llm" | "tool" | "hitl",
                 "input": {
                     "required": ["field1", "field2"],
                     "optional": ["field3"],

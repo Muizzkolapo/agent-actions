@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Set
 from agent_actions.tooling.docs.scanner import ProjectScanner
 from agent_actions.output.response.loader import SchemaLoader
 
+from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
+
 from .data_flow_graph import InputSchema, OutputSchema
 
 
@@ -119,6 +121,8 @@ class SchemaExtractor:
 
         if kind == "tool" or model_vendor == "tool":
             self._extract_tool_schema(agent_config, output)
+        elif kind == "hitl" or model_vendor == "hitl":
+            self._extract_hitl_schema(output)
         else:
             self._extract_llm_schema(agent_config, output, schema_loader)
 
@@ -152,6 +156,9 @@ class SchemaExtractor:
 
         if kind == "tool" or model_vendor == "tool":
             self._extract_tool_input_schema(agent_config, input_schema)
+        elif kind == "hitl" or model_vendor == "hitl":
+            # HITL actions have no input schema — they receive context_data at runtime
+            pass
         else:
             # LLM actions - extract from template references and context_scope
             self._extract_llm_input_schema(agent_config, input_schema, reference_extractor)
@@ -451,6 +458,15 @@ class SchemaExtractor:
                     output.schema_fields.add(item["name"])
         else:
             output.is_dynamic = True
+
+    def _extract_hitl_schema(self, output: OutputSchema) -> None:
+        """Extract schema for HITL actions using the canonical HITL output schema.
+
+        Always applies the canonical schema regardless of any inline schema
+        on the action config — the HITL runtime contract is fixed.
+        """
+        output.json_schema = HITL_OUTPUT_JSON_SCHEMA
+        output.schema_fields = self._extract_fields_from_json_schema(HITL_OUTPUT_JSON_SCHEMA)
 
     def _apply_context_scope(self, config: Dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema.

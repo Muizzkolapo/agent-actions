@@ -68,7 +68,7 @@ class ProjectPathsFactory:
     """Factory for creating project paths."""
 
     REQUIRED_DIRECTORIES = ["agent_config_dir", "schema_dir"]
-    AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir"]
+    AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
     def __init__(self, path_manager: PathManager = None):
         """Initialize factory with optional PathManager."""
