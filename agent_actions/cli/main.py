@@ -234,6 +234,9 @@ def main_entrypoint(argv: Optional[Sequence[str]] = None) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure)
     """
+    from dotenv import load_dotenv
+
+    load_dotenv()
     app = CLI()
     return app.execute(argv)
 
