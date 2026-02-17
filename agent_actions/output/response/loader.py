@@ -101,10 +101,27 @@ class SchemaLoader:
 
         schema_file = schema_dir / f"{schema_name}.yml"
 
+        if not schema_file.exists() and schema_dir.exists():
+            # Try recursive search in subdirectories
+            matches = sorted(schema_dir.rglob(f"{schema_name}.yml"))
+            if len(matches) == 1:
+                schema_file = matches[0]
+                logger.info(
+                    "Schema '%s' found at %s (not in root schema dir)",
+                    schema_name,
+                    schema_file,
+                )
+            elif len(matches) > 1:
+                match_paths = "\n  ".join(str(m.relative_to(schema_dir)) for m in matches)
+                raise FileNotFoundError(
+                    f"Multiple schema files named '{schema_name}.yml' found in {schema_dir}:\n  {match_paths}\n"
+                    f"Move the schema to schema/{schema_name}.yml or use a unique name."
+                )
+
         if not schema_file.exists():
             raise FileNotFoundError(
-                f"Schema file '{schema_name}.yml' not found in {schema_dir}. "
-                f"Ensure the schema file exists in the schema/ directory."
+                f"Schema file '{schema_name}.yml' not found in {schema_dir} "
+                f"or any subdirectory. Ensure the schema file exists in the schema/ directory."
             )
 
         # Fire event before loading

@@ -95,8 +95,10 @@ class ProjectScanner:
             except (IOError, UnicodeDecodeError):
                 continue
 
-            if len(content.encode("utf-8")) > self._README_MAX_BYTES:
-                truncated = content[: self._README_MAX_BYTES].rsplit("\n", 1)[0]
+            encoded = content.encode("utf-8")
+            if len(encoded) > self._README_MAX_BYTES:
+                truncated = encoded[: self._README_MAX_BYTES].decode("utf-8", errors="ignore")
+                truncated = truncated.rsplit("\n", 1)[0]
                 content = truncated + "\n\n---\n*README truncated (exceeds 100 KB)*\n"
 
             for yaml_file in agent_config_dir.glob("*.yml"):

@@ -74,6 +74,12 @@ class DuplicateFunctionError(ConfigurationError):
             if existing_location and new_location:
                 msg += f"\n  Existing: {existing_location} (in {existing_file})"
                 msg += f"\n  New:      {new_location} (in {new_file})"
+            msg += (
+                "\n\nSuggestions:"
+                "\n  1. Rename one of the functions to be unique"
+                "\n  2. Move shared UDFs to a common shared directory"
+                "\n  3. Remove the duplicate if it's unintentional"
+            )
             ctx = context or {}
             ctx.update(
                 {

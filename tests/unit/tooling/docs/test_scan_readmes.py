@@ -111,3 +111,26 @@ def test_scan_readmes_truncates_large_readme(tmp_path: Path):
     assert "big" in readmes
     assert len(readmes["big"].encode("utf-8")) < len(large_content.encode("utf-8"))
     assert readmes["big"].endswith("*README truncated (exceeds 100 KB)*\n")
+
+
+def test_scan_readmes_truncates_multibyte_by_bytes(tmp_path: Path):
+    """Multibyte UTF-8 content is truncated by bytes, not characters."""
+    max_bytes = ProjectScanner._README_MAX_BYTES
+
+    wf_dir = tmp_path / "cjk" / "agent_config"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "cjk.yml").write_text("name: cjk")
+
+    # Each CJK character is 3 bytes in UTF-8; exceed the byte limit
+    cjk_char = "\u4e16"  # 世 — 3 bytes
+    large_content = cjk_char * (max_bytes // 3 + max_bytes)
+    (wf_dir.parent / "README.md").write_text(large_content)
+
+    scanner = ProjectScanner(str(tmp_path))
+    readmes = scanner.scan_readmes()
+
+    result = readmes["cjk"]
+    # The truncated body (before the marker) must fit within the byte cap
+    body = result.split("\n\n---\n")[0]
+    assert len(body.encode("utf-8")) <= max_bytes
+    assert result.endswith("*README truncated (exceeds 100 KB)*\n")
