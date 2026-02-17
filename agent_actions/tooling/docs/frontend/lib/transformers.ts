@@ -72,6 +72,7 @@ export function transformWorkflows(catalog: RawCatalogJson): Workflow[] {
       toolCount,
       levels: wf.manifest?.levels ?? [],
       manifestStatus: statusFromManifest(wf.manifest),
+      readme: wf.readme ?? null,
     }
   })
 }

@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { Search, ArrowLeft, ArrowRight, Circle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -178,6 +180,11 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
           <TabsTrigger value="actions" className="text-xs data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md">
             Actions ({wfActions.length})
           </TabsTrigger>
+          {workflow.readme && (
+            <TabsTrigger value="readme" className="text-xs data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md">
+              README
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="graph" className="mt-4">
@@ -265,6 +272,23 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
             )}
           </div>
         </TabsContent>
+
+        {/* Safety: react-markdown sanitizes HTML by default. Do NOT add
+            rehype-raw without also adding rehype-sanitize — README content
+            is user-supplied and could contain arbitrary HTML. */}
+        {workflow.readme && (
+          <TabsContent value="readme" className="mt-4">
+            <ScrollArea className="h-[600px]">
+              <div className="rounded-xl border border-border bg-card p-6">
+                <article className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-mono prose-code:text-[hsl(var(--primary))] prose-code:bg-secondary prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-secondary prose-pre:border prose-pre:border-border">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {workflow.readme}
+                  </ReactMarkdown>
+                </article>
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

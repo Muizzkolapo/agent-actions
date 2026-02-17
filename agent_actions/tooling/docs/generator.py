@@ -107,6 +107,7 @@ class CatalogGenerator:
         data_loaders_data: Optional[Dict[str, Any]] = None,
         processing_states_data: Optional[Dict[str, Any]] = None,
         workflow_data: Optional[Dict[str, Any]] = None,
+        readmes_data: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
@@ -237,6 +238,7 @@ class CatalogGenerator:
                 "action_count": len(enriched_actions),
                 "latest_run": latest_run,
                 "manifest": manifest,
+                "readme": (readmes_data or {}).get(workflow_id),
             }
 
             # Update stats
@@ -347,6 +349,9 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Step 1m: Scan workflow output data (SQLite target DBs)
     workflow_data = scanner.scan_workflow_data()
 
+    # Step 1n: Scan workflow READMEs
+    readmes_data = scanner.scan_readmes()
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
     catalog = catalog_gen.generate(
@@ -362,6 +367,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         data_loaders_data=data_loaders_data,
         processing_states_data=processing_states_data,
         workflow_data=workflow_data,
+        readmes_data=readmes_data,
     )
 
     # Step 3: Write data files

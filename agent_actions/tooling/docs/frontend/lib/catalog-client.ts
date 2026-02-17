@@ -49,6 +49,7 @@ export interface RawWorkflow {
     levels?: string[][]
     [key: string]: unknown
   } | null
+  readme?: string | null
 }
 
 export interface RawAction {

@@ -37,6 +37,7 @@ export interface Workflow {
   toolCount: number
   levels: string[][]
   manifestStatus: WorkflowStatus
+  readme: string | null
 }
 
 export interface ActionMetrics {

@@ -66,6 +66,44 @@ class ProjectScanner:
 
         return workflows
 
+    # Cap README content at 100 KB to prevent catalog.json bloat
+    _README_MAX_BYTES = 100 * 1024
+
+    def scan_readmes(self) -> Dict[str, str]:
+        """Scan for README.md files alongside agent_config directories.
+
+        Uses last-write-wins on duplicate workflow stems, matching the
+        collision policy in scan() so README content stays paired with the
+        workflow metadata that catalog generation actually uses.  rglob
+        ordering is filesystem-dependent.
+
+        READMEs larger than 100 KB are truncated with a trailing notice.
+        """
+        readmes: Dict[str, str] = {}
+        artefact_dir = self.project_root / "artefact"
+
+        for agent_config_dir in self.project_root.rglob("agent_config"):
+            if artefact_dir in agent_config_dir.parents or agent_config_dir == artefact_dir:
+                continue
+
+            readme_path = agent_config_dir.parent / "README.md"
+            if not readme_path.exists():
+                continue
+
+            try:
+                content = readme_path.read_text(encoding="utf-8")
+            except (IOError, UnicodeDecodeError):
+                continue
+
+            if len(content.encode("utf-8")) > self._README_MAX_BYTES:
+                truncated = content[: self._README_MAX_BYTES].rsplit("\n", 1)[0]
+                content = truncated + "\n\n---\n*README truncated (exceeds 100 KB)*\n"
+
+            for yaml_file in agent_config_dir.glob("*.yml"):
+                readmes[yaml_file.stem] = content
+
+        return readmes
+
     def scan_prompts(self) -> Dict[str, Any]:
         """
         Scan project directory for prompt files.
