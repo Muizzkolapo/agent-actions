@@ -27,81 +27,37 @@ from agent_actions.errors import DependencyError
 class TestIsParallelBranches:
     """Test _is_parallel_branches() detection logic."""
 
-    def test_same_base_name_with_numeric_suffix_is_parallel(self):
-        """Dependencies with same base name and numeric suffix are parallel."""
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["classify_1", "classify_2", "classify_3"])
-            is True
-        )
-
-    def test_same_base_name_with_different_suffixes_is_parallel(self):
-        """Dependencies with same base name are parallel regardless of suffix number."""
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["research_1", "research_5", "research_10"])
-            is True
-        )
-
-    def test_different_base_names_is_not_parallel(self):
-        """Dependencies with different base names are NOT parallel (fan-in)."""
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["extract", "enrich", "validate"]) is False
-        )
-
-    def test_mixed_base_names_is_not_parallel(self):
-        """Mix of different base names is NOT parallel."""
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["classify_1", "validate_1", "score_1"])
-            is False
-        )
-
-    def test_no_numeric_suffix_different_names_is_not_parallel(self):
-        """Different action names without suffixes are NOT parallel."""
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["analyzer", "validator", "scorer"])
-            is False
-        )
-
-    def test_underscore_in_base_name_handled_correctly(self):
-        """Action names with underscores in base name work correctly."""
-        # extract_raw_qa_1, extract_raw_qa_2 should be parallel
-        assert (
-            ContextScopeProcessor._is_parallel_branches(
-                ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]
-            )
-            is True
-        )
-
-    def test_similar_but_different_base_names_not_parallel(self):
-        """Similar but different base names are NOT parallel."""
-        # classify_text vs classify_image are different actions
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["classify_text", "classify_image"])
-            is False
-        )
-
-    def test_different_base_names_with_same_numeric_suffix_not_parallel(self):
-        """Different base names with same numeric suffix are NOT parallel (fan-in).
-
-        This is an important edge case: classify_text_1 and classify_image_1
-        both end in _1, but they have different base names (classify_text vs classify_image).
-        This should be detected as fan-in, not parallel branches.
-        """
-        assert (
-            ContextScopeProcessor._is_parallel_branches(["classify_text_1", "classify_image_1"])
-            is False
-        )
-
-    def test_mixed_versioned_and_non_versioned_not_parallel(self):
-        """Mix of versioned and non-versioned deps with different base names is fan-in."""
-        # research_1, research_2, research_3 all have base name 'research'
-        # summarize has base name 'summarize'
-        # Different base names = fan-in
-        assert (
-            ContextScopeProcessor._is_parallel_branches(
-                ["research_1", "research_2", "research_3", "summarize"]
-            )
-            is False
-        )
+    @pytest.mark.parametrize(
+        "deps, expected",
+        [
+            # Parallel: same base name + numeric suffix
+            (["classify_1", "classify_2", "classify_3"], True),
+            (["research_1", "research_5", "research_10"], True),
+            (["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"], True),
+            # Fan-in: different base names
+            (["extract", "enrich", "validate"], False),
+            (["classify_1", "validate_1", "score_1"], False),
+            (["analyzer", "validator", "scorer"], False),
+            (["classify_text", "classify_image"], False),
+            # Edge: same numeric suffix but different bases
+            (["classify_text_1", "classify_image_1"], False),
+            # Edge: mixed versioned + non-versioned
+            (["research_1", "research_2", "research_3", "summarize"], False),
+        ],
+        ids=[
+            "same_base_numeric",
+            "same_base_varied_suffix",
+            "underscore_base_name",
+            "different_bases",
+            "mixed_bases_same_suffix",
+            "no_numeric_suffix",
+            "similar_different_bases",
+            "different_bases_same_suffix",
+            "mixed_versioned_non_versioned",
+        ],
+    )
+    def test_parallel_detection(self, deps, expected):
+        assert ContextScopeProcessor._is_parallel_branches(deps) is expected
 
 
 class TestGetVersionBranches:
