@@ -5,6 +5,13 @@ import threading
 from agent_actions.llm.providers.hitl.server import HitlServer
 
 
+def _post(client, url, server, **kwargs):
+    """POST helper that automatically injects the HITL session token."""
+    headers = kwargs.pop("headers", {})
+    headers["X-HITL-Token"] = server._session_token
+    return client.post(url, headers=headers, **kwargs)
+
+
 def test_reject_requires_comment_when_enabled():
     """Reject endpoint should enforce comment when requirement is enabled."""
     server = HitlServer(
@@ -16,7 +23,7 @@ def test_reject_requires_comment_when_enabled():
     )
     client = server.app.test_client()
 
-    response = client.post("/api/reject", json={"comment": ""})
+    response = _post(client, "/api/reject", server, json={"comment": ""})
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -37,7 +44,7 @@ def test_reject_allows_empty_comment_when_disabled():
     )
     client = server.app.test_client()
 
-    response = client.post("/api/reject", json={"comment": ""})
+    response = _post(client, "/api/reject", server, json={"comment": ""})
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -99,8 +106,10 @@ def test_review_record_persists_state_for_refresh():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 0, "hitl_status": "approved", "user_comment": "ok"},
     )
     assert response.status_code == 200
@@ -125,20 +134,24 @@ def test_submit_uses_persisted_review_state_when_payload_missing():
     client = server.app.test_client()
 
     # Save only first review to simulate partial progress.
-    client.post(
+    _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 0, "hitl_status": "approved", "user_comment": "ok"},
     )
-    response = client.post("/api/submit", json={"hitl_status": "approved"})
+    response = _post(client, "/api/submit", server, json={"hitl_status": "approved"})
     assert response.status_code == 400
     assert "missing record 2" in response.get_json()["error"].lower()
 
     # Save second decision and submit again without explicit record_reviews payload.
-    client.post(
+    _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 1, "hitl_status": "rejected", "user_comment": "needs fix"},
     )
-    response = client.post("/api/submit", json={"hitl_status": "rejected"})
+    response = _post(client, "/api/submit", server, json={"hitl_status": "rejected"})
     assert response.status_code == 200
     assert server.response is not None
     assert server.response["hitl_status"] == "rejected"
@@ -157,8 +170,10 @@ def test_submit_endpoint_rejects_missing_record_reject_comment():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/submit",
+        server,
         json={
             "record_reviews": [
                 {"hitl_status": "approved", "user_comment": ""},
@@ -184,8 +199,10 @@ def test_submit_endpoint_sets_response_with_record_reviews():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/submit",
+        server,
         json={
             "record_reviews": [
                 {"hitl_status": "approved", "user_comment": "ok"},
@@ -214,8 +231,10 @@ def test_submit_endpoint_uses_hitl_status_not_legacy_status():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/submit",
+        server,
         json={
             "hitl_status": "approved",
             "status": "rejected",
@@ -244,7 +263,7 @@ def test_shutdown_endpoint_sets_flag_and_triggers_event():
     assert not server.response_event.is_set()
     assert not server.shutdown_requested
 
-    response = client.post("/api/shutdown")
+    response = _post(client, "/api/shutdown", server, json={})
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -390,7 +409,7 @@ def test_approve_endpoint_sets_response_for_single_record():
     )
     client = server.app.test_client()
 
-    response = client.post("/api/approve", json={"comment": "looks good"})
+    response = _post(client, "/api/approve", server, json={"comment": "looks good"})
 
     assert response.status_code == 200
     payload = response.get_json()
@@ -412,7 +431,7 @@ def test_approve_endpoint_rejects_multi_record():
     )
     client = server.app.test_client()
 
-    response = client.post("/api/approve", json={"comment": "all good"})
+    response = _post(client, "/api/approve", server, json={"comment": "all good"})
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -432,7 +451,7 @@ def test_reject_endpoint_rejects_multi_record():
     )
     client = server.app.test_client()
 
-    response = client.post("/api/reject", json={"comment": "bad"})
+    response = _post(client, "/api/reject", server, json={"comment": "bad"})
 
     assert response.status_code == 400
     payload = response.get_json()
@@ -451,8 +470,10 @@ def test_review_record_rejects_non_integer_index():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": "abc", "hitl_status": "approved"},
     )
 
@@ -471,8 +492,10 @@ def test_review_record_rejects_out_of_range_index():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 99, "hitl_status": "approved"},
     )
 
@@ -491,8 +514,10 @@ def test_review_record_rejects_missing_hitl_status():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 0},
     )
 
@@ -511,8 +536,10 @@ def test_review_record_rejects_when_no_records():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/review-record",
+        server,
         json={"index": 0, "hitl_status": "approved"},
     )
 
@@ -570,8 +597,10 @@ def test_submit_endpoint_preserves_top_level_comment():
     )
     client = server.app.test_client()
 
-    response = client.post(
+    response = _post(
+        client,
         "/api/submit",
+        server,
         json={
             "hitl_status": "approved",
             "comment": "Everything looks correct",

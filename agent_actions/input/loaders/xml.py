@@ -2,8 +2,13 @@
 
 # Similar loader pattern is intentional across different file type loaders
 import logging
+
+# ET is used for type annotations (ET.Element) and exception handling
+# (ET.ParseError).  DefusedET handles all actual parsing.
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
+
+import defusedxml.ElementTree as DefusedET
 
 from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
@@ -33,7 +38,7 @@ class XmlLoader(BaseLoader[ET.Element]):
                 error = ValueError("Either file_path or content must be provided")
                 self.handle_validation_error(error, "XML input", file_path=file_path)
                 raise error
-            root = ET.fromstring(content_str)
+            root = DefusedET.fromstring(content_str)
             return root
         except ET.ParseError as e:
             position_info = {}

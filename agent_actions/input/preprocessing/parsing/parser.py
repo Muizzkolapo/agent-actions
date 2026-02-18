@@ -465,12 +465,7 @@ class WhereClauseParser:
 
 
 class SafeExpressionEvaluator:
-    """
-    Safe expression evaluator to replace eval() usage.
-
-    This evaluator only supports basic mathematical and logical operations
-    without allowing arbitrary code execution.
-    """
+    """Safe expression evaluator with restricted ``eval()`` usage."""
 
     def __init__(self):
         """Initialize the safe evaluator."""

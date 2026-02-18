@@ -1,6 +1,8 @@
 """Flask-based approval UI server."""
 
 import logging
+import re
+import secrets
 import socket
 import threading
 from datetime import datetime, timezone
@@ -11,6 +13,12 @@ from flask import Flask, jsonify, render_template, request
 from werkzeug.serving import make_server
 
 from agent_actions.errors import NetworkError
+
+# Keys whose values should be redacted from /api/context responses
+_SENSITIVE_KEY_PATTERN = re.compile(
+    r"(password|credential|api_key|auth_token|auth_secret|_secret|_token)$", re.IGNORECASE
+)
+_REDACTED = "***"
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +46,8 @@ class HitlServer:
         self.shutdown_requested = False
         self._server = None
         self._lock = threading.Lock()
+        self._active_port = port  # Updated when an available port is found
+        self._session_token = secrets.token_urlsafe(32)
         self.app = self._create_app()
 
     def _create_app(self) -> Flask:
@@ -45,13 +55,52 @@ class HitlServer:
         template_folder = Path(__file__).parent / "templates"
         app = Flask(__name__, template_folder=str(template_folder))
 
+        @app.before_request
+        def _enforce_post_security():
+            """Enforce CSRF token, JSON content-type, and origin on POST requests."""
+            if request.method != "POST":
+                return None
+
+            # Require JSON content type (blocks form-encoded CSRF)
+            content_type = request.content_type or ""
+            if "application/json" not in content_type:
+                return jsonify(
+                    {"success": False, "error": "Content-Type must be application/json"}
+                ), 400
+
+            # Validate session token
+            token = request.headers.get("X-HITL-Token", "")
+            if not secrets.compare_digest(token, self._session_token):
+                return jsonify({"success": False, "error": "Invalid or missing session token"}), 403
+
+            # Validate Origin/Referer when present.  Missing headers are allowed
+            # because same-origin requests from CLI tools and some browsers omit
+            # both; the custom X-HITL-Token header + JSON content-type already
+            # provide sufficient CSRF protection on their own.
+            origin = request.headers.get("Origin") or request.headers.get("Referer") or ""
+            if origin:
+                from urllib.parse import urlparse as _urlparse
+
+                parsed_origin = _urlparse(origin)
+                origin_key = (parsed_origin.scheme, parsed_origin.hostname, parsed_origin.port)
+                allowed_keys = {
+                    ("http", "127.0.0.1", self._active_port),
+                    ("http", "localhost", self._active_port),
+                }
+                if origin_key not in allowed_keys:
+                    return jsonify({"success": False, "error": "Invalid origin"}), 403
+
+            return None
+
         @app.after_request
         def _set_security_headers(response):
+            nonce = getattr(request, "csp_nonce", "")
+            script_src = f"'self' 'nonce-{nonce}'" if nonce else "'self'"
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
-                "script-src 'self' 'unsafe-inline'; "
+                f"script-src {script_src}; "
                 "img-src 'self' data:; "
                 "connect-src 'self'"
             )
@@ -70,14 +119,18 @@ class HitlServer:
         return app
 
     def _handle_index(self):
+        nonce = secrets.token_urlsafe(16)
+        request.csp_nonce = nonce  # type: ignore[attr-defined]
         return render_template(
             "approval.html",
             instructions=self.instructions,
             require_comment_on_reject=self.require_comment_on_reject,
+            hitl_token=self._session_token,
+            csp_nonce=nonce,
         )
 
     def _handle_get_context(self):
-        return jsonify(self.context_data)
+        return jsonify(_sanitize_context(self.context_data))
 
     def _handle_review_state(self):
         with self._lock:
@@ -362,6 +415,7 @@ class HitlServer:
         """
         # Try to find available port
         actual_port = self._find_available_port()
+        self._active_port = actual_port
 
         # Display URL for user (print ensures visibility regardless of log level)
         url = f"http://localhost:{actual_port}"
@@ -439,6 +493,22 @@ class HitlServer:
                 "last_error": str(last_error),
             },
         )
+
+
+def _sanitize_context(data: Any) -> Any:
+    """Recursively redact values for keys matching sensitive patterns.
+
+    Prevents accidental leakage of credentials or secrets through the
+    ``/api/context`` endpoint.
+    """
+    if isinstance(data, dict):
+        return {
+            k: (_REDACTED if _SENSITIVE_KEY_PATTERN.search(k) else _sanitize_context(v))
+            for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [_sanitize_context(item) for item in data]
+    return data
 
 
 def _utc_timestamp() -> str:

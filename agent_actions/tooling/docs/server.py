@@ -31,6 +31,9 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
 
         - /artefact/* -> user's artefact directory
         - /* -> docs_site directory (static files)
+
+        All resolved paths are validated to stay within their respective
+        root directory to prevent path-traversal attacks.
         """
         # Decode URL and remove query string
         path = urllib.parse.unquote(path)
@@ -40,14 +43,28 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
         # Route artefact requests to user's directory
         if path.startswith("artefact/") or path == "artefact":
             relative = path[len("artefact") :].lstrip("/")
+            root = self.artefact_dir
             if relative:
-                return str(self.artefact_dir / relative)
-            return str(self.artefact_dir)
+                target = (root / relative).resolve()
+            else:
+                return str(root)
+            return self._guard_path(target, root)
 
         # Route everything else to docs_site
+        root = self.docs_site_dir
         if path:
-            return str(self.docs_site_dir / path)
-        return str(self.docs_site_dir)
+            target = (root / path).resolve()
+            return self._guard_path(target, root)
+        return str(root)
+
+    @staticmethod
+    def _guard_path(target: Path, root: Path) -> str:
+        """Return *target* as a string if it is inside *root*, else empty string (→ 404)."""
+        try:
+            target.relative_to(root.resolve())
+        except ValueError:
+            return ""
+        return str(target)
 
     def log_message(self, format, *args):
         """Suppress default logging for cleaner output."""
@@ -100,11 +117,11 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
     # Create handler class with bound directories
     handler = partial(DocsRequestHandler, docs_site_dir=docs_site_dir, artefact_dir=artefact_dir)
 
-    print(f"\nServing docs at http://localhost:{port}")
+    print(f"\nServing docs at http://127.0.0.1:{port}")
     print("Press Ctrl+C to exit\n")
 
     try:
-        with HTTPServer(("", port), handler) as httpd:
+        with HTTPServer(("127.0.0.1", port), handler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down server...")

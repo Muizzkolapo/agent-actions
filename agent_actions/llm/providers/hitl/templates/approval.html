@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HITL Review</title>
-    <script>
+    <script nonce="{{ csp_nonce }}">
         (function(){
             var s=localStorage.getItem('hitl-theme');
             var t=s||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
@@ -1107,8 +1107,9 @@
 
     <div class="toast-wrap"><div id="toast" class="toast"></div></div>
 
-    <script>
+    <script nonce="{{ csp_nonce }}">
         const requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
+        const HITL_TOKEN = {{ hitl_token | tojson }};
 
         /* ── DOM ── */
         const dataDisplay = document.getElementById('data-display');
@@ -1444,7 +1445,7 @@
         async function persistRecordDecision(index, decision) {
             var resp = await fetch('/api/review-record', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
                 body: JSON.stringify({ index: index, hitl_status: decision.hitl_status, user_comment: decision.user_comment || '' }),
             });
             if (!resp.ok) {
@@ -1512,7 +1513,7 @@
                 var overall = recordDecisions.every(function (d) { return d.hitl_status === 'approved'; }) ? 'approved' : 'rejected';
                 var resp = await fetch('/api/submit', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
                     body: JSON.stringify({ hitl_status: overall, record_reviews: recordDecisions, comment: commentInput.value.trim() }),
                 });
                 if (!resp.ok) {
@@ -1522,7 +1523,7 @@
                 showStatus('Reviews submitted! Workflow continuing...', 'success');
                 showToast('Submitted reviews', 'g');
                 setTimeout(async function () {
-                    try { await fetch('/api/shutdown', { method: 'POST' }); console.log('Server shutdown initiated'); }
+                    try { await fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN } }); console.log('Server shutdown initiated'); }
                     catch (e) { console.log('Shutdown requested'); }
                     window.close();
                     /* window.close() is a no-op when the tab was not opened by script; always show the fallback message */

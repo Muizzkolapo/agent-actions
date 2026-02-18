@@ -2,9 +2,9 @@
 
 import csv
 import json
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import defusedxml.ElementTree as DefusedET
 import pandas as pd
 import PyPDF2
 from bs4 import BeautifulSoup
@@ -98,7 +98,7 @@ class FileReader(ProcessorErrorHandlerMixin):
             return "".join(page.extract_text() or "" for page in reader.pages)
 
     def _read_xml(self):
-        tree = ET.parse(self.file_path)
+        tree = DefusedET.parse(self.file_path)
         root = tree.getroot()
         return (tree, root)
 
