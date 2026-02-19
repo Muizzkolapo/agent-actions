@@ -434,26 +434,6 @@ class BaseBatchClient(ABC):
             Usage dictionary with token counts, or None if not available
         """
 
-    def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        DEPRECATED: This method is no longer used for schema compilation.
-
-        Schema compilation is now handled by the unified prepare_schema_unified()
-        function in agent_actions.core.parser.schema_change module.
-
-        This method remains for backward compatibility but should not be used.
-
-        .. deprecated::
-            TODO(v3.0): Remove -- schema compilation uses prepare_schema_unified().
-
-        Args:
-            schema_dict: Generic schema dictionary
-
-        Returns:
-            Provider-specific schema format (returns as-is by default)
-        """
-        return schema_dict
-
     def get_supported_models(self) -> List[str]:
         """
         Get list of model names supported by this provider.

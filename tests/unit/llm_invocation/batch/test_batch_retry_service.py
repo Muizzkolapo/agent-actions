@@ -455,6 +455,163 @@ class TestSerializeDeserializeResults:
         assert deserialized[0].recovery_metadata is None
 
 
+# ---------------------------------------------------------------------------
+# BatchRetryService.validate_and_reprompt — post-reprompt validation
+# ---------------------------------------------------------------------------
+
+
+class TestValidateAndRepromptPassedFlag:
+    """Regression test: RepromptMetadata.passed must reflect post-reprompt state.
+
+    Before the fix, validation_status was populated only during the reprompt loop
+    and never refreshed after reprompt results were merged. So .passed was always
+    False even when the reprompted result actually passed validation.
+    """
+
+    def test_passed_reflects_post_reprompt_validation(self):
+        """REGRESSION: .passed should be True when reprompted result passes validation."""
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+
+        service = BatchRetryService()
+        provider = MagicMock()
+
+        # Initial result fails validation (content="bad")
+        initial_result = BatchResult(custom_id="a", content="bad", success=True)
+
+        # After reprompt, provider returns a good result
+        reprompted_result = BatchResult(custom_id="a", content="good", success=True)
+        provider.submit_batch.return_value = ("reprompt-batch-1", "submitted")
+        provider.retrieve_results.return_value = [reprompted_result]
+
+        # Validation: "good" passes, anything else fails
+        def validation_func(content):
+            return content == "good"
+
+        agent_config = {
+            "reprompt": {
+                "validation": "test_validator",
+                "max_attempts": 2,
+                "on_exhausted": "return_last",
+            }
+        }
+
+        with (
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(validation_func, "Please fix your response."),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.retry._import_validation_module",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.retry.wait_for_batch_completion",
+                return_value=BatchStatus.COMPLETED,
+            ),
+            patch(
+                "agent_actions.processing.recovery.response_validator.build_validation_feedback",
+                return_value="Feedback: Please fix.",
+            ),
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
+            ) as mock_prep_cls,
+        ):
+            mock_prep = MagicMock()
+            mock_prep.prepare_tasks.return_value = MagicMock(tasks=[{"body": "task"}])
+            mock_prep_cls.return_value = mock_prep
+
+            results = service.validate_and_reprompt(
+                results=[initial_result],
+                provider=provider,
+                context_map={"a": {"target_id": "a", "user_content": "original"}},
+                output_directory="/tmp/out",
+                file_name="test",
+                agent_config=agent_config,
+            )
+
+        # Find the result for "a"
+        result_a = next(r for r in results if r.custom_id == "a")
+
+        # The key assertion: .passed must be True because reprompted content is "good"
+        assert result_a.recovery_metadata is not None
+        assert result_a.recovery_metadata.reprompt is not None
+        assert result_a.recovery_metadata.reprompt.passed is True
+        assert result_a.recovery_metadata.reprompt.validation == "test_validator"
+
+    def test_passed_is_false_when_reprompt_still_fails(self):
+        """Passed should be False when reprompted result still fails validation.
+
+        Uses max_attempts=2 so the reprompt is actually submitted on attempt 1,
+        and the still-bad result is re-validated on attempt 2 (exhaustion).
+        """
+        from agent_actions.llm.batch.services.retry import BatchRetryService
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+
+        service = BatchRetryService()
+        provider = MagicMock()
+
+        initial_result = BatchResult(custom_id="a", content="bad", success=True)
+
+        # Reprompt also returns bad content
+        reprompted_result = BatchResult(custom_id="a", content="still_bad", success=True)
+        provider.submit_batch.return_value = ("reprompt-batch-1", "submitted")
+        provider.retrieve_results.return_value = [reprompted_result]
+
+        def validation_func(content):
+            return content == "good"
+
+        agent_config = {
+            "reprompt": {
+                "validation": "test_validator",
+                "max_attempts": 2,
+                "on_exhausted": "return_last",
+            }
+        }
+
+        with (
+            patch(
+                "agent_actions.processing.recovery.validation.get_validation_function",
+                return_value=(validation_func, "Please fix."),
+            ),
+            patch(
+                "agent_actions.llm.batch.services.retry._import_validation_module",
+            ),
+            patch(
+                "agent_actions.llm.batch.services.retry.wait_for_batch_completion",
+                return_value=BatchStatus.COMPLETED,
+            ),
+            patch(
+                "agent_actions.processing.recovery.response_validator.build_validation_feedback",
+                return_value="Feedback: Please fix.",
+            ),
+            patch(
+                "agent_actions.llm.batch.processing.preparator.BatchTaskPreparator"
+            ) as mock_prep_cls,
+        ):
+            mock_prep = MagicMock()
+            mock_prep.prepare_tasks.return_value = MagicMock(tasks=[{"body": "task"}])
+            mock_prep_cls.return_value = mock_prep
+
+            results = service.validate_and_reprompt(
+                results=[initial_result],
+                provider=provider,
+                context_map={"a": {"target_id": "a", "user_content": "original"}},
+                output_directory="/tmp/out",
+                file_name="test",
+                agent_config=agent_config,
+            )
+
+        # Verify the reprompt path was actually exercised
+        provider.submit_batch.assert_called_once()
+        provider.retrieve_results.assert_called_once()
+
+        result_a = next(r for r in results if r.custom_id == "a")
+
+        assert result_a.recovery_metadata is not None
+        assert result_a.recovery_metadata.reprompt is not None
+        assert result_a.recovery_metadata.reprompt.passed is False
+
+
 class TestBatchJobEntryRecoveryFields:
     """Tests for recovery fields on BatchJobEntry."""
 

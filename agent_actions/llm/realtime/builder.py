@@ -83,7 +83,6 @@ def create_dynamic_agent(
     context_data = ContextService.prepare_context_data(context_data_str, original_context, is_tool)
 
     # Note: dispatch_task() injection now happens in PromptPreparationService
-    # TODO: captured_results (add_dispatch feature) needs to be returned from PromptPreparationService
     captured_results = {}
 
     # Append additional_context if provided (context_scope.observe fields)

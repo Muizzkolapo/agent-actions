@@ -547,13 +547,12 @@ class BatchRetryService:
                 logger.exception("Error during reprompt batch submission: %s", e)
                 break
 
-        # Add reprompt metadata to all records that were reprompted
+        # Add reprompt metadata to all records that were reprompted.
+        # validation_status is already up-to-date: the loop re-validates all results
+        # (including reprompted ones) at the start of each iteration after merging.
         for custom_id, attempts in reprompt_attempts.items():
             if custom_id in result_map:
                 result = result_map[custom_id]
-                # TODO(v3.0): validation_status is stale after reprompt — it still holds
-                # the pre-reprompt False value. Re-running validation after the final
-                # reprompt attempt would fix this.
                 passed = validation_status.get(custom_id, False)
 
                 if not result.recovery_metadata:
