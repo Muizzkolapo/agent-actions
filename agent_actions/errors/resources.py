@@ -10,16 +10,6 @@ class ResourceError(AgentActionsError):
     pass
 
 
-class ResourceMemoryError(ResourceError):
-    """Raised when memory-related issues occur.
-
-    Note: Renamed from MemoryError to avoid shadowing Python's built-in.
-    For application-level memory management issues in agent-actions.
-    """
-
-    pass
-
-
 class DependencyError(ResourceError):
     """Raised when a required dependency is not provided or cannot be loaded."""
 

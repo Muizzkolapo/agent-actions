@@ -63,20 +63,8 @@ class VendorAPIError(ExternalServiceError):
         super().__init__(message, context=context, cause=cause)
 
 
-class OpenAIError(VendorAPIError):
-    """Specific error for OpenAI API failures."""
-
-    pass
-
-
 class AnthropicError(VendorAPIError):
     """Specific error for Anthropic API failures."""
-
-    pass
-
-
-class GeminiError(VendorAPIError):
-    """Specific error for Gemini API failures."""
 
     pass
 

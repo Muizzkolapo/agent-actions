@@ -17,7 +17,6 @@ from agent_actions.errors.configuration import (
     UDFLoadError,
     AgentNotFoundError,
     ProjectNotFoundError,
-    EnvironmentConfigError,
 )
 
 # Validation errors
@@ -42,9 +41,7 @@ from agent_actions.errors.processing import (
 from agent_actions.errors.external_services import (
     ExternalServiceError,
     VendorAPIError,
-    OpenAIError,
     AnthropicError,
-    GeminiError,
     NetworkError,
     RateLimitError,
 )
@@ -60,7 +57,6 @@ from agent_actions.errors.filesystem import (
 # Resource errors
 from agent_actions.errors.resources import (
     ResourceError,
-    ResourceMemoryError,
     DependencyError,
 )
 
@@ -99,7 +95,6 @@ __all__ = [
     "UDFLoadError",
     "AgentNotFoundError",
     "ProjectNotFoundError",
-    "EnvironmentConfigError",
     # Validation
     "ValidationError",
     "PromptValidationError",
@@ -115,9 +110,7 @@ __all__ = [
     # External Services
     "ExternalServiceError",
     "VendorAPIError",
-    "OpenAIError",
     "AnthropicError",
-    "GeminiError",
     "NetworkError",
     "RateLimitError",
     # File System
@@ -127,7 +120,6 @@ __all__ = [
     "DirectoryError",
     # Resources
     "ResourceError",
-    "ResourceMemoryError",
     "DependencyError",
     # Operations
     "OperationalError",

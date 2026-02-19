@@ -135,9 +135,3 @@ class ProjectNotFoundError(ConfigurationError):
     """Raised when a command requires being in a project but agent_actions.yml is not found."""
 
     pass
-
-
-class EnvironmentConfigError(ConfigurationError):
-    """Raised when environment configuration is invalid or missing."""
-
-    pass
