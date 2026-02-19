@@ -16,6 +16,9 @@ const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jet
 export const metadata: Metadata = {
   title: 'Agent Actions Docs',
   description: 'Navigate AI agent workflows, run history, events, and data exploration',
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export const viewport: Viewport = {
