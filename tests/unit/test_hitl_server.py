@@ -71,7 +71,68 @@ def test_context_endpoint_returns_full_file_payload():
     response = client.get("/api/context")
 
     assert response.status_code == 200
-    assert response.get_json() == payload
+    body = response.get_json()
+    assert body["_envelope"] is True
+    assert body["data"] == payload
+
+
+def test_context_endpoint_includes_field_order():
+    """Context endpoint should include field_order when observe fields are configured."""
+    server = HitlServer(
+        port=3001,
+        instructions="Review output",
+        context_data=[{"b": 2, "a": 1}],
+        timeout=30,
+        field_order=["upstream.a", "upstream.b"],
+    )
+    client = server.app.test_client()
+
+    response = client.get("/api/context")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["field_order"] == ["upstream.a", "upstream.b"]
+    assert body["data"] == [{"b": 2, "a": 1}]
+
+
+def test_context_endpoint_omits_field_order_when_empty():
+    """Context endpoint should omit field_order when no observe fields are configured."""
+    server = HitlServer(
+        port=3001,
+        instructions="Review output",
+        context_data={"value": 1},
+        timeout=30,
+    )
+    client = server.app.test_client()
+
+    response = client.get("/api/context")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["data"] == {"value": 1}
+    assert "field_order" not in body
+
+
+def test_context_envelope_distinguishable_from_raw_data_key():
+    """Envelope _envelope marker prevents misclassifying a payload that has a 'data' key."""
+    context_with_data_key = {"data": "some_value", "other": "field"}
+    server = HitlServer(
+        port=3001,
+        instructions="Review output",
+        context_data=context_with_data_key,
+        timeout=30,
+    )
+    client = server.app.test_client()
+
+    response = client.get("/api/context")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    # The envelope wraps the original payload — _envelope marker distinguishes it
+    assert body["_envelope"] is True
+    assert body["data"] == context_with_data_key
+    assert body["data"]["data"] == "some_value"
+    assert body["data"]["other"] == "field"
 
 
 def test_index_includes_fields_json_view_toggle():

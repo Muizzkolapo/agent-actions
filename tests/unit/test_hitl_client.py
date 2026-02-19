@@ -47,6 +47,7 @@ def test_hitl_client_invoke_with_config():
             context_data={"test": "data", "value": 42},
             timeout=300,
             require_comment_on_reject=True,
+            field_order=[],
         )
 
         # Verify start_and_wait was called
@@ -167,3 +168,89 @@ def test_hitl_client_invoke_honors_require_comment_on_reject_flag():
 
         call_args = mock_server_class.call_args
         assert call_args[1]["require_comment_on_reject"] is False
+
+
+def test_hitl_client_passes_field_order_from_observe():
+    """Test HitlClient.invoke extracts field_order from context_scope.observe."""
+    agent_config = {
+        "name": "test_action",
+        "hitl": {"port": 3001, "instructions": "Review"},
+        "context_scope": {
+            "observe": [
+                "upstream.question_text",
+                "upstream.answer",
+                "source.url",
+            ]
+        },
+    }
+    context_data = {"question_text": "Q1", "answer": "A1", "url": "https://example.com"}
+
+    with patch("agent_actions.llm.providers.hitl.client.HitlServer") as mock_server_class:
+        mock_server = Mock()
+        mock_server.start_and_wait.return_value = {
+            "hitl_status": "approved",
+            "user_comment": "",
+            "timestamp": "2026-02-12T10:00:00Z",
+        }
+        mock_server_class.return_value = mock_server
+
+        HitlClient.invoke(agent_config, context_data)
+
+        call_args = mock_server_class.call_args
+        assert call_args[1]["field_order"] == [
+            "upstream.question_text",
+            "upstream.answer",
+            "source.url",
+        ]
+
+
+def test_hitl_client_filters_wildcard_from_field_order():
+    """Wildcard observe refs like 'action.*' should not leak into field_order."""
+    agent_config = {
+        "name": "test_action",
+        "hitl": {"port": 3001, "instructions": "Review"},
+        "context_scope": {
+            "observe": ["upstream.*"],
+        },
+    }
+    context_data = {"a": 1}
+
+    with patch("agent_actions.llm.providers.hitl.client.HitlServer") as mock_server_class:
+        mock_server = Mock()
+        mock_server.start_and_wait.return_value = {
+            "hitl_status": "approved",
+            "user_comment": "",
+            "timestamp": "2026-02-12T10:00:00Z",
+        }
+        mock_server_class.return_value = mock_server
+
+        HitlClient.invoke(agent_config, context_data)
+
+        call_args = mock_server_class.call_args
+        assert call_args[1]["field_order"] == []
+
+
+def test_hitl_client_preserves_distinct_refs_with_same_field_name():
+    """Refs from different deps with the same field name stay distinct in field_order."""
+    agent_config = {
+        "name": "test_action",
+        "hitl": {"port": 3001, "instructions": "Review"},
+        "context_scope": {
+            "observe": ["dep_a.title", "dep_b.title", "dep_a.body"],
+        },
+    }
+    context_data = {"title": "T", "body": "B"}
+
+    with patch("agent_actions.llm.providers.hitl.client.HitlServer") as mock_server_class:
+        mock_server = Mock()
+        mock_server.start_and_wait.return_value = {
+            "hitl_status": "approved",
+            "user_comment": "",
+            "timestamp": "2026-02-12T10:00:00Z",
+        }
+        mock_server_class.return_value = mock_server
+
+        HitlClient.invoke(agent_config, context_data)
+
+        call_args = mock_server_class.call_args
+        assert call_args[1]["field_order"] == ["dep_a.title", "dep_b.title", "dep_a.body"]

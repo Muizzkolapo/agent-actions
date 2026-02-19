@@ -25,6 +25,8 @@ from agent_actions.processing.types import (
 )
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import ContextFieldSkippedEvent
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -487,13 +489,44 @@ class ProcessingPipeline:
         if not observe_refs:
             return data
 
-        field_names = ContextScopeProcessor.extract_field_names_from_references(observe_refs)
-        if not field_names:
+        # Parse refs in lockstep so invalid entries don't misalign the two lists.
+        valid_pairs = []  # [(original_ref, bare_field_name), ...]
+        for ref in observe_refs:
+            try:
+                _, field_name = ContextScopeProcessor.parse_field_reference(ref)
+                valid_pairs.append((ref, field_name))
+            except ValueError as e:
+                fire_event(
+                    ContextFieldSkippedEvent(
+                        action_name=agent_config.get("name", "unknown"),
+                        field_ref=ref,
+                        reason=str(e),
+                        directive="observe_filter",
+                    )
+                )
+                continue
+
+        if not valid_pairs:
             return data
 
         # Wildcard or prefix pattern → no filtering needed
-        if "*" in field_names or "_" in field_names:
+        if any(bare in ("*", "_") for _, bare in valid_pairs):
             return data
+
+        # Detect bare-key collisions so we can namespace them.
+        # e.g. ["dep_a.title", "dep_b.title", "dep_a.body"] → collisions = {"title"}
+        from collections import Counter
+
+        bare_counts = Counter(bare for _, bare in valid_pairs)
+        collisions = {k for k, v in bare_counts.items() if v > 1}
+
+        # Build (output_key, bare_key) pairs preserving observe order.
+        # Colliding bare keys use the full qualified ref as the output key;
+        # unique bare keys stay bare for backwards compatibility.
+        key_pairs = []  # [(output_key, bare_key), ...]
+        for ref, bare in valid_pairs:
+            output_key = ref if bare in collisions else bare
+            key_pairs.append((output_key, bare))
 
         filtered = []
         for item in data:
@@ -501,13 +534,13 @@ class ProcessingPipeline:
                 filtered.append(item)
                 continue
             content = item.get("content", item) if isinstance(item.get("content"), dict) else item
-            ordered = {k: content[k] for k in field_names if k in content}
-            missing = [k for k in field_names if k not in content]
+            ordered = {ok: content[bk] for ok, bk in key_pairs if bk in content}
+            missing = [bk for _, bk in key_pairs if bk not in content]
             if missing:
                 logger.warning(
                     "[OBSERVE FILTER] Fields %s not found in record. "
                     "Available: %s. Check that observe field names match the actual data.",
-                    missing,
+                    list(set(missing)),
                     list(content.keys()),
                 )
             filtered.append(ordered)

@@ -33,12 +33,14 @@ class HitlServer:
         context_data: Any,
         timeout: int = 300,
         require_comment_on_reject: bool = True,
+        field_order: list[str] | None = None,
     ):
         self.port = port
         self.instructions = instructions
         self.context_data = context_data
         self.timeout = timeout
         self.require_comment_on_reject = require_comment_on_reject
+        self.field_order = field_order or []
         self.record_count = self._determine_record_count(context_data)
         self.record_reviews: list[dict[str, Any] | None] = [None] * self.record_count
         self.response = None
@@ -130,7 +132,10 @@ class HitlServer:
         )
 
     def _handle_get_context(self):
-        return jsonify(_sanitize_context(self.context_data))
+        response = {"_envelope": True, "data": _sanitize_context(self.context_data)}
+        if self.field_order:
+            response["field_order"] = self.field_order
+        return jsonify(response)
 
     def _handle_review_state(self):
         with self._lock:

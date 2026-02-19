@@ -143,7 +143,8 @@ class TestContextRedaction:
     def test_context_endpoint_redacts_sensitive_data(self, client, server):
         resp = client.get("/api/context")
         assert resp.status_code == 200
-        data = resp.get_json()
+        body = resp.get_json()
+        data = body["data"]
         assert data["name"] == "test"
         assert data["db_password"] == "***"
 

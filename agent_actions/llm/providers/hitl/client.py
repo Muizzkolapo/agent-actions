@@ -52,6 +52,13 @@ class HitlClient:
         timeout = hitl_config.get("timeout", 300)
         require_comment_on_reject = hitl_config.get("require_comment_on_reject", True)
 
+        # Preserve observe field order for UI rendering (full qualified refs)
+        context_scope = agent_config.get("context_scope") or {}
+        observe_refs = context_scope.get("observe") or []
+        field_order = [
+            ref for ref in observe_refs if isinstance(ref, str) and not ref.endswith(".*")
+        ]
+
         # Parse context data
         if isinstance(context_data, str):
             try:
@@ -68,6 +75,7 @@ class HitlClient:
             context_data=context_dict,
             timeout=timeout,
             require_comment_on_reject=require_comment_on_reject,
+            field_order=field_order,
         )
 
         response = server.start_and_wait()

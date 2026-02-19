@@ -395,3 +395,49 @@ def test_apply_observe_filter_mixed_wildcard_and_specific():
     }
     result = ProcessingPipeline._apply_observe_filter(data, config)
     assert result is data
+
+
+def test_apply_observe_filter_collision_uses_qualified_keys():
+    """When two refs share the same bare key, both appear with qualified keys."""
+    data = [{"content": {"title": "My Title", "body": "My Body"}}]
+    config = {
+        "context_scope": {
+            "observe": ["dep_a.title", "dep_b.title", "dep_a.body"],
+        },
+    }
+    result = ProcessingPipeline._apply_observe_filter(data, config)
+    # "title" collides → both refs become qualified output keys
+    # "body" is unique → stays bare
+    assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
+    assert result[0]["dep_a.title"] == "My Title"
+    assert result[0]["dep_b.title"] == "My Title"
+    assert result[0]["body"] == "My Body"
+
+
+def test_apply_observe_filter_no_collision_stays_bare():
+    """When all refs have unique bare keys, output keys remain bare."""
+    data = [{"content": {"question": "Q1", "answer": "A1"}}]
+    config = {
+        "context_scope": {
+            "observe": ["upstream.question", "upstream.answer"],
+        },
+    }
+    result = ProcessingPipeline._apply_observe_filter(data, config)
+    assert list(result[0].keys()) == ["question", "answer"]
+
+
+def test_apply_observe_filter_invalid_ref_does_not_misalign_pairs():
+    """Invalid refs between valid ones must not shift collision pairing."""
+    data = [{"content": {"title": "T", "body": "B"}}]
+    config = {
+        "context_scope": {
+            "observe": ["dep_a.title", "bad_ref_no_dot", "dep_b.title", "dep_a.body"],
+        },
+    }
+    result = ProcessingPipeline._apply_observe_filter(data, config)
+    # "bad_ref_no_dot" is dropped; remaining refs pair correctly
+    # "title" still collides → qualified keys
+    assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
+    assert result[0]["dep_a.title"] == "T"
+    assert result[0]["dep_b.title"] == "T"
+    assert result[0]["body"] == "B"
