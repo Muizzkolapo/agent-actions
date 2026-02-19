@@ -737,7 +737,7 @@ class AgentWorkflow:
 
     def _log_agent_result(self, params: AgentLogParams):
         """Log agent execution result via event system."""
-        if params.result.success:
+        if params.result.success and params.result.status == "completed":
             # Fire agent complete event
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
@@ -752,7 +752,7 @@ class AgentWorkflow:
                     tokens=tokens,
                 )
             )
-        else:
+        elif not params.result.success:
             # Fire agent failed event
             fire_event(
                 AgentFailedEvent(
@@ -767,6 +767,7 @@ class AgentWorkflow:
                     execution_time=params.duration,
                 )
             )
+        # batch_submitted: BatchSubmittedEvent already fired by executor
 
     def _finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""

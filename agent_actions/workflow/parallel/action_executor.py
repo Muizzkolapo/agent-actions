@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from rich.console import Console
-from agent_actions.errors import WorkflowError
+from agent_actions.errors import WorkflowError, get_error_detail
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import AgentCompleteEvent, AgentFailedEvent
 
 
 @dataclass
@@ -219,10 +221,13 @@ class ActionLevelOrchestrator:
         original_idx = agent_indices[agent_name]
         agent_config = self.agent_configs[agent_name]
         is_last = original_idx == len(self.execution_order) - 1
+        total_agents = len(self.execution_order)
 
         result = await agent_executor.execute_agent_async(
             agent_name, agent_idx=original_idx, agent_config=agent_config, is_last_agent=is_last
         )
+
+        self._fire_agent_result_event(agent_name, original_idx, total_agents, result)
 
         if not result.success:
             raise result.error
@@ -232,22 +237,43 @@ class ActionLevelOrchestrator:
         self.console.print(f"[blue]  → {len(params.pending_agents)} agents in parallel[/blue]")
         semaphore = asyncio.Semaphore(params.concurrency_limit)
 
+        total_agents = len(self.execution_order)
+
         async def run_with_limit(agent):
-            """Run agent with semaphore limit."""
+            """Run agent with semaphore limit, firing events on completion."""
             async with semaphore:
                 original_idx = params.agent_indices[agent]
                 agent_config = self.agent_configs[agent]
                 is_last = original_idx == len(self.execution_order) - 1
 
-                return await params.agent_executor.execute_agent_async(
-                    agent, agent_idx=original_idx, agent_config=agent_config, is_last_agent=is_last
-                )
+                try:
+                    result = await params.agent_executor.execute_agent_async(
+                        agent,
+                        agent_idx=original_idx,
+                        agent_config=agent_config,
+                        is_last_agent=is_last,
+                    )
+                except Exception as exc:
+                    fire_event(
+                        AgentFailedEvent(
+                            agent_name=agent,
+                            agent_index=original_idx,
+                            total_agents=total_agents,
+                            error_message=str(exc),
+                            error_detail=get_error_detail(exc),
+                            error_type=type(exc).__name__,
+                        )
+                    )
+                    raise
+
+                self._fire_agent_result_event(agent, original_idx, total_agents, result)
+                return result
 
         # Execute all agents concurrently
         tasks = [run_with_limit(agent) for agent in params.pending_agents]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Check for errors
+        # Collect errors (events already fired per-agent above)
         errors = []
         for agent, result in zip(params.pending_agents, results):
             if isinstance(result, Exception):
@@ -261,6 +287,34 @@ class ActionLevelOrchestrator:
                 f"Multiple agents failed in parallel action {params.level_idx}:\n{error_details}"
             )
             raise WorkflowError("parallel_execution_failures", error_msg)
+
+    def _fire_agent_result_event(self, agent_name: str, idx: int, total: int, result):
+        """Fire agent complete or failed event for an execution result."""
+        if result.success and result.status == "completed":
+            tokens = result.metrics.tokens if result.metrics and result.metrics.tokens else {}
+            fire_event(
+                AgentCompleteEvent(
+                    agent_name=agent_name,
+                    agent_index=idx,
+                    total_agents=total,
+                    execution_time=result.metrics.duration if result.metrics else 0.0,
+                    output_path=result.output_folder or "",
+                    tokens=tokens,
+                )
+            )
+        elif not result.success:
+            fire_event(
+                AgentFailedEvent(
+                    agent_name=agent_name,
+                    agent_index=idx,
+                    total_agents=total,
+                    error_message=str(result.error) if result.error else "",
+                    error_detail=get_error_detail(result.error) if result.error else "",
+                    error_type=type(result.error).__name__ if result.error else "",
+                    execution_time=result.metrics.duration if result.metrics else 0.0,
+                )
+            )
+        # batch_submitted: BatchSubmittedEvent already fired by executor
 
     def _check_batch_status(
         self, level_idx: int, level_agents: List[str], state_manager, start_time: datetime

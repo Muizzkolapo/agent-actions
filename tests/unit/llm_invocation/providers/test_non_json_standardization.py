@@ -492,8 +492,8 @@ class TestAnthropicSharedCallApi:
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")
-    def test_max_tokens_logged_from_config(self, mock_anthropic_mod, mock_fire):
-        """max_tokens in log should reflect actual config, not hardcoded 1024."""
+    def test_max_tokens_from_config(self, mock_anthropic_mod, mock_fire):
+        """max_tokens in API call should reflect actual config, not hardcoded 1024."""
         from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         config = {"model_name": "claude-3", "max_tokens": 4096}
@@ -502,15 +502,10 @@ class TestAnthropicSharedCallApi:
         mock_client.messages.create.return_value = mock_response
         mock_anthropic_mod.Anthropic.return_value = mock_client
 
-        with patch("agent_actions.llm.providers.anthropic.client.logger") as mock_logger:
-            AnthropicClient.call_non_json("key", config, "prompt", "data")
+        AnthropicClient.call_non_json("key", config, "prompt", "data")
 
-            request_calls = [
-                c for c in mock_logger.debug.call_args_list if c[0][0] == "Anthropic API request"
-            ]
-            assert len(request_calls) == 1
-            extra = request_calls[0][1]["extra"]
-            assert extra["max_tokens"] == 4096
+        call_kwargs = mock_client.messages.create.call_args[1]
+        assert call_kwargs["max_tokens"] == 4096
 
     @patch("agent_actions.llm.providers.anthropic.client.fire_event")
     @patch("agent_actions.llm.providers.anthropic.client.anthropic")

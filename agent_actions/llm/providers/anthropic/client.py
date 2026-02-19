@@ -8,7 +8,6 @@ SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 """
 
-import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
@@ -30,7 +29,6 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 
-logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
@@ -140,18 +138,6 @@ class AnthropicClient(BaseClient):
 
         request_id = str(uuid.uuid4())
 
-        logger.debug(
-            "Anthropic API request",
-            extra={
-                "operation": "anthropic_api_request",
-                "model": model_name,
-                "mode": mode,
-                "max_tokens": api_args["max_tokens"],
-                "has_tools": schema is not None,
-                "request_id": request_id,
-            },
-        )
-
         fire_event(
             LLMRequestEvent(
                 provider="anthropic",
@@ -184,21 +170,6 @@ class AnthropicClient(BaseClient):
                 latency_ms=latency_ms,
                 request_id=request_id,
             )
-        )
-
-        logger.debug(
-            "Anthropic API response",
-            extra={
-                "operation": "anthropic_api_response",
-                "model": model_name,
-                "duration": duration,
-                "stop_reason": response.stop_reason,
-                "usage": {
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                },
-                "request_id": request_id,
-            },
         )
 
         return response, model_name, request_id

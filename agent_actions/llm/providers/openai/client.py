@@ -9,7 +9,6 @@ consistent retry handling across all providers.
 """
 
 import json
-import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
@@ -31,7 +30,6 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 
-logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="openai",
@@ -73,20 +71,6 @@ class OpenAIClient(BaseClient):
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
 
-        # Log API request at DEBUG level
-        logger.debug(
-            "OpenAI API request",
-            extra={
-                "operation": "openai_api_request",
-                "model": model_name,
-                "mode": "json",
-                "message_count": len(messages),
-                "has_schema": schema is not None,
-                "request_id": request_id,
-            },
-        )
-
-        # Fire LLM request event
         fire_event(
             LLMRequestEvent(
                 provider="openai",
@@ -140,22 +124,6 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        # Log API response at DEBUG level
-        logger.debug(
-            "OpenAI API response",
-            extra={
-                "operation": "openai_api_response",
-                "model": model_name,
-                "duration": duration,
-                "finish_reason": response.choices[0].finish_reason if response.choices else None,
-                "usage": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                },
-                "request_id": request_id,
-            },
-        )
         response_message = response.choices[0].message
         response_content: Optional[str] = response_message.content
         if response_content is None:
@@ -200,19 +168,6 @@ class OpenAIClient(BaseClient):
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
 
-        # Log API request at DEBUG level
-        logger.debug(
-            "OpenAI API request",
-            extra={
-                "operation": "openai_api_request",
-                "model": model_name,
-                "mode": "non_json",
-                "message_count": len(messages),
-                "request_id": request_id,
-            },
-        )
-
-        # Fire LLM request event
         fire_event(
             LLMRequestEvent(
                 provider="openai",
@@ -265,22 +220,6 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        # Log API response at DEBUG level
-        logger.debug(
-            "OpenAI API response",
-            extra={
-                "operation": "openai_api_response",
-                "model": model_name,
-                "duration": duration,
-                "finish_reason": response.choices[0].finish_reason if response.choices else None,
-                "usage": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                },
-                "request_id": request_id,
-            },
-        )
         response_message = response.choices[0].message
         output_field: str = agent_config.get("output_field", "raw_response")
         content: Optional[str] = response_message.content

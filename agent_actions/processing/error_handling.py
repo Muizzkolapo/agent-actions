@@ -13,7 +13,6 @@ patterns across all processor modules.
 import csv
 import json
 import logging
-import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union
@@ -95,13 +94,6 @@ class ProcessorErrorHandlerMixin:
         context = self.get_error_context(operation, **context_kwargs)
         context["error_type"] = error.__class__.__name__
         context["error_message"] = get_error_detail(error)
-        log_entry = {
-            "level": "ERROR",
-            "message": f"{operation} failed: {get_error_detail(error)}",
-            "context": context,
-            "traceback": traceback.format_exc(),
-        }
-        self.logger.error(json.dumps(log_entry, default=str))
 
         # Fire appropriate data error event
         file_path = context_kwargs.get("file_path", "unknown")

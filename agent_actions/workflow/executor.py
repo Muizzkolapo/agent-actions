@@ -16,8 +16,6 @@ from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     AgentSkipEvent,
-    AgentCompleteEvent,
-    AgentFailedEvent,
     BatchSubmittedEvent,
     BatchCompleteEvent,
 )
@@ -232,7 +230,7 @@ class AgentExecutor:
             self.run_tracker.record_action_complete(config=config)
 
         return AgentExecutionResult(
-            success=True, status="completed", metrics=ExecutionMetrics(duration=duration)
+            success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
         )
 
     def _track_action_start(self, params: AgentRunParams) -> None:
@@ -278,17 +276,6 @@ class AgentExecutor:
         if batch_status == "batch_submitted":
             self.deps.state_manager.update_status(params.agent_name, "batch_submitted")
             fire_event(BatchSubmittedEvent(agent_name=params.agent_name))
-            logger.info(
-                "Agent batch submitted",
-                extra={
-                    "operation": "execute_agent_run",
-                    "agent_name": params.agent_name,
-                    "agent_idx": params.agent_idx,
-                    "duration": duration,
-                    "status": "batch_submitted",
-                    "is_last_agent": params.is_last_agent,
-                },
-            )
             return AgentExecutionResult(
                 success=True,
                 status="batch_submitted",
@@ -318,25 +305,6 @@ class AgentExecutor:
         # Normal completion
         self.deps.state_manager.update_status(params.agent_name, "completed")
         tokens = get_last_usage()
-
-        fire_event(
-            AgentCompleteEvent(
-                agent_name=params.agent_name,
-                execution_time=duration,
-                tokens=tokens or {},
-            )
-        )
-        logger.info(
-            "Agent completed successfully",
-            extra={
-                "operation": "execute_agent_run",
-                "agent_name": params.agent_name,
-                "agent_idx": params.agent_idx,
-                "duration": duration,
-                "status": "completed",
-                "is_last_agent": params.is_last_agent,
-            },
-        )
 
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
             config = ActionCompleteConfig(
@@ -374,27 +342,6 @@ class AgentExecutor:
             AgentExecutionResult indicating failure
         """
         duration = (datetime.now() - params.start_time).total_seconds()
-        logger.error(
-            "Agent execution failed: %s",
-            error,
-            extra={
-                "operation": "execute_agent_run",
-                "agent_name": params.agent_name,
-                "agent_idx": params.agent_idx,
-                "duration": duration,
-                "is_last_agent": params.is_last_agent,
-                "error": get_error_detail(error),
-                "error_type": type(error).__name__,
-            },
-        )
-        fire_event(
-            AgentFailedEvent(
-                agent_name=params.agent_name,
-                error_message=str(error),
-                error_detail=get_error_detail(error),
-                error_type=type(error).__name__,
-            )
-        )
         self.deps.state_manager.update_status(params.agent_name, "failed")
 
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
@@ -693,15 +640,7 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(params.agent_name, params.agent_idx)
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
-        except (
-            OSError,
-            IOError,
-            ValueError,
-            TypeError,
-            KeyError,
-            RuntimeError,
-            AttributeError,
-        ) as e:
+        except Exception as e:
             return self._handle_run_failure(params, e)
 
         finally:
@@ -725,15 +664,7 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(params.agent_name, params.agent_idx)
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
-        except (
-            OSError,
-            IOError,
-            ValueError,
-            TypeError,
-            KeyError,
-            RuntimeError,
-            AttributeError,
-        ) as e:
+        except Exception as e:
             return self._handle_run_failure(params, e)
 
         finally:
