@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 from agent_actions.errors import ConfigurationError
@@ -68,6 +69,13 @@ class HitlClient:
         else:
             context_dict = context_data
 
+        # Compute state file path for review persistence
+        state_file: Path | None = None
+        hitl_state_dir = agent_config.get("_hitl_state_dir")
+        if hitl_state_dir:
+            file_stem = agent_config.get("_hitl_file_stem", "default")
+            state_file = Path(hitl_state_dir) / f".hitl_reviews_{file_stem}.json"
+
         # Start server and wait for response
         server = HitlServer(
             port=port,
@@ -76,6 +84,7 @@ class HitlClient:
             timeout=timeout,
             require_comment_on_reject=require_comment_on_reject,
             field_order=field_order,
+            state_file=state_file,
         )
 
         response = server.start_and_wait()

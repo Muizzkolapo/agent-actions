@@ -1,6 +1,7 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
 from dataclasses import dataclass, field
+from hashlib import sha256
 from pathlib import Path
 import json
 import logging
@@ -669,12 +670,26 @@ class ProcessingPipeline:
             context: Processing context
         """
         try:
+            # Inject HITL state persistence metadata into agent config
+            hitl_agent_config = dict(context.agent_config)
+            if context.output_directory:
+                hitl_state_dir = str(Path(context.output_directory) / "hitl")
+                # Derive a collision-proof, filesystem-safe key from the full
+                # input path AND agent name.  Including the agent name ensures
+                # multiple FILE-mode HITL actions on the same file get distinct
+                # state files.  The hex hash avoids separator collisions and
+                # platform-invalid characters (e.g. Windows drive-letter colons).
+                identity = f"{context.file_path or 'default'}:{context.agent_name}"
+                file_stem = sha256(identity.encode()).hexdigest()[:16]
+                hitl_agent_config["_hitl_state_dir"] = hitl_state_dir
+                hitl_agent_config["_hitl_file_stem"] = file_stem
+
             raw_response, executed = run_dynamic_agent(
-                agent_config=context.agent_config,
+                agent_config=hitl_agent_config,
                 agent_name=context.agent_name,
                 context=data,
                 formatted_prompt="",
-                tools_path=context.agent_config.get("tools_path"),
+                tools_path=hitl_agent_config.get("tools_path"),
             )
 
             # Unwrap single-item list from invocation service
@@ -692,6 +707,21 @@ class ProcessingPipeline:
                 raise ValueError(
                     "FILE mode HITL must return an object payload, "
                     f"got {type(decision_payload).__name__}"
+                )
+
+            # Detect timeout — partial reviews are persisted on disk; raise so
+            # the agent is marked failed and re-runs will resume from state.
+            if decision_payload.get("hitl_status") == "timeout":
+                reviewed = sum(
+                    1 for r in (decision_payload.get("record_reviews") or []) if r is not None
+                )
+                raise AgentActionsException(
+                    f"HITL review timed out ({reviewed}/{len(data)} records reviewed). "
+                    "Partial reviews saved. Re-run workflow to resume.",
+                    context={
+                        "agent_name": context.agent_name,
+                        "record_count": len(data),
+                    },
                 )
 
             record_reviews = (
@@ -772,6 +802,8 @@ class ProcessingPipeline:
 
             result = self.record_processor.enrichment_pipeline.enrich(result, context)
             return [result]
+        except AgentActionsException:
+            raise
         except Exception as e:
             logger.error("Error in FILE mode HITL processing: %s", e)
             error_result = ProcessingResult(

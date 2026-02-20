@@ -48,6 +48,7 @@ def test_hitl_client_invoke_with_config():
             timeout=300,
             require_comment_on_reject=True,
             field_order=[],
+            state_file=None,
         )
 
         # Verify start_and_wait was called

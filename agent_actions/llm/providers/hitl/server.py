@@ -1,9 +1,13 @@
 """Flask-based approval UI server."""
 
+import hashlib
+import json
 import logging
+import os
 import re
 import secrets
 import socket
+import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +38,7 @@ class HitlServer:
         timeout: int = 300,
         require_comment_on_reject: bool = True,
         field_order: list[str] | None = None,
+        state_file: Path | None = None,
     ):
         self.port = port
         self.instructions = instructions
@@ -43,6 +48,8 @@ class HitlServer:
         self.field_order = field_order or []
         self.record_count = self._determine_record_count(context_data)
         self.record_reviews: list[dict[str, Any] | None] = [None] * self.record_count
+        self._data_fingerprint = self._compute_data_fingerprint(context_data)
+        self.state_file = state_file
         self.response = None
         self.response_event = threading.Event()
         self.shutdown_requested = False
@@ -50,7 +57,101 @@ class HitlServer:
         self._lock = threading.Lock()
         self._active_port = port  # Updated when an available port is found
         self._session_token = secrets.token_urlsafe(32)
+        if self.state_file:
+            self._load_state_from_disk()
         self.app = self._create_app()
+
+    def _load_state_from_disk(self) -> None:
+        """Load persisted review state from disk if available."""
+        if not self.state_file or not self.state_file.exists():
+            return
+        try:
+            raw = self.state_file.read_text(encoding="utf-8")
+            state = json.loads(raw)
+            if not isinstance(state, dict):
+                logger.warning(
+                    "HITL state file %s is not a JSON object — starting fresh", self.state_file
+                )
+                return
+            if state.get("total_records") != self.record_count:
+                logger.warning(
+                    "HITL state file record count mismatch (file=%d, current=%d) — starting fresh",
+                    state.get("total_records", -1),
+                    self.record_count,
+                )
+                return
+            saved_fingerprint = state.get("data_fingerprint")
+            if saved_fingerprint and saved_fingerprint != self._data_fingerprint:
+                logger.warning(
+                    "HITL state file data fingerprint mismatch — input content changed, starting fresh"
+                )
+                return
+            saved_reviews = state.get("record_reviews", [])
+            for idx, review in enumerate(saved_reviews):
+                if idx < self.record_count and isinstance(review, dict):
+                    self.record_reviews[idx] = review
+            restored = sum(1 for r in self.record_reviews if r is not None)
+            logger.info(
+                "Restored %d/%d HITL reviews from %s", restored, self.record_count, self.state_file
+            )
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            logger.warning(
+                "Could not load HITL state file %s: %s — starting fresh", self.state_file, exc
+            )
+        except OSError as exc:
+            logger.warning("Could not read HITL state file %s: %s", self.state_file, exc)
+
+    def _persist_state(self) -> None:
+        """Atomically persist current review state to disk (best-effort)."""
+        if not self.state_file:
+            return
+        try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
+            with self._lock:
+                # Skip if a terminal response was already set (submit/approve/
+                # reject deleted the state file; don't recreate it).
+                if self.response_event.is_set():
+                    return
+                snapshot = list(self.record_reviews)
+            state = {
+                "record_reviews": snapshot,
+                "total_records": self.record_count,
+                "data_fingerprint": self._data_fingerprint,
+                "last_updated": _utc_timestamp(),
+            }
+            fd, tmp_path = tempfile.mkstemp(
+                dir=str(self.state_file.parent),
+                prefix=".hitl_tmp_",
+                suffix=".json",
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(state, f, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
+                # Re-check terminal state right before the atomic replace.
+                # A concurrent submit/approve/reject may have set the
+                # response and deleted the state file while we were writing
+                # the temp file; replacing now would resurrect stale state.
+                if self.response_event.is_set():
+                    Path(tmp_path).unlink(missing_ok=True)
+                    return
+                Path(tmp_path).replace(self.state_file)
+            except BaseException:
+                Path(tmp_path).unlink(missing_ok=True)
+                raise
+        except OSError as exc:
+            logger.warning("Failed to persist HITL state to %s: %s", self.state_file, exc)
+
+    def _delete_state_file(self) -> None:
+        """Remove persisted state file after successful completion."""
+        if not self.state_file:
+            return
+        try:
+            self.state_file.unlink(missing_ok=True)
+            logger.debug("Deleted HITL state file %s", self.state_file)
+        except OSError as exc:
+            logger.warning("Could not delete HITL state file %s: %s", self.state_file, exc)
 
     def _create_app(self) -> Flask:
         """Create Flask app with routes."""
@@ -152,6 +253,8 @@ class HitlServer:
         )
 
     def _handle_review_record(self):
+        if self.response_event.is_set():
+            return jsonify({"success": False, "error": "Review already submitted."}), 409
         if self.record_count == 0:
             return (
                 jsonify({"success": False, "error": "No records available for review."}),
@@ -196,6 +299,7 @@ class HitlServer:
         with self._lock:
             self.record_reviews[raw_index] = normalized_review
         logger.debug("Saved review for record %d: %s", raw_index, normalized_review["hitl_status"])
+        self._persist_state()
         return jsonify({"success": True})
 
     def _handle_approve(self):
@@ -216,6 +320,7 @@ class HitlServer:
             with self._lock:
                 self.record_reviews[0] = review
         self._set_response(payload=payload, default_status="approved")
+        self._delete_state_file()
         return jsonify({"success": True})
 
     def _handle_reject(self):
@@ -242,6 +347,7 @@ class HitlServer:
             with self._lock:
                 self.record_reviews[0] = review
         self._set_response(payload=payload, default_status="rejected")
+        self._delete_state_file()
         return jsonify({"success": True})
 
     def _handle_submit(self):
@@ -273,6 +379,7 @@ class HitlServer:
             default_status="approved",
             record_reviews=record_reviews,
         )
+        self._delete_state_file()
         return jsonify({"success": True})
 
     def _handle_shutdown(self):
@@ -352,6 +459,12 @@ class HitlServer:
         if context_data is None:
             return 0
         return 1
+
+    @staticmethod
+    def _compute_data_fingerprint(context_data: Any) -> str:
+        """Return a short hash of the review dataset for stale-state detection."""
+        serialized = json.dumps(context_data, sort_keys=True, default=str)
+        return hashlib.sha256(serialized.encode()).hexdigest()[:16]
 
     @staticmethod
     def _normalize_single_review(item: Any) -> dict[str, Any] | None:
