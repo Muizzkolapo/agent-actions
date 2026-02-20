@@ -122,9 +122,10 @@ class ProcessingPipeline:
         self.model_vendor = (config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
         self.action_kind = (config.agent_config.get("kind") or "").lower()
         self.granularity = (config.agent_config.get("granularity") or "").lower()
-        # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action
-        self.is_tool_action = self.action_kind == "tool"
-        self.is_hitl_action = self.action_kind == "hitl"
+        # Detect synchronous action types via kind OR model_vendor so that
+        # batch-mode bypass works regardless of which field the user sets.
+        self.is_tool_action = self.action_kind == "tool" or self.model_vendor == "tool"
+        self.is_hitl_action = self.action_kind == "hitl" or self.model_vendor == "hitl"
         if processor_factory is None:
             raise DependencyError(
                 "ProcessingPipeline requires processor_factory",
