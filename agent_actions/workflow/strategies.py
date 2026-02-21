@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
+from agent_actions.output.response.config_types import AgentConfigDict
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     process_initial_stage,
     InitialStageContext,
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
 class StrategyExecutionParams:
     """Parameters for strategy execution."""
 
-    agent_config: Dict[str, Any]
+    agent_config: AgentConfigDict
     agent_name: str
     file_path: str
     base_directory: str

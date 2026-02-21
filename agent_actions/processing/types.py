@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
+from agent_actions.output.response.config_types import AgentConfigDict
+
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
@@ -248,7 +250,7 @@ class ProcessingContext:
     """
 
     # Core configuration
-    agent_config: Dict[str, Any]
+    agent_config: AgentConfigDict
     agent_name: str
     mode: ProcessingMode = ProcessingMode.ONLINE
 

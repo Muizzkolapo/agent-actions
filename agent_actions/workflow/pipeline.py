@@ -7,6 +7,7 @@ import json
 import logging
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
+from agent_actions.output.response.config_types import AgentConfigDict
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.output.writer import FileWriter
 from agent_actions.llm.realtime.output import OutputHandler
@@ -42,7 +43,7 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for ProcessingPipeline."""
 
-    agent_config: Dict[str, Any]
+    agent_config: AgentConfigDict
     agent_name: str
     idx: int
     agent_configs: Optional[Dict[str, Any]] = None
@@ -55,7 +56,7 @@ class PipelineConfig:
 class BatchPipelineParams:
     """Parameters for batch pipeline processing."""
 
-    pipeline_agent_config: Dict[str, Any]
+    pipeline_agent_config: AgentConfigDict
     pipeline_agent_name: str
     batch_file_path: str
     batch_base_directory: str
@@ -80,7 +81,7 @@ class FilePathsConfig:
 class ProcessParams:
     """Parameters for pipeline processing."""
 
-    agent_config: Dict[str, Any]
+    agent_config: AgentConfigDict
     agent_name: str
     paths: FilePathsConfig
     idx: int
@@ -480,7 +481,7 @@ class ProcessingPipeline:
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
-    def _apply_observe_filter(data: List[Dict], agent_config: Dict[str, Any]) -> List[Dict]:
+    def _apply_observe_filter(data: List[Dict], agent_config: AgentConfigDict) -> List[Dict]:
         """Filter records to context_scope.observe fields in defined order.
 
         Returns filtered copy; original data is unchanged.
@@ -833,7 +834,7 @@ def create_processing_pipeline(
 
 
 def create_processing_pipeline_from_params(
-    agent_config: Dict[str, Any],
+    agent_config: AgentConfigDict,
     agent_name: str,
     idx: int,
     processor_factory: ProcessorFactory,

@@ -12,6 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 from rich.console import Console
+from agent_actions.output.response.config_types import AgentConfigDict
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -61,7 +62,7 @@ class AgentRunParams:
 
     agent_name: str
     agent_idx: int
-    agent_config: Dict[str, Any]
+    agent_config: AgentConfigDict
     is_last_agent: bool
     start_time: datetime
 
@@ -187,7 +188,7 @@ class AgentExecutor:
         )
 
     def _handle_agent_skip(
-        self, agent_name: str, agent_idx: int, agent_config: Dict[str, Any], start_time: datetime
+        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
     ) -> AgentExecutionResult:
         """
         Handle agent skip due to WHERE clause condition.
@@ -376,7 +377,7 @@ class AgentExecutor:
                 )
 
     def execute_agent_sync(
-        self, agent_name: str, *, agent_idx: int, agent_config: Dict[str, Any], is_last_agent: bool
+        self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
     ) -> AgentExecutionResult:
         """
         Execute a single agent synchronously.
@@ -431,7 +432,7 @@ class AgentExecutor:
         )
 
     async def execute_agent_async(
-        self, agent_name: str, *, agent_idx: int, agent_config: Dict[str, Any], is_last_agent: bool
+        self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
     ) -> AgentExecutionResult:
         """
         Execute a single agent asynchronously.
@@ -488,7 +489,7 @@ class AgentExecutor:
         )
 
     def _handle_batch_check(
-        self, agent_name: str, agent_idx: int, agent_config: Dict[str, Any], start_time: datetime
+        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
     ) -> AgentExecutionResult:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(agent_name, "checking_batch")
@@ -553,7 +554,7 @@ class AgentExecutor:
         )
 
     async def _handle_batch_check_async(
-        self, agent_name: str, agent_idx: int, agent_config: Dict[str, Any], start_time: datetime
+        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
     ) -> AgentExecutionResult:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(agent_name, "checking_batch")
