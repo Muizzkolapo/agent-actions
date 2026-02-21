@@ -784,7 +784,7 @@ class PromptPreparationService:
                 try:
                     pm.get_project_root(start_path=start_path)
                 except ProjectRootNotFoundError:
-                    pass
+                    logger.debug("No project root found from %s", start_path)
 
             project_seed_dir = pm.get_standard_path(PathType.SEED_DATA)
 

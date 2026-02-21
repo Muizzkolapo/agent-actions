@@ -5,11 +5,16 @@ Serves static files from the docs_site package directory and data files
 from the user's project artefact directory without modifying the package.
 """
 
+import logging
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 from pathlib import Path
 from typing import Optional
 import urllib.parse
+
+import click
+
+logger = logging.getLogger(__name__)
 
 
 class DocsRequestHandler(SimpleHTTPRequestHandler):
@@ -86,8 +91,8 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
     docs_site_dir = Path(__file__).parent / "docs_site"
 
     if not docs_site_dir.exists():
-        print("Error: docs_site directory not found!")
-        print(f"   Expected at: {docs_site_dir}")
+        logger.error("docs_site directory not found at %s", docs_site_dir)
+        click.echo(f"Error: docs_site directory not found!\n   Expected at: {docs_site_dir}")
         return False
 
     # Find artefact directory (in user's project)
@@ -101,8 +106,8 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
         artefact_dir = Path.cwd() / "artefact"
 
     if not artefact_dir.exists():
-        print("Error: artefact/ directory not found!")
-        print("   Run 'agac docs generate' first.\n")
+        logger.error("artefact directory not found at %s", artefact_dir)
+        click.echo("Error: artefact/ directory not found!\n   Run 'agac docs generate' first.\n")
         return False
 
     # Check for required data files
@@ -110,20 +115,21 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
     runs_path = artefact_dir / "runs.json"
 
     if not catalog_path.exists() or not runs_path.exists():
-        print("Error: Data files not found in artefact/")
-        print("   Run 'agac docs generate' first.\n")
+        logger.error("Data files not found in %s", artefact_dir)
+        click.echo("Error: Data files not found in artefact/\n   Run 'agac docs generate' first.\n")
         return False
 
     # Create handler class with bound directories
     handler = partial(DocsRequestHandler, docs_site_dir=docs_site_dir, artefact_dir=artefact_dir)
 
-    print(f"\nServing docs at http://127.0.0.1:{port}")
-    print("Press Ctrl+C to exit\n")
+    logger.info("Serving docs at http://127.0.0.1:%d", port)
+    click.echo(f"\nServing docs at http://127.0.0.1:{port}")
+    click.echo("Press Ctrl+C to exit\n")
 
     try:
         with HTTPServer(("127.0.0.1", port), handler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down server...")
+        click.echo("\nShutting down server...")
 
     return True

@@ -3,9 +3,14 @@ Catalog and runs data generator.
 """
 
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+
+import click
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.output.response.loader import SchemaLoader
 
@@ -310,7 +315,8 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     workflows_data = scanner.scan()
 
     if not workflows_data:
-        print("❌ No workflows found in project!")
+        logger.warning("No workflows found in %s", project_path)
+        click.echo("No workflows found in project!")
         return False
 
     # Step 1b: Scan prompts
@@ -410,37 +416,50 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     except ValueError:
         display_path = output_dir
 
-    print("\nBuilding catalog")
-    print(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
-    print(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
-    print(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
-    print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
+    click.echo("\nBuilding catalog")
+    click.echo(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
+    click.echo(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
+    click.echo(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
+    click.echo(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
     func_suffix = "s" if total_tool_functions != 1 else ""
-    print(f"  Indexed {total_tool_functions} tool function{func_suffix}")
+    click.echo(f"  Indexed {total_tool_functions} tool function{func_suffix}")
     if total_runs > 0:
-        print(f"  Loaded {total_runs} workflow run{'s' if total_runs != 1 else ''} with metrics")
+        click.echo(
+            f"  Loaded {total_runs} workflow run{'s' if total_runs != 1 else ''} with metrics"
+        )
     if validation_errors > 0 or validation_warnings > 0:
-        print(
+        click.echo(
             f"  Parsed logs: {validation_errors} error{'s' if validation_errors != 1 else ''}, {validation_warnings} warning{'s' if validation_warnings != 1 else ''}"
         )
     if total_vendors > 0:
-        print(f"  Scanned {total_vendors} vendor{'s' if total_vendors != 1 else ''}")
+        click.echo(f"  Scanned {total_vendors} vendor{'s' if total_vendors != 1 else ''}")
     if total_error_types > 0:
-        print(f"  Cataloged {total_error_types} error type{'s' if total_error_types != 1 else ''}")
+        click.echo(
+            f"  Cataloged {total_error_types} error type{'s' if total_error_types != 1 else ''}"
+        )
     if total_event_types > 0:
-        print(f"  Mapped {total_event_types} event type{'s' if total_event_types != 1 else ''}")
+        click.echo(
+            f"  Mapped {total_event_types} event type{'s' if total_event_types != 1 else ''}"
+        )
     if total_examples > 0:
-        print(f"  Found {total_examples} example project{'s' if total_examples != 1 else ''}")
+        click.echo(f"  Found {total_examples} example project{'s' if total_examples != 1 else ''}")
     if total_data_loaders > 0:
-        print(f"  Indexed {total_data_loaders} data loader{'s' if total_data_loaders != 1 else ''}")
+        click.echo(
+            f"  Indexed {total_data_loaders} data loader{'s' if total_data_loaders != 1 else ''}"
+        )
     if total_processing_states > 0:
-        print(
+        click.echo(
             f"  Parsed {total_processing_states} processing type{'s' if total_processing_states != 1 else ''}"
         )
     if total_data_nodes > 0:
-        print(
+        click.echo(
             f"  Exported {total_data_nodes} data node{'s' if total_data_nodes != 1 else ''} with previews"
         )
-    print(f"\nDone. Documentation compiled to {display_path}/")
+    logger.info(
+        "Documentation catalog generated: %d workflows, %d actions",
+        total_workflows,
+        total_actions,
+    )
+    click.echo(f"\nDone. Documentation compiled to {display_path}/")
 
     return True

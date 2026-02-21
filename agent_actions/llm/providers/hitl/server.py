@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import click
 from flask import Flask, jsonify, render_template, request
 from werkzeug.serving import make_server
 
@@ -535,9 +536,9 @@ class HitlServer:
         actual_port = self._find_available_port()
         self._active_port = actual_port
 
-        # Display URL for user (print ensures visibility regardless of log level)
+        # Display URL for user
         url = f"http://localhost:{actual_port}"
-        print(f"\n  HITL approval UI ready at: {url}\n")
+        click.echo(f"\n  HITL approval UI ready at: {url}\n")
         logger.info("HITL approval UI ready at: %s", url)
 
         # Start Flask in background thread

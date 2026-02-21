@@ -5,11 +5,12 @@ This module provides the implementation of the 'run' command,
 which executes agent workflows based on configuration files.
 """
 
+import asyncio
+import logging
+import traceback
 from pathlib import Path
 from typing import Optional
 
-import asyncio
-import traceback
 import click
 
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
@@ -20,6 +21,8 @@ from agent_actions.logging import LoggerFactory
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
+
+logger = logging.getLogger(__name__)
 from agent_actions.validation.run_validator import RunCommandArgs
 
 
@@ -183,6 +186,11 @@ class RunCommand:
                 )
             except Exception as track_error:
                 # Don't fail the workflow if tracking fails
+                logger.warning(
+                    "Could not finalize workflow run tracking: %s",
+                    track_error,
+                    exc_info=True,
+                )
                 click.echo(
                     f"Warning: Could not finalize workflow run tracking: {track_error}", err=True
                 )

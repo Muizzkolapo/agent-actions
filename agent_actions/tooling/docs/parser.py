@@ -2,9 +2,13 @@
 Workflow YAML parser for documentation generation.
 """
 
+import logging
 from typing import Dict, List, Any, Optional
 
+import click
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 def extract_fields_for_docs(raw_schema: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -96,10 +100,13 @@ class WorkflowParser:
             with open(yaml_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            print(f"  ⚠ Warning: YAML parsing error - {e}")
+            # Dual-channel: logger for log aggregation, click.echo for CLI visibility
+            logger.warning("YAML parsing error in %s: %s", yaml_path, e)
+            click.echo(f"  Warning: YAML parsing error in {yaml_path} - {e}")
             return None
         except Exception as e:
-            print(f"  ⚠ Warning: Error reading file - {e}")
+            logger.warning("Error reading workflow file %s: %s", yaml_path, e)
+            click.echo(f"  Warning: Error reading file {yaml_path} - {e}")
             return None
 
         # Extract workflow defaults

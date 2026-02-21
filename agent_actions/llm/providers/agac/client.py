@@ -73,7 +73,9 @@ class AgacClient(BaseClient):
                 if isinstance(parsed, dict):
                     identifier = parsed.get("source_guid", identifier)
             except (json.JSONDecodeError, AttributeError):
-                pass
+                logger.debug(
+                    "Failed to parse context_data as JSON for identifier extraction", exc_info=True
+                )
         return identifier
 
     @staticmethod

@@ -197,7 +197,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 f.write(json.dumps(result) + "\n")
 
         logger.info("Ollama batch output file: %s", output_file_path)
-        logger.info("Batch completed: %d succeeded, %d failed", completed, failed)
+        if failed > 0:
+            logger.warning(
+                "Batch completed with failures: %d succeeded, %d failed", completed, failed
+            )
+        else:
+            logger.info("Batch completed successfully: %d records", completed)
 
         # Return 'submitted' to mimic async providers
         return (batch_id, "submitted")

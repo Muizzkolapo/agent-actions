@@ -9,9 +9,16 @@ logging system.
 from __future__ import annotations
 
 import atexit
+import logging
 import threading
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Iterator
+
+# Use a non-propagating logger to avoid re-entering EventManager.fire()
+# via LoggingBridgeHandler when a handler fails. Messages go directly
+# to stderr via lastResort.
+_stdlib_logger = logging.getLogger(__name__)
+_stdlib_logger.propagate = False
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
@@ -226,8 +233,7 @@ class EventManager:
                     handler.handle(filtered_event)
             except Exception:
                 # Don't let handler errors break the application
-                # In production, you might want to log this somewhere
-                pass
+                _stdlib_logger.warning("Event handler %s failed", handler, exc_info=True)
 
     def flush(self) -> None:
         """
@@ -240,7 +246,7 @@ class EventManager:
             try:
                 handler.flush()
             except Exception:
-                pass
+                _stdlib_logger.warning("Flush failed for handler %s", handler, exc_info=True)
 
 
 def get_manager() -> EventManager:

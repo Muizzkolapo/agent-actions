@@ -1,6 +1,12 @@
 """Prompt preparation service for agent builder."""
 
+import json
+import logging
 from typing import Dict, Any, Optional
+
+import click
+
+logger = logging.getLogger(__name__)
 
 
 class PromptService:
@@ -23,18 +29,20 @@ class PromptService:
             schema: The schema being passed to the LLM (optional)
         """
         if agent_config.get("prompt_debug", False):
+            # click.echo used here because prompt_debug is a user-facing CLI diagnostic
             divider = "=" * 50
-            print(f"\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}")
-            print(prompt_config)
+            click.echo(f"\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}")
+            click.echo(prompt_config)
 
             if context_data:
-                print("\n[Context Data Preview]\n" + "-" * 50)
-                print(context_data)
+                click.echo("\n[Context Data Preview]\n" + "-" * 50)
+                click.echo(context_data)
 
             if schema:
-                print("\n[Context Schema Preview]\n" + "-" * 50)
-                import json
+                click.echo("\n[Context Schema Preview]\n" + "-" * 50)
+                click.echo(json.dumps(schema, indent=2, ensure_ascii=False))
 
-                print(json.dumps(schema, indent=2, ensure_ascii=False))
-
-            print(f"{divider}\n")
+            click.echo(f"{divider}\n")
+            logger.debug(
+                "prompt_debug output displayed for agent %s", agent_config.get("name", "unknown")
+            )

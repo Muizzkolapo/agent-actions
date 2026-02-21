@@ -235,6 +235,22 @@ If anything unexpected happens (test failures, build errors, behavior regression
 - Keyboard navigation, focus management, readable contrast, and meaningful empty/error states.
 - Prefer clear copy and predictable interactions over fancy effects.
 
+### 8. Logging Convention
+
+| Layer | Tool | Level |
+|-------|------|-------|
+| CLI user output | `click.echo()` / `console.print()` | N/A |
+| Operational flow events | `logger.info` | Start, complete, skip |
+| Recoverable failures | `logger.warning` | Retries, fallbacks, degradation |
+| Unrecoverable errors | `logger.error` | Failures that affect output |
+| Debug diagnostics | `logger.debug` | Exception traces, internal state |
+
+Rules:
+- Business logic: `logger = logging.getLogger(__name__)` — never `print()`
+- CLI: `click.echo()` for user output, `logger.*` for operational logging
+- Silent `except: pass` must log at `debug` or `warning` (except destructors and safety utilities)
+- `print()` permitted only in: standalone scripts (`__main__`), docstring examples, dedicated debug handlers
+
 ---
 
 ## Git and Change Hygiene (If Applicable)

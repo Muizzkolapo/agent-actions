@@ -6,8 +6,11 @@ Extracted from BatchService for better separation of concerns.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Optional, Any
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
@@ -228,6 +231,6 @@ class BatchClientResolver:
                 if entry.get("batch_id") == batch_id:
                     return entry.get("provider")
         except (json.JSONDecodeError, OSError, KeyError):
-            pass
+            logger.debug("Failed to read batch registry file %s", registry_file, exc_info=True)
 
         return None
