@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
-from agent_actions.output.response.config_types import AgentConfigDict
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
     process_initial_stage,
     InitialStageContext,

@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional
 from rich.console import Console
-from agent_actions.output.response.config_types import AgentConfigDict
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (

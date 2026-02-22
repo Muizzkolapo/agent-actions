@@ -7,7 +7,7 @@ import json
 import logging
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
-from agent_actions.output.response.config_types import AgentConfigDict
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.output.writer import FileWriter
 from agent_actions.llm.realtime.output import OutputHandler

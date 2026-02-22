@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
 
-from agent_actions.output.response.config_types import AgentEntryDict
+from agent_actions.config.types import AgentEntryDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend

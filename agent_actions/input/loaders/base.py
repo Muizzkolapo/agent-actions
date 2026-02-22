@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, TypeVar, Generic, Tuple, Type
 
 from agent_actions.config.interfaces import IDataLoader, ProcessingMode
-from agent_actions.output.response.config_types import AgentEntryDict
+from agent_actions.config.types import AgentEntryDict
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 
 

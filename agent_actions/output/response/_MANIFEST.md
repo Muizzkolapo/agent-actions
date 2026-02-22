@@ -11,7 +11,6 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 |------|------|-------------|---------|
 | `config_fields.py` | Module | Field helpers used by schema configuration objects. | `output.response.schema`, `validation` |
 | `config_schema.py` | Module | Schema definitions for response metadata configuration. | `validation` |
-| `config_types.py` | Module | Typed dictionaries (`AgentConfigDict`, `ContextScopeDict`, `GuardConfigDict`, `AgentEntryDict`) for config structures. | `config`, `workflow`, `processing` |
 | `consolidated_guard.py` | Module | Renders consolidated guard results with metadata for outputs. | `validation`, `logging` |
 | `expander.py` | Module | Expands inline schema definitions and prompts when rendering docs. | `tooling.docs`, `schema` |
 | `guard_parser.py` | Module | Parses guard metadata from response payloads. | `preprocessing` |

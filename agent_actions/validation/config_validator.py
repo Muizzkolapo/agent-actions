@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 from agent_actions.output.file_handler import FileHandler
-from agent_actions.output.response.config_types import AgentConfigMap
+from agent_actions.config.types import AgentConfigMap
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
     AgentEntryValidationOrchestrator,

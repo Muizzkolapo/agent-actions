@@ -20,7 +20,7 @@ from agent_actions.utils.constants import (
 )
 from agent_actions.utils.schema_utils import is_compiled_schema
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
-from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
+from agent_actions.config.types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_fields import inherit_simple_fields
 
 logger = logging.getLogger(__name__)
