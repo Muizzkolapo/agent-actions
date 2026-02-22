@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_actions.cli.project_root import find_project_root
+from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
 
 
@@ -66,8 +67,8 @@ class DataSourceConfig(BaseModel):
 logger = logging.getLogger(__name__)
 
 # Safety limits for API fetches
-_MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB
-_REQUEST_TIMEOUT_SECONDS = 30
+_MAX_RESPONSE_BYTES = ApiDefaults.MAX_RESPONSE_BYTES
+_REQUEST_TIMEOUT_SECONDS = ApiDefaults.REQUEST_TIMEOUT_SECONDS
 _REMOTE_CACHE_DIR = "_remote_cache"
 
 # Type names that require dict config — used to catch bare-string typos early

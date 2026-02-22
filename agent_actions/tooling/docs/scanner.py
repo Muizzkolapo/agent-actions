@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 
 import yaml
 
+from agent_actions.config.defaults import DocsDefaults
 from agent_actions.output.response.loader import SchemaLoader
 from .parser import extract_fields_for_docs
 
@@ -66,8 +67,8 @@ class ProjectScanner:
 
         return workflows
 
-    # Cap README content at 100 KB to prevent catalog.json bloat
-    _README_MAX_BYTES = 100 * 1024
+    # Cap README content to prevent catalog.json bloat
+    _README_MAX_BYTES = DocsDefaults.README_MAX_BYTES
 
     def scan_readmes(self) -> Dict[str, str]:
         """Scan for README.md files alongside agent_config directories.

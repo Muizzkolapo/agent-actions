@@ -14,6 +14,8 @@ import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
+from agent_actions.config.defaults import OllamaDefaults
+
 from ollama import Client
 from ..batch_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
@@ -39,7 +41,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         Args:
             base_url: Ollama server URL (default: http://localhost:11434)
         """
-        self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.base_url = base_url or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
         self.client = Client(host=self.base_url)
 
     def format_task_for_provider(

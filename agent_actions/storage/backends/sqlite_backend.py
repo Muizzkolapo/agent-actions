@@ -7,6 +7,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+from agent_actions.config.defaults import StorageDefaults
 from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,7 @@ class SQLiteBackend(StorageBackend):
             self._connection = sqlite3.connect(
                 str(self.db_path),
                 check_same_thread=False,  # Allow sharing across threads
-                timeout=30.0,  # Wait up to 30s for locks
+                timeout=StorageDefaults.SQLITE_LOCK_TIMEOUT_SECONDS,
             )
             # Enable WAL mode for better concurrency
             self._connection.execute("PRAGMA journal_mode=WAL")

@@ -10,6 +10,8 @@ import os
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, Callable, Tuple
 
+from agent_actions.config.defaults import OllamaDefaults
+
 from .batch_base import BaseBatchClient
 
 logger = logging.getLogger(__name__)
@@ -78,7 +80,7 @@ def _create_gemini(config: Dict[str, Any]) -> BaseBatchClient:
 def _create_ollama(config: Dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
-    base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
     return OllamaBatchClient(base_url=base_url)
 
 

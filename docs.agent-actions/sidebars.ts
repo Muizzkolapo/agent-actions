@@ -158,7 +158,19 @@ const sidebars: SidebarsConfig = {
           ],
         },
         'reference/tools/index',
-        'reference/architecture/index',
+        {
+          type: 'category',
+          label: 'Architecture',
+          collapsed: true,
+          collapsible: true,
+          link: {
+            type: 'doc',
+            id: 'reference/architecture/index',
+          },
+          items: [
+            'reference/architecture/internal-defaults',
+          ],
+        },
         'reference/inspect',
         'reference/documentation-site',
       ],

@@ -14,6 +14,8 @@ from typing import Any, Dict, Optional, Tuple, Type
 
 import portalocker
 
+from agent_actions.config.defaults import LockDefaults
+
 
 def _empty_runs_data(*, extended: bool = False) -> Dict[str, Any]:
     """Create empty runs data structure.
@@ -107,7 +109,9 @@ class RunTracker:
         """Load existing runs data or create new structure with file locking."""
         if self.runs_file.exists():
             try:
-                with portalocker.Lock(self.runs_file, "r", timeout=5) as f:
+                with portalocker.Lock(
+                    self.runs_file, "r", timeout=LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS
+                ) as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError, portalocker.exceptions.LockException):
                 # If file is corrupted or locked, start fresh
@@ -126,7 +130,9 @@ class RunTracker:
         runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
 
         # Write to file with exclusive lock
-        with portalocker.Lock(self.runs_file, "w", timeout=5) as f:
+        with portalocker.Lock(
+            self.runs_file, "w", timeout=LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS
+        ) as f:
             json.dump(runs_data, f, indent=2)
 
     def record_run(self, *, config: RunConfig) -> str:
@@ -150,7 +156,12 @@ class RunTracker:
             self._create_empty_runs_file()
 
         # Atomic read-modify-write with exclusive lock
-        with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX,
+        ) as f:
             runs_data = self._load_runs_data_from_file(f)
             run_id = self._create_run_record(runs_data, config)
             self._write_runs_data_to_file(f, runs_data)
@@ -291,7 +302,12 @@ class RunTracker:
                 json.dump(_empty_runs_data(extended=True), f)
 
         # Atomic read-modify-write with exclusive lock
-        with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX,
+        ) as f:
             # Load existing data
             try:
                 f.seek(0)
@@ -357,7 +373,12 @@ class RunTracker:
             agent_config: Full agent configuration (for extracting model info)
         """
         # Atomic read-modify-write with exclusive lock and retry
-        with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX,
+        ) as f:
             f.seek(0)
             runs_data = json.load(f)
 
@@ -403,7 +424,12 @@ class RunTracker:
             config: ActionCompleteConfig containing action completion parameters
         """
         # Atomic read-modify-write with exclusive lock and retry
-        with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX,
+        ) as f:
             f.seek(0)
             runs_data = json.load(f)
 
@@ -471,7 +497,12 @@ class RunTracker:
             error_message: Error description (if status='FAILED')
         """
         # Atomic read-modify-write with exclusive lock and retry
-        with portalocker.Lock(self.runs_file, "r+", timeout=10, flags=portalocker.LOCK_EX) as f:
+        with portalocker.Lock(
+            self.runs_file,
+            "r+",
+            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+            flags=portalocker.LOCK_EX,
+        ) as f:
             f.seek(0)
             runs_data = json.load(f)
 

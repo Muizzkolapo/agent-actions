@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
+from agent_actions.config.defaults import SeedDataDefaults
 from agent_actions.errors import FileSystemError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
@@ -42,8 +43,8 @@ class StaticDataLoadError(FileSystemError):
 class StaticDataLoader:
     """Loads static/seed data files with caching and path validation."""
 
-    # File size limit: 10MB to prevent memory issues
-    MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+    # File size limit to prevent memory issues
+    MAX_FILE_SIZE_BYTES = SeedDataDefaults.MAX_FILE_SIZE_BYTES
 
     # Supported file extensions
     SUPPORTED_EXTENSIONS = {".json", ".yml", ".yaml", ".md", ".txt", ".csv"}

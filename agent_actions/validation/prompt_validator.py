@@ -9,6 +9,7 @@ import re
 import logging
 from pathlib import Path
 from typing import Dict, List, Set, Any, Optional, Tuple
+from agent_actions.config.defaults import PromptDefaults
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class PromptValidator(BaseValidator):
 
     _PROMPT_SECTION_PATTERN = re.compile("^#+\\s+(.+?)$", re.MULTILINE)
     _PROMPT_ID_PATTERN = re.compile("^```prompt:(\\w+)$", re.MULTILINE)
-    _MAX_PROMPT_SIZE = 1024 * 100
+    _MAX_PROMPT_SIZE = PromptDefaults.MAX_PROMPT_SIZE_BYTES
 
     @staticmethod
     def _find_prompt_sections_in_content(content: str) -> List[str]:

@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from agent_actions.config.defaults import OllamaDefaults
+
 
 class VendorType(str, Enum):
     """Supported LLM vendor types."""
@@ -108,7 +110,7 @@ class OllamaConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.OLLAMA] = VendorType.OLLAMA
     api_key_env_name: str = "OLLAMA_API_KEY"
-    base_url: str = Field(default="http://localhost:11434", description="Ollama server URL")
+    base_url: str = Field(default=OllamaDefaults.BASE_URL, description="Ollama server URL")
 
 
 class ToolVendorConfig(BaseVendorConfig):

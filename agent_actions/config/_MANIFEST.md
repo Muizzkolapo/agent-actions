@@ -29,6 +29,7 @@ orchestration, prompts, and processing to concrete implementations.
 | `factory.py` | Module | DI-aware factory helpers for `AgentRunner`. | `di`, `configuration` |
 | `init.py` | Module | ProjectInitializer for scaffolding new projects. | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
+| `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
 | `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) for config structures. | `config`, `workflow`, `processing` |
 
 ## Flows
