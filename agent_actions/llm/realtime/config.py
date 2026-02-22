@@ -303,9 +303,21 @@ class ConfigManager:
         result = {}
         for agent_type, config in self.agent_configs.items():
             config_dict = config.model_dump()
-            string_fields_with_defaults = {
+
+            # Required for LLM actions — fail fast instead of masking with "".
+            # tool/hitl kinds get model_vendor overridden below, so skip them.
+            kind = config_dict.get("kind")
+            if kind not in ("tool", "hitl"):
+                if not config_dict.get("model_vendor"):
+                    raise ConfigurationError(
+                        f"Action '{agent_type}' is missing required field 'model_vendor'",
+                        context={"action": agent_type, "field": "model_vendor"},
+                    )
+
+            # Optional fields — default None → "" to satisfy downstream
+            # string expectations (e.g., template rendering, empty conditionals).
+            optional_string_defaults = {
                 "conditional_clause": "",
-                "model_vendor": "",
                 "granularity": "record",
                 "run_mode": "online",
                 "prompt": "",
@@ -313,7 +325,7 @@ class ConfigManager:
                 "code_path": "",
                 "anthropic_version": "",
             }
-            for field, default_value in string_fields_with_defaults.items():
+            for field, default_value in optional_string_defaults.items():
                 if field in config_dict and config_dict[field] is None:
                     config_dict[field] = default_value
 
