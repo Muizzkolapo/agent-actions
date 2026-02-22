@@ -35,6 +35,34 @@ class GuardConfigDict(TypedDict, total=False):
     value: Any
 
 
+class WhereClauseDict(TypedDict, total=False):
+    """WHERE clause configuration for conditional filtering.
+
+    Supports SQL-like expressions evaluated per-item or per-agent.
+    See WhereClauseConfig (output/response/config_schema.py) for
+    validation rules and defaults.
+    """
+
+    clause: str
+    scope: str  # "item" | "agent"
+    behavior: str  # "skip" | "filter"
+    passthrough_on_empty: bool
+    passthrough_on_error: bool
+    cache_enabled: bool
+
+
+class HitlConfigDict(TypedDict, total=False):
+    """Human-in-the-loop review configuration.
+
+    See HitlConfig (config/schema.py) for validation rules and defaults.
+    """
+
+    port: int
+    instructions: str
+    timeout: int
+    require_comment_on_reject: bool
+
+
 class AgentConfigDict(TypedDict, total=False):
     """Fully-expanded agent configuration as used at runtime.
 
@@ -97,7 +125,7 @@ class AgentConfigDict(TypedDict, total=False):
     conditional_clause: str
     skip_if: str
     skip_condition: str  # alternative to skip_if
-    where_clause: Dict[str, Any]
+    where_clause: WhereClauseDict
 
     # Optional features
     ephemeral: bool
@@ -130,7 +158,7 @@ class AgentConfigDict(TypedDict, total=False):
     code_path: str
 
     # HITL-specific (subscript-assigned in pipeline.py)
-    hitl: Dict[str, Any]
+    hitl: HitlConfigDict
     _hitl_state_dir: str
     _hitl_file_stem: str
 
@@ -163,7 +191,7 @@ class AgentEntryDict(TypedDict, total=False):
     chunk_config: Dict[str, Any]
     is_operational: bool
     conditional_clause: Optional[str]
-    where_clause: Optional[Dict[str, Any]]
+    where_clause: Optional[WhereClauseDict]
     skip_if: Optional[str]
     ephemeral: Optional[bool]
     add_dispatch: Optional[bool]
@@ -174,6 +202,8 @@ class AgentEntryDict(TypedDict, total=False):
     enable_prompt_caching: Optional[bool]
     # Control field flow: observe (LLM context), drop (block), passthrough (output)
     context_scope: Optional[ContextScopeDict]
+    # HITL config (assigned by expander for kind="hitl" agents)
+    hitl: Optional[HitlConfigDict]
 
 
 # Alias for the list of agent entries under a pipeline name

@@ -29,7 +29,7 @@ orchestration, prompts, and processing to concrete implementations.
 | `factory.py` | Module | DI-aware factory helpers for `AgentRunner`. | `di`, `configuration` |
 | `init.py` | Module | ProjectInitializer for scaffolding new projects. | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
-| `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`) for config structures. | `config`, `workflow`, `processing` |
+| `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) for config structures. | `config`, `workflow`, `processing` |
 
 ## Flows
 
