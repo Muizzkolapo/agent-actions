@@ -1085,8 +1085,8 @@ def wait_for_batch_completion(
                 progress = provider.get_batch_progress(batch_id)
                 completed = progress.get("completed", 0)
                 failed = progress.get("failed", 0)
-            except Exception:
-                pass  # Progress tracking is optional
+            except Exception as e:
+                logger.debug("Failed to get batch progress for %s: %s", batch_id, e, exc_info=True)
 
         # Calculate progress percentage
         current_pct = (completed / total_items * 100) if total_items > 0 else 0

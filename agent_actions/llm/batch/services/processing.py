@@ -297,7 +297,8 @@ class BatchProcessingService:
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             status = provider.check_status(batch_id)
             return status == BatchStatus.COMPLETED
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to check batch status for %s: %s", batch_id, e, exc_info=True)
             return False
 
     def _determine_output_path(

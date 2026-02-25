@@ -2,6 +2,7 @@
 Extract output schemas from action configurations.
 """
 
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
@@ -11,6 +12,8 @@ from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaExtractor:
@@ -358,8 +361,10 @@ class SchemaExtractor:
                     output.json_schema = loaded
                     output.schema_fields = self._extract_fields_from_json_schema(loaded)
                     return
-                except Exception:
-                    pass  # Schema loading failed - will fall through to schemaless
+                except Exception as e:
+                    logger.debug(
+                        "Schema loading failed for '%s': %s", schema_name, e, exc_info=True
+                    )
 
         if not schema_def:
             # Check json_mode - if enabled, action should have schema
@@ -392,7 +397,10 @@ class SchemaExtractor:
                     loaded = schema_loader.load_schema(schema_def)
                     output.json_schema = loaded
                     output.schema_fields = self._extract_fields_from_json_schema(loaded)
-                except Exception:
+                except Exception as e:
+                    logger.debug(
+                        "Schema loader fallback failed for '%s': %s", schema_def, e, exc_info=True
+                    )
                     output.is_dynamic = True
             else:
                 output.is_dynamic = True

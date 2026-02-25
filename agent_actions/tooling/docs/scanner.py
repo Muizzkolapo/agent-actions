@@ -3,6 +3,7 @@ Project scanner for finding workflow files and prompts.
 """
 
 import ast
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -12,6 +13,8 @@ import yaml
 from agent_actions.config.defaults import DocsDefaults
 from agent_actions.output.response.loader import SchemaLoader
 from .parser import extract_fields_for_docs
+
+logger = logging.getLogger(__name__)
 
 
 class ProjectScanner:
@@ -249,7 +252,10 @@ class ProjectScanner:
                         workflow_name=workflow_name,
                     )
                     stats = backend.get_storage_stats()
-                except Exception:
+                except Exception as e:
+                    logger.debug(
+                        "Failed to init SQLite backend for %s: %s", db_file, e, exc_info=True
+                    )
                     continue
 
                 nodes = {}
@@ -262,7 +268,10 @@ class ProjectScanner:
                             "files": preview_result.get("files", []),
                             "preview": preview_result.get("records", []),
                         }
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(
+                            "Failed to preview target for %s: %s", action_name, e, exc_info=True
+                        )
                         nodes[action_name] = {
                             "record_count": record_count,
                             "files": [],
@@ -340,8 +349,13 @@ class ProjectScanner:
             if events_path.exists():
                 try:
                     action_metrics = self._extract_action_metrics(events_path)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(
+                        "Failed to extract action metrics from %s: %s",
+                        events_path,
+                        e,
+                        exc_info=True,
+                    )
 
             # Load .manifest.json for execution plan and per-action status
             manifest_path = target_dir / ".manifest.json"
@@ -1127,8 +1141,10 @@ class ProjectScanner:
                 config_content = yaml.safe_load(config_file.read_text())
                 if isinstance(config_content, dict):
                     description = config_content.get("description", "")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Failed to parse YAML config for example %s: %s", example_name, e, exc_info=True
+                )
 
             # Scan for workflows
             workflow_dir = example_dir / "agent_workflow"

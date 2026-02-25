@@ -198,8 +198,8 @@ class RunCommand:
             # Flush event handlers to ensure all output is written
             try:
                 LoggerFactory.flush()
-            except Exception:
-                pass  # Don't fail if event flushing fails
+            except Exception as e:
+                logger.debug("Failed to flush event handlers: %s", e, exc_info=True)
 
 
 @click.command()

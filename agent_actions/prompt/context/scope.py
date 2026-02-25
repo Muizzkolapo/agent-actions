@@ -438,9 +438,13 @@ class ContextScopeProcessor:
                         f"from template: {valid_template_actions - referenced_actions}"
                     )
                 referenced_actions = referenced_actions | valid_template_actions
-        except Exception:
-            # If prompt retrieval fails, skip template-based inference
-            pass
+        except Exception as e:
+            logger.debug(
+                "Prompt retrieval failed for template inference on '%s': %s",
+                action_name,
+                e,
+                exc_info=True,
+            )
 
         # 2b. Identify field prefix patterns and wildcards from context_scope
         # Collect all field references once to avoid duplication

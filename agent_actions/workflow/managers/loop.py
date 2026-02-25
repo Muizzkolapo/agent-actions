@@ -248,8 +248,8 @@ class VersionOutputCorrelator:
                 target_files = self.storage_backend.list_target_files(agent_name)
                 if target_files:
                     return 0  # Data exists in storage backend
-            except Exception:
-                pass  # Fall through to filesystem check
+            except Exception as e:
+                logger.debug("Failed to list target files for %s: %s", agent_name, e, exc_info=True)
 
         # Fallback to filesystem check
         target_dir = self.agent_folder / "target"

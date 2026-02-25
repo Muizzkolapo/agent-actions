@@ -244,7 +244,8 @@ class AgentOutputManager:
         """Read all target files for a node from storage backend."""
         try:
             target_files = self.storage_backend.list_target_files(action_name)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to list target files for %s: %s", action_name, e, exc_info=True)
             return {}
         result: Dict[str, List[Dict]] = {}
         for relative_path in target_files:
@@ -285,7 +286,8 @@ class AgentOutputManager:
         """
         try:
             target_files = self.storage_backend.list_target_files(action_name)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to list target files for %s: %s", action_name, e, exc_info=True)
             return [], []
         outputs: List[Any] = []
         for relative_path in target_files:

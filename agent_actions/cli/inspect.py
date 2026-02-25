@@ -6,6 +6,7 @@ which includes subcommands for analyzing workflow structure and data flow.
 """
 
 import json as json_lib
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -20,6 +21,8 @@ from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.errors import FileLoadError
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
+
+logger = logging.getLogger(__name__)
 
 
 class BaseInspectCommand:
@@ -174,8 +177,8 @@ class BaseInspectCommand:
                             fields = [k for k in schema_data.keys() if k not in keywords]
                             if fields:
                                 return fields
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to read schema '%s': %s", schema_name, e, exc_info=True)
             return [f"[schema: {schema_name}]"]
 
         return []
