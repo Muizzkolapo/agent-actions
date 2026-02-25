@@ -427,7 +427,7 @@ class AgentWorkflow:
 
         # Fire UDF discovery complete event once with total count
         if total_udfs > 0:
-            self.console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
+            self.console.print(f"[green]✅ Discovered {total_udfs} Tools[/green]")
             fire_event(UDFDiscoveryCompleteEvent(total_udfs=total_udfs))
 
     def _discover_udfs_from_path(self, path: str) -> int:
@@ -441,7 +441,7 @@ class AgentWorkflow:
             # Use centralized path management (thread-safe, cached)
             ensure_path_importable(abs_path)
 
-            self.console.print(f"[cyan]🔍 Discovering UDFs in {abs_path}...[/cyan]")
+            self.console.print(f"[cyan]🔍 Discovering Tools in {abs_path}...[/cyan]")
 
             registry = discover_udfs(abs_path)
 

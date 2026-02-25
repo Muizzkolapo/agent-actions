@@ -5,6 +5,7 @@ from hashlib import sha256
 from pathlib import Path
 import json
 import logging
+import warnings
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from agent_actions.config.types import AgentConfigDict
@@ -454,17 +455,23 @@ class ProcessingPipeline:
         )
 
         # Process via RecordProcessor
-        if self.granularity == "file" and self.is_tool_action:
+        if self.granularity == "file" and (self.is_tool_action or self.is_hitl_action):
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
             context.source_data = data
-            filtered = self._apply_observe_filter(data, self.config.agent_config)
-            results = self._process_file_mode_tool(filtered, data, context)
-        elif self.granularity == "file" and self.is_hitl_action:
-            # For FILE mode HITL, present the entire dataset for one decision
-            context.source_data = data
-            filtered = self._apply_observe_filter(data, self.config.agent_config)
-            results = self._process_file_mode_hitl(filtered, data, context)
+            filtered = ContextScopeProcessor.apply_observe_for_file_mode(
+                data=data,
+                agent_config=self.config.agent_config,
+                agent_name=self.config.agent_name,
+                agent_indices=agent_indices,
+                file_path=file_path,
+                source_data=source_data,
+                storage_backend=self.config.storage_backend,
+            )
+            if self.is_tool_action:
+                results = self._process_file_mode_tool(filtered, data, context)
+            else:
+                results = self._process_file_mode_hitl(filtered, data, context)
         else:
             # process_batch handles looping and calls process() which handles retries
             results = self.record_processor.process_batch(data, context)
@@ -486,7 +493,18 @@ class ProcessingPipeline:
 
         Returns filtered copy; original data is unchanged.
         If no observe is configured, returns data as-is.
+
+        .. deprecated::
+            Use ``ContextScopeProcessor.apply_observe_for_file_mode`` instead.
+            This method strips namespaces and performs bare-key lookup only,
+            which silently fails for cross-namespace references.
         """
+        warnings.warn(
+            "_apply_observe_filter is deprecated. "
+            "Use ContextScopeProcessor.apply_observe_for_file_mode instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         context_scope = agent_config.get("context_scope") or {}
         observe_refs = context_scope.get("observe")
         if not observe_refs:

@@ -39,10 +39,10 @@ class ListUDFsCommand:
         """Execute the list-udfs command."""
         clear_registry()
         if not self.json_output:
-            self.console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
+            self.console.print("[cyan]🔍 Discovering Tools...[/cyan]")
         registry = discover_udfs(self.user_code)
         if not self.json_output:
-            self.console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]\n")
+            self.console.print(f"[green]✅ Discovered {len(registry)} Tools[/green]\n")
         udfs = list_udfs()
         if not udfs:
             if self.json_output:

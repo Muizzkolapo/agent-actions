@@ -1771,7 +1771,7 @@ class UDFDiscoveryStartEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.PLUGIN
-        self.message = f"Discovering UDFs in {self.search_path}"
+        self.message = f"Discovering Tools in {self.search_path}"
         self.data = {
             "search_path": self.search_path,
         }

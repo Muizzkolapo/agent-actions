@@ -122,8 +122,8 @@ class ValidateUDFsCommand:
             self.console.print("[green]✅ All UDF references valid[/green]")
             self.console.print("[green]✅ No duplicate function names[/green]")
             self.console.print("\n[bold]Summary:[/bold]")
-            self.console.print(f"  - {len(impl_refs)} UDF(s) referenced in config")
-            self.console.print(f"  - {len(registry)} UDF(s) discovered and registered")
+            self.console.print(f"  - {len(impl_refs)} Tools referenced in config")
+            self.console.print(f"  - {len(registry)} Tools discovered and registered")
             self.console.print("  - All functions found\n")
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")

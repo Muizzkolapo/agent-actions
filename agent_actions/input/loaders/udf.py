@@ -31,7 +31,7 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
 
     Example:
         registry = discover_udfs(Path('./user_code'))
-        print(f"Discovered {len(registry)} UDF(s)")
+        print(f"Discovered {len(registry)} Tools")
     """
     user_code_path = Path(user_code_path)
     if not user_code_path.exists():
