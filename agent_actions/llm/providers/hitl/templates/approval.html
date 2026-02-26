@@ -63,6 +63,8 @@
             --glass-border: rgba(255,255,255,0.06);
             --jk: #93c5fd; --js: #86efac; --jn: #c4b5fd; --jb: #fca5a5; --jl: #52526a;
             --dot-color: rgba(255,255,255,0.04);
+            --logo-bar-1: #94a3b8;
+            --logo-bar-2: #e2e8f0;
             color-scheme: dark;
         }
 
@@ -104,6 +106,8 @@
             --glass-border: rgba(0,0,0,0.05);
             --jk: #1d4ed8; --js: #15803d; --jn: #7c3aed; --jb: #dc2626; --jl: #9898b0;
             --dot-color: rgba(0,0,0,0.03);
+            --logo-bar-1: #64748b;
+            --logo-bar-2: #334155;
             color-scheme: light;
         }
 
@@ -120,16 +124,7 @@
             position: relative;
         }
 
-        /* ── Dot Grid Background ── */
-        body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image: radial-gradient(var(--dot-color) 1px, transparent 1px);
-            background-size: 20px 20px;
-            pointer-events: none;
-            z-index: 0;
-        }
+        /* ── Dot Grid Background (removed — too noisy at scale) ── */
 
         /* ── Ambient Glow ── */
         body::after {
@@ -173,7 +168,7 @@
             max-width: 880px;
             margin: 0 auto;
             padding: 2.2rem 2rem 0;
-            padding-bottom: 200px;
+            padding-bottom: 240px;
         }
 
         /* ── Staggered Page Load ── */
@@ -183,8 +178,7 @@
         }
         .header { animation: revealUp 0.5s var(--spring) 0.05s both; }
         .nav-row { animation: revealUp 0.5s var(--spring) 0.12s both; }
-        .status-dots { animation: revealUp 0.5s var(--spring) 0.16s both; }
-        .card { animation: revealUp 0.5s var(--spring) 0.2s both; }
+        .card { animation: revealUp 0.5s var(--spring) 0.16s both; }
         .action-bar { animation: revealUp 0.4s var(--spring) 0.3s both; }
 
         /* ── Header ── */
@@ -200,14 +194,11 @@
         }
         .header h1 {
             font-family: "Bricolage Grotesque", serif;
-            font-size: 1.65rem;
-            font-weight: 800;
-            letter-spacing: -0.04em;
-            line-height: 1.1;
-            background: linear-gradient(135deg, var(--text), var(--text-2));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            color: var(--text);
         }
         .header-sub {
             font-size: 0.68rem;
@@ -247,6 +238,20 @@
         .stat-p { color: var(--blue); background: var(--blue-soft); border: 1px solid var(--blue-border); }
         .stat-a { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); }
         .stat-r { color: var(--red); background: var(--red-soft); border: 1px solid var(--red-border); }
+
+        /* ── Logo ── */
+        .logo-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow: hidden;
+        }
 
         /* ── Theme Toggle ── */
         .theme-btn {
@@ -451,6 +456,12 @@
             margin: 0 1px;
             flex-shrink: 0;
         }
+        .ctrl-label {
+            font-size: 0.56rem;
+            color: var(--text-4);
+            min-width: auto;
+            padding: 0 0.25rem;
+        }
 
         /* ── Button Flash (keyboard feedback) ── */
         @keyframes flashGreen {
@@ -525,35 +536,7 @@
         .batch-approve:hover { color: var(--green) !important; border-color: var(--green-border) !important; }
         .batch-reject:hover { color: var(--red) !important; border-color: var(--red-border) !important; }
 
-        /* ── Status Dots ── */
-        .status-dots {
-            display: none;
-            flex-wrap: wrap;
-            gap: 7px;
-            padding: 0.45rem 0 0.2rem;
-        }
-        .dot {
-            width: 11px; height: 11px;
-            border-radius: 50%;
-            border: 2px solid var(--border-2);
-            background: transparent;
-            cursor: pointer;
-            transition: all 0.25s var(--spring);
-            padding: 0;
-            outline: none;
-            position: relative;
-        }
-        .dot:hover { transform: scale(1.35); }
-        .dot-active {
-            box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--text-3);
-            transform: scale(1.1);
-        }
-        .dot-active:hover { transform: scale(1.35); }
-        .dot-approved { background: var(--green); border-color: var(--green); box-shadow: 0 0 6px var(--green-glow); }
-        .dot-approved.dot-active { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--green), 0 0 10px var(--green-glow); }
-        .dot-rejected { background: var(--red); border-color: var(--red); box-shadow: 0 0 6px var(--red-glow); }
-        .dot-rejected.dot-active { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--red), 0 0 10px var(--red-glow); }
-        .dot-pending { border-color: var(--border-3); }
+        /* ── Status Dots (removed — not useful at scale) ── */
 
         /* ── Review Card ── */
         .card {
@@ -762,7 +745,8 @@
             min-height: 100px;
             max-height: 55vh;
             tab-size: 2;
-            white-space: pre;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         .jk { color: var(--jk); } .js { color: var(--js); }
         .jn { color: var(--jn); } .jb { color: var(--jb); }
@@ -799,9 +783,6 @@
             background: var(--surface);
         }
 
-        /* ── Full Dataset ── */
-        .full-dataset { padding: 0 1.4rem 1.1rem 1.6rem; display: none; }
-        .full-dataset .json-pre { margin: 0; max-height: 280px; }
 
         /* ── Status ── */
         .status-msg {
@@ -827,11 +808,11 @@
         .action-backdrop {
             position: absolute;
             inset: 0;
-            background: linear-gradient(to top, var(--bg) 30%, transparent);
-            backdrop-filter: blur(16px) saturate(1.4);
-            -webkit-backdrop-filter: blur(16px) saturate(1.4);
-            mask-image: linear-gradient(to top, black 50%, transparent);
-            -webkit-mask-image: linear-gradient(to top, black 50%, transparent);
+            background: linear-gradient(to top, var(--bg) 55%, transparent);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            mask-image: linear-gradient(to top, black 60%, transparent);
+            -webkit-mask-image: linear-gradient(to top, black 60%, transparent);
         }
         .action-inner {
             max-width: 880px;
@@ -948,7 +929,7 @@
 
         /* ── Responsive ── */
         @media (max-width: 640px) {
-            .page { padding: 1.4rem 1rem 0; padding-bottom: 200px; }
+            .page { padding: 1.4rem 1rem 0; padding-bottom: 240px; }
             .header-row { flex-direction: column; gap: 0.7rem; }
             .header-right { align-items: flex-start; }
             .stats { justify-content: flex-start; }
@@ -957,10 +938,10 @@
             .nav-right { justify-content: flex-start; }
             .action-btns { flex-direction: column; gap: 0.5rem; }
             .field { padding-left: 1.1rem; padding-right: 1rem; }
-            .card-head, .card-meta, .json-wrap, .comment-section, .full-dataset, .status-msg {
+            .card-head, .card-meta, .json-wrap, .comment-section, .status-msg {
                 padding-left: 1.1rem; padding-right: 1rem;
             }
-            .header h1 { font-size: 1.4rem; }
+            .header h1 { font-size: 1.15rem; }
         }
     </style>
 </head>
@@ -970,13 +951,13 @@
     <div class="page">
         <header class="header">
             <div class="header-row">
-                <div style="display:flex;align-items:center;gap:0.75rem">
-                    <div style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:8px;background:#111520;flex-shrink:0;overflow:hidden">
-                        <svg width="24" height="24" viewBox="-2 10 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" transform="rotate(-30 14 68)"/>
-                            <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.5" transform="rotate(-15 34 76)"/>
-                            <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.7" transform="rotate(-5 56 80)"/>
-                            <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0"/>
+                <div style="display:flex;align-items:center;gap:1rem">
+                    <div class="logo-mark">
+                        <svg width="22" height="22" viewBox="0 10 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="8" y="20" width="13" height="54" rx="4" fill="var(--logo-bar-1)" transform="rotate(-30 14 68)"/>
+                            <rect x="28" y="22" width="13" height="56" rx="4" fill="var(--logo-bar-2)" opacity="0.6" transform="rotate(-15 34 76)"/>
+                            <rect x="50" y="22" width="13" height="60" rx="4" fill="var(--logo-bar-2)" opacity="0.8" transform="rotate(-5 56 80)"/>
+                            <rect x="72" y="18" width="15" height="68" rx="4" fill="var(--logo-bar-2)"/>
                         </svg>
                     </div>
                     <div>
@@ -1026,13 +1007,14 @@
                 </button>
             </div>
             <div class="nav-right">
-                <button id="toggle-full-dataset" class="ghost-btn" type="button" style="display:none">Show full dataset</button>
-                <div class="ctrl-pill" title="Font size (+/-)">
+                <div class="ctrl-pill" title="Font size (+ / -)">
                     <button class="ctrl-btn" id="font-down" type="button" aria-label="Decrease font size"><span class="ctrl-a-sm">A</span></button>
                     <span class="ctrl-val" id="font-label">15</span>
                     <button class="ctrl-btn" id="font-up" type="button" aria-label="Increase font size"><span class="ctrl-a-lg">A</span></button>
+                    <span class="ctrl-sep"></span>
+                    <span class="ctrl-val ctrl-label">Font</span>
                 </div>
-                <div class="ctrl-pill" title="Page width ([/])">
+                <div class="ctrl-pill" title="Page width ([ / ])">
                     <button class="ctrl-btn" id="width-down" type="button" aria-label="Narrower page">
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M4 5.5L6 8 4 10.5M12 5.5L10 8l2 2.5"/></svg>
                     </button>
@@ -1040,6 +1022,8 @@
                     <button class="ctrl-btn" id="width-up" type="button" aria-label="Wider page">
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M3.5 5.5L1 8l2.5 2.5M12.5 5.5L15 8l-2.5 2.5"/></svg>
                     </button>
+                    <span class="ctrl-sep"></span>
+                    <span class="ctrl-val ctrl-label">Width</span>
                 </div>
                 <div class="view-toggle">
                     <button class="vt-btn on" data-view="fields" id="view-fields-btn" type="button">Fields</button>
@@ -1048,7 +1032,6 @@
             </div>
         </div>
 
-        <div class="status-dots" id="status-dots"></div>
 
         <section class="card" id="review-card" data-state="pending">
             <div class="card-head">
@@ -1083,9 +1066,6 @@
                 <textarea id="comment" placeholder="Add your feedback..."></textarea>
             </div>
 
-            <div class="full-dataset" id="full-dataset">
-                <pre class="json-pre" id="full-dataset-display"></pre>
-            </div>
 
             <div id="status" class="status-msg"></div>
         </section>
@@ -1121,13 +1101,10 @@
         const reviewProgress = document.getElementById('review-progress');
         const prevRecordButton = document.getElementById('prev-record');
         const nextRecordButton = document.getElementById('next-record');
-        const toggleDatasetButton = document.getElementById('toggle-full-dataset');
         const panelFields = document.getElementById('panel-fields');
         const panelJson = document.getElementById('panel-json');
         const fieldsWrap = document.getElementById('fields-wrap');
         const viewButtons = document.querySelectorAll('.vt-btn');
-        const fullDatasetContainer = document.getElementById('full-dataset');
-        const fullDatasetDisplay = document.getElementById('full-dataset-display');
         const approveRecordButton = document.getElementById('approve-record-btn');
         const rejectRecordButton = document.getElementById('reject-record-btn');
         const submitReviewButton = document.getElementById('submit-review-btn');
@@ -1140,7 +1117,6 @@
         const statApproved = document.getElementById('stat-approved');
         const statRejected = document.getElementById('stat-rejected');
         const toastEl = document.getElementById('toast');
-        const statusDotsEl = document.getElementById('status-dots');
         const reviewCard = document.getElementById('review-card');
         const copyJsonBtn = document.getElementById('copy-json-btn');
         const copyBtnText = document.getElementById('copy-btn-text');
@@ -1156,7 +1132,6 @@
         let fullDataset = null;
         let fieldOrder = [];
         let currentIndex = 0;
-        let isFullDatasetVisible = false;
         let currentView = 'fields';
         let isPersistingDecision = false;
 
@@ -1218,7 +1193,7 @@
             if (type === 'obj' || type === 'arr') return false;
             if (type === 'null' || type === 'bool' || type === 'num') return true;
             var s = String(value);
-            return s.length < 80 && s.indexOf('\n') === -1;
+            return s.length < 50 && s.indexOf('\n') === -1;
         }
 
         /* ── JSON Syntax Highlighting ── */
@@ -1284,18 +1259,37 @@
                    detects bare-key collisions (e.g. dep_a.title & dep_b.title),
                    it uses the full qualified ref as the data key so both values
                    are preserved. Non-colliding keys stay bare for compat. */
-                var keyLabel = {};
+                var keyLeaf = {};
+                var keyFullRef = {};
                 var keyOrder = [];
+                /* First pass: resolve data keys and compute leaf labels */
                 fieldOrder.forEach(function (ref) {
                     var dot = ref.indexOf('.');
                     var bareKey = dot >= 0 ? ref.substring(dot + 1) : ref;
                     var dataKey = (ref in display) ? ref : ((bareKey in display) ? bareKey : null);
                     if (dataKey === null) return;
-                    keyLabel[dataKey] = humanizeKey(ref.replace(/\./g, ' > '));
+                    var lastDot = bareKey.lastIndexOf('.');
+                    var leafKey = lastDot >= 0 ? bareKey.substring(lastDot + 1) : bareKey;
+                    keyLeaf[dataKey] = humanizeKey(leafKey);
+                    keyFullRef[dataKey] = ref.replace(/\./g, ' > ');
                     if (keyOrder.indexOf(dataKey) === -1) keyOrder.push(dataKey);
                 });
+                /* Second pass: detect duplicate leaf labels and promote to
+                   full qualified labels so collisions like dep_a.title and
+                   dep_b.title are visually distinguishable. */
+                var leafCounts = {};
+                keyOrder.forEach(function (k) {
+                    var lbl = keyLeaf[k];
+                    leafCounts[lbl] = (leafCounts[lbl] || 0) + 1;
+                });
+                var keyLabel = {};
+                keyOrder.forEach(function (k) {
+                    keyLabel[k] = leafCounts[keyLeaf[k]] > 1
+                        ? humanizeKey(keyFullRef[k].replace(/ > /g, '_'))
+                        : keyLeaf[k];
+                });
                 var usedKeys = new Set(keyOrder);
-                var ordered = keyOrder.map(function (k) { return { key: k, label: keyLabel[k] }; });
+                var ordered = keyOrder.map(function (k) { return { key: k, label: keyLabel[k], fullRef: keyFullRef[k] }; });
                 allKeys.forEach(function (k) {
                     if (!usedKeys.has(k)) ordered.push({ key: k, label: humanizeKey(k) });
                 });
@@ -1315,6 +1309,7 @@
                 var isEmpty = value === undefined || value === null;
                 var short = isShort(value, type);
                 var label = escapeHtml(entry.label);
+                var titleAttr = entry.fullRef ? ' title="' + escapeHtml(entry.fullRef) + '"' : '';
                 var valueHtml;
 
                 if (isEmpty) {
@@ -1334,31 +1329,13 @@
 
                 var cls = (short || isEmpty) && !isComplex ? 'field field-compact' : 'field';
                 return '<div class="' + cls + '">' +
-                    '<div class="field-key">' + label + '</div>' +
+                    '<div class="field-key"' + titleAttr + '>' + label + '</div>' +
                     valueHtml +
                 '</div>';
             }).join('');
             fieldsWrap.innerHTML = html;
         }
 
-        /* ── Status Dots ── */
-        function renderStatusDots() {
-            if (records.length <= 1) { statusDotsEl.style.display = 'none'; return; }
-            statusDotsEl.style.display = 'flex';
-            statusDotsEl.innerHTML = records.map(function (_, i) {
-                var d = recordDecisions[i];
-                var active = i === currentIndex ? ' dot-active' : '';
-                var state = 'dot-pending';
-                if (d && d.hitl_status === 'approved') state = 'dot-approved';
-                if (d && d.hitl_status === 'rejected') state = 'dot-rejected';
-                return '<button class="dot ' + state + active + '" data-index="' + i + '" type="button" aria-label="Record ' + (i + 1) + '"></button>';
-            }).join('');
-        }
-
-        statusDotsEl.addEventListener('click', function (e) {
-            var dot = e.target.closest('.dot');
-            if (dot) { currentIndex = parseInt(dot.dataset.index, 10); renderCurrentRecord(); }
-        });
 
         /* ── Progress ── */
         function reviewedCount() { return recordDecisions.filter(Boolean).length; }
@@ -1395,7 +1372,6 @@
         /* ── Render ── */
         function renderCurrentRecord() {
             updateProgressUI();
-            renderStatusDots();
             if (records.length === 0) {
                 dataDisplay.textContent = 'No records found for review.';
                 fieldsWrap.innerHTML = '<div class="fields-empty">No records found for review.</div>';
@@ -1404,8 +1380,6 @@
                 recordHint.textContent = 'The payload is empty.';
                 reviewProgress.style.display = 'none';
                 submitReviewButton.disabled = true;
-                toggleDatasetButton.style.display = 'none';
-                fullDatasetContainer.style.display = 'none';
                 commentInput.value = '';
                 setRecordTag(null);
                 return;
@@ -1421,11 +1395,8 @@
                 recordCounter.innerHTML = '<strong>' + (currentIndex + 1) + '</strong> / ' + records.length;
                 prevRecordButton.disabled = currentIndex === 0;
                 nextRecordButton.disabled = currentIndex === records.length - 1;
-                toggleDatasetButton.style.display = 'inline';
             } else {
                 recordToolbar.style.display = 'none';
-                toggleDatasetButton.style.display = 'none';
-                fullDatasetContainer.style.display = 'none';
             }
             recordHint.style.display = 'block';
             recordHint.textContent = dec
@@ -1587,16 +1558,12 @@
                 try { await loadReviewState(); }
                 catch (error) { console.error('Failed to restore review state:', error); showToast('Could not restore previous reviews', 'r'); }
                 currentIndex = 0;
-                try { fullDatasetDisplay.innerHTML = syntaxHighlight(JSON.stringify(fullDataset, null, 2)); }
-                catch (_) { fullDatasetDisplay.textContent = String(fullDataset); }
                 renderCurrentRecord();
             } catch (error) {
                 dataDisplay.textContent = 'Error loading context data: ' + error.message;
                 recordToolbar.style.display = 'none';
                 recordHint.style.display = 'none';
                 reviewProgress.style.display = 'none';
-                toggleDatasetButton.style.display = 'none';
-                fullDatasetContainer.style.display = 'none';
                 submitReviewButton.disabled = true;
                 showStatus('Failed to load context data.', 'error');
             }
@@ -1631,11 +1598,6 @@
         /* ── Events ── */
         prevRecordButton.addEventListener('click', function () { if (currentIndex > 0) { currentIndex -= 1; renderCurrentRecord(); } });
         nextRecordButton.addEventListener('click', function () { if (currentIndex < records.length - 1) { currentIndex += 1; renderCurrentRecord(); } });
-        toggleDatasetButton.addEventListener('click', function () {
-            isFullDatasetVisible = !isFullDatasetVisible;
-            fullDatasetContainer.style.display = isFullDatasetVisible ? 'block' : 'none';
-            toggleDatasetButton.textContent = isFullDatasetVisible ? 'Hide full dataset' : 'Show full dataset';
-        });
         approveRecordButton.addEventListener('click', function () { markCurrentRecord('approved'); });
         rejectRecordButton.addEventListener('click', function () { markCurrentRecord('rejected'); });
         submitReviewButton.addEventListener('click', function () { submitReviews(); });

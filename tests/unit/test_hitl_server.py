@@ -373,17 +373,36 @@ def test_server_startup_failure_signals_error(monkeypatch):
     assert "failed to start" in server.response["user_comment"].lower()
 
 
+def _pick_safe_ephemeral_port(headroom=6):
+    """Return an ephemeral port low enough that port + headroom <= 65535."""
+    import socket
+
+    for _ in range(20):
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+        if port + headroom <= 65535:
+            return port
+    raise RuntimeError(
+        f"Could not find ephemeral port below {65535 - headroom} after 20 attempts"
+    )
+
+
 def test_find_available_port_with_collision():
     """Test port search finds alternative when primary is occupied."""
     import socket
 
-    # Block port 3001
+    base_port = _pick_safe_ephemeral_port(headroom=2)
+
+    # Block the base port
     blocker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    blocker_socket.bind(("127.0.0.1", 3001))
+    blocker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker_socket.bind(("127.0.0.1", base_port))
 
     try:
         server = HitlServer(
-            port=3001,
+            port=base_port,
             instructions="Test",
             context_data={"value": 1},
             timeout=30,
@@ -392,8 +411,8 @@ def test_find_available_port_with_collision():
         # Should find next available port
         actual_port = server._find_available_port()
 
-        # Should have found 3002 (next port)
-        assert actual_port == 3002
+        # Should have skipped the blocked port
+        assert actual_port == base_port + 1
 
     finally:
         blocker_socket.close()
@@ -403,16 +422,19 @@ def test_find_available_port_exhaustion_raises_network_error():
     """Test port search raises NetworkError when all ports are occupied."""
     import socket
 
-    # Block ports 3001-3005
+    base_port = _pick_safe_ephemeral_port(headroom=6)
+
+    # Block 5 consecutive ports (the max_attempts range)
     blocker_sockets = []
-    for port in range(3001, 3006):
+    for port in range(base_port, base_port + 5):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", port))
         blocker_sockets.append(sock)
 
     try:
         server = HitlServer(
-            port=3001,
+            port=base_port,
             instructions="Test",
             context_data={"value": 1},
             timeout=30,
