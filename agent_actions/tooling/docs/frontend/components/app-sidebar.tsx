@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Wrench,
   ScrollText,
-  Settings,
   Search,
   Boxes,
 } from "lucide-react"
@@ -56,7 +55,6 @@ export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
 
   const systemNav = useMemo(() => [
     { label: "Logs", icon: ScrollText, id: "logs", badge: String(stats.validation_errors) },
-    { label: "Settings", icon: Settings, id: "settings" },
   ], [stats])
 
   const generatedDate = generatedAt ? generatedAt.split("T")[0] : ""

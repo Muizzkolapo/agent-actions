@@ -6,7 +6,6 @@ import type {
   RawPrompt,
   RawSchema,
   RawToolFunction,
-  RawInvocation,
   RawValidationEntry,
   RawExecution,
   RawWorkflowData,
@@ -22,7 +21,6 @@ import type {
   Schema,
   Prompt,
   ToolFunction,
-  Invocation,
   ValidationGroup,
   DataNode,
   WorkflowDataSummary,
@@ -243,35 +241,68 @@ export function transformToolFunctions(catalog: RawCatalogJson): ToolFunction[] 
   })
 }
 
-// ─── Invocations ─────────────────────────────────────────────────────────────
-
-export function transformInvocations(catalog: RawCatalogJson): Invocation[] {
-  return (catalog.logs?.recent_invocations ?? []).map((raw: RawInvocation) => ({
-    id: raw.invocation_id,
-    ts: raw.timestamp,
-    wf: raw.workflow_name ?? "",
-    cmd: raw.command ?? null,
-  }))
-}
-
 // ─── Validation Groups ───────────────────────────────────────────────────────
 
+function extractMessage(entry: RawValidationEntry): string {
+  return entry.message || entry.error || entry.warning || ""
+}
+
 function groupValidationEntries(entries: RawValidationEntry[]): ValidationGroup[] {
-  const groups = new Map<string, { count: number; sample: string }>()
+  const groups = new Map<
+    string,
+    { count: number; sample: string; messageMap: Map<string, { count: number; timestamps: string[] }>; timestamps: string[] }
+  >()
   for (const entry of entries) {
     const key = entry.target ?? "unknown"
+    const msg = extractMessage(entry)
     const existing = groups.get(key)
     if (existing) {
       existing.count++
+      if (msg) {
+        const msgEntry = existing.messageMap.get(msg)
+        if (msgEntry) {
+          msgEntry.count++
+          if (entry.timestamp) msgEntry.timestamps.push(entry.timestamp)
+        } else {
+          existing.messageMap.set(msg, { count: 1, timestamps: entry.timestamp ? [entry.timestamp] : [] })
+        }
+      }
+      if (entry.timestamp) existing.timestamps.push(entry.timestamp)
     } else {
-      groups.set(key, { count: 1, sample: entry.message ?? "" })
+      const messageMap = new Map<string, { count: number; timestamps: string[] }>()
+      if (msg) {
+        messageMap.set(msg, { count: 1, timestamps: entry.timestamp ? [entry.timestamp] : [] })
+      }
+      const timestamps: string[] = []
+      if (entry.timestamp) timestamps.push(entry.timestamp)
+      groups.set(key, { count: 1, sample: msg, messageMap, timestamps })
     }
   }
-  return Array.from(groups.entries()).map(([target, { count, sample }]) => ({
-    target,
-    count,
-    sample,
-  }))
+  return Array.from(groups.entries())
+    .map(([target, { count, sample, messageMap, timestamps }]) => {
+      const messages = Array.from(messageMap.entries())
+        .filter(([text]) => text !== "")
+        .map(([text, m]) => {
+          const sorted = [...m.timestamps].sort()
+          return {
+            text,
+            count: m.count,
+            firstSeen: sorted[0] ?? "",
+            lastSeen: sorted[sorted.length - 1] ?? "",
+          }
+        })
+        .sort((a, b) => b.count - a.count)
+
+      return {
+        target,
+        count,
+        sample,
+        distinctCount: messageMap.size,
+        timestamps: timestamps.sort(),
+        messages,
+      }
+    })
+    .sort((a, b) => b.count - a.count)
 }
 
 export function transformValidationGroups(catalog: RawCatalogJson): {
@@ -321,7 +352,6 @@ export interface CatalogData {
   schemas: Schema[]
   prompts: Prompt[]
   toolFunctions: ToolFunction[]
-  invocations: Invocation[]
   validationErrorGroups: ValidationGroup[]
   validationWarningGroups: ValidationGroup[]
   workflowData: WorkflowDataSummary[]
@@ -338,7 +368,6 @@ export function transformAll(catalog: RawCatalogJson, runs: RawRunsJson): Catalo
     schemas: transformSchemas(catalog),
     prompts: transformPrompts(catalog),
     toolFunctions: transformToolFunctions(catalog),
-    invocations: transformInvocations(catalog),
     validationErrorGroups: errors,
     validationWarningGroups: warnings,
     workflowData: transformWorkflowData(catalog),

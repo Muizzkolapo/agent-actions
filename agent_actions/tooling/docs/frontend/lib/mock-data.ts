@@ -111,17 +111,20 @@ export interface ToolFunction {
   file: string
 }
 
-export interface Invocation {
-  id: string
-  ts: string
-  wf: string
-  cmd: string | null
+export interface ValidationMessage {
+  text: string
+  count: number
+  firstSeen: string
+  lastSeen: string
 }
 
 export interface ValidationGroup {
   target: string
   count: number
   sample: string
+  distinctCount: number
+  timestamps: string[]
+  messages: ValidationMessage[]
 }
 
 // Data Explorer types (populated from catalog.json workflow_data)

@@ -16,7 +16,7 @@ export interface RawCatalogJson {
   workflow_data: Record<string, RawWorkflowData>
   logs: {
     events_path?: string
-    recent_invocations: RawInvocation[]
+    recent_invocations: unknown[]
     validation_errors: RawValidationEntry[]
     validation_warnings: RawValidationEntry[]
   }
@@ -114,16 +114,13 @@ export interface RawToolFunction {
   found?: boolean
 }
 
-export interface RawInvocation {
-  invocation_id: string
-  timestamp: string
-  workflow_name: string
-  command?: string | null
-}
-
 export interface RawValidationEntry {
   target: string
-  message: string
+  message?: string
+  error?: string
+  warning?: string
+  field?: string
+  timestamp?: string
   [key: string]: unknown
 }
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { Prompt, ToolFunction, Schema } from "@/lib/mock-data"
-import { MessageSquare, FileCode, Wrench, Settings, Globe, Code2, Search as SearchIcon, Cpu, X, ArrowLeft, Variable, Zap } from "lucide-react"
+import { MessageSquare, FileCode, Wrench, Code2, Search as SearchIcon, ArrowLeft, Variable, Zap } from "lucide-react"
 
 /* ------------------------------------------------------------------ */
 /*  Prompt template analysis helpers                                   */
@@ -613,67 +613,3 @@ export function ToolsScreen() {
   )
 }
 
-/* ================================================================== */
-/*  SettingsScreen                                                    */
-/* ================================================================== */
-export function SettingsScreen() {
-  const { stats, generatedAt, workflows } = useCatalogData()
-
-  // Derive real values from the catalog
-  const generatorVersion = "1.1.0"
-  const catalogGenerated = generatedAt
-    ? new Date(generatedAt).toLocaleString()
-    : "\u2014"
-  const totalActions = stats.total_actions
-  const llmRatio = totalActions > 0
-    ? `${stats.llm_actions} LLM / ${stats.tool_actions} tool`
-    : "\u2014"
-  const defaultVendor = workflows.length > 0 && workflows[0].defaults?.model_vendor
-    ? `${workflows[0].defaults.model_vendor}`
-    : "\u2014"
-  const defaultModel = workflows.length > 0 && workflows[0].defaults?.model_name
-    ? `${workflows[0].defaults.model_name}`
-    : "\u2014"
-
-  const settings = [
-    { label: "Generator Version", value: `v${generatorVersion}`, description: "Catalog generator version", icon: Cpu, accent: "hsl(var(--primary))" },
-    { label: "Catalog Generated", value: catalogGenerated, description: "Last catalog build timestamp", icon: Settings, accent: "hsl(var(--chart-2))" },
-    { label: "Workflows", value: String(stats.total_workflows), description: "Total registered workflows", icon: Globe, accent: "hsl(var(--success))" },
-    { label: "Action Breakdown", value: llmRatio, description: `${totalActions} total actions`, icon: Wrench, accent: "hsl(var(--chart-5))" },
-    { label: "Default Vendor", value: defaultVendor, description: "Workflow default LLM provider", icon: Globe, accent: "hsl(var(--warning))" },
-    { label: "Default Model", value: defaultModel, description: "Workflow default model name", icon: Code2, accent: "hsl(var(--muted-foreground))" },
-  ]
-
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Catalog metadata and project configuration</p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {settings.map((setting) => {
-          const Icon = setting.icon
-          return (
-            <div key={setting.label} className="relative overflow-hidden rounded-xl border border-border bg-card p-5">
-              <div className="absolute top-0 left-0 right-0 h-px" style={{ backgroundColor: setting.accent, opacity: 0.3 }} />
-              <div className="flex items-start gap-3">
-                <div
-                  className="flex h-9 w-9 items-center justify-center rounded-lg shrink-0"
-                  style={{ backgroundColor: `${setting.accent}15` }}
-                >
-                  <Icon className="h-4 w-4" style={{ color: setting.accent }} />
-                </div>
-                <div className="flex-1">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">{setting.label}</span>
-                  <p className="text-sm font-mono text-foreground mt-1">{setting.value}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{setting.description}</p>
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}

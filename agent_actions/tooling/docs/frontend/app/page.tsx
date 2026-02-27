@@ -9,7 +9,7 @@ import { ActionsScreen } from "@/components/screens/actions-screen"
 import { RunsScreen } from "@/components/screens/runs-screen"
 import { DataScreen } from "@/components/screens/data-screen"
 import { LogsScreen } from "@/components/screens/logs-screen"
-import { PromptsScreen, SchemasScreen, ToolsScreen, SettingsScreen } from "@/components/screens/catalog-screens"
+import { PromptsScreen, SchemasScreen, ToolsScreen } from "@/components/screens/catalog-screens"
 import { Separator } from "@/components/ui/separator"
 import { useCatalog, useCatalogRetry, useCatalogData } from "@/lib/catalog-context"
 import { AlertTriangle, RefreshCw, Zap, Loader2 } from "lucide-react"
@@ -49,7 +49,6 @@ function Dashboard() {
     prompts: "Prompts",
     tools: "Tools",
     logs: "Logs & Events",
-    settings: "Settings",
   }
 
   return (
@@ -84,7 +83,6 @@ function Dashboard() {
           {activeSection === "schemas" && <SchemasScreen />}
           {activeSection === "prompts" && <PromptsScreen />}
           {activeSection === "tools" && <ToolsScreen />}
-          {activeSection === "settings" && <SettingsScreen />}
         </main>
       </SidebarInset>
     </SidebarProvider>
