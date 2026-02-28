@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { Prompt, ToolFunction, Schema } from "@/lib/mock-data"
-import { MessageSquare, FileCode, Wrench, Code2, Search as SearchIcon, ArrowLeft, Variable, Zap } from "lucide-react"
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
+import { MessageSquare, FileCode, Wrench, Code2, Search as SearchIcon, ArrowLeft, Variable, Zap, ChevronRight, FolderOpen } from "lucide-react"
 
 /* ------------------------------------------------------------------ */
 /*  Prompt template analysis helpers                                   */
@@ -319,12 +320,82 @@ function SchemaDetail({ schema, onBack }: { schema: Schema; onBack: () => void }
 }
 
 /* ------------------------------------------------------------------ */
+/*  Tool signature parser                                              */
+/* ------------------------------------------------------------------ */
+const sigSizeClass = { xs: "text-xs", sm: "text-sm" } as const
+
+// Regex does not handle signatures with literal ")" inside parameter types
+// (e.g. Callable[..., str] or default values containing ")"). Falls back to raw string.
+function ParsedSignature({ sig, size = "xs" }: { sig: string; size?: "xs" | "sm" }) {
+  const match = sig.match(/^def\s+(\w+)\(([^)]*)\)\s*(?:→|->)\s*(.+?):?\s*$/)
+  if (!match) return <span className={`${sigSizeClass[size]} font-mono text-muted-foreground`}>{sig}</span>
+  const [, name, params, ret] = match
+  return (
+    <span className={`${sigSizeClass[size]} font-mono leading-relaxed`}>
+      <span className="text-muted-foreground/70">def </span>
+      <span className="text-foreground font-medium">{name}</span>
+      <span className="text-muted-foreground/70">(</span>
+      <span className="text-muted-foreground">{params}</span>
+      <span className="text-muted-foreground/70">)</span>
+      <span className="text-muted-foreground/70"> &rarr; </span>
+      <span className="text-[hsl(var(--primary))]">{ret.replace(/:$/, "")}</span>
+    </span>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  ToolFunctionCard — single function in the grouped list             */
+/* ------------------------------------------------------------------ */
+function ToolFunctionCard({ tool, onSelect }: { tool: ToolFunction; onSelect: () => void }) {
+  const borderColor = !tool.found
+    ? "border-l-[hsl(var(--destructive))]"
+    : tool.udf
+      ? "border-l-emerald-400"
+      : "border-l-[hsl(var(--primary))]"
+
+  return (
+    <button
+      onClick={onSelect}
+      className={`group relative w-full rounded-lg border border-border bg-card p-4 text-left
+        border-l-[3px] ${borderColor}
+        hover:bg-accent/30 hover:shadow-sm hover:translate-x-px
+        transition-all duration-150`}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-sm font-mono font-semibold text-foreground group-hover:text-[hsl(var(--primary))] transition-colors truncate">
+          {tool.name}
+        </span>
+        {tool.udf && (
+          <Badge variant="outline" className="text-[10px] rounded-md bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-1.5 py-0 shrink-0">
+            UDF
+          </Badge>
+        )}
+        {!tool.found && (
+          <Badge variant="outline" className="text-[10px] rounded-md bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20 px-1.5 py-0 shrink-0">
+            NOT FOUND
+          </Badge>
+        )}
+      </div>
+      <div className="pr-6">
+        <ParsedSignature sig={tool.sig} />
+      </div>
+      <ChevronRight className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/30 group-hover:text-muted-foreground/60 transition-colors" />
+    </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  ToolDetail — full-page view for a single tool function            */
 /* ------------------------------------------------------------------ */
 function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }) {
+  const accentColor = !tool.found
+    ? "border-t-[hsl(var(--destructive))]"
+    : tool.udf
+      ? "border-t-emerald-400"
+      : "border-t-[hsl(var(--primary))]"
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Back button */}
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
@@ -333,11 +404,9 @@ function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }
         Back to Tool Functions
       </button>
 
-      {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[55%_45%] gap-4">
         {/* Left column */}
         <div className="flex flex-col gap-4">
-          {/* Heading + badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold tracking-tight text-foreground font-mono">{tool.name}</h1>
             {tool.udf && (
@@ -352,19 +421,17 @@ function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }
             )}
           </div>
 
-          {/* Signature */}
           <div>
             <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Signature</h2>
-            <pre className="bg-secondary/50 rounded-lg border border-border p-4 font-mono text-xs text-muted-foreground leading-relaxed overflow-auto whitespace-pre-wrap">
-              {tool.sig}
-            </pre>
+            <div className="bg-secondary/50 rounded-lg border border-border p-4 overflow-auto whitespace-pre-wrap">
+              <ParsedSignature sig={tool.sig} size="sm" />
+            </div>
           </div>
         </div>
 
         {/* Right column */}
         <div className="flex flex-col gap-4">
-          {/* Details card */}
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className={`rounded-lg border border-border border-t-2 ${accentColor} bg-card p-4`}>
             <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">Details</h2>
             <div className="rounded-lg border border-border divide-y divide-border text-sm font-mono">
               <div className="flex justify-between px-3 py-2">
@@ -524,6 +591,104 @@ export function SchemasScreen() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/*  FileGroupRow — collapsible file group in the tools list            */
+/* ------------------------------------------------------------------ */
+function FileGroupRow({
+  file,
+  tools,
+  isOpen,
+  onToggle,
+  onSelectTool,
+}: {
+  file: string
+  tools: ToolFunction[]
+  isOpen: boolean
+  onToggle: () => void
+  onSelectTool: (tool: ToolFunction) => void
+}) {
+  const fileName = file.split("/").pop() || file
+  const udfCount = tools.filter((t) => t.udf).length
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={onToggle}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full rounded-lg px-3 py-2.5 text-left hover:bg-accent/40 transition-colors">
+        <ChevronRight
+          className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform duration-200 ${
+            isOpen ? "rotate-90" : ""
+          }`}
+        />
+        <FileCode className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+        <span className="text-xs font-mono text-foreground font-medium truncate min-w-0">
+          {fileName}
+        </span>
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          {udfCount > 0 && (
+            <span className="text-[10px] tabular-nums text-emerald-400/70">{udfCount} UDF</span>
+          )}
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {tools.length} fn{tools.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 pt-1.5 pb-3 pl-8 pr-1">
+          {tools.map((tool) => (
+            <ToolFunctionCard key={tool.name} tool={tool} onSelect={() => onSelectTool(tool)} />
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  DirectoryCard — card container for all files in a directory        */
+/* ------------------------------------------------------------------ */
+function DirectoryCard({
+  dirPath,
+  files,
+  openGroups,
+  lowerSearch,
+  onToggle,
+  onSelectTool,
+}: {
+  dirPath: string
+  files: [string, ToolFunction[]][]
+  openGroups: Set<string>
+  lowerSearch: string
+  onToggle: (key: string) => void
+  onSelectTool: (tool: ToolFunction) => void
+}) {
+  const totalFns = files.reduce((sum, [, tools]) => sum + tools.length, 0)
+  const totalUdfs = files.reduce((sum, [, tools]) => sum + tools.filter((t) => t.udf).length, 0)
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-border/50 bg-secondary/30 flex items-center gap-2">
+        <FolderOpen className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+        <span className="text-xs font-mono font-semibold text-foreground truncate">{dirPath}</span>
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          {totalUdfs > 0 && <span className="text-[10px] tabular-nums text-emerald-400/70">{totalUdfs} UDF</span>}
+          <span className="text-[10px] text-muted-foreground tabular-nums">{totalFns} fn{totalFns !== 1 ? "s" : ""}</span>
+        </div>
+      </div>
+      <div className="divide-y divide-border/30">
+        {files.map(([file, tools]) => (
+          <FileGroupRow
+            key={file}
+            file={file}
+            tools={tools}
+            isOpen={!!lowerSearch || openGroups.has(file)}
+            onToggle={() => onToggle(file)}
+            onSelectTool={onSelectTool}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ================================================================== */
 /*  ToolsScreen                                                       */
 /* ================================================================== */
@@ -532,80 +697,112 @@ export function ToolsScreen() {
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<"all" | "udf" | "helper">("all")
   const [selected, setSelected] = useState<ToolFunction | null>(null)
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
 
-  const filtered = toolFunctions.filter((t) => {
-    if (filter === "udf" && !t.udf) return false
-    if (filter === "helper" && t.udf) return false
-    return t.name.includes(search) || t.sig.includes(search)
-  })
+  const lowerSearch = search.toLowerCase()
+  const filtered = React.useMemo(
+    () => toolFunctions.filter((t) => {
+      if (filter === "udf" && !t.udf) return false
+      if (filter === "helper" && t.udf) return false
+      if (!lowerSearch) return true
+      return t.name.toLowerCase().includes(lowerSearch) || t.sig.toLowerCase().includes(lowerSearch) || t.file.toLowerCase().includes(lowerSearch)
+    }),
+    [toolFunctions, filter, lowerSearch]
+  )
+
+  /* Group filtered results by directory → file, sorted alphabetically */
+  const dirGroups = React.useMemo(() => {
+    const fileMap = new Map<string, ToolFunction[]>()
+    for (const t of filtered) {
+      const key = t.file || "unknown"
+      if (!fileMap.has(key)) fileMap.set(key, [])
+      fileMap.get(key)!.push(t)
+    }
+    const sortedFiles = [...fileMap.entries()].sort(([a], [b]) => a.localeCompare(b))
+    const dirs = new Map<string, [string, ToolFunction[]][]>()
+    for (const entry of sortedFiles) {
+      const dir = entry[0].split("/").slice(0, -1).join("/") || "(top-level)"
+      if (!dirs.has(dir)) dirs.set(dir, [])
+      dirs.get(dir)!.push(entry)
+    }
+    return [...dirs.entries()].sort(([a], [b]) => a.localeCompare(b))
+  }, [filtered])
+
+  const totalFiles = dirGroups.reduce((sum, [, files]) => sum + files.length, 0)
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   if (selected) {
     return <ToolDetail tool={selected} onBack={() => setSelected(null)} />
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
+      {/* Page header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tool Functions</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {stats.total_tool_functions} discovered &middot; showing {filtered.length} of {toolFunctions.length} loaded
+          {stats.total_tool_functions} discovered &middot; {filtered.length} of {toolFunctions.length} shown
+          {totalFiles > 0 && <> &middot; {totalFiles} file{totalFiles !== 1 ? "s" : ""}</>}
         </p>
       </div>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filter functions..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
-          />
-        </div>
-        <div className="flex gap-1">
-          {(["all", "udf", "helper"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-medium capitalize transition-all ${
-                filter === f
-                  ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+      {/* Sticky search + filter bar — -mx-6 px-6 cancels parent px-6 to bleed edge-to-edge */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-background/80 backdrop-blur-sm">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search functions..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="flex gap-1 shrink-0 overflow-x-auto min-w-0">
+            {(["all", "udf", "helper"] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-all ${
+                  filter === f
+                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                {f === "all" ? `All (${toolFunctions.length})` : f}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
-        {filtered.map((tool) => (
-          <button
-            key={tool.name}
-            onClick={() => setSelected(tool)}
-            className="w-full p-5 text-left hover:bg-accent/20 transition-colors"
-          >
-            <div className="flex items-center gap-2.5 mb-2">
-              <span className="text-sm font-mono font-medium text-emerald-400">{tool.name}</span>
-              {tool.udf && (
-                <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                  UDF
-                </Badge>
-              )}
-              {!tool.found && (
-                <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20">
-                  NOT FOUND
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs font-mono text-muted-foreground leading-relaxed mb-1">{tool.sig}</p>
-            <p className="text-[10px] font-mono text-muted-foreground/60">{tool.file}</p>
-          </button>
+      {/* Grouped results */}
+      <div className="flex flex-col gap-4">
+        {dirGroups.map(([dir, files]) => (
+          <DirectoryCard
+            key={dir}
+            dirPath={dir}
+            files={files}
+            openGroups={openGroups}
+            lowerSearch={lowerSearch}
+            onToggle={toggleGroup}
+            onSelectTool={setSelected}
+          />
         ))}
+
         {filtered.length === 0 && (
-          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-            No tools match the current filters
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <SearchIcon className="h-8 w-8 text-muted-foreground/20 mb-3" />
+            <p className="text-sm">No functions match the current filters</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Try adjusting your search or filter</p>
           </div>
         )}
       </div>
