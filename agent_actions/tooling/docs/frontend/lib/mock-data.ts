@@ -109,6 +109,7 @@ export interface ToolFunction {
   udf: boolean
   found: boolean
   file: string
+  sourceCode?: string
 }
 
 export interface ValidationMessage {

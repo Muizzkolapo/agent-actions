@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { HomeScreen } from "@/components/screens/home-screen"
@@ -26,7 +26,16 @@ export default function Page() {
 
 function Dashboard() {
   const [activeSection, setActiveSection] = useState("home")
+  const [navKeys, setNavKeys] = useState<Record<string, number>>({})
   const { workflows } = useCatalogData()
+
+  // Reset drill-down state when re-clicking the same sidebar item
+  const handleNavigate = useCallback((section: string) => {
+    setActiveSection((prev) => {
+      if (section === prev) setNavKeys((nk) => ({ ...nk, [section]: (nk[section] || 0) + 1 }))
+      return section === prev ? prev : section
+    })
+  }, [])
 
   const projectName = (() => {
     if (workflows.length === 0) return "project"
@@ -53,7 +62,7 @@ function Dashboard() {
 
   return (
     <SidebarProvider>
-      <AppSidebar activeSection={activeSection} onNavigate={setActiveSection} />
+      <AppSidebar activeSection={activeSection} onNavigate={handleNavigate} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4 sticky top-0 z-10">
           <SidebarTrigger className="-ml-1 h-7 w-7 text-muted-foreground hover:text-foreground transition-colors" />
@@ -74,15 +83,15 @@ function Dashboard() {
           </div>
         </header>
         <main className="flex-1 overflow-auto p-6">
-          {activeSection === "home" && <HomeScreen onNavigate={setActiveSection} />}
-          {activeSection === "workflows" && <WorkflowsScreen />}
-          {activeSection === "actions" && <ActionsScreen />}
-          {activeSection === "runs" && <RunsScreen />}
-          {activeSection === "data" && <DataScreen />}
-          {activeSection === "logs" && <LogsScreen />}
-          {activeSection === "schemas" && <SchemasScreen />}
-          {activeSection === "prompts" && <PromptsScreen />}
-          {activeSection === "tools" && <ToolsScreen />}
+          {activeSection === "home" && <HomeScreen onNavigate={handleNavigate} />}
+          {activeSection === "workflows" && <WorkflowsScreen key={navKeys.workflows} />}
+          {activeSection === "actions" && <ActionsScreen key={navKeys.actions} />}
+          {activeSection === "runs" && <RunsScreen key={navKeys.runs} />}
+          {activeSection === "data" && <DataScreen key={navKeys.data} />}
+          {activeSection === "logs" && <LogsScreen key={navKeys.logs} />}
+          {activeSection === "schemas" && <SchemasScreen key={navKeys.schemas} />}
+          {activeSection === "prompts" && <PromptsScreen key={navKeys.prompts} />}
+          {activeSection === "tools" && <ToolsScreen key={navKeys.tools} />}
         </main>
       </SidebarInset>
     </SidebarProvider>

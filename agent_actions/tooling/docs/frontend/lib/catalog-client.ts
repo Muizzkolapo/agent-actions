@@ -112,6 +112,7 @@ export interface RawToolFunction {
   line_end?: number
   is_udf: boolean
   found?: boolean
+  source_code?: string
 }
 
 export interface RawValidationEntry {

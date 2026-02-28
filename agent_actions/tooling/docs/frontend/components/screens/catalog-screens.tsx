@@ -349,9 +349,7 @@ function ParsedSignature({ sig, size = "xs" }: { sig: string; size?: "xs" | "sm"
 function ToolFunctionCard({ tool, onSelect }: { tool: ToolFunction; onSelect: () => void }) {
   const borderColor = !tool.found
     ? "border-l-[hsl(var(--destructive))]"
-    : tool.udf
-      ? "border-l-emerald-400"
-      : "border-l-[hsl(var(--primary))]"
+    : "border-l-emerald-400"
 
   return (
     <button
@@ -365,11 +363,6 @@ function ToolFunctionCard({ tool, onSelect }: { tool: ToolFunction; onSelect: ()
         <span className="text-sm font-mono font-semibold text-foreground group-hover:text-[hsl(var(--primary))] transition-colors truncate">
           {tool.name}
         </span>
-        {tool.udf && (
-          <Badge variant="outline" className="text-[10px] rounded-md bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-1.5 py-0 shrink-0">
-            UDF
-          </Badge>
-        )}
         {!tool.found && (
           <Badge variant="outline" className="text-[10px] rounded-md bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20 px-1.5 py-0 shrink-0">
             NOT FOUND
@@ -385,79 +378,222 @@ function ToolFunctionCard({ tool, onSelect }: { tool: ToolFunction; onSelect: ()
 }
 
 /* ------------------------------------------------------------------ */
+/*  Python syntax highlighting (zero-dependency tokenizer)             */
+/* ------------------------------------------------------------------ */
+type TokenType = "keyword" | "builtin" | "string" | "comment" | "decorator" | "number" | "defname" | "plain"
+
+const PY_KEYWORDS = new Set([
+  "False","None","True","and","as","assert","async","await","break","class",
+  "continue","def","del","elif","else","except","finally","for","from","global",
+  "if","import","in","is","lambda","nonlocal","not","or","pass","raise",
+  "return","try","while","with","yield",
+])
+const PY_BUILTINS = new Set([
+  "print","len","range","int","str","float","list","dict","set","tuple",
+  "bool","type","isinstance","issubclass","hasattr","getattr","setattr",
+  "enumerate","zip","map","filter","sorted","reversed","any","all","min","max",
+  "sum","abs","round","open","super","property","staticmethod","classmethod",
+  "ValueError","TypeError","KeyError","IndexError","AttributeError","RuntimeError",
+  "Exception","StopIteration","NotImplementedError","OSError","IOError",
+])
+
+interface Token { type: TokenType; text: string }
+
+function tokenizePythonLine(line: string, prevTriple: false | '"""' | "'''"): { tokens: Token[]; inTriple: false | '"""' | "'''" } {
+  const tokens: Token[] = []
+  let i = 0
+  let tripleState = prevTriple
+
+  const push = (type: TokenType, text: string) => { if (text) tokens.push({ type, text }) }
+
+  // Continue a multi-line triple-quoted string
+  if (tripleState) {
+    const end = line.indexOf(tripleState)
+    if (end === -1) { push("string", line); return { tokens, inTriple: tripleState } }
+    push("string", line.slice(0, end + 3))
+    i = end + 3
+    tripleState = false
+  }
+
+  while (i < line.length) {
+    const rest = line.slice(i)
+
+    // String prefix literals (f"...", r"...", b"...", rb"...", etc.)
+    const prefixMatch = rest.match(/^([fFrRbBuU]{1,2})(['"])/)
+    if (prefixMatch) {
+      const prefix = prefixMatch[1]
+      const quote = prefixMatch[2]
+      // Check if this is a triple-quoted prefixed string
+      const afterPrefix = rest.slice(prefix.length)
+      if (afterPrefix.startsWith('"""') || afterPrefix.startsWith("'''")) {
+        const q = afterPrefix.startsWith('"""') ? '"""' : "'''" as const
+        const end = line.indexOf(q, i + prefix.length + 3)
+        if (end === -1) { push("string", line.slice(i)); return { tokens, inTriple: q } }
+        push("string", line.slice(i, end + 3)); i = end + 3; continue
+      }
+      // Single-line prefixed string
+      let j = i + prefix.length + 1
+      while (j < line.length && line[j] !== quote) { if (line[j] === "\\") j++; j++ }
+      push("string", line.slice(i, j + 1)); i = j + 1; continue
+    }
+
+    // Triple-quoted strings — check before single quotes to avoid partial match
+    if (rest.startsWith('"""') || rest.startsWith("'''")) {
+      const q = rest.startsWith('"""') ? '"""' : "'''" as const
+      const end = line.indexOf(q, i + 3)
+      if (end === -1) { push("string", line.slice(i)); return { tokens, inTriple: q } }
+      push("string", line.slice(i, end + 3)); i = end + 3; continue
+    }
+    // Single/double quoted strings
+    if (rest[0] === '"' || rest[0] === "'") {
+      const quote = rest[0]; let j = i + 1
+      while (j < line.length && line[j] !== quote) { if (line[j] === "\\") j++; j++ }
+      push("string", line.slice(i, j + 1)); i = j + 1; continue
+    }
+    // Comments
+    if (rest[0] === "#") { push("comment", line.slice(i)); break }
+    // Decorators
+    if (rest[0] === "@" && (i === 0 || /^\s*$/.test(line.slice(0, i)))) {
+      push("decorator", line.slice(i)); break
+    }
+    // Numbers
+    const numMatch = rest.match(/^(0[xX][\da-fA-F_]+|0[oO][0-7_]+|0[bB][01_]+|\d[\d_]*\.?\d*(?:e[+-]?\d+)?)/)
+    if (numMatch && (i === 0 || /[\s([\{,:=<>!+\-*/]/.test(line[i - 1]))) {
+      push("number", numMatch[0]); i += numMatch[0].length; continue
+    }
+    // Words (keywords, builtins, def names)
+    const wordMatch = rest.match(/^[A-Za-z_]\w*/)
+    if (wordMatch) {
+      const w = wordMatch[0]
+      if (PY_KEYWORDS.has(w)) {
+        push("keyword", w)
+        // Capture the name after def/class
+        if ((w === "def" || w === "class") && i + w.length < line.length) {
+          const after = line.slice(i + w.length).match(/^(\s+)([A-Za-z_]\w*)/)
+          if (after) {
+            push("plain", after[1]); push("defname", after[2]); i += w.length + after[0].length; continue
+          }
+        }
+      } else if (PY_BUILTINS.has(w)) { push("builtin", w) }
+      else { push("plain", w) }
+      i += w.length; continue
+    }
+    // Whitespace and operators
+    const wsMatch = rest.match(/^[^A-Za-z_'"#@\d]+/)
+    if (wsMatch) { push("plain", wsMatch[0]); i += wsMatch[0].length; continue }
+    push("plain", rest[0]); i++
+  }
+  return { tokens, inTriple: tripleState }
+}
+
+/* Editor-dark palette — always dark regardless of app theme */
+const editorTokenColors: Record<TokenType, string> = {
+  keyword: "text-[#c678dd] font-semibold",        /* soft purple */
+  builtin: "text-[#61afef]",                       /* sky blue */
+  string: "text-[#98c379]",                        /* muted green */
+  comment: "text-[#5c6370] italic",                /* grey, italic */
+  decorator: "text-[#e5c07b]",                     /* warm gold */
+  number: "text-[#d19a66]",                        /* burnt orange */
+  defname: "text-[#61afef] font-semibold",         /* blue, bold */
+  plain: "text-[#abb2bf]",                         /* soft grey */
+}
+
+function HighlightedLine({ tokens }: { tokens: Token[] }) {
+  return (
+    <pre className="font-mono text-[13px] h-[22px] leading-[22px] whitespace-pre">
+      {tokens.map((t, i) => (
+        <span key={i} className={editorTokenColors[t.type]}>{t.text}</span>
+      ))}
+      {tokens.length === 0 && " "}
+    </pre>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  ToolDetail — full-page view for a single tool function            */
 /* ------------------------------------------------------------------ */
-function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }) {
-  const accentColor = !tool.found
-    ? "border-t-[hsl(var(--destructive))]"
-    : tool.udf
-      ? "border-t-emerald-400"
-      : "border-t-[hsl(var(--primary))]"
+function SourceCodeBlock({ code, file }: { code: string; file: string }) {
+  const highlighted = React.useMemo(() => {
+    const rawLines = code.split("\n")
+    let tripleState: false | '"""' | "'''" = false
+    return rawLines.map((line) => {
+      const result = tokenizePythonLine(line, tripleState)
+      tripleState = result.inTriple
+      return result.tokens
+    })
+  }, [code])
+
+  const lineCount = highlighted.length
+  const gutterWidth = lineCount >= 100 ? "w-12" : "w-10"
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="rounded-xl border border-[#1e1e1e] overflow-hidden shadow-lg flex-1 flex flex-col min-h-0">
+      {/* Title bar — mimics editor tab */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-[#21252b] border-b border-[#181a1f]">
+        <div className="flex items-center gap-2.5">
+          <span className="text-[11px] font-mono font-medium text-[#9da5b4]">{file.split("/").pop()}</span>
+          <span className="text-[10px] font-mono rounded bg-[#2c313a] px-1.5 py-0.5 text-[#636d83]">Python</span>
+        </div>
+        <span className="text-[10px] font-mono text-[#636d83] hidden sm:block">{file}</span>
+      </div>
+      {/* Code area — gutter is outside the horizontal scroll region */}
+      <div className="flex max-h-[calc(100vh-12rem)] overflow-y-auto bg-[#282c34]">
+        {/* Fixed gutter */}
+        <div className={`shrink-0 ${gutterWidth} border-r border-[#2c313a] bg-[#282c34] select-none`}>
+          {highlighted.map((_, i) => (
+            <div key={i} className="px-3 text-right text-[13px] font-mono tabular-nums text-[#495162] h-[22px] leading-[22px]">
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        {/* Scrollable code */}
+        <div className="flex-1 overflow-x-auto min-w-0">
+          {highlighted.map((tokens, i) => (
+            <div key={i} className="px-5 hover:bg-[#2c313a] transition-colors duration-75">
+              <HighlightedLine tokens={tokens} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }) {
+  return (
+    <div className="flex flex-col gap-4 min-h-[calc(100vh-7rem)]">
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
-        Back to Tool Functions
+        Back to Tools
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[55%_45%] gap-4">
-        {/* Left column */}
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl font-semibold tracking-tight text-foreground font-mono">{tool.name}</h1>
-            {tool.udf && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                UDF
-              </Badge>
-            )}
-            {!tool.found && (
-              <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20">
-                NOT FOUND
-              </Badge>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Signature</h2>
-            <div className="bg-secondary/50 rounded-lg border border-border p-4 overflow-auto whitespace-pre-wrap">
-              <ParsedSignature sig={tool.sig} size="sm" />
-            </div>
-          </div>
+      {/* Header */}
+      <div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-xl font-semibold tracking-tight text-foreground font-mono">{tool.name}</h1>
+          {!tool.found && (
+            <Badge variant="outline" className="text-[10px] font-normal rounded-md bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20">
+              NOT FOUND
+            </Badge>
+          )}
         </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-4">
-          <div className={`rounded-lg border border-border border-t-2 ${accentColor} bg-card p-4`}>
-            <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">Details</h2>
-            <div className="rounded-lg border border-border divide-y divide-border text-sm font-mono">
-              <div className="flex justify-between px-3 py-2">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">name</span>
-                <span className="text-foreground text-xs">{tool.name}</span>
-              </div>
-              <div className="flex justify-between px-3 py-2">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">udf</span>
-                <span className={`text-xs ${tool.udf ? "text-emerald-400" : "text-muted-foreground"}`}>
-                  {tool.udf ? "Yes" : "No"}
-                </span>
-              </div>
-              <div className="flex justify-between px-3 py-2">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">found</span>
-                <span className={`text-xs ${tool.found ? "text-emerald-400" : "text-[hsl(var(--destructive))]"}`}>
-                  {tool.found ? "Yes" : "No"}
-                </span>
-              </div>
-              <div className="flex justify-between px-3 py-2 gap-3">
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground shrink-0">file</span>
-                <span className="text-foreground text-xs break-all text-right">{tool.file}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <p className="text-xs text-muted-foreground mt-0.5 font-mono">{tool.file}</p>
       </div>
+
+      {/* Source code with line numbers — docstring is visible inside the source */}
+      {tool.sourceCode ? (
+        <SourceCodeBlock code={tool.sourceCode} file={tool.file} />
+      ) : (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground mb-3">Source code not available</p>
+          <div className="bg-secondary/50 rounded-lg border border-border p-4 overflow-auto whitespace-pre-wrap">
+            <ParsedSignature sig={tool.sig} size="sm" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -608,7 +744,6 @@ function FileGroupRow({
   onSelectTool: (tool: ToolFunction) => void
 }) {
   const fileName = file.split("/").pop() || file
-  const udfCount = tools.filter((t) => t.udf).length
 
   return (
     <Collapsible open={isOpen} onOpenChange={onToggle}>
@@ -622,14 +757,9 @@ function FileGroupRow({
         <span className="text-xs font-mono text-foreground font-medium truncate min-w-0">
           {fileName}
         </span>
-        <div className="flex items-center gap-1.5 ml-auto shrink-0">
-          {udfCount > 0 && (
-            <span className="text-[10px] tabular-nums text-emerald-400/70">{udfCount} UDF</span>
-          )}
-          <span className="text-[10px] text-muted-foreground tabular-nums">
-            {tools.length} fn{tools.length !== 1 ? "s" : ""}
-          </span>
-        </div>
+        <span className="text-[10px] text-muted-foreground tabular-nums ml-auto shrink-0">
+          {tools.length} tool{tools.length !== 1 ? "s" : ""}
+        </span>
       </CollapsibleTrigger>
       <CollapsibleContent className="overflow-hidden data-[state=open]:animate-collapsible-down data-[state=closed]:animate-collapsible-up">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 pt-1.5 pb-3 pl-8 pr-1">
@@ -661,17 +791,13 @@ function DirectoryCard({
   onSelectTool: (tool: ToolFunction) => void
 }) {
   const totalFns = files.reduce((sum, [, tools]) => sum + tools.length, 0)
-  const totalUdfs = files.reduce((sum, [, tools]) => sum + tools.filter((t) => t.udf).length, 0)
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="px-4 py-2.5 border-b border-border/50 bg-secondary/30 flex items-center gap-2">
         <FolderOpen className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
         <span className="text-xs font-mono font-semibold text-foreground truncate">{dirPath}</span>
-        <div className="flex items-center gap-1.5 ml-auto shrink-0">
-          {totalUdfs > 0 && <span className="text-[10px] tabular-nums text-emerald-400/70">{totalUdfs} UDF</span>}
-          <span className="text-[10px] text-muted-foreground tabular-nums">{totalFns} fn{totalFns !== 1 ? "s" : ""}</span>
-        </div>
+        <span className="text-[10px] text-muted-foreground tabular-nums ml-auto shrink-0">{totalFns} tool{totalFns !== 1 ? "s" : ""}</span>
       </div>
       <div className="divide-y divide-border/30">
         {files.map(([file, tools]) => (
@@ -695,19 +821,19 @@ function DirectoryCard({
 export function ToolsScreen() {
   const { toolFunctions, stats } = useCatalogData()
   const [search, setSearch] = useState("")
-  const [filter, setFilter] = useState<"all" | "udf" | "helper">("all")
   const [selected, setSelected] = useState<ToolFunction | null>(null)
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
 
   const lowerSearch = search.toLowerCase()
+  const udfTools = React.useMemo(() => toolFunctions.filter((t) => t.udf), [toolFunctions])
   const filtered = React.useMemo(
-    () => toolFunctions.filter((t) => {
-      if (filter === "udf" && !t.udf) return false
-      if (filter === "helper" && t.udf) return false
-      if (!lowerSearch) return true
-      return t.name.toLowerCase().includes(lowerSearch) || t.sig.toLowerCase().includes(lowerSearch) || t.file.toLowerCase().includes(lowerSearch)
-    }),
-    [toolFunctions, filter, lowerSearch]
+    () => {
+      if (!lowerSearch) return udfTools
+      return udfTools.filter((t) =>
+        t.name.toLowerCase().includes(lowerSearch) || t.sig.toLowerCase().includes(lowerSearch) || t.file.toLowerCase().includes(lowerSearch)
+      )
+    },
+    [udfTools, lowerSearch]
   )
 
   /* Group filtered results by directory → file, sorted alphabetically */
@@ -747,9 +873,13 @@ export function ToolsScreen() {
     <div className="flex flex-col gap-4">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tool Functions</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tools</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {stats.total_tool_functions} discovered &middot; {filtered.length} of {toolFunctions.length} shown
+          {(() => {
+            const total = lowerSearch ? udfTools.length : filtered.length
+            const label = lowerSearch ? `${filtered.length} of ${total}` : `${total}`
+            return `${label} UDF tool${total !== 1 ? "s" : ""}`
+          })()}
           {totalFiles > 0 && <> &middot; {totalFiles} file{totalFiles !== 1 ? "s" : ""}</>}
         </p>
       </div>
@@ -760,26 +890,11 @@ export function ToolsScreen() {
           <div className="relative flex-1 min-w-[200px]">
             <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search functions..."
+              placeholder="Search by name, file, or signature..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
             />
-          </div>
-          <div className="flex gap-1 shrink-0 overflow-x-auto min-w-0">
-            {(["all", "udf", "helper"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium capitalize transition-all ${
-                  filter === f
-                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                }`}
-              >
-                {f === "all" ? `All (${toolFunctions.length})` : f}
-              </button>
-            ))}
           </div>
         </div>
       </div>

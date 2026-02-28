@@ -237,6 +237,7 @@ export function transformToolFunctions(catalog: RawCatalogJson): ToolFunction[] 
       udf: raw.is_udf ?? false,
       found: raw.found !== false,
       file: raw.file_path || "",
+      sourceCode: raw.source_code ? raw.source_code : undefined,
     }
   })
 }
