@@ -384,9 +384,7 @@ def _pick_safe_ephemeral_port(headroom=6):
         probe.close()
         if port + headroom <= 65535:
             return port
-    raise RuntimeError(
-        f"Could not find ephemeral port below {65535 - headroom} after 20 attempts"
-    )
+    raise RuntimeError(f"Could not find ephemeral port below {65535 - headroom} after 20 attempts")
 
 
 def test_find_available_port_with_collision():

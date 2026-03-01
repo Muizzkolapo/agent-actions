@@ -91,6 +91,8 @@ export interface Schema {
   id: string
   fields: string[] | number
   types: string[]
+  source: string
+  usedBy: { workflow: string; action: string }[]
 }
 
 export interface Prompt {

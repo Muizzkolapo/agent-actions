@@ -38,6 +38,19 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
 }
 
 /* ------------------------------------------------------------------ */
+/*  Schema field-type color mapping                                    */
+/* ------------------------------------------------------------------ */
+function typeColor(t: unknown): string {
+  if (typeof t !== "string") return "bg-secondary text-muted-foreground"
+  const lower = t.toLowerCase()
+  if (lower === "array") return "bg-blue-500/15 text-blue-300"
+  if (lower === "number" || lower === "integer" || lower === "float") return "bg-amber-500/15 text-amber-300"
+  if (lower === "object" || lower === "dict") return "bg-purple-500/15 text-purple-300"
+  if (lower === "boolean" || lower === "bool") return "bg-rose-500/15 text-rose-300"
+  return "bg-secondary text-muted-foreground" // string and everything else
+}
+
+/* ------------------------------------------------------------------ */
 /*  Prompt template analysis helpers                                   */
 /* ------------------------------------------------------------------ */
 function extractPromptAnalysis(content: string) {
@@ -271,7 +284,7 @@ function SchemaDetail({ schema, onBack }: { schema: Schema; onBack: () => void }
                       <tr key={i} className={`hover:bg-accent/20 transition-colors ${i % 2 === 1 ? "bg-secondary/20" : ""}`}>
                         <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{i + 1}</td>
                         <td className="px-3 py-1.5 text-foreground">{field}</td>
-                        <td className="px-3 py-1.5 text-muted-foreground">{schema.types[i]}</td>
+                        <td className="px-3 py-1.5"><span className={`rounded px-1 py-0.5 text-[10px] ${typeColor(schema.types[i])}`}>{schema.types[i]}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -290,7 +303,7 @@ function SchemaDetail({ schema, onBack }: { schema: Schema; onBack: () => void }
                     {schema.types.map((t, i) => (
                       <tr key={i} className={`hover:bg-accent/20 transition-colors ${i % 2 === 1 ? "bg-secondary/20" : ""}`}>
                         <td className="px-3 py-1.5 text-muted-foreground text-[10px]">{i + 1}</td>
-                        <td className="px-3 py-1.5 text-foreground">{t}</td>
+                        <td className="px-3 py-1.5"><span className={`rounded px-1 py-0.5 ${typeColor(t)}`}>{t}</span></td>
                       </tr>
                     ))}
                   </tbody>
@@ -314,24 +327,38 @@ function SchemaDetail({ schema, onBack }: { schema: Schema; onBack: () => void }
                 <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">unique types</span>
                 <span className="text-foreground text-xs">{uniqueTypes.length}</span>
               </div>
+              {schema.source && (
+                <div className="flex justify-between px-3 py-2">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">source</span>
+                  <span className="text-foreground text-xs font-mono truncate ml-4" title={schema.source}>{schema.source.split("/").pop()}</span>
+                </div>
+              )}
+              {schema.usedBy.length > 0 && (
+                <div className="flex justify-between px-3 py-2">
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">used by</span>
+                  <span className="text-foreground text-xs">{schema.usedBy.length} action{schema.usedBy.length !== 1 ? "s" : ""}</span>
+                </div>
+              )}
             </div>
-            {/* Types breakdown */}
-            <div className="mt-3">
-              <h3 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Types Breakdown</h3>
-              <div className="flex gap-1.5 flex-wrap">
-                {uniqueTypes.map((t) => {
-                  const count = schema.types.filter((st) => st === t).length
-                  return (
-                    <span
-                      key={t}
-                      className="rounded-md bg-secondary px-2 py-0.5 text-[10px] font-mono text-muted-foreground"
-                    >
-                      {t} <span className="text-foreground">&times;{count}</span>
-                    </span>
-                  )
-                })}
+            {/* Types breakdown — hide when only 1 unique type (redundant) */}
+            {uniqueTypes.length > 1 && (
+              <div className="mt-3">
+                <h3 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">Types Breakdown</h3>
+                <div className="flex gap-1.5 flex-wrap">
+                  {uniqueTypes.map((t) => {
+                    const count = schema.types.filter((st) => st === t).length
+                    return (
+                      <span
+                        key={t}
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-mono ${typeColor(t)}`}
+                      >
+                        {t} <span className="text-foreground">&times;{count}</span>
+                      </span>
+                    )
+                  })}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Numeric-only info */}
@@ -341,6 +368,22 @@ function SchemaDetail({ schema, onBack }: { schema: Schema; onBack: () => void }
               <p className="text-xs text-muted-foreground leading-relaxed">
                 This schema has <span className="text-foreground font-mono">{fieldCount}</span> fields (numeric count only; field names are not available).
               </p>
+            </div>
+          )}
+
+          {/* Used-by actions */}
+          {schema.usedBy.length > 0 && (
+            <div className="rounded-lg border border-border bg-card p-4">
+              <h2 className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-3">Used By</h2>
+              <div className="space-y-1.5">
+                {schema.usedBy.map((ref, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                    <Zap className="h-3 w-3 text-muted-foreground shrink-0" />
+                    <span className="text-foreground">{ref.action}</span>
+                    <span className="text-muted-foreground">in {ref.workflow}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -775,9 +818,48 @@ export function PromptsScreen() {
 /* ================================================================== */
 /*  SchemasScreen                                                     */
 /* ================================================================== */
+const SCHEMA_BADGE_LIMIT = 8
+
 export function SchemasScreen() {
   const { schemas } = useCatalogData()
   const [selected, setSelected] = useState<Schema | null>(null)
+  const [search, setSearch] = useState("")
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [typeFilter, setTypeFilter] = useState<string | null>(null)
+  const [usageFilter, setUsageFilter] = useState<string | null>(null)
+
+  const lowerSearch = search.toLowerCase()
+
+  const sourceFiles = React.useMemo(
+    () => [...new Set(schemas.map((s) => s.source).filter(Boolean))].sort(),
+    [schemas],
+  )
+  const allTypes = React.useMemo(
+    () => [...new Set(schemas.flatMap((s) => s.types))].sort(),
+    [schemas],
+  )
+  const allWorkflows = React.useMemo(
+    () => [...new Set(schemas.flatMap((s) => s.usedBy.map((r) => r.workflow)).filter(Boolean))].sort(),
+    [schemas],
+  )
+
+  const filtered = React.useMemo(() => {
+    return schemas.filter((s) => {
+      if (sourceFilter && s.source !== sourceFilter) return false
+      if (typeFilter && !s.types.includes(typeFilter)) return false
+      if (usageFilter === "__used__" && s.usedBy.length === 0) return false
+      if (usageFilter === "__unused__" && s.usedBy.length > 0) return false
+      const isWorkflowFilter = usageFilter && usageFilter !== "__used__" && usageFilter !== "__unused__"
+      if (isWorkflowFilter && !s.usedBy.some((r) => r.workflow === usageFilter)) return false
+      if (!lowerSearch) return true
+      const fieldsStr = Array.isArray(s.fields) ? s.fields.join(" ").toLowerCase() : ""
+      return (
+        s.id.toLowerCase().includes(lowerSearch) ||
+        fieldsStr.includes(lowerSearch) ||
+        s.types.join(" ").toLowerCase().includes(lowerSearch)
+      )
+    })
+  }, [schemas, lowerSearch, sourceFilter, typeFilter, usageFilter])
 
   if (selected) {
     return <SchemaDetail schema={selected} onBack={() => setSelected(null)} />
@@ -790,14 +872,75 @@ export function SchemasScreen() {
         <p className="text-sm text-muted-foreground mt-1">{schemas.length} registered schemas</p>
       </div>
 
+      {/* Search + filters */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-background/80 backdrop-blur-sm border-b border-border/50">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search schemas, fields, types…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 bg-secondary border-0 text-xs"
+            />
+          </div>
+          {sourceFiles.length > 1 && (
+            <Select value={sourceFilter ?? "__all__"} onValueChange={(v) => setSourceFilter(v === "__all__" ? null : v)}>
+              <SelectTrigger className="h-9 w-auto min-w-[160px] bg-secondary border-0 text-xs font-mono">
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All sources</SelectItem>
+                {sourceFiles.map((src) => (
+                  <SelectItem key={src} value={src} className="text-xs font-mono">{src}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {allTypes.length > 1 && (
+            <Select value={typeFilter ?? "__all__"} onValueChange={(v) => setTypeFilter(v === "__all__" ? null : v)}>
+              <SelectTrigger className="h-9 w-auto min-w-[130px] bg-secondary border-0 text-xs">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All types</SelectItem>
+                {allTypes.map((t) => (
+                  <SelectItem key={t} value={t} className="text-xs font-mono">{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={usageFilter ?? "__all__"} onValueChange={(v) => setUsageFilter(v === "__all__" ? null : v)}>
+            <SelectTrigger className="h-9 w-auto min-w-[130px] bg-secondary border-0 text-xs">
+              <SelectValue placeholder="Used by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All schemas</SelectItem>
+              <SelectItem value="__used__">Used by actions</SelectItem>
+              <SelectItem value="__unused__">Unused</SelectItem>
+              {allWorkflows.map((wf) => (
+                <SelectItem key={wf} value={wf} className="text-xs font-mono">{wf}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {(search || sourceFilter || typeFilter || usageFilter) && (
+          <p className="text-[10px] text-muted-foreground mt-1.5">{filtered.length} of {schemas.length} schemas</p>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {schemas.map((schema) => {
+        {filtered.map((schema) => {
           const fieldCount = Array.isArray(schema.fields) ? schema.fields.length : schema.fields
+          const badges = Array.isArray(schema.fields) ? schema.fields : []
+          const truncated = badges.length > SCHEMA_BADGE_LIMIT
+          const visibleBadges = truncated ? badges.slice(0, SCHEMA_BADGE_LIMIT) : badges
+          const sourceBase = schema.source ? schema.source.split("/").pop() : null
           return (
             <button
               key={schema.id}
               onClick={() => setSelected(schema)}
-              className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/20 transition-all"
+              className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/20 transition-all flex flex-col"
             >
               <div className="absolute top-0 left-0 right-0 h-px bg-emerald-400 opacity-40" />
               <div className="flex items-start gap-3">
@@ -805,35 +948,39 @@ export function SchemasScreen() {
                   <FileCode className="h-4 w-4 text-emerald-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-mono font-medium text-foreground">{schema.id}</h3>
-                  <span className="text-[10px] text-muted-foreground mt-0.5 block">{fieldCount} fields</span>
+                  <h3 className="text-sm font-mono font-medium text-foreground truncate">{schema.id}</h3>
+                  <span className="text-[10px] text-muted-foreground mt-0.5 block">{fieldCount} field{fieldCount !== 1 ? "s" : ""}</span>
                 </div>
               </div>
-              {Array.isArray(schema.fields) && (
+              {visibleBadges.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3">
-                  {schema.fields.map((f, i) => (
-                    <span
-                      key={i}
-                      className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-mono"
-                    >
+                  {visibleBadges.map((f, i) => (
+                    <span key={i} className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono ${typeColor(schema.types[i])}`}>
                       <span className="text-foreground">{f}</span>
-                      <span className="text-muted-foreground ml-1">{schema.types[i]}</span>
+                      <span className="ml-1 opacity-60">{schema.types[i]}</span>
                     </span>
                   ))}
+                  {truncated && (
+                    <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                      +{badges.length - SCHEMA_BADGE_LIMIT} more
+                    </span>
+                  )}
                 </div>
               )}
-              {!Array.isArray(schema.fields) && (
+              {!Array.isArray(schema.fields) && schema.types.length > 0 && (
                 <div className="flex gap-1.5 flex-wrap mt-3">
                   {schema.types.map((t, i) => (
-                    <span
-                      key={i}
-                      className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground"
-                    >
-                      {t}
-                    </span>
+                    <span key={i} className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono ${typeColor(t)}`}>{t}</span>
                   ))}
                 </div>
               )}
+              {/* Footer — pinned to bottom */}
+              <div className="flex items-center gap-3 mt-auto pt-3 border-t border-border/50">
+                {sourceBase && <span className="text-[10px] text-muted-foreground font-mono truncate">{sourceBase}</span>}
+                {schema.usedBy.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{schema.usedBy.length} action{schema.usedBy.length !== 1 ? "s" : ""}</span>
+                )}
+              </div>
             </button>
           )
         })}

@@ -186,21 +186,48 @@ export function transformRuns(runs: RawRunsJson): Run[] {
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 export function transformSchemas(catalog: RawCatalogJson): Schema[] {
+  // Build reverse index: schema name → [{workflow, action}] from actions
+  const reverseUsage: Record<string, { workflow: string; action: string }[]> = {}
+  for (const a of Object.values(catalog.actions)) {
+    let schemaName: string | undefined
+    if (typeof a.schema === "string") {
+      schemaName = a.schema
+    } else if (a.schema && typeof a.schema === "object" && "name" in a.schema) {
+      schemaName = a.schema.name as string
+    }
+    if (schemaName) {
+      ;(reverseUsage[schemaName] ??= []).push({ workflow: a.workflow_id ?? "", action: a.name ?? "" })
+    }
+  }
+
   return Object.values(catalog.schemas).map((raw: RawSchema) => {
+    const schemaId = raw.id || raw.name
+    // Merge explicit used_by with reverse-indexed usage (deduplicated)
+    const explicit = raw.used_by ?? []
+    const reverse = reverseUsage[schemaId] ?? []
+    const seen = new Set(explicit.map((r) => `${r.workflow}::${r.action}`))
+    const merged = [...explicit]
+    for (const r of reverse) {
+      const key = `${r.workflow}::${r.action}`
+      if (!seen.has(key)) { merged.push(r); seen.add(key) }
+    }
+
     if (Array.isArray(raw.fields) && raw.fields.length > 0 && typeof raw.fields[0] === "object") {
-      // Structured fields with name/type
       const fieldObjs = raw.fields as { name: string; type: string }[]
       return {
-        id: raw.id || raw.name,
+        id: schemaId,
         fields: fieldObjs.map((f) => f.name),
         types: fieldObjs.map((f) => f.type),
+        source: raw.source_file ?? "",
+        usedBy: merged,
       }
     }
-    // Fallback: field_count as numeric
     return {
-      id: raw.id || raw.name,
+      id: schemaId,
       fields: raw.field_count ?? 0,
       types: [],
+      source: raw.source_file ?? "",
+      usedBy: merged,
     }
   })
 }
