@@ -8,7 +8,34 @@ import { Input } from "@/components/ui/input"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { Prompt, ToolFunction, Schema } from "@/lib/mock-data"
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible"
-import { MessageSquare, FileCode, Wrench, Code2, Search as SearchIcon, ArrowLeft, Variable, Zap, ChevronRight, FolderOpen } from "lucide-react"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
+import { MessageSquare, FileCode, Wrench, Code2, Search as SearchIcon, ArrowLeft, Variable, Zap, ChevronRight, FolderOpen, Copy, Check } from "lucide-react"
+
+/* ------------------------------------------------------------------ */
+/*  Shared copy-to-clipboard button                                    */
+/* ------------------------------------------------------------------ */
+function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+  const [copied, setCopied] = React.useState(false)
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(text).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1500) },
+      () => { /* clipboard permission denied or unavailable — silent no-op */ },
+    )
+  }
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      onClick={handleCopy}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleCopy(e as unknown as React.MouseEvent) } }}
+      className={`inline-flex items-center justify-center rounded-md p-1.5 transition-colors hover:bg-accent/40 cursor-pointer ${className}`}
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+    </span>
+  )
+}
 
 /* ------------------------------------------------------------------ */
 /*  Prompt template analysis helpers                                   */
@@ -107,7 +134,10 @@ function PromptDetail({ prompt, onBack }: { prompt: Prompt; onBack: () => void }
         <div className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between border-b border-border px-4 py-2">
             <span className="text-xs font-semibold text-foreground">Prompt Template</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{text.length.toLocaleString()} chars</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted-foreground tabular-nums">{text.length.toLocaleString()} chars</span>
+              <CopyButton text={text} />
+            </div>
           </div>
           <pre className="p-4 font-mono text-xs text-foreground/85 leading-relaxed whitespace-pre-wrap overflow-auto max-h-[600px]">
             {text}
@@ -604,26 +634,98 @@ function ToolDetail({ tool, onBack }: { tool: ToolFunction; onBack: () => void }
 export function PromptsScreen() {
   const { prompts, stats } = useCatalogData()
   const [selected, setSelected] = useState<Prompt | null>(null)
+  const [search, setSearch] = useState("")
+  const [sourceFilter, setSourceFilter] = useState<string | null>(null)
+  const [lengthFilter, setLengthFilter] = useState<string | null>(null)
+
+  const lowerSearch = search.toLowerCase()
+
+  const sourceFiles = React.useMemo(
+    () => [...new Set(prompts.map((p) => p.source))].sort(),
+    [prompts],
+  )
+  const lengthCategories = React.useMemo(
+    () => [...new Set(prompts.map((p) => p.length))].sort(),
+    [prompts],
+  )
+
+  const filtered = React.useMemo(() => {
+    return prompts.filter((p) => {
+      if (sourceFilter && p.source !== sourceFilter) return false
+      if (lengthFilter && p.length !== lengthFilter) return false
+      if (!lowerSearch) return true
+      return (
+        p.name.toLowerCase().includes(lowerSearch) ||
+        p.source.toLowerCase().includes(lowerSearch) ||
+        p.preview.toLowerCase().includes(lowerSearch)
+      )
+    })
+  }, [prompts, lowerSearch, sourceFilter, lengthFilter])
 
   if (selected) {
     return <PromptDetail prompt={selected} onBack={() => setSelected(null)} />
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-foreground">Prompts</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {prompts.length} shown / {stats.total_prompts} total prompts
+          {lowerSearch || sourceFilter || lengthFilter
+            ? `${filtered.length} of ${prompts.length} prompts`
+            : `${prompts.length} prompt${prompts.length !== 1 ? "s" : ""}`}
         </p>
       </div>
 
+      {/* Sticky search + filter bar */}
+      <div className="sticky top-0 z-10 -mx-6 px-6 py-3 bg-background/80 backdrop-blur-sm">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-[200px]">
+            <SearchIcon className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name, source, or content..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
+            />
+          </div>
+          {/* Source file filter */}
+          {sourceFiles.length > 1 && (
+            <Select value={sourceFilter ?? "__all__"} onValueChange={(v) => setSourceFilter(v === "__all__" ? null : v)}>
+              <SelectTrigger className="h-9 w-auto min-w-[160px] bg-secondary border-0 text-xs font-mono">
+                <SelectValue placeholder="All sources" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All sources</SelectItem>
+                {sourceFiles.map((src) => (
+                  <SelectItem key={src} value={src} className="text-xs font-mono">{src}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {/* Length category filter */}
+          {lengthCategories.length > 1 && (
+            <Select value={lengthFilter ?? "__all__"} onValueChange={(v) => setLengthFilter(v === "__all__" ? null : v)}>
+              <SelectTrigger className="h-9 w-auto min-w-[120px] bg-secondary border-0 text-xs font-mono">
+                <SelectValue placeholder="All lengths" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All lengths</SelectItem>
+                {lengthCategories.map((len) => (
+                  <SelectItem key={len} value={len} className="text-xs font-mono">{len}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {prompts.map((prompt) => (
+        {filtered.map((prompt) => (
           <button
             key={prompt.id}
             onClick={() => setSelected(prompt)}
-            className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/20 transition-all"
+            className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/20 transition-all flex flex-col"
           >
             <div className="absolute top-0 left-0 right-0 h-px bg-purple-400 opacity-40" />
             <div className="flex items-start gap-3">
@@ -634,25 +736,38 @@ export function PromptsScreen() {
                 <h3 className="text-sm font-mono font-medium text-foreground">{prompt.name}</h3>
                 <span className="text-[10px] font-mono text-muted-foreground mt-0.5 block">{prompt.source}</span>
               </div>
+              <CopyButton text={prompt.content || prompt.preview} className="opacity-0 group-hover:opacity-100 shrink-0" />
             </div>
             <p className="text-xs text-muted-foreground mt-3 leading-relaxed line-clamp-2">{prompt.preview}</p>
-            <div className="flex gap-1.5 mt-3 flex-wrap">
-              {prompt.usedBy.map((u) => (
-                <span
-                  key={u}
-                  className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-mono text-[hsl(var(--primary))]"
-                >
-                  {u}
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center gap-3 mt-3 pt-2.5 border-t border-border/50">
+            {prompt.usedBy.length > 0 && (
+              <div className="flex gap-1.5 mt-3 flex-wrap">
+                {prompt.usedBy.map((u) => (
+                  <span
+                    key={u}
+                    className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-mono text-[hsl(var(--primary))]"
+                  >
+                    {u}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-3 mt-auto pt-3 border-t border-border/50">
               <span className="text-[10px] text-muted-foreground">{prompt.length}</span>
-              <span className="text-[10px] text-muted-foreground">{prompt.usedBy.length} actions</span>
+              {prompt.usedBy.length > 0 && (
+                <span className="text-[10px] text-muted-foreground">{prompt.usedBy.length} action{prompt.usedBy.length !== 1 ? "s" : ""}</span>
+              )}
             </div>
           </button>
         ))}
       </div>
+
+      {filtered.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <SearchIcon className="h-8 w-8 text-muted-foreground/20 mb-3" />
+          <p className="text-sm">No prompts match the current filters</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Try adjusting your search or filters</p>
+        </div>
+      )}
     </div>
   )
 }
