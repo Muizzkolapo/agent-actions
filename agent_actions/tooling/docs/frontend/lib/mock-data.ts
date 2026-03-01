@@ -78,13 +78,15 @@ export interface Run {
   wf: string
   status: RunStatus
   started: string
+  ended?: string
   duration: number
   total: number
   success: number
   failed: number
+  skipped: number
   tokens: number
   error?: string | null
-  actions: Record<string, { status: string; dur: number; type: string; model?: string; impl?: string }>
+  actions: Record<string, { status: string; dur: number; type: string; model?: string; vendor?: string; impl?: string; started?: string; ended?: string }>
 }
 
 export interface Schema {

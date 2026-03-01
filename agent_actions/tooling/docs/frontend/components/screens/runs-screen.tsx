@@ -2,12 +2,49 @@
 
 import React from "react"
 import { useState } from "react"
-import { Search, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, Clock, Pause } from "lucide-react"
+import { Search, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Loader2, Pause } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useCatalogData } from "@/lib/catalog-context"
 import type { Run, RunStatus } from "@/lib/mock-data"
+
+/* --- Formatting helpers --- */
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds < 0) return "0s"
+  const s = Math.round(seconds)
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`
+}
+
+function formatTimestamp(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`
+}
+
+function formatTimestampShort(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return iso
+  const now = new Date()
+  const time = `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`
+  if (d.toDateString() === now.toDateString()) return time
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (d.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`
+  return `${MONTHS[d.getMonth()]} ${d.getDate()} ${time}`
+}
+
+// Keys match RunStatus exactly: "SUCCESS" | "FAILED" | "PAUSED" (uppercase) + "running" (lowercase).
+const statusColorVar: Record<string, string> = {
+  SUCCESS: "--success",
+  FAILED: "--destructive",
+  running: "--primary",
+  PAUSED: "--warning",
+}
 
 export function RunsScreen() {
   const { runs } = useCatalogData()
@@ -74,8 +111,9 @@ export function RunsScreen() {
 
       {/* Runs list */}
       <div className="rounded-xl border border-border bg-card overflow-hidden divide-y divide-border">
-        <div className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-2.5 bg-secondary/30">
+        <div className="grid grid-cols-[auto_auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-2.5 bg-secondary/30">
           <span className="w-8 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Status</span>
+          <span className="w-14" />
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Run</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Workflow</span>
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold w-32">Progress</span>
@@ -83,46 +121,72 @@ export function RunsScreen() {
           <span className="w-4" />
         </div>
 
-        {filtered.map((run) => (
+        {filtered.map((run) => {
+          const actionCount = Object.keys(run.actions).length
+          return (
           <button
             key={run.id}
-            className="grid grid-cols-[auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
+            className="grid grid-cols-[auto_auto_1fr_1fr_auto_auto_auto] items-center gap-4 px-5 py-3 w-full text-left hover:bg-accent/30 transition-colors"
             onClick={() => setSelected(run)}
           >
             <RunStatusIcon status={run.status} />
+            <span className="text-[10px] font-medium w-14" style={{ color: `hsl(var(${statusColorVar[run.status] || "--muted-foreground"}))` }}>
+              {run.status.toLowerCase()}
+            </span>
             <div className="min-w-0">
               <span className="text-xs font-mono text-[hsl(var(--primary))]">{run.id.replace("run_qanalabs_quiz_gen_", "quiz_gen#")}</span>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
-                  {run.started.split("T")[1]?.slice(0, 5)}
+                  {formatTimestampShort(run.started)}
                 </span>
-                {Object.keys(run.actions).length > 0 && (
-                  <span className="text-[10px] text-muted-foreground">{Object.keys(run.actions).length} tracked</span>
+                {actionCount > 0 && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {actionCount} action{actionCount !== 1 ? "s" : ""} tracked
+                  </span>
                 )}
               </div>
             </div>
             <span className="text-sm font-mono text-foreground truncate">{run.wf}</span>
             <div className="flex items-center gap-2 w-32">
-              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${run.total > 0 ? (run.success / run.total) * 100 : 0}%`,
-                    backgroundColor:
-                      run.status === "FAILED" ? "hsl(var(--destructive))"
-                      : run.status === "PAUSED" ? "hsl(var(--warning))"
-                      : "hsl(var(--success))",
-                  }}
-                />
+              <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden flex">
+                {run.success > 0 && (
+                  <div
+                    className="h-full transition-all duration-500"
+                    style={{
+                      width: `${run.total > 0 ? (run.success / run.total) * 100 : 0}%`,
+                      backgroundColor: "hsl(var(--success))",
+                    }}
+                  />
+                )}
+                {run.failed > 0 && (
+                  <div
+                    className="h-full transition-all duration-500"
+                    style={{
+                      width: `${run.total > 0 ? (run.failed / run.total) * 100 : 0}%`,
+                      backgroundColor: "hsl(var(--destructive))",
+                    }}
+                  />
+                )}
+                {run.skipped > 0 && (
+                  <div
+                    className="h-full transition-all duration-500"
+                    style={{
+                      width: `${run.total > 0 ? (run.skipped / run.total) * 100 : 0}%`,
+                      backgroundColor: "hsl(var(--muted-foreground))",
+                      opacity: 0.35,
+                    }}
+                  />
+                )}
               </div>
               <span className="text-[10px] font-mono text-muted-foreground tabular-nums whitespace-nowrap">
-                {run.success}/{run.total}
+                {run.success + run.failed + run.skipped}/{run.total}
               </span>
             </div>
-            <span className="text-xs font-mono text-muted-foreground tabular-nums w-20 text-right">{run.duration}s</span>
+            <span className="text-xs font-mono text-muted-foreground tabular-nums w-20 text-right">{formatDuration(run.duration)}</span>
             <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/40" />
           </button>
-        ))}
+          )
+        })}
 
         {filtered.length === 0 && (
           <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
@@ -153,7 +217,9 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
             <RunStatusBadge status={run.status} />
           </div>
           <p className="text-sm text-muted-foreground mt-1">
-            {run.wf} &middot; {run.duration}s &middot; {run.success}/{run.total} actions
+            {run.wf} &middot; {formatDuration(run.duration)} &middot; {run.success}/{run.total} actions
+            {run.failed > 0 && <> &middot; <span className="text-[hsl(var(--destructive))]">{run.failed} failed</span></>}
+            {run.skipped > 0 && <> &middot; {run.skipped} skipped</>}
           </p>
         </div>
       </div>
@@ -161,18 +227,17 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
       {/* Run info */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <InfoCard label="Workflow" value={run.wf} />
-        <InfoCard label="Started" value={run.started} />
-        <InfoCard label="Duration" value={`${run.duration}s`} />
-        <InfoCard label="Tokens" value={String(run.tokens)} />
+        <InfoCard label="Started" value={formatTimestamp(run.started)} />
+        {run.ended && <InfoCard label="Ended" value={formatTimestamp(run.ended)} />}
+        <InfoCard label="Duration" value={formatDuration(run.duration)} />
+        <InfoCard label="Tokens" value={run.tokens.toLocaleString()} />
+        <InfoCard label="Succeeded" value={`${run.success} / ${run.total}`} />
+        {run.failed > 0 && <InfoCard label="Failed" value={String(run.failed)} />}
+        {run.skipped > 0 && <InfoCard label="Skipped" value={String(run.skipped)} />}
       </div>
 
       {/* Error */}
-      {run.error && (
-        <div className="rounded-xl border border-[hsl(var(--destructive))]/20 bg-[hsl(var(--destructive))]/5 p-4">
-          <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--destructive))] font-semibold block mb-1">Error</span>
-          <p className="text-xs font-mono text-[hsl(var(--destructive))] leading-relaxed">{run.error}</p>
-        </div>
-      )}
+      {run.error && <ErrorBlock error={run.error} />}
 
       {/* Action execution timeline */}
       {actionEntries.length > 0 && (
@@ -238,14 +303,22 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
                       </Badge>
                     </div>
                     <div className="flex items-center gap-3">
+                      {a.vendor && (
+                        <span className="text-[10px] font-mono text-muted-foreground/60">{a.vendor}</span>
+                      )}
                       {a.model && (
                         <span className="text-[10px] font-mono text-purple-400">{a.model}</span>
                       )}
                       {a.impl && (
                         <span className="text-[10px] font-mono text-emerald-400">{a.impl}()</span>
                       )}
+                      {a.started && (
+                        <span className="text-[10px] font-mono text-muted-foreground/50 tabular-nums">
+                          {a.started.split("T")[1]?.slice(0, 8)}
+                        </span>
+                      )}
                       <span className="text-xs font-mono text-muted-foreground tabular-nums">
-                        {a.dur > 0 ? `${a.dur}s` : "\u2014"}
+                        {a.dur > 0 ? formatDuration(a.dur) : "\u2014"}
                       </span>
                     </div>
                   </div>
@@ -272,18 +345,55 @@ function RunDetail({ run, onBack }: { run: Run; onBack: () => void }) {
         </div>
         <div className="p-5">
           <pre className="text-xs font-mono text-foreground/80 leading-relaxed">
-{`{
-  "run_id": "${run.id}",
-  "workflow": "${run.wf}",
-  "status": "${run.status}",
-  "actions_completed": ${run.success},
-  "actions_total": ${run.total},
-  "duration": "${run.duration}s",
-  "tokens": ${run.tokens}
-}`}
+{JSON.stringify({
+  run_id: run.id,
+  workflow: run.wf,
+  status: run.status,
+  started: run.started,
+  ...(run.ended ? { ended: run.ended } : {}),
+  duration: formatDuration(run.duration),
+  actions_succeeded: run.success,
+  actions_failed: run.failed,
+  actions_skipped: run.skipped,
+  actions_total: run.total,
+  tokens: run.tokens,
+}, null, 2)}
           </pre>
         </div>
       </div>
+    </div>
+  )
+}
+
+/* --- Error display --- */
+
+function ErrorBlock({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const lines = error.trimEnd().split("\n")
+  // Heuristic: last non-empty line is typically the root cause in Python tracebacks.
+  // For other error formats this still gives a reasonable one-liner.
+  const summary = lines.filter((l) => l.trim()).pop() || error.slice(0, 200)
+  const hasTraceback = lines.length > 1
+
+  return (
+    <div className="rounded-xl border border-[hsl(var(--destructive))]/20 bg-[hsl(var(--destructive))]/5 p-4">
+      <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--destructive))] font-semibold block mb-2">Error</span>
+      <p className="text-xs font-mono text-[hsl(var(--destructive))] font-medium leading-relaxed">{summary}</p>
+      {hasTraceback && (
+        <>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-[10px] text-[hsl(var(--destructive))]/60 hover:text-[hsl(var(--destructive))] mt-2 transition-colors"
+          >
+            {expanded ? "Hide traceback" : "Show full traceback"}
+          </button>
+          {expanded && (
+            <pre className="text-[10px] font-mono text-[hsl(var(--destructive))]/70 leading-relaxed mt-2 max-h-64 overflow-y-auto overflow-x-auto whitespace-pre-wrap border-t border-[hsl(var(--destructive))]/10 pt-2">
+              {error}
+            </pre>
+          )}
+        </>
+      )}
     </div>
   )
 }

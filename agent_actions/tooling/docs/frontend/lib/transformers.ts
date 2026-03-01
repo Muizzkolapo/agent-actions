@@ -163,7 +163,10 @@ export function transformRuns(runs: RawRunsJson): Run[] {
         dur: a.duration_seconds ?? 0,
         type: a.type,
         model: a.model,
+        vendor: a.vendor,
         impl: a.impl,
+        started: a.started_at,
+        ended: a.ended_at ?? undefined,
       }
     }
 
@@ -172,10 +175,12 @@ export function transformRuns(runs: RawRunsJson): Run[] {
       wf: exec.workflow_id || exec.workflow_name,
       status: normalizeRunStatus(exec.status),
       started: exec.started_at,
+      ended: exec.ended_at ?? undefined,
       duration: exec.duration_seconds,
       total: exec.total_actions,
       success: exec.successful_actions,
       failed: exec.failed_actions,
+      skipped: exec.skipped_actions ?? 0,
       tokens: exec.total_tokens,
       error: exec.error_message ?? undefined,
       actions,
