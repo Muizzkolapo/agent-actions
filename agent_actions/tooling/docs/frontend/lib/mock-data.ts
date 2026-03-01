@@ -61,7 +61,9 @@ export interface Action {
   intent: string
   guard: { condition: string; on_false: string } | null
   prompt: string | null
+  promptName: string | null
   impl?: string
+  toolFunction?: { signature: string; docstring: string; file: string; sourceCode?: string }
   metrics: ActionMetrics
   // Lineage fields
   inputs: string[]

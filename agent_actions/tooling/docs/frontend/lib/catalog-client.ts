@@ -110,6 +110,7 @@ export interface RawToolFunction {
   signature: string
   line_start?: number
   line_end?: number
+  docstring?: string
   is_udf: boolean
   found?: boolean
   source_code?: string

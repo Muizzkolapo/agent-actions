@@ -283,6 +283,115 @@ export function ActionsScreen() {
   )
 }
 
+/* --- Source code block (expandable) --- */
+
+function SourceBlock({ fn, name }: { fn: NonNullable<Action["toolFunction"]>; name: string }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Implementation
+        </span>
+        <span className="text-[10px] font-mono text-muted-foreground/60">{fn.file}</span>
+      </div>
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/50 border-b border-border/50">
+          <span className="text-xs font-mono text-[hsl(var(--success))]">{fn.signature || `${name}()`}</span>
+        </div>
+        {fn.docstring && (
+          <div className="px-3 py-1.5 border-b border-border/30 text-xs text-muted-foreground italic">
+            {fn.docstring}
+          </div>
+        )}
+        {fn.sourceCode && expanded && (
+          <div className="px-3 py-2 font-mono text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-96 overflow-auto">
+            {fn.sourceCode}
+          </div>
+        )}
+        {fn.sourceCode && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
+            className="w-full text-center py-1.5 text-[10px] text-[hsl(var(--primary))] hover:bg-secondary/80 border-t border-border/50 transition-colors"
+          >
+            {expanded ? "Hide source" : "Show source code"}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* --- Prompt block (expandable) --- */
+
+function PromptBlock({ content, name }: { content: string; name: string | null }) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = content.length > 300
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Prompt
+        </span>
+        {name && (
+          <span className="text-[10px] font-mono text-[hsl(var(--primary))]">{name}</span>
+        )}
+      </div>
+      <div className="rounded-lg bg-secondary/50 border border-border/50 overflow-hidden">
+        <div
+          className={`px-3 py-2 font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap ${
+            !expanded && isLong ? "max-h-32 overflow-hidden" : ""
+          }`}
+        >
+          {content}
+        </div>
+        {isLong && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            aria-expanded={expanded}
+            className="w-full text-center py-1.5 text-[10px] text-[hsl(var(--primary))] hover:bg-secondary/80 border-t border-border/50 transition-colors"
+          >
+            {expanded ? "Collapse" : `Show full prompt (${content.length.toLocaleString()} chars)`}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* --- Helpers --- */
+
+function formatFieldType(t: unknown): string {
+  if (typeof t === "string") return t
+  if (Array.isArray(t)) return `array[${t.length}]`
+  if (t && typeof t === "object") {
+    const obj = t as Record<string, unknown>
+    if ("type" in obj && typeof obj.type === "string") return obj.type
+    const keys = Object.keys(obj)
+    return keys.length <= 3 ? `{${keys.join(", ")}}` : `{${keys.slice(0, 2).join(", ")}, +${keys.length - 2}}`
+  }
+  return String(t ?? "\u2014")
+}
+
+function fieldTypeColor(t: unknown): string {
+  const s = typeof t === "string" ? t.toLowerCase() : ""
+  if (s === "string") return "bg-sky-500/10 text-sky-400"
+  if (s === "number" || s === "integer" || s === "float") return "bg-amber-500/10 text-amber-300"
+  if (s === "boolean" || s === "bool") return "bg-rose-500/10 text-rose-300"
+  if (s === "array" || Array.isArray(t)) return "bg-blue-500/10 text-blue-300"
+  if (s === "object" || s === "dict" || (t && typeof t === "object")) return "bg-purple-500/10 text-purple-300"
+  return "bg-secondary text-muted-foreground"
+}
+
+function formatExecTime(seconds: number | null | undefined): string {
+  if (seconds == null || seconds <= 0) return "\u2014"
+  if (seconds < 0.1) return `${Math.round(seconds * 1000)}ms`
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const rounded = Math.round(seconds)
+  return `${Math.floor(rounded / 60)}m ${rounded % 60}s`
+}
+
 /* --- Full-page Action Detail --- */
 
 function ActionDetail({
@@ -296,6 +405,15 @@ function ActionDetail({
   onBack: () => void
   onSelectAction: (name: string) => void
 }) {
+  const m = action.metrics
+  const hasMetrics = m.execution_time != null || m.success_count > 0 || m.failed_count > 0
+    || m.tokens?.prompt_tokens != null || m.tokens?.completion_tokens != null
+
+  // Skip output badges when outputFields covers the same names (table is more informative)
+  const outputFieldNames = new Set(action.outputFields.map((f) => f.name))
+  const outputBadgesRedundant = action.outputs.length > 0 && action.outputFields.length > 0
+    && action.outputs.every((o) => outputFieldNames.has(o))
+
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
@@ -321,12 +439,12 @@ function ActionDetail({
                 guarded
               </Badge>
             )}
-            {action.model && (
+            {action.model && action.model !== "unknown" && (
               <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
                 {action.model}
               </Badge>
             )}
-            {action.provider && (
+            {action.provider && action.provider !== action.type && action.provider !== "unknown" && (
               <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
                 {action.provider}
               </Badge>
@@ -352,121 +470,140 @@ function ActionDetail({
 
         {/* Tab: Overview */}
         <TabsContent value="overview" className="mt-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Left column */}
-            <div className="flex flex-col gap-4">
-              {/* Intent */}
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                  Intent
-                </span>
-                <p className="text-xs text-foreground leading-relaxed">{action.intent}</p>
-              </div>
-
-              {/* Dependencies */}
-              <div>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                  Dependencies
-                </span>
-                <div className="flex gap-1.5 flex-wrap">
-                  {action.deps.length === 0 ? (
-                    <span className="text-xs text-muted-foreground italic">root action</span>
-                  ) : (
-                    action.deps.map((d) => (
-                      <button
-                        key={d}
-                        onClick={() => onSelectAction(d)}
-                        className="rounded-md bg-secondary px-2 py-0.5 text-xs font-mono text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
-                      >
-                        {d}
-                      </button>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Inputs */}
-              {action.inputs.length > 0 && (
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                    Inputs
-                  </span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {action.inputs.map((f) => (
-                      <span key={f} className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-mono text-blue-400">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Outputs */}
-              {action.outputs.length > 0 && (
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                    Outputs
-                  </span>
-                  <div className="flex gap-1.5 flex-wrap">
-                    {action.outputs.map((f) => (
-                      <span key={f} className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-mono text-emerald-400">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                  {action.outputFields.length > 0 && (
-                    <div className="mt-2 rounded-lg border border-border divide-y divide-border text-xs font-mono">
-                      {action.outputFields.map((field) => (
-                        <div key={field.name} className="flex items-center justify-between px-2.5 py-1.5">
-                          <span className="text-foreground">{field.name}</span>
-                          <span className="text-muted-foreground">{String(field.type)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+          <div className="flex flex-col gap-4">
+            {/* Intent */}
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                Intent
+              </span>
+              <p className="text-xs text-foreground leading-relaxed">{action.intent}</p>
             </div>
 
-            {/* Right column */}
-            <div className="flex flex-col gap-4">
-              {/* Implementation */}
-              {action.type === "tool" && action.impl && (
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                    Implementation
-                  </span>
+            {/* Implementation */}
+            {action.type === "tool" && action.impl && (
+              action.toolFunction
+                ? <SourceBlock fn={action.toolFunction} name={action.impl} />
+                : (
                   <div className="rounded-lg border border-border bg-secondary/50 px-3 py-2">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                      Implementation
+                    </span>
                     <span className="text-xs font-mono text-[hsl(var(--success))]">{action.impl}()</span>
                   </div>
-                </div>
-              )}
+                )
+            )}
 
-              {/* Guard */}
-              {action.guard && (
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                    Guard
-                  </span>
-                  <div className="rounded-lg bg-[hsl(var(--warning))]/5 border border-[hsl(var(--warning))]/15 px-3 py-2 font-mono text-xs text-[hsl(var(--warning))] leading-relaxed">
-                    <div>condition: {action.guard.condition}</div>
-                    <div className="mt-0.5">on_false: {action.guard.on_false}</div>
-                  </div>
+            {/* Guard */}
+            {action.guard && (
+              <div className="rounded-lg bg-[hsl(var(--warning))]/5 border border-[hsl(var(--warning))]/15 px-3 py-2">
+                <span className="text-[10px] uppercase tracking-wider text-[hsl(var(--warning))]/70 font-semibold block mb-1">
+                  Guard
+                </span>
+                <div className="font-mono text-xs text-[hsl(var(--warning))] leading-relaxed">
+                  <div>condition: {action.guard.condition}</div>
+                  <div className="mt-0.5">on_false: {action.guard.on_false}</div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Prompt preview */}
-              {action.prompt && (
-                <div>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
-                    Prompt Preview
-                  </span>
-                  <div className="rounded-lg bg-secondary/50 border border-border/50 px-3 py-2 font-mono text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-48 overflow-auto">
-                    {action.prompt}
+            {action.prompt && <PromptBlock content={action.prompt} name={action.promptName} />}
+
+            {/* Dependencies / Inputs / Outputs / Drops / Observe */}
+            <div className="flex flex-col gap-4">
+                  {/* Dependencies (always shown — root actions get a "none" label) */}
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
+                      Dependencies
+                    </span>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {action.deps.length === 0 ? (
+                        <span className="text-xs text-muted-foreground italic">none (root action)</span>
+                      ) : (
+                        action.deps.map((d) => (
+                          <button
+                            key={d}
+                            onClick={() => onSelectAction(d)}
+                            className="rounded-md bg-secondary px-2 py-0.5 text-xs font-mono text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
+                          >
+                            {d}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+
+                  {/* Inputs */}
+                  {action.inputs.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
+                        Inputs
+                      </span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {action.inputs.map((f) => (
+                          <span key={f} className="rounded-md bg-blue-500/10 px-2 py-0.5 text-xs font-mono text-blue-400">
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Outputs */}
+                  {action.outputs.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
+                        Outputs
+                      </span>
+                      {!outputBadgesRedundant && (
+                        <div className="flex gap-1.5 flex-wrap mb-2">
+                          {action.outputs.map((f) => (
+                            <span key={f} className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-xs font-mono text-emerald-400">
+                              {f}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {action.outputFields.length > 0 && (
+                        <div className="rounded-lg border border-border divide-y divide-border text-xs font-mono">
+                          {action.outputFields.map((field) => (
+                            <div key={field.name} className="flex items-center justify-between px-2.5 py-1.5">
+                              <span className="text-foreground">{field.name}</span>
+                              <span className={`rounded px-1.5 py-0.5 text-[10px] ${fieldTypeColor(field.type)}`}>
+                                {formatFieldType(field.type)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Drops / Observe */}
+                  {action.drops.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
+                        Drops
+                      </span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {action.drops.map((d) => (
+                          <span key={d} className="rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-mono text-rose-400">{d}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {action.observe.length > 0 && (
+                    <div>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1.5">
+                        Observe
+                      </span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {action.observe.map((o) => (
+                          <span key={o} className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-mono text-amber-400">{o}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+              </div>
           </div>
         </TabsContent>
 
@@ -479,9 +616,9 @@ function ActionDetail({
               ["Schema", action.schema],
               ["Model", action.model],
               ["Provider", action.provider],
+              ["Implementation", action.impl],
               ["Guard condition", action.guard?.condition],
               ["Guard on_false", action.guard?.on_false],
-              ["Implementation", action.impl],
             ] as [string, string | null | undefined][])
               .filter(([, v]) => v != null && v !== "")
               .map(([label, value]) => (
@@ -491,52 +628,74 @@ function ActionDetail({
                 </div>
               ))}
           </div>
+          {/* List-type config fields */}
+          {(action.inputs.length > 0 || action.outputs.length > 0 || action.drops.length > 0 || action.observe.length > 0) && (
+            <div className="rounded-lg border border-border divide-y divide-border text-xs font-mono mt-3">
+              {([
+                ["Inputs", action.inputs],
+                ["Outputs", action.outputs],
+                ["Drops", action.drops],
+                ["Observe", action.observe],
+              ] as [string, string[]][])
+                .filter(([, arr]) => arr.length > 0)
+                .map(([label, arr]) => (
+                  <div key={label} className="flex items-start gap-3 px-3 py-2">
+                    <span className="text-muted-foreground font-sans shrink-0 pt-0.5">{label}</span>
+                    <div className="flex gap-1.5 flex-wrap justify-end flex-1">
+                      {arr.map((v) => (
+                        <span key={v} className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] text-foreground">{v}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* Tab: Metrics */}
         <TabsContent value="metrics" className="mt-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Execution Time
-              </span>
-              <span className="text-sm font-mono text-foreground">
-                {action.metrics.execution_time != null ? `${action.metrics.execution_time}s` : "\u2014"}
-              </span>
+          {hasMetrics ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                  Execution Time
+                </span>
+                <span className="text-sm font-mono text-foreground">
+                  {formatExecTime(m.execution_time)}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                  Successes
+                </span>
+                <span className={`text-sm font-mono ${m.success_count > 0 ? "text-[hsl(var(--success))]" : "text-foreground"}`}>
+                  {m.success_count}
+                </span>
+              </div>
+              <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                  Failures
+                </span>
+                <span className={`text-sm font-mono ${m.failed_count > 0 ? "text-[hsl(var(--destructive))]" : "text-foreground"}`}>
+                  {m.failed_count}
+                </span>
+              </div>
+              {(m.tokens?.prompt_tokens != null || m.tokens?.completion_tokens != null) && (
+                <div className="rounded-lg border border-border bg-card px-3 py-2.5">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
+                    Tokens
+                  </span>
+                  <span className="text-sm font-mono text-foreground">
+                    {m.tokens?.prompt_tokens != null ? m.tokens.prompt_tokens.toLocaleString() : "\u2014"} prompt / {m.tokens?.completion_tokens != null ? m.tokens.completion_tokens.toLocaleString() : "\u2014"} completion
+                  </span>
+                </div>
+              )}
             </div>
-            <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Successes
-              </span>
-              <span className={`text-sm font-mono ${action.metrics.success_count > 0 ? "text-[hsl(var(--success))]" : "text-foreground"}`}>
-                {action.metrics.success_count}
-              </span>
+          ) : (
+            <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+              No metrics recorded for this action
             </div>
-            <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Failures
-              </span>
-              <span className={`text-sm font-mono ${action.metrics.failed_count > 0 ? "text-[hsl(var(--destructive))]" : "text-foreground"}`}>
-                {action.metrics.failed_count}
-              </span>
-            </div>
-            <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Prompt Tokens
-              </span>
-              <span className="text-sm font-mono text-foreground">
-                {action.metrics.tokens?.prompt_tokens != null ? action.metrics.tokens.prompt_tokens.toLocaleString() : "\u2014"}
-              </span>
-            </div>
-            <div className="rounded-lg border border-border bg-card px-3 py-2.5 col-span-2 sm:col-span-1">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold block mb-1">
-                Completion Tokens
-              </span>
-              <span className="text-sm font-mono text-foreground">
-                {action.metrics.tokens?.completion_tokens != null ? action.metrics.tokens.completion_tokens.toLocaleString() : "\u2014"}
-              </span>
-            </div>
-          </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -561,11 +720,3 @@ function TypeBadge({ type }: { type: string }) {
   )
 }
 
-function KV({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
-  return (
-    <div className="flex items-center justify-between px-3 py-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={valueColor || "text-foreground"}>{value}</span>
-    </div>
-  )
-}

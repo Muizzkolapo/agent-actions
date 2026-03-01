@@ -97,14 +97,18 @@ export function transformActions(catalog: RawCatalogJson): Record<string, Action
 
   for (const [wfId, wf] of Object.entries(catalog.workflows)) {
     for (const [actionName, rawAction] of Object.entries(wf.actions)) {
-      // Look up prompt preview from catalog prompts
-      let promptPreview: string | null = null
-      if (rawAction.prompt && catalog.prompts[rawAction.prompt]) {
-        const content = catalog.prompts[rawAction.prompt].content
-        promptPreview = content ? content.slice(0, 200) : null
-      }
-      if (!promptPreview && rawAction.type === "llm" && rawAction.intent) {
-        promptPreview = rawAction.intent
+      // Resolve prompt: named reference → catalog lookup, otherwise inline content.
+      // Intentionally no intent fallback — intent is shown separately in the Overview.
+      let promptContent: string | null = null
+      let promptName: string | null = null
+      if (rawAction.prompt) {
+        if (catalog.prompts[rawAction.prompt]) {
+          promptName = rawAction.prompt
+          promptContent = catalog.prompts[rawAction.prompt].content ?? null
+        } else {
+          // Inline prompt text (not a catalog key)
+          promptContent = rawAction.prompt
+        }
       }
 
       const action: Action = {
@@ -114,8 +118,15 @@ export function transformActions(catalog: RawCatalogJson): Record<string, Action
         schema: typeof rawAction.schema === "string" ? rawAction.schema : null,
         intent: rawAction.intent ?? "",
         guard: rawAction.guard ?? null,
-        prompt: promptPreview,
+        prompt: promptContent,
+        promptName,
         impl: rawAction.implementation,
+        toolFunction: rawAction.tool_function && rawAction.tool_function.found !== false ? {
+          signature: rawAction.tool_function.signature || "",
+          docstring: rawAction.tool_function.docstring || "",
+          file: rawAction.tool_function.file_path || "",
+          sourceCode: rawAction.tool_function.source_code,
+        } : undefined,
         metrics: buildActionMetrics(rawAction.metrics),
         // Lineage fields
         inputs: rawAction.inputs ?? [],
