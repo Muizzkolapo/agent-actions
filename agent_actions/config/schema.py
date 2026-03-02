@@ -225,6 +225,12 @@ class DefaultsConfig(BaseModel):
         default=None,
         description="Default data source for start-node input",
     )
+    hitl_timeout: Optional[int] = Field(
+        default=None,
+        ge=5,
+        le=3600,
+        description="Default HITL timeout in seconds for all hitl actions",
+    )
 
 
 class WorkflowConfigV2(BaseModel):

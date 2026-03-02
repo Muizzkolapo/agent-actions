@@ -98,6 +98,36 @@ hitl:
 | `timeout` | int | 300 | Seconds before timeout. Server shuts down and workflow continues with `hitl_status: timeout`. |
 | `require_comment_on_reject` | bool | true | If true, rejecting a record requires a comment explaining why. |
 
+### Workflow-Level Default Timeout
+
+Set a default HITL timeout for all HITL actions in the workflow using `defaults.hitl_timeout`. Individual actions can still override this value.
+
+```yaml
+defaults:
+  hitl_timeout: 600  # 10 minutes for all HITL actions
+
+actions:
+  - name: review_data
+    kind: hitl
+    dependencies: [extract_data]
+    hitl:
+      instructions: "Review extracted data"
+      # Uses workflow default: 600s
+
+  - name: review_summary
+    kind: hitl
+    dependencies: [generate_summary]
+    hitl:
+      instructions: "Review generated summary"
+      timeout: 120  # Overrides workflow default
+```
+
+**Resolution order:** action `hitl.timeout` > `defaults.hitl_timeout` > 300s hardcoded default.
+
+:::note Minimum timeout
+The minimum allowed value is 5 seconds (useful for testing). For real reviews, use at least 60 seconds — reviewers need time to read instructions and inspect records.
+:::
+
 ### Granularity Modes
 
 HITL actions support two granularity modes:
