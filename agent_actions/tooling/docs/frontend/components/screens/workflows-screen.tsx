@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Search, ArrowLeft, ArrowRight, Circle } from "lucide-react"
+import { Search, ArrowLeft, ArrowRight, Circle, Filter, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
@@ -12,16 +12,52 @@ import { useCatalogData } from "@/lib/catalog-context"
 import { WorkflowDAGView } from "@/components/workflow-dag"
 import type { Workflow, WorkflowStatus, Action } from "@/lib/mock-data"
 
+type WfSortKey = "name" | "actions" | "stages"
+type SortDir = "asc" | "desc"
+
 export function WorkflowsScreen() {
   const { workflows, actions } = useCatalogData()
   const [search, setSearch] = useState("")
   const [selected, setSelected] = useState<Workflow | null>(null)
+  const [statusFilter, setStatusFilter] = useState<WorkflowStatus[]>([])
+  const [sortKey, setSortKey] = useState<WfSortKey>("name")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [showFilters, setShowFilters] = useState(false)
 
-  const filtered = workflows.filter(
-    (w) =>
-      w.name.toLowerCase().includes(search.toLowerCase()) ||
-      w.description.toLowerCase().includes(search.toLowerCase()),
-  )
+  const statuses = useMemo(() => {
+    const s = new Set<WorkflowStatus>()
+    workflows.forEach((w) => s.add(w.manifestStatus))
+    return Array.from(s).sort()
+  }, [workflows])
+
+  const filtered = useMemo(() => {
+    let list = workflows.filter((w) => {
+      if (search) {
+        const q = search.toLowerCase()
+        if (!w.name.toLowerCase().includes(q) && !w.description.toLowerCase().includes(q)) return false
+      }
+      if (statusFilter.length > 0 && !statusFilter.includes(w.manifestStatus)) return false
+      return true
+    })
+    list = [...list].sort((a, b) => {
+      let cmp = 0
+      if (sortKey === "name") cmp = a.name.localeCompare(b.name)
+      else if (sortKey === "actions") cmp = a.actionCount - b.actionCount
+      else if (sortKey === "stages") cmp = a.levels.length - b.levels.length
+      return sortDir === "desc" ? -cmp : cmp
+    })
+    return list
+  }, [workflows, search, statusFilter, sortKey, sortDir])
+
+  const activeFilterCount = statusFilter.length
+
+  const toggleStatus = (s: WorkflowStatus) =>
+    setStatusFilter((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]))
+
+  const toggleSort = (key: WfSortKey) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    else { setSortKey(key); setSortDir("asc") }
+  }
 
   if (selected) {
     return <WorkflowDetail workflow={selected} actions={actions} onBack={() => setSelected(null)} />
@@ -34,80 +70,127 @@ export function WorkflowsScreen() {
         <p className="text-sm text-muted-foreground mt-1">{workflows.length} registered workflows</p>
       </div>
 
+      {/* Toolbar */}
       <div className="flex items-center gap-3">
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Filter by name..."
+            placeholder="Search by name or description..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 h-9 bg-secondary border-0 text-sm placeholder:text-muted-foreground"
           />
         </div>
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          aria-expanded={showFilters}
+          className="flex items-center gap-2 h-9 px-3 rounded-md border border-border text-sm text-muted-foreground bg-transparent hover:bg-accent transition-colors"
+        >
+          <Filter className="h-3.5 w-3.5" />
+          Filters
+          {activeFilterCount > 0 && (
+            <Badge variant="secondary" className="ml-1 h-5 min-w-5 justify-center rounded-md text-[10px]">
+              {activeFilterCount}
+            </Badge>
+          )}
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3">
-        {filtered.map((wf) => (
-          <button
-            key={wf.id}
-            className="group relative overflow-hidden rounded-xl border border-border bg-card p-5 text-left hover:border-[hsl(var(--primary))]/25 transition-all"
-            onClick={() => setSelected(wf)}
-          >
-            <div
-              className="absolute top-0 left-0 right-0 h-px"
-              style={{
-                backgroundColor:
-                  wf.manifestStatus === "running" ? "hsl(var(--primary))"
-                  : wf.manifestStatus === "completed" ? "hsl(var(--success))"
-                  : wf.manifestStatus === "failed" ? "hsl(var(--destructive))"
-                  : "hsl(var(--border))",
-                opacity: 0.6,
-              }}
-            />
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <StatusIcon status={wf.manifestStatus} />
-                <h3 className="text-sm font-mono font-medium text-foreground">{wf.name}</h3>
-                <StatusBadge status={wf.manifestStatus} />
-                <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
-                  v{wf.version}
-                </Badge>
-              </div>
-              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-            </div>
-            <p className="text-xs text-muted-foreground mt-2.5 leading-relaxed">{wf.description}</p>
+      {/* Filter panel */}
+      {showFilters && (
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-6 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Status</span>
+            {statuses.map((s) => (
+              <button
+                key={s}
+                onClick={() => toggleStatus(s)}
+                aria-pressed={statusFilter.includes(s)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium capitalize transition-all ${
+                  statusFilter.includes(s)
+                    ? statusFilterStyle(s)
+                    : "text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <div className="h-6 w-px bg-border" />
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Sort</span>
+            {(["name", "actions", "stages"] as WfSortKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => toggleSort(key)}
+                aria-pressed={sortKey === key}
+                className={`rounded-lg px-2.5 py-1 text-xs font-medium capitalize transition-all ${
+                  sortKey === key
+                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
+                    : "text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {key}
+                {sortKey === key && (sortDir === "asc" ? " \u2191" : " \u2193")}
+              </button>
+            ))}
+          </div>
+          {activeFilterCount > 0 && (
+            <button
+              onClick={() => setStatusFilter([])}
+              className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3 w-3" />
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
-            {/* Stats row */}
-            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border/50">
-              <div className="flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-muted-foreground" />
-                <span className="text-xs text-muted-foreground tabular-nums">{wf.actionCount} actions</span>
+      <div className="grid grid-cols-1 gap-3">
+        {filtered.map((wf) => {
+          const isFailed = wf.manifestStatus === "failed"
+          return (
+            <button
+              key={wf.id}
+              className={`group relative overflow-hidden rounded-xl border border-border p-5 text-left hover:border-[hsl(var(--primary))]/25 transition-all ${
+                isFailed ? "bg-[hsl(var(--destructive))]/3" : "bg-card"
+              }`}
+              onClick={() => setSelected(wf)}
+            >
+              {/* Status conveyed by StatusBadge — no top stripe needed */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-sm font-mono font-medium text-foreground">{wf.name}</h3>
+                  <StatusBadge status={wf.manifestStatus} />
+                  <Badge variant="outline" className="text-[10px] font-normal rounded-md border-border text-muted-foreground">
+                    v{wf.version}
+                  </Badge>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-purple-400" />
-                <span className="text-xs text-muted-foreground tabular-nums">{wf.llmCount} llm</span>
+              <p className="text-xs text-muted-foreground mt-2.5 leading-relaxed">{wf.description}</p>
+
+              {/* Stats */}
+              <div className="flex items-center gap-4 mt-4 pt-3 border-t border-border/50 text-xs text-muted-foreground tabular-nums">
+                <span className="text-foreground font-medium">{wf.actionCount} actions</span>
+                {wf.llmCount > 0 && <span>{wf.llmCount} llm</span>}
+                {wf.toolCount > 0 && <span>{wf.toolCount} tool</span>}
+                <span>{wf.levels.length} stages</span>
+                {(wf.defaults.model_name || wf.defaults.run_mode) && (
+                  <div className="ml-auto flex items-center gap-2">
+                    {wf.defaults.model_name && (
+                      <span className="font-mono">{wf.defaults.model_name}</span>
+                    )}
+                    {wf.defaults.run_mode && (
+                      <span className="font-mono">{wf.defaults.run_mode}</span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-emerald-400" />
-                <span className="text-xs text-muted-foreground tabular-nums">{wf.toolCount} tool</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-muted-foreground" />
-                <span className="text-xs text-muted-foreground tabular-nums">{wf.levels.length} levels</span>
-              </div>
-              {wf.defaults.model_name && (
-                <span className="ml-auto text-xs font-mono text-[hsl(var(--primary))]">
-                  {wf.defaults.model_name}
-                </span>
-              )}
-              {wf.defaults.run_mode && (
-                <span className="text-xs font-mono text-muted-foreground">
-                  {wf.defaults.run_mode}
-                </span>
-              )}
-            </div>
-          </button>
-        ))}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -117,12 +200,12 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
   const [selectedAction, setSelectedAction] = useState<string | null>(null)
   const wfActions = useMemo(
     () => Object.entries(actions).filter(([_, a]) => a.wf === workflow.id),
-    [workflow.id],
+    [workflow.id, actions],
   )
   const actionDetail = selectedAction ? actions[selectedAction] : null
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-3">
       {/* Header */}
       <div className="flex items-center gap-4">
         <button
@@ -174,9 +257,6 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
           <TabsTrigger value="graph" className="text-xs data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md">
             Graph
           </TabsTrigger>
-          <TabsTrigger value="lineage" className="text-xs data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md">
-            Lineage
-          </TabsTrigger>
           <TabsTrigger value="actions" className="text-xs data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm rounded-md">
             Actions ({wfActions.length})
           </TabsTrigger>
@@ -187,46 +267,10 @@ function WorkflowDetail({ workflow, actions, onBack }: { workflow: Workflow; act
           )}
         </TabsList>
 
-        <TabsContent value="graph" className="mt-4">
-          <div className="flex items-center gap-4 mb-3">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Execution Graph</span>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-blue-400" />
-              <span className="text-[10px] text-muted-foreground">LLM</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-muted-foreground">Tool</span>
-            </div>
-          </div>
+        <TabsContent value="graph" className="mt-1">
           <WorkflowDAGView
             actions={actions}
             workflowId={workflow.id}
-            mode="dag"
-            onNodeClick={(n) => setSelectedAction(n === selectedAction ? null : n)}
-          />
-        </TabsContent>
-
-        <TabsContent value="lineage" className="mt-4">
-          <div className="flex items-center gap-4 mb-3">
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Field-Level Lineage</span>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-blue-400" />
-              <span className="text-[10px] text-muted-foreground">Input</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-amber-400" />
-              <span className="text-[10px] text-muted-foreground">Output</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-[10px] text-muted-foreground">Field Flow</span>
-            </div>
-          </div>
-          <WorkflowDAGView
-            actions={actions}
-            workflowId={workflow.id}
-            mode="lineage"
             onNodeClick={(n) => setSelectedAction(n === selectedAction ? null : n)}
           />
         </TabsContent>
@@ -416,6 +460,17 @@ function ActionInspector({
       </div>
     </div>
   )
+}
+
+/* --- Helper functions --- */
+
+function statusFilterStyle(status: WorkflowStatus): string {
+  switch (status) {
+    case "completed": return "bg-[hsl(var(--success))]/15 text-[hsl(var(--success))] ring-1 ring-[hsl(var(--success))]/20"
+    case "failed": return "bg-[hsl(var(--destructive))]/15 text-[hsl(var(--destructive))] ring-1 ring-[hsl(var(--destructive))]/20"
+    case "running": return "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20"
+    default: return "bg-secondary text-muted-foreground ring-1 ring-border"
+  }
 }
 
 /* --- Helper components --- */
