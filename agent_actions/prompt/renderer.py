@@ -315,7 +315,7 @@ class ConfigRenderingService:
         agent_name: str,
         config_path: Union[str, Path],
         template_dir: Union[str, Path],
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
     ) -> AgentConfigMap:
         """
         Render templates and load configuration data.
@@ -346,7 +346,7 @@ class ConfigRenderingService:
         )
         config_path_str = str(config_path)
         template_dir_str = str(template_dir)
-        output_dir_str = str(output_dir)
+        output_dir_str = str(output_dir) if output_dir is not None else None
         cfg_path = Path(config_path)
         if not cfg_path.exists():
             raise ConfigurationError(
@@ -389,7 +389,10 @@ class ConfigRenderer:
     @staticmethod
     @as_validation_error(ConfigValidationError)
     def render_and_load_config(
-        agent_name: str, config_path: Path, template_dir: Path, output_dir: Path
+        agent_name: str,
+        config_path: Path,
+        template_dir: Path,
+        output_dir: Optional[Path] = None,
     ) -> AgentConfigMap:
         """
         Static method for backwards compatibility.
@@ -398,7 +401,7 @@ class ConfigRenderer:
             agent_name: Name of the agent.
             config_path: Path to the agent configuration file.
             template_dir: Path to the template directory.
-            output_dir: Path to the output directory.
+            output_dir: Path to the output directory. None to skip file write.
 
         Returns:
             Parsed configuration data as a dictionary.

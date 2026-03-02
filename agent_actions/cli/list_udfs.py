@@ -1,9 +1,4 @@
-"""
-list-udfs command for the Agent Actions CLI.
-
-This module provides the implementation of the 'list-udfs' command,
-which displays all discovered UDFs with their metadata.
-"""
+"""list-udfs command for the Agent Actions CLI."""
 
 import json as json_lib
 from pathlib import Path
@@ -19,24 +14,14 @@ from agent_actions.utils.udf_management.registry import list_udfs, clear_registr
 
 
 class ListUDFsCommand:
-    """Implementation of the list-udfs command."""
 
     def __init__(self, user_code: str, json_output: bool, verbose: bool):
-        """
-        Initialize the list-udfs command.
-
-        Args:
-            user_code: Path to user code directory containing UDFs
-            json_output: Whether to output as JSON
-            verbose: Whether to show full docstrings and signatures
-        """
         self.user_code = Path(user_code)
         self.json_output = json_output
         self.verbose = verbose
         self.console = Console()
 
     def execute(self) -> None:
-        """Execute the list-udfs command."""
         clear_registry()
         if not self.json_output:
             self.console.print("[cyan]🔍 Discovering Tools...[/cyan]")
@@ -56,12 +41,6 @@ class ListUDFsCommand:
             self._output_table(udfs)
 
     def _output_json(self, udfs: List[Dict[str, Any]]) -> None:
-        """
-        Output UDFs as JSON.
-
-        Args:
-            udfs: List of UDF metadata dictionaries
-        """
         output = []
         for udf in udfs:
             entry = {
@@ -76,12 +55,6 @@ class ListUDFsCommand:
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_table(self, udfs: List[Dict[str, Any]]) -> None:
-        """
-        Output UDFs as a formatted table.
-
-        Args:
-            udfs: List of UDF metadata dictionaries
-        """
         table = Table(title="Available User-Defined Functions")
         table.add_column("Function", style="cyan", no_wrap=True)
         table.add_column("Location", style="green")

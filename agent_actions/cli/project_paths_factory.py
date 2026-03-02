@@ -1,8 +1,4 @@
-"""
-Project paths factory service.
-
-This module provides services for creating and validating project directory paths.
-"""
+"""Project paths factory service."""
 
 import logging
 from dataclasses import dataclass
@@ -22,6 +18,70 @@ from agent_actions.validation.path_validator import PathValidator
 logger = logging.getLogger(__name__)
 
 
+def find_config_file(
+    agent_name: str,
+    config_dir: Path,
+    filename: str,
+    *,
+    check_alternatives: bool = False,
+) -> Path:
+    """Find a workflow configuration file.
+
+    Args:
+        agent_name: Name of the agent (for error context).
+        config_dir: Primary directory to search.
+        filename: Configuration filename (e.g., "my_agent.yml").
+        check_alternatives: If True, also check parent dir, cwd, and cwd/config.
+
+    Returns:
+        Resolved path to the configuration file.
+
+    Raises:
+        FileLoadError: If the file is not found.
+    """
+    full_path = config_dir / filename
+    if full_path.exists():
+        return full_path
+
+    if check_alternatives:
+        parent_dir = config_dir.parent
+        alternatives_checked = [
+            parent_dir / filename,
+            Path.cwd() / filename,
+            Path.cwd() / "config" / filename,
+        ]
+        existing_alternatives = [str(p) for p in alternatives_checked if p.exists()]
+        raise FileLoadError(
+            "Configuration file not found",
+            context={
+                "file_path": str(full_path),
+                "config_dir": str(config_dir),
+                "filename": filename,
+                "agent_name": agent_name,
+                "alternatives_checked": [str(p) for p in alternatives_checked],
+                "found_alternatives": existing_alternatives if existing_alternatives else None,
+                "suggestion": (
+                    f"File not found at {full_path}. "
+                    f"Check if the file exists or use an absolute path."
+                    + (
+                        f" Found similar file at: {existing_alternatives[0]}"
+                        if existing_alternatives
+                        else ""
+                    )
+                ),
+            },
+        )
+
+    raise FileLoadError(
+        "Configuration file not found",
+        context={
+            "file_path": str(full_path),
+            "agent_name": agent_name,
+            "suggestion": f"Check if '{filename}' exists in {config_dir}",
+        },
+    )
+
+
 @dataclass
 class ProjectPaths:
     """Container for project directory paths."""
@@ -36,12 +96,6 @@ class ProjectPaths:
     rendered_workflows_dir: Path
 
     def to_dict(self) -> Dict[str, str]:
-        """
-        Convert paths to a dictionary of strings.
-
-        Returns:
-            Dictionary of path names to string paths.
-        """
         return {
             "current_dir": str(self.current_dir),
             "prompt_dir": str(self.prompt_dir),
@@ -54,12 +108,6 @@ class ProjectPaths:
         }
 
     def __str__(self) -> str:
-        """
-        Convert to string representation.
-
-        Returns:
-            String representation of the paths.
-        """
         paths = self.to_dict()
         return "\n".join([f"{key}: {value}" for key, value in paths.items()])
 
@@ -71,27 +119,13 @@ class ProjectPathsFactory:
     AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
     def __init__(self, path_manager: PathManager = None):
-        """Initialize factory with optional PathManager."""
         self.path_manager = path_manager or PathManager()
 
     @staticmethod
     def get_agent_paths(agent_name: str) -> Tuple[Path, Path]:
-        """
-        Get the agent paths using the FileHandler.
-
-        Args:
-            agent_name: Name of the agent.
-
-        Returns:
-            Tuple of (agent_config_dir, io_dir).
-
-        Raises:
-            ValidationError: If getting agent paths fails.
-        """
         try:
             agent_config_dir_str, io_dir_str = FileHandler.get_agent_paths(agent_name)
 
-            # Check if required paths are None and provide helpful error message
             if agent_config_dir_str is None:
                 raise ValidationError(
                     f"Agent '{agent_name}' not found. "
@@ -121,7 +155,6 @@ class ProjectPathsFactory:
 
             return (Path(agent_config_dir_str), Path(io_dir_str))
         except ValidationError:
-            # Re-raise ValidationError with its original context
             raise
         except Exception as e:
             logger.error("Failed to get agent paths for %s: %s", agent_name, str(e))
@@ -132,20 +165,10 @@ class ProjectPathsFactory:
             ) from e
 
     @classmethod
-    def create_project_paths(cls, agent_name: str, filename: str) -> ProjectPaths:
-        """
-        Create project paths for the given agent.
-
-        Args:
-            agent_name: Name of the agent.
-            filename: Configuration filename.
-
-        Returns:
-            ProjectPaths: Container with all project paths.
-
-        Raises:
-            Various exceptions if validation fails.
-        """
+    def create_project_paths(
+        cls, agent_name: str, filename: str, *, auto_create: bool = True
+    ) -> ProjectPaths:
+        """Create project paths. Set auto_create=False for read-only commands."""
         logger.debug("Creating project paths for agent: %s", agent_name)
         factory = cls()
         try:
@@ -177,8 +200,10 @@ class ProjectPathsFactory:
                 path_validator.validate(path, dir_name)
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
-                factory.path_manager.ensure_path_exists(path)
-                path_validator.validate(path, dir_name)
+                if auto_create:
+                    factory.path_manager.ensure_path_exists(path)
+                if path.exists():
+                    path_validator.validate(path, dir_name)
             path_validator.validate(paths.default_config_path, "Default config")
             logger.debug("All project paths created successfully")
             return paths

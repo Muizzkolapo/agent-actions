@@ -1,5 +1,10 @@
 # Cli Manifest
 
+## Conventions
+
+- **Read-only commands** (inspect, schema, status, preview) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderer.render_and_load_config()` to avoid filesystem mutations.
+- **Write commands** (run, init, compile) use the defaults (`auto_create=True`, explicit `output_dir`).
+
 ## Sub-Modules
 
 | Sub-Module | Description |
@@ -48,6 +53,7 @@
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
 | `project_paths_factory.py` | Module | Project paths factory service. | `errors`, `file_io`, `state_management`, `utilities`, `validation` |
+| `find_config_file` | Function | Find a workflow configuration file with optional alternative-location lookup. | - |
 | `ProjectPaths` | Class | Container for project directory paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert paths to a dictionary of strings. | - |
 | `ProjectPathsFactory` | Class | Factory for creating project paths. | - |

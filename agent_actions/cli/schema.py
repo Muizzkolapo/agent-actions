@@ -1,9 +1,4 @@
-"""
-Schema command for the Agent Actions CLI.
-
-This module provides the implementation of the 'schema' command,
-which displays input and output schemas for all actions in a workflow.
-"""
+"""Schema command for the Agent Actions CLI."""
 
 import json as json_lib
 from pathlib import Path
@@ -13,9 +8,8 @@ import click
 from rich.console import Console
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
 from agent_actions.cli.renderers import SchemaRenderer
-from agent_actions.errors import FileLoadError
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.output.response.loader import SchemaLoader
@@ -23,7 +17,6 @@ from agent_actions.workflow import WorkflowSchemaService
 
 
 class SchemaCommand:
-    """Implementation of the schema command."""
 
     def __init__(
         self,
@@ -32,15 +25,6 @@ class SchemaCommand:
         json_output: bool,
         verbose: bool,
     ):
-        """
-        Initialize the schema command.
-
-        Args:
-            agent: Agent/workflow configuration name
-            user_code: Optional path to user code directory containing UDFs
-            json_output: Whether to output as JSON
-            verbose: Whether to show detailed schema information
-        """
         self.agent = agent
         self.agent_name = Path(agent).stem
         self.user_code = user_code
@@ -49,36 +33,20 @@ class SchemaCommand:
         self.console = Console()
         self.renderer = SchemaRenderer(self.console)
 
-    def _find_config_file(self, config_dir: Path, filename: str) -> Path:
-        """Find the configuration file."""
-        full_path = config_dir / filename
-        if not full_path.exists():
-            raise FileLoadError(
-                "Configuration file not found",
-                context={
-                    "file_path": str(full_path),
-                    "agent_name": self.agent_name,
-                    "suggestion": f"Check if '{filename}' exists in {config_dir}",
-                },
-            )
-        return full_path
-
     def execute(self) -> None:
-        """Execute the schema command."""
         if not self.json_output:
             self.console.print(f"[cyan]Analyzing workflow: {self.agent}[/cyan]\n")
 
-        # Set up paths and load workflow
-        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.agent_name, self.agent, auto_create=False
+        )
         filename = f"{self.agent_name}.yml"
-        full_path = self._find_config_file(paths.agent_config_dir, filename)
+        full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        # Render configuration
         ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+            self.agent_name, full_path, paths.template_dir
         )
 
-        # Load workflow to get agent configs
         workflow = AgentWorkflow(
             WorkflowConfig(
                 paths=WorkflowPaths(
@@ -90,7 +58,6 @@ class SchemaCommand:
             )
         )
 
-        # Build workflow config for service
         workflow_config = {
             "name": self.agent_name,
             "actions": [
@@ -98,19 +65,16 @@ class SchemaCommand:
             ],
         }
 
-        # Get UDF registry (always try to load for tool schemas)
         udf_registry: Dict[str, Any] = {}
         try:
             from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY
         except ImportError:
-            pass  # UDF registry not available
+            pass
 
-        # Create schema loader for external schemas
         schema_loader = SchemaLoader()
 
-        # Create service using unified approach
         service = WorkflowSchemaService(
             workflow_config,
             udf_registry=udf_registry,
@@ -125,8 +89,6 @@ class SchemaCommand:
             self._output_rich(service, workflow.execution_order)
 
     def _output_json(self, service: WorkflowSchemaService) -> None:
-        """Output schemas as JSON."""
-        # Build legacy format for backward compatibility
         schemas = {}
         for name, action_schema in service.get_all_schemas().items():
             schemas[name] = {
@@ -146,17 +108,14 @@ class SchemaCommand:
         click.echo(json_lib.dumps(schemas, indent=2))
 
     def _output_rich(self, service: WorkflowSchemaService, execution_order: list) -> None:
-        """Output schemas using rich formatting."""
         schemas = service.get_all_schemas()
 
-        # Use the unified renderer for the summary table
         table = self.renderer.render_summary_table(
             schemas, execution_order, title=f"Action Schemas: {self.agent_name}"
         )
         self.console.print(table)
         self.console.print(f"\n[bold]Total: {len(schemas)} action(s)[/bold]")
 
-        # Show data flow if verbose
         if self.verbose:
             self.console.print("\n")
             panel = self.renderer.render_data_flow_panel(schemas, execution_order)

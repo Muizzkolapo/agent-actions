@@ -1,9 +1,4 @@
-"""
-Status command for the Agent Actions CLI.
-
-This module provides the implementation of the 'status' command,
-which displays the current status of an agent workflow.
-"""
+"""Status command for the Agent Actions CLI."""
 
 import json
 from pathlib import Path
@@ -18,24 +13,16 @@ from agent_actions.validation.status_validator import StatusCommandArgs
 
 
 class StatusCommand:
-    """Implementation of the status command."""
 
     def __init__(self, args: StatusCommandArgs):
-        """
-        Initialize the status command.
-
-        Args:
-            args: Pydantic model containing the command arguments.
-        """
         self.args = args
         self.agent_name = Path(args.agent).stem
         self.console = Console()
 
     def execute(self) -> None:
-        """
-        Execute the status command.
-        """
-        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.agent_name, self.args.agent, auto_create=False
+        )
         status_file = paths.io_dir / ".agent_status.json"
         if not status_file.exists():
             self.console.print(
@@ -43,8 +30,17 @@ class StatusCommand:
                 "Has a workflow been run?[/yellow]"
             )
             return
-        with open(status_file, "r", encoding="utf-8") as f:
-            status_data = json.load(f)
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                status_data = json.load(f)
+        except json.JSONDecodeError as e:
+            raise click.ClickException(
+                f"Status file is corrupted: {status_file}\n{e}"
+            )
+        if not isinstance(status_data, dict):
+            raise click.ClickException(
+                f"Status file has unexpected format (expected JSON object): {status_file}"
+            )
         table = Table(title=f"Workflow Status for {self.agent_name}")
         table.add_column("Agent Name", justify="left", style="green")
         table.add_column("Status", justify="center", style="yellow")
@@ -66,9 +62,7 @@ class StatusCommand:
 @handles_user_errors("status")
 @requires_project
 def status(agent: str) -> None:
-    """
-    Display the status of an agent workflow.
-    """
+    """Display the status of an agent workflow."""
     args = StatusCommandArgs(agent=agent)
     command = StatusCommand(args)
     command.execute()

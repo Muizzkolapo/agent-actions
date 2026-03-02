@@ -1,9 +1,4 @@
-"""
-Preview command for the Agent Actions CLI.
-
-This module provides the implementation of the 'preview' command,
-which displays data stored in the SQLite storage backend.
-"""
+"""Preview command for viewing SQLite storage data."""
 
 import json
 from pathlib import Path
@@ -21,7 +16,6 @@ from agent_actions.storage import get_storage_backend
 
 
 class PreviewCommand:
-    """Implementation of the preview command."""
 
     def __init__(
         self,
@@ -32,17 +26,6 @@ class PreviewCommand:
         format_type: str = "table",
         stats_only: bool = False,
     ):
-        """
-        Initialize the preview command.
-
-        Args:
-            workflow: Workflow configuration file path or name
-            action: Optional action name to preview (shows all if not specified)
-            limit: Maximum number of records to show
-            offset: Number of records to skip
-            format_type: Output format ('table', 'json', 'raw')
-            stats_only: If True, only show statistics
-        """
         self.workflow = workflow
         self.action = action
         self.limit = limit
@@ -53,14 +36,13 @@ class PreviewCommand:
         self.console = Console()
 
     def execute(self) -> None:
-        """Execute the preview command."""
-        paths = ProjectPathsFactory.create_project_paths(self.workflow_name, self.workflow)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.workflow_name, self.workflow, auto_create=False
+        )
 
-        # Derive paths from ProjectPaths (has io_dir and agent_config_dir)
         target_dir = paths.io_dir / "target"
-        workflow_dir = paths.io_dir.parent  # Workflow root is parent of agent_io
+        workflow_dir = paths.io_dir.parent
 
-        # Find the SQLite database
         db_path = target_dir / f"{self.workflow_name}.db"
 
         if not db_path.exists():
@@ -70,7 +52,6 @@ class PreviewCommand:
             )
             return
 
-        # Create storage backend
         backend = get_storage_backend(
             workflow_path=str(workflow_dir),
             workflow_name=self.workflow_name,
@@ -88,7 +69,6 @@ class PreviewCommand:
             backend.close()
 
     def _show_stats(self, backend) -> None:
-        """Show storage statistics."""
         stats = backend.get_storage_stats()
 
         self.console.print(
@@ -112,7 +92,6 @@ class PreviewCommand:
             self.console.print(table)
 
     def _list_actions(self, backend) -> None:
-        """List all actions with data in the database."""
         stats = backend.get_storage_stats()
 
         if not stats["nodes"]:
@@ -135,7 +114,6 @@ class PreviewCommand:
         )
 
     def _preview_action(self, backend) -> None:
-        """Preview data for a specific action."""
         result = backend.preview_target(
             action_name=self.action,
             limit=self.limit,
@@ -150,7 +128,6 @@ class PreviewCommand:
             self.console.print(f"[yellow]No data found for action '{self.action}'[/yellow]")
             return
 
-        # Show header info
         self.console.print(
             Panel(
                 f"[bold]Action:[/bold] {result['action_name']}\n"
@@ -168,7 +145,6 @@ class PreviewCommand:
         else:
             self._show_table(result["records"])
 
-        # Show pagination hint
         if result["total_count"] > self.offset + self.limit:
             remaining = result["total_count"] - (self.offset + self.limit)
             self.console.print(
@@ -176,24 +152,19 @@ class PreviewCommand:
             )
 
     def _show_table(self, records: list) -> None:
-        """Display records as a table."""
         if not records:
             return
 
-        # Get all unique keys from records
         all_keys = set()
         for record in records:
             if isinstance(record, dict):
-                # Handle nested 'content' key
                 if "content" in record and isinstance(record["content"], dict):
                     all_keys.update(record["content"].keys())
                 else:
                     all_keys.update(record.keys())
 
-        # Filter out internal keys
         display_keys = [k for k in sorted(all_keys) if not k.startswith("_")]
 
-        # Limit columns for readability
         if len(display_keys) > 6:
             display_keys = display_keys[:6]
             self.console.print(
@@ -207,7 +178,6 @@ class PreviewCommand:
 
         for idx, record in enumerate(records, self.offset + 1):
             if isinstance(record, dict):
-                # Handle nested 'content' key
                 data = (
                     record.get("content", record)
                     if isinstance(record.get("content"), dict)
@@ -217,11 +187,8 @@ class PreviewCommand:
                 for key in display_keys:
                     val = data.get(key, "")
                     if isinstance(val, (dict, list)):
-                        val = (
-                            json.dumps(val, ensure_ascii=False)[:100] + "..."
-                            if len(json.dumps(val)) > 100
-                            else json.dumps(val, ensure_ascii=False)
-                        )
+                        serialized = json.dumps(val, ensure_ascii=False)
+                        val = serialized[:100] + "..." if len(serialized) > 100 else serialized
                     else:
                         val = str(val)[:100] + "..." if len(str(val)) > 100 else str(val)
                     values.append(val)
@@ -232,13 +199,11 @@ class PreviewCommand:
         self.console.print(table)
 
     def _show_json(self, records: list) -> None:
-        """Display records as formatted JSON."""
         json_str = json.dumps(records, indent=2, ensure_ascii=False)
         syntax = Syntax(json_str, "json", theme="monokai", line_numbers=True)
         self.console.print(syntax)
 
     def _show_raw(self, records: list) -> None:
-        """Display records as raw JSON (for piping)."""
         print(json.dumps(records, ensure_ascii=False))
 
 
@@ -247,8 +212,8 @@ class PreviewCommand:
 @click.option(
     "-a", "--action", default=None, help="Action name to preview (lists all if not specified)"
 )
-@click.option("-n", "--limit", default=10, type=int, help="Maximum number of records to show")
-@click.option("--offset", default=0, type=int, help="Number of records to skip")
+@click.option("-n", "--limit", default=10, type=click.IntRange(min=1), help="Maximum number of records to show")
+@click.option("--offset", default=0, type=click.IntRange(min=0), help="Number of records to skip")
 @click.option(
     "-f",
     "--format",

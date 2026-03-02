@@ -1,6 +1,4 @@
-"""
-Render command for the Agent Actions CLI.
-"""
+"""Render command for the Agent Actions CLI."""
 
 import logging
 import os
@@ -19,17 +17,14 @@ logger = logging.getLogger(__name__)
 
 
 class RenderCommand:
-    """Implementation of the render command."""
 
     def __init__(self, args: RenderCommandArgs):
-        """Initialize the render command."""
         self.args = args
         self.template_dir = (
             Path(args.template_dir) if args.template_dir else Path(os.getcwd()) / "templates"
         )
 
     def _render_template(self, agent_config_file: Path) -> str:
-        """Render the template with the agent configuration."""
         try:
             logger.info(
                 "Rendering template with configuration...",
@@ -48,11 +43,9 @@ class RenderCommand:
             )
             return rendered_template
         except Exception as e:
-            # Log error without traceback (will be handled by error formatter)
             logger.error(
                 "Template rendering failed: %s", str(e), extra={"agent_name": self.args.agent_name}
             )
-            # Log full traceback only at debug level
             logger.debug("Template rendering exception details", exc_info=True)
             raise TemplateRenderingError(
                 "Failed to render template",
@@ -66,7 +59,6 @@ class RenderCommand:
             ) from e
 
     def execute(self) -> None:
-        """Execute the render command."""
         logger.info("Starting template rendering for agent: %s", self.args.agent_name)
         paths = ProjectPathsFactory.create_project_paths(self.args.agent_name, self.args.agent_name)
         agent_config_file = paths.agent_config_dir / f"{self.args.agent_name}.yml"

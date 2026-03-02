@@ -1,9 +1,4 @@
-"""
-Run command for the Agent Actions CLI.
-
-This module provides the implementation of the 'run' command,
-which executes agent workflows based on configuration files.
-"""
+"""Run command for the Agent Actions CLI."""
 
 import asyncio
 import logging
@@ -14,9 +9,8 @@ from typing import Optional
 import click
 
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
 from agent_actions.tooling.docs.run_tracker import RunTracker
-from agent_actions.errors import FileLoadError
 from agent_actions.logging import LoggerFactory
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
@@ -27,55 +21,12 @@ from agent_actions.validation.run_validator import RunCommandArgs
 
 
 class RunCommand:
-    """Implementation of the run command."""
 
     def __init__(self, args: RunCommandArgs):
-        """
-        Initialize the run command.
-
-        Args:
-            args: Pydantic model containing the command arguments.
-        """
         self.args = args
         self.agent_name = Path(args.agent).stem
 
-    def _find_config_file(self, config_dir: Path, filename: str) -> Path:
-        """Find the configuration file."""
-        full_path = config_dir / filename
-        if not full_path.exists():
-            # Check for alternative locations
-            parent_dir = config_dir.parent
-            alternatives_checked = [
-                parent_dir / filename,
-                Path.cwd() / filename,
-                Path.cwd() / "config" / filename,
-            ]
-            existing_alternatives = [str(p) for p in alternatives_checked if p.exists()]
-
-            raise FileLoadError(
-                "Configuration file not found",
-                context={
-                    "file_path": str(full_path),
-                    "config_dir": str(config_dir),
-                    "filename": filename,
-                    "agent_name": self.agent_name,
-                    "alternatives_checked": [str(p) for p in alternatives_checked],
-                    "found_alternatives": existing_alternatives if existing_alternatives else None,
-                    "suggestion": (
-                        f"File not found at {full_path}. "
-                        f"Check if the file exists or use an absolute path."
-                        + (
-                            f" Found similar file at: {existing_alternatives[0]}"
-                            if existing_alternatives
-                            else ""
-                        )
-                    ),
-                },
-            )
-        return full_path
-
     def _determine_execution_mode(self, workflow: AgentWorkflow) -> bool:
-        """Determine if parallel execution should be used."""
         mode = getattr(self.args, "execution_mode", "auto")
 
         if mode == "parallel":
@@ -93,25 +44,20 @@ class RunCommand:
         return False
 
     def _run_workflow_execution(self, workflow: AgentWorkflow, use_parallel: bool) -> None:
-        """Run the actual workflow execution."""
         if use_parallel:
             asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
         else:
             workflow.run()
 
     def execute(self) -> None:
-        """
-        Execute the run command.
-
-        Raises:
-            Various exceptions depending on the stage that fails
-        """
         click.echo(f"Starting agent run for: {self.args.agent}")
         click.echo("Setting up project paths...")
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
         PromptValidator().validate(paths.prompt_dir)
         filename = f"{self.agent_name}.yml"
-        full_path = self._find_config_file(paths.agent_config_dir, filename)
+        full_path = find_config_file(
+            self.agent_name, paths.agent_config_dir, filename, check_alternatives=True
+        )
         click.echo("Rendering and loading configuration...")
         ConfigRenderer.render_and_load_config(
             self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
@@ -130,7 +76,6 @@ class RunCommand:
             )
         )
 
-        # Initialize run tracker
         tracker = RunTracker()
         run_id = tracker.start_workflow_run(
             workflow_id=self.agent_name,
@@ -138,30 +83,26 @@ class RunCommand:
             actions_total=len(workflow.execution_order),
         )
 
-        # Pass tracker and run_id to executor for action-level tracking
         workflow.services.core.agent_executor.run_tracker = tracker
         workflow.services.core.agent_executor.run_id = run_id
 
-        # Initialize unified logging system (event-based)
         agent_folder = workflow.services.core.agent_runner.get_agent_folder(self.agent_name)
         LoggerFactory.initialize(
             output_dir=agent_folder,
             workflow_name=self.agent_name,
             invocation_id=run_id,
-            force=True,  # Reinitialize for each workflow run
+            force=True,
         )
 
         click.echo("Starting workflow execution...")
 
-        # Track execution state
-        status = "FAILED"  # Default to failed, update on success
+        status = "FAILED"
         error_message = None
 
         try:
             use_parallel = self._determine_execution_mode(workflow)
             self._run_workflow_execution(workflow, use_parallel)
 
-            # Determine final status
             if workflow.services.core.state_manager.is_workflow_complete():
                 status = "SUCCESS"
                 click.echo(f"Successfully completed agent run for: {self.args.agent}")
@@ -174,18 +115,15 @@ class RunCommand:
 
         except Exception:
             status = "FAILED"
-            # Capture full traceback for better debugging
             error_message = traceback.format_exc()
-            raise  # Re-raise to maintain existing error handling
+            raise
 
         finally:
-            # Finalize run tracking
             try:
                 tracker.finalize_workflow_run(
                     run_id=run_id, status=status, error_message=error_message
                 )
             except Exception as track_error:
-                # Don't fail the workflow if tracking fails
                 logger.warning(
                     "Could not finalize workflow run tracking: %s",
                     track_error,
@@ -195,7 +133,6 @@ class RunCommand:
                     f"Warning: Could not finalize workflow run tracking: {track_error}", err=True
                 )
 
-            # Flush event handlers to ensure all output is written
             try:
                 LoggerFactory.flush()
             except Exception as e:
@@ -235,7 +172,6 @@ class RunCommand:
 )
 @handles_user_errors("run")
 @requires_project
-# Click decorators require explicit params
 def run(
     agent: str,
     user_code: Optional[str],
@@ -258,8 +194,6 @@ def run(
         agac run -a my_agent --downstream
         agac run -a my_agent --execution-mode parallel
     """
-    # Let @handles_user_errors decorator handle all exceptions
-    # for consistent error formatting
     args = RunCommandArgs(
         agent=agent,
         user_code=user_code,
