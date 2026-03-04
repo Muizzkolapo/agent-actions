@@ -44,7 +44,6 @@ class CLI:
         fire_event(CLIInitCompleteEvent(command="agent-actions"))
 
     def _create_click_group(self) -> click.Group:
-
         @click.group(name="agent-actions")
         @click.version_option(version=__version__)
         @click.option(

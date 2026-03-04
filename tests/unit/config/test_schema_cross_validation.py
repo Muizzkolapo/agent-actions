@@ -78,3 +78,136 @@ class TestWorkflowInvariants:
             )
         )
         assert len(wf.actions) == 2
+
+
+class TestCircularDependencyDetection:
+    def test_self_cycle_raises(self):
+        with pytest.raises(ValidationError, match=r"A -> A"):
+            WorkflowConfigV2(
+                **_workflow(
+                    actions=[
+                        {
+                            "name": "A",
+                            "intent": "self-loop",
+                            "kind": "llm",
+                            "dependencies": ["A"],
+                        },
+                    ]
+                )
+            )
+
+    def test_two_node_cycle_shows_path(self):
+        with pytest.raises(ValidationError, match=r"A -> B -> A"):
+            WorkflowConfigV2(
+                **_workflow(
+                    actions=[
+                        {
+                            "name": "A",
+                            "intent": "a",
+                            "kind": "llm",
+                            "dependencies": ["B"],
+                        },
+                        {
+                            "name": "B",
+                            "intent": "b",
+                            "kind": "llm",
+                            "dependencies": ["A"],
+                        },
+                    ]
+                )
+            )
+
+    def test_three_node_cycle_shows_path(self):
+        with pytest.raises(ValidationError, match=r"A -> B -> C -> A"):
+            WorkflowConfigV2(
+                **_workflow(
+                    actions=[
+                        {
+                            "name": "A",
+                            "intent": "a",
+                            "kind": "llm",
+                            "dependencies": ["B"],
+                        },
+                        {
+                            "name": "B",
+                            "intent": "b",
+                            "kind": "llm",
+                            "dependencies": ["C"],
+                        },
+                        {
+                            "name": "C",
+                            "intent": "c",
+                            "kind": "llm",
+                            "dependencies": ["A"],
+                        },
+                    ]
+                )
+            )
+
+    def test_diamond_dag_no_false_positive(self):
+        """Diamond shape (A->B, A->C, B->D, C->D) is valid — no cycle."""
+        wf = WorkflowConfigV2(
+            **_workflow(
+                actions=[
+                    {"name": "A", "intent": "a", "kind": "llm"},
+                    {
+                        "name": "B",
+                        "intent": "b",
+                        "kind": "llm",
+                        "dependencies": ["A"],
+                    },
+                    {
+                        "name": "C",
+                        "intent": "c",
+                        "kind": "llm",
+                        "dependencies": ["A"],
+                    },
+                    {
+                        "name": "D",
+                        "intent": "d",
+                        "kind": "llm",
+                        "dependencies": ["B", "C"],
+                    },
+                ]
+            )
+        )
+        assert len(wf.actions) == 4
+
+    def test_cycle_with_acyclic_branch(self):
+        """Cycle in B->C->B, but A is acyclic — cycle still detected."""
+        with pytest.raises(ValidationError, match=r"B -> C -> B"):
+            WorkflowConfigV2(
+                **_workflow(
+                    actions=[
+                        {"name": "A", "intent": "a", "kind": "llm"},
+                        {
+                            "name": "B",
+                            "intent": "b",
+                            "kind": "llm",
+                            "dependencies": ["A", "C"],
+                        },
+                        {
+                            "name": "C",
+                            "intent": "c",
+                            "kind": "llm",
+                            "dependencies": ["B"],
+                        },
+                    ]
+                )
+            )
+
+    def test_deep_chain_no_recursion_error(self):
+        """A 1500-node linear chain must not hit RecursionError."""
+        n = 1500
+        actions = [{"name": "n0", "intent": "a", "kind": "llm"}]
+        for i in range(1, n):
+            actions.append(
+                {
+                    "name": f"n{i}",
+                    "intent": "a",
+                    "kind": "llm",
+                    "dependencies": [f"n{i - 1}"],
+                }
+            )
+        wf = WorkflowConfigV2(**_workflow(actions=actions))
+        assert len(wf.actions) == n

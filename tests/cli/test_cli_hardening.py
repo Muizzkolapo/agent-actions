@@ -27,17 +27,17 @@ class TestBannerNotOnStdout:
         runner = CliRunner()
         with patch(
             "agent_actions.cli.cli_decorators.ensure_in_project",
-            return_value=MagicMock(
-                relative_to=MagicMock(return_value=".")
-            ),
+            return_value=MagicMock(relative_to=MagicMock(return_value=".")),
         ):
             with patch("os.chdir"), patch("os.getcwd", return_value="/tmp"):
                 result = runner.invoke(dummy)
 
         import inspect as inspect_mod
+
         source = inspect_mod.getsource(requires_project)
-        assert 'click.echo(f"' in source and 'err=True' in source, \
+        assert 'click.echo(f"' in source and "err=True" in source, (
             "Banner click.echo must use err=True"
+        )
 
 
 class TestHandlesUserErrorsExitPath:
@@ -75,9 +75,7 @@ class TestInspectNotFoundExitCode:
         mock_workflow = MagicMock()
         mock_workflow.execution_order = []
         cmd._load_workflow = MagicMock(return_value=mock_workflow)
-        cmd._analyze_dependencies = MagicMock(
-            return_value={"action_a": {}, "action_b": {}}
-        )
+        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
 
         import click
 
@@ -96,9 +94,7 @@ class TestInspectNotFoundExitCode:
 
         mock_workflow = MagicMock()
         cmd._load_workflow = MagicMock(return_value=mock_workflow)
-        cmd._analyze_dependencies = MagicMock(
-            return_value={"action_a": {}, "action_b": {}}
-        )
+        cmd._analyze_dependencies = MagicMock(return_value={"action_a": {}, "action_b": {}})
 
         import click
 
@@ -111,11 +107,12 @@ class TestReadOnlyCommandsNoMutation:
 
     def test_create_project_paths_auto_create_false_skips_mkdir(self):
         """auto_create=False skips ensure_path_exists calls."""
-        with patch.object(ProjectPathsFactory, "get_agent_paths") as mock_paths, \
-             patch("agent_actions.cli.project_paths_factory.PathManager") as mock_pm_cls, \
-             patch("agent_actions.cli.project_paths_factory.PathValidator") as mock_pv_cls, \
-             patch("agent_actions.cli.project_paths_factory.resolve_absolute_path") as mock_resolve:
-
+        with (
+            patch.object(ProjectPathsFactory, "get_agent_paths") as mock_paths,
+            patch("agent_actions.cli.project_paths_factory.PathManager") as mock_pm_cls,
+            patch("agent_actions.cli.project_paths_factory.PathValidator") as mock_pv_cls,
+            patch("agent_actions.cli.project_paths_factory.resolve_absolute_path") as mock_resolve,
+        ):
             mock_pm = mock_pm_cls.return_value
             mock_pm.get_project_root.return_value = MagicMock()
             mock_pm.get_standard_path.return_value = MagicMock(exists=MagicMock(return_value=True))

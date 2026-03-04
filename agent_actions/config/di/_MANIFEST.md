@@ -11,6 +11,7 @@ manually instantiating dependencies.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `types.py` | Module | TypedDicts (`DIConfig`, `LoggingConfig`, `ProcessorsConfig`, `ServicesConfig`) for DI configuration boundary. | `config` |
 | `application.py` | Module | Application container that bootstraps the DI stack and exposes factories. | `agent_actions.workflow.runner`, `config.paths`, `config.di.container` |
 | `ApplicationContainer` | Class | Central entry point for DI-bound factories, runners, and processors. | `agent_actions.workflow.runner`, `agent_actions.llm.batch` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `__init__` | Method | Build the container with config and optional pre-configured container. | `config.di.configurator` |
@@ -32,9 +33,10 @@ manually instantiating dependencies.
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `register_singleton/transient/factory/instance` | Methods | Register services via different lifetimes or direct instances. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get` | Method | Resolve a dependency, instantiate if needed, or raise `DependencyError`. | `agent_actions.errors` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `_create_instance` | Method | Inspect constructor parameters, resolve dependencies, and instantiate safely. | `inspect`, `typing`
-| `ProcessorRegistry` | Class | Decorator-driven registry for processors, loaders, generators, and services. | `agent_actions.errors` |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `register_*` | Methods | Decorators used by runtime components to self-register. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_*` | Methods | Retrieve registered implementation classes, raising `ConfigurationError` if missing. | `agent_actions.errors` |
+| `RegistryCategory` | Enum | Categories for registerable components (PROCESSOR, LOADER, GENERATOR, SERVICE). | - |
+| `ProcessorRegistry` | Class | Generic registry for processors, loaders, generators, and services with backward-compat convenience wrappers. | `agent_actions.errors` |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `register/get/list_registered` | Methods | Generic category-based registration, lookup, and listing. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `register_*/get_*/list_*` | Methods | Backward-compatible one-liner delegates to generic methods. | `agent_actions.errors` |
 | `ProcessorFactory` | Class | Factory that constructs processors/loaders/generators/services with DI support. | `config.di.container`, `agent_actions.errors` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_*` | Methods | Build runtime components by resolving dependencies before instantiation. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `_create_with_dependencies` | Method | Unified helper that inspects constructor annotations to supply injected dependencies/overrides. | `inspect`, `typing` |

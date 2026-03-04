@@ -6,17 +6,18 @@ instances with proper DI container lifecycle management.
 """
 
 from contextlib import contextmanager
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from agent_actions.workflow.runner import AgentRunner
 from agent_actions.config.di.application import ApplicationContainer
+from agent_actions.config.di.types import DIConfig
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 
 @contextmanager
-def application_container_context(config: Optional[Dict[str, Any]] = None):
+def application_container_context(config: Optional[DIConfig] = None):
     """
     Context manager for proper DI container lifecycle management.
 
@@ -39,7 +40,7 @@ def application_container_context(config: Optional[Dict[str, Any]] = None):
 
 
 def create_agent_runner(
-    config: Optional[Dict[str, Any]] = None,
+    config: Optional[DIConfig] = None,
     use_tools: bool = True,
     storage_backend: Optional["StorageBackend"] = None,
 ) -> AgentRunner:

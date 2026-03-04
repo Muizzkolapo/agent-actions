@@ -16,7 +16,6 @@ from agent_actions.storage import get_storage_backend
 
 
 class PreviewCommand:
-
     def __init__(
         self,
         workflow: str,
@@ -212,7 +211,13 @@ class PreviewCommand:
 @click.option(
     "-a", "--action", default=None, help="Action name to preview (lists all if not specified)"
 )
-@click.option("-n", "--limit", default=10, type=click.IntRange(min=1), help="Maximum number of records to show")
+@click.option(
+    "-n",
+    "--limit",
+    default=10,
+    type=click.IntRange(min=1),
+    help="Maximum number of records to show",
+)
 @click.option("--offset", default=0, type=click.IntRange(min=0), help="Number of records to skip")
 @click.option(
     "-f",

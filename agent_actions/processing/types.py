@@ -23,7 +23,10 @@ class ProcessingStatus(Enum):
 
 
 class ProcessingMode(Enum):
-    """Processing mode for record handling."""
+    """Workflow-level data flow mode for record handling.
+
+    ONLINE/BATCH. Not to be confused with config.interfaces.ProcessingMode (SYNC/ASYNC/AUTO).
+    """
 
     ONLINE = "online"
     BATCH = "batch"

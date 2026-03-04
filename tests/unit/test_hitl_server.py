@@ -2,6 +2,9 @@
 
 import threading
 
+import pytest
+
+from agent_actions.errors import NetworkError
 from agent_actions.llm.providers.hitl.server import HitlServer
 
 
@@ -393,10 +396,12 @@ def test_find_available_port_with_collision():
 
     base_port = _pick_safe_ephemeral_port(headroom=2)
 
-    # Block the base port
+    # Block the base port — must listen() to truly occupy it (bind-only
+    # with SO_REUSEADDR doesn't prevent another SO_REUSEADDR bind).
     blocker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     blocker_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     blocker_socket.bind(("127.0.0.1", base_port))
+    blocker_socket.listen(1)
 
     try:
         server = HitlServer(
@@ -422,12 +427,14 @@ def test_find_available_port_exhaustion_raises_network_error():
 
     base_port = _pick_safe_ephemeral_port(headroom=6)
 
-    # Block 5 consecutive ports (the max_attempts range)
+    # Block 5 consecutive ports (the max_attempts range) — must listen()
+    # to truly occupy them (bind-only with SO_REUSEADDR is not enough).
     blocker_sockets = []
     for port in range(base_port, base_port + 5):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", port))
+        sock.listen(1)
         blocker_sockets.append(sock)
 
     try:
@@ -439,13 +446,9 @@ def test_find_available_port_exhaustion_raises_network_error():
         )
 
         # Should raise NetworkError with context
-        try:
+        with pytest.raises(NetworkError, match="Could not find available port") as exc_info:
             server._find_available_port()
-            assert False, "Expected NetworkError"
-        except Exception as e:
-            assert "Could not find available port" in str(e)
-            assert hasattr(e, "context")
-            assert "attempted_ports" in e.context
+        assert "attempted_ports" in exc_info.value.context
 
     finally:
         for sock in blocker_sockets:

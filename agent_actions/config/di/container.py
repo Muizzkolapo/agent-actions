@@ -9,14 +9,17 @@ from typing import Dict, Optional, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
+import logging
 
 from agent_actions.errors import DependencyError, ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
-class ServiceLifetime(str, Enum):
+class ServiceLifetime(StrEnum):
     """Service lifetime constants."""
 
     SINGLETON = "singleton"
@@ -156,102 +159,106 @@ class DependencyContainer:
         return cls(**_build_init_kwargs(cls, self, caller="_create_instance"))
 
 
+class RegistryCategory(StrEnum):
+    """Categories of registerable components."""
+
+    PROCESSOR = "processor"
+    LOADER = "loader"
+    GENERATOR = "generator"
+    SERVICE = "service"
+
+
 class ProcessorRegistry:
     """Registry for managing processor implementations."""
 
     def __init__(self):
-        self._processors: Dict[str, Type] = {}
-        self._loaders: Dict[str, Type] = {}
-        self._generators: Dict[str, Type] = {}
-        self._services: Dict[str, Type] = {}
+        self._registries: Dict[RegistryCategory, Dict[str, Type]] = {
+            category: {} for category in RegistryCategory
+        }
+
+    # --- Generic operations ---
+
+    def register(self, category: RegistryCategory, name: str):
+        """Decorator to register a component under the given category."""
+
+        def decorator(cls: Type):
+            registry = self._registries[category]
+            if name in registry:
+                logger.warning(
+                    "Overwriting %s '%s': %s -> %s",
+                    category.value,
+                    name,
+                    registry[name].__name__,
+                    cls.__name__,
+                )
+            registry[name] = cls
+            return cls
+
+        return decorator
+
+    def get(self, category: RegistryCategory, name: str) -> Type:
+        """Get a registered component by category and name."""
+        registry = self._registries[category]
+        if name not in registry:
+            raise ConfigurationError(
+                f"{category.value.title()} '{name}' not registered",
+                context={f"{category.value}_name": name, "operation": f"get_{category.value}"},
+            )
+        return registry[name]
+
+    def list_registered(self, category: RegistryCategory) -> Dict[str, Type]:
+        """List all registered components in a category (returns a copy)."""
+        return self._registries[category].copy()
+
+    # --- Backward-compatible convenience methods ---
 
     def register_processor(self, name: str):
         """Decorator to register a processor."""
-
-        def decorator(cls: Type):
-            self._processors[name] = cls
-            return cls
-
-        return decorator
+        return self.register(RegistryCategory.PROCESSOR, name)
 
     def register_loader(self, name: str):
         """Decorator to register a data loader."""
-
-        def decorator(cls: Type):
-            self._loaders[name] = cls
-            return cls
-
-        return decorator
+        return self.register(RegistryCategory.LOADER, name)
 
     def register_generator(self, name: str):
         """Decorator to register a generator."""
-
-        def decorator(cls: Type):
-            self._generators[name] = cls
-            return cls
-
-        return decorator
+        return self.register(RegistryCategory.GENERATOR, name)
 
     def register_service(self, name: str):
         """Decorator to register a service."""
-
-        def decorator(cls: Type):
-            self._services[name] = cls
-            return cls
-
-        return decorator
+        return self.register(RegistryCategory.SERVICE, name)
 
     def get_processor(self, name: str) -> Type:
         """Get a processor class by name."""
-        if name not in self._processors:
-            raise ConfigurationError(
-                f"Processor '{name}' not registered",
-                context={"processor_name": name, "operation": "get_processor"},
-            )
-        return self._processors[name]
+        return self.get(RegistryCategory.PROCESSOR, name)
 
     def get_loader(self, name: str) -> Type:
         """Get a loader class by name."""
-        if name not in self._loaders:
-            raise ConfigurationError(
-                f"Loader '{name}' not registered",
-                context={"loader_name": name, "operation": "get_loader"},
-            )
-        return self._loaders[name]
+        return self.get(RegistryCategory.LOADER, name)
 
     def get_generator(self, name: str) -> Type:
         """Get a generator class by name."""
-        if name not in self._generators:
-            raise ConfigurationError(
-                f"Generator '{name}' not registered",
-                context={"generator_name": name, "operation": "get_generator"},
-            )
-        return self._generators[name]
+        return self.get(RegistryCategory.GENERATOR, name)
 
     def get_service(self, name: str) -> Type:
         """Get a service class by name."""
-        if name not in self._services:
-            raise ConfigurationError(
-                f"Service '{name}' not registered",
-                context={"service_name": name, "operation": "get_service"},
-            )
-        return self._services[name]
+        return self.get(RegistryCategory.SERVICE, name)
 
     def list_processors(self) -> Dict[str, Type]:
         """List all registered processors."""
-        return self._processors.copy()
+        return self.list_registered(RegistryCategory.PROCESSOR)
 
     def list_loaders(self) -> Dict[str, Type]:
         """List all registered loaders."""
-        return self._loaders.copy()
+        return self.list_registered(RegistryCategory.LOADER)
 
     def list_generators(self) -> Dict[str, Type]:
         """List all registered generators."""
-        return self._generators.copy()
+        return self.list_registered(RegistryCategory.GENERATOR)
 
     def list_services(self) -> Dict[str, Type]:
         """List all registered services."""
-        return self._services.copy()
+        return self.list_registered(RegistryCategory.SERVICE)
 
 
 class ProcessorFactory:

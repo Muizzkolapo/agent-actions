@@ -5,8 +5,7 @@ This module configures the DI container with all application dependencies
 based on configuration settings.
 """
 
-from typing import Any, Dict
-
+from agent_actions.config.di.types import DIConfig
 from agent_actions.config.interfaces import (
     IDataLoader,
     IDataProcessor,
@@ -24,7 +23,7 @@ class DIConfigurator:
     """Configures the dependency container with application services."""
 
     @staticmethod
-    def configure_container(config: Dict[str, Any]) -> DependencyContainer:
+    def configure_container(config: DIConfig) -> DependencyContainer:
         """Configure the container with all dependencies."""
         container = DependencyContainer()
         DIConfigurator._register_core_services(container)
@@ -102,7 +101,7 @@ class ConfigurationProfile:
     """Predefined configuration profiles for different environments."""
 
     @staticmethod
-    def development() -> Dict[str, Any]:
+    def development() -> DIConfig:
         """Development configuration profile."""
         return {
             "environment": "development",
@@ -112,7 +111,7 @@ class ConfigurationProfile:
         }
 
     @staticmethod
-    def production() -> Dict[str, Any]:
+    def production() -> DIConfig:
         """Production configuration profile."""
         return {
             "environment": "production",
@@ -122,7 +121,7 @@ class ConfigurationProfile:
         }
 
     @staticmethod
-    def testing() -> Dict[str, Any]:
+    def testing() -> DIConfig:
         """Testing configuration profile."""
         return {
             "environment": "testing",

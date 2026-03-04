@@ -87,6 +87,8 @@ class PathManager:
         self._project_root = Path(project_root).resolve() if project_root else None
         self._path_cache: Dict[str, Path] = {}
 
+    # --- Root Detection ---
+
     def get_project_root(self, start_path: Optional[Path] = None) -> Path:
         """
         Find and return the project root directory.
@@ -136,6 +138,8 @@ class PathManager:
             f"Project root not found. Searched for '{self.config.marker_file}', 'agent_actions', or 'agent_config' "
             f"starting from {search_path}"
         )
+
+    # --- Path Resolution ---
 
     def get_standard_path(
         self,
@@ -207,6 +211,8 @@ class PathManager:
             "source": self.get_standard_path(PathType.SOURCE, agent_name=agent_name),
         }
 
+    # --- Path Creation ---
+
     def ensure_path_exists(self, path: Path, is_file: bool = False) -> Path:
         """
         Ensure a path exists, creating directories as needed.
@@ -230,6 +236,8 @@ class PathManager:
             logger.debug("Ensured directory exists: %s", directory)
 
         return path
+
+    # --- Validation ---
 
     def _check_permissions(
         self, path: Path, requirements: Dict[str, bool], errors: List[str]
@@ -315,6 +323,8 @@ class PathManager:
         requirements = self.VALIDATION_RULES.get(path_type, {})
         return self.validate_path(path, requirements)
 
+    # --- Normalization / Transform ---
+
     def normalize_path(self, path: Union[str, Path]) -> Path:
         """
         Normalize a path to a resolved Path object.
@@ -357,6 +367,8 @@ class PathManager:
         project_root = self.get_project_root()
         normalized_path = self.normalize_path(path)
         return normalized_path.relative_to(project_root)
+
+    # --- Cleanup / Discovery ---
 
     def find_files_by_pattern(self, pattern: str, base_path: Optional[Path] = None) -> List[Path]:
         """

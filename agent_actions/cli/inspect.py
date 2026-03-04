@@ -37,9 +37,7 @@ class BaseInspectCommand:
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, self.paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, self.paths.template_dir
-        )
+        ConfigRenderer.render_and_load_config(self.agent_name, full_path, self.paths.template_dir)
 
         workflow = AgentWorkflow(
             WorkflowConfig(
@@ -165,7 +163,6 @@ def inspect():
     """Inspect workflow structure and data flow."""
 
 
-
 class DependenciesCommand(BaseInspectCommand):
     """Show dependency analysis in table format."""
 
@@ -257,7 +254,6 @@ def dependencies(
     DependenciesCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_filter=action_filter
     ).execute()
-
 
 
 class GraphCommand(BaseInspectCommand):
@@ -356,7 +352,6 @@ def graph(agent: str, user_code: Optional[str], json_output: bool) -> None:
         agac inspect graph -a my_workflow --json
     """
     GraphCommand(agent=agent, user_code=user_code, json_output=json_output).execute()
-
 
 
 class ActionCommand(BaseInspectCommand):
@@ -486,7 +481,6 @@ def action(agent: str, user_code: Optional[str], json_output: bool, action_name:
     ActionCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
     ).execute()
-
 
 
 class ContextCommand(BaseInspectCommand):

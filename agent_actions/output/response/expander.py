@@ -542,7 +542,11 @@ class ActionExpander:
             # Apply workflow-level default timeout if action doesn't specify one
             hitl_timeout_default = defaults.get("hitl_timeout")
             if "timeout" not in hitl_config and hitl_timeout_default is not None:
-                if not isinstance(hitl_timeout_default, int) or isinstance(hitl_timeout_default, bool) or not (5 <= hitl_timeout_default <= 3600):
+                if (
+                    not isinstance(hitl_timeout_default, int)
+                    or isinstance(hitl_timeout_default, bool)
+                    or not (5 <= hitl_timeout_default <= 3600)
+                ):
                     raise ConfigurationError(
                         f"defaults.hitl_timeout must be an integer between 5 and 3600, "
                         f"got {hitl_timeout_default!r}",

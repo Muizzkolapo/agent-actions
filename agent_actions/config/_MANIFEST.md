@@ -22,7 +22,7 @@ orchestration, prompts, and processing to concrete implementations.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Direct import of `WorkflowConfigV2` from `schema`. | `configuration` |
-| `schema.py` | Module | Workflow configuration schema (Pydantic models) with cross-validation (tool `impl` required, duplicate/dangling dep checks). | `configuration`, `validation` |
+| `schema.py` | Module | Workflow configuration schema (Pydantic models) with cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). | `configuration`, `validation` |
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration models and defaults. | `paths`, `configuration` |

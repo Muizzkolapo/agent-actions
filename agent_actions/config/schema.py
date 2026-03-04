@@ -254,6 +254,35 @@ class WorkflowConfigV2(BaseModel):
             raise ValueError(
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
             )
+
+        # Iterative DFS cycle detection (avoids RecursionError on deep chains)
+        dep_graph = self.get_dependency_graph()
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color = {name: WHITE for name in dep_graph}
+
+        for start_node in dep_graph:
+            if color[start_node] != WHITE:
+                continue
+            # stack entries: (node, iterator over its deps)
+            stack = [(start_node, iter(dep_graph.get(start_node, [])))]
+            color[start_node] = GRAY
+            while stack:
+                node, dep_iter = stack[-1]
+                dep = next(dep_iter, None)
+                if dep is None:
+                    color[node] = BLACK
+                    stack.pop()
+                elif color[dep] == GRAY:
+                    # Reconstruct cycle path from stack
+                    cycle = [n for n, _ in stack]
+                    idx = cycle.index(dep)
+                    cycle = cycle[idx:]
+                    cycle.append(dep)
+                    raise ValueError(f"Circular dependency detected: {' -> '.join(cycle)}")
+                elif color[dep] == WHITE:
+                    color[dep] = GRAY
+                    stack.append((dep, iter(dep_graph.get(dep, []))))
+
         return self
 
     def get_action(self, name: str) -> Optional[ActionConfig]:

@@ -10,7 +10,10 @@ T = TypeVar("T")
 
 
 class ProcessingMode(Enum):
-    """Defines the processing mode for processors."""
+    """Execution strategy for individual components (loaders, processors, generators).
+
+    SYNC/ASYNC/AUTO. Not to be confused with processing.types.ProcessingMode (ONLINE/BATCH).
+    """
 
     SYNC = "sync"
     ASYNC = "async"

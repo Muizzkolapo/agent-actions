@@ -6,9 +6,10 @@ and provides factory methods for creating key application components.
 """
 
 import logging
-from typing import Dict, Any, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from agent_actions.config.di.configurator import DIConfigurator, ConfigurationProfile
+from agent_actions.config.di.types import DIConfig
 from agent_actions.errors import ConfigValidationError
 from agent_actions.config.di.container import (
     DependencyContainer,
@@ -28,7 +29,7 @@ class ApplicationContainer:
 
     def __init__(
         self,
-        config: Optional[Dict[str, Any]] = None,
+        config: Optional[DIConfig] = None,
         *,
         container: Optional[DependencyContainer] = None,
     ):
@@ -43,7 +44,7 @@ class ApplicationContainer:
         """
         if config is None:
             config = ConfigurationProfile.development()
-        self.config = config
+        self.config: DIConfig = config
         self.container = container or DIConfigurator.configure_container(config)
         self.processor_factory = DIConfigurator.create_processor_factory(self.container)
 

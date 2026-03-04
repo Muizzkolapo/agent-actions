@@ -14,7 +14,6 @@ from agent_actions.utils.udf_management.registry import list_udfs, clear_registr
 
 
 class ListUDFsCommand:
-
     def __init__(self, user_code: str, json_output: bool, verbose: bool):
         self.user_code = Path(user_code)
         self.json_output = json_output

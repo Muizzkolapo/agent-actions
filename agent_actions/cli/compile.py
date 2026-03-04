@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class RenderCommand:
-
     def __init__(self, args: RenderCommandArgs):
         self.args = args
         self.template_dir = (

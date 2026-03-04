@@ -13,7 +13,6 @@ from agent_actions.validation.status_validator import StatusCommandArgs
 
 
 class StatusCommand:
-
     def __init__(self, args: StatusCommandArgs):
         self.args = args
         self.agent_name = Path(args.agent).stem
@@ -34,9 +33,7 @@ class StatusCommand:
             with open(status_file, "r", encoding="utf-8") as f:
                 status_data = json.load(f)
         except json.JSONDecodeError as e:
-            raise click.ClickException(
-                f"Status file is corrupted: {status_file}\n{e}"
-            )
+            raise click.ClickException(f"Status file is corrupted: {status_file}\n{e}")
         if not isinstance(status_data, dict):
             raise click.ClickException(
                 f"Status file has unexpected format (expected JSON object): {status_file}"

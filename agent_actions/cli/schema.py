@@ -17,7 +17,6 @@ from agent_actions.workflow import WorkflowSchemaService
 
 
 class SchemaCommand:
-
     def __init__(
         self,
         agent: str,
@@ -43,9 +42,7 @@ class SchemaCommand:
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir
-        )
+        ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir)
 
         workflow = AgentWorkflow(
             WorkflowConfig(

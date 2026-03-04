@@ -21,7 +21,6 @@ from agent_actions.validation.run_validator import RunCommandArgs
 
 
 class RunCommand:
-
     def __init__(self, args: RunCommandArgs):
         self.args = args
         self.agent_name = Path(args.agent).stem

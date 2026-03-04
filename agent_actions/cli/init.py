@@ -92,10 +92,12 @@ class InitCommand:
         try:
             backup_dir = None
             if self.project_dir.exists() and self.args.force:
-                backup_dir = Path(tempfile.mkdtemp(
-                    prefix=f".{self.project_dir.name}_bak_",
-                    dir=str(self.project_dir.parent),
-                ))
+                backup_dir = Path(
+                    tempfile.mkdtemp(
+                        prefix=f".{self.project_dir.name}_bak_",
+                        dir=str(self.project_dir.parent),
+                    )
+                )
                 shutil.rmtree(backup_dir)
                 self.project_dir.rename(backup_dir)
             self.project_dir.mkdir(exist_ok=self.args.force)
