@@ -208,7 +208,6 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise VendorAPIError(
                 f"Gemini non-JSON API call failed: {e}",
                 vendor="gemini",
-                operation="call_non_json",
                 cause=e,
             ) from e
 

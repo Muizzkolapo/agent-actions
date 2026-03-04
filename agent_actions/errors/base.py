@@ -1,32 +1,10 @@
-"""Base exception classes for agent-actions.
-
-This module provides the root exception class for all agent-actions errors.
-We keep the hierarchy simple and clean.
-"""
-# Import-outside-toplevel: Avoid circular imports with utilities module
-# Broad-exception-caught: Safety fallback for exception formatting
+"""Base exception classes for agent-actions."""
 
 from typing import Any, Dict, Optional
 
 
 class AgentActionsError(Exception):
-    """Base exception for all agent-actions errors.
-
-    This is the root of our exception hierarchy. All custom exceptions
-    should inherit from this class.
-
-    Args:
-        message: The error message
-        context: Optional dictionary containing contextual information for debugging
-        cause: Optional original exception that caused this error
-
-    Example:
-        raise AgentActionsError(
-            "Failed to process configuration",
-            context={'file': 'config.yml', 'agent': 'my_agent'},
-            cause=original_exception
-        )
-    """
+    """Base exception for all agent-actions errors."""
 
     def __init__(
         self,
@@ -38,17 +16,11 @@ class AgentActionsError(Exception):
         super().__init__(message)
         self.context = context or {}
         self.cause = cause
-
-        # Set __cause__ to maintain proper exception chain
         if cause is not None:
             self.__cause__ = cause
 
-    def __str__(self) -> str:
-        """Return concise error message without context dump."""
-        return super().__str__()
-
     def detailed_str(self) -> str:
-        """Return message with full context — use for debug logging."""
+        """Return message with full context dict — use at debug/event boundaries."""
         try:
             from agent_actions.utils.safe_format import format_exception_context
 

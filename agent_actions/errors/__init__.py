@@ -77,8 +77,7 @@ from agent_actions.errors.preflight import (
 )
 
 # Backward compatibility aliases
-AgentActionsException = AgentActionsError
-ProcessorError = ProcessingError
+AgentActionsException = AgentActionsError  # Deprecated: use AgentActionsError directly
 
 __all__ = [
     # Base
@@ -131,6 +130,4 @@ __all__ = [
     "ContextStructureError",
     "VendorConfigError",
     "PathValidationError",
-    # Backward compatibility aliases
-    "ProcessorError",
 ]

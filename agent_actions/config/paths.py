@@ -51,7 +51,7 @@ class ProjectRootNotFoundError(PathManagerError):
     """Raised when project root cannot be located."""
 
 
-class PathValidationError(PathManagerError):
+class PathManagerValidationError(PathManagerError):
     """Raised when path validation fails."""
 
 
@@ -281,7 +281,7 @@ class PathManager:
             True if path meets all requirements
 
         Raises:
-            PathValidationError: If validation fails and validate_permissions is True
+            PathManagerValidationError: If validation fails and validate_permissions is True
         """
         path = Path(path).resolve()
         requirements = requirements or {}
@@ -303,7 +303,7 @@ class PathManager:
 
         if errors:
             if self.config.validate_permissions:
-                raise PathValidationError("; ".join(errors))
+                raise PathManagerValidationError("; ".join(errors))
             logger.warning("Path validation warnings: %s", "; ".join(errors))
             return False
 

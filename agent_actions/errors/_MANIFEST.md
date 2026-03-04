@@ -18,13 +18,10 @@
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. | - |
 | `AgentNotFoundError` | Class | Raised when a specified agent cannot be found. | - |
 | `ProjectNotFoundError` | Class | Raised when a command requires being in a project but agent_actions.yml is not found. | - |
-| `EnvironmentConfigError` | Class | Raised when environment configuration is invalid or missing. | - |
 | `external_services.py` | Module | External service and vendor API errors. | `errors` |
 | `ExternalServiceError` | Class | Base exception for external service interactions. | - |
 | `VendorAPIError` | Class | Raised when an error occurs during a call to a vendor's API. | - |
-| `OpenAIError` | Class | Specific error for OpenAI API failures. | - |
 | `AnthropicError` | Class | Specific error for Anthropic API failures. | - |
-| `GeminiError` | Class | Specific error for Gemini API failures. | - |
 | `NetworkError` | Class | Raised when network-related errors occur (timeout, connection, etc). | - |
 | `RateLimitError` | Class | Raised when API rate limits are exceeded. | - |
 | `filesystem.py` | Module | File system operation errors. | `errors` |
@@ -42,6 +39,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `field_context_metadata` | Attr | Metadata about stored vs loaded fields per namespace (for enhanced diagnostics). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `storage_hints` | Attr | Dict mapping variable names to storage info when field exists in storage but wasn't loaded. | - |
 | `preflight.py` | Module | Pre-flight validation errors for unified batch/online error handling. | `errors` |
+| `_render_sections` | Function | Render a user-friendly multi-section error message from (label, value) pairs. | - |
 | `PreFlightValidationError` | Class | Base exception for all pre-flight validation errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `format_user_message` | Method | Format a user-friendly error message with all details. | - |
 | `ContextStructureError` | Class | Raised when context data structure doesn't match expected schema. | - |
@@ -53,9 +51,9 @@
 | `GenerationError` | Class | Raised when data generation fails. | - |
 | `WorkflowError` | Class | Raised when an error occurs in workflow processing. | - |
 | `SerializationError` | Class | Raised when serialization/deserialization fails. | - |
+| `EmptyOutputError` | Class | Raised when an action produces empty output and on_empty=error. | - |
 | `resources.py` | Module | Resource-related errors (memory, dependencies, etc). | `errors` |
 | `ResourceError` | Class | Base exception for resource-related errors. | - |
-| `ResourceMemoryError` | Class | Raised when memory-related issues occur. | - |
 | `DependencyError` | Class | Raised when a required dependency is not provided or cannot be loaded. | - |
 | `validation.py` | Module | Validation-related errors. | `errors` |
 | `ValidationError` | Class | Base exception for validation failures. | - |

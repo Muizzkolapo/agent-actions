@@ -20,12 +20,12 @@ from xml.etree import ElementTree as ET
 
 import yaml
 
-from agent_actions.errors import ProcessingError as ProcessorError
+from agent_actions.errors import ProcessingError
 from agent_actions.errors import get_error_detail
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
 
-T = TypeVar("T", bound=ProcessorError)
+T = TypeVar("T", bound=ProcessingError)
 
 
 class ProcessorErrorHandlerMixin:
@@ -89,7 +89,7 @@ class ProcessorErrorHandlerMixin:
             **context_kwargs: Additional context to log
 
         Raises:
-            The specified error type or ProcessorError if not specified
+            The specified error type or ProcessingError if not specified
         """
         context = self.get_error_context(operation, **context_kwargs)
         context["error_type"] = error.__class__.__name__
@@ -135,7 +135,7 @@ class ProcessorErrorHandlerMixin:
             if error_type:
                 raise error_type(f"{operation} failed: {get_error_detail(error)}") from error
             else:
-                raise ProcessorError(f"{operation} failed: {get_error_detail(error)}") from error
+                raise ProcessingError(f"{operation} failed: {get_error_detail(error)}") from error
 
     def handle_validation_error(
         self,

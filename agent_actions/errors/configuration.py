@@ -1,6 +1,4 @@
 """Configuration-related errors."""
-# Too-many-arguments: Legacy compatibility requires preserving all parameters
-# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError
 
@@ -19,39 +17,21 @@ class ConfigValidationError(ConfigurationError):
         message: str = None,
         reason: str = None,
         *,
-        context: dict = None,
         config_key: str = None,
+        context: dict = None,
         cause: Exception = None,
     ):
-        """Initialize ConfigValidationError.
-
-        Supports both old and new signatures:
-        - New: ConfigValidationError("message", context={...}, cause=...)
-        - Old keyword: ConfigValidationError(config_key="key", reason="reason", context={...})
-        - Old positional: ConfigValidationError("key", "reason", context={...})
-
-        Args:
-            message: Either the full error message (new style) or config_key (old positional style)
-            context: Additional context dict
-            config_key: Config key that failed (old keyword style)
-            reason: Reason for validation failure (old style only)
-            cause: The underlying exception
-        """
-        # Handle old keyword style: config_key= and reason=
-        if config_key is not None and reason is not None:
-            msg = f"Configuration validation failed for '{config_key}': {reason}"
-            ctx = context or {}
-            ctx.update({"config_key": config_key, "reason": reason})
-            super().__init__(msg, context=ctx, cause=cause)
-        # Handle old positional style: ConfigValidationError("key", "reason", ...)
-        elif reason is not None:
-            msg = f"Configuration validation failed for '{message}': {reason}"
-            ctx = context or {}
-            ctx.update({"config_key": message, "reason": reason})
-            super().__init__(msg, context=ctx, cause=cause)
-        # New style: just message
+        ctx = dict(context) if context else {}
+        if reason is not None:
+            effective_key = config_key or message
+            msg = f"Configuration validation failed for '{effective_key}': {reason}"
+            ctx.update({"config_key": effective_key, "reason": reason})
+        elif config_key is not None:
+            msg = f"Configuration validation failed for '{config_key}'"
+            ctx["config_key"] = config_key
         else:
-            super().__init__(message, context=context, cause=cause)
+            msg = message
+        super().__init__(msg, context=ctx, cause=cause)
 
 
 class DuplicateFunctionError(ConfigurationError):
@@ -80,7 +60,7 @@ class DuplicateFunctionError(ConfigurationError):
                 "\n  2. Move shared UDFs to a common shared directory"
                 "\n  3. Remove the duplicate if it's unintentional"
             )
-            ctx = context or {}
+            ctx = dict(context) if context else {}
             ctx.update(
                 {
                     "function_name": function_name,
@@ -118,7 +98,7 @@ class UDFLoadError(ConfigurationError):
             msg = f"Failed to load UDF module '{module}': {error}"
             if file:
                 msg += f" (file: {file})"
-            ctx = context or {}
+            ctx = dict(context) if context else {}
             ctx.update({"module": module, "file": file, "error": error})
             super().__init__(msg, context=ctx, cause=cause)
         else:

@@ -1,6 +1,6 @@
 """Tests for configuration error classes."""
 
-from agent_actions.errors.configuration import DuplicateFunctionError
+from agent_actions.errors.configuration import ConfigValidationError, DuplicateFunctionError
 
 
 class TestDuplicateFunctionError:
@@ -30,3 +30,28 @@ class TestDuplicateFunctionError:
         err = DuplicateFunctionError("some other error")
         msg = str(err)
         assert "Suggestions:" not in msg
+
+
+class TestConfigValidationError:
+    """Tests for ConfigValidationError calling conventions."""
+
+    def test_positional_style(self):
+        err = ConfigValidationError("my_key", "invalid value")
+        assert "my_key" in str(err)
+        assert "invalid value" in str(err)
+        assert err.context["config_key"] == "my_key"
+        assert err.context["reason"] == "invalid value"
+
+    def test_keyword_style(self):
+        err = ConfigValidationError(config_key="my_key", reason="bad")
+        assert "my_key" in str(err)
+        assert "bad" in str(err)
+        assert err.context["config_key"] == "my_key"
+
+    def test_message_only_style(self):
+        err = ConfigValidationError("Something went wrong")
+        assert str(err) == "Something went wrong"
+
+    def test_config_key_only(self):
+        err = ConfigValidationError(config_key="orphan_key")
+        assert "orphan_key" in str(err)

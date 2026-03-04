@@ -199,7 +199,6 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise VendorAPIError(
                 f"Mistral non-JSON API call failed: {e}",
                 vendor="mistral",
-                operation="call_non_json",
                 cause=e,
             ) from e
 

@@ -120,9 +120,8 @@ class GenericErrorHandlerMixin:
             },
         )
         raise VendorAPIError(
-            f"{vendor_name} API call failed: {error}",
+            f"{vendor_name} API call failed ({operation}): {error}",
             vendor=vendor_name,
-            operation=operation,
             cause=error,
         ) from error
 

@@ -150,7 +150,6 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise VendorAPIError(
                 "Cohere JSON response contained no content",
                 vendor="cohere",
-                operation="call_json",
             )
         intermediate_json = response.message.content[0].text
 
@@ -221,7 +220,6 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise VendorAPIError(
                 f"Cohere non-JSON API call failed: {e}",
                 vendor="cohere",
-                operation="call_non_json",
                 cause=e,
             ) from e
 
@@ -263,7 +261,6 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             raise VendorAPIError(
                 "Cohere non-JSON response contained no content",
                 vendor="cohere",
-                operation="call_non_json",
             )
         response_message = response.message.content[0].text
 

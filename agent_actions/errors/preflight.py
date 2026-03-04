@@ -1,31 +1,60 @@
-"""Pre-flight validation errors for unified batch/online error handling.
-
-This module provides error classes specifically for pre-flight validation,
-ensuring consistent error messages between batch and online execution modes.
-"""
-# Unnecessary-pass: Simple exception classes inherit all behavior from parent
+"""Pre-flight validation errors for unified batch/online error handling."""
 
 from typing import Any, Dict, List, Optional
 
 from agent_actions.errors.base import AgentActionsError
 
 
-class PreFlightValidationError(AgentActionsError):
-    """Base exception for all pre-flight validation errors.
+def _render_sections(
+    header: str,
+    sections: list,
+    *,
+    truncate_lists_at: int = 10,
+) -> str:
+    """Render a multi-section error message from (label, value) pairs.
 
-    Pre-flight validation runs before any LLM calls to catch configuration
-    and input errors early, with consistent messaging across batch/online modes.
-
-    Args:
-        message: The error message
-        available_references: List of available context references
-        missing_references: List of missing/invalid references
-        hint: Actionable suggestion for fixing the error
-        mode: Execution mode ('batch' or 'online')
-        agent_name: Name of the agent being validated
-        context: Additional context dict
-        cause: Original exception
+    Sections: None=group separator, str=raw line, (label, value)=formatted pair.
+    List values are comma-joined and truncated at truncate_lists_at.
     """
+    lines = [header]
+
+    # Split sections into groups at None boundaries
+    groups: list[list] = [[]]
+    for item in sections:
+        if item is None:
+            groups.append([])
+        else:
+            groups[-1].append(item)
+
+    for group in groups:
+        group_lines: list[str] = []
+        for item in group:
+            if isinstance(item, str):
+                group_lines.append(item)
+            else:
+                label, value = item
+                if value is None:
+                    continue
+                if isinstance(value, list):
+                    if not value:
+                        continue
+                    display = list(value)
+                    if len(display) > truncate_lists_at:
+                        display = display[:truncate_lists_at] + [
+                            f"(+{len(display) - truncate_lists_at} more)"
+                        ]
+                    group_lines.append(f"  {label}: {', '.join(str(v) for v in display)}")
+                else:
+                    group_lines.append(f"  {label}: {value}")
+        if group_lines:
+            lines.append("")
+            lines.extend(group_lines)
+
+    return "\n".join(lines)
+
+
+class PreFlightValidationError(AgentActionsError):
+    """Base exception for all pre-flight validation errors."""
 
     def __init__(
         self,
@@ -39,7 +68,7 @@ class PreFlightValidationError(AgentActionsError):
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        ctx = context or {}
+        ctx = dict(context) if context else {}
         if available_references is not None:
             ctx["available_references"] = available_references
         if missing_references is not None:
@@ -52,8 +81,6 @@ class PreFlightValidationError(AgentActionsError):
             ctx["agent_name"] = agent_name
 
         super().__init__(message, context=ctx, cause=cause)
-
-        # Store as instance attributes for easy access
         self.available_references = available_references or []
         self.missing_references = missing_references or []
         self.hint = hint
@@ -61,52 +88,26 @@ class PreFlightValidationError(AgentActionsError):
         self.agent_name = agent_name
 
     def __str__(self) -> str:
-        """Return user-friendly string representation instead of raw context dump."""
         return self.format_user_message()
 
     def format_user_message(self) -> str:
-        """Format a user-friendly error message with all details."""
-        lines = [self.args[0]]  # Just the message, no class name prefix
-        lines.append("")
-
-        if self.missing_references:
-            lines.append(f"  Missing: {', '.join(self.missing_references)}")
-        if self.available_references:
-            # Truncate available references for readability
-            refs = self.available_references
-            if len(refs) > 10:
-                display_refs = refs[:10] + [f"(+{len(refs) - 10} more)"]
-            else:
-                display_refs = refs
-            lines.append(f"  Available: {', '.join(display_refs)}")
-
-        if self.hint:
-            lines.append("")
-            lines.append(f"  Hint: {self.hint}")
-
-        if self.mode or self.agent_name:
-            lines.append("")
-            if self.agent_name:
-                lines.append(f"  Agent: {self.agent_name}")
-            if self.mode:
-                lines.append(f"  Mode: {self.mode}")
-
-        return "\n".join(lines)
+        return _render_sections(
+            self.args[0],
+            [
+                None,
+                ("Missing", self.missing_references or None),
+                ("Available", self.available_references or None),
+                None,
+                ("Hint", self.hint),
+                None,
+                ("Agent", self.agent_name),
+                ("Mode", self.mode),
+            ],
+        )
 
 
 class VendorConfigError(PreFlightValidationError):
-    """Raised when vendor configuration is invalid or incompatible.
-
-    Args:
-        message: Description of the vendor config issue
-        vendor: Name of the vendor (openai, anthropic, etc.)
-        missing_fields: List of required fields that are missing
-        unsupported_features: List of features requested but not supported
-        agent_name: Name of the agent being validated
-        mode: Execution mode ('batch' or 'online')
-        context: Additional context dict
-        cause: Original exception
-    """
+    """Raised when vendor configuration is invalid or incompatible."""
 
     def __init__(
         self,
@@ -120,7 +121,7 @@ class VendorConfigError(PreFlightValidationError):
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        ctx = context or {}
+        ctx = dict(context) if context else {}
         if vendor is not None:
             ctx["vendor"] = vendor
         if unsupported_features is not None:
@@ -162,7 +163,7 @@ class ContextStructureError(PreFlightValidationError):
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        ctx = context or {}
+        ctx = dict(context) if context else {}
         if expected_fields is not None:
             ctx["expected_fields"] = expected_fields
         if actual_fields is not None:
@@ -196,17 +197,7 @@ class ContextStructureError(PreFlightValidationError):
 
 
 class PathValidationError(PreFlightValidationError):
-    """Raised when file or directory paths are invalid or inaccessible.
-
-    Args:
-        message: Description of the path issue
-        invalid_paths: List of paths that are invalid or inaccessible
-        path_type: Type of path ('file', 'directory', 'input', 'output', 'schema')
-        agent_name: Name of the agent being validated
-        mode: Execution mode ('batch' or 'online')
-        context: Additional context dict
-        cause: Original exception
-    """
+    """Raised when file or directory paths are invalid or inaccessible."""
 
     def __init__(
         self,
@@ -219,7 +210,7 @@ class PathValidationError(PreFlightValidationError):
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        ctx = context or {}
+        ctx = dict(context) if context else {}
         if path_type is not None:
             ctx["path_type"] = path_type
 

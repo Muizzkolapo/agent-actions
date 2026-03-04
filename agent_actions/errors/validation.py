@@ -1,9 +1,9 @@
 """Validation-related errors."""
-# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from typing import Any, Dict, List, Optional, Tuple
 
 from agent_actions.errors.base import AgentActionsError
+from agent_actions.errors.preflight import _render_sections
 
 
 class ValidationError(AgentActionsError):
@@ -25,28 +25,7 @@ class DataValidationError(ValidationError):
 
 
 class SchemaValidationError(ValidationError):
-    """Raised when schema validation fails.
-
-    Provides structured context for debugging schema validation issues,
-    including validation type, field mismatches, and actionable hints.
-
-    Args:
-        message: Description of the validation failure
-        schema_name: Name of the schema being validated
-        validation_type: Type of validation ('input', 'output', 'structure', 'compilation')
-        action_name: Name of the action/agent being validated
-        expected_fields: List of fields expected by the schema
-        actual_fields: List of fields actually present
-        missing_fields: Required fields that are missing
-        extra_fields: Fields present but not in schema
-        type_errors: Dict mapping field names to (expected_type, actual_type) tuples
-        error_path: JSON path to the failing field (e.g., "root.items[0].name")
-        failed_value: The value that failed validation
-        schema_constraint: The schema constraint that failed
-        hint: Actionable suggestion for fixing the error
-        context: Additional context dict
-        cause: Original exception (e.g., from jsonschema)
-    """
+    """Raised when schema validation fails."""
 
     def __init__(
         self,
@@ -67,9 +46,7 @@ class SchemaValidationError(ValidationError):
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None,
     ):
-        ctx = context or {}
-
-        # Populate context from specific parameters
+        ctx = dict(context) if context else {}
         if schema_name is not None:
             ctx["schema_name"] = schema_name
         if validation_type is not None:
@@ -96,8 +73,6 @@ class SchemaValidationError(ValidationError):
             ctx["hint"] = hint
 
         super().__init__(message, context=ctx, cause=cause)
-
-        # Store as instance attributes for easy programmatic access
         self.schema_name = schema_name
         self.validation_type = validation_type
         self.action_name = action_name
@@ -112,45 +87,32 @@ class SchemaValidationError(ValidationError):
         self.hint = hint
 
     def __str__(self) -> str:
-        """Return user-friendly string representation."""
         return self.format_user_message()
 
     def format_user_message(self) -> str:
-        """Format a user-friendly error message with all details."""
-        lines = [self.args[0]]  # Just the message
-
-        # Schema and action context
-        if self.schema_name or self.action_name:
-            lines.append("")
-            if self.schema_name:
-                lines.append(f"  Schema: {self.schema_name}")
-            if self.action_name:
-                lines.append(f"  Action: {self.action_name}")
-            if self.validation_type:
-                lines.append(f"  Validation: {self.validation_type}")
-
-        # Field mismatches
-        if self.missing_fields:
-            lines.append("")
-            lines.append(f"  Missing fields: {', '.join(self.missing_fields)}")
-
-        if self.extra_fields:
-            lines.append(f"  Extra fields: {', '.join(self.extra_fields)}")
+        sections: list = [
+            None,
+            ("Schema", self.schema_name),
+            ("Action", self.action_name),
+            ("Validation", self.validation_type),
+            None,
+            ("Missing fields", self.missing_fields or None),
+            ("Extra fields", self.extra_fields or None),
+        ]
 
         if self.type_errors:
-            lines.append("")
-            lines.append("  Type mismatches:")
+            sections.append(None)
+            sections.append("  Type mismatches:")
             for field, (expected, actual) in self.type_errors.items():
-                lines.append(f"    - {field}: expected {expected}, got {actual}")
+                sections.append(f"    - {field}: expected {expected}, got {actual}")
 
-        # Error path for nested validation errors
-        if self.error_path:
-            lines.append("")
-            lines.append(f"  Error path: {self.error_path}")
+        sections.extend(
+            [
+                None,
+                ("Error path", self.error_path),
+                None,
+                ("Hint", self.hint),
+            ]
+        )
 
-        # Hint
-        if self.hint:
-            lines.append("")
-            lines.append(f"  Hint: {self.hint}")
-
-        return "\n".join(lines)
+        return _render_sections(self.args[0], sections)
