@@ -5,10 +5,8 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-# Generic type variables for interfaces
+# Generic type variable for interfaces
 T = TypeVar("T")
-DataT = TypeVar("DataT", bound=Dict[str, Any])
-ContentT = TypeVar("ContentT")
 
 
 class ProcessingMode(Enum):

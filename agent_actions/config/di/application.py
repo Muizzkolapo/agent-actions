@@ -9,20 +9,11 @@ import logging
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from agent_actions.config.di.configurator import DIConfigurator, ConfigurationProfile
-from agent_actions.config.interfaces import (
-    IDataProcessor,
-    IGenerator,
-    ISourceDataLoader,
-)
-from agent_actions.errors import ConfigValidationError, DependencyError
-from agent_actions.input.loaders.source_data import SourceDataLoader
+from agent_actions.errors import ConfigValidationError
 from agent_actions.config.di.container import (
     DependencyContainer,
     ProcessorFactory,
-    registry,
 )
-from agent_actions.input.preprocessing.processing.data_processor import DataProcessor
-from agent_actions.prompt.data_generator import DataGenerator
 
 from agent_actions.workflow.runner import AgentRunner
 
@@ -35,18 +26,25 @@ logger = logging.getLogger(__name__)
 class ApplicationContainer:
     """Main application container that manages all dependencies."""
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        config: Optional[Dict[str, Any]] = None,
+        *,
+        container: Optional[DependencyContainer] = None,
+    ):
         """
         Initialize the application container.
 
         Args:
             config: Optional configuration dictionary.
                 Uses development profile if not provided.
+            container: Optional pre-configured DependencyContainer.
+                When provided, skips DIConfigurator.configure_container().
         """
         if config is None:
             config = ConfigurationProfile.development()
         self.config = config
-        self.container = DIConfigurator.configure_container(config)
+        self.container = container or DIConfigurator.configure_container(config)
         self.processor_factory = DIConfigurator.create_processor_factory(self.container)
 
     def get_agent_runner(
@@ -88,66 +86,6 @@ class ApplicationContainer:
         """
         return self.container
 
-    def _get_dependency_configs_for_agent(
-        self, agent_config: Dict, agent_configs: Optional[Dict[str, Dict]] = None
-    ) -> Dict[str, Dict]:
-        """
-        Extract configs for all dependencies of an agent.
-
-        Args:
-            agent_config: Configuration for the agent
-            agent_configs: Full dict mapping agent names to their configs
-
-        Returns:
-            Dict mapping dependency names to their configs
-        """
-        if not agent_configs:
-            return {}
-        dependency_names = agent_config.get("dependencies", [])
-        dependency_configs = {}
-        for dep_name in dependency_names:
-            if dep_name in agent_configs:
-                dependency_configs[dep_name] = agent_configs[dep_name]
-        return dependency_configs
-
-    def _get_source_loader(self, agent_name: str, storage_backend: "StorageBackend"):
-        """Get source loader from container or create with storage backend."""
-        try:
-            source_loader = self.container.get(ISourceDataLoader)
-            logger.debug(
-                "Retrieved ISourceDataLoader from DI container",
-                extra={"agent_name": agent_name},
-            )
-            return source_loader
-        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
-            logger.debug(
-                "Creating SourceDataLoader with storage backend",
-                extra={"agent_name": agent_name},
-            )
-            return SourceDataLoader(agent_name=agent_name, storage_backend=storage_backend)
-
-    def _get_data_generator(
-        self,
-        agent_config: Dict,
-        agent_name: str,
-        _idx: int,
-        agent_configs: Optional[Dict[str, Dict]],
-        agent_indices: Dict,
-    ):
-        """Get data generator from container or create manually."""
-        try:
-            return self.container.get(IGenerator)
-        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
-            dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
-            return DataGenerator(agent_config, agent_name, dependency_configs, agent_indices)
-
-    def _get_data_processor(self, agent_config: Dict):
-        """Get data processor from container or create manually."""
-        try:
-            return self.container.get(IDataProcessor)
-        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
-            return DataProcessor(agent_config)
-
     @classmethod
     def create_for_environment(cls, environment: str) -> "ApplicationContainer":
         """
@@ -185,9 +123,7 @@ class ApplicationContainer:
         Returns:
             ApplicationContainer with test dependencies.
         """
-        container = DIConfigurator.configure_for_testing()
-        app_container = cls.__new__(cls)
-        app_container.config = ConfigurationProfile.testing()
-        app_container.container = container
-        app_container.processor_factory = ProcessorFactory(container, registry)
-        return app_container
+        return cls(
+            config=ConfigurationProfile.testing(),
+            container=DIConfigurator.configure_for_testing(),
+        )

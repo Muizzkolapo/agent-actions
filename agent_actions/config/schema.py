@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import parse_guard_config
 
@@ -36,7 +35,9 @@ class VersionConfig(BaseModel):
     """Configuration for version-based actions."""
 
     param: str = Field(..., description="Parameter name for version variable")
-    range: List[int] = Field(..., description="Range of values for version parameter")
+    range: List[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
+        ..., description="Range of values for version parameter"
+    )
     mode: VersionMode = Field(default=VersionMode.PARALLEL, description="Execution mode")
 
 
@@ -173,10 +174,12 @@ class ActionConfig(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_hitl_config(self):
-        """Ensure HITL config is present when kind=hitl."""
+    def validate_kind_requirements(self):
+        """Ensure kind-specific fields are present."""
         if self.kind == ActionKind.HITL and self.hitl is None:
             raise ValueError("HITL actions require 'hitl' configuration block")
+        if self.kind == ActionKind.TOOL and not self.impl:
+            raise ValueError("Tool actions require 'impl' (implementation path)")
         return self
 
     @field_validator("guard")
@@ -184,24 +187,12 @@ class ActionConfig(BaseModel):
     def validate_guard(cls, v):
         """Validate guard expressions for safety."""
         if v:
-            try:
-                if isinstance(v, str):
-                    GuardParser.parse(v)
-                elif isinstance(v, dict):
-                    parse_guard_config(v)
-                else:
-                    raise ConfigValidationError(
-                        "guard_type",
-                        f"Guard must be string or dict, got {type(v)}",
-                        context={"guard_type": str(type(v)), "operation": "validate_guard"},
-                    )
-            except ValueError as e:
-                raise ConfigValidationError(
-                    "guard_expression",
-                    f"Invalid guard: {e}",
-                    context={"guard": v, "operation": "validate_guard"},
-                    cause=e,
-                ) from e
+            if isinstance(v, str):
+                GuardParser.parse(v)
+            elif isinstance(v, dict):
+                parse_guard_config(v)
+            else:
+                raise ValueError(f"Guard must be string or dict, got {type(v)}")
         return v
 
 
@@ -241,6 +232,29 @@ class WorkflowConfigV2(BaseModel):
     version: str = Field(..., description="Workflow version")
     defaults: Optional[DefaultsConfig] = Field(default=None, description="Default settings")
     actions: List[ActionConfig] = Field(..., description="Workflow actions")
+
+    @model_validator(mode="after")
+    def validate_workflow_invariants(self):
+        """Check for duplicate action names and dangling dependency references."""
+        names = [action.name for action in self.actions]
+        seen = set()
+        duplicates = set()
+        for name in names:
+            if name in seen:
+                duplicates.add(name)
+            seen.add(name)
+        if duplicates:
+            raise ValueError(f"Duplicate action names: {sorted(duplicates)}")
+
+        all_deps = set()
+        for action in self.actions:
+            all_deps.update(action.dependencies)
+        dangling = all_deps - seen
+        if dangling:
+            raise ValueError(
+                f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
+            )
+        return self
 
     def get_action(self, name: str) -> Optional[ActionConfig]:
         """Get an action by name."""

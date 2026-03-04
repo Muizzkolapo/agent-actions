@@ -5,7 +5,6 @@ Provides factory functions to create AgentRunner
 instances with proper DI container lifecycle management.
 """
 
-import logging
 from contextlib import contextmanager
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
@@ -14,8 +13,6 @@ from agent_actions.config.di.application import ApplicationContainer
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-
-logger = logging.getLogger(__name__)
 
 
 @contextmanager

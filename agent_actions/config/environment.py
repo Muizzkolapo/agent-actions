@@ -6,8 +6,6 @@ from enum import Enum
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from agent_actions.errors import ConfigValidationError
-
 
 class Environment(str, Enum):
     """Supported environment types."""
@@ -71,11 +69,7 @@ class EnvironmentConfig(BaseSettings):
         if v is not None:
             key_str = v.get_secret_value() if isinstance(v, SecretStr) else v
             if len(key_str.strip()) < 10:
-                raise ConfigValidationError(
-                    "api_key_length",
-                    "API key must be at least 10 characters long",
-                    context={"key_length": len(key_str.strip()), "operation": "validate_api_key"},
-                )
+                raise ValueError("API key must be at least 10 characters long")
         return v
 
     @field_validator("database_url")
@@ -85,14 +79,8 @@ class EnvironmentConfig(BaseSettings):
         if v is not None:
             valid_prefixes = ("postgresql://", "mysql://", "sqlite:///")
             if not v.startswith(valid_prefixes):
-                raise ConfigValidationError(
-                    "database_url_format",
-                    "Database URL must start with postgresql://, mysql://, or sqlite:///",
-                    context={
-                        "database_url": v,
-                        "valid_prefixes": list(valid_prefixes),
-                        "operation": "validate_database_url",
-                    },
+                raise ValueError(
+                    "Database URL must start with postgresql://, mysql://, or sqlite:///"
                 )
         return v
 

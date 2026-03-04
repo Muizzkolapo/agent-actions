@@ -27,16 +27,13 @@ class DIConfigurator:
     def configure_container(config: Dict[str, Any]) -> DependencyContainer:
         """Configure the container with all dependencies."""
         container = DependencyContainer()
-        DIConfigurator._register_core_services(container, config)
-        DIConfigurator._register_processors(container, config)
-        DIConfigurator._register_utilities(container, config)
+        DIConfigurator._register_core_services(container)
+        DIConfigurator._register_processors(container)
+        DIConfigurator._register_utilities(container)
         return container
 
     @staticmethod
-    def _register_core_services(
-        container: DependencyContainer,
-        config: Dict[str, Any],
-    ):
+    def _register_core_services(container: DependencyContainer):
         """Register core application services."""
         from agent_actions.llm.batch.service import BatchService
         from agent_actions.config.paths import PathManager
@@ -45,25 +42,16 @@ class DIConfigurator:
         container.register_singleton(BatchService, BatchService)
 
     @staticmethod
-    def _register_processors(
-        container: DependencyContainer,
-        config: Dict[str, Any],
-    ):
+    def _register_processors(container: DependencyContainer):
         """Register processor implementations."""
         from agent_actions.input.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt.data_generator import DataGenerator
 
         container.register_transient(IDataProcessor, DataProcessor)
         container.register_transient(IGenerator, DataGenerator)
-        # Note: ISourceDataLoader is NOT registered here because SourceDataLoader
-        # requires runtime parameters (agent_name) that can't be auto-injected.
-        # Use ApplicationContainer._get_source_loader() factory method instead.
 
     @staticmethod
-    def _register_utilities(
-        container: DependencyContainer,
-        config: Dict[str, Any],
-    ):
+    def _register_utilities(container: DependencyContainer):
         """Register utility services."""
         from agent_actions.logging.factory import LoggerFactory
         from agent_actions.prompt.handler import PromptLoader

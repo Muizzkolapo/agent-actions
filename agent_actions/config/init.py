@@ -4,6 +4,7 @@ Module for initializing new Agent Actions projects.
 
 import logging
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 class ProjectInitializer:
     """Initialize new Agent Actions projects with standard structure."""
 
-    def __init__(self, project_name: str, base_path: Path = Path.cwd()) -> None:
+    def __init__(self, project_name: str, base_path: Optional[Path] = None) -> None:
         """
         Initialize a new ProjectInitializer instance.
 
@@ -28,7 +29,7 @@ class ProjectInitializer:
             base_path (Path, optional): Base directory path. Defaults to current working directory.
         """
         self.project_name = project_name
-        self.project_dir: Path = base_path / project_name
+        self.project_dir: Path = (base_path or Path.cwd()) / project_name
 
         # Standard project structure (user-managed directories)
         self.workflow_dir: Path = self.project_dir / "agent_workflow"
@@ -49,14 +50,17 @@ class ProjectInitializer:
 
     def create_file(self, path: Path, content: str = "") -> None:
         """
-        Create a file if it doesn't exist.
+        Create a file if it doesn't exist (atomic check-and-create).
 
         Args:
             path (Path): Path to the file to create.
             content (str): Content to write to the file.
         """
-        if not path.exists():
-            path.write_text(content, encoding="utf-8")
+        try:
+            with open(path, "x", encoding="utf-8") as f:
+                f.write(content)
+        except FileExistsError:
+            pass
 
     def init_project(self) -> None:
         """
@@ -94,5 +98,5 @@ class ProjectInitializer:
                 CHUNK_CONFIG_KEY: {"chunk_size": 300, "overlap": 10},
             }
         }
-        self.create_file(self.config_file, yaml.dump(config_data))
+        self.create_file(self.config_file, yaml.safe_dump(config_data, default_flow_style=False))
         logger.info("Successfully initialized project: %s", self.project_name)

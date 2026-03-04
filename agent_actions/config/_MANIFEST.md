@@ -21,13 +21,13 @@ orchestration, prompts, and processing to concrete implementations.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `__init__.py` | Module | Package exports for configuration models. | `configuration` |
-| `schema.py` | Module | Workflow configuration schema (Pydantic models). | `configuration`, `validation` |
-| `environment.py` | Module | Environment settings with validation and API/perf adapters. | `configuration`, `validation` |
-| `paths.py` | Module | PathManager and standard path resolution. | `paths`, `configuration` |
+| `__init__.py` | Module | Direct import of `WorkflowConfigV2` from `schema`. | `configuration` |
+| `schema.py` | Module | Workflow configuration schema (Pydantic models) with cross-validation (tool `impl` required, duplicate/dangling dep checks). | `configuration`, `validation` |
+| `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
+| `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration models and defaults. | `paths`, `configuration` |
 | `factory.py` | Module | DI-aware factory helpers for `AgentRunner`. | `di`, `configuration` |
-| `init.py` | Module | ProjectInitializer for scaffolding new projects. | `configuration`, `filesystem` |
+| `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
 | `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) for config structures. | `config`, `workflow`, `processing` |
@@ -65,8 +65,9 @@ Key Functions
 | Module | Symbol | Type | Description |
 |--------|--------|------|-------------|
 | `paths.py` | `PathManager.get_standard_path` | Method | Resolve standard project/agent paths. |
-| `paths.py` | `PathManager.get_project_root` | Method | Locate the project root for path resolution. |
+| `paths.py` | `PathManager.get_project_root` | Method | Locate the project root (caches only for CWD lookups). |
 | `paths.py` | `PathManager.get_agent_paths` | Method | Resolve per-agent config/io/source paths. |
+| `paths.py` | `PathManager.clean_path` | Method | Remove files/dirs with project-boundary guard. |
 | `path_config.py` | `load_project_config` | Function | Load project-level config from YAML. |
 
 ## Cross-Module Touchpoints

@@ -42,15 +42,6 @@ class PathConfig:
     marker_file: str = "agent_actions.yml"
     cache_paths: bool = True
 
-    @classmethod
-    def for_environment(cls, environment: str = "default") -> "PathConfig":
-        """Get environment-specific configuration."""
-        configs = {
-            "test": cls(marker_file="test_agent_actions.yml"),
-            "prod": cls(validate_permissions=True, create_if_missing=False),
-        }
-        return configs.get(environment, cls())
-
 
 class PathManagerError(Exception):
     """Base exception for PathManager errors."""
@@ -85,8 +76,8 @@ class PathManager:
     VALIDATION_RULES = {
         PathType.PROJECT_ROOT: {"must_exist": True, "must_be_readable": True},
         PathType.AGENT_CONFIG: {"must_exist": True, "must_be_readable": True},
-        PathType.SOURCE: {"create_if_missing": True, "must_be_writable": True},
-        PathType.TARGET: {"create_if_missing": True, "must_be_writable": True},
+        PathType.SOURCE: {"must_be_writable": True},
+        PathType.TARGET: {"must_be_writable": True},
         PathType.SCHEMA: {"must_exist": True, "must_be_readable": True},
     }
 
@@ -109,7 +100,11 @@ class PathManager:
         Raises:
             ProjectRootNotFoundError: If project root cannot be found
         """
-        if self._project_root and self.config.cache_paths:
+        # When start_path is None (CWD), return cached root if available.
+        # When start_path is explicit, always re-resolve (skip reading cache)
+        # but still store the result for follow-on calls like get_standard_path().
+        read_cache = start_path is None and self.config.cache_paths
+        if self._project_root and read_cache:
             return self._project_root
 
         search_path = Path(start_path or Path.cwd()).resolve()
@@ -119,13 +114,20 @@ class PathManager:
         while current != current.parent:
             marker_path = current / self.config.marker_file
             if marker_path.exists():
-                self._project_root = current
+                if self.config.cache_paths:
+                    self._project_root = current
                 return current
 
             # Fallback: check for 'agent_actions' (package root) or 'agent_config' directory
             # 'agent_actions' is the definitive project marker per user specification.
             if (current / "agent_actions").is_dir() or (current / "agent_config").is_dir():
-                self._project_root = current
+                logger.warning(
+                    "Project root found via fallback heuristic (no marker file '%s'): %s",
+                    self.config.marker_file,
+                    current,
+                )
+                if self.config.cache_paths:
+                    self._project_root = current
                 return current
 
             current = current.parent
@@ -384,6 +386,13 @@ class PathManager:
             True if successfully cleaned
         """
         path = self.normalize_path(path)
+
+        # Note: is_within_project() calls get_project_root() which may resolve
+        # from CWD if the manager wasn't primed with an explicit root. Callers
+        # should ensure the manager is initialised with project_root or primed
+        # via get_project_root(start_path=...) before calling clean_path().
+        if not self.is_within_project(path):
+            raise ValueError(f"Refusing to delete path outside project root: {path}")
 
         try:
             if path.exists():

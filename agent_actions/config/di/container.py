@@ -22,11 +22,6 @@ class ServiceLifetime(str, Enum):
     SINGLETON = "singleton"
     TRANSIENT = "transient"
 
-    @classmethod
-    def is_valid(cls, lifetime: str) -> bool:
-        """Check if a lifetime value is valid."""
-        return lifetime in (cls.SINGLETON.value, cls.TRANSIENT.value)
-
 
 @dataclass
 class ServiceDescriptor:
@@ -94,7 +89,7 @@ class DependencyContainer:
         self._services: Dict[Type, ServiceDescriptor] = {}
         self._factories: Dict[Type, Callable] = {}
         self._instances: Dict[Type, Any] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def register_singleton(
         self, interface: Type[T], implementation: Type[T]
@@ -129,10 +124,6 @@ class DependencyContainer:
 
     def get(self, interface: Type[T]) -> T:
         """Resolve a dependency."""
-        if interface in self._instances:
-            return self._instances[interface]
-        if interface in self._factories:
-            return self._factories[interface]()
         if interface in self._services:
             descriptor = self._services[interface]
             if descriptor.lifetime == ServiceLifetime.SINGLETON:
@@ -142,6 +133,10 @@ class DependencyContainer:
                         self._instances[interface] = instance
                     return self._instances[interface]
             return self._create_instance(descriptor.implementation)
+        if interface in self._instances:
+            return self._instances[interface]
+        if interface in self._factories:
+            return self._factories[interface]()
 
         raise DependencyError(
             f"DependencyContainer: Service {interface.__name__} not found",
