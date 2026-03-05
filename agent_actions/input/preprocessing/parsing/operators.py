@@ -86,12 +86,12 @@ OPERATORS: dict[str, Any] = {
     if isinstance(right, (list, tuple, set))
     else False,
     "NOT_IN": lambda left, right=None: (
-        left not in right if isinstance(right, (list, tuple, set)) else True
+        left not in right if isinstance(right, (list, tuple, set)) else False
     ),
     # String
     "CONTAINS": lambda left, right=None: str(right) in str(left) if left is not None else False,
     "NOT_CONTAINS": lambda left, right=None: (
-        str(right) not in str(left) if left is not None else True
+        str(right) not in str(left) if left is not None else False
     ),
     # Pattern
     "LIKE": _sql_like,
@@ -105,7 +105,7 @@ OPERATORS: dict[str, Any] = {
     "NOT_BETWEEN": lambda left, right=None: (
         not _safe_compare(lambda l, r: r[0] <= l <= r[1])(left, right)
         if _validate_range(right)
-        else True
+        else False
     ),
     # Null (right unused — unary operators with uniform call signature)
     "IS_NULL": lambda left, right=None: left is None,  # pyright: ignore[reportUnusedVariable]

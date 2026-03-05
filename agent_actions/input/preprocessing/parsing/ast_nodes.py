@@ -16,14 +16,14 @@ from .operators import OPERATORS, FUNCTIONS
 logger = logging.getLogger(__name__)
 
 
-def _field_exists(data: Any, field_path: str) -> bool:
-    """Check if a field path exists in the data (distinguishes None value from missing).
+class MissingFieldError(ValueError):
+    """Raised when a guard condition references a field that doesn't exist in the data."""
 
-    Note: This re-walks the same nested dict path that get_nested_value() already
-    traverses. The double-walk is necessary because get_nested_value() returns None for both
-    "field exists with value None" and "field is missing" — we need to distinguish them to
-    raise errors only for truly missing fields.
-    """
+    pass
+
+
+def _field_exists(data: Any, field_path: str) -> bool:
+    """Check if a field path exists in the data (distinguishes None value from missing)."""
     keys = field_path.split(".")
     current = data
     for key in keys:
@@ -174,23 +174,14 @@ def evaluate_node(
     data: Dict[str, Any],
     functions: Optional[Dict[str, Callable[..., Any]]] = None,
 ) -> Any:
-    """Recursively evaluate an AST node against data.
-
-    Args:
-        node: The AST node to evaluate
-        data: Data dictionary to evaluate against
-        functions: Optional custom functions (merged with built-in FUNCTIONS)
-
-    Returns:
-        Evaluation result (bool for comparison/logical, value for field/literal/function)
-    """
+    """Recursively evaluate an AST node against data."""
     if isinstance(node, FieldNode):
         value = get_nested_value(data, node.field_path)
         if value is None and not _field_exists(data, node.field_path):
             available = (
                 ", ".join(sorted(data.keys())) if isinstance(data, dict) else "(non-dict data)"
             )
-            raise ValueError(
+            raise MissingFieldError(
                 f"Guard condition references field '{node.field_path}' which does not exist "
                 f"in the data. Available top-level fields: {available}"
             )
@@ -202,13 +193,11 @@ def evaluate_node(
     if isinstance(node, ComparisonNode):
         try:
             left_value = evaluate_node(node.left, data, functions)
-        except ValueError as e:
-            # Only treat missing-field errors as NULL; re-raise everything else
-            if "does not exist in the data" in str(e):
-                if node.operator == ComparisonOperator.IS_NULL:
-                    return True
-                if node.operator == ComparisonOperator.IS_NOT_NULL:
-                    return False
+        except MissingFieldError:
+            if node.operator == ComparisonOperator.IS_NULL:
+                return True
+            if node.operator == ComparisonOperator.IS_NOT_NULL:
+                return False
             raise
 
         op_fn = OPERATORS.get(node.operator.name)

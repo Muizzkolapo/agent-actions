@@ -1393,17 +1393,25 @@ class ContextScopeProcessor:
                             if version_idx is None or version_idx >= current_idx:
                                 continue
 
-                            historical_data = ContextScopeProcessor._load_historical_node(
-                                action_name=version_source,
-                                lineage=lineage,
-                                source_guid=source_guid,
-                                file_path=file_path,
-                                agent_indices=agent_indices,
-                                parent_target_id=current_item.get("parent_target_id"),
-                                root_target_id=current_item.get("root_target_id"),
-                                output_directory=output_directory,
-                                storage_backend=storage_backend,
-                            )
+                            try:
+                                historical_data = ContextScopeProcessor._load_historical_node(
+                                    action_name=version_source,
+                                    lineage=lineage,
+                                    source_guid=source_guid,
+                                    file_path=file_path,
+                                    agent_indices=agent_indices,
+                                    parent_target_id=current_item.get("parent_target_id"),
+                                    root_target_id=current_item.get("root_target_id"),
+                                    output_directory=output_directory,
+                                    storage_backend=storage_backend,
+                                )
+                            except (ValueError, TypeError, KeyError):
+                                logger.warning(
+                                    "Failed to load historical data for version source '%s'",
+                                    version_source,
+                                    exc_info=True,
+                                )
+                                historical_data = None
 
                             if historical_data:
                                 allowed_fields = allowed_fields_map.get(version_source)
@@ -1507,17 +1515,25 @@ class ContextScopeProcessor:
                     logger.debug(
                         f"[HISTORICAL LOAD] Loading context dep '{dep_name}' from file_path={file_path}"
                     )
-                    historical_data = ContextScopeProcessor._load_historical_node(
-                        action_name=dep_name,
-                        lineage=lineage,
-                        source_guid=source_guid,
-                        file_path=file_path,
-                        agent_indices=agent_indices,
-                        parent_target_id=current_item.get("parent_target_id"),
-                        root_target_id=current_item.get("root_target_id"),
-                        output_directory=output_directory,
-                        storage_backend=storage_backend,
-                    )
+                    try:
+                        historical_data = ContextScopeProcessor._load_historical_node(
+                            action_name=dep_name,
+                            lineage=lineage,
+                            source_guid=source_guid,
+                            file_path=file_path,
+                            agent_indices=agent_indices,
+                            parent_target_id=current_item.get("parent_target_id"),
+                            root_target_id=current_item.get("root_target_id"),
+                            output_directory=output_directory,
+                            storage_backend=storage_backend,
+                        )
+                    except (ValueError, TypeError, KeyError):
+                        logger.warning(
+                            "Failed to load historical data for context dep '%s'",
+                            dep_name,
+                            exc_info=True,
+                        )
+                        historical_data = None
 
                     logger.debug(
                         "[HISTORICAL] Action '%s': dep='%s' -> %s",

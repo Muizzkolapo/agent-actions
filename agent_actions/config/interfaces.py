@@ -47,34 +47,14 @@ class IGenerator(IAsyncCapable):
 
 # Loader interfaces
 class IDataLoader(ILoader, Generic[T]):
-    """Interface for data loading operations.
-
-    Type parameter T represents the type of data returned by load_data.
-    Default is List[Dict[str, Any]] for backward compatibility.
-    """
+    """Interface for data loading operations."""
 
     @abstractmethod
     def load_data(self, file_path: str) -> T:
-        """
-        Load data from the given file path.
-
-        Args:
-            file_path: The path to the data file.
-
-        Returns:
-            A list of dictionaries, where each dictionary represents a row of data.
-        """
+        """Load data from the given file path."""
 
     async def load_data_async(self, file_path: str) -> T:
-        """
-        Async version of load_data. Default implementation uses sync version.
-
-        Args:
-            file_path: The path to the data file.
-
-        Returns:
-            A list of dictionaries, where each dictionary represents a row of data.
-        """
+        """Async version of load_data."""
         return await asyncio.to_thread(self.load_data, file_path)
 
 
@@ -83,49 +63,19 @@ class ISourceDataLoader(ILoader):
 
     @abstractmethod
     def load_source_data(self, source_relative_path: str) -> List[Dict]:
-        """
-        Load source data from the storage backend.
-
-        Args:
-            source_relative_path: Relative path for backend lookup (required)
-
-        Returns:
-            List of source data items
-        """
+        """Load source data from the storage backend."""
 
     async def load_source_data_async(self, source_relative_path: str) -> List[Dict]:
-        """
-        Async version of load_source_data. Default implementation uses sync version.
-
-        Args:
-            source_relative_path: Relative path for backend lookup (required)
-
-        Returns:
-            List of source data items
-        """
+        """Async version of load_source_data."""
         return await asyncio.to_thread(self.load_source_data, source_relative_path)
 
     @abstractmethod
-    def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
-        """
-        Save source data to the source directory.
+    def save_source_data(self, relative_path: str, data: List[Dict]) -> None:
+        """Save source data to the storage backend."""
 
-        Args:
-            file_path: Path to the file containing processed data
-            source_guid: source_guid to associate with the content
-            content: Content to save
-        """
-
-    async def save_source_data_async(self, file_path: str, source_guid: str, content: Dict) -> None:
-        """
-        Async version of save_source_data. Default implementation uses sync version.
-
-        Args:
-            file_path: Path to the file containing processed data
-            source_guid: source_guid to associate with the content
-            content: Content to save
-        """
-        return await asyncio.to_thread(self.save_source_data, file_path, source_guid, content)
+    async def save_source_data_async(self, relative_path: str, data: List[Dict]) -> None:
+        """Async version of save_source_data."""
+        return await asyncio.to_thread(self.save_source_data, relative_path, data)
 
 
 # Processor interfaces
@@ -149,18 +99,7 @@ class IDataProcessor(IProcessor):
         source_guid: str,
         passthrough_fields: Optional[Dict] = None,
     ) -> List[Dict]:
-        """
-        Async version of process_item. Default implementation uses sync version.
-
-        Args:
-            contents: Content data to process
-            generated_data: Previously generated data
-            source_guid: Source identifier
-            passthrough_fields: Optional fields to merge into output
-
-        Returns:
-            List of processed data items
-        """
+        """Async version of process_item."""
         return await asyncio.to_thread(
             self.process_item, contents, generated_data, source_guid, passthrough_fields
         )

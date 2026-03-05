@@ -26,24 +26,7 @@ class ContextBuildConfig:
 
 @dataclass
 class EvaluationContext:
-    """
-    Rich context for guard/filter/prompt evaluation.
-
-    Provides access to:
-    - Current item content (what was previously the only context available)
-    - All upstream action outputs (NEW: enables direct field access in guards)
-    - Source data
-    - Version context
-    - Workflow metadata
-
-    Attributes:
-        current_content: Content of the current item being evaluated
-        field_context: All upstream action outputs {action_name: {field: value}}
-        source_content: Source data (if available)
-        version_context: Version metadata (if in a versioned action)
-        workflow_metadata: Workflow-level metadata
-        current_item: Full item with lineage and metadata
-    """
+    """Rich context for guard/filter/prompt evaluation with upstream action access."""
 
     current_content: Dict[str, Any]
     field_context: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -61,37 +44,14 @@ class EvaluationContext:
         return action_name in self.field_context
 
     def get_field_value(self, action_name: str, field_name: str, default: Any = None) -> Any:
-        """
-        Get a specific field from an action's output.
-
-        Args:
-            action_name: Name of the upstream action
-            field_name: Name of the field to retrieve
-            default: Value to return if not found
-
-        Returns:
-            Field value or default
-        """
+        """Get a specific field from an action's output."""
         action_data = self.get_action_output(action_name)
         if action_data and isinstance(action_data, dict):
             return action_data.get(field_name, default)
         return default
 
     def to_flat_dict(self) -> Dict[str, Any]:
-        """
-        Convert to flat dict for backward compatibility with WHERE clause evaluator.
-
-        The resulting dict has:
-        - Current item content at the top level
-        - Upstream action data under their action names (for action.field access)
-        - Special contexts under their namespaces (source, version, workflow)
-
-        This enables WHERE clauses like:
-        - "extract_facts.count > 5" (upstream field)
-        - "status == 'active'" (current item field)
-        - "source.type == 'pdf'" (source data)
-        - "version.first" (version iteration context)
-        """
+        """Convert to flat dict for WHERE clause evaluation."""
         flat = {}
 
         # Add current item content at top level (backward compatibility)
@@ -117,54 +77,17 @@ class EvaluationContext:
         return flat
 
     def to_nested_dict(self) -> Dict[str, Any]:
-        """
-        Get the full nested structure (field_context).
-
-        Useful when you need the complete context structure without flattening.
-        """
+        """Get the full nested field_context structure."""
         return self.field_context.copy()
 
 
 class EvaluationContextProvider:
-    """
-    Service for building rich evaluation contexts for guards, filters, and prompts.
-
-    Leverages existing ContextScopeProcessor.build_field_context_with_history()
-    to auto-load all upstream action data, making it available to guards and filters.
-
-    Example:
-        provider = EvaluationContextProvider()
-
-        # Build context for item-level guard evaluation
-        context = provider.build_context(
-            current_item={'content': {...}, 'source_guid': '...', 'lineage': [...]},
-            agent_config={'agent_type': 'my_action', 'dependencies': ['extract']},
-            agent_name='my_action',
-            agent_indices={'extract': 0, 'my_action': 1},
-            file_path='/path/to/target/node_1_my_action/file.json'
-        )
-
-        # Guards can now access upstream fields!
-        eval_data = context.to_flat_dict()
-        # eval_data['extract']['count'] is accessible for "extract.count > 5"
-    """
+    """Builds rich evaluation contexts for guards, filters, and prompts."""
 
     def build_context(
         self, current_item: Dict[str, Any], config: ContextBuildConfig
     ) -> EvaluationContext:
-        """
-        Build rich evaluation context for item-level operations.
-
-        This is THE integration point - builds field_context with ALL upstream
-        action data using existing ContextScopeProcessor infrastructure.
-
-        Args:
-            current_item: Current item being evaluated (expects 'content', 'source_guid', 'lineage')
-            config: ContextBuildConfig with agent configuration and context parameters
-
-        Returns:
-            EvaluationContext with full upstream access
-        """
+        """Build rich evaluation context for item-level operations."""
         # Extract current content
         current_content = current_item.get("content", {})
         if not isinstance(current_content, dict):
@@ -173,28 +96,20 @@ class EvaluationContextProvider:
         # Build field context using existing infrastructure
         # This auto-loads upstream actions via historical node loader
         # Respects context_scope if defined, otherwise loads all fields
-        try:
-            context_scope = config.agent_config.get("context_scope")
-            field_context = ContextScopeProcessor.build_field_context_with_history(
-                contents=current_content,
-                agent_name=config.agent_name,
-                agent_config=config.agent_config,
-                agent_indices=config.agent_indices,
-                dependency_configs=config.dependency_configs,
-                source_content=config.source_content,
-                version_context=config.version_context,
-                workflow_metadata=config.workflow_metadata,
-                current_item=current_item,
-                file_path=config.file_path,
-                context_scope=context_scope,
-            )
-        except (ValueError, TypeError, KeyError) as e:
-            logger.warning(
-                "Error building field context for '%s': %s. Using empty context.",
-                config.agent_name,
-                e,
-            )
-            field_context = {}
+        context_scope = config.agent_config.get("context_scope")
+        field_context = ContextScopeProcessor.build_field_context_with_history(
+            contents=current_content,
+            agent_name=config.agent_name,
+            agent_config=config.agent_config,
+            agent_indices=config.agent_indices,
+            dependency_configs=config.dependency_configs,
+            source_content=config.source_content,
+            version_context=config.version_context,
+            workflow_metadata=config.workflow_metadata,
+            current_item=current_item,
+            file_path=config.file_path,
+            context_scope=context_scope,
+        )
 
         return EvaluationContext(
             current_content=current_content,
@@ -211,19 +126,7 @@ class EvaluationContextProvider:
         config: ContextBuildConfig,
         current_item: Optional[Dict[str, Any]] = None,
     ) -> EvaluationContext:
-        """
-        Build context for batch mode (simplified parameters).
-
-        Batch mode may not have current_item initially, so handle gracefully.
-
-        Args:
-            contents: Content dict of the current item
-            config: ContextBuildConfig with agent configuration
-            current_item: Full item (optional, built from contents if not provided)
-
-        Returns:
-            EvaluationContext with available upstream data
-        """
+        """Build context for batch mode (simplified parameters)."""
         # Build minimal current_item if not provided
         if current_item is None:
             current_item = {
@@ -239,18 +142,7 @@ class EvaluationContextProvider:
         current_content: Dict[str, Any],
         upstream_data: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> EvaluationContext:
-        """
-        Build minimal context without historical loading.
-
-        Useful for testing or when historical data is already available.
-
-        Args:
-            current_content: Current item content
-            upstream_data: Pre-loaded upstream action data
-
-        Returns:
-            EvaluationContext with provided data
-        """
+        """Build minimal context without historical loading."""
         return EvaluationContext(
             current_content=current_content,
             field_context=upstream_data or {},

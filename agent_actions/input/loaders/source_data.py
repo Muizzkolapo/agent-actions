@@ -22,16 +22,6 @@ class SourceDataLoader(ISourceDataLoader):
         agent_name: str,
         storage_backend: "StorageBackend",
     ):
-        """
-        Initialize the source data loader.
-
-        Args:
-            agent_name: Name of the agent
-            storage_backend: Storage backend for database-backed reads (required)
-
-        Raises:
-            DependencyError: If storage_backend is not provided
-        """
         self.agent_name = agent_name
         if storage_backend is None:
             raise DependencyError("SourceDataLoader", "storage_backend")
@@ -46,18 +36,7 @@ class SourceDataLoader(ISourceDataLoader):
         return ProcessingMode.AUTO
 
     def load_source_data(self, source_relative_path: str) -> List[Dict]:
-        """
-        Load source data from the storage backend.
-
-        Args:
-            source_relative_path: Relative path for backend lookup (required)
-
-        Returns:
-            List of source data items
-
-        Raises:
-            FileNotFoundError: If source data not found in backend
-        """
+        """Load source data from the storage backend."""
         logger.debug(
             "Loading source data from backend: %s",
             source_relative_path,
@@ -66,13 +45,7 @@ class SourceDataLoader(ISourceDataLoader):
         return self.storage_backend.read_source(source_relative_path)
 
     def save_source_data(self, relative_path: str, data: List[Dict]) -> None:
-        """
-        Save source data to the storage backend.
-
-        Args:
-            relative_path: Relative path for the source data
-            data: List of source data items to save
-        """
+        """Save source data to the storage backend."""
         logger.debug(
             "Saving source data to backend: %s",
             relative_path,

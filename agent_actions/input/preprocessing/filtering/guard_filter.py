@@ -2,6 +2,7 @@
 Guard filter service.
 """
 
+import atexit
 import logging
 import time
 from typing import Any, Dict, Optional
@@ -74,14 +75,6 @@ class GuardFilter:
     def __init__(
         self, cache_size: int = 1000, default_timeout: int = 5, enable_metrics: bool = True
     ):
-        """
-        Initialize the guard filter.
-
-        Args:
-            cache_size: Size of the LRU cache for parsed expressions
-            default_timeout: Default timeout for evaluations in seconds
-            enable_metrics: Whether to collect performance metrics
-        """
         self.parser = WhereClauseParser()
         self.cache_size = cache_size
         self.default_timeout = default_timeout
@@ -94,15 +87,7 @@ class GuardFilter:
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="guard_filter")
 
     def filter_item(self, request: FilterItemRequest) -> FilterResult:
-        """
-        Filter a single data item using a guard condition.
-
-        Args:
-            request: FilterItemRequest containing all parameters
-
-        Returns:
-            FilterResult indicating success and whether the item matched
-        """
+        """Filter a single data item using a guard condition."""
         start_time = time.time()
         timeout = request.timeout or self.default_timeout
 
@@ -167,17 +152,7 @@ class GuardFilter:
     def _evaluate_guard_condition(
         self, data: Dict[str, Any], condition: str, functions: Optional[Dict[str, Any]]
     ) -> bool:
-        """
-        Internal method to evaluate a guard condition against data.
-
-        Args:
-            data: The data to evaluate against
-            condition: The guard condition string
-            functions: Optional custom functions
-
-        Returns:
-            True if the data matches the guard condition, False otherwise
-        """
+        """Evaluate a guard condition against data."""
         # Parse the guard condition (with caching)
         parse_result = self._parse_condition_cached(condition)
 
@@ -250,4 +225,5 @@ def get_global_guard_filter() -> GuardFilter:
     global _GLOBAL_GUARD_FILTER
     if _GLOBAL_GUARD_FILTER is None:
         _GLOBAL_GUARD_FILTER = GuardFilter()
+        atexit.register(_GLOBAL_GUARD_FILTER.shutdown)
     return _GLOBAL_GUARD_FILTER

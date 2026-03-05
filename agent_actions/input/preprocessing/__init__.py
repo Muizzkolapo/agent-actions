@@ -45,9 +45,6 @@ from agent_actions.input.context.historical import HistoricalNodeDataLoader
 # Use: from agent_actions.input.preprocessing.processing.data_processor import DataProcessor
 # from .processing.data_processor import DataProcessor
 
-# Utilities submodule
-from .source_path import SourcePathManager
-
 __all__ = [
     # Parsing - AST Nodes
     "ASTNode",
@@ -84,6 +81,4 @@ __all__ = [
     # Processing - Not exported to avoid circular imports
     # Import directly: from agent_actions.input.preprocessing.processing.data_processor
     # import DataProcessor
-    # Utilities
-    "SourcePathManager",
 ]

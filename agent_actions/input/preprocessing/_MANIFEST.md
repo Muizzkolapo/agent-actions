@@ -20,6 +20,4 @@ Agent Actions workflows.
 
 ## Modules
 
-| Name | Type | Description | Signals |
-|------|------|-------------|---------|
-| `source_path.py` | Module | `SourcePathManager` that maps target files back to the source directory, creates missing JSON files, and logs file writes. | `cli.utils`, `logging` |
+(No top-level modules — all functionality is organized in sub-modules above.)

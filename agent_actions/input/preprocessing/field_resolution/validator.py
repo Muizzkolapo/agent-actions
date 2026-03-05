@@ -25,14 +25,6 @@ class ReferenceValidator:
     """
 
     def __init__(self, strict_dependencies: bool = True):
-        """
-        Initialize validator.
-
-        Args:
-            strict_dependencies: If True, require referenced actions to be in
-                                declared dependencies. If False, allow any
-                                upstream action.
-        """
         self.strict_dependencies = strict_dependencies
         self._parser = ReferenceParser()
         self._schema_validator = SchemaFieldValidator()
@@ -44,21 +36,7 @@ class ReferenceValidator:
         agent_indices: Dict[str, int],
         current_agent_name: Optional[str] = None,
     ) -> List[str]:
-        """
-        Validate references against dependency graph.
-
-        Args:
-            references: References to validate (strings or ParsedReference)
-            agent_config: Current agent configuration (needs 'dependencies' key)
-            agent_indices: Mapping of agent names to their execution indices
-            current_agent_name: Name of current agent (for index lookup)
-
-        Returns:
-            List of error messages (empty if all valid)
-
-        Raises:
-            DependencyValidationError: If validation fails (use validate_strict)
-        """
+        """Validate references against dependency graph. Returns list of error messages."""
         errors = []
 
         # Get current agent info
@@ -121,18 +99,7 @@ class ReferenceValidator:
         agent_indices: Dict[str, int],
         current_agent_name: Optional[str] = None,
     ) -> None:
-        """
-        Validate references and raise exception if invalid.
-
-        Args:
-            references: References to validate
-            agent_config: Current agent configuration
-            agent_indices: Mapping of agent names to indices
-            current_agent_name: Name of current agent
-
-        Raises:
-            DependencyValidationError: If any reference is invalid
-        """
+        """Validate references and raise DependencyValidationError if invalid."""
         errors = self.validate(
             references=references,
             agent_config=agent_config,
@@ -154,20 +121,7 @@ class ReferenceValidator:
         agent_indices: Dict[str, int],
         current_agent_name: Optional[str] = None,
     ) -> List[str]:
-        """
-        Extract references from guard condition and validate them.
-
-        Convenience method that combines parsing and validation.
-
-        Args:
-            guard_condition: The guard condition string (e.g., "extract.count > 5")
-            agent_config: Current agent configuration
-            agent_indices: Mapping of agent names to indices
-            current_agent_name: Name of current agent
-
-        Returns:
-            List of error messages (empty if all valid)
-        """
+        """Extract references from guard condition and validate them."""
         # Parse references from guard condition
         references = self._parser.parse_batch(guard_condition)
 
@@ -182,17 +136,7 @@ class ReferenceValidator:
         )
 
     def get_referenced_actions(self, guard_condition: str) -> List[str]:
-        """
-        Extract action names referenced in a guard condition.
-
-        Useful for dependency analysis and validation.
-
-        Args:
-            guard_condition: The guard condition string
-
-        Returns:
-            List of unique action names referenced
-        """
+        """Extract unique action names referenced in a guard condition."""
         references = self._parser.parse_batch(guard_condition)
 
         action_names = set()
@@ -208,36 +152,9 @@ class ReferenceValidator:
         action_schemas: Dict[str, Dict[str, Any]],
         _current_agent_name: Optional[str] = None,
     ) -> List[str]:
-        """
-        Validate field references against action output schemas.
+        """Validate field references against action output schemas.
 
-        Checks that referenced fields exist in the action's output schema.
-        BREAKING: UDFs with field references MUST have a YAML schema: defined.
-
-        Args:
-            references: Field references to validate
-            action_schemas: Mapping of action names to their JSON output schemas
-            current_agent_name: Name of current agent (for error context)
-
-        Returns:
-            List of error messages (empty if all valid)
-
-        Example:
-            action_schemas = {
-                'my_udf_action': {
-                    'type': 'object',
-                    'properties': {
-                        'result': {'type': 'string'},
-                        'count': {'type': 'integer'}
-                    }
-                }
-            }
-
-            errors = validator.validate_against_schemas(
-                references=['my_udf_action.result', 'my_udf_action.invalid'],
-                action_schemas=action_schemas
-            )
-            # Returns: ["Field 'invalid' not found in 'my_udf_action' output schema..."]
+        Actions without schemas (LLM actions, etc.) skip validation.
         """
         errors = []
 
@@ -256,11 +173,10 @@ class ReferenceValidator:
             if action_name in SPECIAL_NAMESPACES:
                 continue
 
-            # Skip if no schema available (e.g., LLM actions)
+            # Actions without schemas (LLM actions, etc.) skip field validation.
+            # Only actions with explicit schema: definitions are validated.
             if action_name not in action_schemas:
-                # BREAKING: If a UDF is referenced but has no schema, that's an error
-                # This enforces YAML schema: for all referenced UDFs
-                continue  # For now, skip - will tighten this later
+                continue
 
             # Validate field path against schema
             schema = action_schemas[action_name]
@@ -276,35 +192,7 @@ class ReferenceValidator:
     def validate_with_schemas(
         self, references: List[Union[str, ParsedReference]], validation_context: Dict[str, Any]
     ) -> List[str]:
-        """
-        Perform both dependency and schema validation.
-
-        Combines:
-        1. Dependency graph validation (existing validate())
-        2. Schema field validation (new validate_against_schemas())
-
-        Args:
-            references: Field references to validate
-            validation_context: Dict containing:
-                - agent_config: Current agent configuration
-                - agent_indices: Mapping of agent names to indices
-                - action_schemas: Mapping of action names to JSON schemas
-                - current_agent_name: (optional) Name of current agent
-
-        Returns:
-            List of error messages (empty if all valid)
-
-        Example:
-            errors = validator.validate_with_schemas(
-                references=['my_udf.result'],
-                validation_context={
-                    'agent_config': {'dependencies': ['my_udf']},
-                    'agent_indices': {'my_udf': 0, 'current': 1},
-                    'action_schemas': {'my_udf': {...}},
-                    'current_agent_name': 'current'
-                }
-            )
-        """
+        """Perform both dependency graph and schema field validation."""
         # Phase 1: Dependency graph validation
         dep_errors = self.validate(
             references=references,

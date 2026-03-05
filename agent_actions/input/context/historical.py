@@ -14,9 +14,8 @@ logger = logging.getLogger(__name__)
 class HistoricalDataRequest:
     """Request parameters for loading historical node data.
 
-    Supports Ancestry Chain pattern for parallel branch merging:
-    - parent_target_id: Links to immediate parent (Diamond/Fan-in patterns)
-    - root_target_id: Links to original ancestor (Map-Reduce patterns)
+    Ancestry Chain fields (parent_target_id, root_target_id) support parallel
+    branch merging — see docs/specs/RFC_ancestry_chain.md.
     """
 
     action_name: str
@@ -43,170 +42,123 @@ class HistoricalNodeDataLoader:
     """
 
     def __repr__(self):
-        """Return string representation of HistoricalNodeDataLoader."""
         return f"{self.__class__.__name__}()"
 
     @staticmethod
     def load_historical_node_data(request: HistoricalDataRequest) -> Optional[Dict[str, Any]]:
-        """
-        Load historical node data for a specific action from target files.
+        """Load historical node data for a specific action. Returns content dict or None."""
+        logger.debug(
+            "Starting load historical node data",
+            extra={
+                "operation": "load historical node data",
+                "action_name": request.action_name,
+                "source_guid": request.source_guid,
+            },
+        )
 
-        Args:
-            request: HistoricalDataRequest containing all parameters
+        # Find the node_id in lineage for this action
+        # If not found, this may be a parallel sibling (ancestry matching case)
+        logger.debug(
+            "Finding node_id for action='%s' in lineage=%s",
+            request.action_name,
+            request.lineage,
+        )
+        node_id = HistoricalNodeDataLoader._find_node_in_lineage(
+            request.action_name, request.lineage, request.agent_indices
+        )
 
-        Returns:
-            Content dict from the historical node, or None if not found
+        # Determine if this is a parallel sibling case (node not in lineage)
+        is_parallel_sibling = node_id is None
 
-        Example:
-            request = HistoricalDataRequest(
-                action_name="fact_extractor",
-                lineage=["node_0_abc123", "node_1_def456"],
-                source_guid="guid-123",
-                file_path="/path/to/file.json",
-                agent_indices={"fact_extractor": 0, "flatten_facts": 1}
-            )
-
-            Returns content from target/node_0_fact_extractor/file.json
-            where record matches source_guid and node_id="node_0_abc123"
-        """
-        try:
+        if is_parallel_sibling:
             logger.debug(
-                "Starting load historical node data",
-                extra={
-                    "operation": "load historical node data",
-                    "action_name": request.action_name,
-                    "source_guid": request.source_guid,
-                },
-            )
-
-            # Find the node_id in lineage for this action
-            # If not found, this may be a parallel sibling (ancestry matching case)
-            logger.debug(
-                "Finding node_id for action='%s' in lineage=%s",
-                request.action_name,
-                request.lineage,
-            )
-            node_id = HistoricalNodeDataLoader._find_node_in_lineage(
-                request.action_name, request.lineage, request.agent_indices
-            )
-
-            # Determine if this is a parallel sibling case (node not in lineage)
-            is_parallel_sibling = node_id is None
-
-            if is_parallel_sibling:
-                logger.debug(
-                    "Node not in lineage for action '%s' - trying ancestry matching. "
-                    "parent_target_id=%s, root_target_id=%s",
-                    request.action_name,
-                    request.parent_target_id,
-                    request.root_target_id,
-                )
-            else:
-                logger.debug("Found node_id=%s for action='%s'", node_id, request.action_name)
-
-            # Storage backend is required for historical data loading
-            if request.storage_backend is None:
-                logger.warning(
-                    "[HISTORICAL] No storage backend provided for action '%s'",
-                    request.action_name,
-                )
-                return None
-
-            data = HistoricalNodeDataLoader._load_from_storage_backend(
-                request.storage_backend,
-                request.action_name,
-                request.file_path,
-            )
-            if data is None:
-                logger.debug(
-                    "[HISTORICAL] No data in storage backend for '%s'",
-                    request.action_name,
-                )
-                return None
-
-            logger.debug("[HISTORICAL] Loaded %d records for %s", len(data), request.action_name)
-
-            lineage_status = "provided" if request.caller_lineage else "None"
-            logger.debug(
-                "Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s, "
+                "Node not in lineage for action '%s' - trying ancestry matching. "
                 "parent_target_id=%s, root_target_id=%s",
-                request.source_guid,
-                node_id,
-                lineage_status,
+                request.action_name,
                 request.parent_target_id,
                 request.root_target_id,
             )
+        else:
+            logger.debug("Found node_id=%s for action='%s'", node_id, request.action_name)
 
-            record = HistoricalNodeDataLoader._find_record_by_identifiers(
-                data,
-                request.source_guid,
-                node_id,
-                request.caller_lineage,
-                parent_target_id=request.parent_target_id,
-                root_target_id=request.root_target_id,
-                is_parallel_sibling=is_parallel_sibling,
-                action_name=request.action_name,
-            )
-
-            if record:
-                content = record.get("content", {})
-                content_keys = list(content.keys()) if isinstance(content, dict) else []
-                logger.debug(
-                    "[HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
-                    request.action_name,
-                    record.get("node_id"),
-                    content_keys,
-                )
-                logger.debug(
-                    "Successfully completed load historical node data",
-                    extra={
-                        "operation": "load historical node data",
-                        "action_name": request.action_name,
-                        "node_id": node_id,
-                    },
-                )
-                return content
-
-            source_guids = set(r.get("source_guid") for r in data if isinstance(r, dict))
-            logger.debug("No match found. File contains source_guids: %s", source_guids)
+        # Storage backend is required for historical data loading
+        if request.storage_backend is None:
             logger.warning(
-                "No record found for source_guid=%s, node_id=%s in action '%s'",
-                request.source_guid,
-                node_id,
+                "[HISTORICAL] No storage backend provided for action '%s'",
                 request.action_name,
             )
             return None
 
-        except (ValueError, TypeError, KeyError) as e:
-            logger.error(
-                "Failed to load historical node data: %s",
-                str(e),
-                extra={"operation": "load historical node data", "error": str(e)},
+        data = HistoricalNodeDataLoader._load_from_storage_backend(
+            request.storage_backend,
+            request.action_name,
+            request.file_path,
+        )
+        if data is None:
+            logger.debug(
+                "[HISTORICAL] No data in storage backend for '%s'",
+                request.action_name,
             )
-            # Don't raise - return None to allow processing to continue
             return None
+
+        logger.debug("[HISTORICAL] Loaded %d records for %s", len(data), request.action_name)
+
+        lineage_status = "provided" if request.caller_lineage else "None"
+        logger.debug(
+            "Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s, "
+            "parent_target_id=%s, root_target_id=%s",
+            request.source_guid,
+            node_id,
+            lineage_status,
+            request.parent_target_id,
+            request.root_target_id,
+        )
+
+        record = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data,
+            request.source_guid,
+            node_id,
+            request.caller_lineage,
+            parent_target_id=request.parent_target_id,
+            root_target_id=request.root_target_id,
+            is_parallel_sibling=is_parallel_sibling,
+            action_name=request.action_name,
+        )
+
+        if record:
+            content = record.get("content", {})
+            content_keys = list(content.keys()) if isinstance(content, dict) else []
+            logger.debug(
+                "[HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
+                request.action_name,
+                record.get("node_id"),
+                content_keys,
+            )
+            logger.debug(
+                "Successfully completed load historical node data",
+                extra={
+                    "operation": "load historical node data",
+                    "action_name": request.action_name,
+                    "node_id": node_id,
+                },
+            )
+            return content
+
+        source_guids = set(r.get("source_guid") for r in data if isinstance(r, dict))
+        logger.debug("No match found. File contains source_guids: %s", source_guids)
+        logger.warning(
+            "No record found for source_guid=%s, node_id=%s in action '%s'",
+            request.source_guid,
+            node_id,
+            request.action_name,
+        )
+        return None
 
     @staticmethod
     def _find_node_in_lineage(
         action_name: str, lineage: List[str], agent_indices: Dict[str, int]
     ) -> Optional[str]:
-        """
-        Find the node_id in lineage that corresponds to the given action.
-
-        Args:
-            action_name: Name of the action/agent
-            lineage: List of node_ids
-            agent_indices: Mapping of agent names to node indices (kept for API compatibility)
-
-        Returns:
-            The matching node_id or None if not found
-
-        Example:
-            action_name = "fact_extractor"
-            lineage = ["fact_extractor_abc123", "flatten_facts_def456"]
-
-            Returns: "fact_extractor_abc123" (matches action name prefix)
-        """
+        """Find the node_id in lineage that corresponds to the given action."""
         if not lineage:
             return None
 
@@ -226,17 +178,7 @@ class HistoricalNodeDataLoader:
         action_name: str,
         file_path: str,
     ) -> Optional[List[Dict[str, Any]]]:
-        """
-        Load target data from the storage backend.
-
-        Args:
-            storage_backend: Storage backend instance (SQLite, TinyDB, etc.)
-            action_name: Name of the action/node to load from
-            file_path: Current file path (used to derive relative_path)
-
-        Returns:
-            List of records from storage, or None if not found
-        """
+        """Load target data from the storage backend."""
         from pathlib import Path as PathLib
 
         file_name = PathLib(file_path).name  # e.g., "batch_0.json" from ".../batch_0.json"
@@ -317,39 +259,10 @@ class HistoricalNodeDataLoader:
     def _lineages_match(
         record_lineage: Optional[List[str]], caller_lineage: Optional[List[str]]
     ) -> bool:
-        """
-        Check if record's lineage is a prefix of caller's lineage.
+        """Check if record's lineage is a prefix of caller's lineage.
 
-        For split records scenarios, a record from node_5 may have lineage:
-            [node_0, node_1, node_4, node_5, node_6_branch_a]
-
-        A caller from node_23 in the same branch would have lineage:
-            [node_0, node_1, node_4, node_5, node_6_branch_a, ..., node_23]
-
-        The record's lineage must be a PREFIX of the caller's lineage for a match.
-
-        Args:
-            record_lineage: Lineage from the historical record
-            caller_lineage: Lineage from the current record looking up historical data
-
-        Returns:
-            True if record's lineage is a prefix of caller's lineage, False otherwise
-
-        Examples:
-            >>> _lineages_match(
-            ...     ['node_0', 'node_1', 'node_5', 'node_6_a'],
-            ...     ['node_0', 'node_1', 'node_5', 'node_6_a', 'node_23']
-            ... )
-            True
-
-            >>> _lineages_match(
-            ...     ['node_0', 'node_1', 'node_5', 'node_6_b'],
-            ...     ['node_0', 'node_1', 'node_5', 'node_6_a', 'node_23']
-            ... )
-            False
-
-            >>> _lineages_match(None, ['node_0', 'node_1'])
-            False
+        Example: record lineage [A, B, C] matches caller lineage [A, B, C, D, E]
+        but not [A, B, X, D, E] (diverged branch).
         """
         # Handle None/empty cases
         if not record_lineage or not caller_lineage:
@@ -373,32 +286,10 @@ class HistoricalNodeDataLoader:
         is_parallel_sibling: bool = False,
         action_name: Optional[str] = None,
     ) -> Optional[Dict]:
-        """
-        Find a record in the data using multi-strategy matching.
+        """Find a record using multi-strategy matching (RFC: docs/specs/RFC_ancestry_chain.md).
 
-        **Matching Priority** (RFC: docs/specs/RFC_ancestry_chain.md):
-        1. Lineage match (existing behavior) - for direct ancestors
-        2. Parent match (parent_target_id) - for parallel siblings (Diamond pattern)
-        3. Root match (root_target_id) - for Map-Reduce aggregation
-
-        **Scenarios Handled**:
-        - Direct ancestors: Uses lineage prefix matching
-        - Parallel siblings: Uses parent_target_id (Diamond/Fan-in)
-        - Map-Reduce: Uses root_target_id
-        - Granularity changes: Requires ancestry fields for disambiguation
-
-        Args:
-            data: List of records from the target file
-            source_guid: Source GUID to match (required)
-            _node_id: Node ID (kept for logging/diagnostics)
-            caller_lineage: Optional lineage for prefix matching
-            parent_target_id: Optional parent ID for sibling matching
-            root_target_id: Optional root ID for Map-Reduce matching
-            is_parallel_sibling: True if dependency node is not in caller's lineage
-            action_name: Optional action name to filter by node_id prefix
-
-        Returns:
-            The matching record or None if not found
+        Priority: lineage prefix match > parent_target_id (Diamond) > root_target_id (Map-Reduce).
+        For parallel siblings (node not in lineage), ancestry fields are used instead.
         """
         if not isinstance(data, list):
             logger.debug("Data is not a list, type=%s", type(data))

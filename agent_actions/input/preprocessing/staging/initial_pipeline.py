@@ -73,15 +73,7 @@ class BatchProcessingContext:
 
 
 def _derive_workflow_root(primary_path: Optional[str], fallback_path: str) -> Path:
-    """Derive workflow root by finding 'agent_io' in path parts.
-
-    Args:
-        primary_path: Preferred path to derive from (e.g. output_directory).
-        fallback_path: Path to use if primary_path is empty/None (e.g. base_directory).
-
-    Returns:
-        Path to the workflow root directory.
-    """
+    """Derive workflow root by finding 'agent_io' in path parts."""
     target_path = Path(primary_path) if primary_path else Path(fallback_path)
     parts = target_path.parts
     if "agent_io" in parts:
@@ -93,22 +85,7 @@ def _derive_workflow_root(primary_path: Optional[str], fallback_path: str) -> Pa
 def _save_source_items_helper(
     source_items, file_path, base_directory, output_directory=None, storage_backend=None
 ):
-    """
-    Helper to save source items using UnifiedSourceDataSaver.
-
-    Args:
-        source_items: List of source items to save
-        file_path: Path to the input file
-        base_directory: Base directory for input files
-        output_directory: Optional output directory - used to determine target workflow root
-                         when processing inter-workflow dependencies (manifest-based input)
-        storage_backend: Optional storage backend for database persistence
-
-    Note:
-        This is extracted to avoid calling protected methods from BatchService.
-        When output_directory is provided, we derive the workflow root from it
-        to ensure source data is saved to the TARGET workflow, not the source workflow.
-    """
+    """Save source items using UnifiedSourceDataSaver."""
     relative_path = Path(file_path).relative_to(base_directory)
     workflow_root = _derive_workflow_root(output_directory, base_directory)
 
@@ -132,21 +109,7 @@ def _validate_staged_data(
     mode: str,
     file_path: str,
 ):
-    """
-    Validate INPUT context against template requirements BEFORE LLM execution.
-
-    This runs BEFORE _prepare_realtime_data() to catch template errors early,
-    avoiding wasted LLM calls. Validates against INPUT context (source + seed),
-    NOT against LLM OUTPUT.
-
-    Args:
-        raw_content: Raw content from staging file (JSON array, text, etc.)
-        file_type: File extension (.json, .txt, .md, etc.)
-        agent_config: Agent configuration with prompt template
-        agent_name: Name of agent (for error context)
-        mode: Execution mode ('batch' or 'online')
-        file_path: Path to input file (for context building)
-    """
+    """Validate INPUT context against template requirements before LLM execution."""
     from agent_actions.prompt.service import (
         PromptPreparationService,
     )
@@ -193,22 +156,7 @@ def _validate_staged_data(
 
 
 def process_initial_stage(ctx: InitialStageContext):
-    """
-    Processes input files through the initial stage pipeline.
-
-    This is the entry point for first-stage processing, handling:
-    - File reading and validation
-    - Data preparation (chunking, parsing, etc.)
-    - Source data saving
-    - Processing via RecordProcessor (batch or online)
-    - Result collection and output
-
-    Parameters:
-        ctx: InitialStageContext with all necessary parameters
-
-    Returns:
-        Path to the generated output file
-    """
+    """Process input files through the initial stage pipeline. Returns output file path."""
     from agent_actions.input.loaders.file_reader import FileReader
 
     file_reader = FileReader(ctx.file_path)
@@ -300,34 +248,7 @@ def _should_save_source_items(
     base_directory: str,
     output_directory: Optional[str] = None,
 ) -> bool:
-    """
-    Determine if new source items should be saved based on richness comparison.
-
-    Prevents sparse downstream outputs from overwriting rich initial source data.
-    Returns True if new data is richer (has more fields) than existing data.
-
-    Richness Comparison:
-        Uses field count as a simple heuristic: len(new_fields) > len(existing_fields)
-
-        Limitation: This does NOT compare field names/types, only counts. A file with
-        10 unimportant fields would be considered "richer" than one with 5 critical
-        fields. This is acceptable because:
-        - Initial source loads typically have the richest data
-        - Downstream sparse overwrites are the main threat
-        - False positives (allowing a save) are safer than false negatives
-
-        Future Enhancement: Could compare actual field names or use a field importance
-        scoring system if needed.
-
-    Args:
-        new_items: New source items to potentially save
-        file_path: Path to the input file
-        base_directory: Base directory for input files
-        output_directory: Optional output directory
-
-    Returns:
-        True if new items should be saved, False otherwise
-    """
+    """Return True if new_items are richer (more fields) than existing source data."""
     if not new_items:
         return False
 
@@ -509,6 +430,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
+    # CSV/XML bypass ctx.content and re-read via file_path (see staging/_MANIFEST.md).
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         data_chunk = _prepare_text_chunks_batch(
             ctx.content, ctx.agent_config, local_batch_id, node_id
@@ -521,13 +443,23 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         )
         src_text = []
 
-    elif ctx.file_type in (".csv", ".xlsx"):
-        rows = tabular_loader.process(ctx.content)
+    elif ctx.file_type == ".csv":
+        # CSV: let TabularLoader read the file itself (FileReader returns list[list], not str)
+        rows = tabular_loader.process(content=None, file_path=ctx.file_path)
+        data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
+        src_text = []
+
+    elif ctx.file_type == ".xlsx":
+        # XLSX: FileReader already returns list[dict] from pandas, use directly
+        if not isinstance(ctx.content, list):
+            logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
+        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
         data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         src_text = []
 
     elif ctx.file_type == ".xml":
-        rows = xml_loader.process(ctx.content)
+        # XML: let XmlLoader read the file itself (FileReader returns (tree, root) tuple, not str)
+        rows = xml_loader.process(content=None, file_path=ctx.file_path)
         if isinstance(rows, list):
             data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         else:
@@ -562,10 +494,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
 
 
 def _prepare_realtime_data(ctx: DataPreparationContext):
-    """
-    Prepare data for realtime mode processing using direct loaders.
-    Replaces StagingContentLoader usage.
-    """
+    """Prepare data for realtime mode processing using direct loaders."""
     from agent_actions.input.loaders.json import JsonLoader
     from agent_actions.input.loaders.tabular import TabularLoader
     from agent_actions.input.loaders.xml import XmlLoader
@@ -574,6 +503,7 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
+    # CSV/XML bypass ctx.content and re-read via file_path (see staging/_MANIFEST.md).
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
         chunk_size = chunk_config.get("chunk_size", 1000)
@@ -629,12 +559,19 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
             else:
                 src_text.append(item)
 
-    elif ctx.file_type in (".csv", ".xlsx"):
-        data_chunk = tabular_loader.process(ctx.content)
+    elif ctx.file_type == ".csv":
+        # CSV: let TabularLoader read the file itself (FileReader returns list[list], not str)
+        data_chunk = tabular_loader.process(content=None, file_path=ctx.file_path)
+        src_text = data_chunk
+
+    elif ctx.file_type == ".xlsx":
+        # XLSX: FileReader already returns list[dict] from pandas, use directly
+        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]
         src_text = data_chunk
 
     elif ctx.file_type == ".xml":
-        data_chunk = xml_loader.process(ctx.content)
+        # XML: let XmlLoader read the file itself (FileReader returns (tree, root) tuple, not str)
+        data_chunk = xml_loader.process(content=None, file_path=ctx.file_path)
         src_text = data_chunk
 
     else:
@@ -729,14 +666,13 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     else:
         _write_batch_placeholder(output_file_path, local_batch_id, result, ctx.agent_name)
 
+    return str(output_file_path)
+
 
 def _process_realtime_mode_with_record_processor(
     data_chunk, ctx: InitialStageContext, file_path, base_directory, output_directory
 ):
-    """
-    Process data in realtime mode using RecordProcessor.
-    This enables global retries and unified logic.
-    """
+    """Process data in realtime mode using RecordProcessor."""
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
     # No directory creation - storage backend is required
@@ -787,3 +723,5 @@ def _process_realtime_mode_with_record_processor(
         output_directory=str(output_directory),
     )
     file_writer.write_target(processed_items)
+
+    return str(output_file_path)

@@ -61,7 +61,7 @@ class TestArrayOperators:
     def test_not_in_operator(self):
         assert OPERATORS["NOT_IN"](6, [1, 2, 3, 4, 5]) is True
         assert OPERATORS["NOT_IN"](5, [1, 2, 3, 4, 5]) is False
-        assert OPERATORS["NOT_IN"](5, "not_a_list") is True
+        assert OPERATORS["NOT_IN"](5, "not_a_list") is False  # invalid input → False
 
 
 # -- String / contains ---------------------------------------------------------
