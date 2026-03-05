@@ -86,12 +86,10 @@ class FailureInjector:
         if not self.is_enabled():
             return False
 
-        # Check specific IDs first
         if custom_id in self._ids:
             logger.debug("[FAILURE INJECTION] Skipping record: %s (in ID list)", custom_id)
             return True
 
-        # Check random rate
         if self._rate > 0 and self._rng.random() < self._rate:
             logger.debug("[FAILURE INJECTION] Skipping record: %s (random)", custom_id)
             return True

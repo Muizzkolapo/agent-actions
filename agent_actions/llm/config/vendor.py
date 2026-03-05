@@ -15,8 +15,8 @@ class VendorType(str, Enum):
 
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
-    GOOGLE = "google"
     GEMINI = "gemini"
+    GOOGLE = "gemini"
     GROQ = "groq"
     COHERE = "cohere"
     MISTRAL = "mistral"
@@ -73,13 +73,16 @@ class AnthropicConfig(BaseVendorConfig):
     tools_mode: bool = Field(default=True, description="Use tools for JSON responses")
 
 
-class GoogleConfig(BaseVendorConfig):
+class GeminiConfig(BaseVendorConfig):
     """Configuration specific to Google Gemini."""
 
-    vendor_type: Literal[VendorType.GOOGLE] = VendorType.GOOGLE
+    vendor_type: Literal[VendorType.GEMINI] = VendorType.GEMINI
     api_key_env_name: str = "GEMINI_API_KEY"
     safety_settings: Optional[Dict[str, Any]] = Field(default=None)
     generation_config: Optional[Dict[str, Any]] = Field(default=None)
+
+
+GoogleConfig = GeminiConfig
 
 
 class GroqConfig(BaseVendorConfig):
@@ -204,6 +207,7 @@ __all__ = [
     "BaseVendorConfig",
     "OpenAIConfig",
     "AnthropicConfig",
+    "GeminiConfig",
     "GoogleConfig",
     "GroqConfig",
     "CohereConfig",

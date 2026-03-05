@@ -73,7 +73,6 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
         """Extract metadata from OpenAI response with OpenAI-specific fields."""
-        # Get base metadata from mixin
         metadata = super()._extract_metadata_from_response(raw_response)
         # Add OpenAI-specific fields if response body exists
         response_data = raw_response.get("response", {})
@@ -95,7 +94,8 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
         """Submit batch to OpenAI API."""
-        batch_file = self.client.files.create(file=open(input_file, "rb"), purpose="batch")
+        with open(input_file, "rb") as f:
+            batch_file = self.client.files.create(file=f, purpose="batch")
         batch_job = self.client.batches.create(
             input_file_id=batch_file.id, endpoint="/v1/chat/completions", completion_window="24h"
         )
@@ -131,7 +131,6 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         if not result_file_id:
             from agent_actions.errors import VendorAPIError
 
-            # Check if there's an error file instead
             error_file_id = getattr(batch_job, "error_file_id", None)
             raise VendorAPIError(
                 vendor="openai",

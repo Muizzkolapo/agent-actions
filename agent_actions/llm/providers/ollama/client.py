@@ -157,7 +157,6 @@ class OllamaClient(BaseClient):
 
         logger.debug("Calling Ollama with JSON mode, schema=%s", bool(ollama_schema))
 
-        # Build optional LLM parameters (Ollama uses 'options' dict)
         options = extract_generation_params(
             agent_config,
             key_map={"max_tokens": "num_predict"},
@@ -226,7 +225,6 @@ class OllamaClient(BaseClient):
                     return [parsed]
                 return [{"response": parsed}]
             except json.JSONDecodeError as e:
-                # Return raw content with error info
                 logger.debug("JSON parse failed: %s, request_id=%s", e, request_id)
                 fire_event(
                     LLMJSONParseErrorEvent(

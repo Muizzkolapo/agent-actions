@@ -16,6 +16,7 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
     _process_batch_mode,
     _process_realtime_mode_with_record_processor,
 )
+from agent_actions.llm.batch.core.batch_models import SubmissionResult
 
 
 @pytest.fixture
@@ -43,7 +44,9 @@ class TestBatchModeReturnsPath:
         )
 
         with patch("agent_actions.llm.batch.service.BatchService") as MockBatch:
-            MockBatch.return_value.submit_batch_job.return_value = "vendor_id_123"
+            MockBatch.return_value.submit_batch_job.return_value = SubmissionResult(
+                batch_id="vendor_id_123"
+            )
             result = _process_batch_mode(ctx)
 
         assert isinstance(result, str)
@@ -67,7 +70,9 @@ class TestBatchModeReturnsPath:
             patch("agent_actions.llm.batch.service.BatchService") as MockBatch,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockBatch.return_value.submit_batch_job.return_value = tombstone
+            MockBatch.return_value.submit_batch_job.return_value = SubmissionResult(
+                passthrough=tombstone
+            )
             result = _process_batch_mode(ctx)
 
         assert isinstance(result, str)

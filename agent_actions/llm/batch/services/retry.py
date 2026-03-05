@@ -81,12 +81,10 @@ class BatchRetryService:
             Tuple of (consolidated batch results, per-record recovery metadata for exhausted records)
             The dict maps custom_id -> RecoveryMetadata for records that never succeeded.
         """
-        # Get retry config
         retry_config = (agent_config or {}).get("retry")
         retry_enabled = retry_config and retry_config.get("enabled", True)
         max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
 
-        # Initial retrieval
         all_results = retrieve_and_reconcile(
             provider,
             batch_id,
@@ -102,10 +100,8 @@ class BatchRetryService:
         exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
 
         if not retry_enabled:
-            # No retry configured - skip to validation
             pass
         else:
-            # Check for missing records
             expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
             received_ids = BatchResultReconciler.collect_result_custom_ids(all_results)
             missing_ids = expected_ids - received_ids
@@ -118,7 +114,6 @@ class BatchRetryService:
                 # Initial failure = 1 (the initial batch didn't return this record)
                 record_failure_counts: Dict[str, int] = {rid: 1 for rid in missing_ids}
 
-                # Retry loop for missing records
                 retry_attempts = 0
 
                 while missing_ids and retry_attempts < max_attempts:
@@ -130,7 +125,6 @@ class BatchRetryService:
                         len(missing_ids),
                     )
 
-                    # Resubmit missing records
                     retry_results = self._resubmit_missing_records(
                         provider=provider,
                         missing_ids=missing_ids,
@@ -141,7 +135,6 @@ class BatchRetryService:
                     )
 
                     if retry_results:
-                        # Attach per-record recovery metadata based on individual failure counts
                         for res in retry_results:
                             if res.success:
                                 custom_id = res.custom_id
@@ -156,7 +149,6 @@ class BatchRetryService:
                                     )
                                 )
 
-                        # Merge results
                         all_results.extend(retry_results)
 
                         # Only count *successful* results when updating missing IDs.
@@ -167,7 +159,6 @@ class BatchRetryService:
                         )
                         missing_ids = missing_ids - new_received
 
-                    # Increment failure count for records that are still missing after this retry
                     for rid in missing_ids:
                         record_failure_counts[rid] = record_failure_counts.get(rid, 0) + 1
 
@@ -196,8 +187,6 @@ class BatchRetryService:
         # =========================================================================
         # PHASE 2: VALIDATE - Ensure all records meet validation conditions
         # =========================================================================
-        # Validate all successful results we have (regardless of whether retry ran)
-        # Missing/exhausted records are not in all_results, so they're skipped
         all_results = self.validate_and_reprompt(
             results=all_results,
             provider=provider,
@@ -240,12 +229,10 @@ class BatchRetryService:
             BatchTaskPreparator,
         )
 
-        # Extract missing records from context_map
         missing_records = []
         for custom_id in missing_ids:
             if custom_id in context_map:
                 record = context_map[custom_id].copy()
-                # Ensure target_id is set for task preparation
                 if "target_id" not in record:
                     record["target_id"] = custom_id
                 missing_records.append(record)
@@ -255,7 +242,6 @@ class BatchRetryService:
             return []
 
         try:
-            # Prepare tasks for missing records
             preparator = BatchTaskPreparator(storage_backend=self._storage_backend)
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
@@ -269,7 +255,6 @@ class BatchRetryService:
                 logger.warning("No tasks prepared for retry batch")
                 return []
 
-            # Submit retry batch
             batch_name = f"{file_name}_retry" if file_name else "retry"
             retry_batch_id, _ = provider.submit_batch(
                 tasks=prepared.tasks,
@@ -294,7 +279,6 @@ class BatchRetryService:
                 )
                 return []
 
-            # Retrieve results
             return provider.retrieve_results(retry_batch_id, output_directory)
 
         except Exception as e:
@@ -341,7 +325,6 @@ class BatchRetryService:
         )
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
-        # Check if reprompt is enabled
         reprompt_config = (agent_config or {}).get("reprompt")
         logger.debug(
             "Batch reprompt check: agent_config has %d keys, reprompt_config=%s",
@@ -360,7 +343,6 @@ class BatchRetryService:
         max_attempts = reprompt_config.get("max_attempts", 2)
         on_exhausted = reprompt_config.get("on_exhausted", "return_last")
 
-        # Load validation UDF module before trying to get the function
         validation_path = reprompt_config.get("validation_path")
         if not validation_path:
             validation_path = resolve_tools_path(agent_config or {})
@@ -378,14 +360,12 @@ class BatchRetryService:
             )
             _import_validation_module(validation_module, None)
 
-        # Get validation function
         try:
             validation_func, feedback_message = get_validation_function(validation_name)
         except ValueError as e:
             logger.error("Failed to get validation function: %s", e)
             return results
 
-        # Track per-record reprompt attempts
         reprompt_attempts: Dict[str, int] = {}
         validation_status: Dict[str, bool] = {}
         result_map = {r.custom_id: r for r in results}
@@ -394,7 +374,6 @@ class BatchRetryService:
         while attempt < max_attempts:
             attempt += 1
 
-            # Validate all current results
             failed_results = []
             for result in result_map.values():
                 if not result.success:
@@ -458,7 +437,6 @@ class BatchRetryService:
                     )
                 break
 
-            # Build reprompt tasks for failed records
             reprompt_records = []
             for failed_result in failed_results:
                 custom_id = failed_result.custom_id
@@ -489,7 +467,6 @@ class BatchRetryService:
                 logger.warning("No records to reprompt")
                 break
 
-            # Submit reprompt batch
             try:
                 reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
                 preparator = BatchTaskPreparator(
@@ -547,7 +524,6 @@ class BatchRetryService:
                 logger.exception("Error during reprompt batch submission: %s", e)
                 break
 
-        # Add reprompt metadata to all records that were reprompted.
         # validation_status is already up-to-date: the loop re-validates all results
         # (including reprompted ones) at the start of each iteration after merging.
         for custom_id, attempts in reprompt_attempts.items():
@@ -599,7 +575,6 @@ class BatchRetryService:
             BatchTaskPreparator,
         )
 
-        # Extract missing records from context_map
         missing_records = []
         for custom_id in missing_ids:
             if custom_id in context_map:
@@ -667,7 +642,6 @@ class BatchRetryService:
         all_results = list(accumulated_results)
 
         if results:
-            # Attach per-record recovery metadata
             for res in results:
                 if res.success:
                     custom_id = res.custom_id
@@ -684,12 +658,10 @@ class BatchRetryService:
 
             all_results.extend(results)
 
-            # Only successful results reduce missing_ids
             successful_retry = [r for r in results if r.success]
             new_received = BatchResultReconciler.collect_result_custom_ids(successful_retry)
             missing_ids = missing_ids - new_received
 
-        # Increment failure count for still-missing records
         updated_counts = dict(record_failure_counts)
         for rid in missing_ids:
             updated_counts[rid] = updated_counts.get(rid, 0) + 1
@@ -750,7 +722,6 @@ class BatchRetryService:
         if not validation_name:
             return [], None
 
-        # Load validation UDF
         from agent_actions.processing.recovery.validation import get_validation_function
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
@@ -777,7 +748,6 @@ class BatchRetryService:
             if not result.success:
                 continue
 
-            # Skip already-passed
             if (
                 result.recovery_metadata
                 and result.recovery_metadata.reprompt
@@ -845,7 +815,6 @@ class BatchRetryService:
             logger.error("Failed to get validation function for reprompt: %s", e)
             return None
 
-        # Build reprompt records with feedback
         reprompt_records = []
         for failed_result in failed_results:
             custom_id = failed_result.custom_id
@@ -922,7 +891,6 @@ class BatchRetryService:
         result_map = {r.custom_id: r for r in accumulated_results}
 
         for reprompt_result in reprompt_results:
-            # Preserve existing retry metadata if present
             if reprompt_result.custom_id in result_map:
                 existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
                 if not reprompt_result.recovery_metadata:
@@ -1088,7 +1056,6 @@ def wait_for_batch_completion(
             except Exception as e:
                 logger.debug("Failed to get batch progress for %s: %s", batch_id, e, exc_info=True)
 
-        # Calculate progress percentage
         current_pct = (completed / total_items * 100) if total_items > 0 else 0
         current_time = time.time()
         time_since_last_progress = current_time - last_progress_time

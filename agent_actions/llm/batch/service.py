@@ -5,7 +5,7 @@ This is a thin facade that delegates to specialized services for all operations.
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Union, Callable
+from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
 
 from agent_actions.llm.batch.infrastructure.batch_data_loader import BatchDataLoader
 
@@ -187,7 +187,7 @@ class BatchService:
         force=False,
         source_data: Optional[Any] = None,
         workflow_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Union[str, Dict[str, Any]]:
+    ):
         """Submit a batch job for processing (delegates to submission service)."""
         return self._get_submission_service().submit_batch_job(
             agent_config,

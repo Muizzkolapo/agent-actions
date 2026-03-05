@@ -152,4 +152,7 @@ class RecoveryStateManager:
         Returns:
             Path to recovery state file
         """
-        return Path(output_directory) / "batch" / f".recovery_state_{file_name}.json"
+        if ".." in file_name:
+            raise ValueError(f"Invalid file name contains path traversal: {file_name}")
+        safe_name = Path(file_name).name
+        return Path(output_directory) / "batch" / f".recovery_state_{safe_name}.json"

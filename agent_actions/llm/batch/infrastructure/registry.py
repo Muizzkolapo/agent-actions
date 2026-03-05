@@ -41,7 +41,6 @@ class BatchRegistryManager:
         registry_path = Path('output/batch/.batch_registry.json')
         manager = BatchRegistryManager(registry_path)
 
-        # Save a batch job
         entry = BatchJobEntry(
             batch_id='batch_123',
             status='submitted',
@@ -89,7 +88,6 @@ class BatchRegistryManager:
             self._persist_registry(self._cache)
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
 
-            # Fire cache update event
             fire_event(CacheUpdateEvent(cache_type="batch_registry", key=file_name))
 
     def remove_batch_job(self, file_name: str) -> bool:
@@ -125,7 +123,6 @@ class BatchRegistryManager:
             self._ensure_cache_loaded()
             entry = self._cache.get(file_name)
 
-            # Fire cache event
             if entry is not None:
                 fire_event(CacheHitEvent(cache_type="batch_registry", key=file_name))
             else:
@@ -179,7 +176,6 @@ class BatchRegistryManager:
         with self._lock:
             self._ensure_cache_loaded()
 
-            # Find entry by batch_id
             for file_name, entry in self._cache.items():
                 if entry.batch_id == batch_id:
                     updated_entry = dataclasses.replace(entry, status=new_status)
@@ -275,11 +271,9 @@ class BatchRegistryManager:
                         # Assume not complete on error
                         return False
 
-                # Check terminal state
                 if not entry.is_terminal:
                     all_terminal = False
 
-            # Persist if cache was updated
             if cache_modified:
                 self._persist_registry(self._cache)
 
@@ -296,7 +290,6 @@ class BatchRegistryManager:
             self._cache = None
             logger.debug("Registry cache invalidated")
 
-            # Fire cache invalidation event
             fire_event(
                 CacheInvalidationEvent(
                     cache_type="batch_registry",
@@ -334,14 +327,12 @@ class BatchRegistryManager:
             with open(self._registry_path, "r", encoding="utf-8") as f:
                 raw_data = json.load(f)
 
-            # Convert raw dict to BatchJobEntry objects
             registry = {}
             for file_name, entry_dict in raw_data.items():
                 try:
                     registry[file_name] = BatchJobEntry.from_dict(entry_dict)
                 except (TypeError, ValueError) as e:
                     logger.warning("Invalid entry for %s in registry: %s", file_name, e)
-                    # Skip invalid entries
                     continue
 
             logger.debug("Loaded %d entries from registry", len(registry))
@@ -361,7 +352,6 @@ class BatchRegistryManager:
             )
             return {}
         except Exception as e:
-            # Catch all exceptions to gracefully handle file system errors
             logger.error("Failed to load registry from %s: %s", self._registry_path, e)
             fire_event(
                 CacheLoadEvent(cache_type="batch_registry", entries_loaded=0, source="disk (error)")
@@ -381,23 +371,18 @@ class BatchRegistryManager:
         Raises:
             IOError: If write fails
         """
-        # Ensure directory exists
         ensure_directory_exists(self._registry_path, is_file=True)
 
-        # Convert BatchJobEntry objects to dicts for JSON
         raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
 
-        # Atomic write pattern
         tmp_path = self._registry_path.with_suffix(".json.tmp")
 
         try:
-            # Write to temp file
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(raw_data, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())  # Force write to disk
 
-            # Atomic rename (POSIX guarantees atomicity)
             tmp_path.replace(self._registry_path)
 
             logger.debug(
@@ -405,7 +390,6 @@ class BatchRegistryManager:
             )
 
         except Exception as e:
-            # Clean up temp file on error
             if tmp_path.exists():
                 tmp_path.unlink()
             raise IOError(f"Failed to persist registry to {self._registry_path}: {e}") from e

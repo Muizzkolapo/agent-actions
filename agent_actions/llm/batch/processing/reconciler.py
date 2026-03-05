@@ -47,16 +47,13 @@ class BatchResultReconciler:
         for batch_result in batch_results:
             reconciler.mark_processed(batch_result.custom_id)
 
-        # Get reconciliation result
         result = reconciler.reconcile()
 
-        # Handle missing records
         if result.missing_ids:
             logger.warning("Missing %s records", len(result.missing_ids))
 
-        # Create passthrough for unprocessed records
         for custom_id, original_row in result.passthrough_records:
-            # Create passthrough item...
+            ...
     """
 
     def __init__(self, context_map: Dict[str, Any]):
@@ -121,17 +118,14 @@ class BatchResultReconciler:
         passthrough_records = []
 
         for custom_id, original_row in self.context_map.items():
-            # Skip records that were already processed
             if str(custom_id) in self._processed_ids:
                 continue
 
             filter_status = BatchContextMetadata.get_filter_status(original_row)
 
-            # Skip filtered records (they should not appear in output)
             if filter_status == FilterStatus.FILTERED:
                 continue
 
-            # Include skipped and included (but missing) records
             if filter_status in (FilterStatus.SKIPPED, FilterStatus.INCLUDED, None):
                 passthrough_records.append((custom_id, original_row))
 
@@ -149,7 +143,6 @@ class BatchResultReconciler:
         """
         missing_ids = self.get_missing_ids()
 
-        # Log warning if records are missing
         if missing_ids:
             logger.info(
                 "Missing %d records in batch results. Continuing with available data.",

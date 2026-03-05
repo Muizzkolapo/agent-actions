@@ -71,6 +71,8 @@ class BaseBatchClient(ABC):
     to integrate with the agent-actions batch processing system.
     """
 
+    _configured_model: Optional[str] = None
+
     def prepare_tasks(
         self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
@@ -88,6 +90,8 @@ class BaseBatchClient(ABC):
         Returns:
             List of provider-specific task dictionaries ready for submission
         """
+        self._configured_model = agent_config.get("model_name", self._get_default_model())
+
         tasks = []
         json_mode = agent_config.get("json_mode", True)
         schema = agent_config.get("compiled_schema") if json_mode else None
@@ -283,10 +287,8 @@ class BaseBatchClient(ABC):
         # Optionally write to file
         if output_directory:
             result_file_path = self._write_results_to_file(batch_id, raw_results, output_directory)
-            # Parse from file
             return self._read_jsonl_file(result_file_path)
 
-        # Parse from memory
         batch_results = []
         lines = raw_results.decode("utf-8").strip().split("\n")
         for line_num, line in enumerate(lines, 1):
@@ -338,7 +340,6 @@ class BaseBatchClient(ABC):
         # Extract custom_id
         custom_id = self._extract_custom_id(raw_response)
 
-        # Check for errors first
         error = self._extract_error_from_response(raw_response)
         if error:
             return BatchResult(custom_id=custom_id, content=None, success=False, error=error)

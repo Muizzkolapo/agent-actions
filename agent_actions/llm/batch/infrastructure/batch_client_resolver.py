@@ -5,6 +5,7 @@ Handles resolution and caching of batch clients based on configuration or batch 
 Extracted from BatchService for better separation of concerns.
 """
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -60,12 +61,8 @@ class BatchClientResolver:
         Raises:
             ConfigurationError: If config is invalid or client creation fails
         """
-        # Mock client doesn't require api_key
         vendor = agent_config.get("model_vendor", "").lower()
-        if vendor == "mock":
-            required_fields = ["model_vendor", "model_name"]
-        else:
-            required_fields = ["model_vendor", "model_name", "api_key"]
+        required_fields = ["model_vendor", "model_name"]
 
         missing = [f for f in required_fields if not agent_config.get(f)]
         if missing:
@@ -92,19 +89,18 @@ class BatchClientResolver:
                 },
             )
 
-        # Check cache
-        if client_type in self._client_cache:
-            fire_event(CacheHitEvent(cache_type="batch_client", key=f"config:{client_type}"))
-            return self._client_cache[client_type]
+        cache_key = self._build_cache_key(client_type, agent_config)
 
-        # Cache miss - need to create new client
+        if cache_key in self._client_cache:
+            fire_event(CacheHitEvent(cache_type="batch_client", key=f"config:{cache_key}"))
+            return self._client_cache[cache_key]
+
         fire_event(
             CacheMissEvent(
-                cache_type="batch_client", key=f"config:{client_type}", reason="client not cached"
+                cache_type="batch_client", key=f"config:{cache_key}", reason="client not cached"
             )
         )
 
-        # Create new client
         try:
             client_config = {}
             if client_type == "gemini" and agent_config.get("gemini_api_key"):
@@ -114,7 +110,6 @@ class BatchClientResolver:
 
             client = BatchClientFactory.create_client(client_type, client_config)
 
-            # Validate config
             is_valid, error_msg = client.validate_config(agent_config)
             if not is_valid:
                 raise ConfigurationError(
@@ -122,8 +117,7 @@ class BatchClientResolver:
                     context={"client_type": client_type, "error_message": error_msg},
                 )
 
-            # Cache and return
-            self._client_cache[client_type] = client
+            self._client_cache[cache_key] = client
             return client
 
         except Exception as e:
@@ -157,12 +151,11 @@ class BatchClientResolver:
         client_type = self._resolve_client_type(batch_id, registry_manager, output_directory)
 
         if client_type:
-            # Check cache
-            if client_type in self._client_cache:
+            cached = self._find_cached_client(client_type)
+            if cached is not None:
                 fire_event(CacheHitEvent(cache_type="batch_client", key=f"batch_id:{batch_id}"))
-                return self._client_cache[client_type]
+                return cached
 
-            # Cache miss - create new client
             fire_event(
                 CacheMissEvent(
                     cache_type="batch_client",
@@ -172,7 +165,6 @@ class BatchClientResolver:
             )
             return BatchClientFactory.create_client(client_type)
 
-        # Fallback to default client if available
         if self._default_client:
             return self._default_client
 
@@ -181,26 +173,36 @@ class BatchClientResolver:
             context={"batch_id": batch_id, "output_directory": output_directory},
         )
 
+    def _find_cached_client(self, client_type: str) -> Optional[BaseBatchClient]:
+        if client_type in self._client_cache:
+            return self._client_cache[client_type]
+        # When cache uses hashed keys (vendor:hash), return a match only if
+        # there is exactly one entry for this vendor. With multiple entries
+        # we cannot determine which API key was used at submission time, so
+        # we return None to force a fresh (env-key) client instead of
+        # silently picking the wrong one.
+        prefix = f"{client_type}:"
+        matches = [v for k, v in self._client_cache.items() if k.startswith(prefix)]
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
+    @staticmethod
+    def _build_cache_key(client_type: str, agent_config: Dict[str, Any]) -> str:
+        api_key = agent_config.get("api_key") or agent_config.get(f"{client_type}_api_key") or ""
+        if api_key:
+            key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
+            return f"{client_type}:{key_hash}"
+        return client_type
+
     def _resolve_client_type(
         self, batch_id: str, registry_manager, output_directory: Optional[str]
     ) -> Optional[str]:
-        """Resolve client type from registry manager or registry file.
-
-        Args:
-            batch_id: The batch job ID to look up
-            registry_manager: Optional registry manager instance
-            output_directory: Optional output directory containing registry file
-
-        Returns:
-            Client type string or None if not found
-        """
-        # Try registry manager first
         if registry_manager:
             entry = registry_manager.get_batch_job_by_id(batch_id)
             if entry:
                 return entry.provider
 
-        # Fallback: read directly from registry file
         if output_directory:
             client_type = self._lookup_client_from_file(batch_id, output_directory)
             if client_type:
@@ -209,15 +211,6 @@ class BatchClientResolver:
         return None
 
     def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> Optional[str]:
-        """Look up client type directly from registry file.
-
-        Args:
-            batch_id: The batch job ID to look up
-            output_directory: Directory containing the batch registry
-
-        Returns:
-            Client type string or None if not found
-        """
         registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
         if not registry_file.exists():
             return None
@@ -226,7 +219,6 @@ class BatchClientResolver:
             with open(registry_file, "r", encoding="utf-8") as f:
                 registry = json.load(f)
 
-            # Search for batch_id in registry entries
             for entry in registry.values():
                 if entry.get("batch_id") == batch_id:
                     return entry.get("provider")

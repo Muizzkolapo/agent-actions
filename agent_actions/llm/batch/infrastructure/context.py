@@ -26,14 +26,12 @@ class BatchContextManager:
     Example:
         manager = BatchContextManager()
 
-        # Save context
         manager.save_batch_context_map(
             context_map={'rec_1': {...}},
             output_directory='/tmp/node_1_Agent',
             batch_name='test.json'
         )
 
-        # Load context
         context = manager.load_batch_context_map(
             output_directory='/tmp/node_1_Agent',
             batch_name='test.json'
@@ -61,10 +59,8 @@ class BatchContextManager:
         try:
             context_path = BatchContextManager._get_context_path(output_directory, batch_name)
 
-            # Ensure directory exists
             ensure_directory_exists(context_path, is_file=True)
 
-            # Save context map
             with open(context_path, "w", encoding="utf-8") as f:
                 json.dump(context_map, f, indent=2, ensure_ascii=False)
 
@@ -155,8 +151,11 @@ class BatchContextManager:
         output_dir = Path(output_directory)
         batch_dir = output_dir / "batch"
 
-        # Context file name: .context_map_{batch_name}
-        context_file_name = f".context_map_{batch_name}"
+        if ".." in batch_name:
+            raise ValueError(f"Invalid batch name contains path traversal: {batch_name}")
+        safe_name = Path(batch_name).name
+
+        context_file_name = f".context_map_{safe_name}"
 
         return batch_dir / context_file_name
 

@@ -80,7 +80,6 @@ class GroqClient(BaseClient, JSONResponseMixin):
             )
         )
 
-        # Build optional LLM parameters from agent config
         json_completion_kwargs = {
             "messages": [{"role": "system", "content": prompt_dedent}],
             "model": model_name,

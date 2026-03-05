@@ -190,14 +190,14 @@ class ProcessingPipeline:
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
-        if isinstance(result, dict) and result.get("type") == "tombstone":
+        if result.is_passthrough and result.passthrough.get("type") == "tombstone":
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=params.storage_backend,
                 action_name=params.pipeline_agent_name,
                 output_directory=params.batch_output_directory,
             )
-            file_writer.write_target(result["data"])
+            file_writer.write_target(result.passthrough["data"])
             if params.storage_backend:
                 params.storage_backend.set_disposition(
                     params.pipeline_agent_name,
@@ -208,10 +208,9 @@ class ProcessingPipeline:
             return str(output_file_path)
 
         # Batch job placeholder - always JSON (tracking file, not data)
-        # Directory is needed for the placeholder file
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
         placeholder = {
-            "batch_job_id": result,
+            "batch_job_id": result.batch_id,
             "status": "submitted",
             "agent": params.pipeline_agent_name,
         }

@@ -139,7 +139,6 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
-        # Set context with prompt for reproducible, prompt-aware generation
         FakeDataGenerator.set_context(prompt=f"{identifier}:{prompt}")
 
         if schema:

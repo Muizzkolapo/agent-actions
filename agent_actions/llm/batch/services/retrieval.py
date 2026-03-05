@@ -73,11 +73,9 @@ class BatchRetrievalService:
             manager = self._registry_manager_factory(output_dir)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_dir)
 
-            # Get entry from registry
             entry = manager.get_batch_job_by_id(batch_id)
             file_name = entry.file_name if entry else None
 
-            # Load context and retrieve results
             context_map = (
                 self._context_manager.load_batch_context_map(output_dir, file_name)
                 if file_name
@@ -92,7 +90,6 @@ class BatchRetrievalService:
                 file_name=file_name,
             )
 
-            # Write results to JSONL
             output_path = Path(output_dir)
             result_file = output_path / (
                 f"{Path(file_path).stem}_results.jsonl"
@@ -100,9 +97,8 @@ class BatchRetrievalService:
                 else f"{batch_id}_results.jsonl"
             )
 
-            if not result_file.exists():
-                ensure_directory_exists(output_path)
-                self._write_results_to_jsonl(result_file, batch_results)
+            ensure_directory_exists(output_path)
+            self._write_results_to_jsonl(result_file, batch_results)
 
             return result_file
 

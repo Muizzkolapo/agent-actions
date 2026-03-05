@@ -126,8 +126,12 @@ class ConfigManager:
         """
         if "name" in config and "actions" in config:
             return config["name"]
-        else:
-            return next(iter(config))
+        if not config:
+            raise ConfigurationError(
+                "Cannot find agent name: configuration is empty",
+                context={"config_keys": list(config.keys())},
+            )
+        return next(iter(config))
 
     def validate_agent_name(self):
         self.agent_name = self.find_agent_name(self.user_config)
@@ -241,23 +245,19 @@ class ConfigManager:
         }
         instance_config.validate(agent_configs_dict)
 
-        # Get list of all workflow actions for dependency inference
         workflow_actions = list(self.agent_configs.keys())
 
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
-                # Use auto-inferred dependencies (input + context sources)
                 try:
                     input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
                         config.model_dump(), workflow_actions, agent_type
                     )
                     all_deps = input_sources + context_sources
                 except Exception:
-                    # Fallback to explicit dependencies if inference fails
                     all_deps = config.dependencies
 
-                # Filter to only operational dependencies
                 dependencies = [
                     dep
                     for dep in all_deps
@@ -274,7 +274,6 @@ class ConfigManager:
         }
         normalize_all_agent_configs(agent_configs_dict, self.execution_order)
 
-        # Update self.agent_configs with normalized versions
         for agent_type, config_dict in agent_configs_dict.items():
             self.agent_configs[agent_type] = AgentConfig.model_validate(config_dict)
 

@@ -128,7 +128,6 @@ _BATCH_CLIENT_REGISTRY: Dict[str, _BatchClientRegistration] = {
     "agac-provider": _BatchClientRegistration(factory=_create_agac, aliases=("mock",)),
 }
 
-# Build reverse alias map
 _ALIAS_MAP: Dict[str, str] = {}
 for _name, _reg in _BATCH_CLIENT_REGISTRY.items():
     for _alias in _reg.aliases:

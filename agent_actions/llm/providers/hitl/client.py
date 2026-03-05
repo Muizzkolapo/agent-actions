@@ -39,7 +39,6 @@ class HitlClient:
         Raises:
             ConfigurationError: If hitl config is missing or invalid
         """
-        # Validate config
         hitl_config = agent_config.get("hitl")
         if not hitl_config:
             raise ConfigurationError(
@@ -60,7 +59,6 @@ class HitlClient:
             ref for ref in observe_refs if isinstance(ref, str) and not ref.endswith(".*")
         ]
 
-        # Parse context data
         if isinstance(context_data, str):
             try:
                 context_dict = json.loads(context_data)

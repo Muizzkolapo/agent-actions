@@ -35,30 +35,20 @@ class BatchSourceHandler:
         """
         from agent_actions.output.saver import UnifiedSourceDataSaver
 
-        # Calculate paths for source saving
-        # Find workflow root by looking for 'agent_io' in the path and going up one level
-        # base_directory could be:
-        #   - .../qanalabs_quiz_gen/agent_io/staging (2 levels to root)
-        #   - .../qanalabs_quiz_gen/agent_io/target/node_X (3 levels to root)
         relative_path = Path(file_path).relative_to(base_directory)
 
-        # Find workflow root by locating 'agent_io' in path parts and getting its parent
         base_path = Path(base_directory)
         parts = base_path.parts
         if "agent_io" in parts:
             agent_io_idx = parts.index("agent_io")
             workflow_root = Path(*parts[:agent_io_idx])
         else:
-            # Fallback to going up 3 levels
             workflow_root = base_path.parent.parent.parent
 
-        # Use unified saver with batch mode settings (deduplication enabled)
         saver = UnifiedSourceDataSaver(
             base_directory=str(workflow_root),
             enable_deduplication=True,
             storage_backend=storage_backend,
         )
 
-        # Save source items (relative_path without extension for consistency)
-        # UnifiedSourceDataSaver will create: workflow_root/agent_io/source/{relative_path}.json
         saver.save_source_items(items=src_text, relative_path=str(relative_path.with_suffix("")))

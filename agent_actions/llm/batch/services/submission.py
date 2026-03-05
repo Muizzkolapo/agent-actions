@@ -6,7 +6,7 @@ BatchService to follow Single Responsibility Principle.
 
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List, Callable, Union
+from typing import Optional, Dict, Any, Tuple, List, Callable
 
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
@@ -28,7 +28,7 @@ from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.llm.batch.processing.batch_passthrough_builder import (
     BatchPassthroughBuilder,
 )
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
 from agent_actions.errors import ConfigValidationError, ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -142,7 +142,7 @@ class BatchSubmissionService:
         force: bool = False,
         source_data: Optional[Any] = None,
         workflow_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Union[str, Dict[str, Any]]:
+    ) -> SubmissionResult:
         """Submit a batch job for processing.
 
         Args:
@@ -154,7 +154,7 @@ class BatchSubmissionService:
             workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
 
         Returns:
-            Batch ID if submitted, or passthrough dict if no tasks
+            SubmissionResult with batch_id if submitted, or passthrough dict if no tasks
 
         Raises:
             ConfigValidationError: If model_vendor missing
@@ -162,7 +162,6 @@ class BatchSubmissionService:
         """
         force_submission = force or self._force_batch
 
-        # Check for existing in-flight batch
         if not force_submission and output_directory:
             manager = self._registry_manager_factory(output_directory)
             entry = manager.get_batch_job(batch_name or "default")
@@ -176,21 +175,17 @@ class BatchSubmissionService:
                     "Skipping new batch submission. "
                     "Use --batch_continue to process completed batches."
                 )
-                return entry.batch_id
+                return SubmissionResult(batch_id=entry.batch_id)
 
-        # Prepare tasks
         tasks, context_map = self.prepare_batch_tasks(
             agent_config, data, output_directory, batch_name, source_data, workflow_metadata
         )
 
-        # Handle empty tasks
         if not tasks:
             return self._handle_empty_tasks(agent_config, context_map, data, output_directory)
 
-        # Save context map
         self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
 
-        # Submit to provider
         return self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
 
     def _handle_empty_tasks(
@@ -199,7 +194,7 @@ class BatchSubmissionService:
         context_map: Dict[str, Any],
         data: List[Dict[str, Any]],
         output_directory: Optional[str],
-    ) -> Dict[str, Any]:
+    ) -> SubmissionResult:
         """Handle case where no tasks remain after filtering.
 
         Args:
@@ -209,20 +204,22 @@ class BatchSubmissionService:
             output_directory: Output directory path
 
         Returns:
-            Passthrough dict
+            SubmissionResult with passthrough dict
         """
         where_config = agent_config.get("where_clause") or {}
         behavior = where_config.get("behavior", "filter")
 
         if behavior == "filter":
-            return {"type": "tombstone", "data": [], "output_directory": output_directory}
-        if behavior == "skip":
-            return BatchPassthroughBuilder(output_directory).from_context(
+            passthrough = {"type": "tombstone", "data": [], "output_directory": output_directory}
+        elif behavior == "skip":
+            passthrough = BatchPassthroughBuilder(output_directory).from_context(
                 context_map, reason="where_clause_not_matched"
             )
-        return BatchPassthroughBuilder(output_directory).from_data(
-            data, reason="conditional_clause_failed"
-        )
+        else:
+            passthrough = BatchPassthroughBuilder(output_directory).from_data(
+                data, reason="conditional_clause_failed"
+            )
+        return SubmissionResult(passthrough=passthrough)
 
     def _submit_to_provider(
         self,
@@ -230,7 +227,7 @@ class BatchSubmissionService:
         batch_name: str,
         tasks: List[Dict[str, Any]],
         output_directory: Optional[str],
-    ) -> str:
+    ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 
         Args:
@@ -240,7 +237,7 @@ class BatchSubmissionService:
             output_directory: Output directory path
 
         Returns:
-            Batch ID
+            SubmissionResult with batch_id
 
         Raises:
             ConfigValidationError: If model_vendor missing
@@ -259,10 +256,8 @@ class BatchSubmissionService:
             provider = self._client_resolver.get_for_config(agent_config)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
 
-            # Set batch_id in event context
             get_manager().set_context(batch_id=batch_id)
 
-            # Fire batch submitted event (B001)
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=batch_id,
@@ -272,7 +267,6 @@ class BatchSubmissionService:
                 )
             )
 
-            # Save to registry
             if output_directory:
                 manager = self._registry_manager_factory(output_directory)
                 file_key = batch_name or "default"
@@ -289,7 +283,7 @@ class BatchSubmissionService:
                 )
                 manager.save_batch_job(file_key, entry)
 
-            return batch_id
+            return SubmissionResult(batch_id=batch_id)
 
         except ConfigValidationError:
             raise

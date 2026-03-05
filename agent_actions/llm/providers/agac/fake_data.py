@@ -308,7 +308,6 @@ class FakeDataGenerator:
         if seed is not None:
             cls._current_seed = seed
         elif prompt:
-            # Use prompt hash as seed for reproducibility
             cls._current_seed = int(hashlib.md5(prompt.encode()).hexdigest()[:8], 16)
         else:
             cls._current_seed = random.randint(0, 2**32 - 1)
@@ -347,22 +346,18 @@ class FakeDataGenerator:
         Returns:
             Generated data matching the schema structure
         """
-        # Set context if prompt provided
         if prompt and prompt != cls._current_prompt:
             cls.set_context(prompt=prompt)
 
         if not isinstance(schema, dict):
             return cls._generate_string(attempt, field_name=field_name)
 
-        # Handle schema references
         if "$ref" in schema:
             return cls._generate_string(attempt, field_name=field_name)
 
-        # Handle const (fixed value)
         if "const" in schema:
             return schema["const"]
 
-        # Handle enum (pick random value based on attempt)
         if "enum" in schema:
             enum_values = schema["enum"]
             if enum_values:

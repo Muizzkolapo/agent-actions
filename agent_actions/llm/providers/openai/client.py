@@ -79,7 +79,6 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        # Build optional LLM parameters from agent config
         completion_kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": messages,
@@ -176,7 +175,6 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        # Build optional LLM parameters from agent config
         completion_kwargs: Dict[str, Any] = {
             "model": model_name,
             "messages": messages,

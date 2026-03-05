@@ -125,7 +125,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 if line.strip():
                     tasks.append(json.loads(line))
 
-        # Process all tasks immediately
         results = []
         completed = 0
         failed = 0
@@ -140,7 +139,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 messages = body["messages"]
                 model = body.get("model", "llama2")
 
-                # Build options dict
                 options = {
                     "temperature": (
                         body.get("temperature") if body.get("temperature") is not None else 1.0

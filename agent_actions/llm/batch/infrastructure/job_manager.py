@@ -9,7 +9,6 @@ from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,16 @@ class BatchJobManager:
         client = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
         return client.check_status(batch_id)
 
+    def _get_registry_manager(self, output_directory: str) -> Optional[BatchRegistryManager]:
+        if self._registry_manager is not None:
+            return self._registry_manager
+
+        registry_path = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_path.exists():
+            return None
+
+        return BatchRegistryManager(registry_path)
+
     def are_all_jobs_completed(self, output_directory: str) -> bool:
         """Check if all batch jobs in the registry are completed.
 
@@ -57,53 +66,25 @@ class BatchJobManager:
         if not output_directory:
             return True
 
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
+        registry_path = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_path.exists():
             return True
 
         try:
-            with open(registry_file, "r", encoding="utf-8") as f:
-                registry = json.load(f)
+            with open(registry_path, "r", encoding="utf-8") as f:
+                json.load(f)
+        except (json.JSONDecodeError, OSError):
+            logger.warning("Registry file is malformed: %s", registry_path, exc_info=True)
+            return False
 
-            if not registry:
-                return True
-
-            for file_name, entry in registry.items():
-                batch_id = entry.get("batch_id")
-                if not batch_id:
-                    continue
-
-                try:
-                    actual_status = self._check_status(batch_id, str(output_directory))
-                    if actual_status != entry.get("status"):
-                        entry["status"] = actual_status
-
-                    if actual_status not in BatchStatus.terminal_states():
-                        return False
-
-                except Exception as e:
-                    logger.warning(
-                        "Failed to check status for batch %s in registry: %s",
-                        batch_id,
-                        e,
-                        exc_info=True,
-                        extra={
-                            "batch_id": batch_id,
-                            "file_name": file_name,
-                            "output_directory": output_directory,
-                            "operation": "registry_status_check",
-                        },
-                    )
-                    return False
-
-            # Update registry file with new statuses
-            with open(registry_file, "w", encoding="utf-8") as f:
-                json.dump(registry, f, indent=2)
-
+        manager = self._get_registry_manager(output_directory)
+        if manager is None:
             return True
 
-        except (json.JSONDecodeError, KeyError):
-            return True
+        def check_provider(batch_id: str) -> str:
+            return self._check_status(batch_id, output_directory)
+
+        return manager.are_all_jobs_completed(check_provider=check_provider)
 
     def get_registry_status(self, output_directory: str) -> str:
         """Get the overall status of all batch jobs in the registry.
@@ -118,56 +99,8 @@ class BatchJobManager:
         if not output_directory:
             return "no_batches"
 
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
+        manager = self._get_registry_manager(output_directory)
+        if manager is None:
             return "no_batches"
 
-        try:
-            with open(registry_file, "r", encoding="utf-8") as f:
-                registry = json.load(f)
-
-            if not registry:
-                return "no_batches"
-
-            completed_count = 0
-            failed_count = 0
-            in_progress_count = 0
-
-            for file_name, entry in registry.items():
-                batch_id = entry.get("batch_id")
-                if not batch_id:
-                    continue
-
-                try:
-                    actual_status = self._check_status(batch_id, str(output_directory))
-                    if actual_status == BatchStatus.COMPLETED:
-                        completed_count += 1
-                    elif actual_status in (BatchStatus.FAILED, BatchStatus.CANCELLED):
-                        failed_count += 1
-                    else:
-                        in_progress_count += 1
-
-                except Exception as e:
-                    logger.debug(
-                        "Could not check status for batch %s, treating as in_progress: %s",
-                        batch_id,
-                        e,
-                        extra={
-                            "batch_id": batch_id,
-                            "file_name": file_name,
-                            "operation": "status_aggregation",
-                        },
-                    )
-                    in_progress_count += 1
-
-            total_jobs = len(registry)
-            if completed_count == total_jobs:
-                return "completed"
-            if failed_count > 0:
-                return "partial_failed"
-            if in_progress_count > 0:
-                return "in_progress"
-            return "unknown"
-
-        except (json.JSONDecodeError, KeyError):
-            return "error"
+        return manager.get_overall_status()

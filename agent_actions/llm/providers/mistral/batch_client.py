@@ -126,10 +126,9 @@ class MistralBatchClient(BaseBatchClient):
                     purpose="batch",
                 )
 
-            # Create batch job
             batch_job = self.client.batch.jobs.create(
                 input_files=[batch_file.id],
-                model=self._get_default_model(),
+                model=self._configured_model or self._get_default_model(),
                 endpoint="/v1/chat/completions",
                 metadata={"name": batch_name},
             )

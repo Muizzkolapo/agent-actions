@@ -163,8 +163,8 @@ class TestRetrieveResults:
 
         assert "batch_123_results.jsonl" in str(result_file)
 
-    def test_skips_write_if_file_exists(self, tmp_path):
-        """Should not overwrite existing results file."""
+    def test_overwrites_existing_file_with_fresh_results(self, tmp_path):
+        """Should overwrite existing results file with fresh data."""
         from agent_actions.llm.batch.services.retrieval import (
             BatchRetrievalService,
         )
@@ -201,8 +201,9 @@ class TestRetrieveResults:
 
         result_file = service.retrieve_results("batch_123", str(tmp_path))
 
-        # Verify original content preserved
-        assert Path(result_file).read_text() == "existing content\n"
+        content = Path(result_file).read_text()
+        assert "existing content" not in content
+        assert "record_1" in content
 
     def test_raises_external_service_error_on_failure(self, tmp_path):
         """Should raise ExternalServiceError when retrieval fails."""

@@ -205,3 +205,19 @@ class PreparedBatchTasks:
     def task_count(self) -> int:
         """Get number of prepared tasks."""
         return len(self.tasks)
+
+
+@dataclass
+class SubmissionResult:
+    """Result of a batch submission."""
+
+    batch_id: Optional[str] = None
+    passthrough: Optional[Dict[str, Any]] = None
+
+    @property
+    def is_submitted(self) -> bool:
+        return self.batch_id is not None
+
+    @property
+    def is_passthrough(self) -> bool:
+        return self.passthrough is not None

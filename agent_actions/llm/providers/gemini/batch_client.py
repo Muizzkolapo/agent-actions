@@ -160,7 +160,7 @@ class GeminiBatchClient(BaseBatchClient):
                 config=types.UploadFileConfig(display_name=f"{batch_name}-batch-input"),
             )
             logger.info("Uploaded file: %s", uploaded_file.name)
-            model_name = self._get_default_model()
+            model_name = self._configured_model or self._get_default_model()
             batch_job = self.client.batches.create(
                 model=model_name, src=uploaded_file.name, config={"display_name": batch_name}
             )

@@ -172,7 +172,7 @@ class TestSubmitBatchJob:
             output_directory="/tmp/output",
         )
 
-        assert result == "existing_batch"
+        assert result.batch_id == "existing_batch"
 
     def test_force_bypasses_in_flight_check(self):
         """Should submit new batch when force=True even if in-flight exists."""
@@ -222,7 +222,7 @@ class TestSubmitBatchJob:
             force=True,
         )
 
-        assert result == "new_batch_123"
+        assert result.batch_id == "new_batch_123"
 
     def test_returns_tombstone_when_no_tasks(self):
         """Should return tombstone dict when no tasks after filtering."""
@@ -260,7 +260,8 @@ class TestSubmitBatchJob:
             output_directory="/tmp/output",
         )
 
-        assert result["type"] == "tombstone"
+        assert result.is_passthrough
+        assert result.passthrough["type"] == "tombstone"
 
     def test_submits_batch_and_saves_to_registry(self):
         """Should submit batch and save entry to registry."""
@@ -306,7 +307,7 @@ class TestSubmitBatchJob:
             output_directory="/tmp/output",
         )
 
-        assert result == "batch_123"
+        assert result.batch_id == "batch_123"
         manager.save_batch_job.assert_called_once()
         context_manager.save_batch_context_map.assert_called_once()
 

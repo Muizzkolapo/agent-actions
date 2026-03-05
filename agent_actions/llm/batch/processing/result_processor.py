@@ -100,7 +100,6 @@ class BatchResultProcessor:
         Returns:
             List of processed data in workflow format
         """
-        # Stage 1: Initialize context
         ctx = self._stage_1_initialize_context(
             batch_results,
             context_map,
@@ -109,13 +108,10 @@ class BatchResultProcessor:
             exhausted_recovery,
         )
 
-        # Stage 2: Reconcile requests with responses
         ctx = self._stage_2_reconcile(ctx)
 
-        # Stage 3-4: Process batch results (success + errors)
         ctx = self._stage_3_4_process_results(ctx)
 
-        # Stage 6: Merge passthroughs for missing/skipped records
         ctx = self._stage_6_merge_passthroughs(ctx)
 
         logger.debug(
@@ -142,7 +138,6 @@ class BatchResultProcessor:
         """
         context_map = context_map or {}
 
-        # Extract agent config values
         json_mode = True
         output_field = "content"
         if agent_config:
@@ -184,18 +179,15 @@ class BatchResultProcessor:
         successful results and errors.
         """
         for batch_result in ctx.batch_results:
-            # Normalize custom_id to string for JSON context_map compatibility
             custom_id = str(batch_result.custom_id)
 
             if batch_result.success and batch_result.content is not None:
-                # Stage 3: Process successful result
                 try:
                     items = self._process_successful_result(ctx, batch_result, custom_id)
                     ctx.processed_data.extend(items)
                     ctx.success_count += len(items)
                     ctx.reconciler.mark_processed(custom_id)
 
-                    # Log individual item processing at DEBUG level
                     logger.debug(
                         "Processed batch result item",
                         extra={
@@ -207,8 +199,6 @@ class BatchResultProcessor:
                     )
 
                 except Exception as e:
-                    # Catch all exceptions to prevent one item from breaking entire batch
-                    # Processing exception - create error item
                     error_item = self._create_error_item(
                         ctx,
                         custom_id,
@@ -221,7 +211,6 @@ class BatchResultProcessor:
                     ctx.error_count += 1
                     ctx.reconciler.mark_processed(custom_id)
 
-                    # Log processing exception at ERROR level
                     logger.error(
                         "Batch result item processing failed",
                         extra={
@@ -233,7 +222,6 @@ class BatchResultProcessor:
                     )
 
             else:
-                # Stage 4: Process error result
                 error_item = self._create_error_item(
                     ctx,
                     custom_id,
@@ -245,7 +233,6 @@ class BatchResultProcessor:
                 ctx.error_count += 1
                 ctx.reconciler.mark_processed(custom_id)
 
-                # Log error result at ERROR level
                 logger.error(
                     "Batch result item had error",
                     extra={
@@ -268,19 +255,15 @@ class BatchResultProcessor:
         Enrichment (metadata, lineage, IDs, recovery) is delegated to
         the shared EnrichmentPipeline via BatchContextAdapter.
         """
-        # Step 1: Handle json_mode
         generated_obj = batch_result.content
         if not ctx.json_mode and isinstance(generated_obj, str):
             generated_obj = {ctx.output_field: generated_obj}
 
-        # Step 2: Ensure list format
         generated_list = DataTransformer.ensure_list(generated_obj)
 
-        # Step 3: Get original row data
         original_row = ctx.reconciler.get_record_by_id(custom_id)
         original_source_guid = ctx.reconciler.get_source_guid(custom_id)
 
-        # Step 4: Apply context_scope.passthrough (if configured)
         if ctx.agent_config:
             if custom_id in ctx.context_map:
                 generated_list = self._apply_context_passthrough(
@@ -293,7 +276,6 @@ class BatchResultProcessor:
                     custom_id,
                 )
 
-        # Step 5: Transform structure (convert to workflow format)
         structured_items = DataTransformer.transform_structure(
             [{original_source_guid: generated_list}]
         )
@@ -306,7 +288,6 @@ class BatchResultProcessor:
                 if "target_id" not in item or not item["target_id"]:
                     item["target_id"] = original_target_id
 
-        # Step 6: Enrich via shared pipeline
         record_index = ctx.reconciler.get_record_index(custom_id)
 
         processing_context = BatchContextAdapter.to_processing_context(
@@ -339,11 +320,9 @@ class BatchResultProcessor:
 
         Handles both pre-computed passthrough fields and fallback behavior.
         """
-        # Check for pre-computed passthrough fields
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
-            # Use pre-computed passthrough
             from agent_actions.prompt.context.scope import (
                 ContextScopeProcessor,
             )
@@ -353,7 +332,6 @@ class BatchResultProcessor:
             )
 
         elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
-            # Fallback: old behavior for backward compatibility
             passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
             passthrough_fields = []
 
@@ -369,10 +347,8 @@ class BatchResultProcessor:
                     # If parsing fails, use the whole string as field name
                     passthrough_fields.append(field_ref)
 
-            # Get original content
             original_content = original_row.get("content", original_row)
 
-            # Merge passthrough fields
             generated_list = [
                 (
                     DataTransformer.update_schema_objects(
@@ -417,11 +393,9 @@ class BatchResultProcessor:
             "metadata": metadata or {},
         }
 
-        # Include raw_content for processing errors (helps debugging)
         if raw_content is not None:
             error_item["raw_content"] = raw_content
 
-        # Include recovery metadata (per-record)
         if recovery_metadata:
             error_item["_recovery"] = recovery_metadata.to_dict()
 
@@ -471,13 +445,10 @@ class BatchResultProcessor:
         - Skipped records (guard/conditional): Passthrough with original content
         - Exhausted retry records: Empty schema content + _recovery metadata
         """
-        # Get reconciliation result
         reconciliation = ctx.reconciler.reconcile()
 
-        # Build passthrough items for missing/skipped records
         if reconciliation.passthrough_records:
             for custom_id, original_row in reconciliation.passthrough_records:
-                # Check if this is an exhausted retry record
                 is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
 
                 record_index = ctx.reconciler.get_record_index(custom_id)
@@ -486,21 +457,18 @@ class BatchResultProcessor:
                 )
 
                 if is_exhausted:
-                    # Check on_exhausted behavior from retry config
                     on_exhausted = "return_last"  # default
                     if ctx.agent_config:
                         retry_config = ctx.agent_config.get("retry", {})
                         on_exhausted = retry_config.get("on_exhausted", "return_last")
 
                     if on_exhausted == "raise":
-                        # Raise exception as configured - fail the action
                         recovery_meta = ctx.exhausted_recovery[custom_id]
                         raise RuntimeError(
                             f"Retry exhausted for record {custom_id} after "
                             f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
                         )
 
-                    # Exhausted retry: Build record with empty schema + route through enrichment
                     recovery_meta = ctx.exhausted_recovery[custom_id]
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}

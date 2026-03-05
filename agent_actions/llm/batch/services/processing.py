@@ -131,7 +131,6 @@ class BatchProcessingService:
             if provider.check_status(batch_id) != BatchStatus.COMPLETED:
                 raise ProcessingError("Batch job is not completed", context={"batch_id": batch_id})
 
-            # Get entry and load context
             entry = manager.get_batch_job_by_id(batch_id)
             file_name = entry.file_name if entry else None
             context_map = (
@@ -143,7 +142,6 @@ class BatchProcessingService:
             )
             agent_config = self._apply_workflow_session_id(agent_config, entry)
 
-            # Retrieve and process results
             batch_results = retrieve_and_reconcile(
                 provider,
                 batch_id,
@@ -159,11 +157,9 @@ class BatchProcessingService:
                 agent_config=agent_config,
             )
 
-            # Write per-record dispositions for dead records
             if self._storage_backend and self._action_name:
                 self._write_record_dispositions(processed_data, self._action_name)
 
-            # Save source data before writing output
             if self._source_handler:
                 self._source_handler.save_task_source(
                     processed_data,
@@ -173,11 +169,9 @@ class BatchProcessingService:
                     storage_backend=self._storage_backend,
                 )
 
-            # Write output files
             output_file = Path(output_directory) / Path(file_path).relative_to(
                 base_directory
             ).with_suffix(".json")
-            # Only create directory if not using storage backend
             if self._storage_backend is None:
                 ensure_directory_exists(output_file, is_file=True)
             FileWriter(
@@ -224,7 +218,6 @@ class BatchProcessingService:
                 "No batch registry found", context={"output_directory": output_directory}
             )
 
-        # Use provided action_name or fall back to instance default
         effective_action_name = action_name or self._action_name
 
         processed_files = []
@@ -237,11 +230,9 @@ class BatchProcessingService:
             if entry.parent_file_name is not None:
                 continue
 
-            # Check status using helper method
             if not self._is_batch_ready_for_processing(batch_id, output_directory):
                 continue
 
-            # Process batch
             try:
                 output_file = self._process_single_batch_file(
                     batch_id=batch_id,
@@ -333,7 +324,6 @@ class BatchProcessingService:
             output_directory: Output directory path
             action_name: Override action_name for storage backend writes
         """
-        # Only create directory if not using storage backend
         if self._storage_backend is None:
             ensure_directory_exists(output_file, is_file=True)
         FileWriter(
@@ -425,7 +415,6 @@ class BatchProcessingService:
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
-        # Retrieve results
         batch_results = retrieve_and_reconcile(
             provider,
             batch_id,
@@ -435,7 +424,6 @@ class BatchProcessingService:
             file_name=file_name,
         )
 
-        # Check for retry
         retry_config = (agent_config or {}).get("retry")
         retry_enabled = retry_config and retry_config.get("enabled", True)
 
@@ -446,7 +434,6 @@ class BatchProcessingService:
 
             if missing_ids:
                 max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
-                # Submit async retry batch
                 submission = self._retry_service.submit_retry_batch(
                     provider=provider,
                     missing_ids=missing_ids,
@@ -472,7 +459,6 @@ class BatchProcessingService:
                     )
                     manager.save_batch_job(recovery_file_name, recovery_entry)
 
-                    # Save recovery state
                     record_failure_counts = {rid: 1 for rid in missing_ids}
                     state = RecoveryState(
                         phase="retry",
@@ -482,7 +468,6 @@ class BatchProcessingService:
                         record_failure_counts=record_failure_counts,
                         accumulated_results=BatchRetryService.serialize_results(batch_results),
                     )
-                    # Store reprompt config for later
                     reprompt_config = (agent_config or {}).get("reprompt")
                     if reprompt_config:
                         state.reprompt_max_attempts = reprompt_config.get("max_attempts", 2)
@@ -498,7 +483,6 @@ class BatchProcessingService:
                     )
                     return None  # Recovery pending
 
-        # Check for reprompt (no retry needed or retry not configured)
         should_continue = self._check_and_submit_reprompt(
             batch_results=batch_results,
             context_map=context_map,
@@ -512,7 +496,6 @@ class BatchProcessingService:
         if not should_continue:
             return None  # Reprompt submitted, processing paused
 
-        # No recovery needed — process normally
         return self._finalize_batch_output(
             batch_results=batch_results,
             exhausted_recovery=None,
@@ -549,7 +532,6 @@ class BatchProcessingService:
             logger.error("Recovery entry %s has no parent_file_name", file_name)
             return None
 
-        # Load recovery state
         state = RecoveryStateManager.load(output_directory, parent_file_name)
         if not state:
             logger.error("No recovery state found for %s", parent_file_name)
@@ -561,7 +543,6 @@ class BatchProcessingService:
         agent_config = self._apply_workflow_session_id(agent_config, entry)
         provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
-        # Retrieve recovery batch results
         recovery_results = retrieve_and_reconcile(
             provider,
             batch_id,
@@ -571,7 +552,6 @@ class BatchProcessingService:
             file_name=file_name,
         )
 
-        # Deserialize accumulated results
         accumulated = BatchRetryService.deserialize_results(state.accumulated_results)
 
         if entry.recovery_type == "retry":
@@ -626,7 +606,6 @@ class BatchProcessingService:
         """Handle retry recovery batch completion."""
         missing_ids = set(state.missing_ids)
 
-        # Process retry results
         merged, still_missing, updated_counts, _ = self._retry_service.process_retry_results(
             results=recovery_results,
             accumulated_results=accumulated,
@@ -635,7 +614,6 @@ class BatchProcessingService:
             missing_ids=missing_ids,
         )
 
-        # Check if more retries needed
         if still_missing and state.retry_attempt < state.retry_max_attempts:
             next_attempt = state.retry_attempt + 1
             submission = self._retry_service.submit_retry_batch(
@@ -662,7 +640,6 @@ class BatchProcessingService:
                 )
                 manager.save_batch_job(recovery_file_name, recovery_entry)
 
-                # Update state
                 state.retry_attempt = next_attempt
                 state.missing_ids = list(still_missing)
                 state.record_failure_counts = updated_counts
@@ -670,14 +647,12 @@ class BatchProcessingService:
                 RecoveryStateManager.save(output_directory, parent_file_name, state)
                 return None  # More retries pending
 
-        # Build exhausted recovery for still-missing records
         exhausted_recovery = None
         if still_missing:
             exhausted_recovery = self._retry_service.build_exhausted_recovery(
                 still_missing, updated_counts
             )
 
-        # Retry phase done — check if reprompt is needed
         should_continue = self._check_and_submit_reprompt(
             batch_results=merged,
             context_map=context_map,
@@ -693,7 +668,6 @@ class BatchProcessingService:
         if not should_continue:
             return None  # Reprompt submitted, processing paused
 
-        # All done — finalize
         RecoveryStateManager.delete(output_directory, parent_file_name)
         return self._finalize_batch_output(
             batch_results=merged,
@@ -724,13 +698,11 @@ class BatchProcessingService:
         start_time: float,
     ) -> Optional[str]:
         """Handle reprompt recovery batch completion."""
-        # Merge reprompt results
         merged = self._retry_service.process_reprompt_results(
             reprompt_results=recovery_results,
             accumulated_results=accumulated,
         )
 
-        # Re-validate
         failed_results, validation_name = self._retry_service.validate_results(
             results=merged,
             agent_config=agent_config,
@@ -763,7 +735,6 @@ class BatchProcessingService:
                 )
                 manager.save_batch_job(recovery_file_name, recovery_entry)
 
-                # Update per-record tracking
                 for fr in failed_results:
                     state.reprompt_attempts_per_record[fr.custom_id] = (
                         state.reprompt_attempts_per_record.get(fr.custom_id, 0) + 1
@@ -774,7 +745,6 @@ class BatchProcessingService:
                 RecoveryStateManager.save(output_directory, parent_file_name, state)
                 return None  # More reprompts pending
 
-        # Apply exhaustion metadata if reprompt is done but some failed
         if failed_results and validation_name:
             on_exhausted = state.on_exhausted
             failed_ids = {r.custom_id for r in failed_results}
@@ -797,7 +767,6 @@ class BatchProcessingService:
                 set(state.missing_ids), state.record_failure_counts
             )
 
-        # All done — finalize
         RecoveryStateManager.delete(output_directory, parent_file_name)
         return self._finalize_batch_output(
             batch_results=merged,
@@ -846,13 +815,11 @@ class BatchProcessingService:
         max_attempts = reprompt_config.get("max_attempts", 2)
         on_exhausted = reprompt_config.get("on_exhausted", "return_last")
 
-        # If this is the first reprompt attempt
         current_attempt = 0
         if recovery_state:
             current_attempt = recovery_state.reprompt_attempt
 
         if current_attempt >= max_attempts:
-            # Exhausted — apply metadata and continue to finalize
             failed_ids = {r.custom_id for r in failed_results}
             self._retry_service.apply_exhausted_reprompt_metadata(
                 results=batch_results,
@@ -892,7 +859,6 @@ class BatchProcessingService:
         )
         manager.save_batch_job(recovery_file_name, recovery_entry)
 
-        # Save/update recovery state
         state = recovery_state or RecoveryState(phase="reprompt")
         state.phase = "reprompt"
         state.reprompt_attempt = next_attempt
@@ -905,7 +871,6 @@ class BatchProcessingService:
             )
         state.accumulated_results = BatchRetryService.serialize_results(batch_results)
 
-        # Preserve exhausted_recovery info in state
         if exhausted_recovery:
             state.missing_ids = list(exhausted_recovery.keys())
             state.record_failure_counts = {
@@ -994,7 +959,6 @@ class BatchProcessingService:
             exhausted_recovery=exhausted_recovery,
         )
 
-        # Write per-record dispositions for dead records
         if self._storage_backend and self._action_name:
             self._write_record_dispositions(processed_data, self._action_name)
 
@@ -1018,8 +982,6 @@ class BatchProcessingService:
         )
 
         manager.update_status(batch_id, BatchStatus.COMPLETED)
-
-        # Clean up orphaned recovery entries linked to this file
         self._cleanup_recovery_entries(manager, file_name)
 
         return str(output_file)
@@ -1081,14 +1043,11 @@ class BatchProcessingService:
         if not entry:
             return agent_config
 
-        # Create config if None (batch collect mode without agent_config)
         updated_config = agent_config.copy() if agent_config else {}
 
-        # Restore workflow session ID
         if entry.workflow_session_id:
             updated_config["workflow_session_id"] = entry.workflow_session_id
 
-        # Restore version context for loop correlation
         if entry.is_versioned_agent is not None:
             updated_config["is_versioned_agent"] = entry.is_versioned_agent
         if entry.version_base_name is not None:

@@ -35,7 +35,7 @@ class BatchDataLoader(IDataLoader):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 if path.suffix == ".jsonl":
-                    return [json.loads(line) for line in f]
+                    return [json.loads(line) for line in f if line.strip()]
                 if path.suffix == ".json":
                     return json.load(f)
                 raise ValueError(

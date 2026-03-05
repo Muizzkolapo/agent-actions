@@ -117,7 +117,6 @@ class AgacBatchClient(BaseBatchClient):
 
         state.poll_count += 1
 
-        # Check time-based completion
         elapsed = time.time() - state.created_at
         if elapsed >= state.complete_after_seconds:
             state.status = "completed"
@@ -126,7 +125,6 @@ class AgacBatchClient(BaseBatchClient):
                 batch_id,
                 elapsed,
             )
-        # Check poll-based completion (if configured)
         elif state.polls_until_complete > 0 and state.poll_count >= state.polls_until_complete:
             state.status = "completed"
             logger.debug(

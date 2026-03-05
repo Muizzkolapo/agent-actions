@@ -75,7 +75,6 @@ def create_dynamic_agent(
     if tools_path:
         ensure_path_importable(tools_path)
 
-    # Get model vendor and check if tool
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     is_tool = model_vendor == "tool"
 
@@ -115,7 +114,6 @@ def create_dynamic_agent(
         schema,
     )
 
-    # Get granularity
     granularity = (agent_config.get("granularity") or "record").lower()
 
     # Invoke client
