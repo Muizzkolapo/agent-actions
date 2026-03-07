@@ -9,7 +9,6 @@
 | [errors](errors/_MANIFEST.md) | Centralized error exports for agent-actions. |
 | [input](input/_MANIFEST.md) | Data ingestion utilities (context loaders, preprocessors, and transformers). |
 | [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/realtime execution. |
-| [lsp](lsp/_MANIFEST.md) | Backward-compatible LSP entrypoint shims that delegate to tooling LSP modules. |
 | [logging](logging/_MANIFEST.md) | Agent Actions logging infrastructure. |
 | [models](models/_MANIFEST.md) | Unified data models for agent-actions. |
 | [output](output/_MANIFEST.md) | Output serialization, schema loading, and response helpers. |

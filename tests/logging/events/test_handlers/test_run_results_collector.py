@@ -10,6 +10,7 @@ from agent_actions.logging.events.types import (
     WorkflowStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
+    AgentStartEvent,
     AgentCompleteEvent,
     AgentSkipEvent,
     AgentFailedEvent,
@@ -399,3 +400,71 @@ class TestAgentSkipHandling:
         summary = collector.get_summary()
         assert summary["skipped"] == 1
         assert summary["success"] == 1
+
+
+class TestAgentStartEventHandling:
+    """Tests for AgentStartEvent handling (1-B)."""
+
+    def test_handle_agent_start_creates_entry(self, collector):
+        """AgentStartEvent creates a running entry with started_at."""
+        event = AgentStartEvent(
+            agent_name="my_agent",
+            agent_index=2,
+            total_agents=5,
+        )
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+
+        collector.handle(event)
+
+        assert "my_agent" in collector._results
+        result = collector._results["my_agent"]
+        assert result.status == "running"
+        assert result.agent_index == 2
+        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+
+    def test_start_then_complete_preserves_started_at(self, collector):
+        """started_at from AgentStartEvent survives AgentCompleteEvent."""
+        start = AgentStartEvent(agent_name="a", agent_index=1, total_agents=3)
+        start.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        collector.handle(start)
+
+        complete = AgentCompleteEvent(agent_name="a", agent_index=1, execution_time=5.0)
+        complete.meta.timestamp = datetime(2024, 1, 15, 10, 0, 5, tzinfo=timezone.utc)
+        collector.handle(complete)
+
+        result = collector._results["a"]
+        assert result.status == "success"
+        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 5, tzinfo=timezone.utc)
+
+
+class TestAgentIndexUpdatedOnExistingEntry:
+    """Tests for agent_index update on pre-existing entries (1-A)."""
+
+    def test_empty_output_then_complete_updates_index(self, collector):
+        """RecordEmptyOutputEvent creates entry with index=0; AgentCompleteEvent fixes it."""
+        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+
+        collector.handle(RecordEmptyOutputEvent(agent_name="agent_x", record_index=0))
+        assert collector._results["agent_x"].agent_index == 0
+
+        collector.handle(AgentCompleteEvent(agent_name="agent_x", agent_index=3))
+        assert collector._results["agent_x"].agent_index == 3
+
+    def test_empty_output_then_skip_updates_index(self, collector):
+        """RecordEmptyOutputEvent creates entry with index=0; AgentSkipEvent fixes it."""
+        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+
+        collector.handle(RecordEmptyOutputEvent(agent_name="agent_y", record_index=0))
+        collector.handle(AgentSkipEvent(agent_name="agent_y", agent_index=2, skip_reason="cached"))
+        assert collector._results["agent_y"].agent_index == 2
+
+    def test_empty_output_then_failed_updates_index(self, collector):
+        """RecordEmptyOutputEvent creates entry with index=0; AgentFailedEvent fixes it."""
+        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+
+        collector.handle(RecordEmptyOutputEvent(agent_name="agent_z", record_index=0))
+        collector.handle(
+            AgentFailedEvent(agent_name="agent_z", agent_index=4, error_message="boom")
+        )
+        assert collector._results["agent_z"].agent_index == 4

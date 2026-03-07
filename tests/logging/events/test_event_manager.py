@@ -1,6 +1,8 @@
 """Tests for EventManager and event dispatching."""
 
+import threading
 from unittest.mock import Mock
+
 import pytest
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
@@ -326,3 +328,140 @@ class TestResetBehavior:
         EventManager.reset()
 
         assert handler.flushed
+
+
+class TestBaseEventCodeFallback:
+    """Tests for BaseEvent.code default (1-C)."""
+
+    def test_base_event_code_returns_static_fallback(self):
+        """BaseEvent.code returns a fixed fallback since all subclasses override."""
+        event = BaseEvent(category="workflow", message="test")
+        assert event.code == "X000"
+
+
+class TestAtexitAccumulation:
+    """Tests for atexit callback accumulation fix (1-E)."""
+
+    def test_reset_and_get_does_not_duplicate_atexit(self):
+        """Multiple reset()+get() cycles should not accumulate atexit callbacks."""
+        import agent_actions.logging.core.manager as mgr
+
+        # After the first get() in the fixture, _atexit_registered is True
+        assert mgr._atexit_registered is True
+
+        EventManager.reset()
+        EventManager.get()
+        EventManager.reset()
+        EventManager.get()
+
+        # Still True, but only registered once
+        assert mgr._atexit_registered is True
+
+
+class TestThreadSafety:
+    """Tests for thread-safe context and handler iteration (1-D, 2-B)."""
+
+    def test_concurrent_fire_and_register(self):
+        """fire() and register() can run concurrently without error."""
+        manager = EventManager.get()
+        handler = MockHandler()
+        manager.register(handler)
+
+        errors = []
+
+        def fire_many():
+            try:
+                for _ in range(50):
+                    manager.fire(BaseEvent(message="concurrent"))
+            except Exception as exc:
+                errors.append(exc)
+
+        def register_many():
+            try:
+                for _ in range(50):
+                    manager.register(MockHandler())
+            except Exception as exc:
+                errors.append(exc)
+
+        t1 = threading.Thread(target=fire_many)
+        t2 = threading.Thread(target=register_many)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert errors == []
+
+    def test_overlapping_thread_contexts_are_isolated(self):
+        """Two threads with overlapping context() blocks don't clobber each other."""
+        manager = EventManager.get()
+        manager.set_context(base="shared")
+
+        barrier = threading.Barrier(2)
+        results: dict[str, Any] = {}
+
+        def thread_a():
+            with manager.context(a="1"):
+                barrier.wait()  # Ensure both threads are inside context()
+                import time
+
+                time.sleep(0.02)  # Let thread_b exit its context()
+                results["a_inside"] = manager.get_context("a")
+                results["a_sees_b"] = manager.get_context("b")
+            results["a_after"] = manager.get_context("a")
+
+        def thread_b():
+            with manager.context(b="2"):
+                barrier.wait()
+                results["b_inside"] = manager.get_context("b")
+                results["b_sees_a"] = manager.get_context("a")
+            results["b_after"] = manager.get_context("b")
+
+        t1 = threading.Thread(target=thread_a)
+        t2 = threading.Thread(target=thread_b)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        # Each thread sees its own overlay, not the other's
+        assert results["a_inside"] == "1"
+        assert results["b_inside"] == "2"
+        assert results["a_sees_b"] is None  # Thread A shouldn't see b
+        assert results["b_sees_a"] is None  # Thread B shouldn't see a
+        # After exiting context(), overlay values are gone
+        assert results["a_after"] is None
+        assert results["b_after"] is None
+        # Global context survives
+        assert manager.get_context("base") == "shared"
+
+    def test_concurrent_fire_and_set_context(self):
+        """fire() and set_context() can run concurrently without error."""
+        manager = EventManager.get()
+        handler = MockHandler()
+        manager.register(handler)
+
+        errors = []
+
+        def fire_many():
+            try:
+                for _ in range(50):
+                    manager.fire(BaseEvent(message="ctx"))
+            except Exception as exc:
+                errors.append(exc)
+
+        def set_ctx():
+            try:
+                for i in range(50):
+                    manager.set_context(key=str(i))
+            except Exception as exc:
+                errors.append(exc)
+
+        t1 = threading.Thread(target=fire_many)
+        t2 = threading.Thread(target=set_ctx)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+
+        assert errors == []

@@ -3,7 +3,7 @@
 import logging
 import pytest
 
-from agent_actions.logging.filters import RedactingFilter
+from agent_actions.logging.filters import RedactingFilter, _redact_sensitive_data
 
 
 class TestRedactingFilter:
@@ -329,3 +329,44 @@ class TestRedactingFilter:
         assert record.batch_id == "batch-456"
         # Sensitive field redacted
         assert record.api_key == "[REDACTED]"
+
+
+class TestStandaloneRedactSensitiveData:
+    """Tests for the standalone _redact_sensitive_data function (2-A)."""
+
+    def test_redacts_dict_keys(self):
+        """Sensitive dict keys are replaced with [REDACTED]."""
+        data = {"model": "gpt-4", "api_key": "sk-secret", "timeout": 30}
+        result = _redact_sensitive_data(data)
+        assert result["model"] == "gpt-4"
+        assert result["api_key"] == "[REDACTED]"
+        assert result["timeout"] == 30
+
+    def test_redacts_nested_dicts(self):
+        """Nested dicts are redacted recursively."""
+        data = {"config": {"secret": "val", "name": "ok"}}
+        result = _redact_sensitive_data(data)
+        assert result["config"]["secret"] == "[REDACTED]"
+        assert result["config"]["name"] == "ok"
+
+    def test_redacts_lists(self):
+        """Lists of dicts are redacted element-wise."""
+        data = [{"token": "abc"}, {"name": "safe"}]
+        result = _redact_sensitive_data(data)
+        assert result[0]["token"] == "[REDACTED]"
+        assert result[1]["name"] == "safe"
+
+    def test_redacts_string_patterns(self):
+        """API key patterns in strings are redacted."""
+        data = "key is sk-abcdefghij1234567890abcdefghij12"
+        result = _redact_sensitive_data(data)
+        assert "sk-abcdefghij1234567890abcdefghij12" not in result
+        assert "sk-[REDACTED]" in result
+
+    def test_no_baseclient_import(self):
+        """filters.py must not import from llm providers."""
+        import agent_actions.logging.filters as mod
+        import inspect
+
+        source = inspect.getsource(mod)
+        assert "from agent_actions.llm.providers" not in source

@@ -4,9 +4,54 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import List, Pattern
+from typing import Any, List, Pattern
 
-from agent_actions.llm.providers.client_base import BaseClient
+
+def _redact_sensitive_data(
+    data: Any,
+    redact_keys: tuple[str, ...] = (
+        "api_key",
+        "key",
+        "token",
+        "password",
+        "secret",
+        "authorization",
+    ),
+) -> Any:
+    """Redact sensitive data from nested structures for logging.
+
+    Standalone implementation so the logging module does not depend on
+    the LLM providers package.
+
+    Args:
+        data: Data to redact (dict, list, or primitive).
+        redact_keys: Tuple of key name substrings to redact.
+
+    Returns:
+        Redacted copy of data.
+    """
+    if isinstance(data, dict):
+        return {
+            k: (
+                "[REDACTED]"
+                if any(key in k.lower() for key in redact_keys)
+                else _redact_sensitive_data(v, redact_keys)
+            )
+            for k, v in data.items()
+        }
+    if isinstance(data, list):
+        return [_redact_sensitive_data(item, redact_keys) for item in data]
+    if isinstance(data, str):
+        patterns = [
+            (r"sk-[a-zA-Z0-9]{20,}", "sk-[REDACTED]"),
+            (r"anthropic-[a-zA-Z0-9-]{20,}", "anthropic-[REDACTED]"),
+            (r"AIza[a-zA-Z0-9_-]{35}", "AIza[REDACTED]"),
+        ]
+        result = data
+        for pattern, replacement in patterns:
+            result = re.sub(pattern, replacement, result)
+        return result
+    return data
 
 
 class RedactingFilter(logging.Filter):
@@ -164,12 +209,10 @@ class RedactingFilter(logging.Filter):
     def _redact_nested(self, data):
         """Redact sensitive data from nested structures.
 
-        Uses the redaction utility from BaseClient for consistent redaction.
-
         Args:
             data: Nested dict or list to redact.
 
         Returns:
             Redacted copy of the data.
         """
-        return BaseClient.redact_sensitive_data(data)
+        return _redact_sensitive_data(data)

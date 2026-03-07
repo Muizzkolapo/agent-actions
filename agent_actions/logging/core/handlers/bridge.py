@@ -154,8 +154,8 @@ class LogEvent(BaseEvent):
 
     @property
     def code(self) -> str:
-        """Log events use 'X' prefix for system/debug."""
-        return f"X{abs(hash(self.logger_name)) % 1000:03d}"
+        """Log events use 'X' prefix for bridged log records."""
+        return "X000"
 
     @property
     def has_exception(self) -> bool:

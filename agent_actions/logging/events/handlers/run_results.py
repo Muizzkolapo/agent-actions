@@ -158,6 +158,8 @@ class RunResultsCollector:
             self._handle_workflow_complete(event)
         elif event_type == "WorkflowFailedEvent":
             self._handle_workflow_failed(event)
+        elif event_type == "AgentStartEvent":
+            self._handle_agent_start(event)
         elif event_type == "AgentCompleteEvent":
             self._handle_agent_complete(event)
         elif event_type == "AgentSkipEvent":
@@ -231,6 +233,23 @@ class RunResultsCollector:
         }
         self.flush()
 
+    def _handle_agent_start(self, event: BaseEvent) -> None:
+        """Handle AgentStartEvent — record started_at and create entry if needed."""
+        agent_name = event.data.get("agent_name", "")
+
+        if agent_name not in self._results:
+            unique_id = f"{self.workflow_name}.{agent_name}"
+            self._results[agent_name] = AgentResult(
+                unique_id=unique_id,
+                agent_name=agent_name,
+                agent_index=event.data.get("agent_index", 0),
+                status="running",
+            )
+
+        result = self._results[agent_name]
+        result.agent_index = event.data.get("agent_index", result.agent_index)
+        result.started_at = event.meta.timestamp
+
     def _handle_agent_complete(self, event: BaseEvent) -> None:
         """Handle AgentCompleteEvent."""
         agent_name = event.data.get("agent_name", "")
@@ -245,6 +264,7 @@ class RunResultsCollector:
             )
 
         result = self._results[agent_name]
+        result.agent_index = event.data.get("agent_index", result.agent_index)
         result.status = "success"
         result.execution_time = event.data.get("execution_time", 0.0)
         result.output_folder = event.data.get("output_path", "")
@@ -264,6 +284,7 @@ class RunResultsCollector:
 
         if agent_name in self._results:
             result = self._results[agent_name]
+            result.agent_index = event.data.get("agent_index", result.agent_index)
             result.status = "skipped"
             result.skip_reason = event.data.get("skip_reason", "")
             result.completed_at = event.meta.timestamp
@@ -286,6 +307,7 @@ class RunResultsCollector:
 
         if agent_name in self._results:
             result = self._results[agent_name]
+            result.agent_index = event.data.get("agent_index", result.agent_index)
             result.status = "error"
             result.execution_time = event.data.get("execution_time", 0.0)
             result.error_message = error_msg

@@ -122,17 +122,8 @@ class BaseEvent:
 
     @property
     def code(self) -> str:
-        """
-        Return a short event code.
-
-        Override in subclasses to provide codes like 'W001', 'A002'.
-        Default implementation uses first letter of category + hash.
-        """
-        # Default: first letter of category uppercase
-        prefix = self.category[0].upper() if self.category else "X"
-        # Use class name hash for uniqueness (last 3 digits)
-        suffix = str(abs(hash(self.__class__.__name__)) % 1000).zfill(3)
-        return f"{prefix}{suffix}"
+        """Return a short event code. Subclasses must override."""
+        return "X000"
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize event to dictionary for JSON logging."""

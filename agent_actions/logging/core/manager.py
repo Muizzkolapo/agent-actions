@@ -9,6 +9,7 @@ logging system.
 from __future__ import annotations
 
 import atexit
+import contextvars
 import logging
 import threading
 from contextlib import contextmanager
@@ -23,6 +24,16 @@ _stdlib_logger.propagate = False
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
     from agent_actions.logging.core.protocols import EventFilter, EventHandler
+
+# Module-level atexit function registered once.  Delegates to the current
+# singleton so that reset() + get() does not accumulate callbacks.
+_atexit_registered = False
+
+
+def _atexit_flush() -> None:
+    """Flush the current EventManager singleton (if any) at interpreter exit."""
+    if EventManager._instance is not None:
+        EventManager._instance.flush()
 
 
 class EventManager:
@@ -47,14 +58,25 @@ class EventManager:
 
     def __init__(self) -> None:
         """Initialize the event manager. Use get() instead of direct instantiation."""
+        global _atexit_registered
+
         self._handlers: list[EventHandler] = []
         self._filters: list[EventFilter] = []
         self._context: dict[str, Any] = {}
-        self._context_stack: list[dict[str, Any]] = []
         self._initialized: bool = False
+        self._fire_lock: threading.RLock = threading.RLock()
 
-        # Register flush on exit
-        atexit.register(self.flush)
+        # Per-thread/coroutine context overlay set by context().
+        # Each thread sees its own value; global context from set_context()
+        # is merged underneath.
+        self._context_overlay: contextvars.ContextVar[dict[str, Any] | None] = (
+            contextvars.ContextVar("_context_overlay", default=None)
+        )
+
+        # Register the module-level atexit callback exactly once
+        if not _atexit_registered:
+            atexit.register(_atexit_flush)
+            _atexit_registered = True
 
     @classmethod
     def get(cls) -> EventManager:
@@ -85,7 +107,6 @@ class EventManager:
                 cls._instance._handlers.clear()
                 cls._instance._filters.clear()
                 cls._instance._context.clear()
-                cls._instance._context_stack.clear()
                 cls._instance._initialized = False
             cls._instance = None
 
@@ -107,7 +128,8 @@ class EventManager:
         Args:
             handler: Handler implementing the EventHandler protocol
         """
-        self._handlers.append(handler)
+        with self._fire_lock:
+            self._handlers.append(handler)
 
     def unregister(self, handler: EventHandler) -> None:
         """
@@ -116,8 +138,9 @@ class EventManager:
         Args:
             handler: Handler to remove
         """
-        if handler in self._handlers:
-            self._handlers.remove(handler)
+        with self._fire_lock:
+            if handler in self._handlers:
+                self._handlers.remove(handler)
 
     def clear_handlers(self) -> None:
         """
@@ -126,7 +149,8 @@ class EventManager:
         Used by LoggerFactory when re-initializing with force=True
         to prevent handler accumulation.
         """
-        self._handlers.clear()
+        with self._fire_lock:
+            self._handlers.clear()
 
     def add_filter(self, filter_: EventFilter) -> None:
         """
@@ -138,7 +162,8 @@ class EventManager:
         Args:
             filter_: Filter implementing the EventFilter protocol
         """
-        self._filters.append(filter_)
+        with self._fire_lock:
+            self._filters.append(filter_)
 
     def set_context(self, **kwargs: Any) -> None:
         """
@@ -150,11 +175,27 @@ class EventManager:
         Args:
             **kwargs: Key-value pairs to add to context
         """
-        self._context.update(kwargs)
+        with self._fire_lock:
+            self._context.update(kwargs)
+
+    def _effective_context(self) -> dict[str, Any]:
+        """Return global context merged with the thread-local overlay.
+
+        Must be called under ``_fire_lock``.
+        """
+        overlay = self._context_overlay.get()
+        if overlay is None:
+            return dict(self._context)
+        merged = dict(self._context)
+        merged.update(overlay)
+        return merged
 
     def get_context(self, key: str, default: Any = None) -> Any:
         """
         Get a context value.
+
+        Checks the thread-local overlay first (set by ``context()``),
+        then falls back to the global context (set by ``set_context()``).
 
         Args:
             key: Context key to retrieve
@@ -163,18 +204,23 @@ class EventManager:
         Returns:
             The context value or default
         """
-        return self._context.get(key, default)
+        with self._fire_lock:
+            return self._effective_context().get(key, default)
 
     def clear_context(self) -> None:
         """Clear all context values."""
-        self._context.clear()
+        with self._fire_lock:
+            self._context.clear()
 
     @contextmanager
     def context(self, **kwargs: Any) -> Iterator[None]:
         """
         Temporarily set context values within a scope.
 
-        Context is restored when exiting the context manager.
+        Uses ``contextvars.ContextVar`` so each thread (and each asyncio
+        task) gets its own overlay that does not interfere with other
+        threads.  Nesting is supported: inner overlays inherit the outer
+        overlay's values.
 
         Example:
             with manager.context(correlation_id="req-123"):
@@ -183,15 +229,14 @@ class EventManager:
         Args:
             **kwargs: Temporary context values
         """
-        # Save current context
-        self._context_stack.append(self._context.copy())
-        # Apply new context
-        self._context.update(kwargs)
+        previous = self._context_overlay.get()
+        merged = dict(previous) if previous else {}
+        merged.update(kwargs)
+        token = self._context_overlay.set(merged)
         try:
             yield
         finally:
-            # Restore previous context
-            self._context = self._context_stack.pop()
+            self._context_overlay.reset(token)
 
     def fire(self, event: BaseEvent) -> None:
         """
@@ -205,20 +250,27 @@ class EventManager:
         Args:
             event: The event to fire
         """
+        # Snapshot mutable state under lock so concurrent register/set_context
+        # calls cannot break iteration.
+        with self._fire_lock:
+            context = self._effective_context()
+            handlers = list(self._handlers)
+            filters = list(self._filters)
+
         # Inject context into event metadata
-        if self._context.get("invocation_id"):
-            event.meta.invocation_id = self._context["invocation_id"]
-        if self._context.get("correlation_id"):
-            event.meta.correlation_id = self._context["correlation_id"]
+        if context.get("invocation_id"):
+            event.meta.invocation_id = context["invocation_id"]
+        if context.get("correlation_id"):
+            event.meta.correlation_id = context["correlation_id"]
 
         # Copy extra context into meta
-        for key, value in self._context.items():
+        for key, value in context.items():
             if key not in ("invocation_id", "correlation_id"):
                 event.meta.extra[key] = value
 
         # Apply global filters
         filtered_event: BaseEvent | None = event
-        for filter_ in self._filters:
+        for filter_ in filters:
             if filtered_event is None:
                 return
             filtered_event = filter_.filter(filtered_event)
@@ -227,7 +279,7 @@ class EventManager:
             return
 
         # Dispatch to handlers
-        for handler in self._handlers:
+        for handler in handlers:
             try:
                 if handler.accepts(filtered_event):
                     handler.handle(filtered_event)
@@ -242,7 +294,9 @@ class EventManager:
         Ensures all buffered events are written. Called automatically
         at program exit.
         """
-        for handler in self._handlers:
+        with self._fire_lock:
+            handlers = list(self._handlers)
+        for handler in handlers:
             try:
                 handler.flush()
             except Exception:
