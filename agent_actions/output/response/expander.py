@@ -3,25 +3,45 @@ Workflow format converter for expanding action-based configurations.
 
 This module converts action-based workflow configurations into agent configurations,
 handling loop expansion, template variables, and dependency mapping.
+
+Implementation details are split across focused submodules:
+- expander_validation: field and name validation
+- expander_schema: schema processing and compilation
+- expander_action_types: guard, tool, and HITL processing
+- expander_merge: config merging and initialization
+- expander_guard_validation: guard reference validation
 """
 
 import logging
 from typing import Dict, Any, Optional
 
-from agent_actions.errors import ConfigValidationError, ConfigurationError, SchemaValidationError
-from agent_actions.llm.config.vendor import VendorType
-from agent_actions.output.response.guard_parser import GuardParser
-from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
-from agent_actions.output.response.schema import compile_unified_schema
-from agent_actions.utils.constants import (
-    RESERVED_AGENT_NAMES,
-    HITL_OUTPUT_SCHEMA,
-    HITL_OUTPUT_JSON_SCHEMA,
-)
-from agent_actions.utils.schema_utils import is_compiled_schema
-from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
 from agent_actions.config.types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_fields import inherit_simple_fields
+from .expander_validation import (
+    validate_vendor_exists,
+    validate_action_name,
+    validate_required_fields,
+)
+from .expander_schema import (
+    process_schema_config,
+    compile_output_schema,
+)
+from .expander_action_types import (
+    process_guard_config,
+    process_tool_action,
+    process_hitl_action,
+)
+from .expander_merge import (
+    merge_directive_value,
+    deep_merge_context_scope,
+    process_chunk_config,
+    initialize_optional_fields,
+)
+from .expander_guard_validation import (
+    build_schema_registry,
+    validate_agent_guards,
+    validate_guard_references,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,346 +57,76 @@ class ActionExpander:
         """Initialize the ActionExpander."""
         # This class uses static methods for utility functions
 
+    # ------------------------------------------------------------------
+    # Backward-compatible delegates (thin wrappers, no logic)
+    # ------------------------------------------------------------------
+
     @staticmethod
     def _validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
-        """
-        Validate vendor is a known/supported vendor.
-
-        Args:
-            vendor: Vendor name to validate
-            action_name: Name of action for error context
-
-        Raises:
-            ConfigValidationError: If vendor is unknown
-        """
-        if not vendor:
-            return
-        valid_vendors = [v.value for v in VendorType]
-        if vendor not in valid_vendors:
-            raise ConfigValidationError(
-                "model_vendor",
-                f"Unknown vendor '{vendor}'",
-                context={
-                    "action": action_name,
-                    "vendor": vendor,
-                    "supported_vendors": valid_vendors,
-                    "hint": f"Valid vendors: {', '.join(valid_vendors)}",
-                },
-            )
+        return validate_vendor_exists(vendor, action_name)
 
     @staticmethod
     def _validate_action_name(action_name: Optional[str]) -> None:
-        """Validate action name is not reserved."""
-        if not action_name or not isinstance(action_name, str):
-            raise ConfigValidationError(
-                "name",
-                "Action name must be a non-empty string",
-                context={"action_name": action_name, "operation": "expand_actions_to_agents"},
-            )
-
-        normalized = action_name.strip().lower()
-        if normalized in RESERVED_AGENT_NAMES:
-            raise ConfigValidationError(
-                "name",
-                f"Reserved action name '{action_name}' cannot be used",
-                context={
-                    "action_name": action_name,
-                    "reserved_names": sorted(RESERVED_AGENT_NAMES),
-                    "operation": "expand_actions_to_agents",
-                    "hint": "Rename the action to avoid reserved namespaces.",
-                },
-            )
+        return validate_action_name(action_name)
 
     @staticmethod
     def _validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
-        """
-        Validate that required configuration fields are present after hierarchy resolution.
-
-        This validation ensures that essential fields (vendor, model, api_key) are defined
-        at least once across the 3-level hierarchy (project → workflow → action).
-
-        Args:
-            agent: Agent configuration dict after hierarchy resolution
-            action_name: Name of the action being validated (for error messages)
-
-        Raises:
-            ConfigValidationError: If any required field is missing
-        """
-        required_fields = {
-            "model_vendor": agent.get("model_vendor"),
-            "model_name": agent.get("model_name"),
-            "api_key": agent.get("api_key"),
-        }
-        missing_fields = [field for field, value in required_fields.items() if not value]
-        if missing_fields:
-            field_display_names = {
-                "model_vendor": "vendor/model_vendor",
-                "model_name": "model/model_name",
-                "api_key": "api_key",
-            }
-            missing_display = [field_display_names.get(f, f) for f in missing_fields]
-            raise ConfigValidationError(
-                config_key=", ".join(missing_fields),
-                reason="Required configuration fields are missing after hierarchy resolution",
-                context={
-                    "action_name": action_name,
-                    "missing_fields": missing_fields,
-                    "missing_display": missing_display,
-                    "operation": "expand_actions_to_agents",
-                    "hint": (
-                        "Add missing fields to agent_actions.yml (project-level), "
-                        "workflow defaults, or action config"
-                    ),
-                },
-            )
+        return validate_required_fields(agent, action_name)
 
     @staticmethod
     def _merge_directive_value(existing: Any, new_value: Any) -> Any:
-        """Merge two directive values based on their types."""
-        if isinstance(existing, dict) and isinstance(new_value, dict):
-            return {**existing, **new_value}
-        if isinstance(existing, list) and isinstance(new_value, list):
-            return list(dict.fromkeys(existing + new_value))
-        return new_value
+        return merge_directive_value(existing, new_value)
 
     @staticmethod
     def _deep_merge_context_scope(
         defaults_scope: Optional[Dict[str, Any]], action_scope: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """
-        Deep merge context_scope directives from defaults and action levels.
-
-        Action-level directives are merged with (not replace) defaults directives.
-        This allows actions to define drop/observe while inheriting seed_data from defaults.
-        """
-        if not defaults_scope:
-            return action_scope or {}
-        if not action_scope:
-            return defaults_scope or {}
-
-        merged = {**defaults_scope}
-
-        for key, value in action_scope.items():
-            if key in merged:
-                merged[key] = ActionExpander._merge_directive_value(merged[key], value)
-            else:
-                merged[key] = value
-
-        return merged
+        return deep_merge_context_scope(defaults_scope, action_scope)
 
     @staticmethod
     def _process_schema_config(
         agent: AgentEntryDict, action: Dict[str, Any], template_replacer
     ) -> None:
-        """
-        Process schema configuration for an agent.
-
-        If the schema is already compiled (from render step), use it directly.
-        Otherwise, apply template replacement and set appropriately.
-        """
-        schema_value = action.get("schema")
-        if schema_value:
-            # If already compiled (unified format from render step), use directly
-            if is_compiled_schema(schema_value):
-                agent["schema"] = schema_value
-            else:
-                # Apply template replacement for non-compiled schemas
-                schema_value = template_replacer(schema_value)
-                if isinstance(schema_value, str):
-                    agent["schema_name"] = schema_value
-                elif isinstance(schema_value, dict):
-                    agent["schema"] = schema_value
-                else:
-                    agent["schema"] = schema_value
+        return process_schema_config(agent, action, template_replacer)
 
     @staticmethod
     def _process_guard_config(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
-        """Process guard configuration for an agent."""
-        if not action.get("guard"):
-            return
-
-        guard_data = action["guard"]
-        if isinstance(guard_data, str):
-            guard_expr = GuardParser.parse(guard_data)
-            if guard_expr.type.value == "udf":
-                agent["conditional_clause"] = guard_expr.expression
-            else:
-                agent["guard"] = {"clause": guard_expr.expression, "scope": "item"}
-        else:
-            guard_config = parse_guard_config(guard_data)
-            if guard_config.is_udf_condition():
-                if guard_config.on_false == GuardBehavior.FILTER:
-                    action_name = action.get("name", "unknown")
-                    raise ConfigurationError(
-                        "UDF conditions cannot use 'filter' behavior. "
-                        "UDF conditions only support 'skip' behavior",
-                        context={
-                            "action_name": action_name,
-                            "guard_behavior": "filter",
-                            "operation": "expand_actions_to_agents",
-                        },
-                    )
-                agent["conditional_clause"] = guard_config.get_condition_expression()
-            else:
-                agent["guard"] = {
-                    "clause": guard_config.get_condition_expression(),
-                    "scope": "item",
-                    "behavior": guard_config.on_false.value,
-                }
+        return process_guard_config(agent, action)
 
     @staticmethod
     def _process_tool_action(agent: AgentEntryDict, action: Dict[str, Any], run_mode: str) -> None:
-        """Process tool-specific action configuration."""
-        action_kind = action.get("kind", "llm")
-        if action_kind != "tool":
-            return
-
-        if not action.get("impl"):
-            raise ConfigValidationError(
-                "impl",
-                "Tool actions must specify 'impl' field",
-                context={
-                    "action": action.get("name", "unknown"),
-                    "kind": "tool",
-                    "hint": "Add 'impl: module.function_name' to your tool action",
-                },
-            )
-        agent["model_vendor"] = "tool"
-        agent["model_name"] = action.get("impl", action.get("name"))
-
-        if run_mode == "batch" and action.get("run_mode") == "batch":
-            action_name = action.get("name", "unknown")
-            raise ConfigurationError(
-                "Tool actions do not support batch processing. "
-                "Please set run_mode='online' or remove the run_mode "
-                "setting to use the default",
-                context={
-                    "action_name": action_name,
-                    "kind": "tool",
-                    "run_mode": "batch",
-                    "operation": "expand_actions_to_agents",
-                },
-            )
-        if run_mode == "batch":
-            agent["run_mode"] = "online"
-
-        # Tool actions MUST declare an output schema.
-        # Ordering: runs BEFORE _compile_output_schema (which populates
-        # json_output_schema from schema:). Reads from the raw action dict.
-        if not agent.get("json_output_schema") and not action.get("schema"):
-            action_name = action.get("name", "unknown")
-            raise ConfigValidationError(
-                "schema",
-                f"Tool action '{action_name}' has no output schema",
-                context={
-                    "action": action_name,
-                    "kind": "tool",
-                    "hint": (
-                        "Add schema: in YAML to declare the tool's output fields. "
-                        "(output_type on @udf_tool was removed in this version)"
-                    ),
-                },
-            )
+        return process_tool_action(agent, action, run_mode)
 
     @staticmethod
     def _compile_output_schema(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
-        """Compile YAML schema: to json_output_schema for any action type.
-
-        Skips if json_output_schema is already set (e.g. from HITL
-        auto-injection), so action-type-specific schemas take precedence.
-        """
-        # Skip if already has json_output_schema
-        if agent.get("json_output_schema"):
-            return
-
-        # Get schema from action (already processed by _process_schema_config)
-        schema_fields = agent.get("schema")
-        if not schema_fields:
-            return
-
-        # Build unified schema format
-        agent_name = agent.get("agent_type", "unknown")
-
-        # Handle list of fields format: [{id: 'field', type: 'string'}, ...]
-        if isinstance(schema_fields, list):
-            unified_schema = {"name": agent_name, "fields": schema_fields}
-        # Handle dict format (already unified or JSON Schema)
-        elif isinstance(schema_fields, dict):
-            if "fields" in schema_fields:
-                unified_schema = schema_fields
-            else:
-                # Assume it's a JSON Schema format - compile_unified_schema handles this
-                unified_schema = {"name": agent_name, **schema_fields}
-        else:
-            logger.warning(
-                "Action '%s' has schema of unsupported type '%s' (expected list or dict). "
-                "Schema will be ignored.",
-                agent_name,
-                type(schema_fields).__name__,
-            )
-            return
-
-        # For array-type schemas, json_output_schema describes a single item.
-        # The full unified schema is kept in output_schema for LLM providers.
-        if (
-            isinstance(schema_fields, dict)
-            and schema_fields.get("type") == "array"
-            and "items" in schema_fields
-            and "fields" not in schema_fields
-        ):
-            items_schema = schema_fields["items"]
-            if isinstance(items_schema, dict) and items_schema.get("type") == "object":
-                items_schema.setdefault("additionalProperties", False)
-            agent["output_schema"] = unified_schema
-            agent["json_output_schema"] = items_schema
-            return
-
-        # Compile to JSON Schema for validation
-        try:
-            # Use 'openai' format as canonical JSON Schema
-            compiled = compile_unified_schema(unified_schema, "openai")
-            agent["output_schema"] = unified_schema
-            agent["json_output_schema"] = compiled.get("schema", compiled)
-        except (ValueError, KeyError, TypeError) as e:
-            raise SchemaValidationError(
-                f"Failed to compile output schema for action '{agent_name}'",
-                schema_name=agent_name,
-                validation_type="compilation",
-                hint="Check that schema: fields have valid 'id' and 'type' entries.",
-                cause=e,
-            ) from e
+        return compile_output_schema(agent, action)
 
     @staticmethod
     def _process_chunk_config(
         agent: AgentEntryDict, action: Dict[str, Any], defaults: Dict[str, Any]
     ) -> None:
-        """Process chunk configuration for an agent."""
-        chunk_config = action.get("chunk_config", defaults.get("chunk_config", {}))
-        if chunk_config:
-            agent["chunk_config"] = chunk_config
-        else:
-            agent["chunk_config"] = {}
-            if action.get("chunk_size") or defaults.get("chunk_size"):
-                agent["chunk_config"]["chunk_size"] = action.get(
-                    "chunk_size", defaults.get("chunk_size", 300)
-                )
-            if action.get("chunk_overlap") or defaults.get("chunk_overlap"):
-                agent["chunk_config"]["chunk_overlap"] = action.get(
-                    "chunk_overlap", defaults.get("chunk_overlap", 10)
-                )
+        return process_chunk_config(agent, action, defaults)
 
     @staticmethod
     def _initialize_optional_fields(agent: AgentEntryDict) -> None:
-        """Initialize optional fields in agent configuration."""
-        agent["skip_if"] = None
-        agent["ephemeral"] = None
-        agent["add_dispatch"] = None
-        agent["anthropic_version"] = None
-        agent["enable_prompt_caching"] = None
-        if "conditional_clause" not in agent:
-            agent["conditional_clause"] = None
-        if "guard" not in agent:
-            agent["guard"] = None
+        return initialize_optional_fields(agent)
+
+    @staticmethod
+    def _build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
+        return build_schema_registry(agents)
+
+    @staticmethod
+    def _validate_agent_guards(
+        agent: AgentEntryDict,
+        validator,
+        agent_indices: Dict[str, int],
+        action_schemas: Dict[str, Any],
+    ) -> list[str]:
+        return validate_agent_guards(agent, validator, agent_indices, action_schemas)
+
+    # ------------------------------------------------------------------
+    # Orchestration methods (real logic stays here)
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _create_template_replacer(param_name: str, current_val, idx: int, values):
@@ -510,15 +260,15 @@ class ActionExpander:
             agent["model_vendor"] = "hitl"
 
         # Validate configuration
-        ActionExpander._validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
+        validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
         if action_kind not in {"tool", "hitl"}:
-            ActionExpander._validate_required_fields(agent, action.get("name", "unknown"))
+            validate_required_fields(agent, action.get("name", "unknown"))
 
         # Process schema configuration
-        ActionExpander._process_schema_config(agent, action, template_replacer)
+        process_schema_config(agent, action, template_replacer)
 
         # Process guard configuration
-        ActionExpander._process_guard_config(agent, action)
+        process_guard_config(agent, action)
 
         # Process prompt
         prompt = action.get("prompt")
@@ -526,41 +276,14 @@ class ActionExpander:
 
         # Process tool actions
         run_mode = agent["run_mode"]
-        ActionExpander._process_tool_action(agent, action, run_mode)
+        process_tool_action(agent, action, run_mode)
         if action_kind == "hitl":
-            hitl_config = action.get("hitl")
-            if not hitl_config or not isinstance(hitl_config, dict):
-                raise ConfigurationError(
-                    f"HITL action '{action.get('name', '?')}' requires a 'hitl' configuration block",
-                    context={"action": action.get("name")},
-                )
-            if not hitl_config.get("instructions"):
-                raise ConfigurationError(
-                    f"HITL action '{action.get('name', '?')}' requires 'instructions' in hitl config",
-                    context={"action": action.get("name")},
-                )
-            agent["hitl"] = dict(hitl_config)
-            # Apply workflow-level default timeout if action doesn't specify one
-            hitl_timeout_default = defaults.get("hitl_timeout")
-            if "timeout" not in hitl_config and hitl_timeout_default is not None:
-                if (
-                    not isinstance(hitl_timeout_default, int)
-                    or isinstance(hitl_timeout_default, bool)
-                    or not (5 <= hitl_timeout_default <= 3600)
-                ):
-                    raise ConfigurationError(
-                        f"defaults.hitl_timeout must be an integer between 5 and 3600, "
-                        f"got {hitl_timeout_default!r}",
-                        context={"hitl_timeout": hitl_timeout_default},
-                    )
-                agent["hitl"]["timeout"] = hitl_timeout_default
-            agent["output_schema"] = HITL_OUTPUT_SCHEMA
-            agent["json_output_schema"] = HITL_OUTPUT_JSON_SCHEMA
+            process_hitl_action(agent, action, defaults)
 
         # Compile YAML schema: to json_output_schema (all action types).
-        # NOTE: Must run AFTER HITL schema injection above — _compile_output_schema
+        # NOTE: Must run AFTER HITL schema injection above — compile_output_schema
         # skips when json_output_schema is already set, preserving the canonical HITL schema.
-        ActionExpander._compile_output_schema(agent, action)
+        compile_output_schema(agent, action)
 
         # Process granularity
         # HITL reviews should see the full dataset in one step, so default to FILE.
@@ -584,7 +307,7 @@ class ActionExpander:
         context_scope_defaults = defaults.get("context_scope")
         context_scope_action = action.get("context_scope")
         if context_scope_defaults or context_scope_action:
-            agent["context_scope"] = ActionExpander._deep_merge_context_scope(
+            agent["context_scope"] = deep_merge_context_scope(
                 context_scope_defaults, context_scope_action
             )
 
@@ -592,10 +315,10 @@ class ActionExpander:
         agent["dependencies"] = action.get("dependencies", [])
 
         # Process chunk configuration
-        ActionExpander._process_chunk_config(agent, action, defaults)
+        process_chunk_config(agent, action, defaults)
 
         # Initialize optional fields
-        ActionExpander._initialize_optional_fields(agent)
+        initialize_optional_fields(agent)
 
         # Process version consumption
         version_consumption = action.get("version_consumption")
@@ -637,7 +360,7 @@ class ActionExpander:
 
         agents: AgentConfigList = []
         for action in actions:
-            ActionExpander._validate_action_name(action.get("name"))
+            validate_action_name(action.get("name"))
 
             # Check if this action was already expanded by render step
             # Pre-expanded actions have _version_context set
@@ -679,147 +402,8 @@ class ActionExpander:
         return {workflow_name: agents}
 
     @staticmethod
-    def _build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
-        """
-        Build schema registry from agent configs.
-
-        Args:
-            agents: List of agent configurations
-
-        Returns:
-            Dictionary mapping agent names to their JSON output schemas
-        """
-        action_schemas = {}
-        for agent in agents:
-            agent_name = agent.get("agent_type") or agent.get("name", "unknown")
-
-            # Add schema if present (both LLM and UDF actions can have schemas)
-            if agent.get("json_output_schema"):
-                action_schemas[agent_name] = agent["json_output_schema"]
-
-        return action_schemas
-
-    @staticmethod
-    def _validate_agent_guards(
-        agent: AgentEntryDict,
-        validator: ReferenceValidator,
-        agent_indices: Dict[str, int],
-        action_schemas: Dict[str, Any],
-    ) -> list[str]:
-        """
-        Validate guard references for a single agent.
-
-        Args:
-            agent: Agent configuration
-            validator: Reference validator instance
-            agent_indices: Mapping of agent names to indices
-            action_schemas: Mapping of agent names to schemas
-
-        Returns:
-            List of error messages
-        """
-        errors = []
-        agent_name = agent.get("agent_type") or agent.get("name", "unknown")
-
-        # Check guard conditions
-        guard = agent.get("guard")
-        if guard and isinstance(guard, dict):
-            clause = guard.get("clause", "")
-            if clause:
-                parser = ReferenceParser()
-                references = parser.parse_batch(clause)
-
-                guard_errors = validator.validate_with_schemas(
-                    references=references,
-                    agent_config=agent,
-                    agent_indices=agent_indices,
-                    action_schemas=action_schemas,
-                    current_agent_name=agent_name,
-                )
-                errors.extend(guard_errors)
-
-        # Check conditional_clause (UDF guards)
-        conditional_clause = agent.get("conditional_clause")
-        if conditional_clause and isinstance(conditional_clause, str):
-            parser = ReferenceParser()
-            references = parser.parse_batch(conditional_clause)
-
-            guard_errors = validator.validate_with_schemas(
-                references=references,
-                agent_config=agent,
-                agent_indices=agent_indices,
-                action_schemas=action_schemas,
-                current_agent_name=agent_name,
-            )
-            errors.extend(guard_errors)
-
-        return errors
-
-    @staticmethod
     def validate_guard_references(agents: AgentConfigList, strict: bool = True) -> list[str]:
-        """
-        Validate that guard conditions only reference valid upstream actions.
-
-        This should be called after expand_actions_to_agents() to ensure all
-        guard field references (e.g., "extract_facts.count > 5") reference
-        actions that exist and are upstream in the dependency graph.
-
-        Args:
-            agents: List of agent configurations from expand_actions_to_agents()
-            strict: If True, raise exception on validation errors. If False,
-                   return list of error messages.
-
-        Returns:
-            List of error messages (empty if all valid)
-
-        Raises:
-            ConfigValidationError: If strict=True and validation fails
-
-        Example:
-            config = {'name': 'my_workflow', 'actions': [...]}
-            result = ActionExpander.expand_actions_to_agents(config)
-            agents = result['my_workflow']
-
-            # Validate guard references
-            errors = ActionExpander.validate_guard_references(agents, strict=False)
-            if errors:
-                for error in errors:
-                    logger.warning(error)
-        """
-        errors = []
-        validator = ReferenceValidator(strict_dependencies=True)
-
-        # Build agent_indices from the list
-        agent_indices = {}
-        for idx, agent in enumerate(agents):
-            agent_name = agent.get("agent_type") or agent.get("name", f"unknown_{idx}")
-            agent_indices[agent_name] = idx
-
-        # Build schema registry from agent configs
-        action_schemas = ActionExpander._build_schema_registry(agents)
-
-        # Validate each agent's guard references with schemas
-        for agent in agents:
-            agent_errors = ActionExpander._validate_agent_guards(
-                agent, validator, agent_indices, action_schemas
-            )
-            errors.extend(agent_errors)
-
-        # Handle strict mode
-        if strict and errors:
-            raise ConfigValidationError(
-                config_key="guard",
-                reason="Guard references invalid actions",
-                context={
-                    "errors": errors,
-                    "hint": (
-                        "Ensure guard conditions only reference actions that are "
-                        "declared in the dependencies list and exist in the workflow."
-                    ),
-                },
-            )
-
-        return errors
+        return validate_guard_references(agents, strict)
 
 
 __all__ = ["ActionExpander"]
