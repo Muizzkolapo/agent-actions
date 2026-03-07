@@ -1,7 +1,10 @@
 """Tests for SchemaLoader recursive schema search."""
 
+from unittest.mock import patch
+
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
 
 
@@ -63,3 +66,29 @@ class TestLoadSchemaRecursive:
 
         result = SchemaLoader.load_schema("priority", schema_dir=schema_dir)
         assert result["name"] == "flat_version"
+
+
+class TestReturnSchemaErrorHandling:
+    """Tests for return_schema() narrowed exception handling."""
+
+    @patch(
+        "agent_actions.output.response.loader.FileHandler.get_agent_paths",
+        return_value=(None, None),
+    )
+    def test_raises_on_missing_agent_config_dir(self, _mock):
+        """Missing agent_config dir should raise with clear message, not TypeError."""
+        with pytest.raises(SchemaValidationError, match="Agent config directory not found"):
+            SchemaLoader.return_schema("nonexistent_agent")
+
+    @patch(
+        "agent_actions.output.response.loader.FileHandler.find_config_file",
+        return_value=None,
+    )
+    @patch(
+        "agent_actions.output.response.loader.FileHandler.get_agent_paths",
+        return_value=("/some/path", "/some/io"),
+    )
+    def test_raises_on_missing_config_file(self, _paths, _find):
+        """Missing config file should raise with clear message, not TypeError."""
+        with pytest.raises(SchemaValidationError, match="Config file.*not found"):
+            SchemaLoader.return_schema("missing_config")

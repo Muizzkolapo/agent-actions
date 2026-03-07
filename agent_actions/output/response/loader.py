@@ -5,13 +5,21 @@ This module provides schema loading functionality used by both batch and realtim
 Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
 """
 
+from __future__ import annotations
+
 import ast
 import json
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
-from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.errors import (
+    ConfigurationError,
+    ConfigValidationError,
+    SchemaValidationError,
+)
+from agent_actions.errors.operations import TemplateRenderingError
 from agent_actions.logging import LoggerFactory, fire_event
 from agent_actions.logging.events import (
     SchemaLoadingStartedEvent,
@@ -42,36 +50,46 @@ class SchemaLoader:
             agent_name (str): The name of the agent
 
         Returns:
-            set: Set of schema names, or empty set if an error occurs
+            set: Set of schema names
+
+        Raises:
+            SchemaValidationError: If agent config cannot be found, rendered, or parsed
         """
+        # Resolve paths — FileHandler returns None on failure, not exceptions
+        agent_config_dir, _ = FileHandler.get_agent_paths(agent_name)
+        if not agent_config_dir:
+            raise SchemaValidationError(
+                f"Agent config directory not found for '{agent_name}'",
+                schema_name=None,
+                validation_type="schema_loading",
+                action_name=agent_name,
+                hint="Ensure the agent_config directory exists under your project.",
+            )
+
+        agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
+        if not agent_config_file:
+            raise SchemaValidationError(
+                f"Config file '{agent_name}.yml' not found in {agent_config_dir}",
+                schema_name=None,
+                validation_type="schema_loading",
+                action_name=agent_name,
+                hint="Ensure the agent configuration YAML file exists.",
+            )
+
+        # Render templates and parse YAML — expected failures are config/template errors
         try:
-            agent_config_dir, _ = FileHandler.get_agent_paths(agent_name)
-            agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
             current_dir = Path.cwd()
             template_dir = current_dir / "templates"
             rendered_templates = render_pipeline_with_templates(
                 agent_config_file, str(template_dir)
             )
             data = yaml.safe_load(rendered_templates)
-
-            # After compilation, schemas are inlined with their 'name' field preserved
-            dynamic_schema_names = set()
-            actions = data.get("actions", [])
-            for action in actions:
-                if "schema" in action and isinstance(action["schema"], dict):
-                    schema_name = action["schema"].get("name")
-                    # Only collect named schemas (not InlineSchema which is auto-generated)
-                    if schema_name and schema_name != "InlineSchema":
-                        dynamic_schema_names.add(schema_name)
-
-            return dynamic_schema_names
-        except Exception as e:
+        except (ConfigurationError, TemplateRenderingError, yaml.YAMLError) as e:
             logger.error(
                 "Failed to render schema for agent '%s': %s",
                 agent_name,
                 str(e),
             )
-            # Note: schema_name is None here because we're at agent-level, not schema-level
             raise SchemaValidationError(
                 f"Failed to load schemas for agent '{agent_name}': {e}",
                 schema_name=None,
@@ -81,8 +99,20 @@ class SchemaLoader:
                 cause=e,
             ) from e
 
+        # Extract schema names from compiled output — pure data traversal, no expected errors
+        dynamic_schema_names = set()
+        actions = data.get("actions", [])
+        for action in actions:
+            if "schema" in action and isinstance(action["schema"], dict):
+                schema_name = action["schema"].get("name")
+                # Only collect named schemas (not InlineSchema which is auto-generated)
+                if schema_name and schema_name != "InlineSchema":
+                    dynamic_schema_names.add(schema_name)
+
+        return dynamic_schema_names
+
     @staticmethod
-    def load_schema(schema_name: str, schema_dir: Path = None) -> dict:
+    def load_schema(schema_name: str, schema_dir: Optional[Path] = None) -> dict:
         """
         Load a schema from YAML file.
 
@@ -151,7 +181,7 @@ class SchemaLoader:
     @staticmethod
     def validate_schemas_exist(
         agent_name: str,
-        directory: str = None,
+        directory: Optional[str] = None,
     ) -> None:
         """
         Validates that each schema file exists anywhere in the project.

@@ -154,7 +154,6 @@ class TestContextScopeMergeInActionExpander:
             defaults=defaults,
             agent=agent,
             template_replacer=template_replacer,
-            is_operational=True,
         )
 
         # Should have both seed_data from defaults AND drop from action
@@ -188,7 +187,6 @@ class TestContextScopeMergeInActionExpander:
             defaults=defaults,
             agent=agent,
             template_replacer=template_replacer,
-            is_operational=True,
         )
 
         # Should inherit defaults context_scope
@@ -221,7 +219,6 @@ class TestContextScopeMergeInActionExpander:
             defaults=defaults,
             agent=agent,
             template_replacer=template_replacer,
-            is_operational=True,
         )
 
         # Should have both
@@ -247,7 +244,6 @@ class TestContextScopeMergeInActionExpander:
             defaults=defaults,
             agent=agent,
             template_replacer=template_replacer,
-            is_operational=True,
         )
 
         # Should not have context_scope

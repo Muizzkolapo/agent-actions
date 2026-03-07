@@ -14,5 +14,5 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | `consolidated_guard.py` | Module | Renders consolidated guard results with metadata for outputs. | `validation`, `logging` |
 | `expander.py` | Module | Expands inline schema definitions and prompts when rendering docs. | `tooling.docs`, `schema` |
 | `guard_parser.py` | Module | Parses guard metadata from response payloads. | `preprocessing` |
-| `loader.py` | Module | `SchemaLoader` that reads schema files, caches them, and surfaces type information. | `file_io`, `validation` |
+| `loader.py` | Module | `SchemaLoader` that reads and validates schema files from YAML. | `file_io`, `validation` |
 | `schema.py` | Module | Schema utilities used by the CLI and docs to describe workflow outputs. | `validation`, `schema_loader` |

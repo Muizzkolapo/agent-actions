@@ -79,11 +79,36 @@ class TestGuardParser:
         dangerous_expressions = [
             "module.__import__",
             "package.exec",
+            "my_module.eval",
+            "test.compile",
+            "utils.open",
+        ]
+        for expr in dangerous_expressions:
+            with pytest.raises(ValidationError, match="potentially dangerous pattern"):
+                GuardParser._validate_udf_expression(expr)
+
+    def test_validate_udf_expression_allows_legitimate_names(self):
+        """Legitimate identifiers containing dangerous substrings must NOT be blocked."""
+        safe_expressions = [
             "my_module.eval_something",
             "test.compile_code",
             "utils.open_file",
+            "pipeline.execution_status",
+            "tools.file_handler",
+            "data.directory_scanner",
         ]
-        for expr in dangerous_expressions:
+        for expr in safe_expressions:
+            # Should NOT raise — these are legitimate function names
+            GuardParser._validate_udf_expression(expr)
+
+    def test_validate_udf_expression_blocks_dunder_access(self):
+        """Any dunder access in UDF expressions should be blocked."""
+        dunder_expressions = [
+            "module.__class__",
+            "module.__dict__",
+            "module.__getattribute__",
+        ]
+        for expr in dunder_expressions:
             with pytest.raises(ValidationError, match="potentially dangerous pattern"):
                 GuardParser._validate_udf_expression(expr)
 
@@ -97,6 +122,20 @@ class TestGuardParser:
         for expr in dangerous_expressions:
             with pytest.raises(ValidationError, match="potentially dangerous pattern"):
                 GuardParser._validate_sql_expression(expr)
+
+    def test_validate_sql_expression_allows_legitimate_names(self):
+        """Legitimate field names containing dangerous substrings must NOT be blocked."""
+        safe_expressions = [
+            'execution_status == "complete"',
+            "file_count > 0",
+            'directory_path != ""',
+            'compiled_output == "success"',
+            "open_tickets < 10",
+            'input_file == "data.csv"',
+        ]
+        for expr in safe_expressions:
+            # Should NOT raise
+            GuardParser._validate_sql_expression(expr)
 
     def test_parse_guard_convenience_function(self):
         """Test the convenience parse_guard function."""

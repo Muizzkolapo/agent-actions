@@ -19,6 +19,9 @@ RESERVED_AGENT_NAMES = frozenset(
 
 # Dangerous patterns that are blocked in user-provided expressions (guards, WHERE clauses, etc.)
 # These patterns indicate potentially dangerous operations that could be exploited.
+#
+# Matched using word boundaries (\b) so that legitimate identifiers like
+# "execution_status", "file_count", "directory_path" are NOT false-positived.
 DANGEROUS_PATTERNS = frozenset(
     {
         "__import__",
@@ -43,6 +46,37 @@ DANGEROUS_PATTERNS = frozenset(
 
 # Extended dangerous patterns for UDF expressions (includes dunder access)
 DANGEROUS_PATTERNS_UDF = DANGEROUS_PATTERNS | {"__"}
+
+
+def contains_dangerous_pattern(
+    expression: str, patterns: frozenset = DANGEROUS_PATTERNS
+) -> str | None:
+    """Check if expression contains a dangerous pattern as a whole word.
+
+    Uses word-boundary matching so that e.g. "exec" blocks "exec(" and
+    "exec " but NOT "execution_status" or "execute".
+
+    The special "__" pattern (UDF-only) uses substring matching since any
+    dunder access is suspicious regardless of context.
+
+    Args:
+        expression: The expression to check (should be lowercased by caller).
+        patterns: Set of patterns to check against.
+
+    Returns:
+        The matched pattern string, or None if clean.
+    """
+    import re
+
+    for pattern in patterns:
+        if pattern == "__":
+            # Dunder access: substring match is intentional
+            if "__" in expression:
+                return "__"
+        else:
+            if re.search(rf"\b{re.escape(pattern)}\b", expression):
+                return pattern
+    return None
 
 
 # Special namespaces that are always available without explicit dependency declarations.

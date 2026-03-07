@@ -1,5 +1,4 @@
 """Consolidated guard configuration with explicit behavior control."""
-# pyright: reportImportCycles=false
 
 from enum import Enum
 from typing import Union, Dict, Any

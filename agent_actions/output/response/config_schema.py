@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent_actions.errors import ValidationError
-from agent_actions.utils.constants import DANGEROUS_PATTERNS
+from agent_actions.utils.constants import DANGEROUS_PATTERNS, contains_dangerous_pattern
 
 
 class FilterScope(str, Enum):
@@ -67,27 +67,26 @@ class WhereClauseConfig(BaseModel):
                 },
             )
         clause_lower = v.lower()
-        for pattern in DANGEROUS_PATTERNS:
-            if pattern in clause_lower:
-                raise ValidationError(
-                    f"WHERE clause contains potentially dangerous operation: {pattern}",
-                    context={
-                        "clause": v,
-                        "dangerous_pattern": pattern,
-                        "operation": "validate_where_clause",
-                        "failed_field": "where_clause",
-                        "expected": (
-                            "WHERE clause without dangerous patterns like "
-                            "exec, eval, __import__, etc."
-                        ),
-                        "actual_value": v,
-                        "suggestion": (
-                            f'Remove the dangerous pattern "{pattern}" from your '
-                            "WHERE clause. Use safe comparison operators and "
-                            "column references only."
-                        ),
-                    },
-                )
+        matched = contains_dangerous_pattern(clause_lower, DANGEROUS_PATTERNS)
+        if matched:
+            raise ValidationError(
+                f"WHERE clause contains potentially dangerous operation: {matched}",
+                context={
+                    "clause": v,
+                    "dangerous_pattern": matched,
+                    "operation": "validate_where_clause",
+                    "failed_field": "where_clause",
+                    "expected": (
+                        "WHERE clause without dangerous patterns like exec, eval, __import__, etc."
+                    ),
+                    "actual_value": v,
+                    "suggestion": (
+                        f'Remove the dangerous pattern "{matched}" from your '
+                        "WHERE clause. Use safe comparison operators and "
+                        "column references only."
+                    ),
+                },
+            )
         return v
 
     model_config = ConfigDict(extra="forbid")
@@ -124,27 +123,27 @@ class SkipConditionConfig(BaseModel):
         """Validate custom expressions for safety."""
         if v and info.data.get("condition_type") == "custom":
             expr_lower = v.lower()
-            for pattern in DANGEROUS_PATTERNS:
-                if pattern in expr_lower:
-                    raise ValidationError(
-                        f"Expression contains potentially dangerous operation: {pattern}",
-                        context={
-                            "expression": v,
-                            "dangerous_pattern": pattern,
-                            "operation": "validate_skip_condition",
-                            "failed_field": "expression",
-                            "expected": (
-                                "Safe custom expression without dangerous patterns "
-                                "like exec, eval, __import__, etc."
-                            ),
-                            "actual_value": v,
-                            "suggestion": (
-                                f'Remove the dangerous pattern "{pattern}" from your '
-                                "skip condition expression. Use safe comparison "
-                                "operators only."
-                            ),
-                        },
-                    )
+            matched = contains_dangerous_pattern(expr_lower, DANGEROUS_PATTERNS)
+            if matched:
+                raise ValidationError(
+                    f"Expression contains potentially dangerous operation: {matched}",
+                    context={
+                        "expression": v,
+                        "dangerous_pattern": matched,
+                        "operation": "validate_skip_condition",
+                        "failed_field": "expression",
+                        "expected": (
+                            "Safe custom expression without dangerous patterns "
+                            "like exec, eval, __import__, etc."
+                        ),
+                        "actual_value": v,
+                        "suggestion": (
+                            f'Remove the dangerous pattern "{matched}" from your '
+                            "skip condition expression. Use safe comparison "
+                            "operators only."
+                        ),
+                    },
+                )
         return v
 
     model_config = ConfigDict(extra="forbid")

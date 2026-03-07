@@ -4,7 +4,11 @@ import re
 from enum import Enum
 
 from agent_actions.errors import ValidationError
-from agent_actions.utils.constants import DANGEROUS_PATTERNS, DANGEROUS_PATTERNS_UDF
+from agent_actions.utils.constants import (
+    DANGEROUS_PATTERNS,
+    DANGEROUS_PATTERNS_UDF,
+    contains_dangerous_pattern,
+)
 
 
 class GuardType(str, Enum):
@@ -127,26 +131,26 @@ class GuardParser:
                 },
             )
         expression_lower = expression.lower()
-        for pattern in DANGEROUS_PATTERNS_UDF:
-            if pattern in expression_lower:
-                raise ValidationError(
-                    f"UDF expression contains potentially dangerous pattern: {pattern}",
-                    context={
-                        "expression": expression,
-                        "dangerous_pattern": pattern,
-                        "operation": "validate_udf_expression",
-                        "failed_field": "udf_expression",
-                        "expected": (
-                            "UDF expression without dangerous patterns "
-                            "like exec, eval, __import__, etc."
-                        ),
-                        "actual_value": expression,
-                        "suggestion": (
-                            f'Remove the dangerous pattern "{pattern}" from your UDF expression. '
-                            "Use safe function calls only."
-                        ),
-                    },
-                )
+        matched = contains_dangerous_pattern(expression_lower, DANGEROUS_PATTERNS_UDF)
+        if matched:
+            raise ValidationError(
+                f"UDF expression contains potentially dangerous pattern: {matched}",
+                context={
+                    "expression": expression,
+                    "dangerous_pattern": matched,
+                    "operation": "validate_udf_expression",
+                    "failed_field": "udf_expression",
+                    "expected": (
+                        "UDF expression without dangerous patterns "
+                        "like exec, eval, __import__, etc."
+                    ),
+                    "actual_value": expression,
+                    "suggestion": (
+                        f'Remove the dangerous pattern "{matched}" from your UDF expression. '
+                        "Use safe function calls only."
+                    ),
+                },
+            )
 
     @classmethod
     def _validate_sql_expression(cls, expression: str) -> None:
@@ -160,27 +164,27 @@ class GuardParser:
             ValueError: If expression contains dangerous patterns
         """
         expression_lower = expression.lower()
-        for pattern in DANGEROUS_PATTERNS:
-            if pattern in expression_lower:
-                raise ValidationError(
-                    f"SQL expression contains potentially dangerous pattern: {pattern}",
-                    context={
-                        "expression": expression,
-                        "dangerous_pattern": pattern,
-                        "operation": "validate_sql_expression",
-                        "failed_field": "sql_expression",
-                        "expected": (
-                            "SQL expression without dangerous patterns "
-                            "like exec, eval, __import__, etc."
-                        ),
-                        "actual_value": expression,
-                        "suggestion": (
-                            f'Remove the dangerous pattern "{pattern}" '
-                            "from your SQL guard expression. "
-                            "Use safe SQL operators and column references only."
-                        ),
-                    },
-                )
+        matched = contains_dangerous_pattern(expression_lower, DANGEROUS_PATTERNS)
+        if matched:
+            raise ValidationError(
+                f"SQL expression contains potentially dangerous pattern: {matched}",
+                context={
+                    "expression": expression,
+                    "dangerous_pattern": matched,
+                    "operation": "validate_sql_expression",
+                    "failed_field": "sql_expression",
+                    "expected": (
+                        "SQL expression without dangerous patterns "
+                        "like exec, eval, __import__, etc."
+                    ),
+                    "actual_value": expression,
+                    "suggestion": (
+                        f'Remove the dangerous pattern "{matched}" '
+                        "from your SQL guard expression. "
+                        "Use safe SQL operators and column references only."
+                    ),
+                },
+            )
 
     @classmethod
     def is_udf_guard(cls, guard: str) -> bool:

@@ -520,4 +520,11 @@ def prepare_schema_unified(
 
     # Compile for target vendor
     compiled = _compile_schema_for_vendor(base_schema, vendor, schema_name)
+    if compiled is None and (inline_schema or agent_config.get("schema_name")):
+        logger.warning(
+            "Schema '%s' was explicitly configured but vendor '%s' does not support "
+            "schema validation. LLM responses will not be schema-constrained.",
+            schema_name,
+            vendor,
+        )
     return compiled, captured_results

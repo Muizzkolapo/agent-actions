@@ -308,6 +308,12 @@ class ActionExpander:
                 # Assume it's a JSON Schema format - compile_unified_schema handles this
                 unified_schema = {"name": agent_name, **schema_fields}
         else:
+            logger.warning(
+                "Action '%s' has schema of unsupported type '%s' (expected list or dict). "
+                "Schema will be ignored.",
+                agent_name,
+                type(schema_fields).__name__,
+            )
             return
 
         # For array-type schemas, json_output_schema describes a single item.
@@ -412,7 +418,6 @@ class ActionExpander:
         action: Dict[str, Any],
         version_config: Dict[str, Any],
         defaults: Dict[str, Any],
-        is_operational: bool,
     ) -> AgentConfigList:
         """
         Expand a versioned action into multiple agent configurations.
@@ -421,7 +426,6 @@ class ActionExpander:
             action: Action configuration with versions
             version_config: Version configuration
             defaults: Default settings
-            is_operational: Whether this action should run
 
         Returns:
             List of expanded agent configurations
@@ -470,7 +474,7 @@ class ActionExpander:
 
             # Create agent
             created_agent = ActionExpander._create_agent_from_action(
-                action, defaults, agent, template_replacer, is_operational=is_operational
+                action, defaults, agent, template_replacer
             )
 
             agents.append(created_agent)
@@ -483,7 +487,6 @@ class ActionExpander:
         defaults: Dict[str, Any],
         agent: AgentEntryDict,
         template_replacer,
-        is_operational: bool = True,
     ) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
@@ -493,14 +496,12 @@ class ActionExpander:
             defaults: Default settings
             agent: Pre-initialized agent dict with agent_type and name already set
             template_replacer: Function to replace template variables
-            is_operational: Whether this action should run (based on plan)
 
         Returns:
             Completed agent configuration
         """
-        # Inherit simple fields and set operational status
+        # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
-        agent["is_operational"] = is_operational
 
         action_kind = action.get("kind", "llm")
         # HITL is a non-LLM action type and should always route to the HITL client,
@@ -637,9 +638,6 @@ class ActionExpander:
         agents: AgentConfigList = []
         for action in actions:
             ActionExpander._validate_action_name(action.get("name"))
-            # Assuming all actions listed are operational unless specified otherwise,
-            # or we could filter by some other logic. For now, we take all actions.
-            is_operational = True
 
             # Check if this action was already expanded by render step
             # Pre-expanded actions have _version_context set
@@ -649,7 +647,7 @@ class ActionExpander:
             if version_config and not is_pre_expanded:
                 # Expand versioned action into multiple agents (legacy path)
                 version_agents = ActionExpander._expand_versioned_action(
-                    action, version_config, defaults, is_operational
+                    action, version_config, defaults
                 )
                 agents.extend(version_agents)
             else:
@@ -671,7 +669,7 @@ class ActionExpander:
                 # This is handled inside _create_agent_from_action via inheritance,
                 # but we ensure it persists
                 created_agent = ActionExpander._create_agent_from_action(
-                    action, defaults, agent, lambda x: x, is_operational=is_operational
+                    action, defaults, agent, lambda x: x
                 )
                 if "dependencies" not in created_agent and "dependencies" in action:
                     created_agent["dependencies"] = action["dependencies"]

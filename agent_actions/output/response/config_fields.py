@@ -2,6 +2,7 @@
 Centralized config field definitions for ActionExpander.
 """
 
+import copy
 from typing import Dict, Any
 
 # Simple config fields that follow standard inheritance pattern
@@ -34,7 +35,7 @@ SIMPLE_CONFIG_FIELDS = {
     "stop": None,  # Default: None (no stop sequences)
     # Reprompt configuration
     "reprompt": False,  # Default: False (reprompting disabled)
-    "constraints": [],  # Default: empty list (no constraints)
+    "constraints": (),  # Default: empty tuple (immutable — no cross-agent mutation)
     # Retry configuration (transport-layer failure handling)
     "retry": None,  # Default: None (retry disabled unless configured)
 }
@@ -80,6 +81,9 @@ def inherit_simple_fields(
         # Normalize run_mode to lowercase for case-insensitive comparison
         if field == "run_mode" and isinstance(value, str):
             value = value.lower()
+        # Deep-copy mutable values to prevent cross-agent state leakage
+        if isinstance(value, (list, dict)):
+            value = copy.deepcopy(value)
         agent[field] = value
 
 
