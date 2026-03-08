@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from agent_actions.config.types import AgentConfigDict
 
@@ -25,7 +25,9 @@ class ProcessingStatus(Enum):
 class ProcessingMode(Enum):
     """Workflow-level data flow mode for record handling.
 
-    ONLINE/BATCH. Not to be confused with config.interfaces.ProcessingMode (SYNC/ASYNC/AUTO).
+    ONLINE/BATCH controls whether LLM calls are synchronous or queued.
+    Not to be confused with ``config.interfaces.ProcessingMode``
+    (SYNC/ASYNC/AUTO) which controls CLI-level execution mode.
     """
 
     ONLINE = "online"
@@ -60,7 +62,7 @@ class RetryMetadata:
     reason: str  # "timeout", "api_error", "missing", "rate_limit", "network_error"
     timestamp: Optional[str] = None  # ISO format (e.g., "2024-01-13T12:30:45Z")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         result = {
             "attempts": self.attempts,
@@ -88,7 +90,7 @@ class RepromptMetadata:
     passed: bool
     validation: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "attempts": self.attempts,
@@ -109,14 +111,14 @@ class RecoveryMetadata:
     retry: Optional[RetryMetadata] = None
     reprompt: Optional[RepromptMetadata] = None
 
-    def to_dict(self) -> Optional[Dict[str, Any]]:
-        """Convert to dictionary for JSON serialization. Returns None if empty."""
-        result: Dict[str, Any] = {}
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for JSON serialization. Returns empty dict if no recovery."""
+        result: dict[str, Any] = {}
         if self.retry:
             result["retry"] = self.retry.to_dict()
         if self.reprompt:
             result["reprompt"] = self.reprompt.to_dict()
-        return result if result else None
+        return result
 
     def is_empty(self) -> bool:
         """Check if any recovery occurred."""
@@ -133,24 +135,24 @@ class ProcessingResult:
     """
 
     status: ProcessingStatus
-    data: List[Dict[str, Any]] = field(default_factory=list)
+    data: list[dict[str, Any]] = field(default_factory=list)
 
     # Identity
     source_guid: Optional[str] = None
     node_id: Optional[str] = None
 
     # For first-stage: preserve original input for source saving
-    source_snapshot: Optional[Dict[str, Any]] = None
+    source_snapshot: Optional[dict[str, Any]] = None
 
     # For downstream: preserve full input record (with lineage, target_id, etc.)
-    input_record: Optional[Dict[str, Any]] = None
+    input_record: Optional[dict[str, Any]] = None
 
     # Execution state
     executed: bool = True
     skip_reason: Optional[str] = None
 
     # Passthrough
-    passthrough_fields: Dict[str, Any] = field(default_factory=dict)
+    passthrough_fields: dict[str, Any] = field(default_factory=dict)
 
     # Error handling
     error: Optional[str] = None
@@ -163,40 +165,106 @@ class ProcessingResult:
     raw_response: Optional[Any] = None
 
     # Pre-extracted metadata (batch path provides this directly)
-    pre_extracted_metadata: Optional[Dict[str, Any]] = None
+    pre_extracted_metadata: Optional[dict[str, Any]] = None
 
     @classmethod
-    def success(cls, data: List[Dict], **kwargs) -> "ProcessingResult":
+    def success(
+        cls,
+        data: list[dict[str, Any]],
+        *,
+        source_guid: Optional[str] = None,
+        passthrough_fields: Optional[dict[str, Any]] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        raw_response: Optional[Any] = None,
+        recovery_metadata: Optional["RecoveryMetadata"] = None,
+        input_record: Optional[dict[str, Any]] = None,
+        pre_extracted_metadata: Optional[dict[str, Any]] = None,
+    ) -> "ProcessingResult":
         """Factory for successful result."""
-        return cls(status=ProcessingStatus.SUCCESS, data=data, executed=True, **kwargs)
+        return cls(
+            status=ProcessingStatus.SUCCESS,
+            data=data,
+            executed=True,
+            source_guid=source_guid,
+            passthrough_fields=passthrough_fields or {},
+            source_snapshot=source_snapshot,
+            raw_response=raw_response,
+            recovery_metadata=recovery_metadata,
+            input_record=input_record,
+            pre_extracted_metadata=pre_extracted_metadata,
+        )
 
     @classmethod
-    def skipped(cls, passthrough_data: Any, reason: str, **kwargs) -> "ProcessingResult":
+    def skipped(
+        cls,
+        passthrough_data: Any,
+        reason: str,
+        *,
+        source_guid: Optional[str] = None,
+    ) -> "ProcessingResult":
         """Factory for skipped (passthrough) result."""
-        data_list = (
-            [passthrough_data] if not isinstance(passthrough_data, list) else passthrough_data
-        )
+        if passthrough_data is None:
+            data_list: list = []
+        elif isinstance(passthrough_data, list):
+            data_list = passthrough_data
+        else:
+            data_list = [passthrough_data]
         return cls(
             status=ProcessingStatus.SKIPPED,
             data=data_list,
             executed=False,
             skip_reason=reason,
-            **kwargs,
+            source_guid=source_guid,
         )
 
     @classmethod
-    def filtered(cls, **kwargs) -> "ProcessingResult":
+    def filtered(
+        cls,
+        *,
+        source_guid: Optional[str] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        input_record: Optional[dict[str, Any]] = None,
+    ) -> "ProcessingResult":
         """Factory for filtered (excluded) result."""
-        return cls(status=ProcessingStatus.FILTERED, data=[], executed=False, **kwargs)
+        return cls(
+            status=ProcessingStatus.FILTERED,
+            data=[],
+            executed=False,
+            source_guid=source_guid,
+            source_snapshot=source_snapshot,
+            input_record=input_record,
+        )
 
     @classmethod
-    def failed(cls, error: str, **kwargs) -> "ProcessingResult":
+    def failed(
+        cls,
+        error: str,
+        *,
+        source_guid: Optional[str] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        input_record: Optional[dict[str, Any]] = None,
+    ) -> "ProcessingResult":
         """Factory for failed result."""
-        return cls(status=ProcessingStatus.FAILED, data=[], executed=False, error=error, **kwargs)
+        return cls(
+            status=ProcessingStatus.FAILED,
+            data=[],
+            executed=False,
+            error=error,
+            source_guid=source_guid,
+            source_snapshot=source_snapshot,
+            input_record=input_record,
+        )
 
     @classmethod
     def exhausted(
-        cls, error: str, data: Optional[List[Dict]] = None, **kwargs
+        cls,
+        error: str,
+        *,
+        data: Optional[list[dict[str, Any]]] = None,
+        source_guid: Optional[str] = None,
+        recovery_metadata: Optional["RecoveryMetadata"] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        input_record: Optional[dict[str, Any]] = None,
     ) -> "ProcessingResult":
         """Factory for exhausted (retry) result."""
         return cls(
@@ -204,27 +272,44 @@ class ProcessingResult:
             data=data or [],
             executed=False,
             error=error,
-            **kwargs,
+            source_guid=source_guid,
+            recovery_metadata=recovery_metadata,
+            source_snapshot=source_snapshot,
+            input_record=input_record,
         )
 
     @classmethod
-    def unprocessed(cls, data: List[Dict], reason: str, **kwargs) -> "ProcessingResult":
+    def unprocessed(
+        cls,
+        data: list[dict[str, Any]],
+        reason: str,
+        *,
+        source_guid: Optional[str] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        input_record: Optional[dict[str, Any]] = None,
+    ) -> "ProcessingResult":
         """Factory for unprocessed (upstream dead/failed/skipped) result."""
         return cls(
             status=ProcessingStatus.UNPROCESSED,
             data=data,
             executed=False,
             skip_reason=reason,
-            **kwargs,
+            source_guid=source_guid,
+            source_snapshot=source_snapshot,
+            input_record=input_record,
         )
 
     @classmethod
-    def deferred(cls, task_id: str, **kwargs) -> "ProcessingResult":
-        """
-        Factory for deferred (batch) result.
-
-        Used when task is queued for batch execution rather than
-        executed immediately.
+    def deferred(
+        cls,
+        task_id: str,
+        *,
+        source_guid: Optional[str] = None,
+        passthrough_fields: Optional[dict[str, Any]] = None,
+        source_snapshot: Optional[dict[str, Any]] = None,
+        input_record: Optional[dict[str, Any]] = None,
+    ) -> "ProcessingResult":
+        """Factory for deferred (batch) result.
 
         Args:
             task_id: Unique identifier for retrieving result later
@@ -234,7 +319,10 @@ class ProcessingResult:
             data=[],
             executed=False,
             node_id=task_id,
-            **kwargs,
+            source_guid=source_guid,
+            passthrough_fields=passthrough_fields or {},
+            source_snapshot=source_snapshot,
+            input_record=input_record,
         )
 
     @property
@@ -261,25 +349,25 @@ class ProcessingContext:
     is_first_stage: bool = False
 
     # Source data for lookups
-    source_data: List[Dict[str, Any]] = field(default_factory=list)
+    source_data: list[dict[str, Any]] = field(default_factory=list)
 
     # File context
     file_path: Optional[str] = None
     output_directory: Optional[str] = None
 
     # Version context for {version.*} references
-    version_context: Optional[Dict[str, Any]] = None
-    workflow_metadata: Optional[Dict[str, Any]] = None
+    version_context: Optional[dict[str, Any]] = None
+    workflow_metadata: Optional[dict[str, Any]] = None
 
     # Current record position (for loop correlation)
     record_index: int = 0
 
     # Workflow context for historical data loading
-    agent_indices: Optional[Dict[str, int]] = None
-    dependency_configs: Optional[Dict[str, Any]] = None
+    agent_indices: Optional[dict[str, int]] = None
+    dependency_configs: Optional[dict[str, Any]] = None
 
     # Current item (per-record) for lineage chaining in realtime processing
-    current_item: Optional[Dict[str, Any]] = None
+    current_item: Optional[dict[str, Any]] = None
 
     # Storage backend for database-backed persistence and historical data loading
     storage_backend: Optional["StorageBackend"] = None

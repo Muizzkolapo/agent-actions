@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, List, Protocol, runtime_checkable
+from typing import Any, Optional, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,9 @@ class UdfValidator:
 class SchemaValidator:
     """Validates LLM output against an expected schema.
 
+    **Not thread-safe**: mutable ``_last_feedback`` is updated during
+    ``validate()`` calls.  Each thread should use its own instance.
+
     Parameters
     ----------
     schema:
@@ -92,6 +95,8 @@ class SchemaValidator:
         the reprompt loop instead of raising immediately.
     """
 
+    _import_warned: bool = False
+
     def __init__(
         self,
         schema: dict,
@@ -102,8 +107,31 @@ class SchemaValidator:
         self._action_name = action_name
         self._strict_mode = strict_mode
         self._last_feedback: str = ""
+        self._validator_available = self._check_import()
+
+    @classmethod
+    def _check_import(cls) -> bool:
+        """Check if schema validator module is available (warns once)."""
+        try:
+            from agent_actions.validation.schema_output_validator import (  # noqa: F401
+                validate_output_against_schema,
+            )
+
+            return True
+        except ImportError:
+            if not cls._import_warned:
+                logger.warning(
+                    "Schema output validator not available; SchemaValidator will "
+                    "pass all responses. Install the validation module to enable "
+                    "schema checking."
+                )
+                cls._import_warned = True
+            return False
 
     def validate(self, response: Any) -> bool:  # noqa: D401
+        if not self._validator_available:
+            return True
+
         try:
             from agent_actions.validation.schema_output_validator import (
                 validate_output_against_schema,
@@ -124,10 +152,15 @@ class SchemaValidator:
             self._last_feedback = "; ".join(errors)
             return False
 
-        except ImportError:
-            logger.debug("Schema output validator not available, treating as pass")
-            return True
+        except (ValueError, KeyError) as e:
+            self._last_feedback = f"Schema validation error: {e}"
+            return False
         except Exception as e:
+            logger.exception(
+                "Unexpected error during schema validation for '%s': %s",
+                self._action_name,
+                e,
+            )
             self._last_feedback = f"Schema validation error: {e}"
             return False
 
@@ -150,13 +183,16 @@ class ComposedValidator:
 
     The LLM receives feedback for **one** issue at a time so it can
     focus on fixing that issue before the next validation fires.
+
+    **Not thread-safe**: mutable ``_last_failed`` is updated during
+    ``validate()`` calls.  Each thread should use its own instance.
     """
 
-    def __init__(self, validators: List[ResponseValidator]) -> None:
+    def __init__(self, validators: list[ResponseValidator]) -> None:
         if not validators:
             raise ValueError("ComposedValidator requires at least one validator")
         self._validators = validators
-        self._last_failed: ResponseValidator | None = None
+        self._last_failed: Optional[ResponseValidator] = None
 
     def validate(self, response: Any) -> bool:  # noqa: D401
         for v in self._validators:

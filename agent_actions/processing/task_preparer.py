@@ -14,16 +14,14 @@ This ensures identical preparation behavior regardless of execution mode.
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional, Tuple, TYPE_CHECKING
+import threading
+from typing import Any, Callable, Optional
 
 from agent_actions.processing.prepared_task import (
     GuardStatus,
     PreparedTask,
     PreparationContext,
 )
-
-if TYPE_CHECKING:
-    from agent_actions.storage.backend import StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +99,13 @@ class TaskPreparer:
         Returns:
             PreparedTask with all preparation results
         """
+        logger.debug(
+            "Preparing task for %s (first_stage=%s, skip_guard=%s)",
+            context.agent_name,
+            context.is_first_stage,
+            skip_guard,
+        )
+
         # Step 0: Check if upstream record was unprocessed (dead/failed/skipped)
         # Runs BEFORE normalization, context loading, or guard evaluation
         # to avoid ALL wasted work on records that should not be sent to LLM
@@ -183,7 +188,7 @@ class TaskPreparer:
 
     def _normalize_input(
         self, item: Any, context: PreparationContext
-    ) -> Tuple[Any, Optional[str], Optional[Any]]:
+    ) -> tuple[Any, Optional[str], Optional[Any]]:
         """
         Normalize input format.
 
@@ -220,7 +225,8 @@ class TaskPreparer:
                 # Non-dict input in subsequent-stage: treat as raw content
                 return item, None, None  # None triggers fallback lineage/recovery
 
-    def _prepare_source_snapshot(self, item: Any) -> Any:
+    @staticmethod
+    def _prepare_source_snapshot(item: Any) -> Any:
         """
         Prepare source snapshot for first-stage processing.
 
@@ -285,8 +291,8 @@ class TaskPreparer:
         content: Any,
         source_content: Any,
         context: PreparationContext,
-        current_item: Optional[Dict] = None,
-    ) -> Dict[str, Any]:
+        current_item: Optional[dict] = None,
+    ) -> dict[str, Any]:
         """
         Load full context including upstream action outputs.
 
@@ -324,22 +330,21 @@ class TaskPreparer:
 
         return field_context
 
+    @staticmethod
     def _evaluate_guard(
-        self,
         content: Any,
-        guard_config: Optional[Dict[str, Any]],
+        guard_config: Optional[dict[str, Any]],
         conditional_clause: Optional[str],
-        field_context: Dict[str, Any],
+        field_context: dict[str, Any],
     ):
-        """
-        Evaluate guard with full context.
+        """Evaluate guard with full context.
 
         Guards can reference any field available in field_context:
-        - source.* (original input)
-        - upstream_action.field (e.g., extract_facts.count)
-        - version.* (iteration context)
-        - workflow.* (workflow metadata)
-        - Top-level content fields
+        source.*, upstream_action.field, version.*, workflow.*, top-level fields.
+
+        When ``content`` is not a dict (e.g. raw string input), it is wrapped
+        as ``{"_raw": content}`` so the guard evaluator receives a dict.  The
+        ``_raw`` key is only used for evaluation and never stored.
 
         Args:
             content: Original content (for item parameter)
@@ -357,6 +362,8 @@ class TaskPreparer:
         evaluator = get_guard_evaluator()
 
         # Evaluate with full context
+        if not isinstance(content, dict):
+            logger.debug("Wrapping non-dict content as {'_raw': ...} for guard evaluation")
         return evaluator.evaluate_with_context(
             item=content if isinstance(content, dict) else {"_raw": content},
             guard_config=guard_config,
@@ -364,11 +371,11 @@ class TaskPreparer:
             conditional_clause=conditional_clause,
         )
 
+    @staticmethod
     def _render_prompt(
-        self,
         content: Any,
         context: PreparationContext,
-        field_context: Dict[str, Any],
+        field_context: dict[str, Any],
     ):
         """
         Render prompt template using pre-loaded context.
@@ -419,17 +426,22 @@ class TaskPreparer:
 
 # Module-level singleton for convenience
 _task_preparer: Optional[TaskPreparer] = None
+_task_preparer_lock = threading.Lock()
 
 
 def get_task_preparer() -> TaskPreparer:
-    """Get or create the global TaskPreparer instance."""
+    """Get or create the global TaskPreparer instance (thread-safe)."""
     global _task_preparer
     if _task_preparer is None:
-        _task_preparer = TaskPreparer()
+        with _task_preparer_lock:
+            # Double-check after acquiring lock
+            if _task_preparer is None:
+                _task_preparer = TaskPreparer()
     return _task_preparer
 
 
 def reset_task_preparer() -> None:
     """Reset the global TaskPreparer instance (for testing)."""
     global _task_preparer
-    _task_preparer = None
+    with _task_preparer_lock:
+        _task_preparer = None

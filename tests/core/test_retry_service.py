@@ -129,14 +129,12 @@ class TestRetryServiceOnlineSuccess:
 class TestRetryServiceOnlineExhausted:
     """Tests for retry exhaustion scenarios (online mode)."""
 
-    def test_retry_online_exhausted_raises(self):
-        """on_exhausted=raise returns exhausted result (caller decides whether to raise)."""
-        service = RetryService(max_attempts=3, on_exhausted="raise")
+    def test_retry_online_exhausted(self):
+        """Exhausted result returned when all attempts fail."""
+        service = RetryService(max_attempts=3)
         error = NetworkError("persistent timeout")
         operation = Mock(side_effect=error)
 
-        # Changed behavior: retry_service always returns result, never raises
-        # The decision to raise is made by ProcessingPipeline/BatchResultProcessor
         result = service.execute(operation)
 
         assert result.response is None
@@ -145,20 +143,6 @@ class TestRetryServiceOnlineExhausted:
         assert result.reason == "timeout"
         assert "persistent timeout" in result.last_error
         assert operation.call_count == 3
-        assert service.on_exhausted == "raise"  # Config is preserved for caller to check
-
-    def test_retry_online_exhausted_returns_last(self):
-        """on_exhausted=return_last returns None after max_attempts."""
-        service = RetryService(max_attempts=3, on_exhausted="return_last")
-        operation = Mock(side_effect=NetworkError("persistent timeout"))
-
-        result = service.execute(operation)
-
-        assert result.response is None
-        assert result.attempts == 3
-        assert result.exhausted
-        assert result.reason == "timeout"
-        assert "persistent timeout" in result.last_error
 
 
 class TestRetryServiceMetadata:
@@ -214,24 +198,26 @@ class TestCreateRetryServiceFromConfig:
 
         assert service is not None
         assert service.max_attempts == 3
-        assert service.on_exhausted == "return_last"
 
     def test_creates_service_with_custom_config(self):
         """Creates service with custom configuration."""
         config = {
             "enabled": True,
             "max_attempts": 5,
-            "on_exhausted": "raise",
         }
         service = create_retry_service_from_config(config)
 
         assert service is not None
         assert service.max_attempts == 5
-        assert service.on_exhausted == "raise"
 
 
 class TestRetryServiceEdgeCases:
     """Tests for edge cases and boundary conditions."""
+
+    def test_max_attempts_below_one_raises(self):
+        """max_attempts < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="max_attempts must be >= 1"):
+            RetryService(max_attempts=0)
 
     def test_context_included_in_logging(self):
         """Context string is included in logging."""

@@ -12,6 +12,7 @@ from agent_actions.processing.recovery.reprompt import (
     RepromptResult,
     create_reprompt_service_from_config,
 )
+from agent_actions.processing.recovery.response_validator import build_validation_feedback
 from agent_actions.processing.recovery.validation import (
     reprompt_validation,
     _VALIDATION_REGISTRY,
@@ -227,7 +228,7 @@ class TestFeedbackMessageGeneration:
         service = RepromptService(validation_name="check_name", max_attempts=2)
 
         failed_response = {"email": "test@example.com"}
-        feedback = service._build_feedback_message(failed_response)
+        feedback = build_validation_feedback(failed_response, service.feedback_message)
 
         # Check format
         assert "---" in feedback
@@ -246,7 +247,7 @@ class TestFeedbackMessageGeneration:
             "timestamp": "2024-01-13T12:00:00Z",
         }
 
-        feedback = service._build_feedback_message(failed_response)
+        feedback = build_validation_feedback(failed_response, service.feedback_message)
 
         # Should contain JSON representation
         assert '"user"' in feedback
@@ -266,7 +267,7 @@ class TestFeedbackMessageGeneration:
         failed_response = {"obj": CustomObject()}
 
         # Should not crash, fallback to str()
-        feedback = service._build_feedback_message(failed_response)
+        feedback = build_validation_feedback(failed_response, service.feedback_message)
         assert "Your response:" in feedback
 
 
@@ -549,6 +550,21 @@ class TestParameterValidation:
         # "raise" should work
         service2 = RepromptService(validation_name="test_validator", on_exhausted="raise")
         assert service2.on_exhausted == "raise"
+
+    def test_invalid_on_exhausted_override_in_execute_raises(self):
+        """Invalid on_exhausted override in execute() raises ValueError."""
+        service = RepromptService(
+            validation_name="test_validator",
+            max_attempts=2,
+            on_exhausted="return_last",
+        )
+        with pytest.raises(ValueError, match="on_exhausted must be one of"):
+            service.execute(
+                llm_operation=lambda _: ("response", True),
+                original_prompt="test",
+                context="test",
+                on_exhausted="invalid_value",
+            )
 
     def test_max_attempts_one_is_valid(self):
         """Should accept max_attempts=1 (no retry)."""

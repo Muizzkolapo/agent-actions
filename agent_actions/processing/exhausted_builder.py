@@ -1,6 +1,6 @@
 """Utilities for constructing exhausted retry records."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.utils.id_generation import IDGenerator
@@ -10,7 +10,7 @@ class ExhaustedRecordBuilder:
     """Build exhausted records with empty content and recovery metadata."""
 
     @staticmethod
-    def build_empty_content(agent_config: Dict[str, Any]) -> Dict[str, Any]:
+    def build_empty_content(agent_config: dict[str, Any]) -> dict[str, Any]:
         """
         Build empty content dict from action schema.
 
@@ -23,7 +23,7 @@ class ExhaustedRecordBuilder:
         Returns:
             Dict with schema fields set to type-appropriate empty values.
         """
-        empty_content: Dict[str, Any] = {}
+        empty_content: dict[str, Any] = {}
         schema = agent_config.get("schema") if agent_config else None
         if schema and isinstance(schema, dict):
             for field_name, field_spec in schema.get("properties", {}).items():
@@ -37,18 +37,18 @@ class ExhaustedRecordBuilder:
                 elif field_type in ("number", "integer"):
                     empty_content[field_name] = 0
                 else:
-                    empty_content[field_name] = None
+                    empty_content[field_name] = ""
         return empty_content
 
     @staticmethod
     def build_exhausted_item(
         *,
         source_guid: Optional[str],
-        original_row: Any,
+        original_row: Optional[dict[str, Any]],
         recovery_metadata: RecoveryMetadata,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         action_name: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build an exhausted retry record.
 
@@ -71,7 +71,7 @@ class ExhaustedRecordBuilder:
         empty_content = ExhaustedRecordBuilder.build_empty_content(agent_config)
 
         node_id = IDGenerator.generate_node_id(action_name)
-        exhausted_item: Dict[str, Any] = {
+        exhausted_item: dict[str, Any] = {
             "source_guid": resolved_source_guid,
             "content": empty_content,
             "node_id": node_id,
@@ -81,11 +81,10 @@ class ExhaustedRecordBuilder:
         }
 
         if isinstance(original_row, dict):
+            # Ancestry chain propagation (matches LineageBuilder.add_unified_lineage)
             if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
-            # Ancestry chain propagation (matches LineageBuilder.add_unified_lineage)
-            # parent_target_id = input's target_id (link to immediate parent)
-            if original_row.get("target_id"):
+                # parent_target_id = input's target_id (link to immediate parent)
                 exhausted_item["parent_target_id"] = original_row["target_id"]
                 # root_target_id = input's root_target_id (preserve original ancestor)
                 # If no root_target_id on input, the input is the root

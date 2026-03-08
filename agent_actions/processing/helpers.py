@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm.realtime import builder as agent_builder
@@ -13,7 +13,9 @@ from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY, ON_SCHE
 logger = logging.getLogger(__name__)
 
 
-def evaluate_guard_condition(agent_config: Dict, context: Any) -> Tuple[bool, Optional[str]]:
+def evaluate_guard_condition(
+    agent_config: dict[str, Any], context: Any
+) -> tuple[bool, Optional[str]]:
     """
     Evaluate guard conditions (where_clause, conditional_clause).
 
@@ -41,13 +43,13 @@ def evaluate_guard_condition(agent_config: Dict, context: Any) -> Tuple[bool, Op
 
 
 def run_dynamic_agent(
-    agent_config: Dict,
+    agent_config: dict[str, Any],
     agent_name: str,
     context: Any,
     formatted_prompt: str,
     *,
     tools_path: Optional[str] = None,
-    tool_args: Optional[Dict[str, Any]] = None,
+    tool_args: Optional[dict[str, Any]] = None,
     source_content: Optional[Any] = None,
     llm_context: Optional[Any] = None,
     skip_guard_eval: bool = False,
@@ -135,7 +137,7 @@ def run_dynamic_agent(
     return (response, True)
 
 
-def _resolve_schema_mismatch_mode(agent_config: Dict) -> str:
+def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
     """Determine schema mismatch handling mode from config.
 
     Resolution order:
@@ -147,6 +149,12 @@ def _resolve_schema_mismatch_mode(agent_config: Dict) -> str:
     if explicit in ("warn", "reprompt", "reject"):
         return explicit
 
+    if explicit is not None:
+        logger.warning(
+            "Unrecognized on_schema_mismatch value '%s', defaulting to 'warn'",
+            explicit,
+        )
+
     if agent_config.get(STRICT_SCHEMA_KEY, False):
         return "reject"
 
@@ -155,7 +163,7 @@ def _resolve_schema_mismatch_mode(agent_config: Dict) -> str:
 
 def _validate_llm_output_schema(
     response: Any,
-    agent_config: Dict,
+    agent_config: dict[str, Any],
     agent_name: str,
     *,
     skip_schema_validation: bool = False,
@@ -204,7 +212,6 @@ def _validate_llm_output_schema(
     try:
         from agent_actions.validation.schema_output_validator import (
             validate_output_against_schema,
-            SchemaValidationReport,
         )
 
         report = validate_output_against_schema(
@@ -240,12 +247,12 @@ def _validate_llm_output_schema(
 
     except ImportError:
         # Module not available - skip validation (acceptable during testing/development)
-        logger.debug("Schema output validator not available, skipping validation")
+        logger.warning("Schema output validator not available, skipping validation")
     except SchemaValidationError:
         # Re-raise schema validation errors - these should fail loudly
         raise
-    except Exception as e:
-        # Log unexpected errors but don't swallow them in strict mode
+    except (ValueError, KeyError) as e:
+        # Known validation data errors
         if strict_mode:
             raise SchemaValidationError(
                 f"Schema validation failed unexpectedly for action '{agent_name}': {e}",
@@ -254,12 +261,12 @@ def _validate_llm_output_schema(
                 hint="Check the schema format and LLM output structure",
                 cause=e,
             ) from e
-        logger.warning("Schema validation failed with error: %s", e)
+        logger.warning("Schema validation failed with error: %s", e, exc_info=True)
 
     return response
 
 
-def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
+def _should_skip_legacy_conditional(agent_config: dict[str, Any], context: Any) -> bool:
     """Check if agent should be skipped based on legacy conditional clause."""
     conditional_clause = (agent_config.get("conditional_clause") or "").lower()
     if conditional_clause and (not execute_user_defined_function(conditional_clause, context)):
@@ -267,7 +274,7 @@ def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
     return False
 
 
-def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
+def _should_skip_guard(agent_config: dict[str, Any], context: Any) -> bool:
     """
     Check if agent should be skipped based on guard with skip behavior.
 
@@ -277,7 +284,7 @@ def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
     return evaluator.should_skip(agent_config, context)
 
 
-def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
+def _should_filter_guard(agent_config: dict[str, Any], context: Any) -> bool:
     """
     Check if item should be filtered out based on guard with filter behavior.
 
@@ -288,14 +295,14 @@ def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
 
 
 def transform_with_passthrough(
-    data: List[Any],
-    context_data: Dict[str, Any],
+    data: list[Any],
+    context_data: dict[str, Any],
     source_guid: str,
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     idx: int = 0,
-    passthrough_fields: Optional[Dict[str, Any]] = None,
-    metadata: Optional[Dict[str, Any]] = None,
-) -> List[Any]:
+    passthrough_fields: Optional[dict[str, Any]] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> list[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data consistently.
 
     Args:

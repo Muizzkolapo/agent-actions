@@ -9,7 +9,7 @@ Queues tasks for batch API submission instead of immediate execution.
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
@@ -34,7 +34,7 @@ class BatchSubmissionResult:
 
     batch_id: Optional[str]
     task_count: int
-    context_map: Dict[str, Any] = field(default_factory=dict)
+    context_map: dict[str, Any] = field(default_factory=dict)
 
     @property
     def is_empty(self) -> bool:
@@ -76,9 +76,9 @@ class BatchStrategy(InvocationStrategy):
             provider: Batch provider instance (e.g., OpenAIBatchClient)
         """
         self._provider = provider
-        self._agent_config: Optional[Dict[str, Any]] = None
-        self._queued: List[PreparedTask] = []
-        self._context_map: Dict[str, Any] = {}
+        self._agent_config: Optional[dict[str, Any]] = None
+        self._queued: list[PreparedTask] = []
+        self._context_map: dict[str, Any] = {}
 
     def invoke(
         self,
@@ -116,14 +116,17 @@ class BatchStrategy(InvocationStrategy):
                 )
             return InvocationResult.filtered()
 
-        # Capture agent_config once (deep copy to guard against mutation)
+        # Capture agent_config once. Deep copy guards against the caller mutating
+        # agent_config between invoke() and flush() (e.g. per-record overrides).
         if self._agent_config is None:
             self._agent_config = copy.deepcopy(context.agent_config)
 
         # Queue task for batch submission
         self._queued.append(task)
 
-        # Track in context map
+        # Track in context map (warn on duplicate)
+        if task.target_id in self._context_map:
+            logger.warning("Duplicate target_id %s, overwriting", task.target_id)
         self._context_map[task.target_id] = {
             "status": "included",
             "original": task.original_content,
@@ -177,8 +180,9 @@ class BatchStrategy(InvocationStrategy):
             batch_tasks.append(batch_task)
 
         # Prepare tasks in provider-specific format and submit.
-        # Reset state in finally so a failed submission doesn't leave stale
-        # tasks that would be resubmitted on the next flush() call.
+        # State is always reset in `finally` to prevent stale tasks from
+        # leaking into a subsequent flush() if the caller catches and
+        # reuses this strategy instance after a failure.
         task_count = len(batch_tasks)
         context_snapshot = self._context_map.copy()
         try:
@@ -219,7 +223,7 @@ class BatchStrategy(InvocationStrategy):
             self._context_map = {}
             self._agent_config = None
 
-    def get_prepared_tasks(self) -> List[Dict[str, Any]]:
+    def get_prepared_tasks(self) -> list[dict[str, Any]]:
         """
         Get queued tasks in provider-ready format.
 
@@ -243,6 +247,6 @@ class BatchStrategy(InvocationStrategy):
         return len(self._queued)
 
     @property
-    def context_map(self) -> Dict[str, Any]:
+    def context_map(self) -> dict[str, Any]:
         """Access context map for result reconciliation."""
         return self._context_map

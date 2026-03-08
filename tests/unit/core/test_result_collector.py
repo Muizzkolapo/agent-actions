@@ -183,7 +183,7 @@ def test_exhausted_record_builder_build_empty_content():
     }
     empty = ExhaustedRecordBuilder.build_empty_content(agent_config)
     assert empty == {
-        "name": None,
+        "name": "",
         "active": False,
         "count": 0,
         "score": 0,

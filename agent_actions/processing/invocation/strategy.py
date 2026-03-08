@@ -5,7 +5,7 @@ Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Protocol, Tuple, TYPE_CHECKING, runtime_checkable
+from typing import Any, Optional, Protocol, TYPE_CHECKING
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.prepared_task import PreparedTask
@@ -14,20 +14,19 @@ if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
 
 
-@runtime_checkable
 class BatchProvider(Protocol):
     """Protocol for batch providers used by BatchStrategy."""
 
     def prepare_tasks(
-        self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]
-    ) -> List[Dict[str, Any]]: ...
+        self, data: list[dict[str, Any]], agent_config: dict[str, Any]
+    ) -> list[dict[str, Any]]: ...
 
     def submit_batch(
         self,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
         batch_name: str,
         output_directory: Optional[str] = None,
-    ) -> Tuple[str, str]: ...
+    ) -> tuple[str, str]: ...
 
 
 class InvocationStrategy(ABC):

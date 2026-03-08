@@ -1,7 +1,9 @@
 """Enrichment pipeline for processing results."""
 
+import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Optional
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -11,6 +13,8 @@ from agent_actions.logging.events import (
 )
 
 from .types import ProcessingContext, ProcessingResult, ProcessingStatus
+
+logger = logging.getLogger(__name__)
 
 
 class Enricher(ABC):
@@ -72,7 +76,7 @@ class LineageEnricher(Enricher):
 
     def _get_parent_item(
         self, source_guid: Optional[str], context: ProcessingContext
-    ) -> Optional[Dict]:
+    ) -> Optional[dict]:
         """
         Get parent item for lineage chaining.
 
@@ -160,7 +164,12 @@ class PassthroughEnricher(Enricher):
     """Merge passthrough fields into results."""
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
-        """Merge passthrough_fields into each item."""
+        """Merge passthrough_fields into each item.
+
+        Targets the ``content`` sub-dict when present (structured output),
+        otherwise merges directly into the top-level item dict (passthrough
+        into the flat content namespace).
+        """
         if not result.passthrough_fields:
             return result
 
@@ -220,7 +229,7 @@ class RecoveryEnricher(Enricher):
 class EnrichmentPipeline:
     """Pipeline of enrichers applied in sequence."""
 
-    def __init__(self, enrichers: List[Enricher] = None):
+    def __init__(self, enrichers: Optional[list[Enricher]] = None):
         """
         Initialize pipeline with enrichers.
 
@@ -251,9 +260,6 @@ class EnrichmentPipeline:
         Returns:
             Enriched ProcessingResult
         """
-        # Capture start time before firing event
-        from datetime import datetime
-
         start_time = datetime.now()
 
         # Fire pipeline started event
@@ -275,6 +281,7 @@ class EnrichmentPipeline:
                     )
                 )
             except Exception:
+                logger.exception("Enricher %s failed", enricher_name)
                 fire_event(
                     EnricherExecutedEvent(
                         enricher_name=enricher_name,

@@ -8,7 +8,7 @@ when validation fails.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Any, Optional, Tuple, Dict, TYPE_CHECKING
+from typing import Callable, Any, Optional, TYPE_CHECKING
 import logging
 
 from agent_actions.logging import fire_event
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class RepromptResult:
     """Result of reprompt execution."""
 
-    response: Any  # The actual LLM response content
+    response: Optional[Any]  # The actual LLM response content
     executed: bool  # Whether LLM was executed (False if guard skipped)
     attempts: int
     passed: bool  # Whether validation ultimately passed
@@ -100,13 +100,17 @@ class RepromptService:
         else:
             self.validation_name = validation_name
 
-        # Backward-compat attributes used by existing code / tests
+        # Backward-compat attribute used by existing code / tests
         self.validation_func = self._validator.validate
-        self.feedback_message = self._validator.feedback_message
+
+    @property
+    def feedback_message(self) -> str:
+        """Delegate to validator for always-current feedback message."""
+        return self._validator.feedback_message
 
     def execute(
         self,
-        llm_operation: Callable[[str], Tuple[Any, bool]],
+        llm_operation: Callable[[str], tuple[Any, bool]],
         original_prompt: str,
         context: str = "",
         on_exhausted: Optional[str] = None,
@@ -132,8 +136,15 @@ class RepromptService:
             on reprompt attempts) and returns a tuple of (response, executed).
             If executed=False (guard skip), validation is bypassed.
         """
-        # Use override or instance default
-        exhausted_behavior = on_exhausted or self.on_exhausted
+        # Use override or instance default (identity check, not truthiness)
+        exhausted_behavior = on_exhausted if on_exhausted is not None else self.on_exhausted
+
+        # Validate override value
+        valid_exhausted_options = ("return_last", "raise")
+        if exhausted_behavior not in valid_exhausted_options:
+            raise ValueError(
+                f"on_exhausted must be one of {valid_exhausted_options}, got: '{exhausted_behavior}'"
+            )
 
         attempts = 0
         current_prompt = original_prompt
@@ -147,7 +158,7 @@ class RepromptService:
 
             # If guard skipped execution, return immediately
             if not executed:
-                logger.info(f"[{context}] Guard skipped execution, bypassing reprompt")
+                logger.info("[%s] Guard skipped execution, bypassing reprompt", context)
                 return RepromptResult(
                     response=response,
                     executed=False,
@@ -166,15 +177,22 @@ class RepromptService:
                 # Log validator exception with full context and traceback
                 # This helps distinguish validator bugs from actual validation failures
                 logger.warning(
-                    f"[{context}] Validation '{self.validation_name}' raised exception "
-                    f"(treating as validation failure): {e.__class__.__name__}: {e}",
+                    "[%s] Validation '%s' raised exception "
+                    "(treating as validation failure): %s: %s",
+                    context,
+                    self.validation_name,
+                    e.__class__.__name__,
+                    e,
                     exc_info=True,
                 )
                 is_valid = False
 
             if is_valid:
                 logger.info(
-                    f"[{context}] Validation passed on attempt {attempts}/{self.max_attempts}"
+                    "[%s] Validation passed on attempt %d/%d",
+                    context,
+                    attempts,
+                    self.max_attempts,
                 )
                 return RepromptResult(
                     response=response,
@@ -187,7 +205,10 @@ class RepromptService:
 
             # Validation failed
             logger.warning(
-                f"[{context}] Validation failed on attempt {attempts}/{self.max_attempts}"
+                "[%s] Validation failed on attempt %d/%d",
+                context,
+                attempts,
+                self.max_attempts,
             )
 
             # Check if exhausted
@@ -200,8 +221,10 @@ class RepromptService:
 
         # Exhausted all attempts
         logger.error(
-            f"[{context}] Reprompt exhausted after {attempts} attempts "
-            f"(validation: {self.validation_name})"
+            "[%s] Reprompt exhausted after %d attempts (validation: %s)",
+            context,
+            attempts,
+            self.validation_name,
         )
         fire_event(
             RepromptValidationFailedEvent(
@@ -227,17 +250,10 @@ class RepromptService:
             exhausted=True,
         )
 
-    def _build_feedback_message(self, failed_response: Any) -> str:
-        """Build feedback message to append to prompt.
-
-        Thin backward-compat wrapper around ``build_validation_feedback()``.
-        """
-        return build_validation_feedback(failed_response, self._validator.feedback_message)
-
 
 def create_reprompt_service_from_config(
-    reprompt_config: Optional[Dict],
-    validator: Optional[ResponseValidator] = None,
+    reprompt_config: Optional[dict],
+    validator: Optional["ResponseValidator"] = None,
 ) -> Optional[RepromptService]:
     """
     Create RepromptService from action config.

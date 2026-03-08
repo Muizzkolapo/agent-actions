@@ -8,9 +8,10 @@ These dataclasses ensure identical task preparation for both batch and online mo
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from agent_actions.processing.types import ProcessingContext, ProcessingMode
     from agent_actions.storage.backend import StorageBackend
 
 
@@ -26,7 +27,7 @@ class GuardStatus(Enum):
 @dataclass
 class PreparedTask:
     """
-    Immutable task ready for execution (online) or submission (batch).
+    Task configuration ready for execution (online) or submission (batch).
 
     This is the unified output of TaskPreparer.prepare() that both
     RecordProcessor and BatchTaskPreparator consume.
@@ -52,10 +53,10 @@ class PreparedTask:
 
     # Prompt data (empty if guard blocked before prompt preparation)
     formatted_prompt: str = ""
-    llm_context: Dict[str, Any] = field(default_factory=dict)
+    llm_context: dict[str, Any] = field(default_factory=dict)
 
     # Context preservation
-    passthrough_fields: Dict[str, Any] = field(default_factory=dict)
+    passthrough_fields: dict[str, Any] = field(default_factory=dict)
     original_content: Any = None
     source_content: Optional[Any] = None
     source_snapshot: Optional[Any] = None
@@ -65,10 +66,10 @@ class PreparedTask:
     guard_behavior: Optional[str] = None  # 'skip' or 'filter' if not PASSED
 
     # Full context used for guard evaluation (includes rendered template variables)
-    prompt_context: Dict[str, Any] = field(default_factory=dict)
+    prompt_context: dict[str, Any] = field(default_factory=dict)
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def should_execute(self) -> bool:
@@ -117,7 +118,7 @@ class PreparationContext:
     """
 
     # Core configuration
-    agent_config: Dict[str, Any]
+    agent_config: dict[str, Any]
     agent_name: str
 
     # Stage indicator
@@ -127,15 +128,15 @@ class PreparationContext:
     is_batch_mode: bool = False
 
     # Source data for lookups
-    source_data: Optional[List[Dict[str, Any]]] = None
+    source_data: Optional[list[dict[str, Any]]] = None
 
     # Workflow context (for historical data loading)
-    agent_indices: Optional[Dict[str, int]] = None
-    dependency_configs: Optional[Dict[str, Any]] = None
-    workflow_metadata: Optional[Dict[str, Any]] = None
+    agent_indices: Optional[dict[str, int]] = None
+    dependency_configs: Optional[dict[str, Any]] = None
+    workflow_metadata: Optional[dict[str, Any]] = None
 
     # Version context (online mode)
-    version_context: Optional[Dict[str, Any]] = None
+    version_context: Optional[dict[str, Any]] = None
 
     # File context
     file_path: Optional[str] = None
@@ -146,7 +147,7 @@ class PreparationContext:
     storage_backend: Optional["StorageBackend"] = None
 
     # Per-item context
-    current_item: Optional[Dict[str, Any]] = None
+    current_item: Optional[dict[str, Any]] = None
     record_index: int = 0
 
     @classmethod
@@ -160,13 +161,14 @@ class PreparationContext:
         Returns:
             PreparationContext with equivalent fields
         """
+        from agent_actions.processing.types import ProcessingMode
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
         return cls(
             agent_config=context.agent_config,
             agent_name=context.agent_name,
             is_first_stage=context.is_first_stage,
-            is_batch_mode=False,  # Online/realtime mode
+            is_batch_mode=context.mode == ProcessingMode.BATCH,
             source_data=context.source_data,
             agent_indices=context.agent_indices,
             dependency_configs=context.dependency_configs,
@@ -179,8 +181,3 @@ class PreparationContext:
             current_item=context.current_item,
             record_index=context.record_index,
         )
-
-
-# Import ProcessingContext for type checking and from_processing_context
-if TYPE_CHECKING:
-    from agent_actions.processing.types import ProcessingContext

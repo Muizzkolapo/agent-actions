@@ -4,7 +4,7 @@ Factory for creating invocation strategies.
 Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from agent_actions.processing.invocation.batch import BatchStrategy
 from agent_actions.processing.invocation.online import OnlineStrategy
@@ -34,7 +34,7 @@ class InvocationStrategyFactory:
     @staticmethod
     def create(
         mode: ProcessingMode,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         provider: Optional[BatchProvider] = None,
     ) -> InvocationStrategy:
         """
@@ -60,7 +60,7 @@ class InvocationStrategyFactory:
         return InvocationStrategyFactory._create_online_strategy(agent_config)
 
     @staticmethod
-    def _create_online_strategy(agent_config: Dict[str, Any]) -> OnlineStrategy:
+    def _create_online_strategy(agent_config: dict[str, Any]) -> OnlineStrategy:
         """
         Create OnlineStrategy with configured recovery services.
 
@@ -91,7 +91,7 @@ class InvocationStrategyFactory:
         )
 
     @staticmethod
-    def _build_validator(agent_config: Dict[str, Any]) -> Optional[Any]:
+    def _build_validator(agent_config: dict[str, Any]) -> Optional["ResponseValidator"]:
         """Compose a ``ResponseValidator`` from agent config.
 
         Combines UDF validation (``reprompt.validation``) and schema
@@ -101,12 +101,13 @@ class InvocationStrategyFactory:
         from agent_actions.processing.helpers import _resolve_schema_mismatch_mode
         from agent_actions.processing.recovery.response_validator import (
             ComposedValidator,
+            ResponseValidator,
             SchemaValidator,
             UdfValidator,
         )
         from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY
 
-        validators: List[Any] = []
+        validators: list[ResponseValidator] = []
 
         # UDF validator (from reprompt config)
         reprompt_config = agent_config.get("reprompt")
@@ -132,7 +133,7 @@ class InvocationStrategyFactory:
 
     @staticmethod
     def create_online(
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
     ) -> OnlineStrategy:
         """
         Convenience method to create OnlineStrategy directly.

@@ -1,8 +1,9 @@
 """Unified record processor replacing StagingProcessor and TargetContentProcessor."""
 
 import logging
+from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.processing import EmptyOutputError
@@ -23,7 +24,7 @@ from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
 from .prepared_task import GuardStatus, PreparationContext
-from .task_preparer import get_task_preparer
+from .task_preparer import TaskPreparer, get_task_preparer
 from .types import (
     ProcessingContext,
     ProcessingMode,
@@ -80,7 +81,7 @@ class RecordProcessor:
 
     def __init__(
         self,
-        agent_config: Dict,
+        agent_config: dict[str, Any],
         agent_name: str,
         strategy: Optional[InvocationStrategy] = None,
         mode: ProcessingMode = ProcessingMode.ONLINE,
@@ -98,6 +99,13 @@ class RecordProcessor:
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+
+        if strategy is not None and (mode != ProcessingMode.ONLINE or provider is not None):
+            logger.warning(
+                "Both 'strategy' and 'mode'/'provider' specified for %s; "
+                "'strategy' takes precedence",
+                agent_name,
+            )
 
         # Validate granularity setting
         # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action (default)
@@ -150,9 +158,10 @@ class RecordProcessor:
         1-4. Prepare task (via TaskPreparer): normalize, source, prompt, guard
         5. Execute LLM
         6. Handle non-execution (retry exhausted)
-        7. Transform response
-        8. Create success result
-        9. Enrich (lineage, metadata, loop IDs, etc.)
+        7. Detect empty output
+        8. Transform response
+        9. Create success result
+        10. Enrich (lineage, metadata, loop IDs, etc.)
 
         Guard is evaluated ONCE in TaskPreparer, after prompt preparation,
         with full context available (like SQL WHERE).
@@ -208,16 +217,7 @@ class RecordProcessor:
                 source_snapshot=source_snapshot,
                 input_record=input_record,
             )
-            enriched_result = self.enrichment_pipeline.enrich(result, context)
-            fire_event(
-                RecordProcessingCompleteEvent(
-                    agent_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid,
-                    status=enriched_result.status.value,
-                )
-            )
-            return enriched_result
+            return self._finalize_result(result, context, source_guid)
 
         # Handle Phase 1 guard results (filtered/skipped)
         if prepared.guard_status == GuardStatus.FILTERED:
@@ -244,35 +244,20 @@ class RecordProcessor:
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
             )
-            # Build a proper passthrough item for enrichment
-            passthrough_item = {
-                "content": content,
-                "source_guid": source_guid,
-                "metadata": {
-                    "reason": f"guard_{prepared.guard_behavior}",
-                    "agent_type": "tombstone",
-                },
-                "_unprocessed": True,
-            }
-            if input_record and isinstance(input_record, dict) and "target_id" in input_record:
-                passthrough_item["target_id"] = input_record["target_id"]
+            tombstone = self._build_tombstone_item(
+                content,
+                source_guid,
+                f"guard_{prepared.guard_behavior}",
+                input_record,
+            )
             result = ProcessingResult.unprocessed(
-                data=[passthrough_item],
+                data=[tombstone],
                 reason=f"guard_{prepared.guard_behavior}",
                 source_guid=source_guid,
                 source_snapshot=source_snapshot,
                 input_record=input_record,
             )
-            enriched_result = self.enrichment_pipeline.enrich(result, context)
-            fire_event(
-                RecordProcessingCompleteEvent(
-                    agent_name=context.agent_name,
-                    record_index=context.record_index,
-                    source_guid=source_guid,
-                    status=enriched_result.status.value,
-                )
-            )
-            return enriched_result
+            return self._finalize_result(result, context, source_guid)
 
         # Step 5: Execute LLM via invocation strategy
         # Guard evaluation already done in TaskPreparer (strategy uses skip_guard_eval=True)
@@ -303,36 +288,22 @@ class RecordProcessor:
                 if recovery_metadata and recovery_metadata.retry:
                     # Build exhausted record with empty schema content for enrichment
                     empty_content = ExhaustedRecordBuilder.build_empty_content(context.agent_config)
-                    exhausted_item = {
-                        "content": empty_content,
-                        "source_guid": source_guid,
-                        "metadata": {"retry_exhausted": True, "agent_type": "tombstone"},
-                        "_unprocessed": True,
-                    }
-                    if (
-                        input_record
-                        and isinstance(input_record, dict)
-                        and "target_id" in input_record
-                    ):
-                        exhausted_item["target_id"] = input_record["target_id"]
+                    tombstone = self._build_tombstone_item(
+                        empty_content,
+                        source_guid,
+                        "retry_exhausted",
+                        input_record,
+                        extra_metadata={"retry_exhausted": True},
+                    )
                     result = ProcessingResult.exhausted(
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
-                        data=[exhausted_item],
+                        data=[tombstone],
                         source_guid=source_guid,
                         recovery_metadata=recovery_metadata,
                         source_snapshot=source_snapshot,
                         input_record=input_record,
                     )
-                    enriched_result = self.enrichment_pipeline.enrich(result, context)
-                    fire_event(
-                        RecordProcessingCompleteEvent(
-                            agent_name=context.agent_name,
-                            record_index=context.record_index,
-                            source_guid=source_guid,
-                            status=enriched_result.status.value,
-                        )
-                    )
-                    return enriched_result
+                    return self._finalize_result(result, context, source_guid)
                 # Fire RP002: Record filtered (LLM layer guard filter)
                 fire_event(
                     RecordFilteredEvent(
@@ -358,39 +329,22 @@ class RecordProcessor:
                         filter_reason="llm_layer_guard_skip",
                     )
                 )
-                # Build a proper passthrough item for enrichment
-                passthrough_item = {
-                    "content": response,
-                    "source_guid": source_guid,
-                    "metadata": {"reason": "guard_skip", "agent_type": "tombstone"},
-                    "_unprocessed": True,
-                }
-                if input_record and isinstance(input_record, dict) and "target_id" in input_record:
-                    passthrough_item["target_id"] = input_record["target_id"]
+                tombstone = self._build_tombstone_item(
+                    response,
+                    source_guid,
+                    "guard_skip",
+                    input_record,
+                )
                 result = ProcessingResult.unprocessed(
-                    data=[passthrough_item],
+                    data=[tombstone],
                     reason="guard_skip",
                     source_guid=source_guid,
                     source_snapshot=source_snapshot,
                     input_record=input_record,
                 )
-                enriched_result = self.enrichment_pipeline.enrich(result, context)
-                fire_event(
-                    RecordProcessingCompleteEvent(
-                        agent_name=context.agent_name,
-                        record_index=context.record_index,
-                        source_guid=source_guid,
-                        status=enriched_result.status.value,
-                    )
-                )
-                return enriched_result
+                return self._finalize_result(result, context, source_guid)
 
-        # Step 7: Transform response
-        transformed = self._transform_response(
-            response, content, source_guid, passthrough_fields, context
-        )
-
-        # Step 7b: Detect empty output
+        # Step 7: Detect empty output (before transform to avoid wasted work)
         if _is_empty_output(response):
             on_empty = context.agent_config.get("on_empty", "warn")
             input_field_count = len(content) if isinstance(content, dict) else 0
@@ -418,6 +372,11 @@ class RecordProcessor:
                     },
                 )
 
+        # Step 8: Transform response
+        transformed = self._transform_response(
+            response, content, source_guid, passthrough_fields, context
+        )
+
         # Fire RP003: Record transformed
         input_size = 1 if not isinstance(response, list) else len(response)
         output_size = len(transformed) if isinstance(transformed, list) else 1
@@ -431,7 +390,7 @@ class RecordProcessor:
             )
         )
 
-        # Step 8: Create success result (with recovery metadata if retry occurred)
+        # Step 9: Create success result (with recovery metadata if retry occurred)
         result = ProcessingResult.success(
             data=transformed,
             source_guid=source_guid,
@@ -442,22 +401,10 @@ class RecordProcessor:
             input_record=input_record,
         )
 
-        # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
-        enriched_result = self.enrichment_pipeline.enrich(result, context)
+        # Step 10: Enrich and finalize
+        return self._finalize_result(result, context, source_guid)
 
-        # Fire RP004: Record processing complete
-        fire_event(
-            RecordProcessingCompleteEvent(
-                agent_name=context.agent_name,
-                record_index=context.record_index,
-                source_guid=source_guid,
-                status=enriched_result.status.value,
-            )
-        )
-
-        return enriched_result
-
-    def process_batch(self, items: List[Any], context: ProcessingContext) -> List[ProcessingResult]:
+    def process_batch(self, items: list[Any], context: ProcessingContext) -> list[ProcessingResult]:
         """
         Process multiple records.
 
@@ -483,7 +430,7 @@ class RecordProcessor:
             )
         )
 
-        results = []
+        results: list[ProcessingResult] = []
         successes = 0
         failures = 0
 
@@ -537,7 +484,7 @@ class RecordProcessor:
             except Exception as e:
                 # Create failed result instead of propagating exception
                 # This allows batch processing to continue for transient/data errors
-                logger.error(
+                logger.exception(
                     "[%s] Error processing item %d: %s",
                     context.agent_name,
                     idx,
@@ -551,7 +498,7 @@ class RecordProcessor:
                     from agent_actions.utils.id_generation import IDGenerator
 
                     source_guid = IDGenerator.generate_deterministic_source_guid(item)
-                    source_snapshot = self._prepare_source_snapshot(item)
+                    source_snapshot = TaskPreparer._prepare_source_snapshot(item)
                 else:
                     source_guid = item.get("source_guid") if isinstance(item, dict) else None
                 failed_result = ProcessingResult.failed(
@@ -577,35 +524,69 @@ class RecordProcessor:
 
     # Private helper methods
 
-    def _prepare_source_snapshot(self, item: Any) -> Any:
-        """
-        Prepare source snapshot for first-stage processing.
-
-        Preserves StagingProcessor._prepare_source_text() logic:
-        - Filters out chunk_info metadata keys for dicts
-        - Returns item as-is for non-dict types (str, list, etc.)
+    @staticmethod
+    def _build_tombstone_item(
+        content: Any,
+        source_guid: Optional[str],
+        reason: str,
+        input_record: Optional[dict[str, Any]],
+        *,
+        extra_metadata: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Build a tombstone item for guard-skipped, exhausted, or unprocessed records.
 
         Args:
-            item: Input item (any type)
+            content: Content to preserve in the tombstone
+            source_guid: Source GUID for lineage
+            reason: Reason string stored in metadata
+            input_record: Original input record (for target_id preservation)
+            extra_metadata: Additional metadata keys to merge (e.g. retry_exhausted)
 
         Returns:
-            Filtered snapshot (dict) or original item (for non-dict types)
+            Tombstone dict ready for ProcessingResult.data
         """
-        if isinstance(item, dict) and "chunk_info" in item:
-            excluded_keys = ["target_id", "record_index", "chunk_index"]
-            snapshot = {k: v for k, v in item.items() if k not in excluded_keys}
-        else:
-            snapshot = item.copy() if isinstance(item, dict) else item
-        return snapshot
+        item: dict[str, Any] = {
+            "content": content,
+            "source_guid": source_guid,
+            "metadata": {"reason": reason, "agent_type": "tombstone"},
+            "_unprocessed": True,
+        }
+        if extra_metadata:
+            item["metadata"].update(extra_metadata)
+        if input_record and isinstance(input_record, dict) and "target_id" in input_record:
+            item["target_id"] = input_record["target_id"]
+        return item
+
+    def _finalize_result(
+        self,
+        result: ProcessingResult,
+        context: ProcessingContext,
+        source_guid: Optional[str],
+    ) -> ProcessingResult:
+        """Enrich a result and fire the completion event.
+
+        Centralises the enrich → fire-event → return pattern used by every
+        non-filtered exit path in ``process()``.
+        """
+        enriched_result = self.enrichment_pipeline.enrich(result, context)
+        fire_event(
+            RecordProcessingCompleteEvent(
+                agent_name=context.agent_name,
+                record_index=context.record_index,
+                source_guid=source_guid,
+                status=enriched_result.status.value,
+            )
+        )
+        return enriched_result
 
     def _transform_response(
         self,
         response: Any,
         content: Any,
         source_guid: str,
-        passthrough_fields: Dict,
+        passthrough_fields: dict[str, Any],
         context: ProcessingContext,
-    ) -> List[Dict]:
+    ) -> list[dict[str, Any]]:
         """
         Transform LLM response to output format.
 
@@ -631,8 +612,9 @@ class RecordProcessor:
             passthrough_fields=passthrough_fields,
         )
 
+    @staticmethod
     def _create_item_context(
-        self, base_context: ProcessingContext, index: int, item: Any
+        base_context: ProcessingContext, index: int, item: Any
     ) -> ProcessingContext:
         """
         Create per-item context with updated record_index.
@@ -645,19 +627,8 @@ class RecordProcessor:
         Returns:
             New ProcessingContext for this item
         """
-        return ProcessingContext(
-            agent_config=base_context.agent_config,
-            agent_name=base_context.agent_name,
-            mode=base_context.mode,
-            is_first_stage=base_context.is_first_stage,
-            source_data=base_context.source_data,
-            file_path=base_context.file_path,
-            output_directory=base_context.output_directory,
-            version_context=base_context.version_context,
-            workflow_metadata=base_context.workflow_metadata,
+        return replace(
+            base_context,
             record_index=index,
-            agent_indices=base_context.agent_indices,
-            dependency_configs=base_context.dependency_configs,
             current_item=item if isinstance(item, dict) else None,
-            storage_backend=base_context.storage_backend,
         )

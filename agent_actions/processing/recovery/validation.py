@@ -7,7 +7,8 @@ feedback message management.
 Thread-safe: All registry access is protected by a lock for concurrent environments.
 """
 
-from typing import Dict, Callable, Tuple
+from typing import Callable
+import functools
 import logging
 import threading
 
@@ -21,7 +22,7 @@ from agent_actions.logging.events import (
 logger = logging.getLogger(__name__)
 
 # Global registry: UDF name -> (function, message)
-_VALIDATION_REGISTRY: Dict[str, Tuple[Callable[[dict], bool], str]] = {}
+_VALIDATION_REGISTRY: dict[str, tuple[Callable[[dict], bool], str]] = {}
 
 # Lock for thread-safe registry access
 _REGISTRY_LOCK = threading.Lock()
@@ -58,6 +59,7 @@ def reprompt_validation(feedback_message: str):
         func_name = func.__name__
 
         # Create wrapper that fires events
+        @functools.wraps(func)
         def wrapped_func(response: dict) -> bool:
             # Fire validation started event
             fire_event(
@@ -86,24 +88,33 @@ def reprompt_validation(feedback_message: str):
                     )
                 return result
             except Exception as e:
-                fire_event(
-                    DataValidationFailedEvent(
-                        validator_type=f"RepromptValidation:{func_name}",
-                        errors=[str(e)],
+                try:
+                    fire_event(
+                        DataValidationFailedEvent(
+                            validator_type=f"RepromptValidation:{func_name}",
+                            errors=[str(e)],
+                        )
                     )
-                )
+                except Exception:
+                    logger.debug(
+                        "Failed to fire DataValidationFailedEvent for %s",
+                        func_name,
+                        exc_info=True,
+                    )
                 raise
 
         # Thread-safe registration
         with _REGISTRY_LOCK:
+            if func_name in _VALIDATION_REGISTRY:
+                logger.warning("Overwriting existing reprompt validation: %s", func_name)
             _VALIDATION_REGISTRY[func_name] = (wrapped_func, feedback_message)
-            logger.debug(f"Registered reprompt validation: {func_name}")
+            logger.debug("Registered reprompt validation: %s", func_name)
         return wrapped_func
 
     return decorator
 
 
-def get_validation_function(name: str) -> Tuple[Callable[[dict], bool], str]:
+def get_validation_function(name: str) -> tuple[Callable[[dict], bool], str]:
     """
     Get validation function and feedback message by name.
 

@@ -93,6 +93,40 @@ class TestPreparationContext:
         assert prep_ctx.version_context == {"i": 0}
 
 
+class TestPreparationContextBatchMode:
+    """Tests for batch mode derivation in PreparationContext."""
+
+    def test_preparation_context_batch_mode_derived(self):
+        """is_batch_mode is True when ProcessingContext.mode is BATCH."""
+        from agent_actions.processing.types import ProcessingContext, ProcessingMode
+
+        processing_ctx = ProcessingContext(
+            agent_config={"agent_type": "test", "prompt": "test"},
+            agent_name="test_agent",
+            mode=ProcessingMode.BATCH,
+            is_first_stage=True,
+        )
+
+        prep_ctx = PreparationContext.from_processing_context(processing_ctx)
+
+        assert prep_ctx.is_batch_mode is True
+
+    def test_preparation_context_online_mode_not_batch(self):
+        """is_batch_mode is False when ProcessingContext.mode is ONLINE."""
+        from agent_actions.processing.types import ProcessingContext, ProcessingMode
+
+        processing_ctx = ProcessingContext(
+            agent_config={"agent_type": "test", "prompt": "test"},
+            agent_name="test_agent",
+            mode=ProcessingMode.ONLINE,
+            is_first_stage=True,
+        )
+
+        prep_ctx = PreparationContext.from_processing_context(processing_ctx)
+
+        assert prep_ctx.is_batch_mode is False
+
+
 class TestTaskPreparerNormalization:
     """Tests for TaskPreparer input normalization."""
 

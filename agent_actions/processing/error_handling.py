@@ -28,6 +28,14 @@ from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadin
 T = TypeVar("T", bound=ProcessingError)
 
 
+_PARSE_ERROR_MAP = {
+    json.JSONDecodeError: "json",
+    yaml.YAMLError: "yaml",
+    ET.ParseError: "xml",
+    csv.Error: "csv",
+}
+
+
 class ProcessorErrorHandlerMixin:
     """
     Mixin class providing standardized error handling for processors.
@@ -36,11 +44,17 @@ class ProcessorErrorHandlerMixin:
     consistent error handling and logging across the application.
     """
 
-    def __init__(self, *args, **kwargs):
-        """Initialize the mixin with a logger if not already present."""
-        super().__init__(*args, **kwargs)
-        if not hasattr(self, "logger"):
-            self.logger = logging.getLogger(self.__class__.__module__)
+    @property
+    def logger(self):
+        """Lazy logger avoids MRO __init__ conflicts in mixin chains."""
+        if not hasattr(self, "_logger"):
+            self._logger = logging.getLogger(self.__class__.__module__)
+        return self._logger
+
+    @logger.setter
+    def logger(self, value):
+        """Allow subclasses to override the logger in __init__."""
+        self._logger = value
 
     def get_error_context(
         self, operation: str, file_path: Optional[Union[str, Path]] = None, **kwargs
@@ -96,46 +110,42 @@ class ProcessorErrorHandlerMixin:
         context["error_message"] = get_error_detail(error)
 
         # Fire appropriate data error event
-        file_path = context_kwargs.get("file_path", "unknown")
-
-        # Mapping of error types to format names
-        parse_error_map = {
-            json.JSONDecodeError: "json",
-            yaml.YAMLError: "yaml",
-            ET.ParseError: "xml",
-            csv.Error: "csv",
-        }
+        file_path = str(context_kwargs.get("file_path", "unknown"))
 
         # Check if this is a parse error
         format_type = None
-        for error_class, fmt in parse_error_map.items():
+        for error_class, fmt in _PARSE_ERROR_MAP.items():
             if isinstance(error, error_class):
                 format_type = fmt
                 break
 
         if format_type:
-            # Parse error - malformed data format
             fire_event(
                 DataParsingErrorEvent(
-                    file_path=str(file_path) if file_path else "unknown",
+                    file_path=file_path,
                     format=format_type,
                     error=get_error_detail(error),
                 )
             )
         else:
-            # Loading error - file access or other issues
             fire_event(
                 DataLoadingErrorEvent(
-                    file_path=str(file_path) if file_path else "unknown",
+                    file_path=file_path,
                     error=get_error_detail(error),
                 )
             )
 
-        if reraise:
-            if error_type:
-                raise error_type(f"{operation} failed: {get_error_detail(error)}") from error
-            else:
-                raise ProcessingError(f"{operation} failed: {get_error_detail(error)}") from error
+        if not reraise:
+            self.logger.warning(
+                "%s failed (not reraising): %s",
+                operation,
+                get_error_detail(error),
+            )
+            return
+
+        if error_type:
+            raise error_type(f"{operation} failed: {get_error_detail(error)}") from error
+        raise ProcessingError(f"{operation} failed: {get_error_detail(error)}") from error
 
     def handle_validation_error(
         self,
@@ -224,29 +234,3 @@ class ProcessorErrorHandlerMixin:
             target_type=target_type,
             **context_kwargs,
         )
-
-    def log_warning(self, message: str, operation: str, **context_kwargs) -> None:
-        """
-        Log a warning with consistent structure.
-
-        Args:
-            message: Warning message
-            operation: Operation that generated the warning
-            **context_kwargs: Additional context to log
-        """
-        context = self.get_error_context(operation, **context_kwargs)
-        log_entry = {"level": "WARNING", "message": message, "context": context}
-        self.logger.warning(json.dumps(log_entry, default=str))
-
-    def log_info(self, message: str, operation: str, **context_kwargs) -> None:
-        """
-        Log an info message with consistent structure.
-
-        Args:
-            message: Info message
-            operation: Operation being performed
-            **context_kwargs: Additional context to log
-        """
-        context = self.get_error_context(operation, **context_kwargs)
-        log_entry = {"level": "INFO", "message": message, "context": context}
-        self.logger.info(json.dumps(log_entry, default=str))

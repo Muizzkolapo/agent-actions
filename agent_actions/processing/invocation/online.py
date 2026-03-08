@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Tuple
+from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
@@ -111,7 +111,7 @@ class OnlineStrategy(InvocationStrategy):
         task: PreparedTask,
         context: ProcessingContext,
         prompt: str,
-    ) -> Tuple[Any, bool]:
+    ) -> tuple[Any, bool]:
         """Execute LLM call with common arguments.
 
         Args:
@@ -164,7 +164,7 @@ class OnlineStrategy(InvocationStrategy):
         context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
         retry_service: RetryService,
-    ) -> Tuple[Any, bool, RecoveryMetadata]:
+    ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with retry protection."""
         retry_result = retry_service.execute(
             lambda: self._call_llm(task, context, task.formatted_prompt),
@@ -182,7 +182,7 @@ class OnlineStrategy(InvocationStrategy):
             )
             return None, False, recovery_metadata
 
-        if retry_result.response:
+        if retry_result.response is not None:
             response, executed = retry_result.response
         else:
             response, executed = None, False
@@ -195,7 +195,7 @@ class OnlineStrategy(InvocationStrategy):
         context: ProcessingContext,
         recovery_metadata: RecoveryMetadata,
         reprompt_service: RepromptService,
-    ) -> Tuple[Any, bool, RecoveryMetadata]:
+    ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with reprompt validation."""
         reprompt_result = reprompt_service.execute(
             llm_operation=lambda prompt: self._call_llm(task, context, prompt),
@@ -219,7 +219,7 @@ class OnlineStrategy(InvocationStrategy):
         recovery_metadata: RecoveryMetadata,
         retry_service: RetryService,
         reprompt_service: RepromptService,
-    ) -> Tuple[Any, bool, RecoveryMetadata]:
+    ) -> tuple[Any, bool, RecoveryMetadata]:
         """LLM call with both retry and reprompt (reprompt wraps retry)."""
 
         def llm_with_retry(prompt: str):

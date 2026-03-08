@@ -7,15 +7,13 @@ It wraps operations with configurable retry behavior and tracks recovery metadat
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, Optional
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import RetryExhaustedEvent
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 
 # Errors that should trigger a retry
@@ -35,7 +33,7 @@ class RetryResult:
         last_error: The last error encountered (if any)
     """
 
-    response: Any
+    response: Optional[Any]
     attempts: int = 1
     reason: Optional[str] = None
     exhausted: bool = False
@@ -43,7 +41,7 @@ class RetryResult:
 
     @property
     def needed_retry(self) -> bool:
-        """Return True if retry was triggered (attempts > 1) or exhausted on first attempt."""
+        """Whether a transport-layer failure occurred (attempts > 1 or exhausted on first attempt)."""
         return self.attempts > 1 or self.exhausted
 
 
@@ -91,8 +89,14 @@ class RetryService:
     This service wraps callable operations and retries them on transient failures.
     It tracks retry attempts and provides metadata for the _recovery field.
 
+    This service is intentionally limited to retry mechanics only.  The
+    ``on_exhausted`` policy ("raise" vs "return_last") lives in the config
+    schema and is enforced by callers (ResultCollector, RepromptService, batch
+    processing) — not here — so that all orchestration paths share the same
+    raise-vs-return decision point.
+
     Example:
-        retry_service = RetryService(max_attempts=3, on_exhausted="return_last")
+        retry_service = RetryService(max_attempts=3)
 
         result = retry_service.execute(
             lambda: llm_client.call(prompt),
@@ -105,21 +109,24 @@ class RetryService:
     def __init__(
         self,
         max_attempts: int = 3,
-        on_exhausted: str = "return_last",
     ):
         """
         Initialize the RetryService.
 
         Args:
-            max_attempts: Maximum number of attempts (1 = no retry)
-            on_exhausted: Behavior when exhausted: "return_last" or "raise"
+            max_attempts: Maximum number of attempts (must be >= 1)
+
+        Raises:
+            ValueError: If max_attempts < 1
         """
-        self.max_attempts = max(1, max_attempts)
-        self.on_exhausted = on_exhausted
+        if max_attempts < 1:
+            raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
+
+        self.max_attempts = max_attempts
 
     def execute(
         self,
-        operation: Callable[[], T],
+        operation: Callable[[], Any],
         context: Optional[str] = None,
     ) -> RetryResult:
         """
@@ -130,12 +137,12 @@ class RetryService:
             context: Optional context string for logging
 
         Returns:
-            RetryResult containing the response and retry metadata
+            RetryResult containing the response and retry metadata.
+            On exhaustion when all attempts raised, ``response`` is ``None``.
 
         Raises:
-            Exception: Re-raises the last exception if on_exhausted="raise" and exhausted
+            Exception: Re-raises non-retriable errors immediately
         """
-        last_response = None
         last_error: Optional[Exception] = None
         reason: Optional[str] = None
 
@@ -154,7 +161,6 @@ class RetryService:
             except Exception as e:
                 last_error = e
                 reason = classify_error(e)
-                last_response = None  # Clear any partial response
 
                 if is_retriable_error(e):
                     # Retriable error - log and retry
@@ -195,11 +201,11 @@ class RetryService:
                     )
                     raise
 
-        # Exhausted all retries - always return result, let caller decide whether to raise
-        # The on_exhausted config is just stored in self.on_exhausted for reference
-        # but the actual decision to raise is made by the higher-level code
+        # Exhausted all retries — return result with exhausted=True.
+        # The on_exhausted policy is enforced by the caller (e.g. ResultCollector)
+        # so that batch and online paths share the same raise-vs-return decision.
         return RetryResult(
-            response=last_response,
+            response=None,
             attempts=self.max_attempts,
             reason=reason,
             exhausted=True,
@@ -207,13 +213,15 @@ class RetryService:
         )
 
 
-def create_retry_service_from_config(retry_config: Optional[dict]) -> Optional[RetryService]:
+def create_retry_service_from_config(
+    retry_config: Optional[dict],
+) -> Optional[RetryService]:
     """
     Create a RetryService from action configuration.
 
     Args:
         retry_config: The retry configuration dict from action config.
-                     Expected format: {"enabled": bool, "max_attempts": int, "on_exhausted": str}
+                     Expected format: {"enabled": bool, "max_attempts": int}
 
     Returns:
         RetryService if retry is enabled, None otherwise
@@ -226,5 +234,4 @@ def create_retry_service_from_config(retry_config: Optional[dict]) -> Optional[R
 
     return RetryService(
         max_attempts=retry_config.get("max_attempts", 3),
-        on_exhausted=retry_config.get("on_exhausted", "return_last"),
     )

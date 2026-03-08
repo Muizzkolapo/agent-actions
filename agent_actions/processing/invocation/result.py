@@ -5,7 +5,7 @@ Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from agent_actions.processing.types import RecoveryMetadata
 
@@ -37,7 +37,7 @@ class InvocationResult:
     task_id: Optional[str] = None
 
     # Context preservation
-    passthrough_fields: Dict[str, Any] = field(default_factory=dict)
+    passthrough_fields: dict[str, Any] = field(default_factory=dict)
 
     # Recovery tracking
     recovery_metadata: Optional[RecoveryMetadata] = None
@@ -47,7 +47,7 @@ class InvocationResult:
         cls,
         response: Any,
         executed: bool,
-        passthrough_fields: Optional[Dict[str, Any]] = None,
+        passthrough_fields: Optional[dict[str, Any]] = None,
         recovery: Optional[RecoveryMetadata] = None,
     ) -> "InvocationResult":
         """
@@ -71,7 +71,7 @@ class InvocationResult:
     def queued(
         cls,
         task_id: str,
-        passthrough_fields: Optional[Dict[str, Any]] = None,
+        passthrough_fields: Optional[dict[str, Any]] = None,
     ) -> "InvocationResult":
         """
         Factory for queued (batch) result.
@@ -91,7 +91,7 @@ class InvocationResult:
     def skipped(
         cls,
         passthrough_data: Optional[Any] = None,
-        passthrough_fields: Optional[Dict[str, Any]] = None,
+        passthrough_fields: Optional[dict[str, Any]] = None,
     ) -> "InvocationResult":
         """
         Factory for skipped (guard skip) result.
