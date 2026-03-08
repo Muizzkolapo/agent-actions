@@ -16,6 +16,7 @@ from agent_actions.workflow.pipeline import PipelineConfig
 from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager
 from agent_actions.output.response.expander import ActionExpander
+from agent_actions.config.schema import ActionConfig, DefaultsConfig
 from agent_actions.input.context.normalizer import normalize_all_agent_configs
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
@@ -178,6 +179,32 @@ class ConfigManager:
             workflow_defaults = self.user_config.get("defaults", {})
             merged_defaults = {**project_defaults, **workflow_defaults}
             config_with_merged_defaults = {**self.user_config, "defaults": merged_defaults}
+
+            # Validate each action dict against ActionConfig schema
+            for action in self.user_config.get("actions") or []:
+                if not isinstance(action, dict):
+                    continue
+                try:
+                    ActionConfig.model_validate(action)
+                except ValidationError as e:
+                    action_name = action.get("name", "<unnamed>")
+                    raise ConfigurationError(
+                        f"Action '{action_name}' has invalid configuration",
+                        context={"action": action_name},
+                        cause=e,
+                    )
+
+            # Validate workflow defaults (project defaults validated by DefaultAgentConfig)
+            if workflow_defaults and isinstance(workflow_defaults, dict):
+                try:
+                    DefaultsConfig.model_validate(workflow_defaults)
+                except ValidationError as e:
+                    raise ConfigurationError(
+                        "Defaults section has invalid configuration",
+                        context={"section": "defaults"},
+                        cause=e,
+                    )
+
             agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
             workflow_name = self.user_config.get("name", "workflow")
             user_agents = agent_config_map.get(workflow_name, [])

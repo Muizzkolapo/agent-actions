@@ -63,7 +63,6 @@ export function transformWorkflows(catalog: RawCatalogJson): Workflow[] {
         json_mode: (wf.defaults.json_mode as boolean) ?? null,
         granularity: (wf.defaults.granularity as string) ?? "Record",
         run_mode: (wf.defaults.run_mode as string) ?? null,
-        few_shot: (wf.defaults.few_shot as number) ?? null,
       },
       actionCount: wf.action_count,
       llmCount,

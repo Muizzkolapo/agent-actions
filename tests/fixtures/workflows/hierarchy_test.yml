@@ -4,7 +4,7 @@ version: 2.0.0
 
 # Workflow-level defaults (should override project defaults)
 defaults:
-  model: gpt-4o-mini-workflow  # Override project default
+  model_name: gpt-4o-mini-workflow  # Override project default
   json_mode: true              # Override project default
   granularity: file           # Override project default
   # chunk_size should inherit from project: 800
@@ -22,8 +22,8 @@ actions:
   - name: action_with_overrides
     intent: Action overriding all levels
     kind: llm
-    model: claude-3-sonnet      # Override workflow default
-    vendor: anthropic           # Override project default
+    model_name: claude-3-sonnet      # Override workflow default
+    model_vendor: anthropic           # Override project default
     json_mode: false           # Override workflow default
     prompt: "Process with action-level overrides"
     schema:

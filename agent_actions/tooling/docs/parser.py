@@ -124,7 +124,6 @@ class WorkflowParser:
                 "json_mode": defaults.get("json_mode"),
                 "granularity": defaults.get("granularity"),
                 "run_mode": defaults.get("run_mode"),
-                "few_shot": defaults.get("few_shot"),
             },
         }
 
@@ -213,8 +212,6 @@ class WorkflowParser:
                 action["run_mode"] = action_data["run_mode"]  # batch or online
             if "json_mode" in action_data:
                 action["json_mode"] = action_data["json_mode"]
-            if "few_shot" in action_data:
-                action["few_shot"] = action_data["few_shot"]
             if "prompt_debug" in action_data:
                 action["prompt_debug"] = action_data["prompt_debug"]
 

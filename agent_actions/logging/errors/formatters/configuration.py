@@ -108,9 +108,9 @@ class ConfigurationErrorFormatter(ErrorFormatter):
 
         for field in missing_fields:
             if field == "model_vendor":
-                fix_parts.append("     vendor: anthropic")
+                fix_parts.append("     model_vendor: anthropic")
             elif field == "model_name":
-                fix_parts.append("     model: claude-3-5-sonnet-20241022")
+                fix_parts.append("     model_name: claude-3-5-sonnet-20241022")
             elif field == "api_key":
                 fix_parts.append("     api_key: ${ANTHROPIC_API_KEY}")
 
@@ -125,9 +125,9 @@ class ConfigurationErrorFormatter(ErrorFormatter):
 
         for field in missing_fields:
             if field == "model_vendor":
-                fix_parts.append("       vendor: anthropic")
+                fix_parts.append("       model_vendor: anthropic")
             elif field == "model_name":
-                fix_parts.append("       model: claude-3-5-sonnet-20241022")
+                fix_parts.append("       model_name: claude-3-5-sonnet-20241022")
             elif field == "api_key":
                 fix_parts.append("       api_key: ${ANTHROPIC_API_KEY}")
 

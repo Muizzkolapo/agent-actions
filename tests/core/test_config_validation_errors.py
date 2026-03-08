@@ -86,3 +86,51 @@ class TestConfigValidationErrorMessages:
         for clause in dangerous_clauses:
             with pytest.raises(ValidationError):
                 WhereClauseConfig(clause=clause)
+
+
+class TestSchemaPreValidationErrors:
+    """Integration tests: unknown/invalid keys raise ConfigurationError via get_user_agents()."""
+
+    def _make_manager(self, actions, defaults=None):
+        """Create a ConfigManager with a new-format workflow config."""
+        # Import order avoids circular import between coordinator and ConfigManager.
+        import agent_actions.workflow.coordinator  # noqa: F401
+        from agent_actions.llm.realtime.config import ConfigManager
+
+        mgr = ConfigManager("test_workflow.yml", "")
+        mgr.user_config = {
+            "name": "test_workflow",
+            "description": "test",
+            "version": "1",
+            "actions": actions,
+        }
+        if defaults:
+            mgr.user_config["defaults"] = defaults
+        return mgr
+
+    def test_unknown_action_key_raises_via_get_user_agents(self):
+        """Unknown action key raises ConfigurationError through get_user_agents()."""
+        mgr = self._make_manager(actions=[{"name": "a", "intent": "i", "bogus_key": True}])
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert exc_info.value.context["action"] == "a"
+        assert exc_info.value.__cause__ is not None
+
+    def test_invalid_type_raises_via_get_user_agents(self):
+        """Type-invalid value raises ConfigurationError through get_user_agents()."""
+        mgr = self._make_manager(actions=[{"name": "a", "intent": "i", "temperature": "banana"}])
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert exc_info.value.context["action"] == "a"
+        assert "temperature" in str(exc_info.value.__cause__)
+
+    def test_invalid_defaults_type_raises_via_get_user_agents(self):
+        """Type-invalid defaults value raises ConfigurationError through get_user_agents()."""
+        mgr = self._make_manager(
+            actions=[{"name": "a", "intent": "i"}],
+            defaults={"temperature": "warm"},
+        )
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert exc_info.value.context["section"] == "defaults"
+        assert "temperature" in str(exc_info.value.__cause__)

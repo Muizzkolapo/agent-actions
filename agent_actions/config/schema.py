@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import parse_guard_config
@@ -16,12 +16,30 @@ class ActionKind(str, Enum):
     TOOL = "tool"
     HITL = "hitl"
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
+
 
 class Granularity(str, Enum):
     """Granularity levels for action execution."""
 
     RECORD = "record"
     FILE = "file"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
 
 
 class VersionMode(str, Enum):
@@ -30,11 +48,20 @@ class VersionMode(str, Enum):
     PARALLEL = "parallel"
     SEQUENTIAL = "sequential"
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
+
 
 class VersionConfig(BaseModel):
     """Configuration for version-based actions."""
 
-    param: str = Field(..., description="Parameter name for version variable")
+    param: str = Field(default="i", description="Parameter name for version variable")
     range: List[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
         ..., description="Range of values for version parameter"
     )
@@ -42,9 +69,10 @@ class VersionConfig(BaseModel):
 
 
 class MergePattern(str, Enum):
-    """Patterns for merging version outputs."""
+    """Patterns for version output consumption."""
 
     MERGE = "merge"
+    MATCH = "match"
 
 
 class VersionConsumptionConfig(BaseModel):
@@ -73,9 +101,13 @@ class RetryConfig(BaseModel):
 
 
 class RepromptConfig(BaseModel):
-    """Configuration for reprompt behavior on validation failures."""
+    """Configuration for reprompt behavior on validation failures.
 
-    validation: str = Field(..., description="Name of validation UDF function")
+    ``validation`` is optional when an external validator is provided
+    (e.g. via ``on_schema_mismatch: reprompt``).
+    """
+
+    validation: Optional[str] = Field(default=None, description="Name of validation UDF function")
     max_attempts: int = Field(
         default=2,
         ge=1,
@@ -117,6 +149,8 @@ class HitlConfig(BaseModel):
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
     kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
@@ -126,7 +160,9 @@ class ActionConfig(BaseModel):
     )
     model_name: Optional[str] = Field(default=None, description="Model name")
     output_schema: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None, description="Output schema", alias="schema"
+        default=None,
+        description="Output schema",
+        alias="schema",  # noqa: A003 — shadows builtin; rename breaks YAML compat
     )
     drops: List[str] = Field(
         default_factory=list, description="Fields to exclude from LLM prompt and final output"
@@ -151,6 +187,12 @@ class ActionConfig(BaseModel):
     reprompt: Optional[RepromptConfig] = Field(
         default=None, description="Reprompt configuration for validation failures"
     )
+    strict_schema: Optional[bool] = Field(
+        default=None, description="Enable strict schema validation (reject on mismatch)"
+    )
+    on_schema_mismatch: Optional[Literal["warn", "reprompt", "reject"]] = Field(
+        default=None, description="Schema mismatch mode: warn, reprompt, or reject"
+    )
     idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
     prompt: Optional[str] = Field(default=None, description="Prompt template or reference")
     dependencies: List[str] = Field(
@@ -170,8 +212,83 @@ class ActionConfig(BaseModel):
     )
     on_empty: Literal["warn", "error", "skip"] = Field(
         default="warn",
-        description="Behavior when action produces empty output: warn (log warning), error (fail workflow), skip (continue, emit event)",
+        description="Behavior when action produces empty output: warn (log warning), "
+        "error (fail workflow), skip (continue, emit event)",
     )
+
+    # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
+    api_key: Optional[str] = Field(default=None, description="API key")
+    base_url: Optional[str] = Field(default=None, description="Base URL for vendors like Ollama")
+    run_mode: Optional[str] = Field(default=None, description="Execution run mode")
+    is_operational: Optional[bool] = Field(default=None, description="Whether action is enabled")
+    json_mode: Optional[bool] = Field(default=None, description="JSON mode setting")
+    prompt_debug: Optional[bool] = Field(default=None, description="Debug output for prompts")
+    output_field: Optional[str] = Field(default=None, description="Output field name")
+    temperature: Optional[float] = Field(default=None, description="Generation temperature")
+    max_tokens: Optional[int] = Field(default=None, description="Maximum tokens")
+    top_p: Optional[float] = Field(default=None, description="Top-p sampling parameter")
+    stop: Optional[Union[str, List[str]]] = Field(default=None, description="Stop sequences")
+    constraints: Optional[Any] = Field(default=None, description="Constraints for reprompting")
+
+    # --- Runtime-consumed keys (from AgentConfig) ---
+    where_clause: Optional[Dict[str, Any]] = Field(
+        default=None, description="WHERE clause configuration for filtering"
+    )
+    ephemeral: Optional[bool] = Field(default=None, description="Ephemeral action outputs")
+    anthropic_version: Optional[str] = Field(
+        default=None, description="API version header for Anthropic requests"
+    )
+    enable_prompt_caching: Optional[bool] = Field(
+        default=None, description="Enable Anthropic prompt caching"
+    )
+    max_execution_time: Optional[int] = Field(
+        default=None, description="Maximum execution time in seconds"
+    )
+    enable_caching: Optional[bool] = Field(
+        default=None, description="Enable caching for performance"
+    )
+
+    # --- Expander-consumed keys ---
+    interceptors: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="Interceptor configuration"
+    )
+    chunk_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="Chunking configuration"
+    )
+    chunk_size: Optional[int] = Field(default=None, description="Chunk size")
+    chunk_overlap: Optional[int] = Field(default=None, description="Chunk overlap")
+    context_scope: Optional[Dict[str, Any]] = Field(
+        default=None, description="Context scope configuration"
+    )
+    version_mode: Optional[str] = Field(default=None, description="Version execution mode")
+    child: Optional[List[str]] = Field(default=None, description="Child pipeline reference")
+
+    # --- Internal (injected by render step) ---
+    version_context: Optional[Dict[str, Any]] = Field(
+        default=None, alias="_version_context", description="Version context injected by renderer"
+    )
+
+    @field_validator("retry", mode="before")
+    @classmethod
+    def validate_retry(cls, v):
+        """Accept false (disable) but reject true (ambiguous — use mapping)."""
+        if v is False or v is None:
+            return None
+        if v is True:
+            raise ValueError("retry: true is not valid; use retry: {max_attempts: N} or omit")
+        return v
+
+    @field_validator("reprompt", mode="before")
+    @classmethod
+    def validate_reprompt(cls, v):
+        """Accept false (disable) but reject true (ambiguous — use mapping)."""
+        if v is False or v is None:
+            return None
+        if v is True:
+            raise ValueError(
+                "reprompt: true is not valid; use reprompt: {validation: fn_name} or omit"
+            )
+        return v
 
     @model_validator(mode="after")
     def validate_kind_requirements(self):
@@ -199,6 +316,11 @@ class ActionConfig(BaseModel):
 class DefaultsConfig(BaseModel):
     """Default configuration applied to all actions."""
 
+    # extra="ignore" (not "forbid"): workflow defaults may contain vendor-specific
+    # params like frequency_penalty, presence_penalty that vary by provider and are
+    # consumed by extract_generation_params(). Typed fields still validate known keys.
+    model_config = ConfigDict(extra="ignore")
+
     model_vendor: Optional[str] = Field(default=None, description="Default model vendor")
     model_name: Optional[str] = Field(default=None, description="Default model name")
     json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
@@ -222,6 +344,57 @@ class DefaultsConfig(BaseModel):
         le=3600,
         description="Default HITL timeout in seconds for all hitl actions",
     )
+
+    # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
+    api_key: Optional[str] = Field(default=None, description="Default API key")
+    base_url: Optional[str] = Field(default=None, description="Default base URL")
+    kind: Optional[ActionKind] = Field(default=None, description="Default action kind")
+    is_operational: Optional[bool] = Field(default=None, description="Default operational flag")
+    prompt_debug: Optional[bool] = Field(default=None, description="Default prompt debug setting")
+    output_field: Optional[str] = Field(default=None, description="Default output field name")
+    temperature: Optional[float] = Field(default=None, description="Default temperature")
+    max_tokens: Optional[int] = Field(default=None, description="Default max tokens")
+    top_p: Optional[float] = Field(default=None, description="Default top-p")
+    stop: Optional[Union[str, List[str]]] = Field(default=None, description="Default stop seq")
+    reprompt: Optional[RepromptConfig] = Field(
+        default=None, description="Default reprompt configuration"
+    )
+    constraints: Optional[Any] = Field(default=None, description="Default constraints")
+    retry: Optional[RetryConfig] = Field(default=None, description="Default retry configuration")
+    strict_schema: Optional[bool] = Field(default=None, description="Default strict schema flag")
+    on_schema_mismatch: Optional[Literal["warn", "reprompt", "reject"]] = Field(
+        default=None, description="Default schema mismatch mode"
+    )
+
+    # --- Expander-consumed keys ---
+    context_scope: Optional[Dict[str, Any]] = Field(default=None, description="Default ctx scope")
+    chunk_config: Optional[Dict[str, Any]] = Field(
+        default=None, description="Default chunk configuration"
+    )
+    chunk_size: Optional[int] = Field(default=None, description="Default chunk size")
+    chunk_overlap: Optional[int] = Field(default=None, description="Default chunk overlap")
+
+    @field_validator("retry", mode="before")
+    @classmethod
+    def validate_retry(cls, v):
+        """Accept false (disable) but reject true (ambiguous — use mapping)."""
+        if v is False or v is None:
+            return None
+        if v is True:
+            raise ValueError("retry: true is not valid; use retry: {max_attempts: N} or omit")
+        return v
+
+    @field_validator("reprompt", mode="before")
+    @classmethod
+    def validate_reprompt(cls, v):
+        """Accept false (disable) but reject true (ambiguous — use mapping)."""
+        if v is False or v is None:
+            return None
+        if v is True:
+            raise ValueError(
+                "reprompt: true is not valid; use reprompt: {validation: fn_name} or omit"
+            )
+        return v
 
 
 class WorkflowConfigV2(BaseModel):
@@ -303,6 +476,7 @@ __all__ = [
     "HitlConfig",
     "VersionConfig",
     "RetryConfig",
+    "RepromptConfig",
     "ActionConfig",
     "DefaultsConfig",
     "WorkflowConfigV2",

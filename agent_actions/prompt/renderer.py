@@ -203,8 +203,8 @@ class ConfigRenderingService:
         agent_entry = {
             "agent_type": action.get("name", "unknown"),
             "name": action.get("name"),
-            "model_vendor": action.get("vendor", "openai"),
-            "model_name": action.get("model", "gpt-4"),
+            "model_vendor": action.get("model_vendor", "openai"),
+            "model_name": action.get("model_name", "gpt-4"),
             "is_operational": True,
             "dependencies": [],
             "granularity": action.get("granularity", "record"),

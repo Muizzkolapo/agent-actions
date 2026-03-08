@@ -23,7 +23,6 @@ export interface WorkflowDefaults {
   json_mode: boolean | null
   granularity: string
   run_mode: string | null
-  few_shot: number | null
 }
 
 export interface Workflow {

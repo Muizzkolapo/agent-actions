@@ -80,8 +80,8 @@ def validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
     missing_fields = [field for field, value in required_fields.items() if not value]
     if missing_fields:
         field_display_names = {
-            "model_vendor": "vendor/model_vendor",
-            "model_name": "model/model_name",
+            "model_vendor": "model_vendor",
+            "model_name": "model_name",
             "api_key": "api_key",
         }
         missing_display = [field_display_names.get(f, f) for f in missing_fields]

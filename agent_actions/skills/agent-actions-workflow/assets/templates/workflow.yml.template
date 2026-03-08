@@ -15,7 +15,6 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: false
   prompt_debug: false
-  few_shot: 0
 
   # Retry: transient errors (rate limits, network)
   retry:
