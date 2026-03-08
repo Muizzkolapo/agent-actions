@@ -60,12 +60,7 @@ def process_chunk_config(
 
 def initialize_optional_fields(agent: AgentEntryDict) -> None:
     """Initialize optional fields in agent configuration."""
-    agent["skip_if"] = None
-    agent["ephemeral"] = None
-    agent["add_dispatch"] = None
-    agent["anthropic_version"] = None
-    agent["enable_prompt_caching"] = None
-    if "conditional_clause" not in agent:
-        agent["conditional_clause"] = None
-    if "guard" not in agent:
-        agent["guard"] = None
+    agent.setdefault("skip_if", None)
+    agent.setdefault("add_dispatch", None)
+    agent.setdefault("conditional_clause", None)
+    agent.setdefault("guard", None)

@@ -9,7 +9,7 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `config_fields.py` | Module | Field helpers used by schema configuration objects. | `output.response.schema`, `validation` |
+| `config_fields.py` | Module | Field helpers used by schema configuration objects. `SIMPLE_CONFIG_FIELDS` includes runtime fields for standard 3-level inheritance. | `output.response.schema`, `validation` |
 | `config_schema.py` | Module | Schema definitions for response metadata configuration. | `validation` |
 | `consolidated_guard.py` | Module | Renders consolidated guard results with metadata for outputs. | `validation`, `logging` |
 | `expander.py` | Module | Facade: `ActionExpander` class orchestrates action-to-agent expansion, delegates to submodules. | `tooling.docs`, `schema` |
