@@ -50,19 +50,21 @@ class TestRuntimeFieldPropagation:
         result = _make_agent(action)
         assert result[field] == value
 
-    def test_fields_default_to_none_when_absent(self):
-        """Fields not set in action or defaults get None."""
+    def test_fields_default_when_absent(self):
+        """Fields not set in action or defaults get their hardcoded default."""
         action = _minimal_action()
         result = _make_agent(action)
+        # Optional fields default to None
         for field in [
             "ephemeral",
             "anthropic_version",
             "enable_prompt_caching",
-            "max_execution_time",
             "where_clause",
-            "enable_caching",
         ]:
             assert result[field] is None, f"{field} should default to None"
+        # Fields with non-None defaults must match AgentConfig expectations
+        assert result["enable_caching"] is True, "enable_caching should default to True"
+        assert result["max_execution_time"] == 300, "max_execution_time should default to 300"
 
     def test_defaults_level_inheritance(self):
         """Fields set in defaults propagate when action omits them."""

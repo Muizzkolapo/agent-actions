@@ -42,9 +42,9 @@ SIMPLE_CONFIG_FIELDS = {
     "ephemeral": None,
     "anthropic_version": None,
     "enable_prompt_caching": None,
-    "max_execution_time": None,
+    "max_execution_time": 300,
     "where_clause": None,
-    "enable_caching": None,
+    "enable_caching": True,
 }
 
 

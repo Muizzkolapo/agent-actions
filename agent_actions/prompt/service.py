@@ -96,7 +96,7 @@ class PromptPreparationResult:
     llm_context: Dict[str, Any]
     passthrough_fields: Dict[str, Any]
     metadata: Dict[str, Any]
-    prompt_context: Dict[str, Any] = None  # Optional for backward compat
+    prompt_context: Optional[Dict[str, Any]] = None
 
 
 class PromptPreparationService:
@@ -396,7 +396,7 @@ class PromptPreparationService:
                 len(static_data),
             )
             logger.debug(
-                "DEBUG: prompt_context namespaces after apply_context_scope: %s",
+                "prompt_context namespaces after apply_context_scope: %s",
                 list(prompt_context.keys()),
             )
         else:

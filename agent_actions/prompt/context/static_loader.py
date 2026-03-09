@@ -207,7 +207,7 @@ class StaticDataLoader:
 
         if suffix == ".json":
             return self._load_json(file_path, field_name)
-        if suffix in {".yml", ".yaml"}:
+        elif suffix in {".yml", ".yaml"}:
             return self._load_yaml(file_path, field_name)
         elif suffix in {".md", ".txt"}:
             return self._load_text(file_path, field_name)

@@ -13,7 +13,6 @@ Compilation steps:
 """
 
 import logging
-import os
 import textwrap
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -37,7 +36,8 @@ def _load_template_globals(env, templates_folder):
         env: Jinja2 Environment instance
         templates_folder: Path to templates directory
     """
-    template_files = [f for f in os.listdir(templates_folder) if f.endswith((".j2", ".jinja2"))]
+    templates_path = Path(templates_folder)
+    template_files = [p.name for p in templates_path.iterdir() if p.suffix in (".j2", ".jinja2")]
     for template_file in template_files:
         try:
             template = env.get_template(template_file)
@@ -110,7 +110,10 @@ def _resolve_prompt_fields(item):
                         resolved = PromptLoader.load_prompt(prompt_key)
                         item[key] = resolved + (" " + extra if extra else "")
                     except ValueError:
-                        # Keep original value if loading fails
+                        logger.warning(
+                            "Failed to resolve prompt reference '%s'; keeping original value",
+                            value,
+                        )
                         item[key] = value
             elif isinstance(value, (dict, list)):
                 _resolve_prompt_fields(value)
@@ -332,7 +335,12 @@ def _compile_workflow_schemas(
     for action in actions:
         _compile_action_schemas(action, schema_dir, strict=strict, errors=errors)
 
-    # Raise aggregated errors in strict mode
+    # Compile schemas in defaults if present
+    defaults = data.get("defaults", {})
+    if defaults:
+        _compile_action_schemas(defaults, schema_dir, strict=strict, errors=errors)
+
+    # Raise aggregated errors in strict mode (after all schemas processed)
     if strict and errors:
         raise ConfigurationError(
             f"Schema compilation failed with {len(errors)} error(s)",
@@ -342,11 +350,6 @@ def _compile_workflow_schemas(
                 "hint": "Ensure all referenced schema files exist in the schema/ directory",
             },
         )
-
-    # Compile schemas in defaults if present
-    defaults = data.get("defaults", {})
-    if defaults:
-        _compile_action_schemas(defaults, schema_dir)
 
 
 # =============================================================================
@@ -476,7 +479,9 @@ def _expand_workflow_versions(data: Dict[str, Any]) -> None:
             expanded = _expand_versioned_action(action)
             expanded_actions.extend(expanded)
             logger.debug(
-                f"Expanded versioned action '{action.get('name')}' into {len(expanded)} actions"
+                "Expanded versioned action '%s' into %d actions",
+                action.get("name"),
+                len(expanded),
             )
         else:
             expanded_actions.append(action)

@@ -29,6 +29,23 @@ from agent_actions.utils.dict import get_nested_value, nested_field_exists, set_
 
 logger = logging.getLogger(__name__)
 
+# System/metadata keys excluded from content extraction.
+# These are infrastructure fields that must not leak into downstream prompts.
+_RECORD_METADATA_KEYS = frozenset(
+    {
+        "source_guid",
+        "lineage",
+        "node_id",
+        "metadata",
+        "target_id",
+        "parent_target_id",
+        "root_target_id",
+        "chunk_info",
+        "_recovery",
+        "_unprocessed",
+    }
+)
+
 
 class ContextScopeProcessor:
     """
@@ -777,34 +794,36 @@ class ContextScopeProcessor:
 
     @staticmethod
     def merge_passthrough_fields(llm_response: List[Dict], passthrough_fields: Dict) -> List[Dict]:
-        """Merge passthrough fields into LLM response."""
+        """Merge passthrough fields into LLM response.
+
+        Returns a new structure — the caller's original is never mutated.
+        """
         if not passthrough_fields:
-            # No passthrough fields to merge
             return llm_response
 
         # Handle list of items
         if isinstance(llm_response, list):
+            result = []
             for item in llm_response:
                 if isinstance(item, dict):
-                    # Check if structured format with 'content' key
-                    if "content" in item and isinstance(item["content"], dict):
-                        # Merge into content
-                        item["content"].update(passthrough_fields)
+                    item_copy = dict(item)
+                    if "content" in item_copy and isinstance(item_copy["content"], dict):
+                        item_copy["content"] = {**item_copy["content"], **passthrough_fields}
                     else:
-                        # Merge directly into item
-                        item.update(passthrough_fields)
-            return llm_response
+                        item_copy.update(passthrough_fields)
+                    result.append(item_copy)
+                else:
+                    result.append(item)
+            return result
 
         # Handle single dict
         if isinstance(llm_response, dict):
-            # Check if structured format with 'content' key
-            if "content" in llm_response and isinstance(llm_response["content"], dict):
-                # Merge into content
-                llm_response["content"].update(passthrough_fields)
+            result = dict(llm_response)
+            if "content" in result and isinstance(result["content"], dict):
+                result["content"] = {**result["content"], **passthrough_fields}
             else:
-                # Merge directly
-                llm_response.update(passthrough_fields)
-            return llm_response
+                result.update(passthrough_fields)
+            return result
 
         # Other types (shouldn't happen, but be defensive)
         return llm_response
@@ -826,24 +845,7 @@ class ContextScopeProcessor:
             return source_content["content"]
 
         # Flat format: {...} but exclude metadata keys
-        return {
-            k: v
-            for k, v in source_content.items()
-            if k
-            not in [
-                "source_guid",
-                "lineage",
-                "node_id",
-                "metadata",
-                "target_id",
-                "parent_target_id",
-                "root_target_id",
-                "chunk_info",
-                # System fields: excluded so they don't leak into downstream prompts
-                "_recovery",  # batch retry recovery metadata
-                "_unprocessed",  # circuit-breaker flag for upstream failures
-            ]
-        }
+        return {k: v for k, v in source_content.items() if k not in _RECORD_METADATA_KEYS}
 
     @staticmethod
     def _enrich_source_namespace(
@@ -1329,6 +1331,7 @@ class ContextScopeProcessor:
             lineage = current_item.get("lineage", [])
             source_guid = current_item.get("source_guid")
             current_idx = agent_indices.get(agent_name, 999)
+            allowed_fields_map = None
 
             # 2a. INPUT SOURCES - Data is already in current_item (the file being processed)
             # Put it under the action name so prompts can reference {{ action_name.field }}
@@ -1351,8 +1354,8 @@ class ContextScopeProcessor:
                 if version_namespaces_detected:
                     # Split nested version namespaces into separate top-level namespaces
                     logger.debug(
-                        f"[VERSION NAMESPACES] Detected nested version namespaces in input_data: "
-                        f"{version_namespaces_detected}"
+                        "[VERSION NAMESPACES] Detected nested version namespaces in input_data: %s",
+                        version_namespaces_detected,
                     )
 
                     for version_name, version_data in input_data.items():
@@ -1385,8 +1388,10 @@ class ContextScopeProcessor:
                     ]
                     if parallel_version_sources and source_guid:
                         logger.debug(
-                            f"[PARALLEL VERSIONS] Loading {len(parallel_version_sources)} parallel "
-                            f"version sources via historical lookup: {parallel_version_sources}"
+                            "[PARALLEL VERSIONS] Loading %d parallel version sources "
+                            "via historical lookup: %s",
+                            len(parallel_version_sources),
+                            parallel_version_sources,
                         )
                         for version_source in parallel_version_sources:
                             version_idx = agent_indices.get(version_source)
@@ -1425,13 +1430,16 @@ class ContextScopeProcessor:
                                 )
                             else:
                                 logger.warning(
-                                    f"[PARALLEL VERSION] Could not load '{version_source}' "
-                                    f"via historical lookup. source_guid={source_guid}"
+                                    "[PARALLEL VERSION] Could not load '%s' "
+                                    "via historical lookup. source_guid=%s",
+                                    version_source,
+                                    source_guid,
                                 )
                 else:
                     # No version namespaces detected - use original behavior
                     logger.debug(
-                        f"[INPUT SOURCE] input_data keys: {list(input_data.keys()) if input_data else 'EMPTY'}"
+                        "[INPUT SOURCE] input_data keys: %s",
+                        list(input_data.keys()) if input_data else "EMPTY",
                     )
                     for input_source_name in input_sources:
                         allowed_fields = allowed_fields_map.get(input_source_name)
@@ -1459,7 +1467,7 @@ class ContextScopeProcessor:
             )
             if context_sources:
                 # Get allowed fields for context sources
-                if "allowed_fields_map" not in locals():
+                if allowed_fields_map is None:
                     all_deps_for_fields = input_sources + context_sources
                     allowed_fields_map = (
                         ContextScopeProcessor._extract_allowed_fields_per_dependency(
@@ -1486,14 +1494,16 @@ class ContextScopeProcessor:
                     dep_idx = agent_indices.get(dep_name)
                     if dep_idx is None:
                         logger.warning(
-                            f"Context dependency '{dep_name}' not found in agent_indices. "
-                            f"Available: {list(agent_indices.keys())}"
+                            "Context dependency '%s' not found in agent_indices. Available: %s",
+                            dep_name,
+                            list(agent_indices.keys()),
                         )
                         continue
 
                     if dep_idx >= current_idx:
                         logger.debug(
-                            f"Skipping context dependency '{dep_name}' (comes after current action)"
+                            "Skipping context dependency '%s' (comes after current action)",
+                            dep_name,
                         )
                         continue
 
@@ -1634,15 +1644,10 @@ class ContextScopeProcessor:
             )
 
         logger.debug(
-            f"Built field_context for '{agent_name}' with namespaces: {list(field_context.keys())}"
+            "Built field_context for '%s' with namespaces: %s",
+            agent_name,
+            list(field_context.keys()),
         )
-
-        # DEBUG: Show what's in each namespace
-        for ns in field_context.keys():
-            if isinstance(field_context[ns], dict):
-                logger.debug(
-                    f"DEBUG: field_context['{ns}'] has fields: {list(field_context[ns].keys())}"
-                )
 
         return field_context
 

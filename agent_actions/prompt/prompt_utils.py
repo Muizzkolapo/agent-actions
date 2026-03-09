@@ -39,7 +39,7 @@ class PromptUtils:
         if captured_results is None:
             captured_results = {}
 
-        pattern = r"dispatch_task\\s*\\(\\s*['\\\"]([^'\\\"]+)['\\\"]\\s*\\)"
+        pattern = r'dispatch_task\s*\(\s*[\'"]([^\'"]+)[\'"]\s*\)'
 
         # Optimization: Check for exact match first if type preservation is requested
         if preserve_type_on_exact_match:
@@ -55,13 +55,10 @@ class PromptUtils:
                     if agent_config and agent_config.get("add_dispatch"):
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
-                        # Decide behavior for None.
-                        # If preserving type, return None or Error string?
-                        # Usually schema field might be optional,
-                        # so proper None might be better than string error.
-                        # But consistency with string replacement suggests
-                        # error string OR None.
-                        # Let's return None if None, user handles it.
+                        # Type-preserving mode: return None so the caller/schema
+                        # can treat the field as absent. In string-replacement mode
+                        # (below, line 90) we substitute an error string because the
+                        # result must remain a str.
                         return None
                     return transformed_text
                 except (AgentActionsException, ConfigurationError):
@@ -151,13 +148,19 @@ class PromptUtils:
         Returns:
             List of dicts with 'reference', 'field_path', and 'full_match'
         """
-        pattern = "\\\\{([a-zA-Z_][a-zA-Z0-9_]*(?:\\\\.[a-zA-Z0-9_]+)+)\\\\}"
+        pattern = r"\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\}"
         references = []
         for match in re.finditer(pattern, prompt):
             full_ref = match.group(1)
             parts = full_ref.split(".")
             references.append(
-                {"reference": parts[0], "field_path": parts[1:], "full_match": match.group(0)}
+                {
+                    "reference": parts[0],
+                    "field_path": parts[1:],
+                    "full_match": match.group(0),
+                    "start": match.start(),
+                    "end": match.end(),
+                }
             )
         return references
 
@@ -211,7 +214,7 @@ class PromptUtils:
             ValueError: If reference or field not found
         """
         references = PromptUtils.parse_field_references(prompt)
-        for ref in references:
+        for ref in reversed(references):
             try:
                 value = PromptUtils.resolve_field_reference(
                     ref["reference"], ref["field_path"], context
@@ -220,7 +223,7 @@ class PromptUtils:
                     value_str = json.dumps(value, indent=2)
                 else:
                     value_str = str(value)
-                prompt = prompt.replace(ref["full_match"], value_str)
+                prompt = prompt[: ref["start"]] + value_str + prompt[ref["end"] :]
             except ValueError as e:
                 raise ValueError(f"Error resolving {ref['full_match']}: {str(e)}") from e
         return prompt

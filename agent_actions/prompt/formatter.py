@@ -2,6 +2,7 @@
 Module for prompt formatting and loading.
 """
 
+from agent_actions.errors import PromptValidationError
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.constants import PROMPT_KEY
 
@@ -31,8 +32,6 @@ class PromptFormatter:
                 raw_prompt = "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
-            from agent_actions.errors import PromptValidationError
-
             raise PromptValidationError(
                 f"Failed to get raw prompt: {str(e)}",
                 context={
