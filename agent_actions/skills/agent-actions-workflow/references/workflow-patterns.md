@@ -286,7 +286,7 @@ flowchart TD
     C2 --> P2["process<br/>root: D1"]
     C3 --> P3["process<br/>root: D1"]
 
-    P1 --> AGG["aggregate<br/>Query: root=D1<br/>Gets ALL chunks"]
+    P1 --> AGG["aggregate<br/>FILE mode: receives<br/>all records in file"]
     P2 --> AGG
     P3 --> AGG
 
@@ -296,17 +296,40 @@ flowchart TD
 ```yaml
 actions:
   - name: chunk_document
-    granularity: splits  # Creates N chunks
+    kind: tool
+    impl: chunk_document       # UDF that splits input into chunks
+    granularity: file           # Receives all records, returns N chunks
 
   - name: process_chunk
-    dependencies: chunk_document
+    dependencies: [chunk_document]
+    granularity: record         # LLM processes each chunk individually
 
   - name: aggregate_results
-    dependencies: process_chunk
-    granularity: collect  # Collects all chunks
+    dependencies: [process_chunk]
+    kind: tool
+    impl: aggregate_results     # UDF that collects all chunks
+    granularity: file           # Receives all processed chunks
 ```
 
-**How matching works:** All chunks preserve the original document's `root_target_id`. The aggregate action queries by `root_target_id` to collect all descendants.
+**Critical: preserve `source_guid` in the splitter.** The framework populates `root_target_id` via LineageEnricher only when `source_guid` is present on each output record. A splitter that returns plain dicts without `source_guid` produces chunks with no ancestry, breaking the aggregate step.
+
+```python
+@udf_tool(granularity=Granularity.FILE)
+def chunk_document(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    chunks = []
+    for record in data:
+        source_guid = record.get("source_guid")
+        text = record.get("content", record).get("text", "")
+        for i, part in enumerate(split_text(text)):
+            chunks.append({
+                "source_guid": source_guid,  # Required for lineage
+                "chunk_index": i,
+                "chunk_text": part,
+            })
+    return chunks
+```
+
+**How it works:** Map-reduce is achieved via `kind: tool` UDFs with file-level granularity for the split and aggregate steps. The chunking UDF receives all records in the current file and returns N chunks; the aggregation UDF receives all processed chunks in the file. FILE-mode invokes the tool once per file on the full record array — it does **not** automatically group by `root_target_id`. If one input file contains chunks from multiple root documents, the aggregation UDF must group by `root_target_id` itself.
 
 ## Tool + LLM Hybrid Pattern
 

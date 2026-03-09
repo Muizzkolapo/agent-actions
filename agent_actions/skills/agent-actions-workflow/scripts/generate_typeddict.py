@@ -15,6 +15,34 @@ import sys
 from pathlib import Path
 from typing import Any
 
+# Pure infrastructure keys excluded from field analysis.
+# Subset of agent_actions.prompt.context.scope._RECORD_METADATA_KEYS —
+# only keys that are never meaningful UDF inputs.
+_METADATA_KEYS = frozenset(
+    {
+        "target_id",
+        "node_id",
+        "lineage",
+        "_recovery",
+        "_unprocessed",
+    }
+)
+
+# Top-level keys surfaced after content unwrapping.  These live outside
+# "content" on structured records but FILE-mode UDFs need them:
+#   source_guid   — pipeline preserves it for lineage chaining
+#   metadata      — MetadataEnricher writes response metadata here
+#   parent/root_target_id, chunk_info — ancestry for reducers/aggregators
+_ANCESTRY_KEYS = frozenset(
+    {
+        "source_guid",
+        "parent_target_id",
+        "root_target_id",
+        "chunk_info",
+        "metadata",
+    }
+)
+
 
 def infer_python_type(value: Any, field_name: str = "") -> str:
     """Infer Python type annotation from a JSON value."""
@@ -50,17 +78,29 @@ def infer_python_type(value: Any, field_name: str = "") -> str:
 
 
 def extract_fields_from_json(data: dict) -> dict[str, str]:
-    """Extract field names and their Python types from JSON data."""
-    # Handle content wrapper
+    """Extract field names and their Python types from JSON data.
+
+    When a content wrapper is present, unwraps to content but also surfaces
+    top-level _ANCESTRY_KEYS (source_guid, parent/root_target_id, chunk_info,
+    metadata) since FILE-mode UDFs may need them.
+    """
+    raw = data
     if "content" in data and isinstance(data["content"], dict):
         data = data["content"]
 
     fields = {}
     for key, value in data.items():
         # Skip internal/metadata fields
-        if key in ("source_guid", "target_id", "node_id", "lineage"):
+        if key in _METADATA_KEYS:
             continue
         fields[key] = infer_python_type(value, key)
+
+    # When content was unwrapped, surface ancestry keys from the top level —
+    # FILE-mode reducers need these (e.g., grouping by root_target_id).
+    if raw is not data:
+        for key in _ANCESTRY_KEYS:
+            if key in raw and key not in fields:
+                fields[key] = infer_python_type(raw[key], key)
 
     return fields
 

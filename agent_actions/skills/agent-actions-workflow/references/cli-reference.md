@@ -122,8 +122,16 @@ agac render -a my_workflow -t ./custom_templates
 List all registered UDF tools:
 
 ```bash
-agac list-udfs
+agac list-udfs -u <tools_path>
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `-u, --user-code DIRECTORY` | Path to user code directory containing UDFs (required) |
+| `--json` | Output as JSON for programmatic use |
+| `--verbose` | Show full signatures and docstrings |
 
 ## Debugging
 

@@ -74,7 +74,7 @@ def filter_questions_by_score(data: dict) -> dict:
 Process all records at once:
 
 ```python
-from agent_actions.configuration.new_format_schema import Granularity
+from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -97,30 +97,39 @@ def run_dedup(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 Use FILE for: Aggregation, deduplication, clustering, cross-record analysis.
 
-## FileUDFResult for Lineage
+## FileUDFResult for FILE-Mode Tools
 
-Track which inputs produced which outputs:
+`FileUDFResult` wraps FILE-mode output with optional metadata. The runtime
+unwraps it to `.outputs` before structuring records.
+
+**Important:** Lineage is tracked via `source_guid`, not `source_mapping`.
+The pipeline's FILE-mode handler preserves `source_guid` on each output item
+and `LineageEnricher` resolves ancestry from it. `source_mapping` is validated
+at construction time but is **not yet consumed** by the runtime for lineage
+resolution. Always copy `source_guid` from inputs to outputs for correct
+lineage.
 
 ```python
-from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
+from agent_actions import FileUDFResult
 
 @udf_tool(granularity=Granularity.FILE)
 def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
     seen = {}
     outputs = []
-    source_mapping = {}
 
-    for idx, record in enumerate(data):
-        fact = record['fact']
+    for record in data:
+        fact = record.get("content", record).get("fact", "")
         if fact not in seen:
-            seen[fact] = len(outputs)
-            outputs.append(record)
-            source_mapping[len(outputs) - 1] = idx
+            seen[fact] = True
+            # Preserve source_guid so the framework can resolve lineage
+            outputs.append({
+                **record.get("content", record),
+                "source_guid": record.get("source_guid"),
+            })
 
     return FileUDFResult(
         outputs=outputs,
-        source_mapping=source_mapping,
-        input_count=len(data)
+        input_count=len(data),
     )
 ```
 
@@ -265,8 +274,8 @@ Check file is in `tools/`, imported, and function name matches `impl`.
 
 ```bash
 # List registered UDFs
-agac list-udfs
+agac list-udfs -u <tools_path>
 
 # Validate UDF schemas
-agac validate --udfs
+agac validate-udfs -a <workflow_name> -u <tools_path>
 ```
