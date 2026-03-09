@@ -1,5 +1,6 @@
 """Shared utilities for Agent Actions LSP."""
 
+import urllib.parse
 from pathlib import Path
 from typing import List
 
@@ -7,13 +8,27 @@ from typing import List
 def uri_to_path(uri: str) -> Path:
     """Convert file:// URI to Path.
 
+    Handles URL-encoded characters (e.g., %20 for spaces),
+    Windows drive-letter URIs (file:///C:/path), and
+    UNC/network-share URIs (file://server/share/path).
+
     Args:
         uri: A file:// URI string (e.g., "file:///path/to/file.yaml")
 
     Returns:
         Path object representing the file path.
     """
-    return Path(uri.replace("file://", ""))
+    parsed = urllib.parse.urlparse(uri)
+    path = urllib.parse.unquote(parsed.path)
+    # Preserve UNC host: file://server/share → //server/share
+    # "localhost" is the local machine per RFC 8089, not a network share.
+    if parsed.netloc and parsed.netloc.lower() != "localhost":
+        return Path(f"//{parsed.netloc}{path}")
+    # On Windows, urlparse("file:///C:/path").path is "/C:/path";
+    # strip the leading slash so Path resolves the drive letter correctly.
+    if len(path) >= 3 and path[0] == "/" and path[2] == ":":
+        path = path[1:]
+    return Path(path)
 
 
 def is_in_dependencies_context(lines: List[str], current_line: int) -> bool:

@@ -230,8 +230,6 @@ class ProjectScanner:
                 }
             }
         """
-        from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
-
         workflow_data = {}
         artefact_dir = self.project_root / "artefact"
 
@@ -247,46 +245,146 @@ class ProjectScanner:
                 workflow_name = db_file.stem
 
                 try:
-                    backend = SQLiteBackend(
-                        db_path=str(db_file),
-                        workflow_name=workflow_name,
-                    )
-                    stats = backend.get_storage_stats()
+                    data = self._scan_sqlite_readonly(db_file, workflow_name)
+                    if data is not None:
+                        workflow_data[workflow_name] = data
                 except Exception as e:
-                    logger.debug(
-                        "Failed to init SQLite backend for %s: %s", db_file, e, exc_info=True
-                    )
-                    continue
-
-                nodes = {}
-                node_counts = stats.get("nodes", {})
-                for action_name, record_count in node_counts.items():
-                    try:
-                        preview_result = backend.preview_target(action_name, limit=20)
-                        nodes[action_name] = {
-                            "record_count": record_count,
-                            "files": preview_result.get("files", []),
-                            "preview": preview_result.get("records", []),
-                        }
-                    except Exception as e:
-                        logger.debug(
-                            "Failed to preview target for %s: %s", action_name, e, exc_info=True
-                        )
-                        nodes[action_name] = {
-                            "record_count": record_count,
-                            "files": [],
-                            "preview": [],
-                        }
-
-                workflow_data[workflow_name] = {
-                    "db_path": str(db_file),
-                    "db_size": stats.get("db_size_human", "0 B"),
-                    "source_count": stats.get("source_count", 0),
-                    "target_count": stats.get("target_count", 0),
-                    "nodes": nodes,
-                }
+                    logger.debug("Failed to scan workflow DB %s: %s", db_file, e, exc_info=True)
 
         return workflow_data
+
+    @staticmethod
+    def _scan_sqlite_readonly(db_file: Path, workflow_name: str) -> Optional[Dict[str, Any]]:
+        """Open a workflow SQLite DB read-only and extract stats + preview data.
+
+        Uses a direct sqlite3 connection in read-only mode so that scanning
+        never modifies the database (safe on read-only mounts/checkouts).
+
+        Tries ``mode=ro`` first so WAL data from active writers is visible.
+        Falls back to ``immutable=1`` when the filesystem is truly read-only
+        (``mode=ro`` still attempts WAL sidecar writes and raises
+        ``OperationalError`` on read-only mounts).
+        """
+        import json as _json
+        import sqlite3
+
+        # Percent-encode the path so that # and ? in directory names
+        # are treated as path bytes, not URI fragment/query separators.
+        import urllib.parse
+
+        # as_posix() ensures forward slashes on all platforms (Windows included).
+        posix_path = db_file.as_posix()
+        # Guarantee the path starts with / so file://{path} always has an
+        # empty URI authority.  Unix paths already start with /; Windows
+        # drive paths (C:/...) do not; UNC paths (//server/...) are fine.
+        if not posix_path.startswith("/"):
+            posix_path = "/" + posix_path
+        encoded_path = urllib.parse.quote(posix_path, safe="/:")
+
+        # mode=ro sees live WAL data; immutable=1 skips WAL but works on
+        # read-only filesystems.  Try the richer mode first.
+        ro_uri = f"file://{encoded_path}?mode=ro"
+        try:
+            conn = sqlite3.connect(ro_uri, uri=True)
+            conn.row_factory = sqlite3.Row
+            # Probe to surface WAL sidecar errors early.
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+        except sqlite3.OperationalError:
+            conn = sqlite3.connect(f"file://{encoded_path}?immutable=1", uri=True)
+            conn.row_factory = sqlite3.Row
+        try:
+            cursor = conn.cursor()
+
+            # Source count
+            cursor.execute("SELECT COUNT(*) as count FROM source_data")
+            source_count = cursor.fetchone()["count"]
+
+            # Target counts per node
+            cursor.execute(
+                "SELECT action_name, SUM(record_count) as count "
+                "FROM target_data GROUP BY action_name ORDER BY action_name"
+            )
+            node_counts = {row["action_name"]: row["count"] for row in cursor.fetchall()}
+
+            # Total target count
+            cursor.execute("SELECT SUM(record_count) as count FROM target_data")
+            row = cursor.fetchone()
+            target_count = row["count"] if row["count"] else 0
+
+            # DB size
+            db_size = db_file.stat().st_size if db_file.exists() else 0
+
+            # Preview records per node
+            nodes = {}
+            for action_name, record_count in node_counts.items():
+                # Collect ALL files for this action (no limit)
+                cursor.execute(
+                    "SELECT DISTINCT relative_path FROM target_data "
+                    "WHERE action_name = ? ORDER BY relative_path",
+                    (action_name,),
+                )
+                files = [row["relative_path"] for row in cursor.fetchall()]
+
+                # Preview: iterate the cursor lazily so we never load every
+                # data blob into memory.  Cap at 20 flattened records.
+                cursor.execute(
+                    "SELECT relative_path, data FROM target_data WHERE action_name = ?",
+                    (action_name,),
+                )
+                records: list[dict] = []
+                for target_row in cursor:
+                    if len(records) >= 20:
+                        break
+                    try:
+                        row_data = _json.loads(target_row["data"])
+                    except (ValueError, _json.JSONDecodeError):
+                        logger.debug(
+                            "Skipping malformed JSON in %s node %s, file %s",
+                            workflow_name,
+                            action_name,
+                            target_row["relative_path"],
+                        )
+                        continue
+                    file_path = target_row["relative_path"]
+                    if isinstance(row_data, list):
+                        for item in row_data:
+                            if len(records) >= 20:
+                                break
+                            if isinstance(item, dict):
+                                records.append({**item, "_file": file_path})
+                            else:
+                                records.append({"_file": file_path, "_value": item})
+                    elif isinstance(row_data, dict):
+                        records.append({**row_data, "_file": file_path})
+                    else:
+                        records.append({"_file": file_path, "_value": row_data})
+                nodes[action_name] = {
+                    "record_count": record_count,
+                    "files": files,
+                    "preview": records,
+                }
+
+            # Format size
+            if db_size < 1024:
+                size_human = f"{db_size} B"
+            elif db_size < 1024 * 1024:
+                size_human = f"{db_size / 1024:.1f} KB"
+            elif db_size < 1024 * 1024 * 1024:
+                size_human = f"{db_size / (1024 * 1024):.1f} MB"
+            elif db_size < 1024 * 1024 * 1024 * 1024:
+                size_human = f"{db_size / (1024 * 1024 * 1024):.1f} GB"
+            else:
+                size_human = f"{db_size / (1024 * 1024 * 1024 * 1024):.1f} TB"
+
+            return {
+                "db_path": str(db_file),
+                "db_size": size_human,
+                "source_count": source_count,
+                "target_count": target_count,
+                "nodes": nodes,
+            }
+        finally:
+            conn.close()
 
     def scan_runs(self) -> Dict[str, Any]:
         """

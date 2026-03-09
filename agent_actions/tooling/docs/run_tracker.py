@@ -6,6 +6,7 @@ Records workflow execution data to artefact/runs.json for the docs UI.
 
 import functools
 import json
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,6 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Type
 
 import portalocker
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.config.defaults import LockDefaults
 
@@ -104,36 +107,6 @@ class RunTracker:
         """
         self.artefact_dir = artefact_dir or Path.cwd() / "artefact"
         self.runs_file = self.artefact_dir / "runs.json"
-
-    def _load_existing_runs(self) -> Dict[str, Any]:
-        """Load existing runs data or create new structure with file locking."""
-        if self.runs_file.exists():
-            try:
-                with portalocker.Lock(
-                    self.runs_file, "r", timeout=LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS
-                ) as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, IOError, portalocker.exceptions.LockException):
-                # If file is corrupted or locked, start fresh
-                pass
-
-        # Return empty structure
-        return _empty_runs_data()
-
-    def _save_runs(self, runs_data: Dict[str, Any]) -> None:
-        """Save runs data to file with file locking to prevent concurrent write issues."""
-        # Ensure directory exists
-        self.artefact_dir.mkdir(parents=True, exist_ok=True)
-
-        # Update metadata
-        runs_data["metadata"]["generated_at"] = datetime.now().isoformat()
-        runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
-
-        # Write to file with exclusive lock
-        with portalocker.Lock(
-            self.runs_file, "w", timeout=LockDefaults.SIMPLE_LOCK_TIMEOUT_SECONDS
-        ) as f:
-            json.dump(runs_data, f, indent=2)
 
     def record_run(self, *, config: RunConfig) -> str:
         """
@@ -242,7 +215,7 @@ class RunTracker:
 
     def update_run(self, run_id: str, updates: Optional[Dict[str, Any]] = None) -> bool:
         """
-        Update an existing run record.
+        Update an existing run record with atomic file locking.
 
         Args:
             run_id: ID of the run to update
@@ -254,14 +227,30 @@ class RunTracker:
         if updates is None:
             updates = {}
 
-        runs_data = self._load_existing_runs()
+        if not self.runs_file.exists():
+            return False
 
-        # Find the run
-        for run in runs_data["executions"]:
-            if run["id"] == run_id:
-                self._apply_run_updates(run, updates)
-                self._save_runs(runs_data)
-                return True
+        # Atomic read-modify-write with exclusive lock.
+        # LOCK_NB lets portalocker retry until timeout instead of blocking
+        # indefinitely at the OS level.
+        try:
+            with portalocker.Lock(
+                self.runs_file,
+                "r+",
+                timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+                flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+            ) as f:
+                runs_data = self._load_runs_data_from_file(f)
+
+                # Find the run
+                for run in runs_data["executions"]:
+                    if run["id"] == run_id:
+                        self._apply_run_updates(run, updates)
+                        self._write_runs_data_to_file(f, runs_data)
+                        return True
+        except portalocker.exceptions.LockException:
+            logger.warning("Could not acquire lock on %s within timeout", self.runs_file)
+            return False
 
         return False
 
