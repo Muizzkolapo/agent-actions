@@ -312,3 +312,42 @@ class TestDispositionMethods:
         """Test get_disposition returns empty list for non-existent node."""
         results = backend.get_disposition("nonexistent")
         assert results == []
+
+    def test_invalid_disposition_rejected(self, backend):
+        """Test that set_disposition rejects unknown disposition strings."""
+        with pytest.raises(ValueError, match="Invalid disposition"):
+            backend.set_disposition("node_1", "rec_1", "typo_disposition")
+
+
+class TestValidation:
+    """Tests for input validation and safety checks."""
+
+    def test_connection_raises_if_not_initialized(self, tmp_path):
+        """Test that accessing connection before initialize() raises RuntimeError."""
+        backend = SQLiteBackend(str(tmp_path / "test.db"), "wf")
+        with pytest.raises(RuntimeError, match="not initialized"):
+            _ = backend.connection
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        """Create a fresh SQLite backend for testing."""
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_path_traversal_rejected_in_write_target(self, backend):
+        """Test that path traversal components are rejected."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            backend.write_target("node_1", "../../etc/passwd", [{}])
+
+    def test_path_traversal_rejected_in_action_name(self, backend):
+        """Test that path traversal is also rejected in action_name."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            backend.write_target("../evil", "file.json", [{}])
+
+    def test_path_with_dots_but_no_traversal_allowed(self, backend):
+        """Test that paths with dots (but not ..) are still valid."""
+        backend.write_target("node_1", "file.v2.json", [{"id": 1}])
+        assert backend.read_target("node_1", "file.v2.json") == [{"id": 1}]

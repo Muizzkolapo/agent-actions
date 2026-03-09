@@ -16,6 +16,17 @@ DISPOSITION_EXHAUSTED = "exhausted"
 DISPOSITION_FAILED = "failed"
 DISPOSITION_UNPROCESSED = "unprocessed"
 
+VALID_DISPOSITIONS = frozenset(
+    {
+        DISPOSITION_PASSTHROUGH,
+        DISPOSITION_SKIPPED,
+        DISPOSITION_FILTERED,
+        DISPOSITION_EXHAUSTED,
+        DISPOSITION_FAILED,
+        DISPOSITION_UNPROCESSED,
+    }
+)
+
 
 class StorageBackend(ABC):
     """
@@ -55,7 +66,7 @@ class StorageBackend(ABC):
         or other infrastructure required by the backend.
 
         Raises:
-            StorageError: If initialization fails
+            Exception: Backend-specific error (e.g., sqlite3.Error)
         """
         ...
 
@@ -73,7 +84,7 @@ class StorageBackend(ABC):
             str: Identifier or path for the written data
 
         Raises:
-            StorageError: If write fails
+            Exception: Backend-specific error (e.g., sqlite3.Error)
         """
         ...
 
@@ -90,7 +101,7 @@ class StorageBackend(ABC):
             List of records from the target data
 
         Raises:
-            StorageError: If read fails
+            Exception: Backend-specific error (e.g., sqlite3.Error)
             FileNotFoundError: If the target data doesn't exist
         """
         ...
@@ -117,7 +128,7 @@ class StorageBackend(ABC):
             str: Identifier or path for the written data
 
         Raises:
-            StorageError: If write fails
+            Exception: Backend-specific error (e.g., sqlite3.Error)
         """
         ...
 
@@ -133,7 +144,7 @@ class StorageBackend(ABC):
             List of source records
 
         Raises:
-            StorageError: If read fails
+            Exception: Backend-specific error (e.g., sqlite3.Error)
             FileNotFoundError: If the source data doesn't exist
         """
         ...

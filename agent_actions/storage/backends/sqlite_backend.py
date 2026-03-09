@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 from agent_actions.config.defaults import StorageDefaults
-from agent_actions.storage.backend import StorageBackend
+from agent_actions.storage.backend import StorageBackend, VALID_DISPOSITIONS
 
 logger = logging.getLogger(__name__)
 
@@ -18,15 +18,16 @@ class SQLiteBackend(StorageBackend):
     SQLite-based storage backend.
 
     Stores source and target data in a single SQLite database file
-    per workflow, located at: {workflow}/agent_io/{workflow_name}.db
+    per workflow, located at: {workflow}/agent_io/target/{workflow_name}.db
 
     Tables:
         source_data: Stores source records with deduplication by source_guid
         target_data: Stores target records organized by action_name
 
     Thread Safety:
-        Uses WAL mode for better concurrency. Each connection should be
-        used from a single thread.
+        Single shared connection with check_same_thread=False.
+        Writes are serialized via threading.Lock; reads are concurrent
+        (WAL mode handles read concurrency safely).
     """
 
     # SQL schema for source_data table
@@ -72,9 +73,6 @@ class SQLiteBackend(StorageBackend):
     SOURCE_INDEX_SQL = """
         CREATE INDEX IF NOT EXISTS idx_source_path ON source_data(relative_path)
     """
-    TARGET_INDEX_SQL = """
-        CREATE INDEX IF NOT EXISTS idx_target_node_path ON target_data(action_name, relative_path)
-    """
     DISPOSITION_INDEX_ACTION_SQL = """
         CREATE INDEX IF NOT EXISTS idx_disp_action ON record_disposition(action_name)
     """
@@ -83,6 +81,17 @@ class SQLiteBackend(StorageBackend):
     """
     DISPOSITION_INDEX_ACTION_RECORD_SQL = """
         CREATE INDEX IF NOT EXISTS idx_disp_action_record ON record_disposition(action_name, record_id)
+    """
+
+    _INSERT_SOURCE_IGNORE_SQL = """
+        INSERT OR IGNORE INTO source_data
+        (relative_path, source_guid, data, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    """
+    _INSERT_SOURCE_REPLACE_SQL = """
+        INSERT OR REPLACE INTO source_data
+        (relative_path, source_guid, data, created_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
     """
 
     # Valid characters for identifiers (node names, paths)
@@ -123,6 +132,8 @@ class SQLiteBackend(StorageBackend):
             raise ValueError(f"Empty {field} not allowed")
         # Normalize to POSIX separators for cross-platform consistency
         name = name.replace("\\", "/")
+        if ".." in name.split("/"):
+            raise ValueError(f"Path traversal ('..') not allowed in {field}")
         if not all(c in self._VALID_IDENTIFIER_CHARS for c in name):
             invalid = set(name) - self._VALID_IDENTIFIER_CHARS
             raise ValueError(f"Invalid characters in {field}: {invalid}")
@@ -133,37 +144,37 @@ class SQLiteBackend(StorageBackend):
         """Return the backend type identifier."""
         return "sqlite"
 
+    def _open_connection(self) -> None:
+        """Create and configure the database connection."""
+        if self._connection is not None:
+            return
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._connection = sqlite3.connect(
+            str(self.db_path),
+            check_same_thread=False,
+            timeout=StorageDefaults.SQLITE_LOCK_TIMEOUT_SECONDS,
+        )
+        self._connection.execute("PRAGMA journal_mode=WAL")
+        self._connection.execute("PRAGMA foreign_keys=ON")
+        self._connection.row_factory = sqlite3.Row
+
     @property
     def connection(self) -> sqlite3.Connection:
-        """Get or create database connection."""
+        """Get the database connection. Raises if not initialized."""
         if self._connection is None:
-            # Ensure parent directory exists
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
-            self._connection = sqlite3.connect(
-                str(self.db_path),
-                check_same_thread=False,  # Allow sharing across threads
-                timeout=StorageDefaults.SQLITE_LOCK_TIMEOUT_SECONDS,
-            )
-            # Enable WAL mode for better concurrency
-            self._connection.execute("PRAGMA journal_mode=WAL")
-            # Enable foreign keys
-            self._connection.execute("PRAGMA foreign_keys=ON")
-            # Return rows as sqlite3.Row for dict-like access
-            self._connection.row_factory = sqlite3.Row
-
+            raise RuntimeError("Backend not initialized. Call initialize() first.")
         return self._connection
 
     def initialize(self) -> None:
-        """Create tables and indexes if they don't exist."""
+        """Create connection, tables, and indexes."""
         with self._lock:
+            self._open_connection()
             cursor = self.connection.cursor()
             try:
                 cursor.execute(self.SOURCE_TABLE_SQL)
                 cursor.execute(self.TARGET_TABLE_SQL)
                 cursor.execute(self.DISPOSITION_TABLE_SQL)
                 cursor.execute(self.SOURCE_INDEX_SQL)
-                cursor.execute(self.TARGET_INDEX_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_DISP_SQL)
                 cursor.execute(self.DISPOSITION_INDEX_ACTION_RECORD_SQL)
@@ -174,6 +185,7 @@ class SQLiteBackend(StorageBackend):
                     extra={"workflow_name": self.workflow_name},
                 )
             except sqlite3.Error as e:
+                self.connection.rollback()
                 logger.error(
                     "Failed to initialize SQLite backend: %s",
                     e,
@@ -223,6 +235,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 return f"{action_name}:{relative_path}"
             except sqlite3.Error as e:
+                self.connection.rollback()
                 logger.error(
                     "Failed to write target data: %s",
                     e,
@@ -303,18 +316,12 @@ class SQLiteBackend(StorageBackend):
 
                     data_json = json.dumps(item, ensure_ascii=False)
 
-                    # conflict_clause is a controlled literal, not user input
-                    # IGNORE: skip if (relative_path, source_guid) exists (dedup)
-                    # REPLACE: overwrite existing record (no dedup)
-                    conflict_clause = "IGNORE" if enable_deduplication else "REPLACE"
-                    cursor.execute(
-                        f"""
-                        INSERT OR {conflict_clause} INTO source_data
-                        (relative_path, source_guid, data, created_at)
-                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                        """,
-                        (relative_path, source_guid, data_json),
+                    sql = (
+                        self._INSERT_SOURCE_IGNORE_SQL
+                        if enable_deduplication
+                        else self._INSERT_SOURCE_REPLACE_SQL
                     )
+                    cursor.execute(sql, (relative_path, source_guid, data_json))
                     # rowcount=0 only when IGNORE skips a duplicate
                     if cursor.rowcount > 0:
                         inserted_count += 1
@@ -331,6 +338,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 return relative_path
             except sqlite3.Error as e:
+                self.connection.rollback()
                 logger.error(
                     "Failed to write source data: %s",
                     e,
@@ -582,6 +590,10 @@ class SQLiteBackend(StorageBackend):
     ) -> None:
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
+        if disposition not in VALID_DISPOSITIONS:
+            raise ValueError(
+                f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
+            )
 
         with self._lock:
             cursor = self.connection.cursor()
@@ -603,6 +615,7 @@ class SQLiteBackend(StorageBackend):
                     extra={"workflow_name": self.workflow_name},
                 )
             except sqlite3.Error as e:
+                self.connection.rollback()
                 logger.error(
                     "Failed to set disposition: %s",
                     e,
@@ -628,7 +641,7 @@ class SQLiteBackend(StorageBackend):
             "SELECT action_name, record_id, disposition, reason, relative_path, created_at"
             " FROM record_disposition WHERE action_name = ?"
         )
-        params: list = [action_name]
+        params: list[str] = [action_name]
 
         if record_id is not None:
             query += " AND record_id = ?"
@@ -653,7 +666,7 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
 
         query = "SELECT 1 FROM record_disposition WHERE action_name = ? AND disposition = ?"
-        params: list = [action_name, disposition]
+        params: list[str] = [action_name, disposition]
 
         if record_id is not None:
             query += " AND record_id = ?"
@@ -675,7 +688,7 @@ class SQLiteBackend(StorageBackend):
         action_name = self._validate_identifier(action_name, "action_name")
 
         query = "DELETE FROM record_disposition WHERE action_name = ?"
-        params: list = [action_name]
+        params: list[str] = [action_name]
 
         if disposition is not None:
             query += " AND disposition = ?"
@@ -699,6 +712,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 return deleted
             except sqlite3.Error as e:
+                self.connection.rollback()
                 logger.error(
                     "Failed to clear dispositions: %s",
                     e,
