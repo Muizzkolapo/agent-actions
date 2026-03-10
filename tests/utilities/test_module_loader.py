@@ -52,6 +52,8 @@ def cleanup_caches():
         "no_exec_module",
         "transient_missing",
         "cached_missing",
+        "broken_exec",
+        "fallback_ok",
     )
     modules_to_remove = [
         name
@@ -458,3 +460,42 @@ def foo():
 
     # Other modules should still be loaded
     assert "sample_module" in registry
+
+
+# ==============================================================================
+# Test path_load_failed semantic: fallback blocked for broken code only
+# ==============================================================================
+
+
+def test_broken_module_blocks_fallback(tmp_path):
+    """exec_module failure blocks fallback — broken code must not be masked."""
+    broken = tmp_path / "broken_exec.py"
+    broken.write_text("raise RuntimeError('deliberate failure')")
+
+    module = load_module_from_path("broken_exec", broken, fallback_import=True, cache=False)
+    # Module code is broken ⇒ fallback must NOT silently replace it
+    assert module is None
+    assert "broken_exec" not in sys.modules
+
+
+def test_missing_path_allows_fallback(tmp_path):
+    """Path resolution failure still allows fallback_import to succeed."""
+    # Create a module importable via sys.path but NOT at the given path
+    real_module = tmp_path / "fallback_ok.py"
+    real_module.write_text("VALUE = 'from_fallback'")
+
+    # Put the real module on sys.path
+    sys.path.insert(0, str(tmp_path))
+    try:
+        # Give a non-existent path — path resolution fails, fallback should fire
+        module = load_module_from_path(
+            "fallback_ok",
+            tmp_path / "wrong_dir" / "fallback_ok.py",
+            fallback_import=True,
+            cache=False,
+        )
+        assert module is not None
+        assert module.VALUE == "from_fallback"
+    finally:
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("fallback_ok", None)

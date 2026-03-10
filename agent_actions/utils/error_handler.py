@@ -109,13 +109,12 @@ class ErrorHandler:
             FileLoadError or FileSystemError: With appropriate message.
         """
 
-        if isinstance(error, (FileNotFoundError, IOError, OSError)):
-            if not error.args or "No such file" in str(error):
-                error_type = FileLoadError
-            else:
-                error_type = FileSystemError
+        if isinstance(error, FileNotFoundError):
+            error_type = FileLoadError
+        elif isinstance(error, OSError):
+            error_type = FileSystemError
         else:
-            error_type = None
+            error_type = FileSystemError
         message = f"File operation '{operation}' failed for path: {path}"
         ErrorHandler.handle_error(error, message, error_type, context)
 

@@ -43,10 +43,14 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         passthrough_fields: Optional[Dict] = None,
     ) -> List:
         """Merge passthrough fields into each item's content."""
+        result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
-                item["content"].update(passthrough_fields)
-        return data
+                merged = {**item, "content": {**item["content"], **passthrough_fields}}
+                result.append(merged)
+            else:
+                result.append(item)
+        return result
 
 
 class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):

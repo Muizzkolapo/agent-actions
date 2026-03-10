@@ -1,11 +1,5 @@
 # UDF Management Manifest
 
-## Sub-Modules
-
-| Sub-Module | Description |
-|------------|-------------|
-| [type_conversion](type_conversion/_MANIFEST.md) | Helpers for turning Python type hints into the unified schema used by `@udf_tool`. |
-
 ## Modules
 
 | Name | Type | Description | Signals |

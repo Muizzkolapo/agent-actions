@@ -57,7 +57,7 @@ class PassthroughTransformer:
         context_data: Dict,
         source_guid: str,
         agent_config: Dict,
-        idx: int = 0,
+        action_name: str = "unknown_action",
         passthrough_fields: Optional[Dict] = None,
         metadata: Optional[Dict] = None,
     ) -> List:
@@ -74,7 +74,7 @@ class PassthroughTransformer:
             context_data: Context data dictionary containing fields
             source_guid: Source GUID
             agent_config: Agent configuration containing context_scope
-            idx: Index for node generation
+            action_name: Action name for node_id generation
             passthrough_fields: Optional pre-computed passthrough fields
                                from field_context. If provided, these
                                values will be used instead of extracting
@@ -104,7 +104,9 @@ class PassthroughTransformer:
 
         # Step 4: Ensure all items have required fields and add metadata
         return [
-            self.field_manager.ensure_required_fields(obj, source_guid, idx, metadata=metadata)
+            self.field_manager.ensure_required_fields(
+                obj, source_guid, action_name, metadata=metadata
+            )
             for obj in output
         ]
 

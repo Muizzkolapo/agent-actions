@@ -17,7 +17,6 @@ class ProcessItemRequest:
     contents: Dict
     generated_data: List[Dict]
     source_guid: str
-    idx: int = 0
     passthrough_fields: Optional[Dict] = None
 
 
@@ -51,6 +50,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
                 contents,
                 source_guid,
                 self.agent_config,
+                action_name=self.agent_config.get("name", "unknown_action"),
                 passthrough_fields=passthrough_fields,
             )
         except (ValueError, TypeError, KeyError) as e:

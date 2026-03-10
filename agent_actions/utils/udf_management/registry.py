@@ -178,13 +178,13 @@ def get_udf(func_name: str) -> Callable:
 def get_udf_metadata(func_name: str) -> Dict[str, Any]:
     """
     Get complete UDF metadata including schema and granularity.
-    Thread-safe. Returns direct reference - callers should not mutate.
+    Thread-safe. Returns a shallow copy to prevent accidental registry mutation.
 
     Args:
         func_name: Name of the function
 
     Returns:
-        Dictionary containing all metadata (read-only reference)
+        Dictionary containing all metadata
 
     Raises:
         FunctionNotFoundError: If function not found
@@ -197,7 +197,7 @@ def get_udf_metadata(func_name: str) -> Dict[str, Any]:
                 f"Function '{func_name}' not found",
                 context={"function_name": func_name, "available_functions": available},
             )
-        return UDF_REGISTRY[func_name_lower]
+        return UDF_REGISTRY[func_name_lower].copy()
 
 
 def list_udfs() -> List[Dict[str, Any]]:

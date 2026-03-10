@@ -184,16 +184,34 @@ class MetadataExtractor:
 
     @classmethod
     def _extract_usage(cls, response: Dict[str, Any]) -> Optional[Dict[str, int]]:
-        """Extract token usage information from response."""
+        """Extract token usage information from response.
+
+        Supports both OpenAI-style keys (prompt_tokens, completion_tokens,
+        total_tokens) and Anthropic-style keys (input_tokens, output_tokens).
+        """
         usage = response.get("usage")
         if not usage:
             return None
 
         if isinstance(usage, dict):
+            # Support both OpenAI and Anthropic key names.
+            # Use `in` checks rather than `or` to avoid treating 0 as falsy.
+            prompt = (
+                usage.get("prompt_tokens")
+                if "prompt_tokens" in usage
+                else usage.get("input_tokens", 0)
+            ) or 0  # guard against explicit None
+            completion = (
+                usage.get("completion_tokens")
+                if "completion_tokens" in usage
+                else usage.get("output_tokens", 0)
+            ) or 0  # guard against explicit None
+            total = usage.get("total_tokens") if "total_tokens" in usage else (prompt + completion)
+            total = total or 0
             return {
-                "prompt_tokens": usage.get("prompt_tokens", 0),
-                "completion_tokens": usage.get("completion_tokens", 0),
-                "total_tokens": usage.get("total_tokens", 0),
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "total_tokens": total,
             }
 
         return None

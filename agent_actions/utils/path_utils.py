@@ -228,24 +228,20 @@ def safe_path_join(*parts: Union[str, Path]) -> Path:
     return resolved_path
 
 
-def create_agent_directory_structure(
-    agent_name: str, base_path: Optional[Path] = None
-) -> dict[str, Path]:
+def create_agent_directory_structure(agent_name: str) -> dict[str, Path]:
     """
     Create standard agent directory structure.
 
     This consolidates the agent directory creation logic.
+    Directories are created under the project root as resolved by PathManager.
 
     Args:
         agent_name: Name of the agent
-        base_path: Base path for agent directories (defaults to project root)
 
     Returns:
         Dictionary of created directory paths
     """
     pm = get_path_manager()
-    if base_path is None:
-        base_path = pm.get_project_root()
     agent_paths = pm.get_agent_paths(agent_name)
     created_paths = {}
     for name, path in agent_paths.items():

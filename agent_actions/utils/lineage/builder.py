@@ -112,30 +112,6 @@ class LineageBuilder:
         return obj
 
     @staticmethod
-    def add_context_lineage_tracking(obj: Dict, context_data: Any, node_id: str) -> Dict:
-        """
-        Add lineage tracking to an object based on context data.
-
-        Also propagates Ancestry Chain fields from context_data.
-
-        Args:
-            obj: Object to add lineage to
-            context_data: Context data that may contain lineage
-            node_id: Node ID to append to lineage
-
-        Returns:
-            Object with lineage tracking added
-        """
-        obj = obj.copy()
-        obj["node_id"] = node_id
-        if isinstance(context_data, dict) and "lineage" in context_data:
-            obj["lineage"] = context_data["lineage"] + [node_id]
-            LineageBuilder._propagate_ancestry_chain(obj, context_data)
-        else:
-            obj["lineage"] = [node_id]
-        return obj
-
-    @staticmethod
     def add_lineage_tracking_from_sources(
         obj: Dict, source_items: List[Dict], node_id: str
     ) -> Dict:
@@ -198,10 +174,6 @@ class LineageBuilder:
     def add_unified_lineage(obj: Dict, node_id: str, parent_item: Dict = None) -> Dict:
         """
         Unified lineage method for both first-stage and subsequent-stage.
-
-        Replaces:
-        - add_lineage_tracking() (subsequent-stage)
-        - add_context_lineage_tracking() (first-stage)
 
         This method adds lineage tracking, node_id, and ancestry chain fields
         to an object based on an optional parent item.

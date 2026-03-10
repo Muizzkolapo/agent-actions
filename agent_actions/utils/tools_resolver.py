@@ -83,8 +83,15 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
                                     "Resolved tools_path from OpenAI tool config: %s", module_path
                                 )
                                 return module_path
-                    except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
-                        logger.warning("Failed to load tool config from %s: %s", tool_file_path, e)
+                    except (
+                        yaml.YAMLError,
+                        FileNotFoundError,
+                        PermissionError,
+                        IsADirectoryError,
+                    ) as e:
+                        logger.warning(
+                            "Failed to load tool config from %s: %s", function_def.get("file"), e
+                        )
 
     logger.debug("No tools_path found in agent_config")
     return None

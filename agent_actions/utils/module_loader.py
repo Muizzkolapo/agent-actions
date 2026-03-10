@@ -292,6 +292,7 @@ def load_module_from_path(
         )
 
         module = None
+        path_load_failed = False
 
         # Try loading from path if provided
         if module_path:
@@ -323,13 +324,28 @@ def load_module_from_path(
                         sys.modules[module_name] = module
 
                         if execute:
-                            # Execute module (triggers decorator registration)
-                            spec.loader.exec_module(module)
-                            logger.debug(
-                                "Loaded and executed module: %s from %s",
-                                module_name,
-                                module_path_obj,
-                            )
+                            try:
+                                # Execute module (triggers decorator registration)
+                                spec.loader.exec_module(module)
+                            except Exception as e:
+                                # Module file found but its code is broken.
+                                # Clean up and block fallback so a different
+                                # same-named package doesn't silently replace it.
+                                sys.modules.pop(module_name, None)
+                                logger.warning(
+                                    "Failed to execute module %s from %s: %s",
+                                    module_name,
+                                    module_path_obj,
+                                    e,
+                                )
+                                module = None
+                                path_load_failed = True
+                            else:
+                                logger.debug(
+                                    "Loaded and executed module: %s from %s",
+                                    module_name,
+                                    module_path_obj,
+                                )
                         else:
                             logger.debug(
                                 "Loaded module (not executed): %s from %s",
@@ -342,11 +358,15 @@ def load_module_from_path(
                         )
 
             except Exception as e:
+                # Path resolution or spec creation failed — the file couldn't
+                # be located.  Clean up but allow fallback_import to try a
+                # normal import (the module may be importable via sys.path).
+                sys.modules.pop(module_name, None)
                 logger.warning("Failed to load module %s from path: %s", module_name, e)
                 module = None
 
-        # Fallback to standard import
-        if module is None and fallback_import:
+        # Fallback to standard import (skip when a path-based load raised)
+        if module is None and fallback_import and not path_load_failed:
             try:
                 module = importlib.import_module(module_name)
                 logger.debug("Loaded module via standard import: %s", module_name)
@@ -415,11 +435,11 @@ def discover_and_load_udfs(
     user_code_path = Path(user_code_path).absolute()
 
     if not user_code_path.exists():
-        logger.warning(f"User code path does not exist: {user_code_path}")
+        logger.warning("User code path does not exist: %s", user_code_path)
         return {}
 
     if not user_code_path.is_dir():
-        logger.warning(f"User code path is not a directory: {user_code_path}")
+        logger.warning("User code path is not a directory: %s", user_code_path)
         return {}
 
     # Ensure path is importable
@@ -446,7 +466,7 @@ def discover_and_load_udfs(
         if module:
             registry[module_name] = {"module": module, "path": py_file}
 
-    logger.info(f"Discovered and loaded {len(registry)} modules from {user_code_path}")
+    logger.info("Discovered and loaded %d modules from %s", len(registry), user_code_path)
     return registry
 
 
@@ -484,11 +504,11 @@ def discover_and_load_udfs_recursive(
     user_code_path = Path(user_code_path).absolute()
 
     if not user_code_path.exists():
-        logger.warning(f"User code path does not exist: {user_code_path}")
+        logger.warning("User code path does not exist: %s", user_code_path)
         return {}
 
     if not user_code_path.is_dir():
-        logger.warning(f"User code path is not a directory: {user_code_path}")
+        logger.warning("User code path is not a directory: %s", user_code_path)
         return {}
 
     # Ensure path is importable
@@ -531,5 +551,7 @@ def discover_and_load_udfs_recursive(
         if module:
             registry[module_name] = {"module": module, "path": py_file}
 
-    logger.info(f"Discovered and loaded {len(registry)} modules from {user_code_path} (recursive)")
+    logger.info(
+        "Discovered and loaded %d modules from %s (recursive)", len(registry), user_code_path
+    )
     return registry

@@ -299,7 +299,7 @@ def transform_with_passthrough(
     context_data: dict[str, Any],
     source_guid: str,
     agent_config: dict[str, Any],
-    idx: int = 0,
+    action_name: str = "unknown_action",
     passthrough_fields: Optional[dict[str, Any]] = None,
     metadata: Optional[dict[str, Any]] = None,
 ) -> list[Any]:
@@ -310,7 +310,7 @@ def transform_with_passthrough(
         context_data: Context data dictionary containing fields
         source_guid: Source GUID
         agent_config: Agent configuration containing context_scope
-        idx: Index for node generation
+        action_name: Action name for node_id generation
         passthrough_fields: Optional pre-computed passthrough fields
         metadata: Optional LLM response metadata to add to output items
 
@@ -323,7 +323,7 @@ def transform_with_passthrough(
         context_data,
         source_guid,
         agent_config,
-        idx,
+        action_name,
         passthrough_fields=passthrough_fields,
         metadata=metadata,
     )

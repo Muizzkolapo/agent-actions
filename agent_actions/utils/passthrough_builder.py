@@ -119,9 +119,10 @@ class PassthroughItemBuilder:
 
         # Add mode-specific metadata
         if mode == "online":
-            # Online mode: Use new reason-based metadata
+            # Online mode: Use reason string plus the matching legacy flag
             processed_item["metadata"]["reason"] = reason
-            processed_item["metadata"]["skipped_by_where_clause"] = True
+            flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
+            processed_item["metadata"][flag_name] = True
         else:  # batch
             # Batch mode: Use legacy flag-based metadata for backward compatibility
             flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)

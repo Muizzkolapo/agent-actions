@@ -609,6 +609,7 @@ class RecordProcessor:
             content,
             source_guid,
             context.agent_config,
+            action_name=context.action_name,
             passthrough_fields=passthrough_fields,
         )
 
