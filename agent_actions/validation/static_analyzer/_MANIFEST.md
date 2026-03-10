@@ -91,6 +91,7 @@
 | `SchemaExtractor` | Class | Extracts output schemas from various agent types. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_schema` | Method | Extract output schema from agent config. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_input_schema` | Method | Extract input schema from agent config. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_fields_from_json_schema` | Method | Extract top-level field names from a JSON schema dict. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `extract_from_workflow` | Method | Extract schemas from all agents in a workflow. | - |
 | `type_checker.py` | Module | Static type checker for workflow field references. | - |
 | `StaticTypeChecker` | Class | Performs static type checking on workflow data flow graph. | - |

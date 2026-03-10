@@ -27,7 +27,7 @@ from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationStartEvent, ValidationCompleteEvent
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
-    UDF_REGISTRY,
+    get_udf_metadata,
 )
 
 
@@ -128,9 +128,11 @@ class ValidateUDFsCommand:
             if impl_refs:
                 self.console.print("[bold]Referenced UDFs:[/bold]")
                 for ref in sorted(impl_refs):
-                    udf_meta = UDF_REGISTRY.get(ref.lower())
-                    if udf_meta:
+                    try:
+                        udf_meta = get_udf_metadata(ref)
                         self.console.print(f"  • {ref} ([cyan]{udf_meta['file']}[/cyan])")
+                    except FunctionNotFoundError:
+                        self.console.print(f"  • {ref}")
         except Exception as e:
             error_message = format_user_error(
                 e,
@@ -199,9 +201,11 @@ class ValidateUDFsCommand:
         if available:
             self.console.print(f"[bold]Available functions ({len(available)}):[/bold]")
             for func in available[:10]:
-                udf_meta = UDF_REGISTRY.get(func.lower())
-                if udf_meta:
+                try:
+                    udf_meta = get_udf_metadata(func)
                     self.console.print(f"  • {func} ([cyan]{udf_meta['file']}[/cyan])")
+                except FunctionNotFoundError:
+                    self.console.print(f"  • {func}")
             if len(available) > 10:
                 self.console.print(f"  ... and {len(available) - 10} more\n")
             else:

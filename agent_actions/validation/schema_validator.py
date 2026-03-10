@@ -24,6 +24,33 @@ from agent_actions.validation.base_validator import BaseValidator
 logger = logging.getLogger(__name__)
 
 
+def _find_refs(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
+    """Find all $ref values in a schema object (recursive)."""
+    refs: Set[str] = set()
+    if isinstance(obj, dict):
+        if "$ref" in obj and isinstance(obj["$ref"], str):
+            refs.add(obj["$ref"])
+        for value in obj.values():
+            refs.update(_find_refs(value))
+    elif isinstance(obj, list):
+        for item in obj:
+            refs.update(_find_refs(item))
+    return refs
+
+
+def _collect_all_keys(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
+    """Collect all keys used in a schema object (recursive)."""
+    keys: Set[str] = set()
+    if isinstance(obj, dict):
+        keys.update(obj.keys())
+        for value in obj.values():
+            keys.update(_collect_all_keys(value))
+    elif isinstance(obj, list):
+        for item in obj:
+            keys.update(_collect_all_keys(item))
+    return keys
+
+
 class SchemaValidator(BaseValidator):
     """
     Handles schema validation operations by inheriting from BaseValidator.
@@ -208,7 +235,7 @@ class SchemaValidator(BaseValidator):
         if schema_data.get("type") == "array" and "items" not in schema_data:
             issues.append(f"Schema '{schema_name}' is 'array' type but 'items' is not defined.")
         if "definitions" in schema_data:
-            definition_refs = cls._find_refs_static(schema_data)
+            definition_refs = _find_refs(schema_data)
             unused_defs = [
                 def_name
                 for def_name in schema_data.get("definitions", {})
@@ -219,7 +246,7 @@ class SchemaValidator(BaseValidator):
                 issues.append(
                     f"Schema '{schema_name}' has unused definitions: {', '.join(unused_defs)}."
                 )
-        all_keys = cls._collect_all_keys_static(schema_data)
+        all_keys = _collect_all_keys(schema_data)
         unknown_keys = all_keys - cls.JSON_SCHEMA_RESERVED_KEYWORDS
         acceptable_custom = {
             "examples",
@@ -236,33 +263,6 @@ class SchemaValidator(BaseValidator):
                 f"properties: {', '.join(suspicious_keys)}."
             )
         return issues
-
-    @staticmethod
-    def _find_refs_static(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
-        """Finds all $ref values in a schema object."""
-        refs = set()
-        if isinstance(obj, dict):
-            if "$ref" in obj and isinstance(obj["$ref"], str):
-                refs.add(obj["$ref"])
-            for value in obj.values():
-                refs.update(SchemaValidator._find_refs_static(value))
-        elif isinstance(obj, list):
-            for item in obj:
-                refs.update(SchemaValidator._find_refs_static(item))
-        return refs
-
-    @staticmethod
-    def _collect_all_keys_static(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
-        """Collects all keys used in a schema object."""
-        keys = set()
-        if isinstance(obj, dict):
-            keys.update(obj.keys())
-            for value in obj.values():
-                keys.update(SchemaValidator._collect_all_keys_static(value))
-        elif isinstance(obj, list):
-            for item in obj:
-                keys.update(SchemaValidator._collect_all_keys_static(item))
-        return keys
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """

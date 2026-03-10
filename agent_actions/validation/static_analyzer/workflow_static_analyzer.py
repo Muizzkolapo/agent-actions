@@ -307,7 +307,7 @@ class WorkflowStaticAnalyzer:
         """Add the special source node for workflow input."""
         if self.source_schema:
             # Extract fields from provided source schema
-            fields = self.schema_extractor._extract_fields_from_json_schema(self.source_schema)
+            fields = self.schema_extractor.extract_fields_from_json_schema(self.source_schema)
             schema = OutputSchema(schema_fields=fields)
         else:
             # Source is dynamic - can have any fields
@@ -361,8 +361,8 @@ class WorkflowStaticAnalyzer:
             )
             # All dependencies (both input and context) for graph building
             dependencies = set(input_sources + context_sources)
-        except Exception:
-            # Fallback to old behavior if inference fails
+        except Exception as e:
+            logger.debug("Dependency inference failed for '%s': %s", name, e, exc_info=True)
             deps_list = action_config.get("depends_on") or action_config.get("dependencies", [])
             dependencies = set()
             if isinstance(deps_list, str):

@@ -203,8 +203,6 @@ class SchemaExtractor:
             if field_ref:
                 input_schema.required_fields.add(field_ref)
 
-        return input_schema
-
     def _extract_tool_input_schema(
         self,
         config: Dict[str, Any],
@@ -351,7 +349,7 @@ class SchemaExtractor:
                 loaded = None
             if loaded:
                 output.json_schema = loaded
-                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)
                 return
 
             # Fall back to schema_loader if provided
@@ -359,7 +357,7 @@ class SchemaExtractor:
                 try:
                     loaded = schema_loader.load_schema(schema_name)
                     output.json_schema = loaded
-                    output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                    output.schema_fields = self.extract_fields_from_json_schema(loaded)
                     return
                 except Exception as e:
                     logger.debug(
@@ -390,13 +388,13 @@ class SchemaExtractor:
                 loaded = None
             if loaded:
                 output.json_schema = loaded
-                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)
             elif schema_loader:
                 # Fall back to schema_loader
                 try:
                     loaded = schema_loader.load_schema(schema_def)
                     output.json_schema = loaded
-                    output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                    output.schema_fields = self.extract_fields_from_json_schema(loaded)
                 except Exception as e:
                     logger.debug(
                         "Schema loader fallback failed for '%s': %s", schema_def, e, exc_info=True
@@ -407,7 +405,7 @@ class SchemaExtractor:
         elif isinstance(schema_def, dict):
             # Inline schema
             output.json_schema = schema_def
-            output.schema_fields = self._extract_fields_from_json_schema(schema_def)
+            output.schema_fields = self.extract_fields_from_json_schema(schema_def)
         elif isinstance(schema_def, list):
             # Array of field definitions
             output.json_schema = {"type": "array", "items": schema_def}
@@ -435,7 +433,7 @@ class SchemaExtractor:
                 loaded = None
             if loaded:
                 output.json_schema = loaded
-                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)
                 return
 
         if not schema_def:
@@ -450,12 +448,12 @@ class SchemaExtractor:
                 loaded = None
             if loaded:
                 output.json_schema = loaded
-                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)
             else:
                 output.is_dynamic = True
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
-            output.schema_fields = self._extract_fields_from_json_schema(schema_def)
+            output.schema_fields = self.extract_fields_from_json_schema(schema_def)
         elif isinstance(schema_def, list):
             # List-style unified format: [{id: "name", type: "string"}, ...]
             output.json_schema = {"type": "array", "items": schema_def}
@@ -474,7 +472,7 @@ class SchemaExtractor:
         on the action config — the HITL runtime contract is fixed.
         """
         output.json_schema = HITL_OUTPUT_JSON_SCHEMA
-        output.schema_fields = self._extract_fields_from_json_schema(HITL_OUTPUT_JSON_SCHEMA)
+        output.schema_fields = self.extract_fields_from_json_schema(HITL_OUTPUT_JSON_SCHEMA)
 
     def _apply_context_scope(self, config: Dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema.
@@ -516,9 +514,9 @@ class SchemaExtractor:
             if field_name:
                 output.observe_fields.add(field_name)
 
-        # Additional drops from context_scope
-        scope_drops = context_scope.get("drop", []) or context_scope.get("drops", [])
-        for ref in scope_drops:
+        # Additional drops from context_scope (runtime only reads "drop" key)
+        scope_drops = context_scope.get("drop")
+        for ref in scope_drops or []:  # or [] guards against explicit null (drop: null in config)
             field_name = self._extract_field_name(ref)
             if field_name:
                 output.dropped_fields.add(field_name)
@@ -527,7 +525,7 @@ class SchemaExtractor:
         if config.get("return_collection"):
             output.schema_fields.add("input_data")
 
-    def _extract_fields_from_json_schema(self, schema: Dict[str, Any]) -> Set[str]:
+    def extract_fields_from_json_schema(self, schema: Dict[str, Any]) -> Set[str]:
         """Extract top-level field names from JSON schema.
 
         Handles:

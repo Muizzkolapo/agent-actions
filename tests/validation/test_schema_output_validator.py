@@ -125,6 +125,34 @@ class TestValidateOutputAgainstSchema:
         assert "age" in report.type_errors
         assert report.type_errors["age"] == ("integer", "str")
 
+    def test_bool_rejected_for_integer_type(self):
+        """Test that bool values are rejected for integer type (bool subclasses int in Python)."""
+        schema = {
+            "name": "test_schema",
+            "fields": [{"id": "count", "type": "integer", "required": True}],
+        }
+        output = {"count": True}
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert not report.is_compliant
+        assert "count" in report.type_errors
+        assert report.type_errors["count"] == ("integer", "bool")
+
+    def test_bool_rejected_for_number_type(self):
+        """Test that bool values are rejected for number type (bool subclasses int/float in Python)."""
+        schema = {
+            "name": "test_schema",
+            "fields": [{"id": "score", "type": "number", "required": True}],
+        }
+        output = {"score": False}
+
+        report = validate_output_against_schema(output, schema, "test_action")
+
+        assert not report.is_compliant
+        assert "score" in report.type_errors
+        assert report.type_errors["score"] == ("number", "bool")
+
     def test_json_schema_format(self):
         """Test validation with JSON Schema format."""
         schema = {

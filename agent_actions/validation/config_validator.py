@@ -352,6 +352,7 @@ class ConfigValidator(BaseValidator):
         for n in list(graph):
             if n not in visited:
                 dfs(n)
+                stack.clear()  # Reset for next component (early return leaves stale entries)
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """Run validation based on the operation key in data."""

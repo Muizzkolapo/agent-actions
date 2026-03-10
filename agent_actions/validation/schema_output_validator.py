@@ -276,7 +276,14 @@ def _check_field_types(
             continue  # None is typically allowed for optional fields
 
         expected_python_type = type_map.get(expected_type)
-        if expected_python_type and not isinstance(value, expected_python_type):
+        if expected_python_type is None:
+            continue
+
+        # Python's bool is a subclass of int, so isinstance(True, int)
+        # returns True.  Reject booleans for integer/number checks.
+        if isinstance(value, bool) and expected_type in ("integer", "number"):
+            type_errors[field_name] = (expected_type, "bool")
+        elif not isinstance(value, expected_python_type):
             actual_type = type(value).__name__
             type_errors[field_name] = (expected_type, actual_type)
 
