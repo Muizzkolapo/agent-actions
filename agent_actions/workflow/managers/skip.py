@@ -291,7 +291,7 @@ class SkipEvaluator:
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 
     def should_skip_agent(
-        self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any] = None
+        self, agent_config: Dict[str, Any], previous_outputs: Optional[Dict[str, Any]] = None
     ) -> bool:
         """
         Determine if an agent should be skipped based on skip conditions.

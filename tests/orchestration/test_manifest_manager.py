@@ -486,6 +486,75 @@ class TestThreadSafety:
         for action in actions:
             assert manifest_manager.is_action_completed(action)
 
+    def test_manifest_property_loads_once_under_contention(self, temp_agent_io):
+        """Concurrent access to manifest property should call load_manifest only once."""
+        manager = ManifestManager(temp_agent_io)
+        load_count = 0
+        original_load = manager.load_manifest
+
+        def counting_load():
+            nonlocal load_count
+            load_count += 1
+            time.sleep(0.05)  # Slow down to widen the race window
+            return original_load()
+
+        manager.load_manifest = counting_load
+
+        barrier = threading.Barrier(10)
+        errors = []
+
+        def access_manifest():
+            try:
+                barrier.wait()
+                _ = manager.manifest
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=access_manifest) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Errors: {errors}"
+        assert load_count == 1, f"load_manifest called {load_count} times, expected 1"
+
+    def test_no_deadlock_when_mutation_triggers_lazy_load(
+        self, temp_agent_io, sample_workflow_data
+    ):
+        """First mutation on a fresh manager with persisted manifest must not deadlock.
+
+        Regression: mark_action_started holds _lock, then accesses self.manifest
+        which tries to acquire the same lock for lazy loading. With a non-reentrant
+        Lock this deadlocks; RLock allows re-entry.
+        """
+        # Persist a manifest to disk via a first manager
+        manager1 = ManifestManager(temp_agent_io)
+        manager1.initialize_manifest(**sample_workflow_data)
+
+        # Create a fresh manager (manifest not yet loaded into memory)
+        manager2 = ManifestManager(temp_agent_io)
+        assert manager2._manifest is None  # not loaded yet
+
+        # This must complete without deadlock — use a timeout to detect hangs
+        result = [None]
+        error = [None]
+
+        def mutate():
+            try:
+                manager2.mark_action_started("extract")
+                result[0] = manager2.manifest["actions"]["extract"]["status"]
+            except Exception as e:
+                error[0] = e
+
+        t = threading.Thread(target=mutate, daemon=True)
+        t.start()
+        t.join(timeout=5)
+
+        assert not t.is_alive(), "mark_action_started deadlocked (thread still alive after 5s)"
+        assert error[0] is None, f"Unexpected error: {error[0]}"
+        assert result[0] == "running"
+
     def test_concurrent_read_write(self, manifest_manager):
         """Should handle concurrent reads and writes."""
         actions = [f"action_{i}" for i in range(5)]

@@ -53,13 +53,15 @@ class ManifestManager:
         self.target_dir = self.agent_io_path / "target"
         self.manifest_path = self.target_dir / MANIFEST_FILENAME
         self._manifest: Optional[Dict[str, Any]] = None
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     @property
     def manifest(self) -> Dict[str, Any]:
         """Get the current manifest, loading from disk if needed."""
         if self._manifest is None:
-            self._manifest = self.load_manifest()
+            with self._lock:
+                if self._manifest is None:
+                    self._manifest = self.load_manifest()
         return self._manifest
 
     def initialize_manifest(
@@ -187,8 +189,8 @@ class ManifestManager:
         except Exception:
             try:
                 os.unlink(tmp_path)
-            except OSError:
-                pass
+            except OSError as cleanup_err:
+                logger.debug("Failed to clean up temp file %s: %s", tmp_path, cleanup_err)
             raise
 
     def get_output_directory(self, action_name: str) -> Path:

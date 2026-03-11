@@ -6,9 +6,11 @@ Extracted from agent_workflow.py to reduce complexity.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Any, List
-from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class AgentStateManager:
@@ -33,7 +35,6 @@ class AgentStateManager:
         self.status_file = status_file_path
         self.execution_order = execution_order
         self.agent_status: Dict[str, Dict[str, Any]] = {}
-        self.console = Console()
         self._load_status()
 
     def _load_status(self):
@@ -42,9 +43,9 @@ class AgentStateManager:
             try:
                 with open(self.status_file, "r", encoding="utf-8") as f:
                     self.agent_status = json.load(f)
-                self.console.print(f"[dim]Loaded status for {len(self.agent_status)} agents[/dim]")
+                logger.info("Loaded status for %d agents", len(self.agent_status))
             except (OSError, IOError, json.JSONDecodeError, ValueError) as e:
-                self.console.print(f"[yellow]Warning: Could not load status file: {e}[/yellow]")
+                logger.warning("Could not load status file: %s", e)
                 self._initialize_default_status()
         else:
             self._initialize_default_status()
@@ -60,7 +61,7 @@ class AgentStateManager:
             with open(self.status_file, "w", encoding="utf-8") as f:
                 json.dump(self.agent_status, f, indent=4)
         except (OSError, IOError, ValueError, TypeError) as e:
-            self.console.print(f"[red]Error saving status: {e}[/red]")
+            logger.error("Error saving status: %s", e)
 
     def update_status(self, agent_name: str, status: str, **metadata):
         """

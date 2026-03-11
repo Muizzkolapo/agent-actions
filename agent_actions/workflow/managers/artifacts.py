@@ -114,8 +114,8 @@ class ArtifactLinker:
         except Exception:
             try:
                 os.unlink(tmp_path)
-            except OSError:
-                pass
+            except OSError as cleanup_err:
+                logger.debug("Failed to clean up temp file %s: %s", tmp_path, cleanup_err)
             raise
 
     def find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
