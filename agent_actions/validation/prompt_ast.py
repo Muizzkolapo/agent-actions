@@ -1,6 +1,4 @@
-"""
-Prompt Analysis using Jinja2 AST Parser (NO REGEX).
-"""
+"""Jinja2 AST-based prompt template analysis."""
 
 import logging
 from dataclasses import dataclass
@@ -21,33 +19,17 @@ class FieldUsage:
 
 
 class PromptASTAnalyzer:
-    """
-    Analyzes Jinja2 templates using AST parsing (no regex).
-
-    Uses Jinja2's AST traversal to extract full variable paths including
-    nested attribute access (e.g., 'seed.exam_syllabus.platform_name').
-    """
+    """Analyzes Jinja2 templates via AST parsing to extract variable paths."""
 
     def __init__(self):
         """Initialize Jinja2 environment for AST parsing."""
         self.env = Environment()
 
     def _build_path_from_node(self, node: nodes.Node) -> str:
-        """
-        Build full attribute path by walking the AST node chain.
+        """Build full attribute path by walking the AST node chain.
 
-        Handles:
-        - nodes.Name: Returns the variable name ('seed')
-        - nodes.Getattr: Recursively builds path ('seed.field')
-        - nodes.Getitem: Appends bracket notation ('data[key]')
-
-        Args:
-            node: AST node to build path from
-
-        Returns:
-            Full path string like 'seed.exam_syllabus.platform_name',
-            or empty string if the path is rooted in an unsupported node
-            (e.g., literal like "foo".upper())
+        Returns the full path string, or empty string if the path is rooted
+        in an unsupported node (e.g., a literal).
         """
         if isinstance(node, nodes.Name):
             return node.name
@@ -75,24 +57,7 @@ class PromptASTAnalyzer:
             return ""
 
     def _extract_full_paths(self, template_ast: nodes.Template) -> Set[str]:
-        """
-        Extract full attribute paths from parsed AST.
-
-        Finds all variable references including nested attribute access.
-        For '{{ seed.exam_syllabus }}', returns {'seed.exam_syllabus'}.
-
-        Excludes declared variables (loop variables, set assignments) which
-        have 'store' context in Jinja2's AST.
-
-        Note: Paths with dynamic keys (e.g., items[i].name) are returned as
-        items[*].name and cannot be statically validated.
-
-        Args:
-            template_ast: Parsed Jinja2 template AST
-
-        Returns:
-            Set of full variable paths (undeclared references only)
-        """
+        """Extract full attribute paths from parsed AST, excluding declared variables."""
         paths: Set[str] = set()
 
         # NOTE: We use id() to track node identity. This is safe because all AST
@@ -141,17 +106,10 @@ class PromptASTAnalyzer:
         return paths
 
     def extract_variables(self, template_source: str) -> Set[str]:
-        """
-        Extract all variable references from a Jinja2 template using AST.
+        """Extract all variable references from a Jinja2 template using AST.
 
-        This is the industry-standard way to analyze Jinja2 templates.
-        NO REGEX - uses Jinja2's built-in parser with AST traversal.
-
-        Args:
-            template_source: Jinja2 template string
-
-        Returns:
-            Set of full variable paths referenced in template
+        Raises:
+            ValueError: If the template has Jinja2 syntax errors.
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -164,10 +122,6 @@ class PromptASTAnalyzer:
             >>> vars = analyzer.extract_variables(template)
             >>> print(sorted(vars))
             ['seed.exam_syllabus.platform_name', 'source.url']
-
-        Technical Details:
-            Uses AST traversal to walk nodes.Getattr and nodes.Getitem
-            chains, building full attribute paths.
         """
         try:
             ast = self.env.parse(template_source)
@@ -178,14 +132,7 @@ class PromptASTAnalyzer:
             raise ValueError(f"Template syntax error: {e}") from e
 
     def extract_referenced_variables(self, template_source: str) -> Tuple[Set[str], Set[str]]:
-        """
-        Extract both root variables and full paths.
-
-        Args:
-            template_source: Jinja2 template
-
-        Returns:
-            Tuple of (root_variables, full_paths)
+        """Return (root_variables, full_paths) from a Jinja2 template.
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -215,14 +162,7 @@ class PromptASTAnalyzer:
             raise ValueError(f"Template syntax error: {e}") from e
 
     def validate_template_syntax(self, template_source: str) -> Tuple[bool, Optional[str]]:
-        """
-        Validate Jinja2 template syntax.
-
-        Args:
-            template_source: Template to validate
-
-        Returns:
-            Tuple of (is_valid, error_message)
+        """Return (is_valid, error_message) for Jinja2 template syntax.
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -245,20 +185,7 @@ class PromptASTAnalyzer:
     def analyze_field_requirements(
         self, template_source: str, available_context: Dict[str, Set[str]]
     ) -> Dict[str, Any]:
-        """
-        Analyze what fields are required and validate against available context.
-
-        Args:
-            template_source: Jinja2 template
-            available_context: Dict of available fields
-                {
-                    'seed': {'exam_syllabus'},
-                    'source': {'content', 'url'},
-                    'agent': {'field1', 'field2'}
-                }
-
-        Returns:
-            Analysis results with errors/warnings
+        """Analyze required fields and validate against available context.
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -268,15 +195,12 @@ class PromptASTAnalyzer:
             >>> print(results['missing_references'])
             ['missing']
         """
-        # Extract all referenced variables
         root_vars, full_paths = self.extract_referenced_variables(template_source)
 
-        # Check which root references are missing
         missing_references = [
             root_var for root_var in root_vars if root_var not in available_context
         ]
 
-        # Check which fields are missing
         missing_fields = []
         for var_path in full_paths:
             parts = var_path.split(".")
@@ -303,22 +227,9 @@ class PromptASTAnalyzer:
         }
 
     def get_detailed_field_usage(self, template_source: str) -> List[Dict[str, Any]]:
-        """
-        Get detailed information about how each root variable is used.
+        """Return root variable names with line numbers and context.
 
-        This method returns ROOT variable names with line numbers and context,
-        useful for detailed inspection and debugging. For full attribute paths,
-        use extract_variables() instead.
-
-        Args:
-            template_source: Jinja2 template
-
-        Returns:
-            List of field usage details with:
-            - name: Root variable name (not full path)
-            - type: AST node type
-            - line: Line number in template
-            - context: 'load' (reading) or 'store' (declaring)
+        For full attribute paths, use extract_variables() instead.
 
         Examples:
             >>> analyzer = PromptASTAnalyzer()
@@ -350,14 +261,7 @@ class PromptASTAnalyzer:
 
 
 def scan_prompt_fields_ast(template_str: str) -> Set[str]:
-    """
-    Quick utility to extract field references using AST (NO REGEX).
-
-    Args:
-        template_str: Jinja2 template string
-
-    Returns:
-        Set of variable references
+    """Extract field references from a Jinja2 template using AST.
 
     Examples:
         >>> fields = scan_prompt_fields_ast("{{ seed.exam }} and {{ source.data }}")
@@ -371,15 +275,7 @@ def scan_prompt_fields_ast(template_str: str) -> Set[str]:
 def validate_prompt_fields_ast(
     template_str: str, available_context: Dict[str, Set[str]]
 ) -> Tuple[bool, List[str]]:
-    """
-    Validate prompt fields using AST parsing (NO REGEX).
-
-    Args:
-        template_str: Jinja2 template
-        available_context: Available field context
-
-    Returns:
-        Tuple of (is_valid, list_of_errors)
+    """Validate prompt fields against available context using AST parsing.
 
     Examples:
         >>> template = "{{ seed.exam }} and {{ source.content }}"

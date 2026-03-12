@@ -6,17 +6,7 @@ _MISSING = object()
 
 
 def get_nested_value(data: Any, field_path: str, default: Any = None) -> Optional[Any]:
-    """
-    Get a nested value from a dictionary using dot notation.
-
-    Args:
-        data: The data structure to search in
-        field_path: Dot-separated path to the field (e.g., 'user.name')
-        default: Value to return if path not found (default: None)
-
-    Returns:
-        The field value or *default* if not found
-    """
+    """Get a nested value from a dictionary using dot-separated *field_path*."""
     keys = field_path.split(".")
     value = data
 
@@ -35,14 +25,7 @@ def nested_field_exists(data: Any, field_path: str) -> bool:
 
 
 def set_nested_value(data: dict, field_path: str, value: Any) -> None:
-    """
-    Set a nested value in a dictionary using dot notation, creating intermediate dicts.
-
-    Args:
-        data: The dictionary to set the value in
-        field_path: Dot-separated path to the field (e.g., 'user.name')
-        value: The value to set
-    """
+    """Set a nested value in a dictionary using dot notation, creating intermediate dicts."""
     keys = field_path.split(".")
     current = data
     for key in keys[:-1]:

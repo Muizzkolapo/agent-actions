@@ -1,10 +1,4 @@
-"""
-Batch invocation strategy.
-
-Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
-
-Queues tasks for batch API submission instead of immediate execution.
-"""
+"""Batch invocation strategy for queuing tasks for batch API submission."""
 
 import copy
 import logging
@@ -23,14 +17,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchSubmissionResult:
-    """
-    Result of batch submission via flush().
-
-    Attributes:
-        batch_id: Provider-assigned batch identifier (None if no tasks)
-        task_count: Number of tasks submitted
-        context_map: Map of task_id -> context metadata for result reconciliation
-    """
+    """Result of batch submission via flush()."""
 
     batch_id: Optional[str]
     task_count: int
@@ -38,43 +25,14 @@ class BatchSubmissionResult:
 
     @property
     def is_empty(self) -> bool:
-        """Whether any tasks were submitted."""
+        """Return True if no tasks were submitted."""
         return self.task_count == 0
 
 
 class BatchStrategy(InvocationStrategy):
-    """
-    Queues tasks for batch API submission.
-
-    Instead of executing immediately, tasks are queued and submitted
-    together via flush(). Results are retrieved asynchronously.
-
-    Example:
-        strategy = BatchStrategy(provider)
-
-        # Queue tasks
-        for item in items:
-            result = strategy.invoke(prepared_task, context)
-            # result.deferred == True
-
-        # Submit batch
-        submission = strategy.flush()
-        print(f"Submitted batch {submission.batch_id} with {submission.task_count} tasks")
-
-    Lifecycle:
-        1. Create strategy with provider
-        2. Call invoke() for each task (queues internally)
-        3. Call flush() to submit all queued tasks
-        4. Use context_map to reconcile results when batch completes
-    """
+    """Queues tasks for batch API submission; call flush() to submit."""
 
     def __init__(self, provider: BatchProvider):
-        """
-        Initialize BatchStrategy.
-
-        Args:
-            provider: Batch provider instance (e.g., OpenAIBatchClient)
-        """
         self._provider = provider
         self._agent_config: Optional[dict[str, Any]] = None
         self._queued: list[PreparedTask] = []
@@ -85,22 +43,8 @@ class BatchStrategy(InvocationStrategy):
         task: PreparedTask,
         context: "ProcessingContext",
     ) -> InvocationResult:
-        """
-        Queue task for batch submission.
-
-        Does not execute immediately. Call flush() to submit all queued tasks.
-
-        Args:
-            task: PreparedTask from TaskPreparer
-            context: ProcessingContext with agent config
-
-        Returns:
-            InvocationResult with deferred=True and task_id
-        """
-        # Defensive: processor handles guard routing before invoke(), but
-        # strategies must also handle it for direct callers bypassing processor.
+        """Queue task for batch submission; returns deferred InvocationResult."""
         if not task.should_execute:
-            # Track in context map for result reconciliation
             self._context_map[task.target_id] = {
                 "status": task.guard_behavior or "filtered",
                 "original": task.original_content,
@@ -116,15 +60,12 @@ class BatchStrategy(InvocationStrategy):
                 )
             return InvocationResult.filtered()
 
-        # Capture agent_config once. Deep copy guards against the caller mutating
-        # agent_config between invoke() and flush() (e.g. per-record overrides).
+        # Deep copy guards against caller mutating agent_config between invoke() and flush()
         if self._agent_config is None:
             self._agent_config = copy.deepcopy(context.agent_config)
 
-        # Queue task for batch submission
         self._queued.append(task)
 
-        # Track in context map (warn on duplicate)
         if task.target_id in self._context_map:
             logger.warning("Duplicate target_id %s, overwriting", task.target_id)
         self._context_map[task.target_id] = {
@@ -149,16 +90,7 @@ class BatchStrategy(InvocationStrategy):
         batch_name: Optional[str] = None,
         output_directory: Optional[str] = None,
     ) -> BatchSubmissionResult:
-        """
-        Submit all queued tasks to batch API.
-
-        Args:
-            batch_name: Name for the batch job (auto-generated if not provided)
-            output_directory: Output directory for batch artifacts
-
-        Returns:
-            BatchSubmissionResult with batch_id and context_map
-        """
+        """Submit all queued tasks to batch API and reset internal state."""
         if not self._queued:
             snapshot = self._context_map.copy()
             self._context_map = {}
@@ -169,7 +101,6 @@ class BatchStrategy(InvocationStrategy):
                 context_map=snapshot,
             )
 
-        # Build batch tasks in provider-ready format
         batch_tasks = []
         for task in self._queued:
             batch_task = {
@@ -179,10 +110,6 @@ class BatchStrategy(InvocationStrategy):
             }
             batch_tasks.append(batch_task)
 
-        # Prepare tasks in provider-specific format and submit.
-        # State is always reset in `finally` to prevent stale tasks from
-        # leaking into a subsequent flush() if the caller catches and
-        # reuses this strategy instance after a failure.
         task_count = len(batch_tasks)
         context_snapshot = self._context_map.copy()
         try:
@@ -209,11 +136,7 @@ class BatchStrategy(InvocationStrategy):
         )
 
     def cleanup(self) -> None:
-        """
-        Cleanup strategy state.
-
-        Called when processing is complete. Logs warning if tasks remain unflushed.
-        """
+        """Clean up strategy state, warning if tasks remain unflushed."""
         if self._queued:
             logger.warning(
                 "BatchStrategy cleanup called with %d unflushed tasks",
@@ -224,14 +147,7 @@ class BatchStrategy(InvocationStrategy):
             self._agent_config = None
 
     def get_prepared_tasks(self) -> list[dict[str, Any]]:
-        """
-        Get queued tasks in provider-ready format.
-
-        Used by BatchTaskPreparator to access prepared tasks for submission.
-
-        Returns:
-            List of task dicts with target_id, content, prompt
-        """
+        """Return queued tasks in provider-ready format."""
         return [
             {
                 "target_id": task.target_id,

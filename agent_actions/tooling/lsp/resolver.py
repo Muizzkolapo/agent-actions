@@ -9,11 +9,7 @@ from .utils import is_in_context_scope_list, is_in_dependencies_context
 
 
 def get_reference_at_position(content: str, line: int, character: int) -> Optional[Reference]:
-    """
-    Detect what reference (if any) is at the given position.
-
-    Returns a Reference object with type and value, or None.
-    """
+    """Detect what reference (if any) is at the given position."""
     lines = content.split("\n")
     if line >= len(lines):
         return None
@@ -139,11 +135,7 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
 def resolve_reference(
     reference: Reference, index: ProjectIndex, current_file: Optional[Path] = None
 ) -> Optional[Location]:
-    """
-    Resolve a reference to its target location.
-
-    Returns Location or None if not found.
-    """
+    """Resolve a reference to its target location."""
     if reference.type == ReferenceType.PROMPT:
         prompt = index.get_prompt(reference.value)
         if prompt:

@@ -19,16 +19,7 @@ class BatchDataLoader(IDataLoader):
         return ProcessingMode.AUTO
 
     def load_data(self, file_path: str) -> List[Dict[str, Any]]:
-        """
-        Loads data from the given file path.
-        Supports JSON and JSONL files.
-
-        Args:
-            file_path: The path to the data file.
-
-        Returns:
-            A list of dictionaries, where each dictionary represents a row of data.
-        """
+        """Load data from a JSON or JSONL file."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"The specified file does not exist: {file_path}")

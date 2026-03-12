@@ -1,6 +1,4 @@
-"""
-Static type checker for workflow field references.
-"""
+"""Static type checker for workflow field references."""
 
 from typing import List
 
@@ -16,47 +14,19 @@ from .errors import (
 
 
 class StaticTypeChecker:
-    """Performs static type checking on workflow data flow graph.
-
-    Validates:
-    1. All referenced actions exist and are in dependencies
-    2. All referenced fields exist in upstream action's output schema
-    3. Referenced fields haven't been dropped
-
-    Example:
-        graph = DataFlowGraph()
-        # ... populate graph ...
-
-        checker = StaticTypeChecker(graph)
-        result = checker.check_all()
-
-        if not result.is_valid:
-            print(result.format_report())
-    """
-
-    # Use centralized SPECIAL_NAMESPACES from utils.constants
+    """Performs static type checking on workflow data flow graph."""
 
     def __init__(self, graph: DataFlowGraph) -> None:
-        """Initialize the type checker.
-
-        Args:
-            graph: Data flow graph to validate
-        """
+        """Initialize the type checker."""
         self.graph = graph
 
     def check_all(self) -> StaticValidationResult:
-        """Run all static type checks on the graph.
-
-        Returns:
-            StaticValidationResult with all errors and warnings
-        """
+        """Run all static type checks on the graph."""
         result = StaticValidationResult()
 
-        # Process nodes in topological order
         try:
             order = self.graph.topological_sort()
         except ValueError as e:
-            # Circular dependency - this should be caught by dependency validator
             result.add_error(
                 StaticTypeError(
                     message=str(e),
@@ -86,28 +56,19 @@ class StaticTypeChecker:
         requirement: InputRequirement,
         result: StaticValidationResult,
     ) -> None:
-        """Check a single input requirement.
-
-        Validates:
-        1. Source action exists (or is special namespace)
-        2. Source action is reachable via dependencies
-        3. Field exists in source action's output
-        """
+        """Check a single input requirement against the graph."""
         source_agent = requirement.source_agent
         field_path = requirement.field_path
 
-        # Create location for error reporting
         location = FieldLocation(
             agent_name=node.name,
             config_field=requirement.location,
             raw_reference=requirement.raw_reference,
         )
 
-        # Skip special namespaces
         if source_agent in SPECIAL_NAMESPACES:
             return
 
-        # Check 1: Source action exists
         source_node = self.graph.get_node(source_agent)
         if not source_node:
             available_agents = sorted(self.graph.get_all_agent_names())
@@ -124,7 +85,6 @@ class StaticTypeChecker:
             )
             return
 
-        # Check 2: Source action is reachable via dependencies
         if source_agent != node.name:
             reachable = self.graph.get_reachable_upstream_names(node.name)
             if source_agent not in reachable:
@@ -145,10 +105,8 @@ class StaticTypeChecker:
                 )
                 return
 
-        # Check 3: Field exists in output schema
         output_schema = source_node.output_schema
 
-        # Handle schemaless actions (freeform output)
         if output_schema.is_schemaless:
             result.add_warning(
                 StaticTypeWarning(
@@ -162,7 +120,6 @@ class StaticTypeChecker:
             )
             return
 
-        # Handle dynamic schemas
         if output_schema.is_dynamic:
             result.add_warning(
                 StaticTypeWarning(
@@ -176,19 +133,14 @@ class StaticTypeChecker:
             )
             return
 
-        # Extract root field (first part of path)
         root_field = field_path.split(".")[0]
 
-        # Handle array index access (e.g., items.0)
         if root_field.isdigit():
-            # This is an array index - skip deep validation
             return
 
-        # Check if field exists
         available = output_schema.available_fields
 
         if root_field not in available:
-            # Check if it was explicitly dropped
             if root_field in output_schema.dropped_fields:
                 result.add_error(
                     StaticTypeError(
@@ -203,7 +155,6 @@ class StaticTypeChecker:
                     )
                 )
             else:
-                # Suggest similar field names
                 hint = self._suggest_similar_field(root_field, available)
                 result.add_error(
                     StaticTypeError(
@@ -222,12 +173,10 @@ class StaticTypeChecker:
         if not available:
             return "No fields available in the source action's schema"
 
-        # Simple similarity check (could use Levenshtein distance for better results)
         field_lower = field.lower()
         similar = []
         for avail in available:
             avail_lower = avail.lower()
-            # Check for common typos
             if field_lower in avail_lower or avail_lower in field_lower:
                 similar.append(avail)
             elif field_lower[:3] == avail_lower[:3]:  # Same prefix
@@ -239,24 +188,18 @@ class StaticTypeChecker:
         return f"Available fields: {', '.join(sorted(available))}"
 
     def check_unused_dependencies(self) -> List[StaticTypeWarning]:
-        """Find declared dependencies that are never referenced.
-
-        Returns:
-            List of warnings for unused dependencies
-        """
+        """Find declared dependencies that are never referenced."""
         warnings: List[StaticTypeWarning] = []
 
         for action_name, node in self.graph.nodes.items():
             if self.graph.is_special_namespace(action_name):
                 continue
 
-            # Get all referenced actions from requirements
             referenced = set()
             for req in node.input_requirements:
                 if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
-            # Find unused dependencies
             unused = node.dependencies - referenced
 
             for dep in unused:
@@ -277,32 +220,21 @@ class StaticTypeChecker:
         return warnings
 
     def check_missing_dependencies(self) -> List[StaticTypeWarning]:
-        """Find actions that are referenced but not declared in dependencies.
-
-        Note: This returns WARNINGS, not errors, because the runtime automatically
-        infers dependencies from references. Explicit depends_on is optional but
-        recommended for clarity.
-
-        Returns:
-            List of warnings for implicit (undeclared) dependencies
-        """
+        """Find actions referenced but not declared in dependencies."""
         warnings: List[StaticTypeWarning] = []
 
         for action_name, node in self.graph.nodes.items():
             if self.graph.is_special_namespace(action_name):
                 continue
 
-            # Get all referenced actions
             referenced = set()
             for req in node.input_requirements:
                 if req.source_agent not in SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
-            # Find referenced but undeclared (implicit dependencies)
             implicit = referenced - node.dependencies
 
             for agent in implicit:
-                # Find the first requirement referencing this action
                 for req in node.input_requirements:
                     if req.source_agent == agent:
                         warnings.append(

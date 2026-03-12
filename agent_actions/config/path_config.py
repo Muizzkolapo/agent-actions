@@ -1,8 +1,4 @@
-"""
-Path configuration for agent-actions.
-
-This module provides utilities for loading project-specific configuration files.
-"""
+"""Project-specific path configuration loading."""
 
 from typing import Dict, Any
 from pathlib import Path

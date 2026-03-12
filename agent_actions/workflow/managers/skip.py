@@ -1,9 +1,4 @@
-"""
-Agent skip condition evaluation module.
-
-Implements strategy pattern for different skip condition types.
-Extracted from agent_workflow.py to reduce _should_skip_agent() complexity (CC 20 → <5).
-"""
+"""Agent skip condition evaluation using strategy pattern."""
 
 import logging
 from abc import ABC, abstractmethod
@@ -28,20 +23,11 @@ class SkipStrategy(ABC):
 
     @abstractmethod
     def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
-        """
-        Determine if agent should be skipped.
-
-        Args:
-            agent_config: Agent configuration
-            previous_outputs: Previous agent outputs
-
-        Returns:
-            True if agent should be skipped, False otherwise
-        """
+        """Return True if the agent should be skipped."""
 
     @abstractmethod
     def get_strategy_name(self) -> str:
-        """Get name of this strategy for logging."""
+        """Return name of this strategy for logging."""
 
 
 class SkipConditionStrategy(SkipStrategy):
@@ -61,7 +47,6 @@ class SkipConditionStrategy(SkipStrategy):
         try:
             context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
 
-            # Extract WHERE clause from skip_condition config
             where_clause = None
             if isinstance(skip_condition, dict) and "where" in skip_condition:
                 where_clause = skip_condition["where"]
@@ -71,19 +56,17 @@ class SkipConditionStrategy(SkipStrategy):
             if not where_clause:
                 return False
 
-            # Use modern guard filter - skip if condition NOT matched
             filter_service = get_global_guard_filter()
             request = FilterItemRequest(data=context, condition=where_clause)
             filter_result = filter_service.filter_item(request)
 
-            # If evaluation failed, don't skip (fail-open)
             if not filter_result.success:
                 logger.debug(
                     "Skip condition evaluation failed for %s: %s", agent_name, filter_result.error
                 )
                 return False
 
-            # Skip if condition NOT matched (inverse logic)
+            # Inverse logic: skip when condition is NOT matched
             should_skip = not filter_result.matched
 
             if should_skip:
@@ -142,7 +125,6 @@ class GuardStrategy(SkipStrategy):
         """Evaluate agent-level guard condition."""
         guard_config = agent_config.get("guard")
 
-        # Only handle agent-scope guards
         if not guard_config or guard_config.get("scope") != "agent":
             return False
 
@@ -178,7 +160,6 @@ class GuardStrategy(SkipStrategy):
                 )
             )
 
-            # Handle filter execution errors
             if not filter_result.success:
                 error_msg = filter_result.error or "Unknown filter error"
                 return self._handle_filter_error(agent_name, error_msg, passthrough_on_error)
@@ -263,22 +244,10 @@ class LegacySkipIfStrategy(SkipStrategy):
 
 
 class SkipEvaluator:
-    """
-    Orchestrates skip condition evaluation using strategy pattern.
-
-    Evaluates skip conditions in order of precedence:
-    1. skip_condition
-    2. guard (scope=agent)
-    3. skip_if (legacy)
-    """
+    """Orchestrates skip condition evaluation in precedence order."""
 
     def __init__(self, console: Optional[Console] = None):
-        """
-        Initialize skip evaluator with strategies.
-
-        Args:
-            console: Rich console for output
-        """
+        """Initialize skip evaluator with strategies."""
         self.console = console or Console()
         self.strategies = [
             SkipConditionStrategy(self.console),
@@ -287,7 +256,6 @@ class SkipEvaluator:
         ]
 
     def __repr__(self):
-        """Return string representation."""
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 
     def should_skip_agent(

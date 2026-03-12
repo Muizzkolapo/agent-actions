@@ -1,9 +1,4 @@
-"""
-Application Container for managing all DI configuration and bootstrapping.
-
-This module provides the main application container that sets up all dependencies
-and provides factory methods for creating key application components.
-"""
+"""Application container for managing DI configuration and bootstrapping."""
 
 import logging
 from typing import Optional, TYPE_CHECKING
@@ -33,8 +28,7 @@ class ApplicationContainer:
         *,
         container: Optional[DependencyContainer] = None,
     ):
-        """
-        Initialize the application container.
+        """Initialize the application container.
 
         Args:
             config: Optional configuration dictionary.
@@ -53,16 +47,7 @@ class ApplicationContainer:
         use_tools: bool = True,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> AgentRunner:
-        """
-        Create an AgentRunner with all dependencies injected.
-
-        Args:
-            use_tools: Whether the agent runner should use tools.
-            storage_backend: Optional storage backend for data persistence.
-
-        Returns:
-            Configured AgentRunner instance.
-        """
+        """Create an AgentRunner with all dependencies injected."""
         return AgentRunner(
             use_tools=use_tools,
             processor_factory=self.processor_factory,
@@ -70,33 +55,19 @@ class ApplicationContainer:
         )
 
     def get_processor_factory(self) -> ProcessorFactory:
-        """
-        Get the processor factory for creating processors.
-
-        Returns:
-            ProcessorFactory instance.
-        """
+        """Get the processor factory for creating processors."""
         return self.processor_factory
 
     def get_dependency_container(self) -> DependencyContainer:
-        """
-        Get the underlying dependency container.
-
-        Returns:
-            DependencyContainer instance.
-        """
+        """Get the underlying dependency container."""
         return self.container
 
     @classmethod
     def create_for_environment(cls, environment: str) -> "ApplicationContainer":
-        """
-        Create application container for specific environment.
+        """Create application container for a specific environment.
 
-        Args:
-            environment: Environment name
-
-        Returns:
-            ApplicationContainer configured for the environment.
+        Raises:
+            ConfigValidationError: If the environment name is not recognized.
         """
         profiles = {
             "development": ConfigurationProfile.development,
@@ -118,12 +89,7 @@ class ApplicationContainer:
 
     @classmethod
     def create_for_testing(cls) -> "ApplicationContainer":
-        """
-        Create application container configured for testing.
-
-        Returns:
-            ApplicationContainer with test dependencies.
-        """
+        """Create application container configured for testing."""
         return cls(
             config=ConfigurationProfile.testing(),
             container=DIConfigurator.configure_for_testing(),

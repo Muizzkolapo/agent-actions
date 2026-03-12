@@ -1,9 +1,4 @@
-"""
-Single agent execution module.
-
-Handles individual agent execution with batch support.
-Extracted from agent_workflow.py to reduce run() method complexity.
-"""
+"""Single agent execution with batch support."""
 
 import asyncio
 import logging
@@ -37,7 +32,6 @@ class ExecutorDependencies:
     output_manager: Any
 
     def __repr__(self):
-        """Return string representation."""
         return (
             f"{self.__class__.__name__}("
             f"agent_runner={self.agent_runner.__class__.__name__}, "
@@ -78,38 +72,36 @@ class AgentExecutionResult:
     metrics: ExecutionMetrics = None
 
     def __post_init__(self):
-        """Initialize mutable defaults."""
         if self.metrics is None:
             self.metrics = ExecutionMetrics()
 
     # Backward compatibility properties
     @property
     def duration(self) -> float:
-        """Get duration from metrics."""
+        """Return duration from metrics."""
         return self.metrics.duration
 
     @property
     def tokens(self) -> Optional[Dict[str, int]]:
-        """Get tokens from metrics."""
+        """Return tokens from metrics."""
         return self.metrics.tokens
 
     @property
     def model_vendor(self) -> Optional[str]:
-        """Get model_vendor from metrics."""
+        """Return model_vendor from metrics."""
         return self.metrics.model_vendor
 
     @property
     def model_name(self) -> Optional[str]:
-        """Get model_name from metrics."""
+        """Return model_name from metrics."""
         return self.metrics.model_name
 
     @property
     def files_processed(self) -> int:
-        """Get files_processed from metrics."""
+        """Return files_processed from metrics."""
         return self.metrics.files_processed
 
     def __repr__(self):
-        """Return string representation."""
         return (
             f"AgentExecutionResult(success={self.success}, "
             f"status={self.status}, duration={self.metrics.duration:.2f})"
@@ -117,43 +109,23 @@ class AgentExecutionResult:
 
 
 class AgentExecutor:
-    """
-    Executes individual agents with full lifecycle management.
-
-    Responsibilities:
-    - Execute single agent (sync or async)
-    - Handle batch mode detection and submission
-    - Manage correlation setup
-    """
+    """Executes individual agents with full lifecycle management."""
 
     def __init__(self, deps: ExecutorDependencies, *, console: Optional[Console] = None):
-        """
-        Initialize agent executor.
-
-        Args:
-            deps: ExecutorDependencies with all required dependencies
-            console: Rich console for output
-        """
+        """Initialize agent executor."""
         self.deps = deps
         self.console = console or Console()
 
     def __eq__(self, other):
-        """Check equality."""
         if not isinstance(other, AgentExecutor):
             return False
         return self.deps == other.deps
 
     def _verify_completion_status(self, agent_name: str) -> tuple:
-        """
-        Verify if a completed agent has actual output in storage.
-
-        Args:
-            agent_name: Name of the agent to verify
+        """Verify a completed agent has actual output in storage.
 
         Returns:
-            Tuple of (should_skip: bool, result: Optional[AgentExecutionResult])
-            - If should_skip is True, return the result
-            - If should_skip is False, agent should be re-run
+            (should_skip, result) -- if should_skip is False, agent is re-run.
         """
         storage_backend = getattr(self.deps.agent_runner, "storage_backend", None)
         if storage_backend is not None:
@@ -190,18 +162,7 @@ class AgentExecutor:
     def _handle_agent_skip(
         self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
     ) -> AgentExecutionResult:
-        """
-        Handle agent skip due to WHERE clause condition.
-
-        Args:
-            agent_name: Name of the agent
-            agent_idx: Index in execution order
-            agent_config: Agent configuration
-            start_time: When execution started
-
-        Returns:
-            AgentExecutionResult indicating skip
-        """
+        """Handle agent skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(agent_idx, agent_name)
         self.deps.state_manager.update_status(agent_name, "completed")
 
@@ -237,7 +198,6 @@ class AgentExecutor:
     def _track_action_start(self, params: AgentRunParams) -> None:
         """Track action start if run_tracker is available."""
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
-            # Determine action type from model_vendor or kind
             model_vendor = params.agent_config.get("model_vendor", "")
             action_kind = params.agent_config.get("kind", "")
 
@@ -262,18 +222,7 @@ class AgentExecutor:
         duration: float,
         batch_status: Optional[str],
     ) -> AgentExecutionResult:
-        """
-        Handle successful agent run result.
-
-        Args:
-            params: Agent run parameters
-            output_folder: Output folder path
-            duration: Execution duration in seconds
-            batch_status: Status from batch submission check
-
-        Returns:
-            AgentExecutionResult
-        """
+        """Handle successful agent run result."""
         if batch_status == "batch_submitted":
             self.deps.state_manager.update_status(params.agent_name, "batch_submitted")
             fire_event(BatchSubmittedEvent(agent_name=params.agent_name))
@@ -332,16 +281,7 @@ class AgentExecutor:
         )
 
     def _handle_run_failure(self, params: AgentRunParams, error: Exception) -> AgentExecutionResult:
-        """
-        Handle agent run failure.
-
-        Args:
-            params: Agent run parameters
-            error: The exception that occurred
-
-        Returns:
-            AgentExecutionResult indicating failure
-        """
+        """Handle agent run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(params.agent_name, "failed")
 
@@ -379,18 +319,7 @@ class AgentExecutor:
     def execute_agent_sync(
         self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
     ) -> AgentExecutionResult:
-        """
-        Execute a single agent synchronously.
-
-        Args:
-            agent_name: Name of the agent
-            agent_idx: Index in execution order
-            agent_config: Agent configuration
-            is_last_agent: Whether this is the last agent in workflow
-
-        Returns:
-            AgentExecutionResult with execution details
-        """
+        """Execute a single agent synchronously."""
         start_time = datetime.now()
         current_status = self.deps.state_manager.get_status(agent_name)
 
@@ -405,22 +334,18 @@ class AgentExecutor:
             },
         )
 
-        # Check 1: Already completed - verify output exists in storage backend
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(agent_name)
             if should_skip:
                 return result
 
-        # Check 2: Batch job submitted, check status
         if current_status == "batch_submitted":
             return self._handle_batch_check(agent_name, agent_idx, agent_config, start_time)
 
-        # Check 3: Should skip agent?
         previous_outputs = self.deps.output_manager.get_previous_outputs(agent_idx)
         if self.deps.skip_evaluator.should_skip_agent(agent_config, previous_outputs):
             return self._handle_agent_skip(agent_name, agent_idx, agent_config, start_time)
 
-        # Execute the agent
         return self._execute_agent_run(
             AgentRunParams(
                 agent_name=agent_name,
@@ -434,18 +359,7 @@ class AgentExecutor:
     async def execute_agent_async(
         self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
     ) -> AgentExecutionResult:
-        """
-        Execute a single agent asynchronously.
-
-        Args:
-            agent_name: Name of the agent
-            agent_idx: Index in execution order
-            agent_config: Agent configuration
-            is_last_agent: Whether this is the last agent in workflow
-
-        Returns:
-            AgentExecutionResult with execution details
-        """
+        """Execute a single agent asynchronously."""
         start_time = datetime.now()
         current_status = self.deps.state_manager.get_status(agent_name)
 
@@ -460,24 +374,20 @@ class AgentExecutor:
             },
         )
 
-        # Check 1: Already completed - verify output exists in storage backend
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(agent_name)
             if should_skip:
                 return result
 
-        # Check 2: Batch job submitted, check status
         if current_status == "batch_submitted":
             return await self._handle_batch_check_async(
                 agent_name, agent_idx, agent_config, start_time
             )
 
-        # Check 3: Should skip agent?
         previous_outputs = self.deps.output_manager.get_previous_outputs(agent_idx)
         if self.deps.skip_evaluator.should_skip_agent(agent_config, previous_outputs):
             return self._handle_agent_skip(agent_name, agent_idx, agent_config, start_time)
 
-        # Execute the agent
         return await self._execute_agent_run_async(
             AgentRunParams(
                 agent_name=agent_name,
@@ -495,7 +405,6 @@ class AgentExecutor:
         self.deps.state_manager.update_status(agent_name, "checking_batch")
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        # Use simple directory name (no index prefix)
         output_directory = str(agent_io_path / "target" / agent_name)
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
@@ -560,7 +469,6 @@ class AgentExecutor:
         self.deps.state_manager.update_status(agent_name, "checking_batch")
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        # Use simple directory name (no index prefix)
         output_directory = str(agent_io_path / "target" / agent_name)
 
         output_folder, batch_status = await asyncio.to_thread(
@@ -574,7 +482,6 @@ class AgentExecutor:
 
         if batch_status == "completed":
             self.deps.state_manager.update_status(agent_name, "completed")
-            # Fire batch complete event
             fire_event(
                 BatchCompleteEvent(
                     batch_id=agent_config.get("batch_id", ""),
@@ -594,12 +501,11 @@ class AgentExecutor:
 
         if batch_status == "in_progress":
             self.deps.state_manager.update_status(agent_name, "batch_submitted")
-            # Fire batch submitted event (still in progress)
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=agent_config.get("batch_id", ""),
                     agent_name=agent_name,
-                    request_count=0,  # Unknown at this point
+                    request_count=0,
                     provider=agent_config.get("model_vendor", ""),
                 )
             )
@@ -608,7 +514,6 @@ class AgentExecutor:
             )
 
         self.deps.state_manager.update_status(agent_name, "failed")
-        # Fire batch complete with failure
         fire_event(
             BatchCompleteEvent(
                 batch_id=agent_config.get("batch_id", ""),
@@ -672,7 +577,6 @@ class AgentExecutor:
             self._cleanup_correlation(params, original_setup)
 
     def __repr__(self):
-        """Return string representation."""
         return f"AgentExecutor(deps={self.deps})"
 
     def _setup_correlation(self, agent_idx: int) -> Optional[callable]:

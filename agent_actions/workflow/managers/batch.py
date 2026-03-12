@@ -1,9 +1,4 @@
-"""
-Batch job lifecycle management module.
-
-Handles batch job status checking, registry management, and result processing.
-Extracted from agent_workflow.py to consolidate batch handling logic.
-"""
+"""Batch job lifecycle management for status checking and result processing."""
 
 import logging
 from pathlib import Path
@@ -28,15 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class BatchLifecycleManager:
-    """
-    Manages batch job lifecycle and result processing.
-
-    Responsibilities:
-    - Check batch job status via registry
-    - Process completed batch results
-    - Handle passthrough scenarios (all filtered)
-    - Provide unified batch status reporting
-    """
+    """Manages batch job lifecycle and result processing."""
 
     def __init__(
         self,
@@ -44,13 +31,10 @@ class BatchLifecycleManager:
         console: Optional[Console] = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
-        """
-        Initialize batch lifecycle manager.
+        """Initialize batch lifecycle manager.
 
-        Args:
-            batch_service: BatchService instance for registry/result operations
-            console: Rich console for output
-            storage_backend: Storage backend for disposition tracking (required; raises if None)
+        Raises:
+            ConfigurationError: If storage_backend is None
         """
         if storage_backend is None:
             raise ConfigurationError(
@@ -65,22 +49,14 @@ class BatchLifecycleManager:
     def handle_batch_agent(
         self, agent_name: str, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
     ) -> Tuple[Optional[str], str]:
-        """
-        Handle batch agent status checking and result processing.
-
-        Args:
-            agent_name: Name of the agent
-            output_directory: Path to agent output directory
-            agent_config: Agent configuration (optional, for processing)
+        """Check batch status and process results.
 
         Returns:
-            Tuple of (output_folder, batch_status)
-            - output_folder: Path to output folder if completed, None otherwise
-            - batch_status: 'completed', 'in_progress', or 'failed'
+            (output_folder or None, batch_status) where status is
+            'completed', 'in_progress', or 'failed'.
         """
         registry_status = self.batch_service.get_batch_registry_status(output_directory)
 
-        # Case 1: All batches completed
         if registry_status == "completed":
             fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
@@ -91,7 +67,6 @@ class BatchLifecycleManager:
             fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
             return (output_directory, "completed")
 
-        # Case 2: Batches in progress or partial failure
         if registry_status in ["in_progress", "partial_failed"]:
             if self.batch_service.are_all_batch_jobs_completed(output_directory):
                 fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
@@ -104,7 +79,6 @@ class BatchLifecycleManager:
                 return (output_directory, "completed")
             return (None, "in_progress")
 
-        # Case 3: No batches found, check for passthrough
         if registry_status == "no_batches":
             has_passthrough = self.storage_backend.has_disposition(
                 agent_name, DISPOSITION_PASSTHROUGH
@@ -121,22 +95,15 @@ class BatchLifecycleManager:
             )
             return (None, "failed")
 
-        # Case 4: Failed status
         return (None, "failed")
 
     def _process_batch_results(
         self, output_directory: str, agent_config: Optional[Dict[str, Any]], agent_name: str
     ):
-        """
-        Process all completed batch job results.
-
-        Args:
-            output_directory: Path to output directory
-            agent_config: Agent configuration
-            agent_name: Name of agent (for storage backend writes and error messages)
+        """Process all completed batch job results.
 
         Raises:
-            ProcessingError: If result processing fails
+            ProcessingError: If result processing fails.
         """
         try:
             processed_files = self.batch_service.process_all_batch_results(
@@ -170,18 +137,7 @@ class BatchLifecycleManager:
     def check_batch_submission(
         self, agent_name: str, agent_idx: int, agent_io_path: Path
     ) -> Optional[str]:
-        """
-        Check if batch jobs were submitted for an agent.
-
-        Args:
-            agent_name: Name of the agent
-            agent_idx: Index of the agent
-            agent_io_path: Path to agent I/O folder
-
-        Returns:
-            Status string: 'batch_submitted', 'passthrough', 'no_batches', or None
-        """
-        # Use simple directory name (no index prefix)
+        """Return 'batch_submitted', 'passthrough', 'no_batches', or None."""
         node_output_dir = agent_io_path / "target" / agent_name
         registry_file = node_output_dir / "batch" / ".batch_registry.json"
 

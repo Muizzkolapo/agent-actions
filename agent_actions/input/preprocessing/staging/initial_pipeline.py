@@ -1,13 +1,4 @@
-"""
-Module for initial stage pipeline processing.
-
-Handles the first stage of data processing workflows including:
-- Reading and validating input files
-- Preparing data (chunking, parsing, transforming)
-- Saving source data
-- Processing through RecordProcessor (batch or online mode)
-- Collecting and writing results
-"""
+"""Initial stage pipeline: file reading, data preparation, source saving, and processing."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,7 +80,6 @@ def _save_source_items_helper(
     relative_path = Path(file_path).relative_to(base_directory)
     workflow_root = _derive_workflow_root(output_directory, base_directory)
 
-    # Use unified saver with batch mode settings and optional storage backend
     saver = UnifiedSourceDataSaver(
         base_directory=str(workflow_root),
         enable_deduplication=True,
@@ -97,7 +87,6 @@ def _save_source_items_helper(
         storage_backend=storage_backend,
     )
 
-    # Save source items
     saver.save_source_items(items=source_items, relative_path=str(relative_path.with_suffix("")))
 
 
@@ -109,41 +98,32 @@ def _validate_staged_data(
     mode: str,
     file_path: str,
 ):
-    """Validate INPUT context against template requirements before LLM execution."""
+    """Validate input context against prompt template requirements before LLM execution."""
     from agent_actions.prompt.service import (
         PromptPreparationService,
     )
 
     if not raw_content:
-        return  # Nothing to validate
+        return
 
-    # Get raw prompt template
     try:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
     except (ValueError, KeyError):
-        return  # No template to validate
+        return
 
     if not raw_prompt:
         return
 
-    # Build INPUT context from raw staging data
-    # For JSON: first item becomes source content
-    # For text: raw text becomes source content
     if file_type == ".json" and isinstance(raw_content, list) and raw_content:
-        # JSON array: use first item as sample source content
         first_item = raw_content[0]
         source_content = first_item
     elif file_type == ".json" and isinstance(raw_content, dict):
-        # Single JSON object
         source_content = raw_content
         first_item = raw_content
     else:
-        # Text/other: wrap in dict with page_content
-        source_content = {"page_content": str(raw_content)[:1000]}  # Truncate for validation
+        source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
 
-    # Use PromptPreparationService to build INPUT context
-    # This builds: {source: {...}, seed: {...}, previous_actions: {...}}
     prep_result = PromptPreparationService.prepare_prompt_with_context(
         agent_config=agent_config,
         agent_name=agent_name,
@@ -164,7 +144,6 @@ def process_initial_stage(ctx: InitialStageContext):
     file_type = file_reader.file_type
     run_mode = ctx.agent_config.get("run_mode")
 
-    # DEBUG: Log what run_mode we're actually getting
     logger.info(
         "Staging loader run_mode check: mode=%s, agent=%s, file=%s",
         run_mode,
@@ -178,9 +157,6 @@ def process_initial_stage(ctx: InitialStageContext):
         },
     )
 
-    # ============================================================================
-    # STEP 1: PREFLIGHT VALIDATION ON INPUT (before any LLM execution!)
-    # ============================================================================
     _validate_staged_data(
         raw_content=content,
         file_type=file_type,
@@ -190,9 +166,6 @@ def process_initial_stage(ctx: InitialStageContext):
         file_path=ctx.file_path,
     )
 
-    # ============================================================================
-    # STEP 2: Prepare data based on run mode
-    # ============================================================================
     prep_ctx = DataPreparationContext(
         content=content,
         file_type=file_type,
@@ -203,15 +176,10 @@ def process_initial_stage(ctx: InitialStageContext):
     )
 
     if run_mode == "batch":
-        # Legacy batch preparation logic
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
-        # Realtime preparation using loaders directly (no StagingContentLoader)
         data_chunk, src_text = _prepare_realtime_data(prep_ctx)
 
-    # ============================================================================
-    # STEP 3: UNIFIED SOURCE SAVING (happens for BOTH modes)
-    # ============================================================================
     _save_source_data(
         src_text,
         data_chunk,
@@ -221,9 +189,6 @@ def process_initial_stage(ctx: InitialStageContext):
         storage_backend=ctx.storage_backend,
     )
 
-    # ============================================================================
-    # STEP 4: Process based on mode
-    # ============================================================================
     if run_mode == "batch":
         batch_ctx = BatchProcessingContext(
             agent_config=ctx.agent_config,
@@ -252,18 +217,15 @@ def _should_save_source_items(
     if not new_items:
         return False
 
-    # Build path to existing source file
     relative_path = Path(file_path).relative_to(base_directory)
     workflow_root = _derive_workflow_root(output_directory, base_directory)
 
     source_file = workflow_root / "agent_io" / "source" / f"{relative_path.with_suffix('')}.json"
 
-    # If source file doesn't exist, always save
     if not source_file.exists():
         logger.debug("Source file doesn't exist, proceeding with save: %s", source_file)
         return True
 
-    # Load existing source data
     try:
         with open(source_file, "r", encoding="utf-8") as f:
             existing_items = json.load(f)
@@ -271,11 +233,9 @@ def _should_save_source_items(
                 logger.debug("Existing source file is empty, proceeding with save")
                 return True
 
-            # Compare field counts: use first item as representative
             existing_fields = set(existing_items[0].keys()) if existing_items else set()
             new_fields = set(new_items[0].keys()) if new_items else set()
 
-            # Only save if new data has MORE fields than existing (is richer)
             if len(new_fields) > len(existing_fields):
                 logger.info(
                     "New source data is richer (%d fields) than existing (%d fields), proceeding with save",
@@ -302,17 +262,12 @@ def _save_source_data(
     src_text, data_chunk, file_path, base_directory, output_directory=None, storage_backend=None
 ):
     """UNIFIED source saving logic for both batch and realtime modes."""
-    # Determine source items to save
     if src_text:
-        # Realtime mode: src_text already prepared by loaders
         source_items = src_text if isinstance(src_text, list) else [src_text]
     else:
-        # Batch mode: extract from data_chunk (each row has source_guid)
         source_items = [row.copy() for row in data_chunk if row.get("source_guid")]
 
-    # Save to source folder (single source of truth)
     if source_items:
-        # Check if we're about to save sparse data when rich data might exist
         if not _should_save_source_items(source_items, file_path, base_directory, output_directory):
             logger.debug(
                 "Skipping source save - existing source data is richer than new data for %s",
@@ -430,7 +385,6 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
-    # CSV/XML bypass ctx.content and re-read via file_path (see staging/_MANIFEST.md).
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         data_chunk = _prepare_text_chunks_batch(
             ctx.content, ctx.agent_config, local_batch_id, node_id
@@ -450,7 +404,6 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     elif ctx.file_type == ".xlsx":
-        # XLSX: FileReader already returns list[dict] from pandas, use directly
         if not isinstance(ctx.content, list):
             logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
         rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
@@ -480,7 +433,6 @@ def _prepare_batch_data(ctx: DataPreparationContext):
             },
         )
 
-    # Ensure all rows have ancestry chain fields
     for row in data_chunk:
         if "target_id" not in row or not row["target_id"]:
             row["target_id"] = str(uuid.uuid4())
@@ -503,7 +455,6 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
-    # CSV/XML bypass ctx.content and re-read via file_path (see staging/_MANIFEST.md).
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
         chunk_size = chunk_config.get("chunk_size", 1000)
@@ -517,39 +468,28 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        # Keep chunks as a list; avoid passing through TextLoader.process (stringifies lists).
         data_chunk = chunks
 
-        # For text, we need to wrap strings in dicts for UnifiedSourceDataSaver
-        # Use IDGenerator to ensure GUIDs match what RecordProcessor will generate
+        # GUIDs must match what RecordProcessor will generate
         from agent_actions.utils.id_generation import IDGenerator
 
         src_text = []
         for text in data_chunk:
             guid = IDGenerator.generate_deterministic_source_guid(text)
-            # Store flat structure for consistency using 'content' as main text field
-            # This avoids nesting and matches the user's expected flat-ish structure
             src_text.append({"source_guid": guid, "content": text})
 
     elif ctx.file_type == ".json":
-        # JsonLoader returns parsed JSON
         data_chunk = json_loader.process(ctx.content, ctx.file_path)
 
-        # Ensure list format for processing
         if not isinstance(data_chunk, list):
             data_chunk = [data_chunk]
 
-        # Prepare source text for saving (add source_guid)
-        # CRITICAL: Do NOT mutate data_chunk items in place, as RecordProcessor
-        # calculates source_guid based on the raw item content. If we add
-        # source_guid to data_chunk, RecordProcessor will include it in the hash,
-        # causing a mismatch with the saved source file.
+        # Do NOT mutate data_chunk: RecordProcessor hashes raw items for source_guid
         from agent_actions.utils.id_generation import IDGenerator
 
         src_text = []
         for item in data_chunk:
             if isinstance(item, dict):
-                # Create a copy for source saving to avoid modifying the input for processing
                 source_item = item.copy()
                 if "source_guid" not in source_item:
                     source_item["source_guid"] = IDGenerator.generate_deterministic_source_guid(
@@ -560,17 +500,14 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
                 src_text.append(item)
 
     elif ctx.file_type == ".csv":
-        # CSV: let TabularLoader read the file itself (FileReader returns list[list], not str)
         data_chunk = tabular_loader.process(content=None, file_path=ctx.file_path)
         src_text = data_chunk
 
     elif ctx.file_type == ".xlsx":
-        # XLSX: FileReader already returns list[dict] from pandas, use directly
         data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]
         src_text = data_chunk
 
     elif ctx.file_type == ".xml":
-        # XML: let XmlLoader read the file itself (FileReader returns (tree, root) tuple, not str)
         data_chunk = xml_loader.process(content=None, file_path=ctx.file_path)
         src_text = data_chunk
 
@@ -641,7 +578,6 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
 
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
-    # Import here to avoid circular dependency
     from agent_actions.llm.batch.service import BatchService
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
@@ -675,13 +611,9 @@ def _process_realtime_mode_with_record_processor(
     """Process data in realtime mode using RecordProcessor."""
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
-    # No directory creation - storage backend is required
 
-    # Initialize RecordProcessor
     processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
 
-    # Create processing context
-    # Use is_first_stage=True to trigger ID generation and enrichment logic for raw input
     processing_context = ProcessingContext(
         agent_config=ctx.agent_config,
         agent_name=ctx.agent_name,
@@ -693,11 +625,8 @@ def _process_realtime_mode_with_record_processor(
         storage_backend=ctx.storage_backend,
     )
 
-    # Execute batch processing (RecordProcessor.process_batch iterates and calls process() -> LLM)
-    # The data_chunk here contains raw items (strings, dicts) or pre-chunked items
     results = processor.process_batch(data_chunk, processing_context)
 
-    # Extract data from results
     processed_items = ResultCollector.collect_results(
         results,
         ctx.agent_config,
@@ -715,7 +644,6 @@ def _process_realtime_mode_with_record_processor(
             },
         )
 
-    # Write output using storage backend (required)
     file_writer = FileWriter(
         str(output_file_path),
         storage_backend=ctx.storage_backend,

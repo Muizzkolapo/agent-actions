@@ -1,7 +1,4 @@
-"""
-Unified parser for field references across different syntaxes.
-"""
-# Line-too-long: Regex patterns and docstrings require longer lines for readability
+"""Unified parser for field references across different syntaxes."""
 
 import re
 from dataclasses import dataclass
@@ -21,15 +18,7 @@ class ReferenceFormat(Enum):
 
 @dataclass
 class ParsedReference:
-    """
-    Structured representation of a parsed field reference.
-
-    Attributes:
-        action_name: The action/namespace being referenced (e.g., "extract_facts")
-        field_path: Path to the field as a list (e.g., ["response", "data", "count"])
-        full_reference: Original reference string for substitution
-        format_type: How the reference was formatted (selector, template, jinja)
-    """
+    """Structured representation of a parsed field reference."""
 
     action_name: str
     field_path: List[str]
@@ -53,12 +42,7 @@ class ParsedReference:
 
 
 class ReferenceParser:
-    """
-    Unified parser for all field reference formats.
-
-    Handles parsing of field references in different syntaxes used across
-    the system (guards, prompts, context_scope directives).
-    """
+    """Unified parser for all field reference formats."""
 
     # Regex patterns for extracting references from text
     # Template: {action.field} or {action.nested.path}
@@ -74,27 +58,10 @@ class ReferenceParser:
     def parse(
         self, reference: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
     ) -> ParsedReference:
-        """
-        Parse a single field reference string into structured format.
-
-        Args:
-            reference: Reference string (e.g., "action.field" or "{action.field}")
-            format_hint: Optional hint about expected format for faster parsing
-            strict: If True, raise InvalidReferenceError on parse failure
-
-        Returns:
-            ParsedReference with action name and field path
+        """Parse a single field reference string into structured format.
 
         Raises:
-            InvalidReferenceError: If reference is malformed (strict mode only)
-
-        Example:
-            >>> parser = ReferenceParser()
-            >>> ref = parser.parse("extract_facts.count")
-            >>> ref.action_name
-            'extract_facts'
-            >>> ref.field_path
-            ['count']
+            InvalidReferenceError: If reference is malformed (strict mode only).
         """
         if not reference or not isinstance(reference, str):
             if strict:
@@ -105,26 +72,22 @@ class ReferenceParser:
 
         reference = reference.strip()
 
-        # Try format hint first if provided
         if format_hint:
             result = self._try_parse_format(reference, format_hint, strict)
             if result:
                 return result
 
-        # Auto-detect format and parse
         for fmt in [ReferenceFormat.JINJA, ReferenceFormat.TEMPLATE, ReferenceFormat.SELECTOR]:
             result = self._try_parse_format(reference, fmt, strict=False)
             if result:
                 return result
 
-        # Fallback: treat as selector format
         if strict:
             raise InvalidReferenceError(
                 f"Invalid reference: '{reference}'. "
                 f"Expected format: 'action.field' or '{{action.field}}'"
             )
 
-        # Non-strict: try to parse, fall back to empty reference if it fails
         try:
             return self._parse_selector_format(reference, ReferenceFormat.SELECTOR)
         except InvalidReferenceError:
@@ -133,26 +96,13 @@ class ReferenceParser:
     def parse_batch(
         self, text: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
     ) -> List[ParsedReference]:
-        """
-        Extract all field references from a text string.
-
-        Useful for finding all references in guard conditions or prompt templates.
-
-        Args:
-            text: Text containing references
-            format_hint: Expected reference format (auto-detects if not provided)
-            strict: If True, raise on invalid references
-
-        Returns:
-            List of ParsedReference objects found in text
-        """
+        """Extract all field references from a text string."""
         if not text:
             return []
 
         references = []
-        seen = set()  # Avoid duplicates
+        seen = set()
 
-        # Determine which patterns to use
         patterns = self._get_patterns_for_format(format_hint)
 
         for pattern, fmt in patterns:
@@ -160,7 +110,6 @@ class ReferenceParser:
                 full_match = match.group(0)
                 ref_content = match.group(1)
 
-                # Skip if already seen this reference
                 if ref_content in seen:
                     continue
                 seen.add(ref_content)
@@ -200,11 +149,7 @@ class ReferenceParser:
         return None
 
     def _parse_selector_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
-        """
-        Parse selector format: action.field or action.nested.path
-
-        Supports nested paths for deep field access.
-        """
+        """Parse selector format: action.field or action.nested.path."""
         parts = reference.split(".")
 
         if len(parts) < 2:
@@ -235,17 +180,14 @@ class ReferenceParser:
 
     def _parse_template_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """Parse template format: {action.field}"""
-        # Check if wrapped in braces
         if not (reference.startswith("{") and reference.endswith("}")):
             raise InvalidReferenceError(
                 f"Invalid template reference: '{reference}'. Expected format: '{{action.field}}'"
             )
 
-        # Strip braces and parse as selector
         content = reference[1:-1].strip()
         parsed = self._parse_selector_format(content, fmt)
 
-        # Keep original full_reference with braces
         return ParsedReference(
             action_name=parsed.action_name,
             field_path=parsed.field_path,
@@ -255,17 +197,14 @@ class ReferenceParser:
 
     def _parse_jinja_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """Parse Jinja format: {{ action.field }}"""
-        # Check if wrapped in double braces
         if not (reference.startswith("{{") and reference.endswith("}}")):
             raise InvalidReferenceError(
                 f"Invalid Jinja reference: '{reference}'. Expected format: '{{{{ action.field }}}}'"
             )
 
-        # Strip double braces and whitespace
         content = reference[2:-2].strip()
         parsed = self._parse_selector_format(content, fmt)
 
-        # Keep original full_reference with braces
         return ParsedReference(
             action_name=parsed.action_name,
             field_path=parsed.field_path,
@@ -281,7 +220,6 @@ class ReferenceParser:
             return [(self.JINJA_PATTERN, ReferenceFormat.JINJA)]
         if format_hint == ReferenceFormat.SELECTOR:
             return [(self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR)]
-        # Try all patterns in order of specificity
         return [
             (self.JINJA_PATTERN, ReferenceFormat.JINJA),
             (self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE),

@@ -20,13 +20,7 @@ if TYPE_CHECKING:
 
 
 class FileWriter(ProcessorErrorHandlerMixin):
-    """File writer utility for writing data to various file formats.
-
-    Supports JSON, TXT, and CSV formats with integrated error handling.
-    Uses ProcessorErrorHandlerMixin for consistent error reporting.
-
-    Optionally uses a StorageBackend for database-backed persistence.
-    """
+    """Writes data to JSON, TXT, or CSV files with optional storage backend persistence."""
 
     def __init__(
         self,
@@ -38,8 +32,6 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """Initialize file writer.
 
         Args:
-            file_path: Path to the output file
-            storage_backend: Optional storage backend for database persistence
             action_name: Node name for backend writes (required if storage_backend provided)
             output_directory: Base directory for computing relative paths (preserves subdirs)
         """
@@ -51,12 +43,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self.output_directory = output_directory
 
     def _execute_write(self, operation_name: str, write_fn: Callable[[], int]) -> None:
-        """Execute a write operation with event firing and error handling.
-
-        Args:
-            operation_name: Name of the operation for error reporting
-            write_fn: Callable that performs the write and returns bytes_written
-        """
+        """Execute a write operation with event firing and error handling."""
         try:
             fire_event(
                 FileWriteStartedEvent(
@@ -87,9 +74,6 @@ class FileWriter(ProcessorErrorHandlerMixin):
     def write_staging(self, data: Any) -> None:
         """Write data to staging file in appropriate format.
 
-        Args:
-            data: Data to write (format depends on file type)
-
         Raises:
             AgentActionsException: If file type is unsupported
         """
@@ -116,13 +100,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self._execute_write("Write staging file", do_write)
 
     def write_target(self, data: list[dict[str, Any]]) -> None:
-        """Write data to target file.
-
-        Requires a storage_backend for database-backed persistence.
-
-        Args:
-            data: Data to write (list of records)
-        """
+        """Write data to target via storage backend (raises ValueError if backend is missing)."""
 
         def do_write() -> int:
             if self.storage_backend is None or self.action_name is None:
@@ -145,11 +123,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         self._execute_write("Write target file", do_write)
 
     def write_source(self, data: Any) -> None:
-        """Write data to source file in JSON format.
-
-        Args:
-            data: Data to write as JSON
-        """
+        """Write data to source file in JSON format."""
 
         def do_write() -> int:
             with open(self.file_path, "w", encoding="utf-8") as file:

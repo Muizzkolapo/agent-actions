@@ -1,6 +1,4 @@
-"""
-Unified error formatter for pre-flight validation.
-"""
+"""Unified error formatter for pre-flight validation."""
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -8,19 +6,7 @@ from typing import Any, Dict, List, Optional
 
 @dataclass
 class ValidationIssue:
-    """Represents a single validation issue (error or warning).
-
-    Attributes:
-        message: The main error/warning message
-        issue_type: Type of issue ('error', 'warning')
-        category: Category of the issue ('template', 'context', 'dependency', etc.)
-        missing_refs: List of missing references/fields
-        available_refs: List of available references/fields
-        hint: Actionable suggestion for fixing the issue
-        agent_name: Name of the agent where issue occurred
-        location: Location info (e.g., template line number)
-        extra_context: Additional context information
-    """
+    """Represents a single validation issue (error or warning)."""
 
     message: str
     issue_type: str = "error"
@@ -34,46 +20,29 @@ class ValidationIssue:
 
 
 class PreFlightErrorFormatter:
-    """Formats pre-flight validation errors consistently.
-
-    This formatter ensures that both batch and online modes produce
-    identical, user-friendly error messages.
-    """
+    """Formats pre-flight validation errors consistently."""
 
     @staticmethod
     def format_issue(issue: ValidationIssue, mode: str = "unknown") -> str:
-        """Format a single validation issue into a user-friendly string.
-
-        Args:
-            issue: The validation issue to format
-            mode: Execution mode ('batch' or 'online')
-
-        Returns:
-            Formatted error string
-        """
+        """Format a single validation issue into a user-friendly string."""
         lines = []
 
-        # Header with issue type and category
         type_label = "ERROR" if issue.issue_type == "error" else "WARNING"
         lines.append(f"[{type_label}] {issue.message}")
         lines.append("")
 
-        # Missing and available references
         if issue.missing_refs:
             lines.append(f"  Missing: {', '.join(issue.missing_refs)}")
         if issue.available_refs:
-            # Limit to reasonable number for display
             refs_display = issue.available_refs[:10]
             if len(issue.available_refs) > 10:
                 refs_display.append(f"... (+{len(issue.available_refs) - 10} more)")
             lines.append(f"  Available: {', '.join(refs_display)}")
 
-        # Hint
         if issue.hint:
             lines.append("")
             lines.append(f"  Hint: {issue.hint}")
 
-        # Context section
         context_items = []
         if mode != "unknown":
             context_items.append(f"mode: {mode}")
@@ -94,15 +63,7 @@ class PreFlightErrorFormatter:
 
     @staticmethod
     def format_issues(issues: List[ValidationIssue], mode: str = "unknown") -> str:
-        """Format multiple validation issues into a summary string.
-
-        Args:
-            issues: List of validation issues
-            mode: Execution mode ('batch' or 'online')
-
-        Returns:
-            Formatted summary string
-        """
+        """Format multiple validation issues into a summary string."""
         if not issues:
             return "Pre-flight validation passed with no issues."
 
@@ -111,19 +72,16 @@ class PreFlightErrorFormatter:
 
         lines = []
 
-        # Summary header
         lines.append("Pre-flight Validation Failed")
         lines.append(f"  {len(errors)} error(s), {len(warnings)} warning(s)")
         lines.append("")
 
-        # Format errors first
         if errors:
             lines.append("Errors:")
             lines.append("-" * 50)
             for i, error in enumerate(errors, 1):
                 lines.append(f"\n{i}. {PreFlightErrorFormatter.format_issue(error, mode)}")
 
-        # Then warnings
         if warnings:
             lines.append("")
             lines.append("Warnings:")
@@ -141,18 +99,7 @@ class PreFlightErrorFormatter:
         unsupported_features: Optional[List[str]] = None,
         agent_name: Optional[str] = None,
     ) -> ValidationIssue:
-        """Create a validation issue for vendor configuration problems.
-
-        Args:
-            message: Description of the vendor config issue
-            vendor: Name of the vendor
-            missing_fields: Required fields that are missing
-            unsupported_features: Features not supported by vendor
-            agent_name: Name of the agent
-
-        Returns:
-            ValidationIssue configured for vendor config errors
-        """
+        """Create a ValidationIssue for vendor configuration problems."""
         hint_parts = []
         if missing_fields:
             hint_parts.append(f"Add required fields: {', '.join(missing_fields)}")
@@ -179,17 +126,7 @@ class PreFlightErrorFormatter:
         path_type: str = "file",
         agent_name: Optional[str] = None,
     ) -> ValidationIssue:
-        """Create a validation issue for invalid paths.
-
-        Args:
-            message: Description of the path issue
-            invalid_paths: List of invalid paths
-            path_type: Type of path ('file', 'directory', etc.)
-            agent_name: Name of the agent
-
-        Returns:
-            ValidationIssue configured for path errors
-        """
+        """Create a ValidationIssue for invalid paths."""
         return ValidationIssue(
             message=message,
             issue_type="error",

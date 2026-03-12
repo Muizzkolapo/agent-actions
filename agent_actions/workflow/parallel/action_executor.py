@@ -36,15 +36,7 @@ class LevelExecutionParams:
 
 
 class ActionLevelOrchestrator:
-    """
-    Orchestrates agent execution by dependency levels.
-
-    Responsibilities:
-    - Compute execution levels from dependency graph
-    - Execute agents in parallel within levels
-    - Manage concurrency limits
-    - Handle level-based error propagation
-    """
+    """Orchestrates agent execution by dependency levels."""
 
     def __init__(
         self,
@@ -52,29 +44,13 @@ class ActionLevelOrchestrator:
         agent_configs: Dict[str, Dict[str, Any]],
         console: Optional[Console] = None,
     ):
-        """
-        Initialize level orchestrator.
-
-        Args:
-            execution_order: List of agent names in topological order
-            agent_configs: Dictionary of agent configurations
-            console: Rich console for output
-        """
+        """Initialize level orchestrator."""
         self.execution_order = execution_order
         self.agent_configs = agent_configs
         self.console = console or Console()
 
     def _build_version_base_name_map(self) -> Dict[str, List[str]]:
-        """
-        Build a mapping from version base names to their expanded agent names.
-
-        For example, if extract_raw_qa is a versioned action that expands to
-        extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3, this returns:
-        {"extract_raw_qa": ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]}
-
-        Returns:
-            Dictionary mapping version base names to list of expanded agent names
-        """
+        """Build a mapping from version base names to their expanded agent names."""
         version_base_map: Dict[str, List[str]] = {}
         for agent_name in self.execution_order:
             config = self.agent_configs[agent_name]
@@ -89,20 +65,7 @@ class ActionLevelOrchestrator:
     def _expand_version_dependencies(
         self, dependencies: List[str], version_base_map: Dict[str, List[str]]
     ) -> List[str]:
-        """
-        Expand dependencies that reference version base names to their expanded variants.
-
-        For example, if dependencies is ["extract_raw_qa"] and version_base_map is
-        {"extract_raw_qa": ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"]},
-        this returns ["extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"].
-
-        Args:
-            dependencies: List of dependency names
-            version_base_map: Mapping from version base names to expanded agent names
-
-        Returns:
-            List of expanded dependency names
-        """
+        """Expand dependencies that reference version base names to their expanded variants."""
         expanded = []
         for dep in dependencies:
             if dep in version_base_map:
@@ -114,24 +77,14 @@ class ActionLevelOrchestrator:
         return expanded
 
     def compute_execution_levels(self) -> List[List[str]]:
-        """
-        Compute execution levels from dependency graph.
-
-        Agents in the same level have no inter-dependencies and can run in parallel.
-
-        Returns:
-            List of execution levels, where each level is a list of agent names
+        """Compute execution levels from dependency graph.
 
         Raises:
-            WorkflowError: If circular dependencies detected
+            WorkflowError: If circular dependencies are detected.
         """
         # Build mapping of version base names to their expanded variants
         version_base_map = self._build_version_base_name_map()
 
-        # Note: context_scope version reference expansion is now handled at config load time
-        # by context_scope_normalizer.py via ConfigManager.determine_execution_order()
-
-        # Build dependency map, expanding version base name references
         deps_map = {}
         for agent in self.execution_order:
             raw_deps = [
@@ -140,7 +93,6 @@ class ActionLevelOrchestrator:
             # Expand any version base name references to their expanded variants
             expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
             deps_map[agent] = expanded_deps
-            # Update agent config with expanded dependencies
             if expanded_deps != raw_deps:
                 self.agent_configs[agent]["dependencies"] = expanded_deps
 
@@ -156,7 +108,6 @@ class ActionLevelOrchestrator:
             ]
 
             if not current_level:
-                # Circular dependency detected
                 remaining_agents = set(self.execution_order) - assigned
                 unsatisfied_deps = {
                     agent: [dep for dep in deps_map[agent] if dep not in assigned]
@@ -187,23 +138,12 @@ class ActionLevelOrchestrator:
         return levels
 
     def should_use_parallel_execution(self) -> bool:
-        """
-        Determine if workflow should use parallel execution.
-
-        Returns:
-            True if any execution level has more than 1 agent
-        """
+        """Return True if any execution level has more than 1 agent."""
         levels = self.compute_execution_levels()
         return any(len(level) > 1 for level in levels)
 
     def log_execution_levels(self, levels: List[List[str]], agent_indices: Dict[str, int]):
-        """
-        Log execution levels for user transparency.
-
-        Args:
-            levels: List of execution levels
-            agent_indices: Dictionary mapping agent names to indices
-        """
+        """Log execution levels for user transparency."""
         self.console.print(f"[blue]📊 Execution: {len(levels)} action(s)[/blue]")
 
         for i, level in enumerate(levels):
@@ -269,11 +209,9 @@ class ActionLevelOrchestrator:
                 self._fire_agent_result_event(agent, original_idx, total_agents, result)
                 return result
 
-        # Execute all agents concurrently
         tasks = [run_with_limit(agent) for agent in params.pending_agents]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Collect errors (events already fired per-agent above)
         errors = []
         for agent, result in zip(params.pending_agents, results):
             if isinstance(result, Exception):
@@ -345,17 +283,13 @@ class ActionLevelOrchestrator:
         return True  # No batch pending
 
     async def execute_level_async(self, params: LevelExecutionParams) -> bool:
-        """
-        Execute all agents in a level asynchronously.
-
-        Args:
-            params: LevelExecutionParams containing all execution parameters
+        """Execute all agents in a level asynchronously.
 
         Returns:
-            True if level completed successfully, False if batch jobs pending
+            True if level completed, False if batch jobs pending.
 
         Raises:
-            WorkflowError: If any agent fails during execution
+            WorkflowError: If any agent fails during execution.
         """
         start_time = datetime.now()
 
@@ -372,12 +306,10 @@ class ActionLevelOrchestrator:
             f"[cyan]Action {params.level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]"
         )
 
-        # Single agent - execute directly
         if len(pending_agents) == 1:
             await self._execute_single_agent(
                 pending_agents[0], params.agent_indices, params.agent_executor
             )
-        # Multiple agents - execute in parallel
         else:
             await self._execute_parallel_agents(
                 ParallelExecutionParams(
@@ -389,13 +321,11 @@ class ActionLevelOrchestrator:
                 )
             )
 
-        # Check for batch submissions
         if not self._check_batch_status(
             params.level_idx, params.level_agents, params.state_manager, start_time
         ):
-            return False  # Batch pending
+            return False
 
-        # Level completed
         duration = (datetime.now() - start_time).total_seconds()
         self.console.print(f"[green]Action {params.level_idx} complete ({duration:.2f}s)[/green]")
         return True

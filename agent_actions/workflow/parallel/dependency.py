@@ -19,12 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class WorkflowDependencyOrchestrator:
-    """
-    Orchestrates upstream and downstream workflow dependencies.
-
-    Handles recursive execution of dependent workflows, status checking,
-    and artifact linking between workflows.
-    """
+    """Orchestrates upstream and downstream workflow dependencies."""
 
     def __init__(
         self,
@@ -33,17 +28,7 @@ class WorkflowDependencyOrchestrator:
         console: Console,
         workflow_factory: Callable[..., Any],
     ):
-        """
-        Initialize the dependency orchestrator.
-
-        Args:
-            workflows_root: Root directory containing all workflows.
-            current_workflow: Name of the current workflow being executed.
-            console: Rich console for output.
-            workflow_factory: Callable to create new workflow instances.
-                              Signature: (config_path, user_code_path, default_path,
-                                         use_tools, run_upstream, run_downstream) -> workflow
-        """
+        """Initialize the dependency orchestrator."""
         self.workflows_root = workflows_root
         self.current_workflow = current_workflow
         self.console = console
@@ -53,7 +38,7 @@ class WorkflowDependencyOrchestrator:
 
     @property
     def workspace_index(self) -> WorkspaceIndex:
-        """Get or create workspace index (lazy initialization)."""
+        """Return workspace index, creating it on first access."""
         if self._workspace_index is None:
             self._workspace_index = WorkspaceIndex(self.workflows_root)
             self._workspace_index.scan_workspace()
@@ -66,17 +51,9 @@ class WorkflowDependencyOrchestrator:
         default_path: Optional[str],
         use_tools: bool,
     ) -> bool:
-        """
-        Recursively resolve and execute upstream dependencies.
-
-        Args:
-            agent_configs: Dictionary of agent configurations.
-            user_code_path: Path to user code directory.
-            default_path: Path to default configuration.
-            use_tools: Whether to enable tool usage.
+        """Recursively resolve and execute upstream dependencies.
 
         Returns:
-            True if all upstreams resolved successfully,
             False if any upstream has pending batch jobs.
         """
         logger.info(
@@ -110,14 +87,7 @@ class WorkflowDependencyOrchestrator:
         default_path: Optional[str],
         use_tools: bool,
     ) -> Optional[bool]:
-        """
-        Execute a single upstream workflow and link artifacts.
-
-        Args:
-            upstream_name: Name of the upstream workflow.
-            user_code_path: Path to user code directory.
-            default_path: Path to default configuration.
-            use_tools: Whether to enable tool usage.
+        """Execute a single upstream workflow and link artifacts.
 
         Returns:
             True if upstream is ready, None if batch jobs pending.
@@ -139,7 +109,6 @@ class WorkflowDependencyOrchestrator:
                     f"Could not locate upstream config at {upstream_config_path}"
                 )
 
-            # Check if upstream workflow is already complete
             all_completed = self._check_workflow_complete(upstream_name)
 
             if all_completed:
@@ -149,7 +118,6 @@ class WorkflowDependencyOrchestrator:
                     "using existing data[/bold green]"
                 )
             else:
-                # Run upstream workflow
                 self.console.print(
                     f"[bold cyan]>> Recursive: Executing upstream "
                     f"workflow '{upstream_name}'...[/bold cyan]"
@@ -168,7 +136,6 @@ class WorkflowDependencyOrchestrator:
                     self._print_batch_pending_message(upstream_name, is_upstream=True)
                     return None
 
-            # Link artifacts
             self.artifact_linker.link_upstream_artifacts(upstream_name, self.current_workflow)
 
             self.console.print(
@@ -200,16 +167,9 @@ class WorkflowDependencyOrchestrator:
     def resolve_downstream_workflows(
         self, user_code_path: Optional[str], default_path: Optional[str], use_tools: bool
     ) -> bool:
-        """
-        Execute all downstream workflows after current workflow completes.
-
-        Args:
-            user_code_path: Path to user code directory.
-            default_path: Path to default configuration.
-            use_tools: Whether to enable tool usage.
+        """Execute all downstream workflows after current workflow completes.
 
         Returns:
-            True if all downstream workflows completed successfully,
             False if any downstream has pending batch jobs.
         """
         logger.info(
@@ -218,7 +178,6 @@ class WorkflowDependencyOrchestrator:
             extra={"operation": "resolve_downstream"},
         )
 
-        # Get sorted downstream workflows
         try:
             downstream_order = self.workspace_index.topological_sort_downstream(
                 self.current_workflow
@@ -238,7 +197,6 @@ class WorkflowDependencyOrchestrator:
             f"{downstream_order}[/bold cyan]"
         )
 
-        # Execute each downstream workflow in order
         for downstream_name in downstream_order:
             result = self._execute_downstream_workflow(
                 downstream_name, user_code_path, default_path, use_tools
@@ -255,18 +213,7 @@ class WorkflowDependencyOrchestrator:
         default_path: Optional[str],
         use_tools: bool,
     ) -> Optional[bool]:
-        """
-        Execute a single downstream workflow.
-
-        Args:
-            downstream_name: Name of the downstream workflow.
-            user_code_path: Path to user code directory.
-            default_path: Path to default configuration.
-            use_tools: Whether to enable tool usage.
-
-        Returns:
-            True on success, None if batch pending.
-        """
+        """Execute a single downstream workflow. Return None if batch pending."""
         self.console.print(
             f"\n[bold cyan]>> Downstream: Executing workflow '{downstream_name}'...[/bold cyan]"
         )
@@ -280,10 +227,8 @@ class WorkflowDependencyOrchestrator:
                 f"Downstream workflow config not found at {downstream_config_path}"
             )
 
-        # Link current workflow's output to downstream's staging
         self.artifact_linker.link_downstream_artifacts(self.current_workflow, downstream_name)
 
-        # Create and run downstream workflow
         downstream_wf = self.workflow_factory(
             config_path=str(downstream_config_path),
             user_code_path=user_code_path,

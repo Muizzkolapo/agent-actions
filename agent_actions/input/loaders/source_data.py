@@ -1,4 +1,4 @@
-"""Module for loading source data from storage backend."""
+"""Source data loading from storage backend."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class SourceDataLoader(ISourceDataLoader):
         return True
 
     def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode to let system choose."""
+        """Return AUTO processing mode."""
         return ProcessingMode.AUTO
 
     def load_source_data(self, source_relative_path: str) -> List[Dict]:

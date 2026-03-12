@@ -21,12 +21,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BatchProcessingContext:
-    """
-    Context passed through the processing pipeline.
-
-    Contains all data needed for processing batch results, accumulated
-    across pipeline stages.
-    """
+    """Context passed through the batch result processing pipeline."""
 
     # Input data
     batch_results: List[BatchResult]
@@ -54,27 +49,7 @@ class BatchProcessingContext:
 
 
 class BatchResultProcessor:
-    """
-    Pipeline-based processor for batch results.
-
-    Converts batch provider results into workflow format using a clean
-    pipeline architecture. Batch-specific pre-processing (JSON mode,
-    passthrough, structure transform) is done locally, then enrichment
-    (metadata, lineage, IDs, recovery) is delegated to the shared
-    EnrichmentPipeline for parity with the online path.
-
-    Example:
-        processor = BatchResultProcessor()
-
-        result = processor.process(
-            batch_results=batch_results,
-            context_map=context_map,
-            output_directory='/tmp/node_1_Agent',
-            agent_config=agent_config
-        )
-
-        # result is the processed data in workflow format
-    """
+    """Converts batch provider results into workflow format via pipeline stages."""
 
     def __init__(self):
         self._enrichment_pipeline = EnrichmentPipeline()
@@ -87,19 +62,7 @@ class BatchResultProcessor:
         agent_config: Optional[Dict[str, Any]] = None,
         exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
     ) -> List[Dict[str, Any]]:
-        """
-        Process batch results through the pipeline.
-
-        Args:
-            batch_results: List of BatchResult objects from provider
-            context_map: Map of custom_id -> original row data
-            output_directory: Output directory path (for node extraction)
-            agent_config: Agent configuration
-            exhausted_recovery: Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
-
-        Returns:
-            List of processed data in workflow format
-        """
+        """Process batch results through the pipeline into workflow format."""
         ctx = self._stage_1_initialize_context(
             batch_results,
             context_map,
@@ -131,11 +94,7 @@ class BatchResultProcessor:
         agent_config: Optional[Dict[str, Any]],
         exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
     ) -> BatchProcessingContext:
-        """
-        Stage 1: Initialize processing context.
-
-        Extracts configuration values and prepares context for pipeline.
-        """
+        """Initialize processing context with configuration values."""
         context_map = context_map or {}
 
         json_mode = True
@@ -163,21 +122,12 @@ class BatchResultProcessor:
         return ctx
 
     def _stage_2_reconcile(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
-        """
-        Stage 2: Reconcile requests with responses.
-
-        Sets up BatchResultReconciler for tracking processed vs missing records.
-        """
+        """Set up BatchResultReconciler for tracking processed vs missing records."""
         ctx.reconciler = BatchResultReconciler(ctx.context_map)
         return ctx
 
     def _stage_3_4_process_results(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
-        """
-        Stages 3-4: Process all batch results (success + errors).
-
-        Iterates through batch results and processes each one, handling both
-        successful results and errors.
-        """
+        """Process all batch results, handling both successes and errors."""
         for batch_result in ctx.batch_results:
             custom_id = str(batch_result.custom_id)
 
@@ -248,13 +198,7 @@ class BatchResultProcessor:
     def _process_successful_result(
         self, ctx: BatchProcessingContext, batch_result: BatchResult, custom_id: str
     ) -> List[Dict[str, Any]]:
-        """
-        Stage 5: Build agent output from successful batch result.
-
-        Steps 1-5 are batch-specific pre-processing.
-        Enrichment (metadata, lineage, IDs, recovery) is delegated to
-        the shared EnrichmentPipeline via BatchContextAdapter.
-        """
+        """Build agent output from successful batch result, delegating enrichment to EnrichmentPipeline."""
         generated_obj = batch_result.content
         if not ctx.json_mode and isinstance(generated_obj, str):
             generated_obj = {ctx.output_field: generated_obj}
@@ -315,11 +259,7 @@ class BatchResultProcessor:
         generated_list: List[Any],
         original_row: Dict[str, Any],
     ) -> List[Any]:
-        """
-        Apply context_scope.passthrough fields to generated items.
-
-        Handles both pre-computed passthrough fields and fallback behavior.
-        """
+        """Apply context_scope.passthrough fields to generated items."""
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
@@ -371,20 +311,7 @@ class BatchResultProcessor:
         raw_content: Any = None,
         recovery_metadata: Optional[RecoveryMetadata] = None,
     ) -> Dict[str, Any]:
-        """
-        Create an error item for failed batch results.
-
-        Args:
-            ctx: Processing context
-            custom_id: The custom ID that failed
-            error_message: Error message
-            metadata: Optional metadata from batch result
-            raw_content: Optional raw content (for processing errors)
-            recovery_metadata: Optional recovery metadata (from retry)
-
-        Returns:
-            Error item dict
-        """
+        """Create an error item for failed batch results."""
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
         error_item: Dict[str, Any] = {
@@ -408,21 +335,7 @@ class BatchResultProcessor:
         original_row: Dict[str, Any],
         recovery_metadata: RecoveryMetadata,
     ) -> Dict[str, Any]:
-        """
-        Create an exhausted retry item using shared utility.
-
-        Delegates to ExhaustedRecordBuilder for consistent behavior
-        between batch and online modes.
-
-        Args:
-            ctx: Processing context
-            custom_id: The custom ID for this record
-            original_row: Original row data (for source_guid, lineage, etc.)
-            recovery_metadata: Recovery metadata with retry info
-
-        Returns:
-            Exhausted item dict with empty content + _recovery
-        """
+        """Create an exhausted retry item via ExhaustedRecordBuilder."""
         from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")

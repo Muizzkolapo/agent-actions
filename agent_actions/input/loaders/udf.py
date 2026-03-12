@@ -1,6 +1,4 @@
-"""
-UDF Discovery and Validation Module.
-"""
+"""UDF discovery and validation."""
 
 import importlib.util
 import sys
@@ -13,25 +11,11 @@ from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 
 def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
-    """
-    Discover and register all UDFs in the user code directory.
-
-    Recursively scans the directory for Python files, imports them to trigger
-    @udf_tool decorator registration, and returns the populated registry.
-
-    Args:
-        user_code_path: Path to the directory containing user-defined functions
-
-    Returns:
-        The populated UDF_REGISTRY dictionary
+    """Discover and register all UDFs in the user code directory.
 
     Raises:
-        UDFLoadError: If a Python file fails to import
-        DuplicateFunctionError: If duplicate function names are detected
-
-    Example:
-        registry = discover_udfs(Path('./user_code'))
-        print(f"Discovered {len(registry)} Tools")
+        UDFLoadError: If a Python file fails to import.
+        DuplicateFunctionError: If duplicate function names are detected.
     """
     user_code_path = Path(user_code_path)
     if not user_code_path.exists():
@@ -51,7 +35,6 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
             context=error_context,
         )
 
-    # Use centralized path management (thread-safe, cached)
     ensure_path_importable(user_code_path)
 
     python_files = list(user_code_path.rglob("*.py"))
@@ -87,21 +70,10 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
 
 
 def validate_udf_references(config: Dict[str, Any]) -> None:
-    """
-    Validate that all 'impl' references in config exist in the UDF registry.
-
-    Recursively walks the configuration structure to find all 'impl' fields
-    and verifies that the referenced functions are registered.
-
-    Args:
-        config: Configuration dictionary to validate
+    """Validate that all 'impl' references in config exist in the UDF registry.
 
     Raises:
-        FunctionNotFoundError: If a referenced function is not in the registry
-
-    Example:
-        config = {'actions': [{'impl': 'my_function'}]}
-        validate_udf_references(config)  # Will raise if 'my_function' not found
+        FunctionNotFoundError: If a referenced function is not in the registry.
     """
     impl_references: List[str] = []
 

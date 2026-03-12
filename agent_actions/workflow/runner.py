@@ -75,12 +75,7 @@ class ProcessGenerateParams:
 
 
 class AgentRunner:
-    """
-    Manages the execution of agents using different strategies in a workflow.
-
-    Handles the selection and application of appropriate strategies (initial,
-    intermediate, or terminal) for each agent in the workflow sequence.
-    """
+    """Manages agent execution using different strategies in a workflow."""
 
     def __init__(
         self,
@@ -88,14 +83,7 @@ class AgentRunner:
         processor_factory: Optional[ProcessorFactory] = None,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> None:
-        """
-        Initialize the AgentRunner with strategy configurations.
-
-        Args:
-            use_tools (bool): Flag indicating whether to use tools during agent execution.
-            processor_factory (Optional[ProcessorFactory]): Factory for creating processors with DI.
-            storage_backend (Optional[StorageBackend]): Storage backend for data persistence.
-        """
+        """Initialize the AgentRunner with strategy configurations."""
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
         self.storage_backend = storage_backend
@@ -110,21 +98,12 @@ class AgentRunner:
         }
 
     def get_agent_folder(self, agent_name: str) -> str:
-        """
-        Retrieves the agent folder using FileHandler.
-
-        Args:
-            agent_name (str): Name of the agent (or workflow name if workflow_name is not set).
-
-        Returns:
-            str: Path to the agent folder.
+        """Return the agent folder path.
 
         Raises:
-            ValueError: If the agent folder is not found.
+            FileSystemError: If the agent folder is not found.
         """
         current_dir: Path = Path.cwd()
-        # Use workflow_name if set (for multi-agent workflows),
-        # otherwise use agent_name (for single-agent or legacy)
         folder_name = self.workflow_name if self.workflow_name else agent_name
         agent_folder: Optional[str] = FileHandler.find_specific_folder(
             str(current_dir), folder_name, "agent_io"
@@ -142,19 +121,7 @@ class AgentRunner:
         return agent_folder
 
     def _resolve_upstream_from_manifest(self, agent_folder: Path) -> Optional[List[Path]]:
-        """
-        Resolve upstream directories from manifest file.
-
-        When a workflow depends on an upstream workflow, the artifact linker
-        writes a manifest file pointing to the upstream's output. This method
-        reads that manifest and returns the upstream path(s).
-
-        Args:
-            agent_folder: Path to the agent's folder (contains agent_io).
-
-        Returns:
-            List of upstream paths from manifest, or None if no manifest exists.
-        """
+        """Resolve upstream directories from manifest file, or None."""
         agent_io_dir = (
             agent_folder / "agent_io" if "agent_io" not in str(agent_folder) else agent_folder
         )
@@ -171,12 +138,7 @@ class AgentRunner:
         return [upstream_path]
 
     def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> List[Path]:
-        """Resolve upstream directories for a start node (no dependencies).
-
-        Tries manifest-based resolution first for inter-workflow dependencies,
-        then delegates to the data source resolver (which defaults to staging).
-        Uses workflow-level ``self.data_source_config`` — not per-agent config.
-        """
+        """Resolve upstream directories for a start node (no dependencies)."""
         manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
         if manifest_dirs:
             return manifest_dirs
@@ -188,25 +150,8 @@ class AgentRunner:
     ) -> List[Path]:
         """Resolve upstream directories from dependencies (input sources).
 
-        SIMPLIFIED BEHAVIOR (Auto-Inferred Context Dependencies):
-        - `dependencies` field = input sources only
-        - Context sources are auto-inferred from context_scope (not handled here)
-        - Returns directories for ALL input sources
-
-        Single dependency: Returns [dep_dir]
-        Multiple dependencies: Returns [dep1_dir, dep2_dir, ...] for merging
-
-        Args:
-            agent_folder: Path to agent folder
-            dependencies: List of input source names (from dependencies field)
-            agent_config: Full agent configuration
-            agent_name: Agent name (for logging/errors)
-
-        Returns:
-            List of input source directory paths
-
         Raises:
-            DependencyError: If any input source directory not found
+            DependencyError: If any input source directory is not found.
         """
         from agent_actions.errors import DependencyError
         from agent_actions.prompt.context.scope import ContextScopeProcessor
@@ -291,18 +236,7 @@ class AgentRunner:
         return resolved_dirs
 
     def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Optional[Path]:
-        """Resolve a single dependency directory.
-
-        Tries storage backend first (if available), then manifest-based resolution,
-        then direct path.
-
-        Args:
-            target_dir: Target directory path
-            dep_name: Dependency name
-
-        Returns:
-            Resolved Path or None if not found
-        """
+        """Resolve a single dependency directory, or None if not found."""
         # Try storage backend first if available
         if self.storage_backend is not None:
             try:
@@ -341,39 +275,18 @@ class AgentRunner:
         return None
 
     def _resolve_linear_directory(self, agent_folder: Path, previous_agent_type: str) -> Path:
-        """Resolve upstream directory for linear workflow (default behavior).
-
-        Uses simple directory name (action name) without index prefix.
-
-        Args:
-            agent_folder: Path to agent folder
-            previous_agent_type: Name of previous action
-        """
+        """Resolve upstream directory for linear workflow (default behavior)."""
         # Use simple name without index prefix
         return agent_folder / "target" / previous_agent_type
 
     def setup_directories(
         self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int
     ) -> Tuple[List[str], str]:
-        """
-        Sets up input and output directories for the agent.
-
-        Args:
-            agent_folder (str): Path to the agent folder.
-            agent_config (dict): Configuration for the agent.
-            previous_agent_type (Optional[str]): Type of the previous agent in workflow.
-            idx (int): Numeric index (used for execution order, not directory naming).
-
-        Returns:
-            Tuple[List[str], str]: (upstream_data_dirs, output_directory)
-        """
+        """Set up input and output directories for the agent."""
         agent_folder_path = Path(agent_folder)
-        # Use simple name without index prefix
         agent_type = agent_config["agent_type"]
         dependencies = agent_config.get("dependencies", [])
 
-        # Determine upstream directories based on workflow position
-        # Start node: no dependencies AND no previous agent (parallel/DAG workflows)
         if not dependencies and not previous_agent_type:
             upstream_data_dirs = self._resolve_start_node_directories(
                 agent_folder_path, agent_config.get("agent_type", "unknown")
@@ -392,9 +305,7 @@ class AgentRunner:
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
 
-        # Output directory uses simple name (no index prefix)
         output_directory = agent_folder_path / "target" / agent_type
-        # Only create directory if not using storage backend
         if self.storage_backend is None:
             output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
@@ -403,7 +314,6 @@ class AgentRunner:
         """Process a single file with the strategy."""
         relative_path = params.locations.item.relative_to(params.locations.input_path)
         output_file_path = params.locations.output_path / relative_path
-        # Only create directory if not using storage backend
         if self.storage_backend is None:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
         params.strategy.execute(
@@ -443,18 +353,7 @@ class AgentRunner:
         return False
 
     def _collect_files_from_upstream(self, upstream_data_dirs: List[str]) -> Dict[Path, List[Path]]:
-        """
-        Collect all files from upstream directories, grouped by relative path.
-
-        This is used to identify files that need to be merged when processing
-        outputs from multiple parallel branches.
-
-        Args:
-            upstream_data_dirs: List of upstream directory paths
-
-        Returns:
-            Dict mapping relative path -> list of absolute file paths
-        """
+        """Collect files from upstream directories, grouped by relative path."""
         files_by_relative_path: Dict[Path, List[Path]] = {}
 
         for input_directory in upstream_data_dirs:
@@ -528,26 +427,13 @@ class AgentRunner:
             )
 
     def _process_merged_files(self, params: FileProcessParams) -> int:
-        """
-        Process files from multiple upstream directories with content merging.
-
-        When the same file exists in multiple upstream directories (parallel branches),
-        merge their JSON contents before processing. This ensures downstream actions
-        receive ALL data from ALL parallel branches.
-
-        Args:
-            params: FileProcessParams with processing configuration
-
-        Returns:
-            Count of files processed
-        """
+        """Process files from multiple upstream directories with content merging."""
         output_path = Path(params.output_directory)
         files_by_path = self._collect_files_from_upstream(params.upstream_data_dirs)
         files_processed_count = 0
 
         for relative_path, file_paths in files_by_path.items():
             if len(file_paths) == 1:
-                # Single source - process normally
                 file_path = file_paths[0]
                 input_path = file_path.parent
                 while input_path.name != "target" and input_path.parent != input_path:
@@ -577,8 +463,6 @@ class AgentRunner:
                     )
                 )
             else:
-                # Multiple sources - merge contents (MapReduce pattern)
-                # Get reduce_key from agent config for correlation
                 reduce_key = params.agent_config.get("reduce_key")
                 logger.debug(
                     "Merging %d files for %s from parallel branches (reduce_key=%s)",
@@ -588,20 +472,14 @@ class AgentRunner:
                 )
                 merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
-                # Use the first upstream directory as the base for path structure
-                # This ensures the path contains 'agent_io' which source_loader expects
-                # The source_loader expects: agent_io/target/{action_name}/{filename}
-                # So we write the merged file to the first upstream directory
                 first_upstream = Path(params.upstream_data_dirs[0])
                 merged_file = first_upstream / relative_path
 
-                # Save original content if file exists (to restore after processing)
                 original_content = None
                 if merged_file.exists():
                     with open(merged_file, "r", encoding="utf-8") as f:
                         original_content = f.read()
 
-                # Write merged data
                 merged_file.parent.mkdir(parents=True, exist_ok=True)
                 with open(merged_file, "w", encoding="utf-8") as f:
                     json.dump(merged_data, f)
@@ -622,30 +500,20 @@ class AgentRunner:
                         )
                     )
                 finally:
-                    # Restore original content if we had one
                     if original_content is not None:
                         with open(merged_file, "w", encoding="utf-8") as f:
                             f.write(original_content)
-                    # Don't delete the file - it's a real upstream output
 
             files_processed_count += 1
 
         return files_processed_count
 
     def _process_from_storage_backend(self, params: FileProcessParams) -> Tuple[int, int]:
-        """
-        Process data from storage backend instead of filesystem.
-
-        Queries the storage backend for target files from upstream node(s)
-        and processes each entry. Merges data from parallel branches when
-        the same relative path exists in multiple upstream nodes.
-
-        Args:
-            params: FileProcessParams with processing configuration
+        """Process data from storage backend instead of filesystem.
 
         Returns:
-            Tuple of (files_found, files_processed) to distinguish between
-            "no data in DB" and "data found but processing failed"
+            (files_found, files_processed) to distinguish "no data" from
+            "data found but processing failed".
         """
         if self.storage_backend is None:
             return (0, 0)
@@ -653,19 +521,15 @@ class AgentRunner:
         output_path = Path(params.output_directory)
         processing_errors = []
 
-        # Collect data from all upstream nodes, grouped by relative path
-        # This enables merge behavior for parallel branches
-        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}  # path -> [(action_name, data), ...]
+        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}
 
         for input_directory in params.upstream_data_dirs:
             input_path = Path(input_directory)
             action_name = input_path.name
 
-            # Skip staging directories - those are still file-based
             if "staging" in str(input_path):
                 continue
 
-            # Query backend for files from this node
             try:
                 target_files = self.storage_backend.list_target_files(action_name)
             except Exception as e:
@@ -696,10 +560,8 @@ class AgentRunner:
         for relative_path, data_sources in data_by_path.items():
             try:
                 if len(data_sources) == 1:
-                    # Single source - use data directly
                     _, data = data_sources[0]
                 else:
-                    # Multiple sources - merge contents (MapReduce pattern)
                     reduce_key = params.agent_config.get("reduce_key")
                     logger.debug(
                         "Merging %d sources for %s from parallel branches (reduce_key=%s)",
@@ -707,7 +569,6 @@ class AgentRunner:
                         relative_path,
                         reduce_key or "auto",
                     )
-                    # Collect all data lists and merge them
                     all_data = []
                     for _, source_data in data_sources:
                         if isinstance(source_data, list):
@@ -716,11 +577,6 @@ class AgentRunner:
                             all_data.append(source_data)
                     data = merge_records_by_key(all_data, reduce_key)
 
-                # Pass data directly to avoid temp file I/O overhead.
-                # We use output_path as the virtual input path because:
-                # 1. Template resolution requires valid file_path and base_directory
-                # 2. The actual data comes from params.data, not from reading the file
-                # 3. Using output_path ensures relative path calculation works correctly
                 source_key = str(Path(relative_path).with_suffix(""))
                 virtual_input_path = output_path / relative_path
 
@@ -758,7 +614,6 @@ class AgentRunner:
                     exc_info=True,
                 )
 
-        # Log summary if some files failed
         if files_found > 0 and files_processed < files_found:
             logger.error(
                 "Storage backend processing incomplete: %d/%d files processed for %s. Errors: %s",
@@ -777,25 +632,12 @@ class AgentRunner:
         return (files_found, files_processed)
 
     def _is_target_directory(self, path: str) -> bool:
-        """Check if path is a target directory (not staging)."""
+        """Return True if path is a target directory (not staging)."""
         return "target" in path and "staging" not in path
 
     def process_files(self, params: FileProcessParams) -> None:
-        """
-        Walks through the upstream data directories, processing each file with the given strategy,
-        explicitly excluding:
-        - Any directory named 'batch'
-        - Hidden files (starting with '.')
-
-        When a storage backend is available, reads from the database instead of filesystem.
-
-        When processing files from multiple upstream directories (parallel branches),
-        files with the same relative path will have their JSON contents merged to ensure
-        downstream actions receive all data from all branches.
-        """
-        # Try storage backend first for target directories
+        """Walk upstream data directories and process each file with the given strategy."""
         if self.storage_backend is not None:
-            # Check if all upstream directories are target directories (not staging)
             all_targets = all(self._is_target_directory(d) for d in params.upstream_data_dirs)
             if all_targets:
                 files_found, files_processed = self._process_from_storage_backend(params)
@@ -817,8 +659,6 @@ class AgentRunner:
                     )
                 # Fall through to filesystem if backend had no data
 
-        # Use merging approach when there are multiple upstream directories
-        # This handles parallel branch outputs correctly
         if len(params.upstream_data_dirs) > 1:
             # Check if this is parallel branches (same action) or multiple deps
             upstream_paths = [Path(d) for d in params.upstream_data_dirs]
@@ -848,7 +688,6 @@ class AgentRunner:
                     self._warn_no_files_found(params)
                 return
 
-        # Single upstream directory - use original logic (more efficient)
         files_processed_count = 0
         output_path = Path(params.output_directory)
         processed_relative_paths: set = set()
@@ -867,15 +706,7 @@ class AgentRunner:
             self._warn_no_files_found(params)
 
     def process_and_generate_for_agent(self, params: ProcessGenerateParams) -> str:
-        """
-        Processes and generates data for an agent using the provided strategy.
-
-        Args:
-            params: ProcessGenerateParams containing all required parameters
-
-        Returns:
-            str: Path to the output directory.
-        """
+        """Process and generate data for an agent using the provided strategy."""
         agent_folder: str = self.get_agent_folder(params.agent_name)
         input_directories, output_directory = self.setup_directories(
             agent_folder, params.agent_config, params.previous_agent_type, params.idx
@@ -912,21 +743,7 @@ class AgentRunner:
         previous_agent_type: Optional[str],
         idx: int,
     ) -> str:
-        """
-        Runs an agent with the appropriate strategy based on its position.
-
-        Args:
-            agent_config (dict): Configuration for the agent.
-            agent_name (str): Name of the agent.
-            previous_agent_type (Optional[str]): Type of previous agent.
-            idx (int): Current agent's index in workflow.
-
-        Returns:
-            str: Path to the output directory.
-        """
-        # Determine strategy based on dependencies, not position
-        # Actions without dependencies (including loop iterations of first-stage actions)
-        # should use InitialStrategy with is_first_stage=True to generate source_guid
+        """Run an agent with the appropriate strategy based on its position."""
         dependencies = agent_config.get("dependencies", [])
         if not dependencies:
             strategy_name = "initial"

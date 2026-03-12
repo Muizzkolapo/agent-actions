@@ -1,6 +1,4 @@
-"""
-Artifact linking for workflow input/output management.
-"""
+"""Artifact linking for workflow input/output management."""
 
 from __future__ import annotations
 
@@ -15,37 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 class ArtifactLinker:
-    """
-    Manages artifact linking between workflows via manifest files.
-
-    Instead of creating symlinks or copying files, this writes a manifest
-    file that points to the upstream workflow's output directory. The
-    downstream workflow reads the manifest and accesses files directly
-    from the original location.
-    """
+    """Manages artifact linking between workflows via manifest files."""
 
     MANIFEST_FILENAME = ".upstream_manifest.json"
 
     def __init__(self, workflows_root: Path):
-        """
-        Initialize artifact linker.
-
-        Args:
-            workflows_root: Root directory containing all workflow directories.
-        """
+        """Initialize artifact linker."""
         self.workflows_root = workflows_root
 
     def link_workflow_artifacts(self, source_workflow: str, target_workflow: str) -> None:
-        """
-        Link source workflow's output to target workflow via manifest.
-
-        Creates a manifest file in the target workflow's agent_io directory
-        that points to the source workflow's latest output node.
-
-        Args:
-            source_workflow: Name of the workflow providing output
-            target_workflow: Name of the workflow receiving input
-        """
+        """Link source workflow's output to target workflow via manifest."""
         source_target = self.workflows_root / source_workflow / "agent_io" / "target"
         target_io = self.workflows_root / target_workflow / "agent_io"
 
@@ -58,7 +35,6 @@ class ArtifactLinker:
             logger.warning("No output nodes found in %s", source_target)
             return
 
-        # Validate paths are within workspace
         if not self.validate_safe_path(latest_node, self.workflows_root):
             logger.warning("Rejecting link: source %s outside workspace", latest_node)
             return
@@ -80,20 +56,10 @@ class ArtifactLinker:
     def _write_upstream_manifest(
         self, target_io: Path, source_workflow: str, source_node: Path
     ) -> None:
-        """
-        Write manifest file pointing to upstream workflow's output.
-
-        Uses atomic write (temp file + rename) to prevent partial writes.
-
-        Args:
-            target_io: Target workflow's agent_io directory
-            source_workflow: Name of the upstream workflow
-            source_node: Path to the upstream's output node directory
-        """
+        """Write manifest file pointing to upstream workflow's output (atomic write)."""
         manifest_file = target_io / self.MANIFEST_FILENAME
         target_io.mkdir(parents=True, exist_ok=True)
 
-        # Collect file list from source node
         files = []
         for item in source_node.iterdir():
             if item.is_file() and not item.name.startswith("."):
@@ -105,7 +71,6 @@ class ArtifactLinker:
             "files": sorted(files),
         }
 
-        # Atomic write using temp file + rename
         fd, tmp_path = tempfile.mkstemp(dir=str(target_io), prefix=".manifest_tmp_")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -119,37 +84,17 @@ class ArtifactLinker:
             raise
 
     def find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
-        """
-        Find the most recent action output directory in target.
-
-        Args:
-            target_dir: Directory to search for action subdirectories.
-
-        Returns:
-            Path to the most recently modified action directory, or None if not found.
-        """
-        # Get all directories (excluding hidden ones)
+        """Return the most recently modified action directory in target, or None."""
         action_dirs = [p for p in target_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
         if not action_dirs:
             return None
-        # Sort by modification time to get the latest run
         return max(action_dirs, key=lambda p: p.stat().st_mtime)
 
     def validate_safe_path(self, path: Path, base_dir: Path) -> bool:
-        """
-        Validate path doesn't escape base directory (path traversal protection).
-
-        Args:
-            path: Path to validate.
-            base_dir: Base directory that path must be within.
-
-        Returns:
-            True if path is safely within base_dir, False otherwise.
-        """
+        """Return True if path is safely within base_dir (path traversal protection)."""
         try:
             resolved = path.resolve()
             base_resolved = base_dir.resolve()
-            # Use proper Path API instead of string comparison (more secure)
             resolved.relative_to(base_resolved)
             return True
         except (OSError, ValueError):
@@ -157,16 +102,7 @@ class ArtifactLinker:
 
     @staticmethod
     def read_manifest(agent_io_dir: Path) -> Optional[dict[str, Any]]:
-        """
-        Read upstream manifest from agent_io directory.
-
-        Args:
-            agent_io_dir: The agent_io directory to read manifest from.
-
-        Returns:
-            Manifest dict with 'upstream_workflow', 'upstream_path', 'files',
-            or None if manifest doesn't exist or is invalid.
-        """
+        """Read upstream manifest from agent_io directory, or None if absent/invalid."""
         manifest_file = agent_io_dir / ArtifactLinker.MANIFEST_FILENAME
         if not manifest_file.exists():
             return None
@@ -175,7 +111,6 @@ class ArtifactLinker:
             with open(manifest_file, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
 
-            # Validate required fields
             if not all(k in manifest for k in ("upstream_workflow", "upstream_path")):
                 logger.warning("Manifest missing required fields: %s", manifest_file)
                 return None

@@ -1,7 +1,4 @@
-"""Error classes for static type checking.
-
-Provides TypeScript-like error messages for workflow data flow validation.
-"""
+"""Error classes for static type checking."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -17,14 +14,7 @@ class ErrorSeverity(Enum):
 
 @dataclass
 class FieldLocation:
-    """Location of a field reference in config.
-
-    Attributes:
-        agent_name: Name of the action containing the reference
-        config_field: Config field where reference appears (prompt, guard, etc.)
-        line_number: Optional line number in config file
-        raw_reference: Original reference string
-    """
+    """Location of a field reference in config."""
 
     agent_name: str
     config_field: str  # 'prompt', 'guard', 'context_scope.observe', etc.
@@ -34,19 +24,7 @@ class FieldLocation:
 
 @dataclass
 class StaticTypeIssue:
-    """Base class for static type checking issues.
-
-    Designed to provide actionable error messages similar to TypeScript.
-
-    Attributes:
-        message: Main error/warning message
-        severity: ERROR or WARNING
-        location: Where the issue occurred
-        referenced_agent: Action being referenced
-        referenced_field: Field being referenced
-        available_fields: Fields available in the referenced action
-        hint: Actionable suggestion for fixing
-    """
+    """Base class for static type checking issues."""
 
     message: str
     severity: ErrorSeverity
@@ -125,19 +103,7 @@ class StaticTypeWarning(StaticTypeIssue):
 
 
 class StaticValidationResult:
-    """Aggregated result of static type checking.
-
-    Collects all errors and warnings from the static analyzer
-    and provides formatting utilities.
-
-    Example:
-        result = StaticValidationResult()
-        result.add_error(StaticTypeError(...))
-
-        if not result.is_valid:
-            print(result.format_report())
-            raise StaticTypeCheckError(result.format_report())
-    """
+    """Aggregated result of static type checking."""
 
     def __init__(self) -> None:
         self.errors: List[StaticTypeError] = []
@@ -174,7 +140,6 @@ class StaticValidationResult:
             lines.append("  All field references validated successfully.")
             lines.append("")
         else:
-            # Group issues by action
             by_agent: Dict[str, List[StaticTypeIssue]] = {}
             for issue in self.errors + self.warnings:
                 agent = issue.location.agent_name
@@ -202,7 +167,7 @@ class StaticValidationResult:
         return "\n".join(lines)
 
     def raise_if_invalid(self) -> None:
-        """Raise exception if validation failed."""
+        """Raise PreFlightValidationError if validation failed."""
         if not self.is_valid:
             from agent_actions.errors.preflight import PreFlightValidationError
 

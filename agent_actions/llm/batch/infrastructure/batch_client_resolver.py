@@ -1,9 +1,4 @@
-"""
-Batch Client Resolver.
-
-Handles resolution and caching of batch clients based on configuration or batch ID.
-Extracted from BatchService for better separation of concerns.
-"""
+"""Resolves and caches batch clients based on configuration or batch ID."""
 
 import hashlib
 import json
@@ -21,17 +16,7 @@ from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent
 
 
 class BatchClientResolver:
-    """
-    Resolves and caches batch clients.
-
-    Handles client instantiation from agent config or batch registry lookup.
-    Maintains internal cache to avoid recreating clients.
-
-    Example:
-        resolver = BatchClientResolver()
-        client = resolver.get_for_config(agent_config)
-        client2 = resolver.get_for_batch_id('batch_123', output_dir, registry_manager)
-    """
+    """Resolves and caches batch clients from agent config or batch registry."""
 
     def __init__(
         self,

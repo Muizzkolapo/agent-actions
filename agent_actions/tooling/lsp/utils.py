@@ -6,18 +6,7 @@ from typing import List
 
 
 def uri_to_path(uri: str) -> Path:
-    """Convert file:// URI to Path.
-
-    Handles URL-encoded characters (e.g., %20 for spaces),
-    Windows drive-letter URIs (file:///C:/path), and
-    UNC/network-share URIs (file://server/share/path).
-
-    Args:
-        uri: A file:// URI string (e.g., "file:///path/to/file.yaml")
-
-    Returns:
-        Path object representing the file path.
-    """
+    """Convert file:// URI to Path, handling URL-encoding and Windows drive letters."""
     parsed = urllib.parse.urlparse(uri)
     path = urllib.parse.unquote(parsed.path)
     # Preserve UNC host: file://server/share → //server/share
@@ -32,18 +21,7 @@ def uri_to_path(uri: str) -> Path:
 
 
 def is_in_dependencies_context(lines: List[str], current_line: int) -> bool:
-    """Check if current line is within a dependencies block.
-
-    Looks backwards from the current line to find a "dependencies:" keyword
-    at the same or lower indentation level.
-
-    Args:
-        lines: List of all lines in the document.
-        current_line: Zero-based line number to check.
-
-    Returns:
-        True if the line is within a dependencies block, False otherwise.
-    """
+    """Check if current line is within a dependencies block."""
     current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
 
     for i in range(current_line - 1, -1, -1):
@@ -66,18 +44,7 @@ def is_in_dependencies_context(lines: List[str], current_line: int) -> bool:
 
 
 def is_in_context_scope_list(lines: List[str], current_line: int) -> bool:
-    """Check if current line is within a context_scope observe/drop/passthrough list.
-
-    Looks backwards from the current line to find observe:, drop:, or passthrough:
-    keywords nested under a context_scope: block.
-
-    Args:
-        lines: List of all lines in the document.
-        current_line: Zero-based line number to check.
-
-    Returns:
-        True if the line is within a context_scope list block, False otherwise.
-    """
+    """Check if current line is within a context_scope observe/drop/passthrough list."""
     current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
     list_block_indent = None
 

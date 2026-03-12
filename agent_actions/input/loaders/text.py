@@ -14,15 +14,7 @@ class TextLoader(BaseLoader[str]):
     """Loader for text-based content like TXT, MD, PDF, DOCX, and HTML."""
 
     def process(self, content: Any, file_path: Optional[str] = None) -> str:
-        """Load and return text content from a file or in-memory content.
-
-        Args:
-            content: Content to process if file_path is not provided.
-            file_path: Path to the text file.
-
-        Returns:
-            Loaded text content as a string.
-        """
+        """Load and return text content from a file or in-memory content."""
         try:
             if file_path:
                 return self.load_file(file_path)

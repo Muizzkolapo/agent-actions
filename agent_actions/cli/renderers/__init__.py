@@ -1,8 +1,4 @@
-"""CLI renderers for agent-actions.
-
-This module provides reusable Rich rendering components
-for displaying schema and workflow information.
-"""
+"""CLI renderers for agent-actions."""
 
 from .schema_renderer import SchemaRenderer
 

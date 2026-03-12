@@ -23,14 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class ErrorTranslator:
-    """
-    Translates Python exceptions to user-friendly errors.
-
-    Uses Strategy Pattern with formatter chain. Each formatter
-    handles a specific error category (Config, Model, Auth, etc.).
-
-    Facade pattern - single public method by design (translate).
-    """
+    """Translates Python exceptions to user-friendly errors via a formatter chain."""
 
     def __init__(self):
         """Initialize formatter chain."""
@@ -47,20 +40,9 @@ class ErrorTranslator:
         ]
 
     def translate(self, exc: Exception, context: Optional[Dict[str, Any]] = None) -> UserError:
-        """
-        Main translation method - converts any exception to UserError.
-
-        Args:
-            exc: The exception to translate
-            context: Optional context dict with keys like 'agent', 'file_path', etc.
-
-        Returns:
-            UserError with user-friendly message
-        """
-        # Merge exception context with passed context
+        """Convert any exception to a UserError with user-friendly message."""
         merged_context = ErrorContextService.merge_exception_context(exc, context)
 
-        # Extract root cause for better error detection
         root_cause = extract_root_cause(exc)
         root_message = safe_get_exception_message(root_cause)
 

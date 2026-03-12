@@ -53,15 +53,8 @@ def contains_dangerous_pattern(
 ) -> str | None:
     """Check if expression contains a dangerous pattern as a whole word.
 
-    Uses word-boundary matching so that e.g. "exec" blocks "exec(" and
-    "exec " but NOT "execution_status" or "execute".
-
-    The special "__" pattern (UDF-only) uses substring matching since any
-    dunder access is suspicious regardless of context.
-
-    Args:
-        expression: The expression to check (should be lowercased by caller).
-        patterns: Set of patterns to check against.
+    Uses word-boundary matching (so "exec" blocks "exec(" but NOT
+    "execution_status"). The "__" pattern uses substring matching.
 
     Returns:
         The matched pattern string, or None if clean.
@@ -70,7 +63,6 @@ def contains_dangerous_pattern(
 
     for pattern in patterns:
         if pattern == "__":
-            # Dunder access: substring match is intentional
             if "__" in expression:
                 return "__"
         else:

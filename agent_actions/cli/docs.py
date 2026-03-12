@@ -1,8 +1,4 @@
-"""
-Documentation commands for agent-actions CLI.
-
-Provides commands for generating and serving interactive workflow documentation.
-"""
+"""Documentation commands for the agent-actions CLI."""
 
 import subprocess
 from pathlib import Path
@@ -39,10 +35,8 @@ def generate(output: str):
         agac docs generate
         agac docs generate --output ./custom-artefact
     """
-    # Use current working directory as project path
     project_path = Path.cwd()
 
-    # Resolve output_dir relative to project path if not absolute
     output_dir = Path(output)
     if not output_dir.is_absolute():
         output_dir = (project_path / output_dir).resolve()
@@ -106,7 +100,6 @@ def run_tests(test_suite: str, port: int):
         agac docs test --test schemas
         agac docs test --port 3000
     """
-    # Check if playwright is available
     try:
         subprocess.run(["node", "--version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
@@ -114,11 +107,9 @@ def run_tests(test_suite: str, port: int):
         click.echo("   Install from: https://nodejs.org/")
         raise click.Abort() from exc
 
-    # Check if test files exist
     project_root = Path.cwd()
     test_dir = project_root
 
-    # Map test types to files
     test_files = {
         "schemas": ["test-all-schemas.js"],
         "actions": ["test-run-actions-complete.js", "test-actions-specific.js"],
@@ -127,7 +118,6 @@ def run_tests(test_suite: str, port: int):
 
     files_to_run = test_files.get(test_suite, test_files["all"])
 
-    # Check if test files exist
     missing_files = [f for f in files_to_run if not (test_dir / f).exists()]
     if missing_files:
         click.echo(f"⚠️  Warning: Test files not found: {', '.join(missing_files)}")
@@ -135,7 +125,6 @@ def run_tests(test_suite: str, port: int):
         click.echo("\n   Run tests from project root or create test files.")
         raise click.Abort()
 
-    # Run each test file
     click.echo(f"\n🧪 Running {test_suite} tests against http://localhost:{port}\n")
 
     failed = []

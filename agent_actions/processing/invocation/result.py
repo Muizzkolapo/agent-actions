@@ -1,8 +1,4 @@
-"""
-Invocation result type for LLM execution.
-
-Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
-"""
+"""Invocation result type for LLM execution."""
 
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -12,34 +8,15 @@ from agent_actions.processing.types import RecoveryMetadata
 
 @dataclass
 class InvocationResult:
-    """
-    Result of LLM invocation (immediate or deferred).
+    """Result of LLM invocation, covering both immediate (online) and deferred (batch) modes."""
 
-    This unified result type handles both:
-    - Online mode: immediate response available
-    - Batch mode: task queued, response retrieved later
-
-    Attributes:
-        response: LLM response (None if deferred or skipped)
-        executed: Whether LLM was actually executed
-        deferred: Whether execution is deferred (batch mode)
-        task_id: Task identifier for deferred results
-        passthrough_fields: Fields to merge into output
-        recovery_metadata: Recovery tracking (retry/reprompt attempts)
-    """
-
-    # Execution result
     response: Optional[Any] = None
     executed: bool = False
 
-    # Deferred execution (batch mode)
     deferred: bool = False
     task_id: Optional[str] = None
 
-    # Context preservation
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
-
-    # Recovery tracking
     recovery_metadata: Optional[RecoveryMetadata] = None
 
     @classmethod
@@ -50,15 +27,7 @@ class InvocationResult:
         passthrough_fields: Optional[dict[str, Any]] = None,
         recovery: Optional[RecoveryMetadata] = None,
     ) -> "InvocationResult":
-        """
-        Factory for immediate execution result.
-
-        Args:
-            response: LLM response
-            executed: Whether execution completed
-            passthrough_fields: Fields to pass through to output
-            recovery: Recovery metadata if retry/reprompt occurred
-        """
+        """Create an immediate execution result."""
         return cls(
             response=response,
             executed=executed,
@@ -73,13 +42,7 @@ class InvocationResult:
         task_id: str,
         passthrough_fields: Optional[dict[str, Any]] = None,
     ) -> "InvocationResult":
-        """
-        Factory for queued (batch) result.
-
-        Args:
-            task_id: Unique identifier for retrieving result later
-            passthrough_fields: Fields to pass through to output
-        """
+        """Create a queued (batch) result."""
         return cls(
             deferred=True,
             task_id=task_id,
@@ -93,13 +56,7 @@ class InvocationResult:
         passthrough_data: Optional[Any] = None,
         passthrough_fields: Optional[dict[str, Any]] = None,
     ) -> "InvocationResult":
-        """
-        Factory for skipped (guard skip) result.
-
-        Args:
-            passthrough_data: Original content to pass through
-            passthrough_fields: Fields to merge into output
-        """
+        """Create a skipped (guard skip) result."""
         return cls(
             response=passthrough_data,
             executed=False,
@@ -118,10 +75,10 @@ class InvocationResult:
 
     @property
     def is_immediate(self) -> bool:
-        """Whether this is an immediate (non-deferred) result."""
+        """Return True if this is an immediate (non-deferred) result."""
         return not self.deferred
 
     @property
     def is_success(self) -> bool:
-        """Whether execution succeeded with a response."""
+        """Return True if execution succeeded with a response."""
         return self.executed and self.response is not None

@@ -8,15 +8,7 @@ from typing import Any
 
 
 class ActionKind(Enum):
-    """Type of action in the workflow.
-
-    Attributes:
-        LLM: Language model action (generates structured output)
-        TOOL: Tool/UDF action (calls external function)
-        SOURCE: Source data (workflow input data)
-        SEED: Seed data (static data defined in config)
-        HITL: Human-in-the-loop action (blocks for human approval)
-    """
+    """Type of action in the workflow."""
 
     LLM = "llm"
     TOOL = "tool"
@@ -26,15 +18,7 @@ class ActionKind(Enum):
 
 
 class FieldSource(Enum):
-    """How a field is produced.
-
-    Attributes:
-        SCHEMA: Field from LLM output schema (output_schema in config)
-        OBSERVE: Field passed through via context_scope.observe
-        PASSTHROUGH: Field from context_scope.passthrough
-        SOURCE: Field from source/seed data (dynamic at runtime)
-        TOOL_OUTPUT: Field from tool function return type
-    """
+    """How a field is produced."""
 
     SCHEMA = "schema"
     OBSERVE = "observe"
@@ -45,14 +29,7 @@ class FieldSource(Enum):
 
 @dataclass
 class FieldInfo:
-    """Information about a single field.
-
-    Attributes:
-        name: Field name
-        source: How the field is produced (schema, observe, passthrough, etc.)
-        is_required: Whether the field is required (for input fields)
-        is_dropped: Whether the field is excluded from output via drops
-    """
+    """Information about a single field."""
 
     name: str
     source: FieldSource
@@ -60,7 +37,6 @@ class FieldInfo:
     is_dropped: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
             "source": self.source.value,
@@ -71,16 +47,7 @@ class FieldInfo:
 
 @dataclass
 class UpstreamReference:
-    """Reference to an upstream agent's field.
-
-    Represents a template reference like {{ action.extractor.summary }}.
-
-    Attributes:
-        source_agent: Name of the agent being referenced
-        field_name: Name of the field being referenced
-        location: Where it appears in config (prompt, guard, context_scope.observe, etc.)
-        raw_reference: Original reference string (e.g., '{{ action.extractor.summary }}')
-    """
+    """Reference to an upstream agent's field used in templates."""
 
     source_agent: str
     field_name: str
@@ -88,7 +55,6 @@ class UpstreamReference:
     raw_reference: str
 
     def to_dict(self) -> dict[str, str]:
-        """Convert to dictionary for JSON serialization."""
         return {
             "source_agent": self.source_agent,
             "field_name": self.field_name,
@@ -99,22 +65,7 @@ class UpstreamReference:
 
 @dataclass
 class ActionSchema:
-    """Unified schema for any action type.
-
-    Provides a consistent interface for all action types (llm, tool, source, seed).
-
-    Attributes:
-        name: Action name
-        kind: Type of action (llm, tool, source, seed)
-        upstream_refs: References to upstream agent fields (template references)
-        input_fields: Input fields (for tools with TypedDict input)
-        output_fields: Output fields with source tracking
-        dependencies: Declared dependencies (depends_on)
-        downstream: Actions that depend on this one
-        is_dynamic: Output determined at runtime (source/seed)
-        is_schemaless: No output schema defined
-        is_template_based: LLM with template but no output schema
-    """
+    """Unified schema for any action type (llm, tool, source, seed)."""
 
     name: str
     kind: ActionKind
@@ -153,7 +104,6 @@ class ActionSchema:
         return sorted({f"{ref.source_agent}.{ref.field_name}" for ref in self.upstream_refs})
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
             "kind": self.kind.value,
@@ -165,7 +115,6 @@ class ActionSchema:
             "is_dynamic": self.is_dynamic,
             "is_schemaless": self.is_schemaless,
             "is_template_based": self.is_template_based,
-            # Computed properties for convenience
             "available_outputs": self.available_outputs,
             "dropped_outputs": self.dropped_outputs,
             "required_inputs": self.required_inputs,

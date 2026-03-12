@@ -1,9 +1,4 @@
-"""
-Agent output management module.
-
-Handles previous output loading, passthrough creation, and version correlation.
-Extracted from agent_workflow.py to consolidate output handling.
-"""
+"""Agent output management for previous output loading and passthrough creation."""
 
 import json
 import logging
@@ -43,22 +38,13 @@ class OutputManagerConfig:
 
 
 class AgentOutputManager:
-    """
-    Manages agent output operations.
-
-    Responsibilities:
-    - Load previous agent outputs with metadata
-    - Create passthrough outputs for skipped agents
-    - Setup version output correlation
-    - Manage input directory resolution
-    """
+    """Manages agent output loading, passthrough creation, and version correlation."""
 
     def __init__(self, config: OutputManagerConfig):
-        """
-        Initialize output manager.
+        """Initialize output manager.
 
-        Args:
-            config: OutputManagerConfig with all required parameters
+        Raises:
+            ConfigurationError: If config.storage_backend is None
         """
         if config.storage_backend is None:
             raise ConfigurationError(
@@ -101,12 +87,10 @@ class AgentOutputManager:
             "errors": [],
         }
 
-        # Try storage backend first
         outputs, backend_files = self._load_outputs_from_backend(prev_agent_name)
         if backend_files:
             agent_output["output_files"] = backend_files
 
-        # Fall back to filesystem if backend had no data
         if not outputs and output_dir.exists():
             json_files = list(output_dir.glob("*.json"))
             agent_output["output_files"] = [str(f.name) for f in json_files]
@@ -117,7 +101,6 @@ class AgentOutputManager:
         agent_output["output_count"] = len(outputs)
         agent_output["has_data"] = len(outputs) > 0
 
-        # Check for node-level passthrough disposition
         passthrough_rows = self.storage_backend.get_disposition(
             prev_agent_name,
             record_id=NODE_LEVEL_RECORD_ID,
@@ -127,7 +110,6 @@ class AgentOutputManager:
             agent_output["passthrough"] = True
             agent_output["passthrough_reason"] = passthrough_rows[0].get("reason", "")
 
-        # Check for node-level skip disposition
         skip_rows = self.storage_backend.get_disposition(
             prev_agent_name,
             record_id=NODE_LEVEL_RECORD_ID,
@@ -140,23 +122,11 @@ class AgentOutputManager:
         return agent_output
 
     def get_previous_outputs(self, current_idx: int) -> Dict[str, Any]:
-        """
-        Get outputs from previously executed agents with enhanced metadata.
-
-        Args:
-            current_idx: Index of the current agent
-
-        Returns:
-            Dictionary of previous agent outputs with metadata.
-            For each agent 'foo', returns:
-            - previous_outputs['foo'] = [data items]
-            - previous_outputs['foo_meta'] = {status, output_count, etc.}
-        """
+        """Return outputs from previously executed agents with metadata."""
         previous_outputs = {}
 
         for i in range(current_idx):
             prev_agent_name = self.execution_order[i]
-            # Use simple directory name (no index prefix)
             output_dir = self.agent_folder / "target" / prev_agent_name
 
             try:
@@ -189,16 +159,7 @@ class AgentOutputManager:
         return previous_outputs
 
     def create_passthrough_output(self, idx: int, agent_type: str):
-        """
-        Create passthrough output for a skipped agent.
-
-        Reads upstream data from storage backend (or filesystem fallback),
-        merges parallel branches by reduce_key, and writes to storage backend.
-
-        Args:
-            idx: Index of the agent
-            agent_type: Type/name of the agent
-        """
+        """Create passthrough output for a skipped agent."""
         upstream_dirs = self.get_upstream_directories(idx)
         agent_config = self.agent_configs.get(agent_type, {})
         reduce_key = agent_config.get("reduce_key")
@@ -208,9 +169,7 @@ class AgentOutputManager:
         target_prefix = str(self.agent_folder / "target") + os.sep
 
         for input_dir in upstream_dirs:
-            # Only query backend for paths under target/ (agent output dirs).
-            # Start-node paths (staging/, local folders, API cache) are not
-            # agent outputs and have no backend entries.
+            # Only query backend for paths under target/ (not staging/local dirs)
             if input_dir.startswith(target_prefix):
                 action_name = Path(input_dir).name
                 target_files = self._read_upstream_from_backend(action_name)
@@ -219,11 +178,9 @@ class AgentOutputManager:
                         data_by_path.setdefault(relative_path, []).append(data)
                     continue
 
-            # Filesystem: start-node dirs or backend had no data
             for relative_path, data in self._read_upstream_from_filesystem(input_dir):
                 data_by_path.setdefault(relative_path, []).append(data)
 
-        # Write each file to storage backend
         for relative_path, data_sources in data_by_path.items():
             if len(data_sources) == 1:
                 data = data_sources[0]
@@ -234,7 +191,6 @@ class AgentOutputManager:
                 data = merge_records_by_key(all_records, reduce_key)
             self.storage_backend.write_target(agent_type, relative_path, data)
 
-        # Record skip disposition
         reason = f"Agent {agent_type} skipped due to WHERE clause condition"
         self.storage_backend.set_disposition(
             agent_type, NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED, reason=reason
@@ -279,11 +235,7 @@ class AgentOutputManager:
         return results
 
     def _load_outputs_from_backend(self, action_name: str) -> Tuple[List[Any], List[str]]:
-        """Load all target data for a node from storage backend.
-
-        Returns:
-            Tuple of (flattened records, list of relative_path strings).
-        """
+        """Load all target data for a node from storage backend."""
         try:
             target_files = self.storage_backend.list_target_files(action_name)
         except Exception as e:
@@ -304,12 +256,7 @@ class AgentOutputManager:
         return outputs, list(target_files)
 
     def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
-        """
-        Resolve upstream directories from manifest file.
-
-        Returns:
-            List of upstream path strings from manifest, or None if no manifest.
-        """
+        """Resolve upstream directories from manifest file, or None."""
         agent_io_dir = self.agent_folder
         manifest = ArtifactLinker.read_manifest(agent_io_dir)
         if manifest is None:
@@ -323,22 +270,12 @@ class AgentOutputManager:
         return [str(upstream_path)]
 
     def get_upstream_directories(self, idx: int) -> List[str]:
-        """
-        Get upstream data directories for an agent, resolving dependencies.
-
-        Args:
-            idx: Index of the agent
-
-        Returns:
-            List of paths to upstream directories
-        """
+        """Return upstream data directories for an agent, resolving dependencies."""
         current_agent = self.execution_order[idx]
         agent_config = self.agent_configs.get(current_agent, {})
         dependencies = agent_config.get("dependencies", [])
         previous_agent_type = self.execution_order[idx - 1] if idx > 0 else None
 
-        # Start node (no dependencies and no implicit predecessor):
-        # use manifest or data source resolver
         if not dependencies and not previous_agent_type:
             manifest_dirs = self._resolve_upstream_from_manifest()
             if manifest_dirs:
@@ -350,7 +287,6 @@ class AgentOutputManager:
             )
             return [str(d) for d in result.directories]
 
-        # Check for explicitly declared dependencies (DAG/Diamond)
         if dependencies:
             upstream_dirs = []
             target_dir = self.agent_folder / "target"
@@ -371,7 +307,6 @@ class AgentOutputManager:
             if upstream_dirs:
                 return upstream_dirs
 
-        # Check if agent consumes version outputs
         version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
             self.execution_order, self.agent_configs
         )
@@ -392,7 +327,6 @@ class AgentOutputManager:
                 )
                 return [correlated_dir]
 
-            # Version correlation configured but failed - this is an error, not a fallback
             from agent_actions.errors import ConfigurationError
 
             raise ConfigurationError(
@@ -406,21 +340,11 @@ class AgentOutputManager:
                 },
             )
 
-        # Standard case: use previous agent's output (Linear Chain Default)
         prev_agent = self.execution_order[idx - 1]
-        # Use simple directory name (no index prefix)
         return [str(self.agent_folder / "target" / prev_agent)]
 
     def setup_correlation_wrapper(self, idx: int) -> Optional[Callable]:
-        """
-        Create a correlation-aware setup_directories wrapper if needed.
-
-        Args:
-            idx: Index of the agent
-
-        Returns:
-            Wrapped setup_directories function if correlation needed, None otherwise
-        """
+        """Create a correlation-aware setup_directories wrapper if needed."""
         current_agent = self.execution_order[idx]
 
         version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
@@ -451,10 +375,8 @@ class AgentOutputManager:
                 # Setup output directory (simple name, no index prefix)
                 agent_type = agent_config["agent_type"]
                 output_directory = Path(agent_folder) / "target" / agent_type
-                # Return list of directories (not a single string) to match setup_directories signature
                 return ([str(input_directory)], str(output_directory))
 
-            # Version correlation configured but failed - this is an error, not a fallback
             from agent_actions.errors import ConfigurationError
 
             raise ConfigurationError(

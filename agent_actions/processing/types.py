@@ -23,12 +23,7 @@ class ProcessingStatus(Enum):
 
 
 class ProcessingMode(Enum):
-    """Workflow-level data flow mode for record handling.
-
-    ONLINE/BATCH controls whether LLM calls are synchronous or queued.
-    Not to be confused with ``config.interfaces.ProcessingMode``
-    (SYNC/ASYNC/AUTO) which controls CLI-level execution mode.
-    """
+    """Workflow-level data flow mode: ONLINE (synchronous) or BATCH (queued)."""
 
     ONLINE = "online"
     BATCH = "batch"
@@ -45,16 +40,7 @@ class RetryState:
 
 @dataclass
 class RetryMetadata:
-    """
-    Metadata for retry recovery, stored in output _recovery.retry field.
-
-    Attributes:
-        attempts: Total number of attempts made (failures + 1 if succeeded)
-        failures: Number of failed attempts before success (or total if exhausted)
-        succeeded: Whether the operation ultimately succeeded
-        reason: Why retry was needed (timeout, api_error, missing, rate_limit, network_error)
-        timestamp: ISO format timestamp when retry completed
-    """
+    """Metadata for retry recovery, stored in output _recovery.retry field."""
 
     attempts: int
     failures: int
@@ -77,14 +63,7 @@ class RetryMetadata:
 
 @dataclass
 class RepromptMetadata:
-    """
-    Metadata for reprompt recovery, stored in output _recovery.reprompt field.
-
-    Attributes:
-        attempts: Number of reprompt attempts made
-        passed: Whether validation ultimately passed
-        validation: Name of the validation UDF that was used
-    """
+    """Metadata for reprompt recovery, stored in output _recovery.reprompt field."""
 
     attempts: int
     passed: bool
@@ -101,12 +80,7 @@ class RepromptMetadata:
 
 @dataclass
 class RecoveryMetadata:
-    """
-    Container for all recovery-related metadata.
-
-    Stored in output records under the _recovery key when recovery occurred.
-    Only present if retry or reprompt was actually triggered.
-    """
+    """Container for recovery metadata, stored under the _recovery output key."""
 
     retry: Optional[RetryMetadata] = None
     reprompt: Optional[RepromptMetadata] = None
@@ -121,50 +95,28 @@ class RecoveryMetadata:
         return result
 
     def is_empty(self) -> bool:
-        """Check if any recovery occurred."""
+        """Return True if no recovery occurred."""
         return self.retry is None and self.reprompt is None
 
 
 @dataclass
 class ProcessingResult:
-    """
-    Unified result type replacing tuple/list returns.
-
-    This replaces fragile tuple returns with a typed, extensible structure.
-    Adding new fields requires only updating this dataclass and consumers.
-    """
+    """Unified result type for record processing output."""
 
     status: ProcessingStatus
     data: list[dict[str, Any]] = field(default_factory=list)
 
-    # Identity
     source_guid: Optional[str] = None
     node_id: Optional[str] = None
-
-    # For first-stage: preserve original input for source saving
     source_snapshot: Optional[dict[str, Any]] = None
-
-    # For downstream: preserve full input record (with lineage, target_id, etc.)
     input_record: Optional[dict[str, Any]] = None
-
-    # Execution state
     executed: bool = True
     skip_reason: Optional[str] = None
-
-    # Passthrough
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
-
-    # Error handling
     error: Optional[str] = None
     retry_state: RetryState = field(default_factory=RetryState)
-
-    # Recovery metadata (populated when retry/reprompt occurred)
     recovery_metadata: Optional[RecoveryMetadata] = None
-
-    # LLM response (for metadata extraction)
     raw_response: Optional[Any] = None
-
-    # Pre-extracted metadata (batch path provides this directly)
     pre_extracted_metadata: Optional[dict[str, Any]] = None
 
     @classmethod
@@ -309,11 +261,7 @@ class ProcessingResult:
         source_snapshot: Optional[dict[str, Any]] = None,
         input_record: Optional[dict[str, Any]] = None,
     ) -> "ProcessingResult":
-        """Factory for deferred (batch) result.
-
-        Args:
-            task_id: Unique identifier for retrieving result later
-        """
+        """Factory for deferred (batch) result."""
         return cls(
             status=ProcessingStatus.DEFERRED,
             data=[],
@@ -333,43 +281,21 @@ class ProcessingResult:
 
 @dataclass
 class ProcessingContext:
-    """
-    Context object flowing through processing pipeline.
+    """Context object flowing through the processing pipeline."""
 
-    This replaces threading individual values through 6+ function calls.
-    All processing-related state is contained in this single object.
-    """
-
-    # Core configuration
     agent_config: AgentConfigDict
     agent_name: str
     mode: ProcessingMode = ProcessingMode.ONLINE
-
-    # Is this first-stage (raw input) or subsequent-stage (structured input)?
     is_first_stage: bool = False
-
-    # Source data for lookups
     source_data: list[dict[str, Any]] = field(default_factory=list)
-
-    # File context
     file_path: Optional[str] = None
     output_directory: Optional[str] = None
-
-    # Version context for {version.*} references
     version_context: Optional[dict[str, Any]] = None
     workflow_metadata: Optional[dict[str, Any]] = None
-
-    # Current record position (for loop correlation)
     record_index: int = 0
-
-    # Workflow context for historical data loading
     agent_indices: Optional[dict[str, int]] = None
     dependency_configs: Optional[dict[str, Any]] = None
-
-    # Current item (per-record) for lineage chaining in realtime processing
     current_item: Optional[dict[str, Any]] = None
-
-    # Storage backend for database-backed persistence and historical data loading
     storage_backend: Optional["StorageBackend"] = None
 
     @property

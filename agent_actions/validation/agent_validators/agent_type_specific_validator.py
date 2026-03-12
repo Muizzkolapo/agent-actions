@@ -1,6 +1,4 @@
-"""
-Validator for agent type and type-specific configuration requirements.
-"""
+"""Validator for agent type and type-specific configuration requirements."""
 
 from pathlib import Path
 from agent_actions.validation.agent_validators.base_agent_validator import (
@@ -14,34 +12,13 @@ from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 
 
 class AgentTypeSpecificValidator(BaseAgentEntryValidator):
-    """
-    Validates agent type field and type-specific requirements.
-
-    Checks:
-    1. name field is string
-    2. agent_type field is string
-    3. Type-specific required fields are present
-    4. For function agents: code_path exists and is a file
-
-    Complexity: CC ~8
-    """
+    """Validates agent type field and type-specific requirements."""
 
     def validate(self, context) -> AgentEntryValidationResult:
-        """
-        Validate agent type and type-specific requirements.
-
-        Args:
-            context: Validation context
-
-        Returns:
-            Validation result with any errors found
-        """
+        """Validate agent type and type-specific requirements."""
         errors = []
 
-        # 1. Validate 'name' field type if present
         self._validate_name_field(context, errors)
-
-        # 2. Validate 'agent_type' field and type-specific requirements
         self._validate_agent_type_field(context, errors)
 
         if errors:
@@ -76,10 +53,8 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
 
         agent_type = str(agent_type_value).lower()
 
-        # Check type-specific required keys
         self._validate_type_specific_keys(context, agent_type, errors)
 
-        # Special validation for 'function' agent type
         if agent_type == "function":
             self._validate_function_agent_code_path(context, errors)
 
@@ -116,7 +91,6 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
         if code_path_value.startswith(("http://", "https://")):
             return
 
-        # Resolve and validate file path
         code_path = Path(code_path_value)
         abs_code_path = code_path if code_path.is_absolute() else context.project_root / code_path
 

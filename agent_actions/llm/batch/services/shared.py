@@ -1,8 +1,4 @@
-"""Shared utilities for batch services.
-
-Contains common result retrieval logic used by both BatchProcessingService
-and BatchRetrievalService, eliminating the previous code duplication.
-"""
+"""Shared result retrieval logic for batch services."""
 
 import logging
 from typing import Optional, Dict, Any, List
@@ -21,22 +17,7 @@ def retrieve_and_reconcile(
     record_count: Optional[int] = None,
     file_name: Optional[str] = None,
 ) -> List[BatchResult]:
-    """Retrieve batch results from provider and log reconciliation.
-
-    This is the shared implementation used by both BatchProcessingService
-    and BatchRetrievalService.
-
-    Args:
-        provider: Batch API client
-        batch_id: Batch job ID
-        output_directory: Output directory path
-        context_map: Context map for reconciliation
-        record_count: Expected record count
-        file_name: Original file name
-
-    Returns:
-        List of batch results
-    """
+    """Retrieve batch results from provider and log reconciliation."""
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,
     )

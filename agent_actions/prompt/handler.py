@@ -1,4 +1,4 @@
-"""Module for loading and managing prompts from markdown files."""
+"""Prompt loading and validation from markdown files."""
 
 import re
 import logging
@@ -14,24 +14,15 @@ PROMPT_PATTERN = re.compile(r"\{prompt\s+(\w+)\}")
 
 
 class PromptLoader:
-    """
-    A class for loading and validating prompts.
-    """
+    """Loads and validates prompts from markdown content."""
 
     @staticmethod
     def extract_prompt(content: str, prompt_name: str) -> str:
         """
-        Extracts a prompt from the content using the prompt_name.
-
-        Parameters:
-            content (str): The content containing the prompt.
-            prompt_name (str): The name of the prompt to extract.
-
-        Returns:
-            str: The extracted prompt.
+        Extract a named prompt block from content.
 
         Raises:
-            ValueError: If the prompt is not found.
+            ValueError: If the prompt block is not found or unclosed.
         """
         start_token = f"{{prompt {prompt_name}}}"
         end_token = "{end_prompt}"
@@ -46,28 +37,13 @@ class PromptLoader:
 
     @staticmethod
     def get_all_prompt_names(content: str) -> List[str]:
-        """
-        Extracts all prompt names from the content.
-
-        Parameters:
-            content (str): The content containing the prompts.
-
-        Returns:
-            List[str]: A list of prompt names found in the content.
-        """
+        """Return all prompt names found in the content."""
         return PROMPT_PATTERN.findall(content)
 
     @staticmethod
     def validate_unique_prompts(filename: str, content: str) -> None:
         """
-        Validates that all prompt names in the content are unique.
-
-        Parameters:
-            filename (str): The name of the file being validated.
-            content (str): The content containing the prompts.
-
-        Raises:
-            ValueError: If duplicate prompt names are found.
+        Raise ValueError if duplicate prompt names exist in content.
         """
         prompt_names = PromptLoader.get_all_prompt_names(content)
         duplicates = [item for item, count in Counter(prompt_names).items() if count > 1]
@@ -86,16 +62,7 @@ class PromptLoader:
     @staticmethod
     def load_prompt(prompt_name: str) -> str:
         """
-        Retrieve and generate a prompt based on the prompt name provided.
-
-        Searches for .md files anywhere within the project tree.
-        No specific directory structure required.
-
-        Parameters:
-            prompt_name (str): The name of the prompt to load, in the format 'filename.prompt_key'.
-
-        Returns:
-            str: The loaded prompt.
+        Load a prompt by name ('filename.prompt_key') from .md files in the project tree.
 
         Raises:
             ValueError: If the prompt file or prompt format is invalid.
@@ -106,8 +73,6 @@ class PromptLoader:
         prompt_file_name, prompt_key = prompt_name.split(".", 1)
         target_filename = f"{prompt_file_name}.md"
 
-        # Search for the .md file anywhere in the project tree
-        # No requirement for a specific directory structure
         prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
 
         if not prompt_file_str:

@@ -72,20 +72,8 @@ class ResultCollector:
         is_first_stage: bool,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> list[dict[str, Any]]:
-        """
-        Flatten ProcessingResult entries into output records.
+        """Flatten ProcessingResult entries into output records.
 
-        Args:
-            results: Processing results to aggregate.
-            agent_config: Agent configuration for schema hints.
-            agent_name: Agent name for exhausted record lineage.
-            is_first_stage: Whether this is the first stage (staging) or downstream.
-                Currently unused in collection logic but preserved in the API
-                for callers that pass it and for future use in stage-specific
-                aggregation behaviour.
-            storage_backend: Optional storage backend for writing per-record dispositions.
-        Returns:
-            List of output records.
         Raises:
             AgentActionsException: If on_exhausted=raise and records exhausted retries.
         """
@@ -96,7 +84,6 @@ class ResultCollector:
             )
         )
 
-        # Check on_exhausted config for raise behavior
         ResultCollector._check_exhausted_raise(results, agent_config, agent_name, storage_backend)
 
         output: list[dict[str, Any]] = []
@@ -245,7 +232,6 @@ class ResultCollector:
             else:
                 logger.debug("Unhandled result status=%s", status)
 
-        # Fire RC003: Result collection complete with statistics
         fire_event(
             ResultCollectionCompleteEvent(
                 agent_name=agent_name,
@@ -258,7 +244,6 @@ class ResultCollector:
             )
         )
 
-        # Log tombstone summary (dead records quarantined from downstream processing)
         tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
         if tombstone_count > 0:
             logger.info(
@@ -280,11 +265,7 @@ class ResultCollector:
         agent_name: str,
         storage_backend: Optional["StorageBackend"],
     ) -> None:
-        """Raise if on_exhausted=raise and any results exhausted retries.
-
-        Writes dispositions for all exhausted records before raising so that
-        telemetry is preserved even when the pipeline crashes.
-        """
+        """Raise if on_exhausted=raise and any results exhausted retries."""
         exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
         if not exhausted_results:
             return
@@ -302,7 +283,6 @@ class ResultCollector:
         if on_exhausted != "raise":
             return
 
-        # Write dispositions for all exhausted records before raising
         if storage_backend:
             for er in exhausted_results:
                 if er.source_guid:

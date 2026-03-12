@@ -20,11 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class UnifiedSourceDataSaver:
-    """Unified source data saver using storage backend.
-
-    Requires a StorageBackend for database-backed persistence.
-    No JSON file fallback - configure sqlite or tinydb backend.
-    """
+    """Saves source data to a storage backend with optional deduplication."""
 
     def __init__(
         self,
@@ -36,10 +32,7 @@ class UnifiedSourceDataSaver:
         """Initialize unified source data saver.
 
         Args:
-            base_directory: Base directory for workflow (e.g., '/path/to/workflow')
-            enable_deduplication: Whether to deduplicate by source_guid (default: True)
             enable_locking: Deprecated - storage backend handles concurrency (ignored)
-            storage_backend: Storage backend for database persistence (required)
         """
         self.base_directory = Path(base_directory)
         self.enable_deduplication = enable_deduplication
@@ -50,17 +43,14 @@ class UnifiedSourceDataSaver:
         """Save source data to storage backend with optional deduplication.
 
         Args:
-            items: Single item or list of items with source_guid
             relative_path: Relative path for source file (e.g., 'node_1_Agent/batch_001')
 
         Raises:
             ValueError: If storage_backend is not configured
         """
-        # Normalize to list
         if isinstance(items, dict):
             items = [items]
 
-        # Build source file path (for logging/events even when using backend)
         source_dir = self.base_directory / "agent_io" / "source"
         source_file = source_dir / f"{relative_path}.json"
 

@@ -1,10 +1,4 @@
-"""
-Unified passthrough item construction for batch and online modes.
-
-This module consolidates passthrough item building logic from batch
-(batch_passthrough_builder.py) and online (record_processor.py) modes into a
-unified interface.
-"""
+"""Unified passthrough item construction for batch and online modes."""
 
 from typing import Dict, Optional, Any
 from agent_actions.utils.field_management.manager import FieldManager
@@ -13,14 +7,7 @@ from agent_actions.utils.id_generation.generator import IDGenerator
 
 
 class PassthroughItemBuilder:
-    """
-    Unified builder for passthrough items across batch and online modes.
-
-    This builder handles all passthrough item construction with consistent structure
-    while supporting mode-specific metadata formats for backward compatibility.
-
-    Note: Single static method is appropriate for builder utility pattern.
-    """
+    """Unified builder for passthrough (tombstone) items across batch and online modes."""
 
     @staticmethod
     def build_item(
@@ -31,80 +18,31 @@ class PassthroughItemBuilder:
         custom_id: Optional[str] = None,
         mode: str = "batch",
     ) -> Dict[str, Any]:
-        """
-        Build passthrough item with consistent structure.
+        """Build a passthrough (tombstone) item with required fields and metadata.
 
-        This method creates a passthrough item with all required fields including
-        target_id, source_guid, node_id, lineage, content, and metadata.
+        The returned item has ``_unprocessed = True`` and
+        ``metadata.agent_type = "tombstone"`` so downstream processing
+        skips it. Metadata format varies by *mode* (batch uses legacy flags,
+        online adds a ``reason`` string).
 
         Args:
-            row: Original data item (must have 'content' key or entire dict
-                is used as content)
-            reason: Passthrough reason (e.g., 'where_clause_not_matched',
-                'conditional_clause_failed')
-            action_name: Action name for node ID generation
-            source_guid: Optional source GUID (if not provided, uses
-                row['source_guid'] or target_id)
-            custom_id: Optional custom ID for target_id (batch mode fallback)
-            mode: Processing mode - 'batch' or 'online' (affects metadata format)
+            row: Original data item.
+            reason: Passthrough reason (e.g., 'where_clause_not_matched').
+            action_name: Action name for node ID generation.
+            source_guid: Optional source GUID override.
+            custom_id: Optional custom target_id (batch fallback).
+            mode: 'batch' or 'online' (affects metadata format).
 
         Returns:
-            Passthrough item dict with structure:
-            {
-                'target_id': str,
-                'source_guid': str,
-                'node_id': str,
-                'lineage': List[str],
-                'content': Any,
-                'metadata': {
-                    'reason': str (online) or legacy flags (batch),
-                    ...
-                }
-            }
-
-        Example (batch mode):
-            >>> row = {
-            ...     'target_id': 'tgt_123',
-            ...     'content': {'text': 'data'},
-            ...     'lineage': ['extract_0']
-            ... }
-            >>> result = PassthroughItemBuilder.build_item(
-            ...     row=row,
-            ...     reason='where_clause_not_matched',
-            ...     action_name='transform',
-            ...     mode='batch'
-            ... )
-            >>> print(result['metadata'])
-            {'skipped_by_where_clause': True}
-
-        Example (online mode):
-            >>> row = {
-            ...     'source_guid': 'src_456',
-            ...     'content': {'text': 'data'}
-            ... }
-            >>> result = PassthroughItemBuilder.build_item(
-            ...     row=row,
-            ...     reason='where_clause_not_matched',
-            ...     action_name='transform',
-            ...     source_guid='src_456',
-            ...     mode='online'
-            ... )
-            >>> print(result['metadata'])
-            {'reason': 'where_clause_not_matched',
-             'skipped_by_where_clause': True}
+            Passthrough item dict.
         """
-        # Generate IDs
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
         resolved_source_guid = source_guid or row.get("source_guid", target_id)
         node_id = IDGenerator.generate_node_id(action_name)
 
-        # Build lineage (preserve existing lineage chain)
         lineage = LineageBuilder.build_lineage(row, node_id)
-
-        # Extract content
         content = row.get("content", row)
 
-        # Create base processed item using FieldManager
         processed_item = FieldManager().create_processed_item(
             source_guid=resolved_source_guid,
             content=content,
@@ -113,22 +51,17 @@ class PassthroughItemBuilder:
             target_id=target_id,
         )
 
-        # Ensure metadata exists
         if "metadata" not in processed_item:
             processed_item["metadata"] = {}
 
-        # Add mode-specific metadata
         if mode == "online":
-            # Online mode: Use reason string plus the matching legacy flag
             processed_item["metadata"]["reason"] = reason
             flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
             processed_item["metadata"][flag_name] = True
-        else:  # batch
-            # Batch mode: Use legacy flag-based metadata for backward compatibility
+        else:
             flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
             processed_item["metadata"][flag_name] = True
 
-        # Mark as tombstone — dead records excluded from downstream processing
         processed_item["metadata"]["agent_type"] = "tombstone"
         processed_item["_unprocessed"] = True
 
@@ -136,28 +69,7 @@ class PassthroughItemBuilder:
 
     @staticmethod
     def _reason_to_legacy_flag(reason: str) -> str:
-        """
-        Map reason string to legacy metadata flag name.
-
-        This maintains backward compatibility with existing batch mode metadata format.
-
-        Args:
-            reason: Passthrough reason string
-
-        Returns:
-            Legacy flag name for metadata
-
-        Mapping:
-            - 'conditional_clause_failed' → 'skipped_by_conditional'
-            - 'where_clause_not_matched' → 'skipped_by_where_clause'
-            - Default → 'skipped_by_where_clause'
-
-        Example:
-            >>> PassthroughItemBuilder._reason_to_legacy_flag('conditional_clause_failed')
-            'skipped_by_conditional'
-            >>> PassthroughItemBuilder._reason_to_legacy_flag('where_clause_not_matched')
-            'skipped_by_where_clause'
-        """
+        """Map reason string to legacy batch-mode metadata flag name."""
         mapping = {
             "conditional_clause_failed": "skipped_by_conditional",
             "where_clause_not_matched": "skipped_by_where_clause",

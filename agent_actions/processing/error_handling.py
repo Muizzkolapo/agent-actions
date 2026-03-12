@@ -1,15 +1,5 @@
-"""
-Standardized error handling mixin for processors.
+"""Standardized error handling mixin for processors."""
 
-This module provides a mixin class that implements consistent error handling
-patterns across all processor modules.
-"""
-
-# Line-too-long: Error messages need to be descriptive
-# Import-outside-toplevel: Avoid circular imports with error module
-# No-else-raise: Code clarity - explicit error handling paths
-# Too-many-arguments: Error context requires all these parameters
-# Unused-argument: Interface consistency
 import csv
 import json
 import logging
@@ -37,12 +27,7 @@ _PARSE_ERROR_MAP = {
 
 
 class ProcessorErrorHandlerMixin:
-    """
-    Mixin class providing standardized error handling for processors.
-
-    This mixin should be inherited by all processor classes to ensure
-    consistent error handling and logging across the application.
-    """
+    """Mixin providing standardized error handling and logging for processors."""
 
     @property
     def logger(self):
@@ -59,17 +44,7 @@ class ProcessorErrorHandlerMixin:
     def get_error_context(
         self, operation: str, file_path: Optional[Union[str, Path]] = None, **kwargs
     ) -> Dict[str, Any]:
-        """
-        Build contextual information for error logging.
-
-        Args:
-            operation: The operation that was being performed
-            file_path: Optional file path involved in the operation
-            **kwargs: Additional context to include
-
-        Returns:
-            Dictionary containing error context
-        """
+        """Build contextual information for error logging."""
         context = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "processor": self.__class__.__name__,
@@ -92,27 +67,17 @@ class ProcessorErrorHandlerMixin:
         reraise: bool = True,
         **context_kwargs,
     ) -> None:
-        """
-        Handle a processing error with consistent logging and re-raising.
-
-        Args:
-            error: The original exception
-            operation: Description of the operation that failed
-            error_type: Optional specific error type to raise
-            reraise: Whether to re-raise the exception (default: True)
-            **context_kwargs: Additional context to log
+        """Log error context and re-raise as the specified error type (or ProcessingError).
 
         Raises:
-            The specified error type or ProcessingError if not specified
+            ProcessingError: Or the specified ``error_type`` if ``reraise`` is True.
         """
         context = self.get_error_context(operation, **context_kwargs)
         context["error_type"] = error.__class__.__name__
         context["error_message"] = get_error_detail(error)
 
-        # Fire appropriate data error event
         file_path = str(context_kwargs.get("file_path", "unknown"))
 
-        # Check if this is a parse error
         format_type = None
         for error_class, fmt in _PARSE_ERROR_MAP.items():
             if isinstance(error, error_class):
@@ -154,17 +119,10 @@ class ProcessorErrorHandlerMixin:
         file_path: Optional[Union[str, Path]] = None,
         **context_kwargs,
     ) -> None:
-        """
-        Handle a validation error.
-
-        Args:
-            error: The original exception
-            target: What was being validated
-            file_path: Optional file path involved
-            **context_kwargs: Additional context to log
+        """Handle a validation error.
 
         Raises:
-            ValidationError with appropriate message
+            ValidationError: Always re-raised with contextual message.
         """
         from agent_actions.errors import ValidationError
 
@@ -180,17 +138,11 @@ class ProcessorErrorHandlerMixin:
     def handle_file_error(
         self, error: Exception, operation: str, file_path: Union[str, Path], **context_kwargs
     ) -> None:
-        """
-        Handle a file operation error.
-
-        Args:
-            error: The original exception
-            operation: The file operation that failed (e.g., 'read', 'write')
-            file_path: Path to the file
-            **context_kwargs: Additional context to log
+        """Handle a file operation error.
 
         Raises:
-            FileLoadError or FileWriteError depending on operation
+            FileLoadError: For read/load/open operations.
+            FileWriteError: For write/save/create operations.
         """
         from agent_actions.errors import FileLoadError, FileWriteError
 
@@ -212,17 +164,10 @@ class ProcessorErrorHandlerMixin:
     def handle_transformation_error(
         self, error: Exception, source_type: str, target_type: str, **context_kwargs
     ) -> None:
-        """
-        Handle a data transformation error.
-
-        Args:
-            error: The original exception
-            source_type: Type of source data
-            target_type: Type of target data
-            **context_kwargs: Additional context to log
+        """Handle a data transformation error.
 
         Raises:
-            TransformationError with appropriate message
+            TransformationError: Always re-raised with contextual message.
         """
         from agent_actions.errors import TransformationError
 

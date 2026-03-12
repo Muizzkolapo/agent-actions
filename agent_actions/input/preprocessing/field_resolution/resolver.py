@@ -1,6 +1,4 @@
-"""
-Centralized service for parsing and resolving field references.
-"""
+"""Centralized service for parsing and resolving field references."""
 
 import json
 import logging
@@ -16,16 +14,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ResolvedReference:
-    """
-    Result of resolving a field reference.
-
-    Attributes:
-        value: The resolved value (can be any type)
-        source_action: Name of the action that provided the value
-        field_path: Path to the value within the action's data
-        success: Whether resolution succeeded
-        error: Error message if resolution failed
-    """
+    """Result of resolving a field reference."""
 
     value: Any
     source_action: str
@@ -35,43 +24,10 @@ class ResolvedReference:
 
 
 class FieldReferenceResolver:
-    """
-    Centralized service for parsing and resolving field references.
-
-    Provides a unified API for field reference operations across guards,
-    prompts, filters, and context_scope directives.
-
-    Attributes:
-        strict_mode: If True, raise errors on invalid/unresolvable references
-        validate_dependencies: If True, validate references against dependency graph
-
-    Example:
-        # Basic usage
-        resolver = FieldReferenceResolver()
-
-        # Parse a reference
-        ref = resolver.parse("extract_facts.count")
-
-        # Resolve to value
-        result = resolver.resolve(ref, field_context)
-        if result.success:
-            print(f"Value: {result.value}")
-
-        # Substitute in text
-        text = resolver.substitute(
-            "Found {extract.count} items",
-            field_context
-        )
-    """
+    """Unified API for field reference parsing and resolution."""
 
     def __init__(self, strict_mode: bool = False, validate_dependencies: bool = True):
-        """
-        Initialize the resolver.
-
-        Args:
-            strict_mode: If True, raise errors on invalid references
-            validate_dependencies: If True, validate against dependency graph
-        """
+        """Initialize the resolver."""
         self.strict_mode = strict_mode
         self.validate_dependencies = validate_dependencies
         self._parser = ReferenceParser()
@@ -79,50 +35,17 @@ class FieldReferenceResolver:
     def parse(
         self, reference: str, format_hint: Optional[ReferenceFormat] = None
     ) -> ParsedReference:
-        """
-        Parse a field reference string into structured format.
-
-        Args:
-            reference: Reference string (e.g., "action.field" or "{action.field}")
-            format_hint: Optional hint about expected format
-
-        Returns:
-            ParsedReference with action name and field path
+        """Parse a field reference string into structured format.
 
         Raises:
-            InvalidReferenceError: If reference is malformed (strict mode)
-
-        Example:
-            >>> resolver = FieldReferenceResolver()
-            >>> ref = resolver.parse("extract_facts.response.data.count")
-            >>> ref.action_name
-            'extract_facts'
-            >>> ref.field_path
-            ['response', 'data', 'count']
+            InvalidReferenceError: If reference is malformed (strict mode).
         """
         return self._parser.parse(reference, format_hint, self.strict_mode)
 
     def parse_batch(
         self, text: str, format_hint: Optional[ReferenceFormat] = None
     ) -> List[ParsedReference]:
-        """
-        Extract all field references from a text string.
-
-        Args:
-            text: Text containing references
-            format_hint: Expected reference format
-
-        Returns:
-            List of ParsedReference objects found in text
-
-        Example:
-            >>> resolver = FieldReferenceResolver()
-            >>> refs = resolver.parse_batch(
-            ...     "extract.count > 5 AND source.type == 'doc'"
-            ... )
-            >>> len(refs)
-            2
-        """
+        """Extract all field references from a text string."""
         return self._parser.parse_batch(text, format_hint, self.strict_mode)
 
     def resolve(
@@ -131,35 +54,10 @@ class FieldReferenceResolver:
         field_context: Dict[str, Any],
         fallback_value: Any = None,
     ) -> ResolvedReference:
-        """
-        Resolve a field reference to its value in the context.
+        """Resolve a field reference to its value in the context.
 
         Supports nested paths and array indices for deep field access.
-
-        Args:
-            reference: Reference string or ParsedReference
-            field_context: Nested context dict {action_name: {field: value}}
-            fallback_value: Value to return if resolution fails
-
-        Returns:
-            ResolvedReference with value and metadata
-
-        Example:
-            field_context = {
-                'extract_facts': {
-                    'response': {
-                        'data': {'count': 5}
-                    }
-                }
-            }
-
-            result = resolver.resolve(
-                'extract_facts.response.data.count',
-                field_context
-            )
-            # result.value = 5
         """
-        # Parse if string
         if isinstance(reference, str):
             try:
                 reference = self.parse(reference)
@@ -173,7 +71,6 @@ class FieldReferenceResolver:
                 )
 
         try:
-            # Check if action exists in context
             if reference.action_name not in field_context:
                 error_msg = (
                     f"Action '{reference.action_name}' not found in context. "
@@ -193,7 +90,6 @@ class FieldReferenceResolver:
 
             action_data = field_context[reference.action_name]
 
-            # Navigate nested path
             value = self._resolve_nested_path(action_data, reference.field_path)
 
             if value is None and self.strict_mode:
@@ -210,7 +106,6 @@ class FieldReferenceResolver:
             )
 
         except ReferenceNotFoundError as e:
-            # Re-raise with additional context
             if self.strict_mode:
                 raise ReferenceNotFoundError(
                     f"{e}. Reference: {reference.action_name}.{'.'.join(reference.field_path)}"
@@ -231,16 +126,7 @@ class FieldReferenceResolver:
     def resolve_batch(
         self, references: List[Union[str, ParsedReference]], field_context: Dict[str, Any]
     ) -> Dict[str, ResolvedReference]:
-        """
-        Resolve multiple references efficiently.
-
-        Args:
-            references: List of reference strings or ParsedReference objects
-            field_context: Context to resolve from
-
-        Returns:
-            Dict mapping reference string to ResolvedReference
-        """
+        """Resolve multiple references efficiently."""
         results = {}
 
         for ref in references:
@@ -255,22 +141,7 @@ class FieldReferenceResolver:
         field_context: Dict[str, Any],
         format_hint: Optional[ReferenceFormat] = None,
     ) -> str:
-        """
-        Replace all field references in text with their resolved values.
-
-        Args:
-            text: Text containing field references
-            field_context: Context to resolve from
-            format_hint: Expected reference format (auto-detects if not provided)
-
-        Returns:
-            Text with references replaced by values
-
-        Example:
-            text = "Found {extract.count} items in {source.title}"
-            result = resolver.substitute(text, field_context)
-            # "Found 5 items in My Document"
-        """
+        """Replace all field references in text with their resolved values."""
         if not text:
             return text
 
@@ -296,18 +167,7 @@ class FieldReferenceResolver:
         agent_indices: Dict[str, int],
         current_agent_name: Optional[str] = None,
     ) -> List[str]:
-        """
-        Validate that referenced actions exist in dependency graph.
-
-        Args:
-            references: References to validate
-            agent_config: Current agent configuration
-            agent_indices: Mapping of agent names to their indices
-            current_agent_name: Name of current agent (for index lookup)
-
-        Returns:
-            List of error messages (empty if all valid)
-        """
+        """Validate that referenced actions exist in the dependency graph."""
         validator = ReferenceValidator()
         return validator.validate(
             references=references,
@@ -317,11 +177,7 @@ class FieldReferenceResolver:
         )
 
     def _resolve_nested_path(self, data: Any, path: List[str]) -> Any:
-        """
-        Resolve a nested path like ['response', 'data', 'count'].
-
-        Supports both dict key access and array index access.
-        """
+        """Resolve a nested path, supporting both dict key access and array index access."""
         current = data
 
         for key in path:
@@ -339,7 +195,6 @@ class FieldReferenceResolver:
                 else:
                     return None
             else:
-                # Try attribute access as last resort
                 if hasattr(current, key):
                     current = getattr(current, key)
                     if current is None:

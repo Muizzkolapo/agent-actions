@@ -1,4 +1,4 @@
-"""Module for loading historical node data from storage backend using lineage tracking."""
+"""Historical node data loading from storage backend using lineage tracking."""
 
 import logging
 from dataclasses import dataclass
@@ -34,12 +34,7 @@ class HistoricalDataRequest:
 
 
 class HistoricalNodeDataLoader:
-    """
-    Loads historical node data from target directories using lineage tracking.
-
-    This class enables referencing upstream agent outputs using {action_name.field}
-    syntax by finding and loading the appropriate target file based on lineage.
-    """
+    """Loads historical node data from target directories using lineage tracking."""
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
@@ -56,8 +51,6 @@ class HistoricalNodeDataLoader:
             },
         )
 
-        # Find the node_id in lineage for this action
-        # If not found, this may be a parallel sibling (ancestry matching case)
         logger.debug(
             "Finding node_id for action='%s' in lineage=%s",
             request.action_name,
@@ -67,7 +60,6 @@ class HistoricalNodeDataLoader:
             request.action_name, request.lineage, request.agent_indices
         )
 
-        # Determine if this is a parallel sibling case (node not in lineage)
         is_parallel_sibling = node_id is None
 
         if is_parallel_sibling:
@@ -81,7 +73,6 @@ class HistoricalNodeDataLoader:
         else:
             logger.debug("Found node_id=%s for action='%s'", node_id, request.action_name)
 
-        # Storage backend is required for historical data loading
         if request.storage_backend is None:
             logger.warning(
                 "[HISTORICAL] No storage backend provided for action '%s'",
@@ -162,10 +153,8 @@ class HistoricalNodeDataLoader:
         if not lineage:
             return None
 
-        # Node IDs now use format: {action_name}_{uuid}
         node_prefix = f"{action_name}_"
 
-        # Find the node_id that starts with the action name
         for node_id in lineage:
             if isinstance(node_id, str) and node_id.startswith(node_prefix):
                 return node_id
@@ -181,10 +170,9 @@ class HistoricalNodeDataLoader:
         """Load target data from the storage backend."""
         from pathlib import Path as PathLib
 
-        file_name = PathLib(file_path).name  # e.g., "batch_0.json" from ".../batch_0.json"
+        file_name = PathLib(file_path).name
 
         try:
-            # First try: load with the derived file name (fast path)
             logger.debug(
                 "[STORAGE_BACKEND] Loading from storage: action_name=%s, relative_path=%s",
                 action_name,
@@ -202,9 +190,7 @@ class HistoricalNodeDataLoader:
             )
             return data
         except FileNotFoundError:
-            # File name doesn't match - search across all files for this action
-            # This handles workflows where file names change between stages
-            # (e.g., aggregation, flattening, fan-in patterns)
+            # File names may change between stages (aggregation, fan-in, etc.)
             logger.debug(
                 "[STORAGE_BACKEND] File %s not found for %s, searching all files",
                 file_name,
@@ -219,7 +205,6 @@ class HistoricalNodeDataLoader:
                     )
                     return None
 
-                # Load and combine records from all files
                 all_records: List[Dict[str, Any]] = []
                 for f in all_files:
                     try:
@@ -264,15 +249,12 @@ class HistoricalNodeDataLoader:
         Example: record lineage [A, B, C] matches caller lineage [A, B, C, D, E]
         but not [A, B, X, D, E] (diverged branch).
         """
-        # Handle None/empty cases
         if not record_lineage or not caller_lineage:
             return False
 
-        # Record lineage cannot be longer than caller lineage
         if len(record_lineage) > len(caller_lineage):
             return False
 
-        # Check if record's lineage is a prefix of caller's lineage
         return record_lineage == caller_lineage[: len(record_lineage)]
 
     @staticmethod
@@ -312,15 +294,10 @@ class HistoricalNodeDataLoader:
             if not isinstance(record, dict):
                 continue
 
-            # Primary filter: source_guid
             if record.get("source_guid") != source_guid:
                 continue
 
-            # Secondary filter: node_id must contain action_name
-            # This prevents returning records from wrong actions that happen to share source_guid
-            # Supports both formats:
-            #   - Production: "{action_name}_{uuid}" (e.g., "get_authoring_prompt_abc123")
-            #   - Test/legacy: "node_{idx}_{action_name}" (e.g., "node_4_generate_seo")
+            # Prevents wrong-action matches: supports both "{action}_{uuid}" and "node_{idx}_{action}"
             record_node_id = record.get("node_id", "")
             if action_name and action_name not in record_node_id:
                 continue
@@ -337,36 +314,30 @@ class HistoricalNodeDataLoader:
                 record.get("root_target_id"),
             )
 
-            # Strategy 1: Lineage matching (for direct ancestors, not parallel siblings)
             if not is_parallel_sibling and caller_lineage is not None:
                 record_lineage = record.get("lineage")
                 if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
                     logger.debug("Lineage match found")
                     return record
 
-            # Strategy 2: Parent matching (for parallel siblings - Diamond pattern)
             if parent_target_id and record.get("parent_target_id") == parent_target_id:
                 if parent_match is None:
                     parent_match = record
                     logger.debug("Parent match found")
 
-            # Strategy 3: Root matching (for Map-Reduce aggregation)
             if root_target_id and record.get("root_target_id") == root_target_id:
                 if root_match is None:
                     root_match = record
                     logger.debug("Root match found")
 
-        # Return based on priority
         if is_parallel_sibling:
-            # For parallel siblings, prefer ancestry matching strategies
             if parent_match:
                 logger.debug("[HISTORICAL] Returning parent_target_id match")
                 return parent_match
             if root_match:
                 logger.debug("[HISTORICAL] Returning root_target_id match")
                 return root_match
-            # Fallback: return first source_guid match (for Action 0 parallel siblings
-            # that have no parent_target_id because they process original source data)
+            # Action 0 parallel siblings have no parent_target_id
             if first_match:
                 logger.debug("[HISTORICAL] Returning source_guid fallback match (parallel sibling)")
                 return first_match

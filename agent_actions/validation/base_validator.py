@@ -1,9 +1,4 @@
-"""
-Base validator class for all validation operations.
-
-Provides common validation infrastructure including error/warning collection
-and utility methods for path validation.
-"""
+"""Base validator class for all validation operations."""
 
 import time
 from abc import ABC, abstractmethod
@@ -20,23 +15,10 @@ from agent_actions.logging.events import (
 
 
 class BaseValidator(ABC):
-    """
-    Unified base class for all validators.
-
-    This class provides a common structure for validation processes,
-    including error and warning collection, and basic path utilities.
-    Concrete validator classes should inherit from this class and
-    implement the `validate` method to perform their specific checks.
-    """
+    """Unified base class for all validators with error/warning collection."""
 
     def __init__(self, fire_events: bool = True) -> None:
-        """Initializes the validator with empty error and warning lists.
-
-        Args:
-            fire_events: Whether to fire validation events. Defaults to True.
-                         Set to False to disable event firing (useful for testing
-                         or when validation is called from within other validators).
-        """
+        """Initialize the validator with empty error and warning lists."""
         self._errors: List[str] = []
         self._warnings: List[str] = []
         self._validation_target: str = ""
@@ -50,24 +32,7 @@ class BaseValidator(ABC):
 
     @abstractmethod
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Performs the core validation logic for the specific validator.
-
-        This method must be implemented by all concrete validator subclasses.
-        It should use `add_error` and `add_warning` to record any issues found.
-
-        Args:
-            data: The primary data or resource to be validated.
-                  The exact nature of this argument (e.g., file path, dictionary,
-                  object instance) will depend on the concrete validator.
-            config: Optional dictionary containing configuration parameters or
-                    additional context needed for the validation (e.g., specific
-                    rules, settings, related file paths).
-
-        Returns:
-            bool: True if validation is successful (no errors reported),
-                  False otherwise.
-        """
+        """Perform validation; return True if no errors found."""
         raise NotImplementedError("Subclasses must implement validate()")
 
     def add_error(self, message: str, field: str = "", value: Any = None) -> None:
@@ -97,44 +62,27 @@ class BaseValidator(ABC):
             )
 
     def get_errors(self) -> List[str]:
-        """Returns a list of all validation errors recorded."""
+        """Return all recorded validation errors."""
         return self._errors
 
     def get_warnings(self) -> List[str]:
-        """Returns a list of all validation warnings recorded."""
+        """Return all recorded validation warnings."""
         return self._warnings
 
     def clear_errors(self) -> None:
-        """Clears all recorded validation errors."""
+        """Clear all recorded validation errors."""
         self._errors = []
 
     def clear_warnings(self) -> None:
-        """Clears all recorded validation warnings."""
+        """Clear all recorded validation warnings."""
         self._warnings = []
 
     def has_errors(self) -> bool:
-        """
-        Checks if any errors have been recorded during validation.
-
-        Returns:
-            bool: True if errors have been added, False otherwise.
-        """
+        """Return True if any errors have been recorded."""
         return bool(self._errors)
 
     def _prepare_validation(self, data: Any, target: str = "") -> bool:
-        """
-        Common validation preparation: clear errors/warnings and check dict type.
-
-        This helper method reduces code duplication across validators.
-
-        Args:
-            data: Data to validate (should be a dict)
-            target: Target name for validation events
-
-        Returns:
-            bool: True if data is a dict and validation can proceed,
-                  False if data is not a dict (error added)
-        """
+        """Clear state, fire start event, and verify data is a dict."""
         self.clear_errors()
         self.clear_warnings()
         self._validation_target = target or self.validator_name
@@ -154,12 +102,7 @@ class BaseValidator(ABC):
         return True
 
     def _complete_validation(self) -> bool:
-        """
-        Complete validation and fire the completion event.
-
-        Returns:
-            bool: True if validation passed (no errors), False otherwise.
-        """
+        """Fire completion event and return True if no errors."""
         elapsed_time = time.time() - self._validation_start_time
         has_errors = self.has_errors()
 
@@ -179,39 +122,15 @@ class BaseValidator(ABC):
     # --- Static Utility Helper Methods ---
     @staticmethod
     def _ensure_path_exists(path: Path) -> bool:
-        """
-        Checks if a given filesystem path exists.
-
-        Args:
-            path: The Path object to check.
-
-        Returns:
-            bool: True if the path exists, False otherwise.
-        """
+        """Return True if the path exists."""
         return path.exists()
 
     @staticmethod
     def _is_file(path: Path) -> bool:
-        """
-        Checks if a given filesystem path exists and is a file.
-
-        Args:
-            path: The Path object to check.
-
-        Returns:
-            bool: True if the path exists and is a file, False otherwise.
-        """
+        """Return True if the path exists and is a file."""
         return path.is_file()
 
     @staticmethod
     def _is_directory(path: Path) -> bool:
-        """
-        Checks if a given filesystem path exists and is a directory.
-
-        Args:
-            path: The Path object to check.
-
-        Returns:
-            bool: True if the path exists and is a directory, False otherwise.
-        """
+        """Return True if the path exists and is a directory."""
         return path.is_dir()

@@ -1,12 +1,4 @@
-"""
-Run results collector handler.
-
-Collects workflow execution data and outputs a run_results.json artifact useful for:
-- CI/CD integration (check success/failure status)
-- Analytics and performance tracking
-- Debugging and troubleshooting
-- Integration with external tools
-"""
+"""Run results collector handler."""
 
 from __future__ import annotations
 
@@ -39,7 +31,6 @@ class AgentResult:
     completed_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
         return {
             "unique_id": self.unique_id,
             "agent_name": self.agent_name,
@@ -60,49 +51,16 @@ class AgentResult:
 
 
 class RunResultsCollector:
-    """
-    Handler that collects workflow execution results into run_results.json.
-
-    Output schema:
-    {
-        "metadata": {
-            "invocation_id": "abc12345",
-            "workflow_name": "my_workflow",
-            "agent_count": 5,
-            "execution_mode": "sequential",
-            "started_at": "2024-01-15T10:30:00.000Z",
-            "completed_at": "2024-01-15T10:31:23.456Z",
-            "elapsed_time": 83.456,
-            "status": "success"
-        },
-        "results": [
-            {
-                "unique_id": "my_workflow.extract_data",
-                "agent_name": "extract_data",
-                ...
-            }
-        ],
-        "elapsed_time": 83.456,
-        "args": {}
-    }
-    """
+    """Collects workflow execution results and writes run_results.json."""
 
     def __init__(
         self,
         output_dir: str | Path | None = None,
         workflow_name: str = "",
     ) -> None:
-        """
-        Initialize the run results collector.
-
-        Args:
-            output_dir: Directory to write run_results.json (creates target/ subdir)
-            workflow_name: Name of the workflow being executed
-        """
         self.output_dir = Path(output_dir) if output_dir else None
         self.workflow_name = workflow_name
 
-        # Collection state
         self._results: dict[str, AgentResult] = {}
         self._metadata: dict[str, Any] = {
             "invocation_id": None,
@@ -121,37 +79,20 @@ class RunResultsCollector:
         }
 
     def accepts(self, event: BaseEvent) -> bool:
-        """
-        Accept workflow and agent events for collection.
-
-        Args:
-            event: Event to check
-
-        Returns:
-            True for workflow/agent events we track
-        """
-        # Accept workflow, agent, and data_processing events (for empty output tracking)
+        """Accept workflow, agent, and RecordEmptyOutput events."""
         if event.category in ("workflow", "agent"):
             return True
-        # Only accept RecordEmptyOutputEvent from data_processing
         if event.event_type == "RecordEmptyOutputEvent":
             return True
         return False
 
     def handle(self, event: BaseEvent) -> None:
-        """
-        Process an event and update collection state.
-
-        Args:
-            event: Event to process
-        """
+        """Process an event and update collection state."""
         event_type = event.event_type
 
-        # Capture invocation_id from any event
         if event.meta.invocation_id and not self._metadata["invocation_id"]:
             self._metadata["invocation_id"] = event.meta.invocation_id
 
-        # Route to specific handlers
         if event_type == "WorkflowStartEvent":
             self._handle_workflow_start(event)
         elif event_type == "WorkflowCompleteEvent":
@@ -174,11 +115,9 @@ class RunResultsCollector:
         if not self.output_dir:
             return
 
-        # Create target directory
         target_dir = self.output_dir / "target"
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        # Build output structure
         output = {
             "metadata": self._metadata,
             "results": [
@@ -188,13 +127,11 @@ class RunResultsCollector:
             "tokens": self._total_tokens,
         }
 
-        # Write to file
         output_path = target_dir / "run_results.json"
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(output, f, indent=2, default=str)
 
     def _handle_workflow_start(self, event: BaseEvent) -> None:
-        """Handle WorkflowStartEvent."""
         self._metadata["workflow_name"] = event.data.get("workflow_name", "")
         self._metadata["agent_count"] = event.data.get("agent_count", 0)
         self._metadata["execution_mode"] = event.data.get("execution_mode", "sequential")
@@ -207,7 +144,6 @@ class RunResultsCollector:
         self.workflow_name = self._metadata["workflow_name"]
 
     def _handle_workflow_complete(self, event: BaseEvent) -> None:
-        """Handle WorkflowCompleteEvent."""
         self._metadata["completed_at"] = (
             event.meta.timestamp.isoformat()
             if event.meta.timestamp
@@ -218,7 +154,6 @@ class RunResultsCollector:
         self.flush()
 
     def _handle_workflow_failed(self, event: BaseEvent) -> None:
-        """Handle WorkflowFailedEvent."""
         self._metadata["completed_at"] = (
             event.meta.timestamp.isoformat()
             if event.meta.timestamp
@@ -234,7 +169,6 @@ class RunResultsCollector:
         self.flush()
 
     def _handle_agent_start(self, event: BaseEvent) -> None:
-        """Handle AgentStartEvent — record started_at and create entry if needed."""
         agent_name = event.data.get("agent_name", "")
 
         if agent_name not in self._results:
@@ -251,7 +185,6 @@ class RunResultsCollector:
         result.started_at = event.meta.timestamp
 
     def _handle_agent_complete(self, event: BaseEvent) -> None:
-        """Handle AgentCompleteEvent."""
         agent_name = event.data.get("agent_name", "")
 
         if agent_name not in self._results:
@@ -272,14 +205,12 @@ class RunResultsCollector:
         result.tokens = event.data.get("tokens", {})
         result.completed_at = event.meta.timestamp
 
-        # Accumulate tokens
         tokens = event.data.get("tokens", {})
         self._total_tokens["prompt_tokens"] += tokens.get("prompt_tokens", 0)
         self._total_tokens["completion_tokens"] += tokens.get("completion_tokens", 0)
         self._total_tokens["total_tokens"] += tokens.get("total_tokens", 0)
 
     def _handle_agent_skip(self, event: BaseEvent) -> None:
-        """Handle AgentSkipEvent."""
         agent_name = event.data.get("agent_name", "")
 
         if agent_name in self._results:
@@ -300,7 +231,6 @@ class RunResultsCollector:
             )
 
     def _handle_agent_failed(self, event: BaseEvent) -> None:
-        """Handle AgentFailedEvent."""
         agent_name = event.data.get("agent_name", "")
 
         error_msg = event.data.get("error_detail") or event.data.get("error_message", "")
@@ -325,7 +255,6 @@ class RunResultsCollector:
             )
 
     def _handle_empty_output(self, event: BaseEvent) -> None:
-        """Handle RecordEmptyOutputEvent."""
         agent_name = event.data.get("agent_name", "")
         if agent_name not in self._results:
             unique_id = f"{self.workflow_name}.{agent_name}"
@@ -340,12 +269,7 @@ class RunResultsCollector:
         self._results[agent_name].empty_output_records += 1
 
     def get_summary(self) -> dict[str, int]:
-        """
-        Get a summary of agent results.
-
-        Returns:
-            Dict with counts: success, skipped, error, running
-        """
+        """Return counts by status: success, skipped, error, running."""
         summary = {"success": 0, "skipped": 0, "error": 0, "running": 0}
         for result in self._results.values():
             if result.status in summary:

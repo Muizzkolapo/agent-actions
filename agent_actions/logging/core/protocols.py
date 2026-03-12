@@ -1,9 +1,4 @@
-"""
-Protocol definitions for event handlers.
-
-Using Protocol (structural subtyping) instead of abstract base classes
-allows for more flexible handler implementations without inheritance.
-"""
+"""Protocol definitions for event handlers."""
 
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -13,92 +8,32 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class EventHandler(Protocol):
-    """
-    Protocol for event handlers.
-
-    Implement this protocol to create custom event handlers.
-    Handlers receive events and process them (log to console, file, etc.).
-
-    Example:
-        class MyHandler:
-            def handle(self, event: BaseEvent) -> None:
-                print(f"[{event.level.value}] {event.message}")
-
-            def accepts(self, event: BaseEvent) -> bool:
-                return event.level != EventLevel.DEBUG
-
-            def flush(self) -> None:
-                pass
-
-        # Usage
-        manager.register(MyHandler())  # Works because it implements the protocol
-    """
+    """Protocol for event handlers that receive and process events."""
 
     def handle(self, event: "BaseEvent") -> None:
-        """
-        Process an event.
-
-        This method is called for every event that passes the accepts() filter.
-        Implementations should be fast and non-blocking.
-
-        Args:
-            event: The event to process
-        """
+        """Process an event that passed the accepts() filter."""
         ...
 
     def accepts(self, event: "BaseEvent") -> bool:
-        """
-        Filter events this handler should process.
-
-        Return True to handle the event, False to skip it.
-        This allows handlers to only process certain event types or levels.
-
-        Args:
-            event: The event to check
-
-        Returns:
-            True if this handler should process the event
-        """
+        """Return True if this handler should process the event."""
         ...
 
     def flush(self) -> None:
-        """
-        Flush any buffered output.
-
-        Called when the application is shutting down or when immediate
-        output is required. Implementations should ensure all pending
-        events are written.
-        """
+        """Flush any buffered output."""
         ...
 
 
 @runtime_checkable
 class EventFilter(Protocol):
-    """
-    Protocol for event filters.
-
-    Filters can transform or drop events before they reach handlers.
-    """
+    """Protocol for event filters that can transform or drop events."""
 
     def filter(self, event: "BaseEvent") -> "BaseEvent | None":
-        """
-        Filter or transform an event.
-
-        Args:
-            event: The event to filter
-
-        Returns:
-            The event (possibly modified), or None to drop it
-        """
+        """Return the event (possibly modified) or None to drop it."""
         ...
 
 
 class LevelFilter:
-    """
-    Filter events by minimum level.
-
-    Events below the minimum level are dropped.
-    """
+    """Filter that drops events below a minimum severity level."""
 
     def __init__(self, min_level: "EventLevel") -> None:
         self.min_level = min_level
@@ -113,11 +48,7 @@ class LevelFilter:
 
 
 class CategoryFilter:
-    """
-    Filter events by category.
-
-    Only events matching the specified categories are passed through.
-    """
+    """Filter that only passes events matching specified categories."""
 
     def __init__(self, categories: set[str]) -> None:
         self.categories = categories

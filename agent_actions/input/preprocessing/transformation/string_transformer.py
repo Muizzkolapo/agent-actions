@@ -1,4 +1,4 @@
-"""Module for String Processing Functions"""
+"""String processing, tokenization, and text chunking utilities."""
 
 import importlib
 import os
@@ -18,31 +18,17 @@ try:
 except ImportError:
     HAS_SPACY = False
 
-# Pre-compiled regex patterns (avoid recompilation on each call)
 _BRACE_PATTERN = re.compile("({.*?})")
 
 
 class StringProcessor:
-    """
-    A class for processing strings, including placeholder replacement and function call processing.
-    """
+    """String processing including placeholder escaping and user-defined function calls."""
 
     @staticmethod
     def process_as_string(input_text):
-        """
-        Ensures the input text is treated as a plain string.
-
-        Handles text even if it contains dictionary-like patterns.
-
-        Parameters:
-            input_text (str): The input text that may contain dictionary-like patterns.
-
-        Returns:
-            str: The processed string treated as plain text.
-        """
+        """Escape brace patterns so the string is not treated as a format template."""
         if not isinstance(input_text, str):
             return input_text
-        # Use pre-compiled pattern for better performance
         escaped_text = _BRACE_PATTERN.sub(
             lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text
         )
@@ -50,18 +36,7 @@ class StringProcessor:
 
     @staticmethod
     def call_user_function(call_args, tools_path=None, context_data_str=None):
-        """
-        Dynamically loads and executes a user-defined function from the tools folder.
-        Always passes `context_data_str` as input.
-
-        Parameters:
-            call_args (str): The arguments to the function call.
-            tools_path (str): Path to the tools directory.
-            context_data_str (str): Documentation string to pass to the function.
-
-        Returns:
-            Any: The result returned by the user function.
-        """
+        """Dynamically load and execute a user-defined function from the tools folder."""
         try:
             args = [arg.strip().strip("'\"") for arg in call_args.split(",")]
             full_function_name = args[0]
@@ -74,8 +49,6 @@ class StringProcessor:
                 function_name = full_function_name
 
             if tools_path:
-                # Use centralized path management with recursive subdirectory support
-                # This is thread-safe and cached
                 ensure_path_importable(tools_path, recursive=True)
 
             module = importlib.import_module(module_name)
@@ -111,9 +84,7 @@ class StringProcessor:
 
 
 class Tokenizer:
-    """
-    A class for handling tokenization of text.
-    """
+    """Text tokenization and chunking with multiple split strategies."""
 
     @staticmethod
     def num_tokens_from_string(string: str, encoding_name: str) -> int:
@@ -148,26 +119,7 @@ class Tokenizer:
         tokenizer_model: str = "cl100k_base",
         split_method: str = "tiktoken",
     ) -> List[str]:
-        """
-        Split text into chunks of a specified size with a specified overlap.
-
-        Parameters:
-            text (str): The text to split into chunks.
-            chunk_size (int): The size of each chunk in tokens or characters.
-            overlap (int): The number of tokens or characters to overlap between chunks.
-            tokenizer_model (str): The model name to use for tokenization and transformers.
-                                  For tiktoken: encoding name (e.g., "cl100k_base")
-                                  For transformers: model name (e.g., "all-MiniLM-L6-v2")
-            split_method (str): The method to use for splitting text. Options:
-                                "tiktoken" (default): Split by tokens using tiktoken
-                                "chars": Split by characters
-                                "spacy": Split using spaCy's sentence tokenization
-                                "transformers": Split using sentence-transformers
-                                Or a custom function name from the tools directory
-
-        Returns:
-            List[str]: A list of text chunks.
-        """
+        """Split text into overlapping chunks using the specified method."""
         if chunk_size <= 0:
             raise ConfigurationError(
                 "chunk_size must be a positive integer",
@@ -249,12 +201,7 @@ class Tokenizer:
     def _split_with_spacy(
         text: str, chunk_size: int, overlap: int, tokenizer_model: str
     ) -> List[str]:
-        """
-        Split text using spaCy's sentence tokenization.
-
-        Requires spaCy to be installed: uv pip install agent-actions[nlp]
-        And the language model: python -m spacy download en_core_web_sm
-        """
+        """Split text using spaCy sentence tokenization."""
         if not HAS_SPACY:
             raise ConfigurationError(
                 "spaCy is not installed. "
@@ -299,7 +246,6 @@ class Tokenizer:
         try:
             tools_path = os.environ.get("TOOLS_PATH", "tools")
             if tools_path:
-                # Use centralized path management (thread-safe, cached)
                 ensure_path_importable(tools_path)
             module = importlib.import_module(split_method)
             function = getattr(module, split_method)

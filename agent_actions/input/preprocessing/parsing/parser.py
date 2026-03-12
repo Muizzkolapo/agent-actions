@@ -1,9 +1,4 @@
-"""
-Advanced WHERE clause parser using pyparsing library.
-
-This module provides a robust parser that builds AST nodes from WHERE clause
-expressions with proper grammar handling and comprehensive error reporting.
-"""
+"""WHERE clause parser using pyparsing with AST construction and LRU caching."""
 
 import re
 from typing import Any, Dict, List, Optional
@@ -77,26 +72,14 @@ class ParseResult:
 
 
 class WhereClauseParser:
-    """
-    Advanced WHERE clause parser using pyparsing.
-
-    Features:
-    - Proper grammar-based parsing
-    - AST construction
-    - Operator precedence handling
-    - Function calls
-    - Parentheses grouping
-    - Comprehensive error reporting
-    - LRU caching for performance
-    """
+    """Grammar-based WHERE clause parser with operator precedence and LRU caching."""
 
     def __init__(self):
-        """Initialize the parser."""
         self._grammar = None
         self._build_grammar()
 
     def _build_basic_tokens(self):
-        """Build basic punctuation tokens."""
+        """Build punctuation token suppressors."""
         return {
             "lpar": Suppress("("),
             "rpar": Suppress(")"),
@@ -123,17 +106,13 @@ class WhereClauseParser:
 
     def _build_grammar(self):
         """Build the pyparsing grammar for WHERE clauses."""
-        # Basic tokens
         tokens = self._build_basic_tokens()
 
-        # Field identifier (with dot notation support)
         field_name = Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
         field_name.set_parse_action(lambda t: FieldNode(field_path=t[0]))
 
-        # Literals
         string_literal, number, boolean, null = self._build_literals()
 
-        # Array literals
         array_element = Forward()
         array_element <<= string_literal | number | boolean | null
 
@@ -144,7 +123,6 @@ class WhereClauseParser:
         )
         array_literal.set_parse_action(self._parse_array)
 
-        # Function calls
         function_name = Word(alphas.upper(), alphanums + "_")
         function_args = Forward()
         function_args <<= (
@@ -156,55 +134,43 @@ class WhereClauseParser:
         function_call = function_name + function_args
         function_call.set_parse_action(self._parse_function)
 
-        # Operands (field references, literals, function calls)
         operand = (
             function_call | field_name | array_literal | string_literal | number | boolean | null
         )
 
-        # Comparison operators
         comparison_ops = self._build_comparison_operators()
 
-        # Build expression using infix_notation for proper precedence
         where_expr = infix_notation(
             operand,
             [
-                # Unary operators (highest precedence)
                 (CaselessKeyword("NOT"), 1, OpAssoc.RIGHT, self._parse_not),
-                # Comparison operators
                 (comparison_ops, 2, OpAssoc.LEFT, self._parse_comparison),
-                # Logical operators (lower precedence)
                 (CaselessKeyword("AND"), 2, OpAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, OpAssoc.LEFT, self._parse_or),
             ],
         )
 
-        # Complete grammar
         self._grammar = where_expr
-
-        # Enable packrat parsing for better performance
         ParserElement.enable_packrat()
 
     def _collect_comparison_operators(self):
-        """Collect and sort comparison operators from the module."""
+        """Collect comparison operators sorted longest-first to avoid partial matches."""
         comparison_ops = [
             (info.symbol, info.name)
             for info in list_operators()
             if info.operator_type.value == "comparison" and info.arity in (1, 2)
         ]
-        # Sort by length (longest first) to avoid partial matches
         comparison_ops.sort(key=lambda x: len(x[0]), reverse=True)
         return comparison_ops
 
     def _create_operator_literal(self, symbol: str, name: str):
         """Create a pyparsing literal for a single operator."""
         if " " in symbol:
-            # Multi-word operators like "IS NULL", "NOT IN"
             words = symbol.split()
             op_literal = CaselessKeyword(words[0])
             for word in words[1:]:
                 op_literal = op_literal + CaselessKeyword(word)
         else:
-            # Single operators like "==", "!="
             op_literal = Literal(symbol)
         op_literal.set_parse_action(lambda t, name=name: name)
         return op_literal
@@ -226,7 +192,6 @@ class WhereClauseParser:
 
     def _parse_array(self, tokens):
         """Parse array literal tokens into LiteralNode."""
-        # Extract values from the parsed tokens
         values = []
         for token in tokens:
             if isinstance(token, LiteralNode):
@@ -243,7 +208,6 @@ class WhereClauseParser:
         func_name = tokens[0]
         args = []
 
-        # Extract arguments
         for token in tokens[1:]:
             if isinstance(token, (FieldNode, LiteralNode, FunctionNode)):
                 args.append(token)
@@ -257,14 +221,12 @@ class WhereClauseParser:
 
     def _parse_comparison(self, tokens):
         """Parse comparison operations."""
-        result = tokens[0][0]  # First operand
+        result = tokens[0][0]
 
-        # Process pairs of (operator, operand)
         i = 1
         while i < len(tokens[0]):
             operator_name = tokens[0][i]
 
-            # Map operator name to enum
             try:
                 info = get_operator_info(operator_name)
                 operator_enum = (
@@ -286,7 +248,6 @@ class WhereClauseParser:
                 result = ComparisonNode(result, operator_enum, right_operand)
                 i += 2
             else:
-                # Unary operator
                 result = ComparisonNode(result, operator_enum)
                 i += 1
 
@@ -341,20 +302,11 @@ class WhereClauseParser:
 
         if operator_name in mapping:
             return mapping[operator_name]
-        # Default fallback
         return ComparisonOperator.EQ
 
     @lru_cache(maxsize=1000)
     def parse_cached(self, where_clause: str) -> ParseResult:
-        """
-        Parse a WHERE clause with caching.
-
-        Args:
-            where_clause: The WHERE clause string to parse
-
-        Returns:
-            ParseResult containing the AST or error information
-        """
+        """Parse a WHERE clause with LRU caching."""
         return self.parse(where_clause)
 
     def _validate_clause_input(self, where_clause: str) -> Optional[ParseResult]:
@@ -392,16 +344,7 @@ class WhereClauseParser:
         return ParseResult(success=True, ast=parsed_ast)
 
     def parse(self, where_clause: str) -> ParseResult:
-        """
-        Parse a WHERE clause into an AST.
-
-        Args:
-            where_clause: The WHERE clause string to parse
-
-        Returns:
-            ParseResult containing the AST or error information
-        """
-        # Validate input
+        """Parse a WHERE clause into an AST."""
         validation_error = self._validate_clause_input(where_clause)
         if validation_error:
             return validation_error
@@ -421,9 +364,7 @@ class WhereClauseParser:
                 error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
             )
 
-    # Pattern for valid field names: identifier with optional dot-separated path
     _FIELD_PATTERN = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-    # Pattern to split WHERE clause into tokens
     _OPERATOR_SPLIT_PATTERN = re.compile(
         r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
         flags=re.IGNORECASE,
@@ -439,7 +380,7 @@ class WhereClauseParser:
         return bool(self._FIELD_PATTERN.fullmatch(token.split()[0]))
 
     def _validate_field_names(self, where_clause: str) -> bool:
-        """Validate field names to prevent injection attacks."""
+        """Validate field names against injection patterns."""
         tokens = self._OPERATOR_SPLIT_PATTERN.split(where_clause)
         return all(self._is_valid_field_token(token) for token in tokens)
 

@@ -11,19 +11,17 @@ class TemplateErrorFormatter(ErrorFormatter):
     """Handles template rendering errors with missing variables."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Detect template variable errors."""
         exc_names = {type(exc).__name__, type(root).__name__}
         return "TemplateVariableError" in exc_names
 
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Format template variable errors with available context fields."""
         agent_name = context.get("agent") or context.get("agent_name") or "unknown"
         missing = context.get("missing_variables", [])
         available = context.get("available_variables", [])
 
-        # Get namespace_context from exception (dict types aren't extracted by ErrorContextService)
+        # dict types aren't extracted by ErrorContextService
         namespace_context = getattr(exc, "namespace_context", {}) or {}
         storage_hints = getattr(exc, "storage_hints", {}) or {}
 
@@ -37,14 +35,12 @@ class TemplateErrorFormatter(ErrorFormatter):
                 self._format_variable_diagnostic(var, namespace_context, storage_hints)
             )
 
-        # If no missing variables were parsed, show generic message with available info
         if not missing:
             details_lines.append("  Unable to parse missing variable from error.")
             if namespace_context:
                 namespaces = list(namespace_context.keys())
                 details_lines.append(f"  Available namespaces: {', '.join(namespaces)}")
 
-        # Generate hint based on error type
         hint = self._generate_hint(missing, namespace_context, storage_hints)
 
         return UserError(
@@ -84,14 +80,12 @@ class TemplateErrorFormatter(ErrorFormatter):
             if ns_exists:
                 lines.append(f"  Field '{field}' in namespace: {'YES' if field_exists else 'NO'}")
                 if fields_in_ns:
-                    # Show up to 10 fields
                     display_fields = fields_in_ns[:10]
                     suffix = (
                         f" (and {len(fields_in_ns) - 10} more)" if len(fields_in_ns) > 10 else ""
                     )
                     lines.append(f"  Available in '{ns}': {', '.join(display_fields)}{suffix}")
 
-                # Check if field exists in storage but wasn't loaded
                 hint = storage_hints.get(var)
                 if hint:
                     lines.append("")
@@ -108,18 +102,15 @@ class TemplateErrorFormatter(ErrorFormatter):
                         "in any upstream schema."
                     )
 
-                # Suggest similar field
                 suggestion = self._find_similar(field, fields_in_ns)
                 if suggestion:
                     lines.append("")
                     lines.append(f"  Did you mean '{ns}.{suggestion}'?")
             else:
-                # Namespace doesn't exist - show available namespaces
                 if namespace_context:
                     namespaces = list(namespace_context.keys())
                     lines.append(f"  Available namespaces: {', '.join(namespaces)}")
         else:
-            # Leaf-only variable (Jinja reports "has no attribute 'field'")
             hint = storage_hints.get(var)
             if hint:
                 ns = hint["namespace"]

@@ -1,6 +1,4 @@
-"""
-Unified Rich rendering for schema display.
-"""
+"""Unified Rich rendering for schema display."""
 
 from typing import Dict, List, Optional
 
@@ -13,18 +11,9 @@ from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSo
 
 
 class SchemaRenderer:
-    """Unified Rich rendering for schema display.
-
-    Provides consistent rendering components used by both
-    the `schema` and `inspect` CLI commands.
-    """
+    """Unified Rich rendering for schema display."""
 
     def __init__(self, console: Console):
-        """Initialize the renderer.
-
-        Args:
-            console: Rich Console instance for output
-        """
         self.console = console
 
     def render_summary_table(
@@ -33,16 +22,7 @@ class SchemaRenderer:
         execution_order: List[str],
         title: Optional[str] = None,
     ) -> Table:
-        """Render a summary table of all actions.
-
-        Args:
-            schemas: Dictionary mapping action names to schemas
-            execution_order: Order to display actions
-            title: Optional table title
-
-        Returns:
-            Rich Table with action summaries
-        """
+        """Render a summary table of all actions."""
         table = Table(title=title, show_lines=True)
         table.add_column("Action", style="cyan", no_wrap=True)
         table.add_column("Type", style="magenta", width=6)
@@ -66,16 +46,7 @@ class SchemaRenderer:
         execution_order: List[str],
         verbose: bool = False,
     ) -> Tree:
-        """Render workflow flow as a tree.
-
-        Args:
-            schemas: Dictionary mapping action names to schemas
-            execution_order: Order to display actions
-            verbose: Whether to show detailed information
-
-        Returns:
-            Rich Tree with flow visualization
-        """
+        """Render workflow flow as a tree."""
         tree = Tree("[bold]Flow Visualization[/bold]")
 
         for action_name in execution_order:
@@ -88,23 +59,14 @@ class SchemaRenderer:
         return tree
 
     def render_action_detail(self, schema: ActionSchema) -> Panel:
-        """Render detailed view of a single action.
-
-        Args:
-            schema: ActionSchema to render
-
-        Returns:
-            Rich Panel with action details
-        """
+        """Render detailed view of a single action."""
         tree = Tree(f"[bold cyan]{schema.name}[/bold cyan] ({schema.kind.value})")
 
-        # Dependencies
         if schema.dependencies:
             deps_branch = tree.add("[blue]depends_on:[/blue]")
             for dep in schema.dependencies:
                 deps_branch.add(dep)
 
-        # Upstream references (template uses)
         if schema.upstream_refs:
             inputs_branch = tree.add("[green]uses (from templates):[/green]")
             by_source: Dict[str, list] = {}
@@ -118,7 +80,6 @@ class SchemaRenderer:
                 for ref in refs:
                     source_branch.add(f"{ref.field_name} [dim]({ref.location})[/dim]")
 
-        # Input schema (for tools)
         if schema.kind == ActionKind.TOOL and schema.input_fields:
             schema_branch = tree.add("[green]expects (input schema):[/green]")
             for field in schema.input_fields:
@@ -127,10 +88,8 @@ class SchemaRenderer:
                 else:
                     schema_branch.add(f"{field.name} [dim](optional)[/dim]")
 
-        # Output fields
         self._add_outputs_to_tree(tree, schema)
 
-        # Downstream
         if schema.downstream:
             downstream_branch = tree.add("[magenta]downstream (used by):[/magenta]")
             for d in schema.downstream:
@@ -143,15 +102,7 @@ class SchemaRenderer:
         schemas: Dict[str, ActionSchema],
         execution_order: List[str],
     ) -> Panel:
-        """Render a data flow panel (verbose tree view).
-
-        Args:
-            schemas: Dictionary mapping action names to schemas
-            execution_order: Order to display actions
-
-        Returns:
-            Rich Panel with data flow tree
-        """
+        """Render a data flow panel (verbose tree view)."""
         tree = self.render_flow_tree(schemas, execution_order, verbose=True)
         return Panel(tree, title="Workflow Data Flow")
 
@@ -186,16 +137,9 @@ class SchemaRenderer:
         schema: ActionSchema,
         verbose: bool = False,
     ) -> None:
-        """Add an action to the flow tree.
-
-        Args:
-            tree: Tree to add action to
-            schema: ActionSchema to add
-            verbose: Whether to show detailed information
-        """
+        """Add an action node to the flow tree."""
         action_branch = tree.add(f"[cyan]{schema.name}[/cyan] ({schema.kind.value})")
 
-        # Inputs - show template references or input schema for tools
         if schema.upstream_refs:
             inputs_branch = action_branch.add("[green]uses:[/green]")
             for ref in schema.upstream_refs:
@@ -210,10 +154,8 @@ class SchemaRenderer:
         elif schema.kind == ActionKind.SOURCE:
             action_branch.add("[dim](workflow input)[/dim]")
 
-        # Outputs
         self._add_outputs_to_tree(action_branch, schema, show_dropped=verbose)
 
-        # Downstream (only in verbose mode)
         if verbose and schema.downstream:
             downstream_branch = action_branch.add("[magenta]downstream:[/magenta]")
             for d in schema.downstream:
@@ -225,13 +167,7 @@ class SchemaRenderer:
         schema: ActionSchema,
         show_dropped: bool = True,
     ) -> None:
-        """Add output fields to a tree node.
-
-        Args:
-            parent: Parent tree node
-            schema: ActionSchema with outputs
-            show_dropped: Whether to show dropped fields
-        """
+        """Add output fields to a tree node."""
         if schema.available_outputs:
             outputs_branch = parent.add("[yellow]produces:[/yellow]")
 
@@ -248,7 +184,6 @@ class SchemaRenderer:
                 else:
                     outputs_branch.add(field.name)
 
-            # Show dropped fields if requested
             if show_dropped and schema.dropped_outputs:
                 dropped_branch = outputs_branch.add("[red]dropped:[/red]")
                 for name in schema.dropped_outputs:

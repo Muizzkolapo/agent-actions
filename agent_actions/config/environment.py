@@ -26,11 +26,7 @@ class LogLevel(str, Enum):
 
 
 class EnvironmentConfig(BaseSettings):
-    """Environment configuration with validation.
-
-    Loads configuration from environment variables with validation.
-    Supports .env file loading and provides sensible defaults.
-    """
+    """Environment configuration loaded from environment variables with validation."""
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="forbid"

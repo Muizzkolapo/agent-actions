@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""
-Analyze field flow across workflow nodes.
-
-Traces which fields appear at each node and identifies:
-- Fields added by each action
-- Fields passed through
-- Fields dropped
-- Type changes between nodes
-
-Usage:
-    python analyze_field_flow.py <workflow-target-dir>
-
-Example:
-    python analyze_field_flow.py /path/to/workflow/agent_io/target
-"""
+"""Analyze field flow across workflow nodes."""
 
 import argparse
 import json
@@ -145,14 +131,12 @@ def analyze_workflow(target_dir: Path) -> None:
                 {"num": node_num, "name": action_name, "dir": node_dir.name, "fields": fields}
             )
 
-    # Sort by node number
     nodes.sort(key=lambda x: x["num"])
 
     if not nodes:
         print("No node data found in target directory", file=sys.stderr)
         sys.exit(1)
 
-    # Print analysis
     print("=" * 70)
     print("FIELD FLOW ANALYSIS")
     print("=" * 70)
@@ -190,7 +174,6 @@ def analyze_workflow(target_dir: Path) -> None:
 
         prev_fields = curr_fields
 
-    # Summary
     print(f"\n{'=' * 70}")
     print("FIELD SUMMARY")
     print("=" * 70)

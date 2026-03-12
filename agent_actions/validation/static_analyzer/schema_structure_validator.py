@@ -1,8 +1,4 @@
-"""Schema structure validation for pre-flight checking.
-
-Validates schema definitions before LLM execution to catch issues early
-and provide clear error messages instead of silent failures.
-"""
+"""Schema structure validation for pre-flight checking."""
 
 import logging
 from typing import Any, Dict, List, Optional, Set
@@ -13,20 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class SchemaStructureValidator:
-    """Validates schema structures for correctness and completeness.
-
-    Performs compile-time validation of schema definitions to catch issues
-    before any LLM calls are made. This helps:
-    - Fail fast on invalid schema definitions
-    - Provide clear error messages with actionable hints
-    - Prevent silent data loss from malformed schemas
-
-    Example:
-        validator = SchemaStructureValidator()
-        errors = validator.validate_schema(schema, action_name)
-        for error in errors:
-            result.add_error(error)
-    """
+    """Validates schema structures for correctness and completeness."""
 
     # Valid JSON Schema types
     VALID_TYPES = {"string", "number", "integer", "boolean", "array", "object", "null"}
@@ -37,16 +20,7 @@ class SchemaStructureValidator:
         action_name: str,
         config_field: str = "schema",
     ) -> List[StaticTypeError]:
-        """Validate a schema definition for structural correctness.
-
-        Args:
-            schema: The schema dict to validate
-            action_name: Name of the action for error reporting
-            config_field: Config field where schema is defined
-
-        Returns:
-            List of StaticTypeError for any issues found
-        """
+        """Validate a schema definition for structural correctness."""
         errors: List[StaticTypeError] = []
 
         if not schema:
@@ -64,13 +38,11 @@ class SchemaStructureValidator:
             )
             return errors
 
-        # Check if this is unified format or JSON Schema format
         if "fields" in schema:
             errors.extend(self._validate_unified_format(schema, action_name, config_field))
         elif "type" in schema:
             errors.extend(self._validate_json_schema_format(schema, action_name, config_field))
         elif "properties" in schema:
-            # Direct object schema without 'type'
             errors.extend(
                 self._validate_object_properties(
                     schema.get("properties", {}),
@@ -80,7 +52,6 @@ class SchemaStructureValidator:
                 )
             )
         else:
-            # Might be inline shorthand format {field_name: "type"}
             errors.extend(self._validate_inline_shorthand(schema, action_name, config_field))
 
         return errors
@@ -154,7 +125,6 @@ class SchemaStructureValidator:
             )
             return errors
 
-        # Check for field identifier (id or name)
         field_id = field.get("id") or field.get("name")
         if not field_id:
             errors.append(
@@ -185,7 +155,6 @@ class SchemaStructureValidator:
         else:
             seen_ids.add(field_id)
 
-        # Check for type
         field_type = field.get("type")
         if not field_type:
             errors.append(
@@ -201,7 +170,6 @@ class SchemaStructureValidator:
                 )
             )
         elif field_type not in self.VALID_TYPES:
-            # Check for extended types like array[string]
             if not (field_type.startswith("array[") and field_type.endswith("]")):
                 errors.append(
                     StaticTypeError(
@@ -217,7 +185,6 @@ class SchemaStructureValidator:
                     )
                 )
 
-        # Validate array items if type is array
         if field_type == "array":
             items = field.get("items")
             if not items:
@@ -403,7 +370,6 @@ class SchemaStructureValidator:
                     )
                 )
 
-        # Check required fields exist in properties
         if required:
             for req_field in required:
                 if req_field not in properties:
@@ -449,15 +415,12 @@ class SchemaStructureValidator:
                 )
                 continue
 
-            # Strip required marker
             base_type = field_type.rstrip("!")
 
-            # Handle array types
             if base_type.startswith("array[") and base_type.endswith("]"):
                 inner_type = base_type[6:-1]
-                # Check for object with properties
                 if inner_type.startswith("object:"):
-                    continue  # Complex format, validated elsewhere
+                    continue
                 elif inner_type not in self.VALID_TYPES:
                     errors.append(
                         StaticTypeError(
@@ -494,22 +457,12 @@ class SchemaStructureValidator:
         action_name: str,
         vendor: str,
     ) -> List[StaticTypeError]:
-        """Validate that schema can be compiled for the target vendor.
-
-        Args:
-            schema: The schema dict to validate
-            action_name: Name of the action
-            vendor: Target vendor (openai, anthropic, etc.)
-
-        Returns:
-            List of errors if compilation would fail
-        """
+        """Validate that schema can be compiled for the target vendor."""
         errors: List[StaticTypeError] = []
 
         if not schema:
             return errors
 
-        # Import here to avoid circular dependency
         try:
             from agent_actions.output.response.schema import compile_unified_schema
 

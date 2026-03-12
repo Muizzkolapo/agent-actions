@@ -1,16 +1,4 @@
-"""
-Module for rendering and compiling workflow templates.
-
-This module provides the single compilation step for workflows. After render, the YAML is fully
-self-contained with all schemas inlined and ready for direct execution.
-
-Compilation steps:
-1. Jinja2 template rendering
-2. Prompt reference resolution ($prompt_name -> actual content)
-3. Named schema inlining (schema_name: foo -> loads schema/foo.yml and inlines)
-4. Inline schema expansion (dict format to unified schema format)
-5. Version expansion for versioned actions
-"""
+"""Render and compile workflow templates into self-contained YAML."""
 
 import logging
 import textwrap

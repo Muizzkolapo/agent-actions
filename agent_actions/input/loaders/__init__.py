@@ -1,9 +1,4 @@
-"""
-Compatibility module for core.loaders.data_loaders imports.
-
-This module re-exports loaders from their new locations to maintain
-backward compatibility after the repository restructuring.
-"""
+"""Compatibility re-exports for core.loaders.data_loaders imports."""
 
 from agent_actions.config.di.container import registry as _registry
 

@@ -1,9 +1,4 @@
-"""
-Orchestration module for agent workflow execution.
-
-This module provides classes for orchestrating multi-agent workflows,
-including execution coordination, state management, and dependency handling.
-"""
+"""Orchestration module for agent workflow execution."""
 
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.managers.artifacts import ArtifactLinker

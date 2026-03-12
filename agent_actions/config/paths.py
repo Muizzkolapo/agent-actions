@@ -1,9 +1,4 @@
-"""
-Centralized path management for agent-actions.
-
-This module provides a unified interface for all path operations,
-eliminating hardcoded path structures and duplicated logic.
-"""
+"""Centralized path management for all agent-actions path operations."""
 
 from pathlib import Path
 from typing import Optional, Dict, Union, List
@@ -87,20 +82,11 @@ class PathManager:
         self._project_root = Path(project_root).resolve() if project_root else None
         self._path_cache: Dict[str, Path] = {}
 
-    # --- Root Detection ---
-
     def get_project_root(self, start_path: Optional[Path] = None) -> Path:
-        """
-        Find and return the project root directory.
-
-        Args:
-            start_path: Starting point for search (defaults to current directory)
-
-        Returns:
-            Path to project root directory
+        """Find and return the project root directory.
 
         Raises:
-            ProjectRootNotFoundError: If project root cannot be found
+            ProjectRootNotFoundError: If project root cannot be found.
         """
         # When start_path is None (CWD), return cached root if available.
         # When start_path is explicit, always re-resolve (skip reading cache)
@@ -111,7 +97,6 @@ class PathManager:
 
         search_path = Path(start_path or Path.cwd()).resolve()
 
-        # Look for marker file in current and parent directories
         current = search_path
         while current != current.parent:
             marker_path = current / self.config.marker_file
@@ -139,8 +124,6 @@ class PathManager:
             f"starting from {search_path}"
         )
 
-    # --- Path Resolution ---
-
     def get_standard_path(
         self,
         path_type: PathType,
@@ -148,18 +131,7 @@ class PathManager:
         action_name: Optional[str] = None,
         **template_vars,
     ) -> Path:
-        """
-        Get a standard path based on type and parameters.
-
-        Args:
-            path_type: Type of path to generate
-            agent_name: Agent name for agent-specific paths
-            action_name: Node name for target paths
-            **template_vars: Additional template variables
-
-        Returns:
-            Resolved path for the requested type
-        """
+        """Get a standard path based on type and parameters."""
         cache_key = (
             f"{path_type.value}:{agent_name}:{action_name}:{hash(frozenset(template_vars.items()))}"
         )
@@ -175,7 +147,6 @@ class PathManager:
             template = self.PATH_TEMPLATES[path_type]
             format_vars = {"agent_name": agent_name, "action_name": action_name, **template_vars}
 
-            # Filter out None values
             format_vars = {k: v for k, v in format_vars.items() if v is not None}
 
             try:
@@ -196,34 +167,15 @@ class PathManager:
         return resolved_path
 
     def get_agent_paths(self, agent_name: str) -> Dict[str, Path]:
-        """
-        Get all standard paths for a specific agent.
-
-        Args:
-            agent_name: Name of the agent
-
-        Returns:
-            Dictionary mapping path names to Path objects
-        """
+        """Get all standard paths for a specific agent."""
         return {
             "config": self.get_standard_path(PathType.AGENT_CONFIG, agent_name=agent_name),
             "io": self.get_standard_path(PathType.AGENT_IO, agent_name=agent_name),
             "source": self.get_standard_path(PathType.SOURCE, agent_name=agent_name),
         }
 
-    # --- Path Creation ---
-
     def ensure_path_exists(self, path: Path, is_file: bool = False) -> Path:
-        """
-        Ensure a path exists, creating directories as needed.
-
-        Args:
-            path: Path to ensure exists
-            is_file: Whether the path is a file (creates parent directory only)
-
-        Returns:
-            The resolved path
-        """
+        """Ensure a path exists, creating directories as needed."""
         path = Path(path).resolve()
 
         if is_file:
@@ -237,19 +189,10 @@ class PathManager:
 
         return path
 
-    # --- Validation ---
-
     def _check_permissions(
         self, path: Path, requirements: Dict[str, bool], errors: List[str]
     ) -> None:
-        """
-        Check path permissions and append errors if checks fail.
-
-        Args:
-            path: Path to check
-            requirements: Dictionary of permission requirements
-            errors: List to append error messages to
-        """
+        """Check path permissions and append errors if checks fail."""
         mode = path.stat().st_mode
 
         permission_checks = [
@@ -270,35 +213,24 @@ class PathManager:
                     errors.append(f"Path is not {perm_name}: {path}")
 
     def validate_path(self, path: Path, requirements: Optional[Dict[str, bool]] = None) -> bool:
-        """
-        Validate a path against requirements.
-
-        Args:
-            path: Path to validate
-            requirements: Dictionary of requirements (must_exist, must_be_readable, etc.)
-
-        Returns:
-            True if path meets all requirements
+        """Validate a path against requirements.
 
         Raises:
-            PathManagerValidationError: If validation fails and validate_permissions is True
+            PathManagerValidationError: If validation fails and validate_permissions is True.
         """
         path = Path(path).resolve()
         requirements = requirements or {}
         errors = []
 
-        # Check existence
         if requirements.get("must_exist", False) and not path.exists():
             errors.append(f"Path does not exist: {path}")
 
         if path.exists():
-            # Check if it's the expected type
             if requirements.get("must_be_file", False) and not path.is_file():
                 errors.append(f"Path is not a file: {path}")
             if requirements.get("must_be_directory", False) and not path.is_dir():
                 errors.append(f"Path is not a directory: {path}")
 
-            # Check permissions using helper method
             self._check_permissions(path, requirements, errors)
 
         if errors:
@@ -310,43 +242,16 @@ class PathManager:
         return True
 
     def validate_standard_path(self, path_type: PathType, path: Path) -> bool:
-        """
-        Validate a path against standard requirements for its type.
-
-        Args:
-            path_type: Type of path being validated
-            path: Path to validate
-
-        Returns:
-            True if path meets standard requirements
-        """
+        """Validate a path against standard requirements for its type."""
         requirements = self.VALIDATION_RULES.get(path_type, {})
         return self.validate_path(path, requirements)
 
-    # --- Normalization / Transform ---
-
     def normalize_path(self, path: Union[str, Path]) -> Path:
-        """
-        Normalize a path to a resolved Path object.
-
-        Args:
-            path: Path to normalize (string or Path object)
-
-        Returns:
-            Normalized and resolved Path object
-        """
+        """Normalize a path to a resolved Path object."""
         return Path(path).resolve()
 
     def is_within_project(self, path: Path) -> bool:
-        """
-        Check if a path is within the project root.
-
-        Args:
-            path: Path to check
-
-        Returns:
-            True if path is within project root
-        """
+        """Check if a path is within the project root."""
         try:
             project_root = self.get_project_root()
             normalized_path = self.normalize_path(path)
@@ -355,48 +260,20 @@ class PathManager:
             return False
 
     def get_relative_to_project(self, path: Path) -> Path:
-        """
-        Get path relative to project root.
-
-        Args:
-            path: Absolute path
-
-        Returns:
-            Path relative to project root
-        """
+        """Get path relative to project root."""
         project_root = self.get_project_root()
         normalized_path = self.normalize_path(path)
         return normalized_path.relative_to(project_root)
 
-    # --- Cleanup / Discovery ---
-
     def find_files_by_pattern(self, pattern: str, base_path: Optional[Path] = None) -> List[Path]:
-        """
-        Find files matching a pattern within the project or specified base path.
-
-        Args:
-            pattern: Glob pattern to match
-            base_path: Base path to search (defaults to project root)
-
-        Returns:
-            List of matching file paths
-        """
+        """Find files matching a glob pattern within the project."""
         search_base = base_path or self.get_project_root()
         search_base = self.normalize_path(search_base)
 
         return list(search_base.glob(pattern))
 
     def clean_path(self, path: Path, recursive: bool = False) -> bool:
-        """
-        Clean/remove a path.
-
-        Args:
-            path: Path to clean
-            recursive: Whether to remove directories recursively
-
-        Returns:
-            True if successfully cleaned
-        """
+        """Remove a path, optionally recursively."""
         path = self.normalize_path(path)
 
         # Note: is_within_project() calls get_project_root() which may resolve
@@ -424,23 +301,10 @@ class PathManager:
         return False
 
     def create_mirror_path(self, source_path: Path, source_base: str, target_base: str) -> Path:
-        """
-        Create a mirrored path by replacing source base with target base.
-
-        This replaces the brittle logic in SourceDataLoader for creating source/target mirrors.
-
-        Args:
-            source_path: Original path
-            source_base: Base directory name to replace (e.g., "target")
-            target_base: Replacement base directory name (e.g., "source")
-
-        Returns:
-            Mirrored path
-        """
+        """Create a mirrored path by replacing source base with target base."""
         source_path = self.normalize_path(source_path)
         parts = source_path.parts
 
-        # Find the source base in the path
         try:
             base_index = parts.index(source_base)
         except ValueError as exc:
@@ -448,7 +312,6 @@ class PathManager:
                 f"Source base '{source_base}' not found in path {source_path}"
             ) from exc
 
-        # Replace source base with target base
         new_parts = parts[:base_index] + (target_base,) + parts[base_index + 1 :]
 
         return Path(*new_parts)

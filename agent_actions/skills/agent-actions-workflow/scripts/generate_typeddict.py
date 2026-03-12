@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generate TypedDict schema from sample JSON data.
-
-Usage:
-    python generate_typeddict.py <sample.json> [--output tool.py] [--class-name MyInput]
-
-Example:
-    python generate_typeddict.py node_5_output/combined_scraped_sample.json --output my_tool.py
-"""
+"""Generate TypedDict schema from sample JSON data."""
 
 import argparse
 import json
@@ -59,20 +51,17 @@ def infer_python_type(value: Any, field_name: str = "") -> str:
     elif isinstance(value, list):
         if not value:
             return "List[Any]"
-        # Check if all elements are same type
         elem_types = set(infer_python_type(e) for e in value)
         if len(elem_types) == 1:
             elem_type = elem_types.pop()
             return f"List[{elem_type}]"
         return "List[Any]"
     elif isinstance(value, dict):
-        # Check if it's a simple dict or needs nested TypedDict
         if not value:
             return "dict"
         value_types = set(infer_python_type(v) for v in value.values())
         if len(value_types) == 1:
             return f"Dict[str, {value_types.pop()}]"
-        # Mixed value types - use plain dict
         return "dict"
     return "Any"
 
@@ -90,7 +79,6 @@ def extract_fields_from_json(data: dict) -> dict[str, str]:
 
     fields = {}
     for key, value in data.items():
-        # Skip internal/metadata fields
         if key in _METADATA_KEYS:
             continue
         fields[key] = infer_python_type(value, key)
@@ -110,7 +98,6 @@ def generate_typeddict(
 ) -> str:
     """Generate TypedDict class definition."""
 
-    # Determine required imports
     imports = {"TypedDict"}
     for type_str in fields.values():
         if "List" in type_str:
@@ -122,7 +109,6 @@ def generate_typeddict(
 
     imports_str = ", ".join(sorted(imports))
 
-    # Group fields by category (heuristic)
     core_fields = []
     metadata_fields = []
 
@@ -132,7 +118,6 @@ def generate_typeddict(
         else:
             core_fields.append((name, type_str))
 
-    # Build class body
     lines = [
         f"from typing import {imports_str}",
         "from agent_actions import udf_tool",
@@ -187,7 +172,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Load JSON
     json_path = Path(args.json_file)
     if not json_path.exists():
         print(f"Error: File not found: {json_path}", file=sys.stderr)
@@ -196,21 +180,17 @@ def main():
     with open(json_path) as f:
         data = json.load(f)
 
-    # Handle array of records
     if isinstance(data, list) and data:
         data = data[0]
 
-    # Extract fields
     fields = extract_fields_from_json(data)
 
     if not fields:
         print("Error: No fields found in JSON", file=sys.stderr)
         sys.exit(1)
 
-    # Generate TypedDict
     result = generate_typeddict(fields, args.class_name, args.source_node, args.dest_node)
 
-    # Output
     if args.output:
         output_path = Path(args.output)
         output_path.write_text(result)

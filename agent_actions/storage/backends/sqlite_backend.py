@@ -14,23 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class SQLiteBackend(StorageBackend):
-    """
-    SQLite-based storage backend.
+    """SQLite-based storage backend using a single DB file per workflow."""
 
-    Stores source and target data in a single SQLite database file
-    per workflow, located at: {workflow}/agent_io/target/{workflow_name}.db
-
-    Tables:
-        source_data: Stores source records with deduplication by source_guid
-        target_data: Stores target records organized by action_name
-
-    Thread Safety:
-        Single shared connection with check_same_thread=False.
-        Writes are serialized via threading.Lock; reads are concurrent
-        (WAL mode handles read concurrency safely).
-    """
-
-    # SQL schema for source_data table
     SOURCE_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS source_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,7 +27,6 @@ class SQLiteBackend(StorageBackend):
         )
     """
 
-    # SQL schema for target_data table
     TARGET_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS target_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +39,6 @@ class SQLiteBackend(StorageBackend):
         )
     """
 
-    # SQL schema for record_disposition table
     DISPOSITION_TABLE_SQL = """
         CREATE TABLE IF NOT EXISTS record_disposition (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,7 +52,6 @@ class SQLiteBackend(StorageBackend):
         )
     """
 
-    # Indexes for common query patterns
     SOURCE_INDEX_SQL = """
         CREATE INDEX IF NOT EXISTS idx_source_path ON source_data(relative_path)
     """
@@ -94,43 +76,25 @@ class SQLiteBackend(StorageBackend):
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
     """
 
-    # Valid characters for identifiers (node names, paths)
     _VALID_IDENTIFIER_CHARS = set(
         "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./"
     )
 
     def __init__(self, db_path: str, workflow_name: str):
-        """
-        Initialize SQLite backend.
-
-        Args:
-            db_path: Path to the SQLite database file
-            workflow_name: Name of the workflow (used for logging)
-        """
+        """Initialize SQLite backend."""
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: Optional[sqlite3.Connection] = None
         self._lock = threading.Lock()  # Serialize write operations
 
     def _validate_identifier(self, name: str, field: str) -> str:
-        """
-        Validate identifier to prevent injection attacks.
-
-        Normalizes paths to POSIX format for consistent storage across platforms.
-
-        Args:
-            name: The identifier to validate
-            field: Field name for error messages
-
-        Returns:
-            The validated identifier in POSIX format
+        """Validate and POSIX-normalize an identifier to prevent injection.
 
         Raises:
-            ValueError: If identifier contains invalid characters
+            ValueError: If identifier contains invalid characters.
         """
         if not name:
             raise ValueError(f"Empty {field} not allowed")
-        # Normalize to POSIX separators for cross-platform consistency
         name = name.replace("\\", "/")
         if ".." in name.split("/"):
             raise ValueError(f"Path traversal ('..') not allowed in {field}")
@@ -194,20 +158,7 @@ class SQLiteBackend(StorageBackend):
                 raise
 
     def write_target(self, action_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
-        """
-        Write target data for a specific node.
-
-        Uses INSERT OR REPLACE to handle updates to existing records.
-
-        Args:
-            action_name: Name of the processing node
-            relative_path: Relative path within target directory
-            data: List of records to write
-
-        Returns:
-            Identifier string: "action_name:relative_path"
-        """
-        # Validate and normalize inputs
+        """Write target data for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
@@ -248,18 +199,10 @@ class SQLiteBackend(StorageBackend):
                 raise
 
     def read_target(self, action_name: str, relative_path: str) -> List[Dict[str, Any]]:
-        """
-        Read target data for a specific node.
-
-        Args:
-            action_name: Name of the processing node
-            relative_path: Relative path within target directory
-
-        Returns:
-            List of records
+        """Read target data for a specific node.
 
         Raises:
-            FileNotFoundError: If no data exists for the given path
+            FileNotFoundError: If no data exists for the given path.
         """
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
@@ -281,21 +224,7 @@ class SQLiteBackend(StorageBackend):
         data: List[Dict[str, Any]],
         enable_deduplication: bool = True,
     ) -> str:
-        """
-        Write source data with optional deduplication.
-
-        Each record is stored individually, keyed by (relative_path, source_guid).
-        Deduplication prevents overwriting existing records with the same source_guid.
-
-        Args:
-            relative_path: Relative path within source directory
-            data: List of source records (each should have source_guid)
-            enable_deduplication: If True, skip records with existing source_guids
-
-        Returns:
-            Identifier string: relative_path
-        """
-        # Validate and normalize input
+        """Write source data with optional deduplication by source_guid."""
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
         with self._lock:
@@ -350,19 +279,10 @@ class SQLiteBackend(StorageBackend):
                 raise
 
     def read_source(self, relative_path: str) -> List[Dict[str, Any]]:
-        """
-        Read source data.
-
-        Retrieves all records for the given relative_path, ordered by id.
-
-        Args:
-            relative_path: Relative path within source directory
-
-        Returns:
-            List of source records
+        """Read source data.
 
         Raises:
-            FileNotFoundError: If no data exists for the given path
+            FileNotFoundError: If no data exists for the given path.
         """
         relative_path = self._validate_identifier(relative_path, "relative_path")
         cursor = self.connection.cursor()
@@ -378,15 +298,7 @@ class SQLiteBackend(StorageBackend):
         return [json.loads(row["data"]) for row in rows]
 
     def list_target_files(self, action_name: str) -> List[str]:
-        """
-        List all target files for a specific node.
-
-        Args:
-            action_name: Name of the processing node
-
-        Returns:
-            List of relative paths
-        """
+        """List all target file paths for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
         cursor = self.connection.cursor()
         cursor.execute(
@@ -396,12 +308,7 @@ class SQLiteBackend(StorageBackend):
         return [row["relative_path"] for row in cursor.fetchall()]
 
     def list_source_files(self) -> List[str]:
-        """
-        List all source files.
-
-        Returns:
-            List of unique relative paths
-        """
+        """List all source file paths."""
         cursor = self.connection.cursor()
         cursor.execute("SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path")
         return [row["relative_path"] for row in cursor.fetchall()]
@@ -413,35 +320,16 @@ class SQLiteBackend(StorageBackend):
         offset: int = 0,
         relative_path: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """
-        Preview target data for a node with pagination.
-
-        Optimized to minimize queries and avoid unnecessary JSON deserialization:
-        - Single query gets file list with record counts
-        - Uses record_count to skip entire files when offset is large
-        - Only fetches data for files that contain needed records
-
-        Args:
-            action_name: Name of the processing node (action)
-            limit: Maximum number of records to return (max 1000)
-            offset: Number of records to skip
-            relative_path: Optional specific file to preview
-
-        Returns:
-            Dict with records, total_count, action_name, and files
-        """
+        """Preview target data for a node with pagination."""
         action_name = self._validate_identifier(action_name, "action_name")
         if relative_path is not None:
             relative_path = self._validate_identifier(relative_path, "relative_path")
 
-        # Enforce limits to prevent memory issues and invalid values
         limit = min(max(1, limit), 1000)
         offset = max(0, offset)
 
         cursor = self.connection.cursor()
 
-        # Single query to get file metadata (path + record_count) for this node
-        # This replaces separate list_target_files() and count queries
         cursor.execute(
             """
             SELECT relative_path, COALESCE(record_count, 0) as record_count
@@ -453,10 +341,8 @@ class SQLiteBackend(StorageBackend):
         )
         file_metadata = cursor.fetchall()
 
-        # Build file list from metadata
         files = [row["relative_path"] for row in file_metadata]
 
-        # If specific file requested, check existence and filter metadata
         if relative_path:
             if relative_path not in files:
                 return {
@@ -466,13 +352,10 @@ class SQLiteBackend(StorageBackend):
                     "files": files,
                     "error": f"File '{relative_path}' not found for node '{action_name}'",
                 }
-            # Filter to just the requested file
             file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
 
-        # Calculate total count from metadata (no extra query needed)
         total_count = sum(row["record_count"] for row in file_metadata)
 
-        # Smart pagination: use record_count to skip entire files
         paginated_records: List[Dict[str, Any]] = []
         skipped = 0
         collected = 0
@@ -484,13 +367,10 @@ class SQLiteBackend(StorageBackend):
             file_path = row["relative_path"]
             file_record_count = row["record_count"]
 
-            # Skip entire file if all its records fall before offset
-            # This avoids fetching and deserializing data we don't need
             if skipped + file_record_count <= offset:
                 skipped += file_record_count
                 continue
 
-            # Fetch data only for files we need records from
             cursor.execute(
                 "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
                 (action_name, file_path),
@@ -501,19 +381,14 @@ class SQLiteBackend(StorageBackend):
 
             records = json.loads(data_row["data"])
             for record in records:
-                # Skip records until we reach offset
                 if skipped < offset:
                     skipped += 1
                     continue
 
-                # Collect records until we reach limit
                 if collected < limit:
-                    # Handle non-dict records (primitives, lists) by wrapping them
                     if isinstance(record, dict):
-                        # Create new dict to avoid mutating original
                         paginated_records.append({**record, "_file": file_path})
                     else:
-                        # Wrap non-dict values to preserve file metadata
                         paginated_records.append({"_file": file_path, "_value": record})
                     collected += 1
                 else:
@@ -529,19 +404,12 @@ class SQLiteBackend(StorageBackend):
         }
 
     def get_storage_stats(self) -> Dict[str, Any]:
-        """
-        Get storage statistics.
-
-        Returns:
-            Dict with database stats and record counts
-        """
+        """Get storage statistics (record counts, DB size, per-node breakdown)."""
         cursor = self.connection.cursor()
 
-        # Get source count
         cursor.execute("SELECT COUNT(*) as count FROM source_data")
         source_count = cursor.fetchone()["count"]
 
-        # Get target count and breakdown by node
         cursor.execute(
             """
             SELECT action_name, SUM(record_count) as count
@@ -552,15 +420,12 @@ class SQLiteBackend(StorageBackend):
         )
         nodes = {row["action_name"]: row["count"] for row in cursor.fetchall()}
 
-        # Get total target records
         cursor.execute("SELECT SUM(record_count) as count FROM target_data")
         row = cursor.fetchone()
         target_count = row["count"] if row["count"] else 0
 
-        # Get database file size
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
 
-        # Get disposition count
         cursor.execute("SELECT COUNT(*) as count FROM record_disposition")
         disposition_count = cursor.fetchone()["count"]
 

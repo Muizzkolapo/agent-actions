@@ -1,9 +1,4 @@
-"""
-Path validation utilities.
-
-This module provides common utilities for validating file and directory paths,
-now conforming to the BaseValidator interface.
-"""
+"""Path validation utilities conforming to the BaseValidator interface."""
 
 import logging
 import os
@@ -27,10 +22,7 @@ class PathValidationOptions:
 
 
 class PathValidator(BaseValidator):
-    """
-    Utility class for validating file and directory paths,
-    inheriting from BaseValidator.
-    """
+    """Validates file and directory paths via the BaseValidator interface."""
 
     def _validate_path_entity_logic(
         self,
@@ -39,9 +31,7 @@ class PathValidator(BaseValidator):
         entity_name: str,
         options: PathValidationOptions,
     ) -> None:
-        """
-        Generic logic to validate a path (file or directory) and add errors.
-        """
+        """Validate a path entity (file or directory) and add errors on failure."""
         operation_desc = f"validate {entity_type} '{entity_name}' at {path_obj}"
         logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         path_exists = self._ensure_path_exists(path_obj)
@@ -108,11 +98,7 @@ class PathValidator(BaseValidator):
         create_if_missing: bool,
         must_be_writable_after_creation: bool,
     ) -> None:
-        """
-        Ensures a directory exists, optionally creates it.
-
-        Adds errors on failure.
-        """
+        """Ensure a directory exists, optionally creating it; adds errors on failure."""
         operation_desc = f"ensure directory exists '{directory_name}' at {path_obj}"
         logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         if not self._ensure_path_exists(path_obj):
@@ -151,9 +137,7 @@ class PathValidator(BaseValidator):
             )
 
     def _validate_user_code_path_logic(self, user_code_path_str: Optional[str]) -> None:
-        """
-        Validates the user code path if provided. Adds errors on failure.
-        """
+        """Validate the user code path if provided; adds errors on failure."""
         operation_desc = f"validate user code path '{user_code_path_str}'"
         logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
         if not user_code_path_str:
@@ -223,35 +207,7 @@ class PathValidator(BaseValidator):
         )
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Validates file or directory paths based on the specified operation.
-
-        Args:
-            data: A dictionary containing:
-                - "operation" (str): One of "validate_file",
-                  "validate_directory", "ensure_directory_exists",
-                  "validate_user_code_path".
-                - "path" (Union[Path, str]): The path to validate/process.
-                - "path_name" (str, optional): Descriptive name for messages.
-                  Defaults to path.
-                - "required" (bool, optional): Defaults to True.
-                  (for validate_file/directory)
-                - "must_be_readable" (bool, optional): Defaults to True.
-                  (for validate_file/directory)
-                - "must_be_writable" (bool, optional): Defaults to False.
-                  (for validate_file/directory)
-                - "must_be_executable" (bool, optional): Defaults to False.
-                  (for validate_file/directory)
-                - "create_if_missing" (bool, optional): Defaults to True.
-                  (for ensure_directory_exists)
-                - "must_be_writable_after_creation" (bool, optional):
-                  Defaults to True. (for ensure_directory_exists)
-
-            config: Not actively used by this validator.
-
-        Returns:
-            bool: True if validation passes for the operation, False otherwise.
-        """
+        """Validate file or directory paths based on the operation specified in data."""
         if not self._prepare_validation(data):
             return False
         operation = data.get("operation")

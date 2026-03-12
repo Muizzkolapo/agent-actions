@@ -14,11 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class BatchJobManager:
-    """
-    Manages batch job lifecycle and registry status.
-
-    Handles checking job completion status and aggregating registry state.
-    """
+    """Manages batch job lifecycle and registry status."""
 
     def __init__(
         self,

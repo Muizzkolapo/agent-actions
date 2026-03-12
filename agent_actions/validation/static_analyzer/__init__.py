@@ -1,6 +1,4 @@
-"""
-Static workflow analysis for compile-time type checking.
-"""
+"""Static workflow analysis for compile-time type checking."""
 
 from .data_flow_graph import (
     AgentKind,

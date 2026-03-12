@@ -1,9 +1,4 @@
-"""
-Documentation HTTP server.
-
-Serves static files from the docs_site package directory and data files
-from the user's project artefact directory without modifying the package.
-"""
+"""Documentation HTTP server for agent-actions workflows."""
 
 import logging
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -18,11 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class DocsRequestHandler(SimpleHTTPRequestHandler):
-    """
-    HTTP handler that serves from two directories:
-    - Static site files from docs_site/ (in package)
-    - Data files from artefact/ (in user's project)
-    """
+    """HTTP handler that serves static site files and project artefact data."""
 
     def __init__(self, *args, docs_site_dir: Path, artefact_dir: Path, **kwargs):
         self.docs_site_dir = docs_site_dir
@@ -31,15 +22,7 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(docs_site_dir), **kwargs)
 
     def translate_path(self, path: str) -> str:
-        """
-        Map URL path to filesystem path.
-
-        - /artefact/* -> user's artefact directory
-        - /* -> docs_site directory (static files)
-
-        All resolved paths are validated to stay within their respective
-        root directory to prevent path-traversal attacks.
-        """
+        """Map URL path to filesystem path, guarding against path traversal."""
         # Decode URL and remove query string
         path = urllib.parse.unquote(path)
         path = path.split("?")[0].split("#")[0]
@@ -73,20 +56,10 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         """Suppress default logging for cleaner output."""
-        # Override to suppress logs - intentionally ignore all arguments
 
 
 def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
-    """
-    Start HTTP server to serve documentation.
-
-    Args:
-        port: Port number to serve on
-        artefact_path: Path to artefact directory (defaults to ./artefact)
-
-    Returns:
-        True if started successfully
-    """
+    """Start HTTP server to serve documentation."""
     # Find docs_site directory (in package)
     docs_site_dir = Path(__file__).parent / "docs_site"
 

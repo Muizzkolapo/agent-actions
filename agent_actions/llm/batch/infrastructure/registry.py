@@ -1,8 +1,4 @@
-"""
-Batch Registry Manager.
-
-Centralized management of .batch_registry.json with caching and thread safety.
-"""
+"""Thread-safe management of .batch_registry.json with in-memory caching."""
 
 import dataclasses
 import json
@@ -27,33 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 class BatchRegistryManager:
-    """
-    Manages batch job registry with caching and thread-safe operations.
-
-    Responsibilities:
-    - CRUD operations on .batch_registry.json
-    - In-memory caching to reduce file I/O
-    - Thread-safe access with locking
-    - Atomic writes to prevent corruption
-    - Status aggregation and queries
-
-    Example:
-        registry_path = Path('output/batch/.batch_registry.json')
-        manager = BatchRegistryManager(registry_path)
-
-        entry = BatchJobEntry(
-            batch_id='batch_123',
-            status='submitted',
-            timestamp=datetime.now().isoformat(),
-            provider='openai',
-            record_count=100
-        )
-        manager.save_batch_job('file1.json', entry)
-
-        # Retrieve it later
-        retrieved = manager.get_batch_job('file1.json')
-        print(retrieved.batch_id)  # 'batch_123'
-    """
+    """Thread-safe CRUD for .batch_registry.json with in-memory caching and atomic writes."""
 
     def __init__(self, registry_path: Path):
         """
@@ -72,12 +42,7 @@ class BatchRegistryManager:
     # ============================================================
 
     def save_batch_job(self, file_name: str, entry: BatchJobEntry) -> None:
-        """
-        Save or update a batch job entry.
-
-        Args:
-            file_name: File name key (e.g., 'input.json')
-            entry: BatchJobEntry to save
+        """Save or update a batch job entry.
 
         Raises:
             IOError: If write fails
@@ -91,15 +56,7 @@ class BatchRegistryManager:
             fire_event(CacheUpdateEvent(cache_type="batch_registry", key=file_name))
 
     def remove_batch_job(self, file_name: str) -> bool:
-        """
-        Remove a batch job entry from the registry.
-
-        Args:
-            file_name: File name key to remove
-
-        Returns:
-            True if removed, False if not found
-        """
+        """Remove a batch job entry. Returns True if removed, False if not found."""
         with self._lock:
             self._ensure_cache_loaded()
             if file_name not in self._cache:
@@ -110,15 +67,7 @@ class BatchRegistryManager:
             return True
 
     def get_batch_job(self, file_name: str) -> Optional[BatchJobEntry]:
-        """
-        Retrieve batch job entry by file name.
-
-        Args:
-            file_name: File name key
-
-        Returns:
-            BatchJobEntry if found, None otherwise
-        """
+        """Retrieve batch job entry by file name."""
         with self._lock:
             self._ensure_cache_loaded()
             entry = self._cache.get(file_name)
@@ -135,15 +84,7 @@ class BatchRegistryManager:
             return entry
 
     def get_batch_job_by_id(self, batch_id: str) -> Optional[BatchJobEntry]:
-        """
-        Retrieve batch job entry by batch ID.
-
-        Args:
-            batch_id: Batch job ID
-
-        Returns:
-            BatchJobEntry if found, None otherwise
-        """
+        """Retrieve batch job entry by batch ID."""
         with self._lock:
             self._ensure_cache_loaded()
             for entry in self._cache.values():
@@ -163,16 +104,7 @@ class BatchRegistryManager:
             return None
 
     def update_status(self, batch_id: str, new_status: str) -> bool:
-        """
-        Update status for a batch job.
-
-        Args:
-            batch_id: Batch job ID to update
-            new_status: New status value
-
-        Returns:
-            True if updated, False if batch_id not found
-        """
+        """Update status for a batch job. Returns False if batch_id not found."""
         with self._lock:
             self._ensure_cache_loaded()
 
@@ -188,23 +120,13 @@ class BatchRegistryManager:
             return False
 
     def get_all_jobs(self) -> Dict[str, BatchJobEntry]:
-        """
-        Get all batch jobs in registry.
-
-        Returns:
-            Dictionary mapping file_name -> BatchJobEntry
-        """
+        """Get all batch jobs in registry."""
         with self._lock:
             self._ensure_cache_loaded()
             return self._cache.copy()  # Return copy to prevent external mutation
 
     def get_registry_stats(self) -> BatchRegistryStats:
-        """
-        Get aggregated statistics for all batches.
-
-        Returns:
-            BatchRegistryStats with counts by status
-        """
+        """Get aggregated statistics for all batches."""
         with self._lock:
             self._ensure_cache_loaded()
 
@@ -225,26 +147,15 @@ class BatchRegistryManager:
             return stats
 
     def get_overall_status(self) -> str:
-        """
-        Get overall status across all batches.
-
-        Returns:
-            One of: 'no_batches', 'completed', 'in_progress',
-                   'partial_failed', 'error'
-        """
+        """Get overall status across all batches."""
         stats = self.get_registry_stats()
         return stats.overall_status
 
     def are_all_jobs_completed(self, check_provider: Optional[Callable[[str], str]] = None) -> bool:
-        """
-        Check if all batch jobs are in terminal state.
+        """Check if all batch jobs are in terminal state.
 
         Args:
-            check_provider: Optional callable(batch_id) -> status
-                          to refresh status from provider
-
-        Returns:
-            True if all jobs completed/failed/cancelled, False otherwise
+            check_provider: Optional callable(batch_id) -> status to refresh from provider
         """
         with self._lock:
             self._ensure_cache_loaded()
@@ -280,11 +191,7 @@ class BatchRegistryManager:
             return all_terminal
 
     def invalidate_cache(self) -> None:
-        """
-        Force cache reload on next access.
-
-        Useful for testing or when registry is modified externally.
-        """
+        """Force cache reload on next access."""
         with self._lock:
             entries_removed = len(self._cache) if self._cache is not None else 0
             self._cache = None

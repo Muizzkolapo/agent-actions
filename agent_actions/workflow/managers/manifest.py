@@ -1,9 +1,4 @@
-"""
-Manifest manager for workflow execution metadata.
-
-Provides a single source of truth for action output directories and execution state,
-replacing index-based directory naming with simple action names.
-"""
+"""Manifest manager for workflow execution metadata."""
 
 from __future__ import annotations
 
@@ -30,25 +25,10 @@ MANIFEST_FILENAME = ".manifest.json"
 
 
 class ManifestManager:
-    """
-    Manages the workflow manifest file that tracks execution state and output directories.
-
-    The manifest is the single source of truth for:
-    - Action output directory locations
-    - Execution order and levels (for parallel execution)
-    - Action status and metadata
-    - Dependency relationships
-
-    Manifest file location: {agent_io_path}/target/.manifest.json
-    """
+    """Manages the workflow manifest file that tracks execution state and output directories."""
 
     def __init__(self, agent_io_path: Path):
-        """
-        Initialize manifest manager.
-
-        Args:
-            agent_io_path: Path to the agent_io directory (contains staging/, target/)
-        """
+        """Initialize manifest manager."""
         self.agent_io_path = Path(agent_io_path)
         self.target_dir = self.agent_io_path / "target"
         self.manifest_path = self.target_dir / MANIFEST_FILENAME
@@ -57,7 +37,7 @@ class ManifestManager:
 
     @property
     def manifest(self) -> Dict[str, Any]:
-        """Get the current manifest, loading from disk if needed."""
+        """Return the current manifest, loading from disk if needed."""
         if self._manifest is None:
             with self._lock:
                 if self._manifest is None:
@@ -72,18 +52,10 @@ class ManifestManager:
         agent_configs: Dict[str, Dict[str, Any]],
         workflow_run_id: Optional[str] = None,
     ) -> None:
-        """
-        Initialize a new manifest for a workflow run.
-
-        Args:
-            workflow_name: Name of the workflow
-            execution_order: List of action names in execution order
-            levels: List of levels, each containing action names that run in parallel
-            agent_configs: Dictionary of action configurations
-            workflow_run_id: Optional run ID (generated if not provided)
+        """Initialize a new manifest for a workflow run.
 
         Raises:
-            DuplicateActionError: If duplicate action names are detected
+            DuplicateActionError: If duplicate action names are detected.
         """
         # Validate no duplicate action names
         seen = set()
@@ -145,12 +117,7 @@ class ManifestManager:
             logger.info("Initialized manifest for workflow %s", workflow_name)
 
     def load_manifest(self) -> Dict[str, Any]:
-        """
-        Load manifest from disk.
-
-        Returns:
-            Manifest dictionary, or empty dict if not found/invalid
-        """
+        """Load manifest from disk, returning empty dict if not found."""
         if not self.manifest_path.exists():
             logger.debug("No manifest found at %s", self.manifest_path)
             return {}
@@ -194,17 +161,10 @@ class ManifestManager:
             raise
 
     def get_output_directory(self, action_name: str) -> Path:
-        """
-        Get the output directory path for an action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            Path to the action's output directory
+        """Return the output directory path for an action.
 
         Raises:
-            KeyError: If action not found in manifest
+            KeyError: If action not found in manifest.
         """
         action = self.manifest.get("actions", {}).get(action_name)
         if not action:
@@ -212,15 +172,7 @@ class ManifestManager:
         return self.target_dir / action["output_dir"]
 
     def get_dependency_directories(self, action_name: str) -> List[Path]:
-        """
-        Get output directories for all dependencies of an action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            List of paths to dependency output directories
-        """
+        """Return output directories for all dependencies of an action."""
         action = self.manifest.get("actions", {}).get(action_name)
         if not action:
             return []
@@ -238,15 +190,7 @@ class ManifestManager:
         return dep_dirs
 
     def get_previous_action_directory(self, action_name: str) -> Optional[Path]:
-        """
-        Get the output directory of the previous action in execution order.
-
-        Args:
-            action_name: Name of the current action
-
-        Returns:
-            Path to previous action's output directory, or None if first action
-        """
+        """Return the output directory of the previous action, or None if first."""
         execution_order = self.manifest.get("execution_order", [])
         if action_name not in execution_order:
             return None
@@ -259,70 +203,34 @@ class ManifestManager:
         return self.get_output_directory(prev_action)
 
     def get_parallel_actions(self, level: int) -> List[str]:
-        """
-        Get all actions at a given execution level.
-
-        Args:
-            level: Execution level index
-
-        Returns:
-            List of action names at that level
-        """
+        """Return all actions at a given execution level."""
         levels = self.manifest.get("levels", [])
         if level < 0 or level >= len(levels):
             return []
         return levels[level]
 
     def get_action_index(self, action_name: str) -> Optional[int]:
-        """
-        Get the execution index for an action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            Execution index, or None if not found
-        """
+        """Return the execution index for an action, or None if not found."""
         action = self.manifest.get("actions", {}).get(action_name)
         if action:
             return action.get("index")
         return None
 
     def is_action_completed(self, action_name: str) -> bool:
-        """
-        Check if an action has completed.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            True if action status is 'completed'
-        """
+        """Return True if action status is 'completed'."""
         action = self.manifest.get("actions", {}).get(action_name)
         return action is not None and action.get("status") == "completed"
 
     def is_action_skipped(self, action_name: str) -> bool:
-        """
-        Check if an action was skipped.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            True if action status is 'skipped'
-        """
+        """Return True if action status is 'skipped'."""
         action = self.manifest.get("actions", {}).get(action_name)
         return action is not None and action.get("status") == "skipped"
 
     def mark_action_started(self, action_name: str) -> None:
-        """
-        Mark an action as started.
-
-        Args:
-            action_name: Name of the action
+        """Mark an action as started.
 
         Raises:
-            KeyError: If action not found in manifest
+            KeyError: If action not found in manifest.
         """
         with self._lock:
             if action_name not in self.manifest.get("actions", {}):
@@ -337,15 +245,10 @@ class ManifestManager:
         action_name: str,
         record_count: Optional[int] = None,
     ) -> None:
-        """
-        Mark an action as completed.
-
-        Args:
-            action_name: Name of the action
-            record_count: Optional count of records processed
+        """Mark an action as completed.
 
         Raises:
-            KeyError: If action not found in manifest
+            KeyError: If action not found in manifest.
         """
         with self._lock:
             if action_name not in self.manifest.get("actions", {}):
@@ -358,15 +261,10 @@ class ManifestManager:
             self._save_manifest()
 
     def mark_action_skipped(self, action_name: str, reason: Optional[str] = None) -> None:
-        """
-        Mark an action as skipped.
-
-        Args:
-            action_name: Name of the action
-            reason: Optional reason for skipping
+        """Mark an action as skipped.
 
         Raises:
-            KeyError: If action not found in manifest
+            KeyError: If action not found in manifest.
         """
         with self._lock:
             if action_name not in self.manifest.get("actions", {}):
@@ -379,15 +277,10 @@ class ManifestManager:
             self._save_manifest()
 
     def mark_action_failed(self, action_name: str, error: str) -> None:
-        """
-        Mark an action as failed.
-
-        Args:
-            action_name: Name of the action
-            error: Error message
+        """Mark an action as failed.
 
         Raises:
-            KeyError: If action not found in manifest
+            KeyError: If action not found in manifest.
         """
         with self._lock:
             if action_name not in self.manifest.get("actions", {}):
@@ -414,12 +307,7 @@ class ManifestManager:
             self._save_manifest()
 
     def get_completed_actions(self) -> List[str]:
-        """
-        Get list of all completed action names.
-
-        Returns:
-            List of action names with 'completed' status
-        """
+        """Return all completed action names."""
         completed = []
         for action_name, action_data in self.manifest.get("actions", {}).items():
             if action_data.get("status") == "completed":
@@ -427,15 +315,7 @@ class ManifestManager:
         return completed
 
     def get_upstream_actions(self, action_name: str) -> List[str]:
-        """
-        Get all actions that are upstream (have lower index) of the given action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            List of upstream action names
-        """
+        """Return all actions upstream (lower index) of the given action."""
         current_idx = self.get_action_index(action_name)
         if current_idx is None:
             return []
@@ -445,12 +325,11 @@ class ManifestManager:
             if data.get("index", 999) < current_idx:
                 upstream.append(name)
 
-        # Sort by index
         upstream.sort(key=lambda n: self.manifest["actions"][n]["index"])
         return upstream
 
     def has_manifest(self) -> bool:
-        """Check if a manifest file exists."""
+        """Return True if a manifest file exists."""
         return self.manifest_path.exists()
 
     def clear_manifest(self) -> None:

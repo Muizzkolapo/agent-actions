@@ -27,15 +27,6 @@ def find_config_file(
 ) -> Path:
     """Find a workflow configuration file.
 
-    Args:
-        agent_name: Name of the agent (for error context).
-        config_dir: Primary directory to search.
-        filename: Configuration filename (e.g., "my_agent.yml").
-        check_alternatives: If True, also check parent dir, cwd, and cwd/config.
-
-    Returns:
-        Resolved path to the configuration file.
-
     Raises:
         FileLoadError: If the file is not found.
     """

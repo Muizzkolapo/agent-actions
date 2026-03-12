@@ -1,8 +1,8 @@
-"""Module for preprocessing context data."""
+"""Context data preprocessing."""
 
 
 class ContextPreprocessor:
-    """Handles context data preprocessing (Single Responsibility)."""
+    """Handles context data preprocessing."""
 
     def __repr__(self):
         """Return string representation of ContextPreprocessor."""
@@ -10,15 +10,12 @@ class ContextPreprocessor:
 
     @staticmethod
     def extract_guid_and_content(context_data):
-        """
-        Extract source_guid and content from context data if available.
-        Handles nested chunked record format: {"uuid": {"source_guid": "...", ...}}
+        """Extract source_guid and content from context data.
 
-        Parameters:
-            context_data: Data to extract from
+        Handles nested chunked record format: {"uuid": {"source_guid": "...", ...}}.
 
         Returns:
-            Tuple of (source_guid, content) where source_guid may be None
+            Tuple of (source_guid, content) where source_guid may be None.
         """
         if isinstance(context_data, dict):
             for _, value in context_data.items():

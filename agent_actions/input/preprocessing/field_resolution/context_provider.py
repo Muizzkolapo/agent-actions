@@ -1,6 +1,4 @@
-"""
-Service for building rich evaluation contexts for guards, filters, and prompts.
-"""
+"""Evaluation context building for guards, filters, and prompts."""
 
 import logging
 from dataclasses import dataclass, field
@@ -54,17 +52,13 @@ class EvaluationContext:
         """Convert to flat dict for WHERE clause evaluation."""
         flat = {}
 
-        # Add current item content at top level (backward compatibility)
         if self.current_content:
             flat.update(self.current_content)
 
-        # Add upstream action data under action names
-        # This enables "action_name.field" access in WHERE clauses
         for action_name, action_data in self.field_context.items():
-            if action_name not in flat:  # Don't overwrite current content
+            if action_name not in flat:
                 flat[action_name] = action_data
 
-        # Add special contexts
         if self.source_content and "source" not in flat:
             flat["source"] = self.source_content
 
@@ -88,14 +82,10 @@ class EvaluationContextProvider:
         self, current_item: Dict[str, Any], config: ContextBuildConfig
     ) -> EvaluationContext:
         """Build rich evaluation context for item-level operations."""
-        # Extract current content
         current_content = current_item.get("content", {})
         if not isinstance(current_content, dict):
             current_content = {}
 
-        # Build field context using existing infrastructure
-        # This auto-loads upstream actions via historical node loader
-        # Respects context_scope if defined, otherwise loads all fields
         context_scope = config.agent_config.get("context_scope")
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents=current_content,
@@ -127,7 +117,6 @@ class EvaluationContextProvider:
         current_item: Optional[Dict[str, Any]] = None,
     ) -> EvaluationContext:
         """Build context for batch mode (simplified parameters)."""
-        # Build minimal current_item if not provided
         if current_item is None:
             current_item = {
                 "content": contents,

@@ -1,8 +1,4 @@
-"""
-Data models for batch processing.
-
-Defines structured types for batch registry entries and related data.
-"""
+"""Data models for batch processing registry entries and task preparation."""
 
 from dataclasses import dataclass, asdict, field
 from typing import Literal, Optional, List, Dict, Any
@@ -12,17 +8,7 @@ from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
 @dataclass
 class BatchJobEntry:
-    """
-    Represents a single batch job entry in the registry.
-
-    Attributes:
-        batch_id: Unique identifier for the batch job
-        status: Current status ('submitted', 'validating', 'in_progress',
-                'finalizing', 'completed', 'failed', 'cancelled')
-        timestamp: ISO format timestamp of creation
-        provider: Provider type ('openai', 'gemini', 'anthropic')
-        record_count: Number of records submitted in this batch
-    """
+    """A single batch job entry in the registry."""
 
     batch_id: str
     status: str
@@ -40,11 +26,7 @@ class BatchJobEntry:
     recovery_attempt: Optional[int] = None  # attempt number (1, 2, 3...)
 
     def __post_init__(self):
-        """Validate that status is a recognized BatchStatus value.
-
-        Logs a warning instead of raising to avoid breaking deserialization
-        of existing registries that may contain provider-specific statuses.
-        """
+        """Warn on unrecognized status to avoid breaking existing registries."""
         valid = {s.value for s in BatchStatus}
         if self.status not in valid:
             import logging as _logging
@@ -77,11 +59,7 @@ class BatchJobEntry:
 
 @dataclass
 class BatchRegistryStats:
-    """
-    Aggregated statistics for all batches in registry.
-
-    Used by get_overall_status() and reporting.
-    """
+    """Aggregated statistics for all batches in registry."""
 
     total_jobs: int
     completed: int
@@ -91,12 +69,7 @@ class BatchRegistryStats:
 
     @property
     def overall_status(self) -> str:
-        """
-        Get overall status across all jobs.
-
-        Returns:
-            'no_batches', 'completed', 'in_progress', 'partial_failed', 'error'
-        """
+        """Get overall status across all jobs."""
         if self.total_jobs == 0:
             return "no_batches"
 
@@ -117,15 +90,7 @@ class BatchRegistryStats:
 
 @dataclass
 class BatchFilterResult:
-    """
-    Result of filtering a single item.
-
-    Attributes:
-        status: Filter status ('included', 'skipped', 'filtered')
-        should_include: Whether item should be included in batch
-        reason: Reason for the filtering decision
-        metadata: Additional filtering metadata
-    """
+    """Result of filtering a single item."""
 
     status: str
     should_include: bool
@@ -135,20 +100,7 @@ class BatchFilterResult:
 
 @dataclass
 class BatchTaskPreparationStats:
-    """
-    Statistics from batch task preparation.
-
-    Tracks what happened during task preparation for monitoring and debugging.
-
-    Attributes:
-        total_items: Total items provided
-        included_items: Items included in batch
-        filtered_items: Items filtered out in Phase 1 (early guard check)
-        skipped_items: Items skipped in Phase 1 (early guard check)
-        phase2_filtered_items: Items filtered out in Phase 2 (after prompt prep)
-        phase2_skipped_items: Items skipped in Phase 2 (after prompt prep)
-        error_items: Items that failed during preparation
-    """
+    """Statistics from batch task preparation across both filter phases."""
 
     total_items: int = 0
     included_items: int = 0
@@ -178,18 +130,7 @@ class BatchTaskPreparationStats:
 
 @dataclass
 class PreparedBatchTasks:
-    """
-    Result of batch task preparation.
-
-    Immutable result returned by BatchTaskPreparator.prepare_tasks().
-    Contains everything needed for batch submission.
-
-    Attributes:
-        tasks: Provider-ready batch tasks
-        context_map: Mapping of custom_id -> original row data with metadata
-        stats: Preparation statistics
-        config: Agent configuration used for preparation
-    """
+    """Immutable result of BatchTaskPreparator.prepare_tasks()."""
 
     tasks: List[Dict[str, Any]]
     context_map: Dict[str, Any]

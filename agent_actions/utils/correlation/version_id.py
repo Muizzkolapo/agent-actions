@@ -1,6 +1,4 @@
-"""
-Version Correlation Service.
-"""
+"""Thread-safe version correlation ID generation for workflow sessions."""
 
 import threading
 import hashlib
@@ -8,12 +6,7 @@ from typing import Dict, Optional
 
 
 class VersionIdGenerator:
-    """
-    Thread-safe version correlation ID generator.
-
-    Uses a class-level registry to maintain correlation IDs across
-    all processor instances within a workflow session.
-    """
+    """Thread-safe version correlation ID generator using a class-level registry."""
 
     _version_correlation_registry: Dict[str, str] = {}
     _version_correlation_lock = threading.RLock()
@@ -22,19 +15,7 @@ class VersionIdGenerator:
     def get_or_create_version_correlation_id(
         cls, source_guid: str, version_base_name: str, workflow_session_id: str
     ) -> str:
-        """
-        Get or create a version correlation ID for a source_guid.
-
-        Args:
-            source_guid: Source GUID of the record
-            version_base_name: Base name of the version
-                           (e.g., 'generate_distractors')
-            workflow_session_id: Workflow session identifier for
-                                deterministic correlation
-
-        Returns:
-            Consistent version correlation ID for this combination
-        """
+        """Get or create a version correlation ID for a source_guid."""
         registry_key = f"{workflow_session_id}:{version_base_name}:{source_guid}"
         with cls._version_correlation_lock:
             if registry_key not in cls._version_correlation_registry:
@@ -53,21 +34,7 @@ class VersionIdGenerator:
         workflow_session_id: str,
         file_context: str = "",
     ) -> str:
-        """
-        Get or create a version correlation ID based on record position.
-
-        Args:
-            record_index: Position/index of the record in the input list
-            version_base_name: Base name of the version
-                           (e.g., 'generate_distractors')
-            workflow_session_id: Workflow session identifier for
-                                deterministic correlation
-            file_context: Optional file context for uniqueness
-
-        Returns:
-            Consistent version correlation ID for this position across
-            all version iterations
-        """
+        """Get or create a version correlation ID based on record position."""
         registry_key = (
             f"{workflow_session_id}:{version_base_name}:position_{record_index}:{file_context}"
         )
@@ -82,28 +49,14 @@ class VersionIdGenerator:
 
     @classmethod
     def _generate_deterministic_correlation_id(cls, workflow_session_id: str, content: str) -> str:
-        """
-        Generate a deterministic correlation ID based on session.
-
-        Args:
-            workflow_session_id: The workflow session identifier
-            content: The content to hash (version_base_name:source_guid
-                    or position info)
-
-        Returns:
-            Deterministic correlation ID in format: corr_{16_char_hash}
-        """
+        """Return a deterministic ``corr_{16_char_hash}`` ID from session and content."""
         hash_input = f"{workflow_session_id}:{content}"
         hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()
         return f"corr_{hash_digest[:16]}"
 
     @classmethod
     def clear_version_correlation_registry(cls):
-        """
-        Clear the version correlation ID registry.
-
-        Useful for testing or workflow resets.
-        """
+        """Clear the version correlation ID registry."""
         with cls._version_correlation_lock:
             cls._version_correlation_registry.clear()
 
@@ -111,19 +64,10 @@ class VersionIdGenerator:
     def add_version_correlation_id(
         cls, obj: Dict, agent_config: Dict, record_index: Optional[int] = None
     ) -> Dict:
-        """
-        Add version correlation ID to an object if agent is versioned.
-
-        Args:
-            obj: Object to potentially add version correlation ID to
-            agent_config: Agent configuration to check for version metadata
-            record_index: Optional position/index of the record
-
-        Returns:
-            Object with version correlation ID added if applicable
+        """Add version correlation ID to an object if agent is versioned.
 
         Raises:
-            ValueError: If workflow_session_id is missing in version context
+            ValueError: If workflow_session_id is missing in version context.
         """
         if not agent_config.get("is_versioned_agent", False):
             return obj

@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Initialize a new agent-actions workflow with proper directory structure.
-
-Usage:
-    python init_workflow.py <workflow-name> --path <output-dir>
-
-Example:
-    python init_workflow.py my_quiz_gen --path /path/to/project/agent_workflow
-
-IMPORTANT: Use underscores in workflow names (not hyphens).
-- Good: my_quiz_gen, incident_triage
-- Bad: my-quiz-gen, incident-triage
-"""
+"""Initialize a new agent-actions workflow with proper directory structure."""
 
 import argparse
 import sys

@@ -1,6 +1,4 @@
-"""
-Chunking-specific error classes shared across strategies.
-"""
+"""Chunking-specific error classes shared across strategies."""
 
 
 class FieldChunkingError(Exception):

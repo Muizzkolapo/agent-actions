@@ -1,4 +1,4 @@
-"""Utility classes for field-level chunking of structured data."""
+"""Field-level chunking of structured data."""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ class AnalyzerConfig:
 
 
 class FieldAnalyzer:
-    """Analyse structured records to determine which fields need chunking."""
+    """Analyzes structured records to determine which fields need chunking."""
 
     def __init__(self, chunk_config: Dict[str, Any]):
         field_chunking = chunk_config.get("field_chunking", {})
@@ -105,16 +105,7 @@ class FieldAnalyzer:
         return result
 
     def should_chunk_field(self, field_name: str, token_count: int) -> bool:
-        """
-        Determine if a field should be chunked based on token count and rules.
-
-        Args:
-            field_name: Name of the field to check
-            token_count: Token count of the field content
-
-        Returns:
-            True if field should be chunked, False otherwise
-        """
+        """Return True if the field should be chunked based on token count and rules."""
         if field_name in self.config.preserve_fields:
             return False
         if self.config.chunk_fields and field_name not in self.config.chunk_fields:
@@ -124,12 +115,7 @@ class FieldAnalyzer:
         return token_count > threshold
 
     def detect_text_fields(self, record: Dict[str, Any]) -> List[str]:
-        """
-        Automatically detect text fields based on content size.
-
-        Returns all string fields that could potentially need chunking.
-        The actual chunking decision is made by should_chunk_field() based on token count.
-        """
+        """Return all string fields that could potentially need chunking."""
         if not self.config.auto_detect_enabled:
             return []
         detected_fields = []
@@ -175,7 +161,6 @@ class FieldChunker:
         self.chunk_config = chunk_config
         field_chunking = chunk_config.get("field_chunking", {})
 
-        # Extract configuration into structured config object
         self.config = ChunkerConfig(
             chunk_size=chunk_config.get("chunk_size", 1000),
             overlap=chunk_config.get("overlap", 200),
@@ -186,12 +171,9 @@ class FieldChunker:
             chunk_metadata=field_chunking.get("chunk_metadata", {}),
         )
 
-        # Initialize strategies
         self.chunking_strategy = self._create_chunking_strategy(chunk_config)
         self.fallback_strategy = self._create_fallback_strategy(chunk_config)
         self.metadata_strategy = self._create_metadata_strategy(chunk_config)
-
-        # Validate configuration
         ConfigValidator.validate_field_chunker_config(chunk_config)
 
     def _create_chunking_strategy(self, config: Dict[str, Any]) -> ChunkingStrategy:
@@ -276,7 +258,6 @@ class FieldChunker:
         chunked_record = record.copy()
         chunked_record[field_name] = chunk_text
 
-        # Extract special metadata fields to record level
         self._extract_special_metadata(chunked_record, chunk_metadata_info)
 
         chunked_record["chunk_info"] = chunk_metadata_info
@@ -298,34 +279,19 @@ class FieldChunker:
     def chunk_record(
         self, record: Dict[str, Any], analysis: FieldAnalysisResult
     ) -> List[Dict[str, Any]]:
-        """
-        Chunk a record by processing each field separately (not cartesian product).
-
-        For a record with multiple large fields, this creates separate chunks for each field
-        instead of creating all possible combinations.
-
-        Example:
-            Record with page_content (3 chunks) and description (2 chunks)
-            Creates: 3 + 2 = 5 records (not 3 × 2 = 6 records)
-        """
+        """Chunk a record by processing each field separately (additive, not cartesian product)."""
         all_chunks = []
 
         for field_name in analysis.fields_to_chunk:
             try:
                 field_value = record.get(field_name, "")
 
-                # Prepare field value (handle oversized fields)
                 field_value, fallback_msg = self._prepare_field_value(field_value, field_name)
-
-                # Chunk the field into smaller pieces
                 chunk_list = self.chunk_field(field_value, field_name)
-
-                # Handle excessive chunk count
                 chunk_list, fallback_msg = self._prepare_chunk_list(
                     chunk_list, field_name, fallback_msg
                 )
 
-                # Create individual chunk records
                 for chunk_index, chunk_text in enumerate(chunk_list, 1):
                     metadata_params = ChunkMetadataParams(
                         record=record,
@@ -356,12 +322,10 @@ class FieldChunker:
         if not field_value:
             return [""]
 
-        # Get field-specific rules or use defaults
         field_rule = self.config.field_rules.get(field_name, {}) if field_name else {}
         chunk_size = field_rule.get("chunk_size", self.config.chunk_size)
         overlap = field_rule.get("overlap", self.config.overlap)
 
-        # Use field-specific chunking strategy if specified, otherwise use default
         if field_name and "split_method" in field_rule:
             field_specific_strategy = self._create_chunking_strategy(
                 {

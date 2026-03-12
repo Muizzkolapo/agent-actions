@@ -1,5 +1,4 @@
 """Processing and transformation errors."""
-# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError
 

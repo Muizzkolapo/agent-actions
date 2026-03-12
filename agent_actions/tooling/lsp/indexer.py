@@ -29,13 +29,11 @@ def find_project_root(start_path: Path) -> Optional[Path]:
     """
     current = start_path.resolve()
 
-    # First, search upward for agent_actions.yml
     while current != current.parent:
         if (current / "agent_actions.yml").exists():
             return current
         current = current.parent
 
-    # If not found going up, search subdirectories (max depth 3)
     start = start_path.resolve() if start_path.is_dir() else start_path.parent
     for depth in range(1, 4):
         pattern = "/".join(["*"] * depth) + "/agent_actions.yml"
@@ -52,16 +50,9 @@ def build_index(project_root: Path) -> ProjectIndex:
     """Build complete project index."""
     index = ProjectIndex(root=project_root)
 
-    # Index workflows
     _index_workflows(index, project_root)
-
-    # Index prompts
     _index_prompts(index, project_root)
-
-    # Index tools
     _index_tools(index, project_root)
-
-    # Index schemas
     _index_schemas(index, project_root)
 
     logger.info(
@@ -86,7 +77,6 @@ def _index_workflows(index: ProjectIndex, project_root: Path) -> None:
 
         index.workflows[workflow_path.name] = workflow_path
 
-        # Find workflow config files
         config_dir = workflow_path / "agent_config"
         if not config_dir.exists():
             continue
@@ -101,10 +91,7 @@ def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> No
         content = yaml_file.read_text()
         lines = content.split("\n")
 
-        # Parse YAML for structural data (versions summaries)
         data = yaml.load(content) or {}
-
-        # Initialize file actions dict
         index.file_actions[yaml_file] = {}
         index.references_by_file[yaml_file] = []
         index.duplicate_actions_by_file[yaml_file] = set()
@@ -508,7 +495,6 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
             if not isinstance(node, ast.FunctionDef):
                 continue
 
-            # Check for @udf_tool decorator
             has_udf_decorator = False
             for decorator in node.decorator_list:
                 if isinstance(decorator, ast.Name) and decorator.id == "udf_tool":
@@ -520,7 +506,6 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
             if not has_udf_decorator:
                 continue
 
-            # Get function signature
             args = []
             for arg in node.args.args:
                 arg_name = arg.arg
@@ -535,7 +520,6 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
 
             signature = f"def {node.name}({', '.join(args)}){returns}"
 
-            # Get docstring
             docstring = ast.get_docstring(node) or ""
 
             index.tools[node.name] = ToolDefinition(

@@ -1,6 +1,4 @@
-"""
-Catalog and runs data generator.
-"""
+"""Catalog and runs data generator."""
 
 import json
 import logging
@@ -47,15 +45,7 @@ class CatalogGenerator:
         return None
 
     def _enrich_action_with_fields(self, action: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Enrich action with input/output field information for lineage.
-
-        Args:
-            action: Action dictionary from parser
-
-        Returns:
-            Enriched action with 'inputs' and 'outputs' fields
-        """
+        """Enrich action with input/output field information for lineage."""
         enriched = action.copy()
 
         # Extract output fields from schema
@@ -300,16 +290,7 @@ class CatalogGenerator:
 
 
 def generate_docs(project_path: str, output_dir: Path) -> bool:
-    """
-    Main entry point for docs generation.
-
-    Args:
-        project_path: Path to project root
-        output_dir: Target directory for generated files (artefact/)
-
-    Returns:
-        True if successful, False otherwise
-    """
+    """Generate documentation catalog from project workflows and write to output_dir."""
     # Step 1: Scan project
     scanner = ProjectScanner(project_path)
     workflows_data = scanner.scan()

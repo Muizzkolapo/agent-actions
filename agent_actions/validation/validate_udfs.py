@@ -1,9 +1,4 @@
-"""
-validate-udfs command for the Agent Actions CLI.
-
-This module provides the implementation of the 'validate-udfs' command,
-which validates all UDF references in a config file without running the workflow.
-"""
+"""Validate-udfs CLI command for checking UDF references without running workflows."""
 
 from pathlib import Path
 from typing import Any, Dict, Set
@@ -35,30 +30,14 @@ class ValidateUDFsCommand:
     """Implementation of the validate-udfs command."""
 
     def __init__(self, agent: str, user_code: str):
-        """
-        Initialize the validate-udfs command.
-
-        Args:
-            agent: Agent configuration file name
-            user_code: Path to user code directory containing UDFs
-        """
+        """Initialize with agent config file name and user code directory path."""
         self.agent_name = Path(agent).stem
         self.agent_file = agent
         self.user_code = Path(user_code)
         self.console = Console()
 
     def validate(self) -> Dict[str, Any]:
-        """
-        Perform UDF validation and return the result.
-
-        Returns:
-            Dictionary with validation results containing:
-                - valid: bool indicating if validation passed
-                - registry: dict of discovered UDFs
-                - impl_refs: set of impl references in config
-                - error: optional error if validation failed
-                - error_type: type of error if validation failed
-        """
+        """Perform UDF validation and return the result dict."""
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent_file)
         filename = f"{self.agent_name}.yml"
         config_path = paths.agent_config_dir / filename
@@ -145,15 +124,7 @@ class ValidateUDFsCommand:
             raise click.ClickException(error_message)
 
     def _count_impl_references(self, config: dict) -> Set[str]:
-        """
-        Count unique impl references in config.
-
-        Args:
-            config: Configuration dictionary
-
-        Returns:
-            Set of unique impl reference names
-        """
+        """Return set of unique impl reference names from config."""
         impl_refs = set()
 
         def extract_impl_refs(obj):
@@ -231,12 +202,6 @@ class ValidateUDFsCommand:
     help="Path to user code directory containing UDFs",
 )
 def validate_udfs_cmd(agent: str, user_code: str) -> None:
-    """
-    Validate all UDF references in config without running the workflow.
-
-    Discovers UDFs from the user code directory and verifies that all
-    'impl' references in the agent configuration exist and are properly
-    decorated with @udf_tool.
-    """
+    """Validate all UDF references in config without running the workflow."""
     command = ValidateUDFsCommand(agent, user_code)
     command.execute()

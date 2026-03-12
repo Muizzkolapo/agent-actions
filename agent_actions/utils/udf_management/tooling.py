@@ -1,6 +1,4 @@
-"""Module for loading and running user-defined functions from a specified module."""
-# Line-too-long: Descriptive error messages require long lines
-# Import-outside-toplevel: Avoid circular imports with udf_registry
+"""Loading and execution of user-defined functions from specified modules."""
 
 import importlib
 import importlib.util
@@ -12,17 +10,10 @@ from agent_actions.utils.safe_format import safe_format_error
 
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:
-    """
-    Split a fully qualified UDF name into its module and function parts.
-
-    Args:
-        udf_name: The full UDF path in the format 'module_name.function_name'.
-
-    Returns:
-        A tuple (module_name, function_name).
+    """Split ``module_name.function_name`` into its parts.
 
     Raises:
-        ValueError: If the udf_name format is invalid.
+        ConfigurationError: If the format is invalid.
     """
     try:
         module_name, func_name = udf_name.rsplit(".", 1)
@@ -36,19 +27,10 @@ def _split_udf_name(udf_name: str) -> Tuple[str, str]:
 
 
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
-    """
-    Load a user-defined function from a specified module.
-
-    Args:
-        module_name: Name of the module containing the function.
-        function_name: Name of the function to load.
-
-    Returns:
-        The loaded function.
+    """Load a user-defined function from a specified module.
 
     Raises:
-        ImportError: If the module cannot be found.
-        AttributeError: If the function cannot be found in the module.
+        ConfigurationError: If the module or function cannot be found.
     """
     try:
         module = importlib.import_module(module_name)
@@ -92,25 +74,11 @@ def execute_user_defined_function(
     json_output_schema: Optional[Dict[str, Any]] = None,
     **kwargs: Any,
 ) -> Any:
-    """
-    Execute UDF with output schema validation.
-
-    Input structure is defined by context_scope in workflow YAML (progressive data exposure).
-    Only output schema validation is performed.
-
-    Args:
-        udf_name: Simple function name (e.g., 'my_function')
-        input_data: Input data (single object or array depending on granularity)
-        validate_output: Whether to validate output against schema
-        json_output_schema: Compiled JSON Schema for output validation (from agent config)
-        **kwargs: Additional arguments
-
-    Returns:
-        Result from UDF execution
+    """Execute a registered UDF with optional output schema validation.
 
     Raises:
-        SchemaValidationError: If output validation fails
-        AgentActionsException: If execution fails
+        SchemaValidationError: If output validation fails.
+        AgentActionsException: If execution fails.
     """
     from agent_actions.utils.udf_management.registry import get_udf_metadata
 
@@ -118,7 +86,6 @@ def execute_user_defined_function(
     udf = metadata["function"]
     granularity = metadata["granularity"]
 
-    # Execute function
     try:
         result = udf(input_data, **kwargs)
     except Exception as e:
@@ -132,7 +99,6 @@ def execute_user_defined_function(
             cause=e,
         ) from e
 
-    # Validate output if enabled and output schema is provided
     if validate_output and json_output_schema is not None:
         _validate_udf_output(udf_name, result, json_output_schema)
 
@@ -140,19 +106,11 @@ def execute_user_defined_function(
 
 
 def _validate_udf_output(udf_name: str, result: Any, json_output_schema: Dict[str, Any]) -> None:
-    """Validate UDF output data against schema.
-
-    json_output_schema always describes a single output item (array schemas
-    are resolved to their per-item schema at compile time in _compile_output_schema).
-    """
+    """Validate UDF output against a per-item JSON Schema."""
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
-    # Unwrap FileUDFResult for validation (FILE-granularity wrapper)
     items = result.outputs if isinstance(result, FileUDFResult) else result
 
-    # If the result is a list, validate each item individually.
-    # This supports 1-to-many expansion (RECORD tools returning lists)
-    # and N-to-M transformation (FILE tools returning lists).
     if isinstance(items, list):
         for idx, item in enumerate(items):
             _validate_against_schema(
@@ -169,28 +127,19 @@ def _validate_against_schema(
     item_index: Optional[int] = None,
     validation_type: str = "input",
 ) -> None:
-    """
-    Validate data against compiled schema.
+    """Validate data against a compiled JSON Schema.
 
-    Args:
-        data: Data to validate
-        compiled_schema: Compiled JSON schema
-        func_name: UDF function name for error messages
-        item_index: Optional index for array item validation
-        validation_type: 'input' or 'output' for error messages
-
-    Uses jsonschema for validation with proper error handling.
+    Raises:
+        SchemaValidationError: On validation failure with path details.
     """
     import jsonschema
     from jsonschema import ValidationError as JsonSchemaValidationError
     from agent_actions.errors import SchemaValidationError
 
     try:
-        # compiled_schema is now direct JSON Schema (no wrapper)
         jsonschema.validate(instance=data, schema=compiled_schema)
 
     except JsonSchemaValidationError as e:
-        # Build helpful error message
         error_path = " -> ".join(str(p) for p in e.path) if e.path else "root"
         item_info = f" (item {item_index})" if item_index is not None else ""
         type_info = f"{validation_type.capitalize()} schema"

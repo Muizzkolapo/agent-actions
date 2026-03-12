@@ -9,10 +9,8 @@ class APIErrorFormatter(ErrorFormatter):
     """Handles API/network errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Detect API/network errors."""
         exc_names = [type(exc).__name__, type(root).__name__]
 
-        # Check exception types
         if any(name.endswith("APIError") or "API" in name for name in exc_names):
             return True
         if any(name in ["NetworkError", "ConnectionError", "TimeoutError"] for name in exc_names):
@@ -33,7 +31,6 @@ class APIErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Handle API/network errors."""
         provider = self._extract_provider_name(message, context)
 
         if "rate limit" in message.lower():
@@ -54,7 +51,6 @@ class APIErrorFormatter(ErrorFormatter):
                 context=context,
             )
 
-        # Generic API error
         return UserError(
             category="API Error",
             title=f"{provider.title()} API error",

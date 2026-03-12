@@ -1,9 +1,4 @@
-"""
-Agent workflow state management module.
-
-Handles loading, saving, and querying agent execution status.
-Extracted from agent_workflow.py to reduce complexity.
-"""
+"""Agent workflow state management for execution status persistence."""
 
 import json
 import logging
@@ -14,24 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 class AgentStateManager:
-    """
-    Manages agent execution state persistence and queries.
-
-    Responsibilities:
-    - Load/save agent status from/to .agent_status.json
-    - Update individual agent status
-    - Query agent statuses
-    - Provide status summaries
-    """
+    """Manages agent execution state persistence and queries."""
 
     def __init__(self, status_file_path: Path, execution_order: List[str]):
-        """
-        Initialize state manager.
-
-        Args:
-            status_file_path: Path to .agent_status.json
-            execution_order: List of agent names in execution order
-        """
+        """Initialize state manager."""
         self.status_file = status_file_path
         self.execution_order = execution_order
         self.agent_status: Dict[str, Dict[str, Any]] = {}
@@ -64,14 +45,7 @@ class AgentStateManager:
             logger.error("Error saving status: %s", e)
 
     def update_status(self, agent_name: str, status: str, **metadata):
-        """
-        Update agent status and save to file.
-
-        Args:
-            agent_name: Name of the agent
-            status: New status (pending|running|batch_submitted|checking_batch|completed|failed)
-            **metadata: Additional metadata to store with status
-        """
+        """Update agent status and persist to file."""
         if agent_name not in self.agent_status:
             self.agent_status[agent_name] = {}
 
@@ -84,75 +58,35 @@ class AgentStateManager:
         self._save_status()
 
     def get_status(self, agent_name: str) -> str:
-        """
-        Get current status of an agent.
-
-        Args:
-            agent_name: Name of the agent
-
-        Returns:
-            Status string, or 'pending' if not found
-        """
+        """Return current status of an agent, defaulting to 'pending'."""
         return self.agent_status.get(agent_name, {}).get("status", "pending")
 
     def get_status_details(self, agent_name: str) -> Dict[str, Any]:
-        """
-        Get full status details for an agent.
-
-        Args:
-            agent_name: Name of the agent
-
-        Returns:
-            Status details dictionary
-        """
+        """Return full status details for an agent."""
         return self.agent_status.get(agent_name, {"status": "pending"})
 
     def is_completed(self, agent_name: str) -> bool:
-        """Check if agent is completed."""
+        """Return True if agent is completed."""
         return self.get_status(agent_name) == "completed"
 
     def is_batch_submitted(self, agent_name: str) -> bool:
-        """Check if agent has batch jobs submitted."""
+        """Return True if agent has batch jobs submitted."""
         return self.get_status(agent_name) == "batch_submitted"
 
     def is_failed(self, agent_name: str) -> bool:
-        """Check if agent has failed."""
+        """Return True if agent has failed."""
         return self.get_status(agent_name) == "failed"
 
     def get_pending_agents(self, agents: List[str]) -> List[str]:
-        """
-        Get list of agents that are not completed.
-
-        Args:
-            agents: List of agent names to check
-
-        Returns:
-            List of agent names that are not completed
-        """
+        """Return agents that are not yet completed."""
         return [agent for agent in agents if not self.is_completed(agent)]
 
     def get_batch_submitted_agents(self, agents: List[str]) -> List[str]:
-        """
-        Get list of agents with batch jobs submitted.
-
-        Args:
-            agents: List of agent names to check
-
-        Returns:
-            List of agent names with batch status
-        """
+        """Return agents with batch jobs submitted."""
         return [agent for agent in agents if self.is_batch_submitted(agent)]
 
     def get_failed_agents(self, agents: List[str]) -> List[str]:
-        """
-        Get list of failed agents.
-
-        Args:
-            agents: List of agent names to check
-
-        Returns:
-            List of agent names that failed
-        """
+        """Return agents that have failed."""
         return [agent for agent in agents if self.is_failed(agent)]
 
     def mark_running_as_failed(self):
@@ -164,12 +98,7 @@ class AgentStateManager:
         return None
 
     def get_summary(self) -> Dict[str, int]:
-        """
-        Get summary counts of agent statuses.
-
-        Returns:
-            Dictionary with counts by status
-        """
+        """Return summary counts of agent statuses."""
         summary = {}
         for details in self.agent_status.values():
             status = details.get("status", "unknown")
@@ -177,19 +106,9 @@ class AgentStateManager:
         return summary
 
     def is_workflow_complete(self) -> bool:
-        """
-        Check if all agents are completed.
-
-        Returns:
-            True if all agents have 'completed' status
-        """
+        """Return True if all agents have 'completed' status."""
         return all(details.get("status") == "completed" for details in self.agent_status.values())
 
     def has_any_failed(self) -> bool:
-        """
-        Check if any agent has failed.
-
-        Returns:
-            True if any agent has 'failed' status
-        """
+        """Return True if any agent has 'failed' status."""
         return any(details.get("status") == "failed" for details in self.agent_status.values())

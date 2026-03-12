@@ -1,9 +1,4 @@
-"""
-Prompt validation utilities.
-
-This module provides utilities for validating prompt files and
-ensuring they meet the required format and constraints.
-"""
+"""Prompt validation utilities for prompt files."""
 
 import re
 import logging
@@ -16,10 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class PromptValidator(BaseValidator):
-    """
-    Handles prompt validation operations by inheriting from BaseValidator.
-    Validates all prompts in a given directory.
-    """
+    """Validates all prompt files in a given directory."""
 
     _PROMPT_SECTION_PATTERN = re.compile("^#+\\s+(.+?)$", re.MULTILINE)
     _PROMPT_ID_PATTERN = re.compile("^```prompt:(\\w+)$", re.MULTILINE)
@@ -96,11 +88,7 @@ class PromptValidator(BaseValidator):
             )
 
     def _validate_single_prompt_file(self, prompt_file: Path, all_prompt_ids_seen: Set[str]) -> int:
-        """
-        Validates a single prompt file and adds errors/warnings to the instance.
-        Updates all_prompt_ids_seen with IDs from this file if valid.
-        Returns the number of valid prompts found in this file.
-        """
+        """Validate a single prompt file and return the number of valid prompts found."""
         file_prompts_count = 0
         try:
             if not self._check_prompt_file_size(prompt_file):
@@ -133,11 +121,7 @@ class PromptValidator(BaseValidator):
         return 0 if has_errors else file_prompts_count
 
     def _validate_prompt_format_logic(self, content: str, file_name: str) -> Optional[str]:
-        """
-        Validates the format of a prompt file content.
-        Returns an error message string if validation fails, None otherwise.
-        (This is based on the original static method `validate_prompt_format`)
-        """
+        """Return an error message if prompt format is invalid, None otherwise."""
         sections = self._find_prompt_sections_in_content(content)
         prompt_ids = self._find_prompt_ids_in_content(content)
         if not prompt_ids and sections:
@@ -161,16 +145,7 @@ class PromptValidator(BaseValidator):
         return None
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Validates all prompt files in the specified directory.
-
-        Args:
-            data (Path): The path to the prompt_store directory.
-            config: Optional configuration (not used by this validator).
-
-        Returns:
-            bool: True if all prompt validations pass, False otherwise.
-        """
+        """Validate all prompt files in the directory specified by data (Path)."""
         self.clear_errors()
         self.clear_warnings()
         if not isinstance(data, Path):

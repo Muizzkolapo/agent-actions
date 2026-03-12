@@ -1,9 +1,4 @@
-"""
-Workspace index for building and traversing workflow dependency graphs.
-
-This module scans all workflows in a workspace to build complete forward and
-reverse dependency graphs, enabling downstream workflow discovery and execution.
-"""
+"""Workspace index for building and traversing workflow dependency graphs."""
 
 import logging
 from collections import defaultdict, deque
@@ -18,18 +13,10 @@ logger = logging.getLogger(__name__)
 
 
 class WorkspaceIndex:
-    """
-    Scans and indexes all workflows in a workspace to build
-    forward and reverse dependency graphs for downstream execution.
-    """
+    """Indexes workflows in a workspace to build dependency graphs for downstream execution."""
 
     def __init__(self, workflows_root: Path):
-        """
-        Initialize the workspace index.
-
-        Args:
-            workflows_root: Root directory containing workflow subdirectories.
-        """
+        """Initialize the workspace index."""
         self.workflows_root = Path(workflows_root)
         self.dependency_graph: Dict[str, List[str]] = {}
         self.reverse_dependency_graph: Dict[str, Set[str]] = defaultdict(set)

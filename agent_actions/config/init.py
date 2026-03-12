@@ -1,6 +1,4 @@
-"""
-Module for initializing new Agent Actions projects.
-"""
+"""Initialize new Agent Actions projects."""
 
 import logging
 from pathlib import Path

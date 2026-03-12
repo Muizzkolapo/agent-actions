@@ -1,8 +1,4 @@
-"""Vendor compatibility validator for pre-flight validation.
-
-Validates that vendor configuration is valid and supports requested features
-before any LLM processing begins.
-"""
+"""Vendor compatibility validator for pre-flight validation."""
 
 from typing import Any, Dict, List, Optional, Set
 
@@ -86,32 +82,14 @@ VALID_VENDORS = set(VENDOR_CAPABILITIES.keys())
 
 
 class VendorCompatibilityValidator(BaseValidator):
-    """Validates vendor configuration and feature compatibility.
-
-    This validator checks that vendor config has required fields and
-    that requested features are supported by the vendor.
-
-    Attributes:
-        issues: List of ValidationIssue objects found during validation
-    """
+    """Validates vendor configuration and feature compatibility."""
 
     def __init__(self) -> None:
         super().__init__()
         self.issues: List[ValidationIssue] = []
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """Validate vendor configuration.
-
-        Args:
-            data: Dictionary containing:
-                - 'agent_config': The agent configuration dict
-            config: Optional config with:
-                - 'agent_name': Name of the agent for error messages
-                - 'mode': Execution mode ('batch' or 'online')
-
-        Returns:
-            bool: True if vendor config is valid, False otherwise
-        """
+        """Validate vendor configuration."""
         self.clear_errors()
         self.clear_warnings()
         self.issues = []
@@ -126,11 +104,9 @@ class VendorCompatibilityValidator(BaseValidator):
         agent_name = config.get("agent_name")
         mode = config.get("mode", "unknown")
 
-        # Get vendor from config
         vendor = agent_config.get("model_vendor", "").lower()
 
         if not vendor:
-            # No vendor specified - might be a tool agent
             agent_type = agent_config.get("agent_type", "")
             if agent_type != "tool":
                 self.add_error("model_vendor is required for non-tool agents")
@@ -144,7 +120,6 @@ class VendorCompatibilityValidator(BaseValidator):
                 )
             return not self.has_errors()
 
-        # Validate vendor is known
         if vendor not in VALID_VENDORS:
             self.add_error(f"Unknown vendor: {vendor}")
             self.issues.append(
@@ -159,10 +134,8 @@ class VendorCompatibilityValidator(BaseValidator):
             )
             return False
 
-        # Get vendor capabilities
         capabilities = VENDOR_CAPABILITIES[vendor]
 
-        # Check required fields
         missing_fields = self._check_required_fields(agent_config, capabilities["required_fields"])
         if missing_fields:
             self.add_error(f"Missing required fields for {vendor}: {', '.join(missing_fields)}")
@@ -175,7 +148,6 @@ class VendorCompatibilityValidator(BaseValidator):
                 )
             )
 
-        # Check feature compatibility
         unsupported = self._check_feature_compatibility(agent_config, capabilities, mode)
         if unsupported:
             for feature, reason in unsupported:
@@ -197,16 +169,7 @@ class VendorCompatibilityValidator(BaseValidator):
         agent_name: Optional[str] = None,
         mode: str = "unknown",
     ) -> bool:
-        """Convenience method to validate vendor config directly.
-
-        Args:
-            agent_config: Agent configuration dictionary
-            agent_name: Optional agent name for error messages
-            mode: Execution mode
-
-        Returns:
-            bool: True if vendor config is valid
-        """
+        """Validate vendor config directly without wrapping in a data dict."""
         data = {"agent_config": agent_config}
         config = {"agent_name": agent_name, "mode": mode}
         return self.validate(data, config)
@@ -214,15 +177,7 @@ class VendorCompatibilityValidator(BaseValidator):
     def _check_required_fields(
         self, agent_config: Dict[str, Any], required_fields: List[str]
     ) -> List[str]:
-        """Check if required fields are present.
-
-        Args:
-            agent_config: Agent configuration
-            required_fields: List of required field names
-
-        Returns:
-            List of missing field names
-        """
+        """Return list of missing required field names."""
         missing = []
         for field in required_fields:
             if not agent_config.get(field):
@@ -235,60 +190,32 @@ class VendorCompatibilityValidator(BaseValidator):
         capabilities: Dict[str, Any],
         mode: str,
     ) -> List[tuple]:
-        """Check if requested features are supported by vendor.
-
-        Args:
-            agent_config: Agent configuration
-            capabilities: Vendor capability dict
-            mode: Execution mode
-
-        Returns:
-            List of (feature_name, reason) tuples for unsupported features
-        """
+        """Return list of (feature_name, reason) tuples for unsupported features."""
         unsupported = []
 
-        # Check batch mode support
         if mode == "batch" and not capabilities.get("supports_batch"):
             unsupported.append(("batch", "Vendor does not support batch processing"))
 
-        # Check json_mode
         json_mode = agent_config.get("json_mode", True)
         if json_mode and not capabilities.get("supports_json_mode"):
             unsupported.append(("json_mode", "Vendor does not support JSON mode"))
 
-        # Check tools
         if agent_config.get("tools") and not capabilities.get("supports_tools"):
             unsupported.append(("tools", "Vendor does not support tool calling"))
 
-        # Check vision
         if agent_config.get("vision") and not capabilities.get("supports_vision"):
             unsupported.append(("vision", "Vendor does not support vision/images"))
 
         return unsupported
 
     def get_supported_vendors(self) -> Set[str]:
-        """Get set of supported vendor names.
-
-        Returns:
-            Set of valid vendor names
-        """
+        """Get set of supported vendor names."""
         return VALID_VENDORS.copy()
 
     def get_vendor_capabilities(self, vendor: str) -> Optional[Dict[str, Any]]:
-        """Get capabilities for a specific vendor.
-
-        Args:
-            vendor: Vendor name
-
-        Returns:
-            Capabilities dict or None if vendor not found
-        """
+        """Get capabilities for a specific vendor."""
         return VENDOR_CAPABILITIES.get(vendor.lower())
 
     def get_issues(self) -> List[ValidationIssue]:
-        """Get the list of validation issues found.
-
-        Returns:
-            List of ValidationIssue objects
-        """
+        """Get the list of validation issues found."""
         return self.issues

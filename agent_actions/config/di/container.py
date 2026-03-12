@@ -1,9 +1,4 @@
-"""
-Dependency Injection Framework for Agent Actions.
-
-This module provides a lightweight dependency injection container and registry
-for managing processor dependencies and improving testability.
-"""
+"""Lightweight dependency injection framework for agent-actions."""
 
 from typing import Dict, Optional, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
@@ -43,15 +38,6 @@ def _build_init_kwargs(
     caller: str = "_build_init_kwargs",
 ) -> Dict[str, Any]:
     """Build keyword arguments for cls.__init__ via dependency resolution.
-
-    Args:
-        cls: The class to inspect.
-        container: DependencyContainer used to resolve typed parameters.
-        overrides: Optional explicit values that take precedence over container resolution.
-        caller: Name of the calling method, included in error context for debuggability.
-
-    Returns:
-        Dictionary of keyword arguments suitable for ``cls(**kwargs)``.
 
     Raises:
         DependencyError: If a required parameter cannot be resolved.
@@ -176,8 +162,6 @@ class ProcessorRegistry:
             category: {} for category in RegistryCategory
         }
 
-    # --- Generic operations ---
-
     def register(self, category: RegistryCategory, name: str):
         """Decorator to register a component under the given category."""
 
@@ -209,8 +193,6 @@ class ProcessorRegistry:
     def list_registered(self, category: RegistryCategory) -> Dict[str, Type]:
         """List all registered components in a category (returns a copy)."""
         return self._registries[category].copy()
-
-    # --- Backward-compatible convenience methods ---
 
     def register_processor(self, name: str):
         """Decorator to register a processor."""

@@ -9,12 +9,7 @@ from agent_actions.validation.batch_validator import BatchCommandArgs
 
 @click.group()
 def batch():
-    """
-    CLI command group for batch processing operations.
-
-    Manages the lifecycle of batch processing jobs including submission,
-    status checking, and result retrieval.
-    """
+    """CLI command group for batch processing operations."""
 
 
 @batch.command()

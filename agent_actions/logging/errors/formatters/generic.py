@@ -9,13 +9,11 @@ class GenericErrorFormatter(ErrorFormatter):
     """Handles unknown/generic errors (fallback formatter)."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Always returns True - this is the fallback formatter."""
         return True
 
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Handle unknown/generic errors."""
         operation = context.get("operation", "operation")
         agent = context.get("agent")
 

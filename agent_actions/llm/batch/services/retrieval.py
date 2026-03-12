@@ -1,8 +1,4 @@
-"""Batch retrieval service for downloading batch job results.
-
-This service encapsulates all result retrieval functionality, extracted from
-BatchService to follow Single Responsibility Principle.
-"""
+"""Batch retrieval service for downloading batch job results."""
 
 import json
 import logging

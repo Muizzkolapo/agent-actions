@@ -1,9 +1,4 @@
-"""
-Abstract Syntax Tree nodes for WHERE clause parsing.
-
-This module defines the AST nodes that represent parsed WHERE clause expressions,
-plus recursive evaluate_node() and format_node() functions.
-"""
+"""AST nodes for WHERE clause parsing and evaluation."""
 
 import logging
 from typing import Any, Callable, Dict, List, Optional
@@ -164,11 +159,6 @@ class FunctionNode(ASTNode):
         self.arguments = arguments
 
 
-# ---------------------------------------------------------------------------
-# evaluate_node — recursive evaluator replacing WhereClauseEvaluator + ASTVisitor
-# ---------------------------------------------------------------------------
-
-
 def evaluate_node(
     node: ASTNode,
     data: Dict[str, Any],
@@ -204,7 +194,6 @@ def evaluate_node(
         if not op_fn:
             raise ValueError(f"Unknown comparison operator: {node.operator}")
 
-        # Unary operators (IS NULL, IS NOT NULL)
         if node.operator in (ComparisonOperator.IS_NULL, ComparisonOperator.IS_NOT_NULL):
             right_value = None
         elif node.right is None:
@@ -238,7 +227,6 @@ def evaluate_node(
 
     if isinstance(node, FunctionNode):
         args = [evaluate_node(arg, data, functions) for arg in node.arguments]
-        # Check custom functions first, then built-in FUNCTIONS
         all_funcs = {**FUNCTIONS, **(functions or {})}
         if node.function_name not in all_funcs:
             raise ValueError(f"Function '{node.function_name}' is not registered")
@@ -249,11 +237,6 @@ def evaluate_node(
         return func(*args)
 
     raise ValueError(f"Unknown node type: {type(node)}")
-
-
-# ---------------------------------------------------------------------------
-# format_node — recursive formatter replacing ASTFormatter
-# ---------------------------------------------------------------------------
 
 
 def _format_literal_value(value: Any) -> str:
@@ -301,11 +284,6 @@ def format_node(node: ASTNode) -> str:
         return f"{node.function_name}({args_str})"
 
     raise ValueError(f"Unknown node type: {type(node)}")
-
-
-# ---------------------------------------------------------------------------
-# WhereClauseAST — container with evaluate() and __str__()
-# ---------------------------------------------------------------------------
 
 
 class WhereClauseAST:

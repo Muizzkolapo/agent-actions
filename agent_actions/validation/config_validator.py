@@ -24,13 +24,7 @@ _ci_dict = ACVUtils.normalize_entry_keys_to_lowercase
 
 
 class ConfigValidator(BaseValidator):
-    """Validate agent configuration files with case-insensitive key handling.
-
-    Business rules are unchanged; only comparisons are agnostic to key case
-    or value case.
-
-    Note: Configuration constants are now centralized in AgentConfigValidationUtilities.
-    """
+    """Validate agent configuration files with case-insensitive key handling."""
 
     def _check_agent_file_unique_logic(self, full_path_str: str, project_dir_str: str) -> None:
         """Check that agent file is unique in the project."""
@@ -54,12 +48,7 @@ class ConfigValidator(BaseValidator):
             )
 
     def _collect_agent_config_files(self, project_dir_str: str) -> Dict[str, List[str]]:
-        """
-        Collect all agent config files in the project.
-
-        Returns:
-            Dict mapping agent name (lowercase) to list of file paths
-        """
+        """Collect all agent config files, returning name-to-paths mapping."""
         name_locations: Dict[str, List[str]] = {}
         for root, dirs, _ in os.walk(project_dir_str):
             if "agent_config" not in dirs:
@@ -126,18 +115,7 @@ class ConfigValidator(BaseValidator):
     def _validate_single_agent_entry_logic(
         self, entry: Dict[str, Any], cfg_ctx_name: str, proj_root: Optional[Path] = None
     ) -> None:
-        """
-        Validate a single agent entry using the orchestrator.
-
-        This method delegates to AgentEntryValidationOrchestrator which runs
-        a chain of specialized validators. This reduces complexity from
-        CC 52 to ~5.
-
-        Args:
-            entry: Agent configuration entry to validate
-            cfg_ctx_name: Context name for error messages
-            proj_root: Optional project root for path resolution
-        """
+        """Validate a single agent entry via the orchestrator chain."""
         orchestrator = AgentEntryValidationOrchestrator()
         orchestrator.validate_agent_entry(entry, cfg_ctx_name, proj_root)
 
@@ -236,11 +214,7 @@ class ConfigValidator(BaseValidator):
     def _build_agent_sets(
         self, agent_cfgs_map: Dict[str, Dict[str, Any]]
     ) -> tuple[Set[str], Set[str]]:
-        """Build sets of active and all agent names (lowercased).
-
-        Returns:
-            Tuple of (active_agents, all_agents) sets.
-        """
+        """Return (active_agents, all_agents) sets with lowercased names."""
         active_agents = {
             name.lower()
             for name, cfg in agent_cfgs_map.items()
@@ -388,11 +362,7 @@ class ConfigValidator(BaseValidator):
         return self._complete_validation()
 
     def _validate_config_file_access(self, cfg_file: Path) -> bool:
-        """Validate config file exists and is accessible.
-
-        Returns:
-            True if file is accessible, False otherwise (errors added to self).
-        """
+        """Return True if config file exists and is readable; adds errors otherwise."""
         if not self._ensure_path_exists(cfg_file):
             self.add_error(
                 f"Config file does not exist: {cfg_file}",

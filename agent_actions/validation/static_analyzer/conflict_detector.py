@@ -1,6 +1,4 @@
-"""
-Conflict detector for workflow field name collisions.
-"""
+"""Conflict detector for workflow field name collisions."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -109,21 +107,12 @@ class ConflictAnalysisResult:
         return sum(1 for c in self.conflicts if c.severity == ConflictSeverity.WARNING)
 
     def filter_by_action(self, action_name: str) -> "ConflictAnalysisResult":
-        """Filter conflicts to those affecting a specific action.
-
-        Args:
-            action_name: Name of the action to filter by
-
-        Returns:
-            New ConflictAnalysisResult with filtered conflicts
-        """
+        """Filter conflicts to those affecting a specific action."""
         filtered = []
         for conflict in self.conflicts:
-            # Include if action is a producer
             if any(p.action == action_name for p in conflict.producers):
                 filtered.append(conflict)
                 continue
-            # Include if action has affected reference
             if any(r.action == action_name for r in conflict.affected_references):
                 filtered.append(conflict)
 
@@ -156,26 +145,13 @@ RESERVED_NAMES = frozenset({"source", "seed", "loop", "workflow", "action"})
 
 
 class ConflictDetector:
-    """Detects field name conflicts in workflows.
-
-    Analyzes a DataFlowGraph to find:
-    - Shadowing: Multiple actions produce same field name
-    - Ambiguous references: Unqualified references to shadowed fields
-    - Drop-recreate: Field dropped then recreated
-    - Reserved names: Fields using reserved namespace names
-    """
+    """Detects field name conflicts such as shadowing and ambiguous references."""
 
     def __init__(self, graph: DataFlowGraph, workflow_name: str = ""):
-        """Initialize the conflict detector.
-
-        Args:
-            graph: DataFlowGraph from WorkflowStaticAnalyzer
-            workflow_name: Name of the workflow being analyzed
-        """
+        """Initialize the conflict detector."""
         self.graph = graph
         self.workflow_name = workflow_name
 
-        # Build field → producers mapping
         self._field_producers: Dict[str, List[FieldProducer]] = {}
         self._build_field_mapping()
 
@@ -209,26 +185,13 @@ class ConflictDetector:
         self._field_producers[field_name].append(FieldProducer(action, source))
 
     def detect_all(self) -> ConflictAnalysisResult:
-        """Detect all conflicts in the workflow.
-
-        Returns:
-            ConflictAnalysisResult with all detected conflicts
-        """
+        """Detect all conflicts in the workflow."""
         conflicts: List[Conflict] = []
 
-        # Detect shadowing conflicts
         conflicts.extend(self._detect_shadowing())
-
-        # Detect ambiguous references
         conflicts.extend(self._detect_ambiguous_references())
-
-        # Detect reserved name conflicts
         conflicts.extend(self._detect_reserved_names())
-
-        # Detect drop-recreate conflicts
         conflicts.extend(self._detect_drop_recreate())
-
-        # Calculate stats
         actions = [n for n in self.graph.nodes if not self.graph.is_special_namespace(n)]
         shadowed = [f for f, p in self._field_producers.items() if len(p) > 1]
 
@@ -246,7 +209,6 @@ class ConflictDetector:
 
         for field_name, producers in self._field_producers.items():
             if len(producers) > 1:
-                # Find which actions reference this field
                 affected = self._find_field_references(field_name)
 
                 producer_names = [p.action for p in producers]
@@ -281,14 +243,10 @@ class ConflictDetector:
                 continue
 
             for req in node.input_requirements:
-                # Check if this is an unqualified reference to a shadowed field
-                # Unqualified means source_agent is a special namespace or doesn't match
-                # a specific producer
                 if req.field_path in shadowed_fields:
                     producers = self._field_producers[req.field_path]
                     producer_names = [p.action for p in producers]
 
-                    # Check if reference is unqualified (using special namespace)
                     if req.source_agent in ("source", "seed", "loop"):
                         qualified_refs = " or ".join(
                             f"{{{{ action.{p}.{req.field_path} }}}}" for p in producer_names
@@ -344,18 +302,15 @@ class ConflictDetector:
         """Detect fields that are dropped then recreated."""
         conflicts = []
 
-        # Track dropped fields and their sources
         dropped_by: Dict[str, str] = {}
 
         for node in self.graph.nodes.values():
             if self.graph.is_special_namespace(node.name):
                 continue
 
-            # Record dropped fields
             for field_name in node.output_schema.dropped_fields:
                 dropped_by[field_name] = node.name
 
-        # Check if any dropped field is recreated
         for node in self.graph.nodes.values():
             if self.graph.is_special_namespace(node.name):
                 continue
@@ -400,11 +355,7 @@ class ConflictDetector:
         return references
 
     def get_shadowed_fields(self) -> Dict[str, List[str]]:
-        """Get mapping of shadowed fields to their producers.
-
-        Returns:
-            Dict mapping field names to list of producer action names
-        """
+        """Get mapping of shadowed field names to their producer action names."""
         return {
             field_name: [p.action for p in producers]
             for field_name, producers in self._field_producers.items()

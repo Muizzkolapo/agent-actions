@@ -1,7 +1,4 @@
-"""Module for generating data using agents.
-
-This module uses RecordProcessor for unified processing with retry support.
-"""
+"""Data generation using agents with RecordProcessor retry support."""
 
 from __future__ import annotations
 
@@ -27,11 +24,7 @@ logger = logging.getLogger(__name__)
 
 @registry.register_generator("data_generator")
 class DataGenerator(IGenerator):
-    """
-    Handles agent creation and data generation.
-
-    Uses RecordProcessor internally for unified processing with retry support.
-    """
+    """Handles agent creation and data generation via RecordProcessor."""
 
     def __init__(
         self,
@@ -41,25 +34,13 @@ class DataGenerator(IGenerator):
         agent_indices: Optional[Dict[str, int]] = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
-        """
-        Initialize the data generator.
-
-        Args:
-            agent_config: Configuration for the agent
-            agent_name: Name of the agent
-            dependency_configs: Optional dict mapping dependency names to their configs.
-                              Used to build namespaced field_context for {agent.field} references.
-            agent_indices: Optional dict mapping agent names to their node indices.
-                         Used for loading historical node data via {action_name.field} references.
-            storage_backend: Optional storage backend for historical data loading.
-        """
+        """Initialize the data generator with agent config and optional dependency info."""
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.dependency_configs = dependency_configs or {}
         self.agent_indices = agent_indices or {}
         self.storage_backend = storage_backend
 
-        # Create RecordProcessor for unified processing with retry
         self._record_processor = RecordProcessor(
             agent_config=self.agent_config,
             agent_name=self.agent_name,
@@ -85,28 +66,13 @@ class DataGenerator(IGenerator):
         """
         Create an agent with the provided data and generate results.
 
-        Uses RecordProcessor internally for unified processing with retry support.
-
-        Args:
-            contents: Content to process
-            source_content: Optional source content for prompt formatting
-            version_context: Optional version context for {version.*} references
-            workflow_metadata: Optional workflow metadata for {workflow.*} references
-            current_item: Optional current item dict containing lineage and
-                source_guid for historical node loading
-            file_path: Optional file path for constructing historical node paths
-
         Returns:
-            Tuple containing:
-            - generated data (List[Dict])
-            - flag indicating if agent was executed (bool)
-            - passthrough_fields extracted from field_context (Dict)
+            Tuple of (generated data, was_executed flag, passthrough_fields).
 
         Raises:
-            GenerationError: If agent creation or data generation fails
+            GenerationError: If agent creation or data generation fails.
         """
         try:
-            # Build processing context for subsequent-stage processing
             context = ProcessingContext(
                 agent_config=self.agent_config,
                 agent_name=self.agent_name,
@@ -121,8 +87,6 @@ class DataGenerator(IGenerator):
                 storage_backend=self.storage_backend,
             )
 
-            # Build item in expected format for RecordProcessor
-            # RecordProcessor expects {content, source_guid} for subsequent-stage
             if current_item is not None:
                 item = current_item
             elif isinstance(contents, dict):
@@ -135,16 +99,13 @@ class DataGenerator(IGenerator):
             else:
                 item = {"content": contents}
 
-            # Process via RecordProcessor (has retry support)
             result = self._record_processor.process(item, context)
 
-            # Convert ProcessingResult to legacy tuple format
             if result.status == ProcessingStatus.FILTERED:
                 return (None, False, {})
             elif result.status == ProcessingStatus.SKIPPED:
                 return (contents, False, result.passthrough_fields)
             elif result.status == ProcessingStatus.EXHAUSTED:
-                # Retry exhausted - return as failed but with recovery metadata
                 logger.warning(
                     "Processing exhausted for '%s': %s",
                     self.agent_name,

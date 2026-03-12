@@ -1,9 +1,4 @@
-"""Shared ResponseValidator protocol and implementations.
-
-Provides a unified interface for all validation in the reprompt loop --
-UDF-based, schema-based, or composed chains. Both online (RepromptService)
-and batch (BatchRetryService) paths use the same protocol.
-"""
+"""Shared ResponseValidator protocol and implementations for reprompt validation."""
 
 from __future__ import annotations
 
@@ -44,15 +39,7 @@ class ResponseValidator(Protocol):
 
 
 class UdfValidator:
-    """Wraps a UDF registered via ``@reprompt_validation``.
-
-    Parameters
-    ----------
-    validation_name:
-        Key in the global ``_VALIDATION_REGISTRY``.  The function and
-        feedback message are resolved at construction time via
-        ``get_validation_function()``.
-    """
+    """Wraps a UDF registered via ``@reprompt_validation``."""
 
     def __init__(self, validation_name: str) -> None:
         from .validation import get_validation_function
@@ -78,22 +65,7 @@ class UdfValidator:
 
 
 class SchemaValidator:
-    """Validates LLM output against an expected schema.
-
-    **Not thread-safe**: mutable ``_last_feedback`` is updated during
-    ``validate()`` calls.  Each thread should use its own instance.
-
-    Parameters
-    ----------
-    schema:
-        Schema dict (as stored in ``agent_config["schema"]``).
-    action_name:
-        Agent/action name for error reporting.
-    strict_mode:
-        When *True*, extra fields also cause failure.  Mirrors the
-        existing ``strict_schema`` behaviour but channelled through
-        the reprompt loop instead of raising immediately.
-    """
+    """Validates LLM output against an expected schema (not thread-safe)."""
 
     _import_warned: bool = False
 
@@ -111,7 +83,7 @@ class SchemaValidator:
 
     @classmethod
     def _check_import(cls) -> bool:
-        """Check if schema validator module is available (warns once)."""
+        """Return True if schema validator module is importable (warns once on failure)."""
         try:
             from agent_actions.validation.schema_output_validator import (  # noqa: F401
                 validate_output_against_schema,
@@ -147,7 +119,6 @@ class SchemaValidator:
             if report.is_compliant:
                 return True
 
-            # Build a feedback string from the report
             errors = report.validation_errors or ["Schema mismatch detected"]
             self._last_feedback = "; ".join(errors)
             return False
@@ -179,14 +150,7 @@ class SchemaValidator:
 
 
 class ComposedValidator:
-    """Chains multiple validators; fails on the first failure.
-
-    The LLM receives feedback for **one** issue at a time so it can
-    focus on fixing that issue before the next validation fires.
-
-    **Not thread-safe**: mutable ``_last_failed`` is updated during
-    ``validate()`` calls.  Each thread should use its own instance.
-    """
+    """Chains multiple validators, failing on the first failure (not thread-safe)."""
 
     def __init__(self, validators: list[ResponseValidator]) -> None:
         if not validators:
@@ -219,12 +183,7 @@ class ComposedValidator:
 
 
 def build_validation_feedback(failed_response: Any, feedback_message: str) -> str:
-    """Build the feedback string appended to the prompt on validation failure.
-
-    This is the **single source of truth** for feedback formatting, replacing
-    both ``RepromptService._build_feedback_message`` and the standalone
-    ``_build_reprompt_feedback`` in the batch retry module.
-    """
+    """Build the feedback string appended to the prompt on validation failure."""
     try:
         response_str = json.dumps(failed_response, indent=2)
     except Exception:

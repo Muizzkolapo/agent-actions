@@ -1,9 +1,4 @@
-"""
-Base Strategy Interface for Passthrough Transformation.
-
-This module defines the interface that all passthrough transformation
-strategies must implement.
-"""
+"""Interface for passthrough transformation strategies."""
 
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
@@ -20,18 +15,7 @@ class IPassthroughTransformStrategy(ABC):
         agent_config: Dict,
         already_structured: bool,
     ) -> bool:
-        """
-        Check if this strategy can handle the given inputs.
-
-        Args:
-            data: Data list to transform
-            passthrough_fields: Optional pre-computed passthrough fields
-            agent_config: Agent configuration
-            already_structured: Whether data is already structured
-
-        Returns:
-            True if this strategy can handle the transformation
-        """
+        """Check if this strategy can handle the given inputs."""
 
     @abstractmethod
     def transform(
@@ -42,18 +26,4 @@ class IPassthroughTransformStrategy(ABC):
         agent_config: Dict,
         passthrough_fields: Optional[Dict] = None,
     ) -> List:
-        """
-        Execute the transformation.
-
-        Args:
-            data: Data list to transform
-            context_data: Context data dictionary
-            source_guid: Source GUID
-            agent_config: Agent configuration
-            passthrough_fields: Optional pre-computed passthrough fields
-
-        Returns:
-            Transformed data list
-
-        Note: All parameters required by interface contract.
-        """
+        """Execute the transformation and return the transformed data list."""

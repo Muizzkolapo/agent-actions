@@ -1,10 +1,4 @@
-"""
-Unified task preparation data structures.
-
-Part of Phase 2 (#890): Extract Shared PreparedTask Builder.
-
-These dataclasses ensure identical task preparation for both batch and online modes.
-"""
+"""Unified task preparation data structures for batch and online modes."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -26,141 +20,66 @@ class GuardStatus(Enum):
 
 @dataclass
 class PreparedTask:
-    """
-    Task configuration ready for execution (online) or submission (batch).
+    """Task configuration ready for execution (online) or submission (batch)."""
 
-    This is the unified output of TaskPreparer.prepare() that both
-    RecordProcessor and BatchTaskPreparator consume.
-
-    Attributes:
-        target_id: Unique identifier for this task (batch: custom_id)
-        source_guid: Deterministic ID for lineage chaining across stages
-        formatted_prompt: Fully rendered prompt ready for LLM
-        llm_context: Context dict passed to LLM (with context_scope.drop applied)
-        passthrough_fields: Fields to merge into output (from context_scope.passthrough)
-        original_content: The original input content (for passthrough on skip)
-        source_content: Resolved source content (for {{ source.* }} templates)
-        source_snapshot: Snapshot of original item (for first-stage source saving)
-        guard_status: Result of guard evaluation (PASSED/SKIPPED/FILTERED)
-        guard_behavior: Specific behavior if guard blocked ('skip' or 'filter')
-        prompt_context: Full context used in template rendering (for guard evaluation)
-        metadata: Additional metadata dict
-    """
-
-    # Identity
     target_id: str
-    source_guid: Optional[str]  # None for subsequent-stage items without source_guid
-
-    # Prompt data (empty if guard blocked before prompt preparation)
+    source_guid: Optional[str]
     formatted_prompt: str = ""
     llm_context: dict[str, Any] = field(default_factory=dict)
 
-    # Context preservation
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
     original_content: Any = None
     source_content: Optional[Any] = None
     source_snapshot: Optional[Any] = None
-
-    # Guard evaluation result
     guard_status: GuardStatus = GuardStatus.PASSED
-    guard_behavior: Optional[str] = None  # 'skip' or 'filter' if not PASSED
-
-    # Full context used for guard evaluation (includes rendered template variables)
+    guard_behavior: Optional[str] = None
     prompt_context: dict[str, Any] = field(default_factory=dict)
-
-    # Metadata
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def should_execute(self) -> bool:
-        """Whether this task should be executed (guard passed)."""
+        """Return True if guard passed and task should be executed."""
         return self.guard_status == GuardStatus.PASSED
 
     @property
     def is_passthrough(self) -> bool:
-        """Whether this task should pass through original content (guard skip)."""
+        """Return True if guard triggered skip (passthrough original content)."""
         return self.guard_status == GuardStatus.SKIPPED
 
     @property
     def is_filtered(self) -> bool:
-        """Whether this task was filtered out (guard filter)."""
+        """Return True if guard triggered filter (exclude from output)."""
         return self.guard_status == GuardStatus.FILTERED
 
     @property
     def is_upstream_unprocessed(self) -> bool:
-        """Whether this task was unprocessed by upstream (dead/failed/skipped)."""
+        """Return True if upstream failed/skipped this record."""
         return self.guard_status == GuardStatus.UPSTREAM_UNPROCESSED
 
 
 @dataclass
 class PreparationContext:
-    """
-    Context needed for task preparation.
+    """Context needed for task preparation, convertible from ProcessingContext."""
 
-    This mirrors ProcessingContext but is focused on preparation-only concerns.
-    It can be constructed from a ProcessingContext or directly.
-
-    Attributes:
-        agent_config: Agent configuration dict
-        agent_name: Agent name for metadata and logging
-        is_first_stage: True for first-stage (raw input), False for subsequent-stage
-        source_data: List of source items for source_guid lookups
-        agent_indices: Dict mapping agent names to node indices (for historical data)
-        dependency_configs: Dict mapping dependency names to configs
-        workflow_metadata: Workflow-level metadata for {{ workflow.* }} templates
-        version_context: Version context for {{ version.* }} templates (online mode)
-        file_path: File path for history tracking
-        output_directory: Output directory path
-        tools_path: Path to tools directory
-        storage_backend: Optional storage backend for historical data loading
-        current_item: Current item dict (for lineage in subsequent-stage)
-        record_index: Current record index (for logging/events)
-    """
-
-    # Core configuration
     agent_config: dict[str, Any]
     agent_name: str
-
-    # Stage indicator
     is_first_stage: bool = False
-
-    # Mode indicator - True for batch processing, False for online/realtime
     is_batch_mode: bool = False
-
-    # Source data for lookups
     source_data: Optional[list[dict[str, Any]]] = None
-
-    # Workflow context (for historical data loading)
     agent_indices: Optional[dict[str, int]] = None
     dependency_configs: Optional[dict[str, Any]] = None
     workflow_metadata: Optional[dict[str, Any]] = None
-
-    # Version context (online mode)
     version_context: Optional[dict[str, Any]] = None
-
-    # File context
     file_path: Optional[str] = None
     output_directory: Optional[str] = None
     tools_path: Optional[str] = None
-
-    # Storage
     storage_backend: Optional["StorageBackend"] = None
-
-    # Per-item context
     current_item: Optional[dict[str, Any]] = None
     record_index: int = 0
 
     @classmethod
     def from_processing_context(cls, context: "ProcessingContext") -> "PreparationContext":
-        """
-        Create PreparationContext from a ProcessingContext.
-
-        Args:
-            context: ProcessingContext to convert
-
-        Returns:
-            PreparationContext with equivalent fields
-        """
+        """Create PreparationContext from a ProcessingContext."""
         from agent_actions.processing.types import ProcessingMode
         from agent_actions.utils.tools_resolver import resolve_tools_path
 

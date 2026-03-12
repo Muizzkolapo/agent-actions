@@ -1,8 +1,4 @@
-"""
-Base class for agent entry validators.
-
-All specialized validators inherit from this to ensure consistent interface.
-"""
+"""Base class for agent entry validators."""
 
 from abc import ABC, abstractmethod
 from typing import List
@@ -11,14 +7,7 @@ from dataclasses import dataclass, field
 
 @dataclass
 class AgentEntryValidationResult:
-    """
-    Result from a single validator execution.
-
-    Attributes:
-        errors: List of validation error messages
-        warnings: List of validation warning messages
-        is_critical_failure: If True, stops the validation chain
-    """
+    """Result from a single validator execution."""
 
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
@@ -46,15 +35,7 @@ class AgentEntryValidationResult:
 
 
 class BaseAgentEntryValidator(ABC):
-    """
-    Abstract base class for all agent entry validators.
-
-    Each validator:
-    - Receives the full entry and context
-    - Performs specific validation checks
-    - Returns a result with errors/warnings
-    - Can signal critical failure to stop chain
-    """
+    """Abstract base class for all agent entry validators."""
 
     def __repr__(self) -> str:
         """Return string representation of validator."""
@@ -62,13 +43,5 @@ class BaseAgentEntryValidator(ABC):
 
     @abstractmethod
     def validate(self, context) -> AgentEntryValidationResult:
-        """
-        Perform validation on the agent entry.
-
-        Args:
-            context: AgentEntryValidationContext with entry, normalized data, etc.
-
-        Returns:
-            AgentEntryValidationResult with errors, warnings, and critical flag
-        """
+        """Perform validation on the agent entry."""
         raise NotImplementedError("Subclasses must implement validate()")

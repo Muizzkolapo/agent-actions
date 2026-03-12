@@ -15,15 +15,7 @@ class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
     """Loader for tabular content like CSV and Excel."""
 
     def process(self, content: Any, file_path: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Load and return tabular content from a CSV/TSV file or in-memory content.
-
-        Args:
-            content: Content to process if file_path is not provided.
-            file_path: Path to the CSV/TSV file.
-
-        Returns:
-            Parsed list of dictionaries representing the rows.
-        """
+        """Load and return tabular content from a CSV/TSV file or in-memory content."""
         try:
             if file_path:
                 content_str = self.load_file(file_path)

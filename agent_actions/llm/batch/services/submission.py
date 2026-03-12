@@ -1,8 +1,4 @@
-"""Batch submission service for submitting batch jobs.
-
-This service encapsulates all batch submission functionality, extracted from
-BatchService to follow Single Responsibility Principle.
-"""
+"""Batch submission service for task preparation and job submission."""
 
 import logging
 from datetime import datetime

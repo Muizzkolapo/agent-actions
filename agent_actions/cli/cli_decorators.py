@@ -1,6 +1,4 @@
-"""
-CLI decorators for agent-actions commands.
-"""
+"""CLI decorators for agent-actions commands."""
 
 import os
 import functools

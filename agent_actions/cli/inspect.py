@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class BaseInspectCommand:
-    """Base class for inspect commands with common functionality."""
+    """Base class for inspect commands."""
 
     def __init__(self, agent: str, user_code: Optional[str], json_output: bool):
         self.agent = agent

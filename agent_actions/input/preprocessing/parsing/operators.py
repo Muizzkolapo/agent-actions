@@ -1,8 +1,4 @@
-"""
-Flat operator module replacing the operator_registry package.
-
-All comparison, logical, and function operators as simple callables in dicts.
-"""
+"""Comparison, logical, and function operators for WHERE clause evaluation."""
 
 import re
 from dataclasses import dataclass
@@ -31,11 +27,6 @@ class OperatorInfo:
     description: str
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _safe_compare(op):
     """Wrap a relational comparison so TypeError → False."""
 
@@ -54,7 +45,6 @@ def _sql_like(left: Any, right: Any = None) -> bool:
         return False
     text = str(left)
     pattern = str(right)
-    # Replace % and _ with placeholders, escape regex chars, then swap back
     pattern = pattern.replace("%", "\x00").replace("_", "\x01")
     escaped = re.escape(pattern)
     regex_pattern = escaped.replace("\x00", ".*").replace("\x01", ".")
@@ -67,10 +57,6 @@ def _sql_like(left: Any, right: Any = None) -> bool:
 def _validate_range(range_val: Any) -> bool:
     return isinstance(range_val, (list, tuple)) and len(range_val) == 2
 
-
-# ---------------------------------------------------------------------------
-# OPERATORS — 16 comparison operators as callables
-# ---------------------------------------------------------------------------
 
 OPERATORS: dict[str, Any] = {
     # Equality
@@ -107,15 +93,10 @@ OPERATORS: dict[str, Any] = {
         if _validate_range(right)
         else False
     ),
-    # Null (right unused — unary operators with uniform call signature)
+    # Null (unary — right unused for uniform call signature)
     "IS_NULL": lambda left, right=None: left is None,  # pyright: ignore[reportUnusedVariable]
     "IS_NOT_NULL": lambda left, right=None: left is not None,  # pyright: ignore[reportUnusedVariable]
 }
-
-
-# ---------------------------------------------------------------------------
-# FUNCTIONS — built-in function operators
-# ---------------------------------------------------------------------------
 
 
 def _length(args: List[Any]) -> int:
@@ -154,10 +135,6 @@ FUNCTIONS: dict[str, Any] = {
     "TRIM": _trim,
 }
 
-
-# ---------------------------------------------------------------------------
-# OPERATOR_INFO — metadata used by parser for grammar construction
-# ---------------------------------------------------------------------------
 
 OPERATOR_INFO: dict[str, OperatorInfo] = {
     # Comparison
@@ -221,11 +198,6 @@ OPERATOR_INFO: dict[str, OperatorInfo] = {
     ),
     "TRIM": OperatorInfo("TRIM", "TRIM", OperatorType.FUNCTION, 10, "none", 1, "Trim whitespace"),
 }
-
-
-# ---------------------------------------------------------------------------
-# Compatibility shims for parser.py
-# ---------------------------------------------------------------------------
 
 
 def list_operators(operator_type: Optional[OperatorType] = None) -> List[OperatorInfo]:

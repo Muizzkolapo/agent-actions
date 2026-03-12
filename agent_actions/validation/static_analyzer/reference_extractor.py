@@ -1,6 +1,4 @@
-"""
-Extract field references from action configurations.
-"""
+"""Extract field references from action configurations."""
 
 import re
 from typing import Any, Dict, List, Optional, Set
@@ -14,34 +12,7 @@ from .data_flow_graph import InputRequirement
 
 
 class ReferenceExtractor:
-    """Extracts field references from action prompts, guards, and directives.
-
-    Uses Jinja2's AST parser to properly handle:
-    - Variable references: {{ action.field }}
-    - Loop variables: {% for item in items %} - automatically excluded
-    - Nested expressions and filters
-
-    Also supports:
-    - Simple brace style: {action.field}
-    - Guard expressions: action.field > 5
-    - Context scope directives: action.field
-
-    Example:
-        extractor = ReferenceExtractor()
-
-        requirements = extractor.extract_from_agent({
-            'name': 'summarizer',
-            'prompt': 'Summarize: {{ action.extractor.summary }}',
-            'guard': 'extractor.count > 0',
-            'context_scope': {'observe': ['extractor.facts']}
-        })
-
-        for req in requirements:
-            print(f"{req.source_agent}.{req.field_path}")
-        # extractor.summary
-        # extractor.count
-        # extractor.facts
-    """
+    """Extracts field references from action prompts, guards, and directives."""
 
     # Matches {action.action_name.field} or {action_name.field} (simple brace style)
     SIMPLE_ACTION_PATTERN = re.compile(r"\{action\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
@@ -50,8 +21,6 @@ class ReferenceExtractor:
     # Matches dot notation in guards: action.field
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
     ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
-
-    # Use centralized SPECIAL_NAMESPACES from utils.constants
 
     # Jinja2 builtins to skip
     JINJA_BUILTINS = frozenset(
@@ -73,28 +42,18 @@ class ReferenceExtractor:
         self._env = Environment()
 
     def extract_from_agent(self, agent_config: Dict[str, Any]) -> List[InputRequirement]:
-        """Extract all field references from an action configuration.
-
-        Args:
-            agent_config: Action configuration dictionary
-
-        Returns:
-            List of InputRequirement objects
-        """
+        """Extract all field references from an action configuration."""
         requirements: List[InputRequirement] = []
         agent_name = agent_config.get("name", "unknown")
 
-        # Extract from prompt
         prompt = agent_config.get("prompt", "")
         if prompt:
             requirements.extend(self._extract_from_template(prompt, agent_name, "prompt"))
 
-        # Extract from guard
         guard = agent_config.get("guard")
         if guard:
             requirements.extend(self._extract_from_guard(guard, agent_name))
 
-        # Extract from context_scope directives
         context_scope = agent_config.get("context_scope", {})
         for directive, refs in context_scope.items():
             if isinstance(refs, list):
@@ -102,7 +61,6 @@ class ReferenceExtractor:
                     self._extract_from_context_scope(refs, agent_name, f"context_scope.{directive}")
                 )
 
-        # Extract from versions items_from
         versions = agent_config.get("versions", {})
         items_from = versions.get("items_from", "")
         if items_from:
@@ -110,7 +68,6 @@ class ReferenceExtractor:
                 self._extract_from_template(str(items_from), agent_name, "versions.items_from")
             )
 
-        # Extract from conditional_clause
         conditional = agent_config.get("conditional_clause", "")
         if conditional:
             requirements.extend(
@@ -125,15 +82,10 @@ class ReferenceExtractor:
         _agent_name: str,
         location: str,
     ) -> List[InputRequirement]:
-        """Extract references from Jinja2 template using AST parsing.
-
-        Uses Jinja2's AST to properly handle loop variables and nested expressions.
-        Falls back to simple brace pattern matching for non-Jinja syntax.
-        """
+        """Extract references from Jinja2 template using AST parsing."""
         requirements: List[InputRequirement] = []
         seen: Set[str] = set()
 
-        # Parse with Jinja2 AST to extract references properly
         jinja_refs = self._extract_jinja_references(template)
         for source, field, raw_ref in jinja_refs:
             ref_key = f"{source}.{field}"
@@ -148,7 +100,6 @@ class ReferenceExtractor:
                     )
                 )
 
-        # Also check simple brace patterns: {action.action_name.field} or {action_name.field}
         for match in self.SIMPLE_ACTION_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
@@ -182,14 +133,7 @@ class ReferenceExtractor:
         return requirements
 
     def _extract_jinja_references(self, template: str) -> List[tuple]:
-        """Extract variable references from Jinja2 template using AST.
-
-        Walks the AST to find all Getattr nodes (dot notation access)
-        and properly excludes loop variables defined in for-loops.
-
-        Returns:
-            List of (source, field, raw_reference) tuples
-        """
+        """Extract variable references from Jinja2 template using AST."""
         references: List[tuple] = []
 
         try:
@@ -198,7 +142,6 @@ class ReferenceExtractor:
             # If template has syntax errors, fall back to empty (simple patterns will catch it)
             return references
 
-        # Walk AST to find variable references
         self._walk_ast(ast, references, local_vars=set())
         return references
 
@@ -208,17 +151,9 @@ class ReferenceExtractor:
         references: List[tuple],
         local_vars: Set[str],
     ) -> None:
-        """Recursively walk AST to extract variable references.
-
-        Args:
-            node: Current AST node
-            references: List to append (source, field, raw_ref) tuples
-            local_vars: Set of locally-defined variable names (loop vars, etc.)
-        """
-        # Handle For loops - add loop variable to local_vars
+        """Recursively walk AST to extract variable references."""
         if isinstance(node, nodes.For):
             new_locals = local_vars.copy()
-            # Extract loop variable name(s)
             target = node.target
             if isinstance(target, nodes.Name):
                 new_locals.add(target.name)
@@ -227,52 +162,37 @@ class ReferenceExtractor:
                     if isinstance(item, nodes.Name):
                         new_locals.add(item.name)
 
-            # Walk child nodes with updated local_vars
             for child in node.iter_child_nodes():
                 self._walk_ast(child, references, new_locals)
             return
 
-        # Handle Getattr (dot notation): {{ action.field }}
         if isinstance(node, nodes.Getattr):
             ref = self._extract_getattr_chain(node)
             if ref:
                 source, field_path = ref
-                # Skip if source is a local variable, builtin, or "action" prefix
                 if source not in local_vars and source not in self.JINJA_BUILTINS:
-                    # Handle action.action_name.field -> (action_name, field)
                     if source == "action" and "." in field_path:
                         parts = field_path.split(".", 1)
                         source = parts[0]
                         field_path = parts[1]
                     raw_ref = f"{{{{ {source}.{field_path} }}}}"
                     references.append((source, field_path, raw_ref))
-            # Don't recurse into Getattr children - we already extracted the full chain
             return
 
-        # Recurse into child nodes
         for child in node.iter_child_nodes():
             self._walk_ast(child, references, local_vars)
 
     def _extract_getattr_chain(self, node: nodes.Getattr) -> Optional[tuple]:
-        """Extract the full attribute chain from a Getattr node.
-
-        Handles chains like: action.field.subfield -> ('action', 'field.subfield')
-
-        Returns:
-            (root_name, attribute_path) tuple or None if not a simple chain
-        """
+        """Extract the full attribute chain from a Getattr node."""
         attrs = [node.attr]
         current = node.node
 
-        # Walk up the chain collecting attributes
         while isinstance(current, nodes.Getattr):
             attrs.append(current.attr)
             current = current.node
 
-        # Root should be a Name node
         if isinstance(current, nodes.Name):
             root = current.name
-            # Reverse attrs to get correct order (we collected bottom-up)
             attrs.reverse()
             return (root, ".".join(attrs))
 
@@ -288,7 +208,6 @@ class ReferenceExtractor:
         requirements: List[InputRequirement] = []
 
         if isinstance(guard, str):
-            # String guard - extract dot notation references
             seen: Set[str] = set()
             action_spans = []
             for match in self.ACTION_DOT_PATTERN.finditer(guard):
@@ -314,7 +233,6 @@ class ReferenceExtractor:
                 field = match.group(2)
                 ref_key = f"{source}.{field}"
 
-                # Skip Python keywords and operators
                 if source in {"and", "or", "not", "in", "is", "True", "False", "None"}:
                     continue
 
@@ -329,7 +247,6 @@ class ReferenceExtractor:
                         )
                     )
         elif isinstance(guard, dict):
-            # Dict guard - check field references
             field = guard.get("field", "")
             field_value = str(field)
             if field_value.startswith("action."):
@@ -382,14 +299,7 @@ class ReferenceExtractor:
         return requirements
 
     def get_referenced_agents(self, requirements: List[InputRequirement]) -> Set[str]:
-        """Get set of all actions referenced (excluding special namespaces).
-
-        Args:
-            requirements: List of input requirements
-
-        Returns:
-            Set of action names that are referenced
-        """
+        """Get set of all actions referenced (excluding special namespaces)."""
         agents: Set[str] = set()
         for req in requirements:
             if req.source_agent not in SPECIAL_NAMESPACES:
@@ -400,14 +310,7 @@ class ReferenceExtractor:
         self,
         workflow_config: Dict[str, Any],
     ) -> Dict[str, List[InputRequirement]]:
-        """Extract references from all actions in a workflow.
-
-        Args:
-            workflow_config: Full workflow configuration
-
-        Returns:
-            Dict mapping action names to their input requirements
-        """
+        """Extract references from all actions in a workflow."""
         requirements: Dict[str, List[InputRequirement]] = {}
 
         actions = workflow_config.get("actions", [])

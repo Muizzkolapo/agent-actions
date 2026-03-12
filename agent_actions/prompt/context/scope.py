@@ -1,8 +1,4 @@
-"""
-Context Scope Processor - Field flow control for LLM context and output.
-
-Processes context_scope directives: static_data, observe, drop, passthrough.
-"""
+"""Field flow control for LLM context via context_scope directives."""
 # Line-too-long: Complex data transformations require descriptive variable names
 # Import-outside-toplevel: Avoid circular imports
 # Broad-exception-caught: Intentional fallback behavior for data processing

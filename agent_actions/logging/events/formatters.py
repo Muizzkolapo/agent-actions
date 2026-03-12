@@ -1,9 +1,4 @@
-"""
-Agent-actions specific event formatters.
-
-Custom formatters for structured console output of agent-actions events.
-These formatters produce clean, scannable output for the CLI.
-"""
+"""Agent-actions specific event formatters."""
 
 from __future__ import annotations
 
@@ -17,15 +12,7 @@ from agent_actions.logging.core._compat import RICH_AVAILABLE
 
 
 class AgentActionsFormatter:
-    """
-    Formatter for agent-actions events.
-
-    Produces structured console output:
-        10:30:45 | Running workflow my_workflow (5 agents)
-        10:30:46 | 1/5 OK extract_data in 12.34s (1700 tokens)
-        10:30:47 | 2/5 SKIP transform (cached)
-        10:31:00 | Completed in 15.00s | 4 OK | 1 SKIP | 0 ERROR
-    """
+    """Formats agent-actions events for structured console output."""
 
     # Status colors for Rich
     COLORS = {
@@ -38,30 +25,13 @@ class AgentActionsFormatter:
     }
 
     def __init__(self, show_timestamp: bool = True, use_color: bool = True) -> None:
-        """
-        Initialize the formatter.
-
-        Args:
-            show_timestamp: Include timestamps in output
-            use_color: Use Rich colors (if available)
-        """
         self.show_timestamp = show_timestamp
         self.use_color = use_color and RICH_AVAILABLE
 
     def format(self, event: BaseEvent) -> str:
-        """
-        Format an event for console output.
-
-        Args:
-            event: Event to format
-
-        Returns:
-            Formatted string for console display
-        """
-        # Route to specific formatter based on event type
+        """Format an event for console output."""
         event_type = event.event_type
 
-        # Workflow events
         if event_type == "WorkflowStartEvent":
             return self._format_workflow_start(event)
         elif event_type == "WorkflowCompleteEvent":
@@ -69,7 +39,6 @@ class AgentActionsFormatter:
         elif event_type == "WorkflowFailedEvent":
             return self._format_workflow_failed(event)
 
-        # Agent events
         elif event_type == "AgentStartEvent":
             return self._format_agent_start(event)
         elif event_type == "AgentCompleteEvent":
@@ -81,13 +50,11 @@ class AgentActionsFormatter:
         elif event_type == "AgentCachedEvent":
             return self._format_agent_cached(event)
 
-        # Batch events
         elif event_type == "BatchSubmittedEvent":
             return self._format_batch_submitted(event)
         elif event_type == "BatchCompleteEvent":
             return self._format_batch_complete(event)
 
-        # Default formatting
         else:
             return self._format_default(event)
 
@@ -110,7 +77,6 @@ class AgentActionsFormatter:
         return status
 
     def _format_workflow_start(self, event: BaseEvent) -> str:
-        """Format WorkflowStartEvent."""
         ts = self._timestamp(event)
         name = event.data.get("workflow_name", "")
         count = event.data.get("agent_count", 0)
@@ -124,7 +90,6 @@ class AgentActionsFormatter:
         )
 
     def _format_workflow_complete(self, event: BaseEvent) -> str:
-        """Format WorkflowCompleteEvent."""
         ts = self._timestamp(event)
         elapsed = event.data.get("elapsed_time", 0.0)
         completed = event.data.get("agents_completed", 0)
@@ -138,7 +103,6 @@ class AgentActionsFormatter:
         return f"{ts}Completed in {elapsed:.2f}s | {completed} {ok} | {skipped} {skip} | {failed} {err}"
 
     def _format_workflow_failed(self, event: BaseEvent) -> str:
-        """Format WorkflowFailedEvent."""
         ts = self._timestamp(event)
         name = event.data.get("workflow_name", "")
         error = event.data.get("error_message", "")
@@ -147,7 +111,6 @@ class AgentActionsFormatter:
         return f"{ts}{err_status} Workflow {name} failed: {error}"
 
     def _format_agent_start(self, event: BaseEvent) -> str:
-        """Format AgentStartEvent."""
         ts = self._timestamp(event)
         idx = event.data.get("agent_index", 0)
         total = event.data.get("total_agents", 0)
@@ -158,7 +121,6 @@ class AgentActionsFormatter:
         return f"{ts}{idx_str} {start} {name}"
 
     def _format_agent_complete(self, event: BaseEvent) -> str:
-        """Format AgentCompleteEvent."""
         ts = self._timestamp(event)
         idx = event.data.get("agent_index", 0)
         total = event.data.get("total_agents", 0)
@@ -172,7 +134,6 @@ class AgentActionsFormatter:
         return f"{ts}{idx_str} {ok} {name} in {time:.2f}s{token_str}"
 
     def _format_agent_skip(self, event: BaseEvent) -> str:
-        """Format AgentSkipEvent."""
         ts = self._timestamp(event)
         idx = event.data.get("agent_index", 0)
         total = event.data.get("total_agents", 0)
@@ -185,7 +146,6 @@ class AgentActionsFormatter:
         return f"{ts}{idx_str} {skip} {name}{reason_str}"
 
     def _format_agent_cached(self, event: BaseEvent) -> str:
-        """Format AgentCachedEvent."""
         ts = self._timestamp(event)
         idx = event.data.get("agent_index", 0)
         total = event.data.get("total_agents", 0)
@@ -196,7 +156,6 @@ class AgentActionsFormatter:
         return f"{ts}{idx_str} {cached} {name}"
 
     def _format_agent_failed(self, event: BaseEvent) -> str:
-        """Format AgentFailedEvent."""
         ts = self._timestamp(event)
         idx = event.data.get("agent_index", 0)
         total = event.data.get("total_agents", 0)
@@ -217,7 +176,6 @@ class AgentActionsFormatter:
         return msg
 
     def _format_batch_submitted(self, event: BaseEvent) -> str:
-        """Format BatchSubmittedEvent."""
         ts = self._timestamp(event)
         batch_id = event.data.get("batch_id", "")[:8]  # Truncate ID
         count = event.data.get("request_count", 0)
@@ -226,7 +184,6 @@ class AgentActionsFormatter:
         return f"{ts}Batch {batch_id} submitted: {count} requests to {provider}"
 
     def _format_batch_complete(self, event: BaseEvent) -> str:
-        """Format BatchCompleteEvent."""
         ts = self._timestamp(event)
         batch_id = event.data.get("batch_id", "")[:8]
         elapsed = event.data.get("elapsed_time", 0.0)
@@ -240,6 +197,5 @@ class AgentActionsFormatter:
         return f"{ts}Batch {batch_id} {status} in {elapsed:.2f}s"
 
     def _format_default(self, event: BaseEvent) -> str:
-        """Default event formatting."""
         ts = self._timestamp(event)
         return f"{ts}{event.message}"

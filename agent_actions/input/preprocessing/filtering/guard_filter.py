@@ -1,6 +1,4 @@
-"""
-Guard filter service.
-"""
+"""Guard filter service with AST-based evaluation, caching, and timeout protection."""
 
 import atexit
 import logging
@@ -60,17 +58,7 @@ class FilterItemRequest:
 
 
 class GuardFilter:
-    """
-    Guard filter with security, performance, and reliability improvements.
-
-    Features:
-    - AST-based evaluation instead of eval()
-    - Comprehensive input validation
-    - LRU caching for performance
-    - Timeout protection
-    - Detailed metrics collection
-    - Thread-safe operations
-    """
+    """Thread-safe guard filter with AST-based evaluation, caching, and timeout protection."""
 
     def __init__(
         self, cache_size: int = 1000, default_timeout: int = 5, enable_metrics: bool = True
@@ -83,7 +71,6 @@ class GuardFilter:
         if enable_metrics:
             self.metrics = FilterMetrics()
 
-        # Thread pool for timeout protection
         self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="guard_filter")
 
     def filter_item(self, request: FilterItemRequest) -> FilterResult:
@@ -92,7 +79,6 @@ class GuardFilter:
         timeout = request.timeout or self.default_timeout
 
         try:
-            # Submit evaluation to thread pool with timeout
             future = self.executor.submit(
                 self._evaluate_guard_condition, request.data, request.condition, request.functions
             )
@@ -101,7 +87,6 @@ class GuardFilter:
             execution_time = time.time() - start_time
 
             if self.enable_metrics:
-                # Cache hit will be determined in _evaluate_where_clause
                 self._update_metrics(True, execution_time, False)
 
             return FilterResult(success=True, matched=matched, execution_time=execution_time)
@@ -153,7 +138,6 @@ class GuardFilter:
         self, data: Dict[str, Any], condition: str, functions: Optional[Dict[str, Any]]
     ) -> bool:
         """Evaluate a guard condition against data."""
-        # Parse the guard condition (with caching)
         parse_result = self._parse_condition_cached(condition)
 
         if not parse_result.success:
@@ -161,7 +145,6 @@ class GuardFilter:
             logger.warning("Failed to parse guard condition: %s", error_msg)
             raise ValueError(f"Parse error: {error_msg}")
 
-        # Evaluate the AST
         return parse_result.ast.evaluate(data, functions)
 
     def _update_metrics(self, success: bool, execution_time: float, cache_hit: bool):
@@ -182,7 +165,6 @@ class GuardFilter:
         else:
             self.metrics.cache_misses += 1
 
-        # Update average
         self.metrics.average_execution_time = (
             self.metrics.total_execution_time / self.metrics.total_evaluations
         )
@@ -216,7 +198,7 @@ class GuardFilter:
         self.executor.shutdown(wait=True)
 
 
-# Global guard filter instance for convenience
+# Global singleton
 _GLOBAL_GUARD_FILTER = None
 
 

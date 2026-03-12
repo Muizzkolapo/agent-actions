@@ -1,8 +1,4 @@
-"""
-Error handling utilities.
-
-This module provides common utilities for handling errors in a consistent way.
-"""
+"""Common error handling utilities for consistent error wrapping and logging."""
 
 import logging
 from pathlib import Path
@@ -29,16 +25,7 @@ class ErrorHandler:
 
     @staticmethod
     def format_for_user(error: Exception, context: Optional[Dict[str, Any]] = None) -> str:
-        """
-        Format error using user-friendly system.
-
-        Args:
-            error: The exception to format
-            context: Optional context dict
-
-        Returns:
-            User-friendly formatted error message
-        """
+        """Format an error into a user-friendly message."""
         return format_user_error(error, context)
 
     @staticmethod
@@ -48,21 +35,9 @@ class ErrorHandler:
         error_type: Optional[Type[T]] = None,
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Handle an error by logging it and raising an appropriate exception.
-
-        Args:
-            error: The original exception.
-            message: Error message to use.
-            error_type: Optional type of exception to raise.
-            context: Optional additional context to log.
-
-        Raises:
-            The specified error type or AgentActionsException if not specified.
-        """
+        """Log and re-raise as *error_type* (or AgentActionsException)."""
         error_details = {"error": get_error_detail(error), **(context or {})}
-        # Only log at DEBUG level (to avoid duplicate error logs)
-        # The top-level error handler (main.py) will log at ERROR level
+        # DEBUG only; the top-level handler (main.py) logs at ERROR
         logger.debug("%s: %s", message, get_error_detail(error), extra=error_details)
         if error_type:
             raise error_type(f"{message}: {get_error_detail(error)}", context=context, cause=error)
@@ -75,17 +50,7 @@ class ErrorHandler:
     def handle_validation_error(
         error: Exception, target: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Handle a validation error.
-
-        Args:
-            error: The original exception.
-            target: Name of the target being validated.
-            context: Optional additional context to log.
-
-        Raises:
-            ValidationError: With appropriate message.
-        """
+        """Re-raise as ValidationError for the given *target*."""
         message = f"Validation failed for {target}"
         ErrorHandler.handle_error(error, message, ValidationError, context)
 
@@ -96,18 +61,7 @@ class ErrorHandler:
         path: Union[str, Path],
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Handle a file operation error.
-
-        Args:
-            error: The original exception.
-            operation: Name of the operation that failed.
-            path: Path being operated on.
-            context: Optional additional context to log.
-
-        Raises:
-            FileLoadError or FileSystemError: With appropriate message.
-        """
+        """Re-raise as FileLoadError or FileSystemError."""
 
         if isinstance(error, FileNotFoundError):
             error_type = FileLoadError
@@ -122,18 +76,7 @@ class ErrorHandler:
     def handle_config_error(
         error: Exception, operation: str, config_name: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Handle a configuration error.
-
-        Args:
-            error: The original exception.
-            operation: Name of the operation that failed.
-            config_name: Name of the configuration.
-            context: Optional additional context to log.
-
-        Raises:
-            ConfigurationError: With appropriate message.
-        """
+        """Re-raise as ConfigurationError for the given *config_name*."""
 
         message = f"Configuration operation '{operation}' failed for {config_name}"
         ErrorHandler.handle_error(error, message, ConfigurationError, context)
@@ -145,18 +88,7 @@ class ErrorHandler:
         template_name: str,
         context: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Handle a template rendering error.
-
-        Args:
-            error: The original exception.
-            operation: Name of the operation that failed.
-            template_name: Name of the template.
-            context: Optional additional context to log.
-
-        Raises:
-            TemplateRenderingError: With appropriate message.
-        """
+        """Re-raise as TemplateRenderingError for the given *template_name*."""
 
         message = f"Template operation '{operation}' failed for {template_name}"
         ErrorHandler.handle_error(error, message, TemplateRenderingError, context)
@@ -165,18 +97,7 @@ class ErrorHandler:
     def handle_execution_error(
         error: Exception, operation: str, target: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        Handle an execution error.
-
-        Args:
-            error: The original exception.
-            operation: Name of the operation that failed.
-            target: Name of the target being executed.
-            context: Optional additional context to log.
-
-        Raises:
-            AgentExecutionError: With appropriate message.
-        """
+        """Re-raise as AgentExecutionError for the given *target*."""
 
         message = f"Execution of '{operation}' failed for {target}"
         ErrorHandler.handle_error(error, message, AgentExecutionError, context)

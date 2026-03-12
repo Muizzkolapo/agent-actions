@@ -1,11 +1,4 @@
-"""Batch retry service for missing record recovery and reprompt validation.
-
-Extracted from BatchProcessingService to follow Single Responsibility Principle.
-Handles:
-- Retry loop for missing batch records
-- Reprompt validation with feedback-appended resubmission
-- Non-blocking batch submission for async recovery (#942)
-"""
+"""Batch retry service for missing record recovery and reprompt validation."""
 
 import logging
 import time
@@ -29,11 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class BatchRetryService:
-    """Handles retry and reprompt logic for batch processing.
-
-    Extracted from BatchProcessingService to reduce its size and isolate
-    retry-specific concerns.
-    """
+    """Handles retry and reprompt logic for batch processing."""
 
     def __init__(
         self,

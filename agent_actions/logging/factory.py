@@ -16,24 +16,7 @@ if TYPE_CHECKING:
 
 
 class LoggerFactory:
-    """
-    Centralized logging factory using event-based architecture.
-
-    All logging flows through the EventManager:
-    - Python logging (logger.info()) → LoggingBridgeHandler → Events
-    - Direct events (fire_event()) → Events
-    - Events → Handlers (Console, JSON, run_results.json)
-
-    Example:
-        >>> LoggerFactory.initialize()
-        >>> logger = LoggerFactory.get_logger('my_module')
-        >>> logger.info('Hello world')  # → Becomes an event
-
-    Or use events directly:
-        >>> from agent_actions.logging import fire_event
-        >>> from agent_actions.logging.events import WorkflowStartEvent
-        >>> fire_event(WorkflowStartEvent(workflow_name="test"))
-    """
+    """Centralized logging factory routing all output through EventManager."""
 
     _initialized: bool = False
     _config: Optional[LoggingConfig] = None
@@ -52,35 +35,12 @@ class LoggerFactory:
         quiet: bool = False,
         force: bool = False,
     ) -> "EventManager":
-        """
-        Initialize the unified logging system.
-
-        This sets up:
-        - EventManager as the central dispatcher
-        - LoggingBridgeHandler to convert Python logging to events
-        - ConsoleEventHandler for user-facing output
-        - JSONFileHandler for debug logs
-        - RunResultsCollector for run_results.json artifact
-
-        Args:
-            config: LoggingConfig instance. If None, uses defaults from environment.
-            output_dir: Directory for run_results.json and event logs
-            workflow_name: Name of the workflow being executed
-            invocation_id: Unique ID for this invocation (generated if not provided)
-            verbose: Show DEBUG level events on console
-            quiet: Only show WARN and ERROR events on console
-            force: Reinitialize even if already initialized
-
-        Returns:
-            The initialized EventManager instance
-        """
+        """Initialize the unified logging system and return the EventManager."""
         if cls._initialized and not force:
             return cls._event_manager  # type: ignore
 
-        # Load config
         cls._config = config or LoggingConfig.from_environment()
 
-        # Determine log levels from config and flags
         if verbose or cls._config.default_level == "DEBUG":
             console_level_str = "DEBUG"
         elif quiet:
@@ -88,7 +48,6 @@ class LoggerFactory:
         else:
             console_level_str = cls._config.default_level
 
-        # Import event system components
         from agent_actions.logging.core import (
             ConsoleEventHandler,
             EventLevel,
@@ -99,7 +58,6 @@ class LoggerFactory:
         from agent_actions.logging.events import AgentActionsFormatter
         from agent_actions.logging.events.handlers import RunResultsCollector
 
-        # Get or create event manager
         manager = EventManager.get()
         cls._event_manager = manager
 
@@ -128,11 +86,8 @@ class LoggerFactory:
                     manager.register(handler)
             raise
 
-        # Setup Python logging bridge
-        # This converts all logger.* calls to events
         cls._setup_logging_bridge()
 
-        # Mark as initialized
         manager.initialize()
         cls._initialized = True
 
@@ -159,17 +114,14 @@ class LoggerFactory:
         from agent_actions.logging.events import AgentActionsFormatter
         from agent_actions.logging.events.handlers import RunResultsCollector
 
-        # Generate invocation ID if not provided
         if not invocation_id:
             invocation_id = str(uuid.uuid4())[:8]
 
-        # Set context
         manager.set_context(
             invocation_id=invocation_id,
             workflow_name=workflow_name,
         )
 
-        # Map string level to EventLevel
         level_map = {
             "DEBUG": EventLevel.DEBUG,
             "INFO": EventLevel.INFO,
@@ -179,13 +131,10 @@ class LoggerFactory:
         }
         console_level = level_map.get(console_level_str.upper(), EventLevel.INFO)
 
-        # Create formatter for agent-actions specific events
         formatter = AgentActionsFormatter(show_timestamp=True, use_color=True)
 
-        # Register console handler (user-facing)
-        # Shows workflow/agent/batch events by default, all in verbose mode
         if verbose:
-            categories = None  # Show all categories in verbose mode
+            categories = None
         else:
             categories = {"workflow", "agent", "batch"}
 
@@ -197,7 +146,6 @@ class LoggerFactory:
         )
         manager.register(console_handler)
 
-        # Register JSON file handler for debug logs
         if output_dir:
             output_path = Path(output_dir)
             log_file = output_path / "target" / "events.json"
@@ -208,18 +156,14 @@ class LoggerFactory:
             )
             manager.register(json_handler)
 
-            # Register error-only JSON handler
             errors_file = output_path / "target" / "errors.json"
             errors_handler = JSONFileHandler(
                 file_path=errors_file,
                 min_level=EventLevel.ERROR,
-                buffer_size=1,  # flush immediately for errors
+                buffer_size=1,
             )
             manager.register(errors_handler)
         elif config.file_handler.enabled:
-            # Use configured log file path
-            # NOTE: errors.json is only written when output_dir is provided (workflow runs).
-            # Config-based file handler path does not get a separate errors.json.
             log_file_path = cls._get_log_file_path()
             if log_file_path:
                 json_handler = JSONFileHandler(
@@ -229,7 +173,6 @@ class LoggerFactory:
                 )
                 manager.register(json_handler)
 
-        # Register run results collector
         run_results = RunResultsCollector(
             output_dir=output_dir,
             workflow_name=workflow_name,
@@ -239,29 +182,19 @@ class LoggerFactory:
 
     @classmethod
     def _setup_logging_bridge(cls) -> None:
-        """
-        Setup Python logging to route through events.
-
-        Attaches LoggingBridgeHandler to the root agent_actions logger,
-        converting all logging calls to events.
-        """
+        """Attach LoggingBridgeHandler to the root agent_actions logger."""
         from agent_actions.logging.core.handlers import LoggingBridgeHandler
 
-        # Get root logger for agent_actions
         root_logger = logging.getLogger(cls._root_logger_name)
 
-        # Clear existing handlers
         root_logger.handlers.clear()
 
-        # Set level to DEBUG so bridge receives everything
-        # The event handlers will filter by level
+        # Event handlers will filter by level
         root_logger.setLevel(logging.DEBUG)
 
-        # Add the bridge handler
         bridge = LoggingBridgeHandler(level=logging.DEBUG)
         root_logger.addHandler(bridge)
 
-        # Prevent propagation to avoid duplicate messages
         root_logger.propagate = False
 
     @classmethod
@@ -273,12 +206,10 @@ class LoggerFactory:
         if cls._config.file_handler.path:
             return Path(cls._config.file_handler.path)
 
-        # Try project root
         project_root = cls._get_project_root()
         if project_root:
             return project_root / "logs" / "events.json"
 
-        # Fallback to home directory
         return Path.home() / ".agent-actions" / "logs" / "events.json"
 
     @classmethod
@@ -292,21 +223,10 @@ class LoggerFactory:
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
-        """
-        Get a logger with the given name.
-
-        The logger's output will flow through the event system.
-
-        Args:
-            name: Logger name. Will be prefixed with 'agent_actions.' if needed.
-
-        Returns:
-            Configured logging.Logger instance.
-        """
+        """Get a logger under the agent_actions namespace."""
         if not cls._initialized:
             cls.initialize()
 
-        # Ensure logger is under agent_actions namespace
         if not name.startswith(cls._root_logger_name):
             name = f"{cls._root_logger_name}.{name}"
 
@@ -351,13 +271,11 @@ class LoggerFactory:
         cls._event_manager = None
         cls._run_results_collector = None
 
-        # Clear handlers from root logger
         root_logger = logging.getLogger(cls._root_logger_name)
         root_logger.handlers.clear()
         for f in root_logger.filters[:]:
             root_logger.removeFilter(f)
 
-        # Reset event manager
         from agent_actions.logging.core import EventManager
 
         EventManager.reset()
@@ -386,20 +304,7 @@ class LoggerFactory:
 
     @classmethod
     def enable_context_debug(cls) -> "ContextDebugHandler":
-        """
-        Enable and return the context debug handler.
-
-        This handler collects context-related events during workflow execution
-        and provides a summary display for the --debug-context flag.
-
-        Returns:
-            The ContextDebugHandler instance
-
-        Example:
-            >>> handler = LoggerFactory.enable_context_debug()
-            >>> # ... workflow execution ...
-            >>> handler.display_summary()
-        """
+        """Enable and return the context debug handler for --debug-context."""
         if not cls._initialized:
             cls.initialize()
 

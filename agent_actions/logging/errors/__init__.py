@@ -17,21 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) -> str:
-    """
-    Convert any exception to a user-friendly error message.
-
-    This is the main entry point for error formatting. It logs the full
-    exception for debugging while returning a clean message for users.
-
-    Args:
-        exc: The exception to format
-        context: Optional context dict with keys like 'agent', 'file_path', etc.
-
-    Returns:
-        User-friendly error message string
-    """
-    # Only log at DEBUG level to avoid duplicate error messages
-    # (The caller should log at ERROR level if needed)
+    """Convert any exception to a user-friendly error message string."""
     logger.debug(
         "Formatting user error: %s",
         safe_get_exception_message(exc),

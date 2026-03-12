@@ -1,6 +1,4 @@
-"""
-Base batch client interface for batch processing systems.
-"""
+"""Base batch client interface for batch processing systems."""
 
 import functools
 import logging
@@ -64,32 +62,14 @@ class BatchResult:
 
 
 class BaseBatchClient(ABC):
-    """
-    Abstract base class for batch processing clients.
-
-    This interface defines the contract that all batch clients must implement
-    to integrate with the agent-actions batch processing system.
-    """
+    """Abstract base class for batch processing clients."""
 
     _configured_model: Optional[str] = None
 
     def prepare_tasks(
         self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
-        """
-        Convert agent-actions data format to provider-specific task format (Template Method).
-
-        This template method provides the common implementation for all providers.
-        Providers only need to implement _get_default_model() and optionally
-        _get_default_temperature().
-
-        Args:
-            data: List of data items to process, each containing target_id and content
-            agent_config: Agent configuration including model_name, prompt, schema_name, etc.
-
-        Returns:
-            List of provider-specific task dictionaries ready for submission
-        """
+        """Convert agent-actions data format to provider-specific task format (Template Method)."""
         self._configured_model = agent_config.get("model_name", self._get_default_model())
 
         tasks = []
@@ -115,89 +95,25 @@ class BaseBatchClient(ABC):
 
     @abstractmethod
     def _get_default_model(self) -> str:
-        """
-        Return provider's default model name.
-
-        Subclasses MUST implement this to specify their default model.
-
-        Returns:
-            Default model name for this provider
-        """
+        """Return provider's default model name."""
 
     def _get_default_temperature(self) -> float:
-        """
-        Return provider's default temperature.
-
-        Subclasses MAY override this. Default is 0.1.
-
-        Returns:
-            Default temperature for this provider
-        """
+        """Return provider's default temperature (0.1)."""
         return 0.1
 
     @abstractmethod
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """
-        Transform standardized BatchTask to provider-specific format.
-
-        This method handles the conversion from our internal representation
-        to whatever format the provider's API expects.
-
-        Args:
-            batch_task: Standardized BatchTask object
-            schema: Optional compiled schema for structured output
-
-        Returns:
-            Provider-specific task dictionary
-
-        Example:
-            BatchTask(custom_id="123", prompt="...", user_content="...")
-
-            OpenAI expects:
-            {
-                "custom_id": "123",
-                "method": "POST",
-                "url": "/v1/chat/completions",
-                "body": {"messages": [...]}
-            }
-
-            Another provider might expect:
-            {
-                "id": "123",
-                "request": {
-                    "prompt": "...",
-                    "input": "..."
-                }
-            }
-        """
+        """Transform standardized BatchTask to provider-specific format."""
 
     def submit_batch(
         self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str] = None
     ) -> Tuple[str, str]:
-        """
-        Submit a batch job to the provider (Template Method).
-
-        This template method provides the common workflow:
-        1. Get batch directory
-        2. Prepare input file in provider-specific format
-        3. Submit to provider API
-
-        Providers implement:
-        - _prepare_batch_input_file() - Write tasks to file
-        - _submit_to_provider_api() - Call provider API
-
-        Args:
-            tasks: List of provider-specific tasks from prepare_tasks()
-            batch_name: Name for the batch job
-            output_directory: Optional directory for storing batch-related files
+        """Submit a batch job to the provider (Template Method).
 
         Returns:
-            Tuple of (batch_id, initial_status) where:
-            - batch_id: Provider-specific batch job ID
-            - initial_status: Initial status from provider
-              (e.g., 'in_progress', 'completed', 'submitted')
+            Tuple of (batch_id, initial_status)
         """
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
@@ -205,18 +121,7 @@ class BaseBatchClient(ABC):
         return self._submit_to_provider_api(input_file, batch_name)
 
     def check_status(self, batch_id: str) -> str:
-        """
-        Check the status of a batch job (Template Method).
-
-        This template method provides common error handling and status normalization.
-        Providers implement _fetch_status() and _normalize_status() hooks.
-
-        Args:
-            batch_id: Provider-specific batch job ID
-
-        Returns:
-            Normalized status string (e.g., 'validating', 'in_progress', 'completed', 'failed')
-        """
+        """Check the status of a batch job (Template Method)."""
         try:
             raw_status = self._fetch_status(batch_id)
             return self._normalize_status(raw_status)
@@ -226,55 +131,16 @@ class BaseBatchClient(ABC):
 
     @abstractmethod
     def _fetch_status(self, batch_id: str) -> str:
-        """
-        Fetch raw status from provider API.
-
-        Subclasses MUST implement this to call their provider's status API.
-
-        Args:
-            batch_id: Provider-specific batch job ID
-
-        Returns:
-            Raw status string from provider
-        """
+        """Fetch raw status from provider API."""
 
     @abstractmethod
     def _normalize_status(self, raw_status: str) -> str:
-        """
-        Normalize provider-specific status to standard format.
-
-        Subclasses MUST implement this to map their provider's status values
-        to our standard set: 'in_progress', 'completed', 'failed', 'cancelled', etc.
-
-        Args:
-            raw_status: Raw status from provider
-
-        Returns:
-            Normalized status string
-        """
+        """Normalize provider-specific status to standard format."""
 
     def retrieve_results(
         self, batch_id: str, output_directory: Optional[str] = None
     ) -> List[BatchResult]:
-        """
-        Retrieve and parse results from a completed batch job (Template Method).
-
-        This template method provides the common workflow:
-        1. Fetch raw results from provider API (with retry)
-        2. Optionally write results to file
-        3. Parse results to BatchResult format
-
-        Providers implement:
-        - _fetch_raw_results() - Call provider API to get results
-        - _get_result_file_name() - Specify result file naming
-
-        Args:
-            batch_id: Provider-specific batch job ID
-            output_directory: Optional directory for caching results
-
-        Returns:
-            List of BatchResult objects containing the processed results
-        """
+        """Retrieve and parse results from a completed batch job (Template Method)."""
         # Fetch raw results with retry
         logger.info("Retrieving results for batch %s...", batch_id)
 
@@ -311,32 +177,7 @@ class BaseBatchClient(ABC):
         return batch_results
 
     def parse_provider_response(self, raw_response: Any) -> BatchResult:
-        """
-        Transform provider-specific response format to standardized BatchResult (Template Method).
-
-        This template method provides the common workflow:
-        1. Extract custom_id
-        2. Check for errors first
-        3. Extract content, metadata, and usage if successful
-
-        Providers implement:
-        - _extract_custom_id() - Get request ID from response
-        - _extract_error_from_response() - Check for error conditions
-        - _extract_content_from_response() - Get main response content
-        - _extract_metadata_from_response() - Get provider metadata
-        - _extract_usage_from_response() - Get token usage info
-
-        Args:
-            raw_response: Provider-specific response object/dict
-
-        Returns:
-            Standardized BatchResult object
-
-        Example:
-            OpenAI returns: {"custom_id": "123", "response": {"body": {"choices": [...]}}}
-            Another provider returns: {"id": "123", "result": {"data": "..."}}
-            Both get transformed to: BatchResult(custom_id="123", content={...}, success=True)
-        """
+        """Transform provider-specific response to standardized BatchResult (Template Method)."""
         # Extract custom_id
         custom_id = self._extract_custom_id(raw_response)
 
@@ -364,102 +205,31 @@ class BaseBatchClient(ABC):
         )
 
     def _extract_custom_id(self, raw_response: Any) -> str:
-        """
-        Extract custom_id from response (Helper Method).
-
-        Provides default implementation using _get_attribute_or_key helper.
-        Providers can override if needed.
-
-        Args:
-            raw_response: Provider-specific response
-
-        Returns:
-            Custom ID string, or 'unknown' if not found
-        """
+        """Extract custom_id from response, defaulting to 'unknown'."""
         return self._get_attribute_or_key(raw_response, "custom_id", "unknown")
 
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
-        """
-        Extract error message from response.
-
-        Subclasses MUST implement this to check for error conditions.
-
-        Args:
-            raw_response: Provider-specific response
-
-        Returns:
-            Error message string if error exists, None otherwise
-        """
+        """Extract error message from response, or None if no error."""
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:
-        """
-        Extract main content from successful response.
-
-        Subclasses MUST implement this to get the actual response content.
-
-        Args:
-            raw_response: Provider-specific response
-
-        Returns:
-            Content (can be dict, str, list, etc.)
-        """
+        """Extract main content from successful response."""
 
     @abstractmethod
     def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
-        """
-        Extract metadata from response.
-
-        Subclasses MUST implement this to get provider-specific metadata
-        (model name, finish_reason, etc.).
-
-        Args:
-            raw_response: Provider-specific response
-
-        Returns:
-            Metadata dictionary
-        """
+        """Extract metadata from response (model name, finish_reason, etc.)."""
 
     @abstractmethod
     def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
-        """
-        Extract usage information from response.
-
-        Subclasses MUST implement this to get token usage data.
-
-        Args:
-            raw_response: Provider-specific response
-
-        Returns:
-            Usage dictionary with token counts, or None if not available
-        """
+        """Extract token usage information from response."""
 
     def get_supported_models(self) -> List[str]:
-        """
-        Get list of model names supported by this provider.
-
-        Returns:
-            List of supported model names
-        """
+        """Get list of model names supported by this provider."""
         return []
 
     def validate_config(self, agent_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
-        """
-        Validate that the agent configuration is compatible with this provider (Template Method).
-
-        This template method provides common validation for all providers.
-        Providers can implement _validate_provider_specific_config() for additional checks.
-
-        Model validation is delegated to the API provider itself, which will
-        return appropriate errors for invalid model names.
-
-        Args:
-            agent_config: Agent configuration to validate
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
+        """Validate agent configuration compatibility with this provider (Template Method)."""
         if not agent_config:
             return (False, "agent_config is required")
 
@@ -468,32 +238,11 @@ class BaseBatchClient(ABC):
     def _validate_provider_specific_config(
         self, _agent_config: Dict[str, Any]
     ) -> Tuple[bool, Optional[str]]:
-        """
-        Perform provider-specific configuration validation.
-
-        Subclasses MAY override this for additional provider-specific validation.
-        Default implementation accepts all configurations.
-
-        Args:
-            _agent_config: Agent configuration to validate
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
+        """Perform provider-specific configuration validation. Override for custom checks."""
         return (True, None)
 
     def _get_batch_directory(self, output_directory: Optional[str] = None) -> Path:
-        """
-        Get or create the batch directory.
-
-        This is OUR code - all providers use the same directory structure.
-
-        Args:
-            output_directory: Optional output directory
-
-        Returns:
-            Path to batch directory
-        """
+        """Get or create the batch directory."""
         from agent_actions.utils.path_utils import ensure_directory_exists
 
         if output_directory:
@@ -506,20 +255,7 @@ class BaseBatchClient(ABC):
     def _write_jsonl_file(
         self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str, provider_name: str
     ) -> Path:
-        """
-        Write tasks to JSONL file.
-
-        This is OUR code - we chose JSONL format for consistency across providers.
-
-        Args:
-            tasks: List of task dictionaries
-            batch_dir: Directory to write to
-            batch_name: Base name for the file
-            provider_name: Provider name for file suffix (e.g., "openai", "ollama")
-
-        Returns:
-            Path to created file
-        """
+        """Write tasks to JSONL file."""
         file_name = f"{Path(batch_name).stem}_{provider_name}_batch_input.jsonl"
         file_path = batch_dir / file_name
         with open(file_path, "w", encoding="utf-8") as file:
@@ -529,17 +265,7 @@ class BaseBatchClient(ABC):
         return file_path
 
     def _read_jsonl_file(self, file_path: Path) -> List[BatchResult]:
-        """
-        Read JSONL file and parse to BatchResults.
-
-        This is OUR code - we handle JSONL parsing the same way everywhere.
-
-        Args:
-            file_path: Path to JSONL file
-
-        Returns:
-            List of BatchResult objects
-        """
+        """Read JSONL file and parse to BatchResults."""
         if not file_path.exists():
             from agent_actions.errors import (
                 VendorAPIError,
@@ -574,17 +300,7 @@ class BaseBatchClient(ABC):
     def _add_optional_param(
         self, target: Dict[str, Any], key: str, value: Any, default: Any = None
     ) -> None:
-        """
-        Add parameter to target dict only if value is not None.
-
-        This is OUR code - standardizes optional parameter handling across providers.
-
-        Args:
-            target: Dict to add parameter to
-            key: Parameter key
-            value: Parameter value (only added if not None)
-            default: Default value to use if value is None and this is provided
-        """
+        """Add parameter to target dict only if value is not None."""
         if value is not None:
             target[key] = value
         elif default is not None:

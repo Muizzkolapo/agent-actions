@@ -20,15 +20,7 @@ from agent_actions.validation.static_analyzer import (
 
 
 class WorkflowSchemaService:
-    """Single source of truth for workflow schema analysis.
-
-    Wraps WorkflowStaticAnalyzer and converts its data structures
-    to the unified ActionSchema model.
-
-    Attributes:
-        workflow_name: Name of the workflow being analyzed
-        analyzer: Underlying WorkflowStaticAnalyzer instance
-    """
+    """Single source of truth for workflow schema analysis."""
 
     def __init__(
         self,
@@ -38,15 +30,6 @@ class WorkflowSchemaService:
         project_root: Optional[Any] = None,
         schema_dir: Optional[Any] = None,
     ):
-        """Initialize the schema service.
-
-        Args:
-            workflow_config: Parsed workflow configuration dictionary
-            udf_registry: UDF_REGISTRY for tool schema lookup
-            schema_loader: SchemaLoader for external schema loading
-            project_root: Project root for scanning tool functions
-            schema_dir: Path to schema directory for external schemas
-        """
         self._config = workflow_config
         self.workflow_name = workflow_config.get("name", "unknown")
         self._analyzer = WorkflowStaticAnalyzer(
@@ -61,18 +44,11 @@ class WorkflowSchemaService:
 
     @property
     def graph(self) -> DataFlowGraph:
-        """Get the data flow graph."""
+        """Return the data flow graph."""
         return self._analyzer.get_graph()
 
     def get_action_schema(self, action_name: str) -> Optional[ActionSchema]:
-        """Get unified schema for a single action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            ActionSchema if action exists, None otherwise
-        """
+        """Return the ActionSchema for action_name, or None if it does not exist."""
         if action_name in self._schemas:
             return self._schemas[action_name]
 
@@ -85,32 +61,20 @@ class WorkflowSchemaService:
         return schema
 
     def get_all_schemas(self) -> dict[str, ActionSchema]:
-        """Get schemas for all actions.
-
-        Returns:
-            Dictionary mapping action names to their schemas
-        """
+        """Return schemas for all actions."""
         for name in self.graph.nodes:
             if not self.graph.is_special_namespace(name):
                 self.get_action_schema(name)
         return self._schemas
 
     def validate(self) -> StaticValidationResult:
-        """Run static validation on the workflow.
-
-        Returns:
-            StaticValidationResult with errors and warnings
-        """
+        """Run static validation on the workflow."""
         if self._validation_result is None:
             self._validation_result = self._analyzer.analyze()
         return self._validation_result
 
     def get_execution_order(self) -> list[str]:
-        """Get topological execution order of actions.
-
-        Returns:
-            List of action names in execution order (excludes special namespaces)
-        """
+        """Return topological execution order of actions, excluding special namespaces."""
         try:
             order = self.graph.topological_sort()
         except ValueError:
@@ -119,23 +83,12 @@ class WorkflowSchemaService:
         return [name for name in order if not self.graph.is_special_namespace(name)]
 
     def get_downstream_actions(self, action_name: str) -> list[str]:
-        """Get actions that depend on the given action.
-
-        Args:
-            action_name: Name of the action
-
-        Returns:
-            List of action names that depend on this action
-        """
+        """Return sorted list of action names that depend on action_name."""
         downstream_nodes = self.graph.get_downstream_nodes(action_name)
         return sorted(node.name for node in downstream_nodes)
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert full analysis to dictionary for JSON serialization.
-
-        Returns:
-            Dictionary with workflow name, schemas, execution order, and validation
-        """
+        """Convert full analysis to dictionary for JSON serialization."""
         validation = self.validate()
         return {
             "workflow_name": self.workflow_name,
@@ -146,15 +99,7 @@ class WorkflowSchemaService:
         }
 
     def _build_action_schema(self, node: DataFlowNode) -> ActionSchema:
-        """Build ActionSchema from a DataFlowNode.
-
-        Args:
-            node: DataFlowNode from the graph
-
-        Returns:
-            ActionSchema with unified field representation
-        """
-        # Build upstream references from input requirements
+        """Build ActionSchema from a DataFlowNode."""
         upstream_refs = [
             UpstreamReference(
                 source_agent=req.source_agent,
@@ -165,7 +110,6 @@ class WorkflowSchemaService:
             for req in node.input_requirements
         ]
 
-        # Build input fields (for tools with TypedDict input)
         input_fields = []
         if node.input_schema:
             for field_name in node.input_schema.required_fields:
@@ -185,7 +129,6 @@ class WorkflowSchemaService:
                     )
                 )
 
-        # Build output fields with source tracking
         output_fields = []
         out = node.output_schema
 
@@ -216,10 +159,8 @@ class WorkflowSchemaService:
                 )
             )
 
-        # Find downstream actions
         downstream = self.get_downstream_actions(node.name)
 
-        # Determine is_template_based from input_schema
         is_template_based = False
         if node.input_schema:
             is_template_based = node.input_schema.is_template_based

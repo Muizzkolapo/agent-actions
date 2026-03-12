@@ -1,10 +1,4 @@
-"""
-Event manager for centralized event dispatching.
-
-The EventManager is a singleton that receives all events via fire_event()
-and routes them to registered handlers. This is the central hub of the
-logging system.
-"""
+"""Singleton event manager for centralized event dispatching."""
 
 from __future__ import annotations
 
@@ -37,27 +31,13 @@ def _atexit_flush() -> None:
 
 
 class EventManager:
-    """
-    Singleton event dispatcher.
-
-    The EventManager maintains a registry of handlers and dispatches events
-    to all handlers that accept them. It also manages shared context
-    (invocation_id, correlation_id) that gets injected into all events.
-
-    Usage:
-        manager = EventManager.get()
-        manager.register(ConsoleHandler())
-        manager.set_context(invocation_id="abc123")
-
-        # From anywhere in the app:
-        fire_event(MyEvent(message="Hello"))
-    """
+    """Singleton event dispatcher that routes events to registered handlers."""
 
     _instance: EventManager | None = None
     _lock: threading.Lock = threading.Lock()
 
     def __init__(self) -> None:
-        """Initialize the event manager. Use get() instead of direct instantiation."""
+        """Initialize the event manager; prefer get() for singleton access."""
         global _atexit_registered
 
         self._handlers: list[EventHandler] = []
@@ -80,14 +60,7 @@ class EventManager:
 
     @classmethod
     def get(cls) -> EventManager:
-        """
-        Get the singleton EventManager instance.
-
-        Thread-safe lazy initialization.
-
-        Returns:
-            The global EventManager instance
-        """
+        """Get the singleton EventManager instance (thread-safe)."""
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -96,11 +69,7 @@ class EventManager:
 
     @classmethod
     def reset(cls) -> None:
-        """
-        Reset the singleton instance.
-
-        Primarily used for testing. Flushes existing handlers before reset.
-        """
+        """Reset the singleton instance (for testing)."""
         with cls._lock:
             if cls._instance is not None:
                 cls._instance.flush()
@@ -120,61 +89,28 @@ class EventManager:
         return self._initialized
 
     def register(self, handler: EventHandler) -> None:
-        """
-        Register an event handler.
-
-        Handlers receive events that pass their accepts() filter.
-
-        Args:
-            handler: Handler implementing the EventHandler protocol
-        """
+        """Register an event handler."""
         with self._fire_lock:
             self._handlers.append(handler)
 
     def unregister(self, handler: EventHandler) -> None:
-        """
-        Unregister an event handler.
-
-        Args:
-            handler: Handler to remove
-        """
+        """Unregister an event handler."""
         with self._fire_lock:
             if handler in self._handlers:
                 self._handlers.remove(handler)
 
     def clear_handlers(self) -> None:
-        """
-        Remove all registered handlers.
-
-        Used by LoggerFactory when re-initializing with force=True
-        to prevent handler accumulation.
-        """
+        """Remove all registered handlers."""
         with self._fire_lock:
             self._handlers.clear()
 
     def add_filter(self, filter_: EventFilter) -> None:
-        """
-        Add a global event filter.
-
-        Filters are applied to all events before they reach handlers.
-        If any filter returns None, the event is dropped.
-
-        Args:
-            filter_: Filter implementing the EventFilter protocol
-        """
+        """Add a global event filter applied before handlers."""
         with self._fire_lock:
             self._filters.append(filter_)
 
     def set_context(self, **kwargs: Any) -> None:
-        """
-        Set shared context values.
-
-        Context values are automatically injected into event metadata.
-        Common context: invocation_id, correlation_id, workflow_name.
-
-        Args:
-            **kwargs: Key-value pairs to add to context
-        """
+        """Set shared context values injected into event metadata."""
         with self._fire_lock:
             self._context.update(kwargs)
 
@@ -191,19 +127,7 @@ class EventManager:
         return merged
 
     def get_context(self, key: str, default: Any = None) -> Any:
-        """
-        Get a context value.
-
-        Checks the thread-local overlay first (set by ``context()``),
-        then falls back to the global context (set by ``set_context()``).
-
-        Args:
-            key: Context key to retrieve
-            default: Default value if key not found
-
-        Returns:
-            The context value or default
-        """
+        """Get a context value, checking thread-local overlay then global context."""
         with self._fire_lock:
             return self._effective_context().get(key, default)
 
@@ -214,21 +138,7 @@ class EventManager:
 
     @contextmanager
     def context(self, **kwargs: Any) -> Iterator[None]:
-        """
-        Temporarily set context values within a scope.
-
-        Uses ``contextvars.ContextVar`` so each thread (and each asyncio
-        task) gets its own overlay that does not interfere with other
-        threads.  Nesting is supported: inner overlays inherit the outer
-        overlay's values.
-
-        Example:
-            with manager.context(correlation_id="req-123"):
-                fire_event(MyEvent(...))  # Gets correlation_id injected
-
-        Args:
-            **kwargs: Temporary context values
-        """
+        """Temporarily overlay context values; thread-safe and nestable."""
         previous = self._context_overlay.get()
         merged = dict(previous) if previous else {}
         merged.update(kwargs)
@@ -239,36 +149,21 @@ class EventManager:
             self._context_overlay.reset(token)
 
     def fire(self, event: BaseEvent) -> None:
-        """
-        Fire an event to all registered handlers.
-
-        This is the main entry point for event dispatch. It:
-        1. Injects context into event metadata
-        2. Applies global filters
-        3. Dispatches to handlers that accept the event
-
-        Args:
-            event: The event to fire
-        """
-        # Snapshot mutable state under lock so concurrent register/set_context
-        # calls cannot break iteration.
+        """Fire an event: inject context, apply filters, dispatch to handlers."""
         with self._fire_lock:
             context = self._effective_context()
             handlers = list(self._handlers)
             filters = list(self._filters)
 
-        # Inject context into event metadata
         if context.get("invocation_id"):
             event.meta.invocation_id = context["invocation_id"]
         if context.get("correlation_id"):
             event.meta.correlation_id = context["correlation_id"]
 
-        # Copy extra context into meta
         for key, value in context.items():
             if key not in ("invocation_id", "correlation_id"):
                 event.meta.extra[key] = value
 
-        # Apply global filters
         filtered_event: BaseEvent | None = event
         for filter_ in filters:
             if filtered_event is None:
@@ -278,7 +173,6 @@ class EventManager:
         if filtered_event is None:
             return
 
-        # Dispatch to handlers
         for handler in handlers:
             try:
                 if handler.accepts(filtered_event):
@@ -288,12 +182,7 @@ class EventManager:
                 _stdlib_logger.warning("Event handler %s failed", handler, exc_info=True)
 
     def flush(self) -> None:
-        """
-        Flush all handlers.
-
-        Ensures all buffered events are written. Called automatically
-        at program exit.
-        """
+        """Flush all handlers, ensuring buffered events are written."""
         with self._fire_lock:
             handlers = list(self._handlers)
         for handler in handlers:
@@ -304,30 +193,10 @@ class EventManager:
 
 
 def get_manager() -> EventManager:
-    """
-    Get the global EventManager instance.
-
-    Convenience function equivalent to EventManager.get().
-
-    Returns:
-        The global EventManager instance
-    """
+    """Get the global EventManager instance."""
     return EventManager.get()
 
 
 def fire_event(event: BaseEvent) -> None:
-    """
-    Fire an event to the global EventManager.
-
-    This is the primary entry point for firing events throughout the application.
-    It's a convenience wrapper around EventManager.get().fire().
-
-    Example:
-        from agent_actions.logging.core import fire_event
-
-        fire_event(WorkflowStarted(workflow_name="my_workflow"))
-
-    Args:
-        event: The event to fire
-    """
+    """Fire an event to the global EventManager."""
     EventManager.get().fire(event)

@@ -1,9 +1,4 @@
-"""
-Reprompt service for validation-based recovery.
-
-Validates LLM responses using UDFs and re-executes with feedback
-when validation fails.
-"""
+"""Reprompt service for validation-based LLM recovery."""
 
 from __future__ import annotations
 
@@ -34,15 +29,7 @@ class RepromptResult:
 
 
 class RepromptService:
-    """
-    Service for validating and reprompting LLM responses.
-
-    Wraps LLM execution with validation loop:
-    1. Execute LLM
-    2. Validate response with UDF
-    3. If fails, append feedback and re-execute
-    4. Repeat until pass or max_attempts exhausted
-    """
+    """Wraps LLM execution with a validate-and-reprompt loop."""
 
     def __init__(
         self,
@@ -51,32 +38,18 @@ class RepromptService:
         on_exhausted: str = "return_last",
         validator: Optional[ResponseValidator] = None,
     ):
-        """
-        Initialize reprompt service.
-
-        Accepts either a ``validation_name`` (legacy -- wraps in ``UdfValidator``)
-        or a pre-built ``validator`` implementing the ``ResponseValidator`` protocol.
-        At least one must be provided.
-
-        Args:
-            validation_name: Name of validation UDF (legacy path)
-            max_attempts: Maximum reprompt attempts (default: 2)
-            on_exhausted: Behavior when exhausted ("return_last" | "raise")
-            validator: Pre-built ResponseValidator (preferred path)
+        """Initialize with either a ``validation_name`` or a pre-built ``validator``.
 
         Raises:
-            ValueError: If neither validation_name nor validator provided,
-                       max_attempts < 1, or on_exhausted is invalid
+            ValueError: If neither validation source is provided,
+                       max_attempts < 1, or on_exhausted is invalid.
         """
-        # Must have at least one validation source
         if validator is None and (not validation_name or not validation_name.strip()):
             raise ValueError("validation_name cannot be empty")
 
-        # Validate max_attempts
         if max_attempts < 1:
             raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
 
-        # Validate on_exhausted
         valid_exhausted_options = ("return_last", "raise")
         if on_exhausted not in valid_exhausted_options:
             raise ValueError(
@@ -86,21 +59,16 @@ class RepromptService:
         self.max_attempts = max_attempts
         self.on_exhausted = on_exhausted
 
-        # Build validator -- prefer explicit validator, fall back to UDF lookup
         if validator is not None:
             self._validator = validator
         else:
             self._validator = UdfValidator(validation_name)
 
-        # When a validator is explicitly provided, use its name so composed
-        # validators (e.g. "check_positive+schema:my_action") are accurately
-        # reported in metadata and error messages.
         if validator is not None:
             self.validation_name = self._validator.name
         else:
             self.validation_name = validation_name
 
-        # Backward-compat attribute used by existing code / tests
         self.validation_func = self._validator.validate
 
     @property
@@ -115,31 +83,13 @@ class RepromptService:
         context: str = "",
         on_exhausted: Optional[str] = None,
     ) -> RepromptResult:
-        """
-        Execute LLM operation with reprompt loop.
-
-        Args:
-            llm_operation: Callable that executes LLM with prompt parameter.
-                          Signature: (prompt: str) -> (response, executed)
-            original_prompt: Original prompt (for appending feedback)
-            context: Context string for logging
-            on_exhausted: Override on_exhausted behavior (optional)
-
-        Returns:
-            RepromptResult with final response and metadata
+        """Execute LLM with reprompt loop until validation passes or attempts exhausted.
 
         Raises:
-            RuntimeError: If on_exhausted="raise" and validation exhausted
-
-        Note:
-            The llm_operation callable receives the prompt (with feedback appended
-            on reprompt attempts) and returns a tuple of (response, executed).
-            If executed=False (guard skip), validation is bypassed.
+            RuntimeError: If on_exhausted="raise" and validation exhausted.
         """
-        # Use override or instance default (identity check, not truthiness)
         exhausted_behavior = on_exhausted if on_exhausted is not None else self.on_exhausted
 
-        # Validate override value
         valid_exhausted_options = ("return_last", "raise")
         if exhausted_behavior not in valid_exhausted_options:
             raise ValueError(
@@ -153,10 +103,8 @@ class RepromptService:
         while attempts < self.max_attempts:
             attempts += 1
 
-            # Execute LLM with current prompt (may include feedback from previous attempts)
             response, executed = llm_operation(current_prompt)
 
-            # If guard skipped execution, return immediately
             if not executed:
                 logger.info("[%s] Guard skipped execution, bypassing reprompt", context)
                 return RepromptResult(
@@ -170,12 +118,9 @@ class RepromptService:
 
             last_response = response
 
-            # Validate response
             try:
                 is_valid = self._validator.validate(response)
             except Exception as e:
-                # Log validator exception with full context and traceback
-                # This helps distinguish validator bugs from actual validation failures
                 logger.warning(
                     "[%s] Validation '%s' raised exception "
                     "(treating as validation failure): %s: %s",
@@ -203,7 +148,6 @@ class RepromptService:
                     exhausted=False,
                 )
 
-            # Validation failed
             logger.warning(
                 "[%s] Validation failed on attempt %d/%d",
                 context,
@@ -211,15 +155,12 @@ class RepromptService:
                 self.max_attempts,
             )
 
-            # Check if exhausted
             if attempts >= self.max_attempts:
                 break
 
-            # Prepare feedback message for next attempt
             feedback = build_validation_feedback(response, self._validator.feedback_message)
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
-        # Exhausted all attempts
         logger.error(
             "[%s] Reprompt exhausted after %d attempts (validation: %s)",
             context,
@@ -240,7 +181,6 @@ class RepromptService:
                 f"(validation: {self.validation_name})"
             )
 
-        # on_exhausted = "return_last"
         return RepromptResult(
             response=last_response,
             executed=True,  # LLM was executed, validation just failed
@@ -255,35 +195,16 @@ def create_reprompt_service_from_config(
     reprompt_config: Optional[dict],
     validator: Optional["ResponseValidator"] = None,
 ) -> Optional[RepromptService]:
-    """
-    Create RepromptService from action config.
-
-    Args:
-        reprompt_config: Reprompt configuration dict (or None)
-        validator: Pre-built ResponseValidator (optional).
-                   When provided, ``reprompt_config["validation"]`` is not required.
-
-    Returns:
-        RepromptService instance or None if not enabled
+    """Create RepromptService from action config, or return None if not enabled.
 
     Raises:
-        ValueError: If required 'validation' key is missing and no validator provided
-
-    Example:
-        config = {
-            "validation": "check_no_forbidden_words",
-            "max_attempts": 2,
-            "on_exhausted": "return_last"
-        }
-        service = create_reprompt_service_from_config(config)
+        ValueError: If required 'validation' key is missing and no validator provided.
     """
     if not reprompt_config:
-        # Even with a validator, we need reprompt_config for max_attempts etc.
         if validator is not None:
             return RepromptService(validator=validator)
         return None
 
-    # Validate required "validation" key when no validator provided
     if validator is None and "validation" not in reprompt_config:
         raise ValueError(
             "Reprompt configuration missing required 'validation' field. "

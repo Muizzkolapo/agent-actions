@@ -34,17 +34,9 @@ class LoggingConfig:
 
     @classmethod
     def from_project_config(cls, config: dict) -> LoggingConfig:
-        """Create LoggingConfig from project configuration.
-
-        Args:
-            config: Project configuration dictionary with optional 'logging' section.
-
-        Returns:
-            LoggingConfig instance with values from config or defaults.
-        """
+        """Create LoggingConfig from a project configuration dictionary."""
         logging_config = config.get("logging", {})
 
-        # Parse file handler configuration from YAML
         file_config = logging_config.get("file", {})
         file_settings = FileHandlerSettings(
             enabled=file_config.get("enabled", True),
@@ -65,21 +57,7 @@ class LoggingConfig:
 
     @classmethod
     def from_environment(cls) -> LoggingConfig:
-        """Create LoggingConfig from environment variables.
-
-        Supported environment variables:
-            AGENT_ACTIONS_DEBUG: Set to '1' to enable debug mode (DEBUG level + source location)
-            AGENT_ACTIONS_LOG_LEVEL: Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-            AGENT_ACTIONS_LOG_FORMAT: Output format ('human' or 'json')
-            AGENT_ACTIONS_NO_LOG_FILE: Set to '1' to disable file logging
-            AGENT_ACTIONS_LOG_FILE: Custom log file path (absolute or relative)
-            AGENT_ACTIONS_LOG_DIR: Custom log directory (will use 'agent_actions.log' as filename)
-            AGENT_ACTIONS_FILE_LOG_LEVEL: File log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-        Returns:
-            LoggingConfig instance with values from environment or defaults.
-        """
-        # Check for debug mode first (overrides other settings)
+        """Create LoggingConfig from AGENT_ACTIONS_* environment variables."""
         debug_mode = os.environ.get("AGENT_ACTIONS_DEBUG", "0") == "1"
 
         if debug_mode:
@@ -95,7 +73,6 @@ class LoggingConfig:
         if log_format not in ("human", "json"):
             log_format = "human"
 
-        # File handler configuration from environment
         file_enabled = os.environ.get("AGENT_ACTIONS_NO_LOG_FILE", "0") != "1"
 
         file_path = os.environ.get("AGENT_ACTIONS_LOG_FILE") or None

@@ -13,49 +13,19 @@ class FallbackStrategy(ABC):
     def handle_oversized_field(
         self, field_value: str, field_name: str, maximum_field_size: int
     ) -> Tuple[str, str]:
-        """
-        Handle field value that exceeds maximum size limit.
-
-        Args:
-            field_value: The field value to potentially truncate or modify
-            field_name: Name of the field being processed
-            maximum_field_size: Maximum allowed field size in characters
-
-        Returns:
-            Tuple of (processed_field_value, fallback_operation_message)
-        """
+        """Handle field value that exceeds maximum size limit."""
 
     @abstractmethod
     def handle_excessive_chunk_count(
         self, chunk_list: List[str], field_name: str, maximum_chunks_allowed: int
     ) -> Tuple[List[str], str]:
-        """
-        Handle field that generates more chunks than allowed limit.
-
-        Args:
-            chunk_list: List of text chunks generated from field
-            field_name: Name of the field being processed
-            maximum_chunks_allowed: Maximum number of chunks permitted per field
-
-        Returns:
-            Tuple of (processed_chunk_list, fallback_operation_message)
-        """
+        """Handle field that generates more chunks than allowed limit."""
 
     @abstractmethod
     def handle_chunking_error(
         self, record: Dict[str, Any], field_name: str, error_message: str
     ) -> List[Dict[str, Any]]:
-        """
-        Handle errors that occur during field chunking process.
-
-        Args:
-            record: The complete record being processed when error occurred
-            field_name: Name of the field that triggered the error
-            error_message: Detailed error message describing what went wrong
-
-        Returns:
-            List of processed record chunks (may be empty, single record, or multiple)
-        """
+        """Handle errors that occur during field chunking process."""
 
 
 class PreserveOriginalStrategy(FallbackStrategy):

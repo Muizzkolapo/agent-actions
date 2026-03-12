@@ -93,12 +93,7 @@ class ProcessParams:
 
 
 class ProcessingPipeline:
-    """
-    Orchestrates data processing workflows through configured agents.
-
-    Handles both batch and online processing modes, routing input files
-    through agent pipelines and generating enriched output files.
-    """
+    """Orchestrates data processing through configured agents in batch and online modes."""
 
     def __init__(self, config: PipelineConfig, processor_factory: ProcessorFactory):
         """

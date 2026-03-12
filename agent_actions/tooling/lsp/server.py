@@ -54,7 +54,6 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
     """Handle initialize request."""
     logger.info("Initializing Agent Actions LSP...")
 
-    # Find project root from workspace folders
     if params.workspace_folders:
         for folder in params.workspace_folders:
             folder_path = uri_to_path(folder.uri)
@@ -103,12 +102,10 @@ def goto_definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
     if not server.index:
         return None
 
-    # Get document content
     doc = server.workspace.get_text_document(params.text_document.uri)
     if not doc:
         return None
 
-    # Get reference at cursor position
     reference = get_reference_at_position(
         content=doc.source,
         line=params.position.line,
@@ -118,7 +115,6 @@ def goto_definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
     if not reference:
         return None
 
-    # Resolve the reference
     current_file = uri_to_path(params.text_document.uri)
     location = resolve_reference(reference, server.index, current_file)
 
@@ -156,7 +152,6 @@ def hover(params: lsp.HoverParams) -> Optional[lsp.Hover]:
     if not reference:
         return None
 
-    # Build hover content based on reference type
     content = _build_hover_content(reference, server.index)
     if not content:
         return None
@@ -211,7 +206,6 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
     if not doc:
         return lsp.CompletionList(is_incomplete=False, items=[])
 
-    # Get the current line
     lines = doc.source.split("\n")
     if params.position.line >= len(lines):
         return lsp.CompletionList(is_incomplete=False, items=[])
@@ -304,7 +298,6 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
     file_path = uri_to_path(params.text_document.uri)
     symbols = []
 
-    # Handle YAML workflow files - show actions
     if file_path in server.index.file_actions:
         for name, action_meta in server.index.file_actions[file_path].items():
             location = action_meta.location
@@ -323,7 +316,6 @@ def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbo
                 )
             )
 
-    # Handle Markdown prompt files - show {prompt} blocks
     if file_path.suffix == ".md":
         symbols.extend(_get_prompt_symbols(doc.source, file_path))
 
@@ -380,7 +372,6 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
     if not server.project_root:
         return
 
-    # Rebuild full index for now (can optimize later)
     server.index = build_index(server.project_root)
     logger.info("Reindexed project after save")
     _publish_diagnostics(params.text_document.uri)

@@ -9,16 +9,13 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     """Handles configuration-related errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Detect configuration-related errors."""
         exc_names = [type(exc).__name__, type(root).__name__]
 
-        # Check exception types
         if any("Config" in name for name in exc_names):
             return True
         if any(name in ["ValidationError", "SchemaValidationError"] for name in exc_names):
             return True
 
-        # Check error message patterns
         message_lower = message.lower()
         config_patterns = [
             "missing required configuration",  # More specific - config errors
@@ -37,8 +34,6 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Handle configuration errors."""
-        # Check for missing required fields (hierarchy resolution)
         missing_field_patterns = [
             "missing required field",
             "required configuration fields are missing",
@@ -46,7 +41,6 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         if any(pattern in message.lower() for pattern in missing_field_patterns):
             return self._format_missing_required_fields_error(message, context)
 
-        # Check for missing environment variable
         if "environment variable" in message.lower() and "not set" in message.lower():
             return self._format_missing_env_var_error(message, context)
 
@@ -60,7 +54,6 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 docs_url="https://docs.agent-actions.com/config/schema",
             )
 
-        # Generic config error
         agent = context.get("agent", "unknown")
         return UserError(
             category="Configuration Error",
@@ -77,19 +70,16 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         missing_fields = context.get("missing_fields", [])
         missing_display = context.get("missing_display", missing_fields)
 
-        # Create details message
         fields_str = ", ".join([f"'{f}'" for f in missing_display])
         details = f"Action '{action_name}' is missing required configuration: {fields_str}\n\n"
         details += "These fields were not found at any level (project → workflow → action)."
 
-        # Create fix instructions with examples
         fix_parts = [
             "Add the missing field(s) to one of these levels:\n",
             "1. Project-level (agent_actions.yml):",
             "   default_agent_config:",
         ]
 
-        # Add examples for each missing field
         for field in missing_fields:
             if field == "model_vendor":
                 fix_parts.append("     model_vendor: anthropic  # or openai, gemini, groq")

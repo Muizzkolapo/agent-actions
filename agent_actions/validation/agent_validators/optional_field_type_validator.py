@@ -1,6 +1,4 @@
-"""
-Validator for optional field types in agent configuration.
-"""
+"""Validator for optional field types in agent configuration."""
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
@@ -10,28 +8,12 @@ from agent_actions.utils.constants import JSON_MODE_KEY
 
 
 class OptionalFieldTypeValidator(BaseAgentEntryValidator):
-    """
-    Validates types of optional configuration fields.
-
-    This validator checks that when optional fields are present,
-    they have the correct data types.
-
-    Complexity: CC ~7 (one check per optional field)
-    """
+    """Validates types of optional configuration fields."""
 
     def validate(self, context) -> AgentEntryValidationResult:
-        """
-        Validate optional field types.
-
-        Args:
-            context: Validation context
-
-        Returns:
-            Validation result with type errors
-        """
+        """Validate optional field types."""
         errors = []
 
-        # Validate each optional field type
         self._validate_description_field(context, errors)
         self._validate_version_field(context, errors)
         self._validate_dependencies_field(context, errors)
@@ -65,17 +47,14 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
         normalized_entry = context.normalized_entry
         desc = context.description
 
-        # Check 'is_operational' field type
         if "is_operational" in normalized_entry:
             if not isinstance(normalized_entry["is_operational"], bool):
                 errors.append(f"{desc} 'is_operational' should be a boolean.")
 
-        # Check 'json_mode' field type
         if JSON_MODE_KEY in normalized_entry:
             if not isinstance(normalized_entry[JSON_MODE_KEY], bool):
                 errors.append(f"{desc} 'json_mode' should be a boolean.")
 
-        # Check 'prompt_debug' field type
         if "prompt_debug" in normalized_entry:
             if not isinstance(normalized_entry["prompt_debug"], bool):
                 errors.append(f"{desc} 'prompt_debug' should be a boolean.")

@@ -17,15 +17,7 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
     def process(
         self, content: Any, file_path: Optional[str] = None
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
-        """Load and return raw JSON content from a file or memory.
-
-        Args:
-            content: JSON content to process if file_path is not provided.
-            file_path: Path to the JSON file.
-
-        Returns:
-            Parsed JSON object (list or dictionary).
-        """
+        """Load and return raw JSON content from a file or memory."""
         try:
             if file_path:
                 content_str = self.load_file(file_path)

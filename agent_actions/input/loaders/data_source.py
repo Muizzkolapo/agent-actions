@@ -1,18 +1,4 @@
-"""Data source resolver for start-node input directories.
-
-Resolves the ``data_source`` field from an agent config into concrete
-directories that the runner can iterate over.  The resolver is the *only*
-place that interprets ``data_source`` — the rest of the config pipeline
-keeps it as a plain ``Optional[str | dict]``.
-
-Supported source types:
-  - **staging** (default): ``agent_folder / "staging"``
-  - **local**: validated local folder path (must exist, within project root)
-  - **api**: fetches JSON from a URL and caches to disk
-
-Extensible: to add GCS/S3, add a new ``DataSourceType`` variant and a
-resolver branch here.
-"""
+"""Data source resolver for start-node input directories."""
 
 from __future__ import annotations
 
@@ -41,12 +27,7 @@ class DataSourceType(str, Enum):
 
 
 class DataSourceConfig(BaseModel):
-    """Configuration for a start-node data source.
-
-    Used internally by the resolver — not exposed through the config pipeline.
-    The config pipeline keeps data_source as Optional[str] on AgentConfig;
-    this model is only instantiated at the point of consumption.
-    """
+    """Configuration for a start-node data source, instantiated only at resolution time."""
 
     type: DataSourceType = Field(default=DataSourceType.STAGING, description="Data source type")
     folder: Optional[str] = Field(default=None, description="Local folder path (for type=local)")
@@ -84,13 +65,7 @@ class DataSourceResolutionResult:
 
 
 def _parse_data_source(raw: Any) -> DataSourceConfig:
-    """Parse a raw data_source value into a DataSourceConfig.
-
-    Accepts:
-      - ``DataSourceConfig`` instance (returned as-is)
-      - ``str``: ``"staging"`` → staging; absolute/relative path → local folder
-      - ``dict``: passed to ``DataSourceConfig(**d)``
-    """
+    """Parse a raw data_source value into a DataSourceConfig."""
     if isinstance(raw, DataSourceConfig):
         return raw
 
@@ -104,7 +79,6 @@ def _parse_data_source(raw: Any) -> DataSourceConfig:
                 f"(e.g. {{type: {raw_lower}, ...}}), not a bare string",
                 context={"data_source": raw},
             )
-        # Anything else is treated as a local folder path
         return DataSourceConfig(type=DataSourceType.LOCAL, folder=raw.strip())
 
     if isinstance(raw, dict):
@@ -151,7 +125,6 @@ def _resolve_local(config: DataSourceConfig, agent_folder: Path) -> DataSourceRe
     if not folder.is_absolute():
         folder = agent_folder / folder
 
-    # Security: must be within project root
     project_root = find_project_root(str(agent_folder))
     if project_root is None:
         project_root = agent_folder.resolve().parent
@@ -176,11 +149,10 @@ def _resolve_local(config: DataSourceConfig, agent_folder: Path) -> DataSourceRe
 def _resolve_api(
     config: DataSourceConfig, agent_folder: Path, agent_name: str
 ) -> DataSourceResolutionResult:
-    """Resolve an API data source — fetch JSON and cache to disk.
+    """Resolve an API data source -- fetch JSON and cache to disk.
 
-    Caching: responses are cached per (url, query, headers) fingerprint.
-    Once cached, the data is reused for all subsequent runs without re-fetching.
-    To force a refresh, delete the ``_remote_cache/api/`` directory inside agent_io.
+    Responses are cached per (url, query, headers) fingerprint. Delete
+    ``_remote_cache/api/`` inside agent_io to force a refresh.
     """
     if not config.url:
         raise ConfigurationError(
@@ -191,7 +163,6 @@ def _resolve_api(
             },
         )
 
-    # Security: only HTTP(S) URLs
     parsed = urlparse(config.url)
     if parsed.scheme not in ("http", "https"):
         raise ConfigurationError(
@@ -199,7 +170,6 @@ def _resolve_api(
             context={"url": config.url, "operation": "resolve_api_data_source"},
         )
 
-    # Only JSON supported for now
     if config.file_type and not all(
         ft.strip().lower().lstrip(".") == "json" for ft in config.file_type
     ):
@@ -211,7 +181,6 @@ def _resolve_api(
             },
         )
 
-    # Build cache directory keyed on URL + query + headers fingerprint
     fingerprint_input = config.url
     if config.query:
         fingerprint_input += json.dumps(config.query, sort_keys=True)
@@ -224,7 +193,6 @@ def _resolve_api(
 
     cache_file = cache_dir / f"{agent_name}.json"
 
-    # Fetch if not cached
     if not cache_file.exists():
         _fetch_api_data(config, cache_file)
     else:
@@ -255,7 +223,6 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
                     context={"url": config.url, "operation": "fetch_api_data"},
                 )
 
-        # Validate JSON
         parsed = json.loads(data)
 
         with open(cache_file, "w", encoding="utf-8") as f:
@@ -284,20 +251,9 @@ def resolve_start_node_data_source(
 ) -> DataSourceResolutionResult:
     """Resolve the data source for a start node.
 
-    This is the single entry point for data source resolution.
-
-    **Backward compatible:** when ``data_source`` is missing, empty, or None,
-    falls back to ``agent_folder / "staging"``.
-
-    Args:
-        agent_folder: Path to the agent_io folder for this workflow.
-        data_source: Raw data source value (str, dict, DataSourceConfig, or None).
-        agent_name: Name of the agent (for logging / error context).
-
-    Returns:
-        DataSourceResolutionResult with directories and optional file_type_filter.
+    Single entry point for data source resolution. Falls back to
+    ``agent_folder / "staging"`` when data_source is missing, empty, or None.
     """
-    # Backward compat: no data_source → staging
     if not data_source:
         return _resolve_staging(agent_folder)
 

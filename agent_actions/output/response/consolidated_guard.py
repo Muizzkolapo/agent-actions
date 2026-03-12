@@ -19,13 +19,7 @@ class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
 
     def __init__(self, condition: str, on_false: Union[GuardBehavior, str]):
-        """
-        Initialize guard configuration.
-
-        Args:
-            condition: Guard expression (SQL or UDF format)
-            on_false: Behavior when condition fails
-        """
+        """Initialize guard configuration."""
         self.condition = condition
         self.on_false = GuardBehavior(on_false) if isinstance(on_false, str) else on_false
         self._parsed_condition = GuardParser.parse(condition)
@@ -44,17 +38,10 @@ class GuardConfig:
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> "GuardConfig":
-        """
-        Create GuardConfig from dictionary (YAML format).
-
-        Args:
-            config_dict: Dictionary with 'condition' and 'on_false' keys
-
-        Returns:
-            GuardConfig instance
+        """Create GuardConfig from a dictionary with 'condition' and 'on_false' keys.
 
         Raises:
-            ValueError: If required keys are missing
+            ConfigValidationError: If required keys are missing or type is wrong
         """
         if not isinstance(config_dict, dict):
             raise ConfigValidationError(
@@ -77,15 +64,7 @@ class GuardConfig:
 
     @classmethod
     def from_string(cls, guard_string: str) -> "GuardConfig":
-        """
-        Create GuardConfig from legacy string format.
-
-        Args:
-            guard_string: Legacy guard expression string
-
-        Returns:
-            GuardConfig with appropriate default behavior
-        """
+        """Create GuardConfig from a legacy guard expression string."""
         parsed = GuardParser.parse(guard_string)
         if parsed.type == GuardType.UDF:
             default_behavior = GuardBehavior.SKIP
@@ -98,17 +77,10 @@ class GuardConfig:
 
 
 def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
-    """
-    Parse guard configuration from various formats.
-
-    Args:
-        guard_data: String (legacy) or dict (new format)
-
-    Returns:
-        GuardConfig instance
+    """Parse guard configuration from string (legacy) or dict format.
 
     Raises:
-        ValueError: If format is invalid
+        ConfigValidationError: If format is invalid
     """
     if isinstance(guard_data, str):
         return GuardConfig.from_string(guard_data)

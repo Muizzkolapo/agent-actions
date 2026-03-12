@@ -1,9 +1,4 @@
-"""Online (synchronous) invocation strategy.
-
-Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
-
-Extracted from RecordProcessor._execute_llm() for unified invocation handling.
-"""
+"""Online (synchronous) invocation strategy with retry/reprompt support."""
 
 from __future__ import annotations
 
@@ -29,25 +24,13 @@ logger = logging.getLogger(__name__)
 
 
 class OnlineStrategy(InvocationStrategy):
-    """Synchronous LLM invocation with retry/reprompt support.
-
-    Executes LLM calls immediately and returns response.
-    Supports recovery mechanisms:
-    - Retry: Re-execute on transient failures
-    - Reprompt: Re-execute with feedback on validation failure
-    """
+    """Synchronous LLM invocation with retry/reprompt support."""
 
     def __init__(
         self,
         retry_service: RetryService | None = None,
         reprompt_service: RepromptService | None = None,
     ):
-        """Initialize OnlineStrategy.
-
-        Args:
-            retry_service: Optional retry service for transient failures
-            reprompt_service: Optional reprompt service for validation failures
-        """
         self._retry_service = retry_service
         self._reprompt_service = reprompt_service
 
@@ -56,18 +39,7 @@ class OnlineStrategy(InvocationStrategy):
         task: PreparedTask,
         context: ProcessingContext,
     ) -> InvocationResult:
-        """Execute LLM synchronously with optional recovery.
-
-        Guard evaluation is already done by TaskPreparer. This method
-        passes skip_guard_eval=True to run_dynamic_agent().
-
-        Args:
-            task: PreparedTask from TaskPreparer
-            context: ProcessingContext with agent config
-
-        Returns:
-            InvocationResult with response or recovery metadata
-        """
+        """Execute LLM synchronously with optional retry/reprompt recovery."""
         if not task.should_execute:
             if task.is_passthrough:
                 return InvocationResult.skipped(
@@ -112,16 +84,7 @@ class OnlineStrategy(InvocationStrategy):
         context: ProcessingContext,
         prompt: str,
     ) -> tuple[Any, bool]:
-        """Execute LLM call with common arguments.
-
-        Args:
-            task: PreparedTask
-            context: ProcessingContext
-            prompt: Formatted prompt string
-
-        Returns:
-            Tuple of (response, executed)
-        """
+        """Execute a single LLM call, returning (response, executed)."""
         from agent_actions.processing.helpers import run_dynamic_agent
 
         tools_path = context.agent_config.get("tools", {}).get("path")
@@ -141,12 +104,7 @@ class OnlineStrategy(InvocationStrategy):
         retry_result: RetryResult,
         recovery_metadata: RecoveryMetadata,
     ) -> None:
-        """Track retry metadata from retry result.
-
-        Args:
-            retry_result: Result from retry service
-            recovery_metadata: Container to update
-        """
+        """Update recovery_metadata with retry attempt info from retry_result."""
         if retry_result.needed_retry:
             succeeded = not retry_result.exhausted
             failures = retry_result.attempts - 1 if succeeded else retry_result.attempts

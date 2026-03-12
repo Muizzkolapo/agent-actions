@@ -10,7 +10,6 @@ class ModelErrorFormatter(ErrorFormatter):
     """Handles model validation errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Detect model validation errors."""
         message_lower = message.lower()
         model_patterns = [
             "model",
@@ -24,12 +23,9 @@ class ModelErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Handle model validation errors."""
-        # Extract model name from error
         model = self._extract_model_name(message, context)
         provider = context.get("provider", self._guess_provider_from_model(model))
 
-        # Get suggested models for the provider
         suggestions = self._get_model_suggestions(provider)
 
         fix_msg = "Update the 'model' field in your agent config"
@@ -46,8 +42,7 @@ class ModelErrorFormatter(ErrorFormatter):
         )
 
     def _extract_model_name(self, message: str, context: Dict) -> str:
-        """Extract model name from error message."""
-        # Look for model name in quotes
+        """Extract model name from error message or context."""
         match = re.search(r"['\"]([^'\"]+)['\"].*not supported", message)
         if match:
             return match.group(1)

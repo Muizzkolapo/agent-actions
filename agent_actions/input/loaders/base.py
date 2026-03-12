@@ -48,12 +48,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     """Abstract base class for all content loaders with async support."""
 
     def __init__(self, agent_config: AgentEntryDict, agent_name: str):
-        """Initialize with agent configuration and name.
-
-        Args:
-            agent_config: Agent configuration
-            agent_name: Name of the agent
-        """
+        """Initialize with agent configuration and name."""
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.logger = logging.getLogger(__name__)
@@ -63,7 +58,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         return True
 
     def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode to let system choose."""
+        """Return AUTO processing mode."""
         return ProcessingMode.AUTO
 
     def load_file(self, file_path: str) -> str:
@@ -100,27 +95,11 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
 
     @abstractmethod
     def process(self, content: Any, file_path: Optional[str] = None) -> T:
-        """Load and parse content from a file or in-memory input.
-
-        Args:
-            content: Raw content provided directly (optional if file_path is provided).
-            file_path: Path to the file to load content from.
-
-        Returns:
-            Parsed content such as a string, dictionary, or list depending on loader type.
-        """
+        """Load and parse content from a file or in-memory input."""
         pass
 
     async def process_async(self, content: Any, file_path: Optional[str] = None) -> T:
-        """Async version of process method.
-
-        Args:
-            content: Raw content provided directly (optional if file_path is provided).
-            file_path: Path to the file to load content from.
-
-        Returns:
-            Parsed content such as a string, dictionary, or list depending on loader type.
-        """
+        """Async version of process method."""
         try:
             import anyio
 

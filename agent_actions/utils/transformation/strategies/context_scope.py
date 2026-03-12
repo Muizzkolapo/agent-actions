@@ -1,9 +1,4 @@
-"""
-Context Scope Passthrough Strategies.
-
-These strategies handle transformation by extracting fields from
-context_scope.passthrough configuration at runtime.
-"""
+"""Passthrough strategies that extract fields from context_scope.passthrough config."""
 
 from typing import Dict, List, Optional
 
@@ -13,12 +8,7 @@ from .base import IPassthroughTransformStrategy
 
 
 class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
-    """
-    Handle context_scope passthrough with structured data.
-
-    Extracts fields from context_scope.passthrough config,
-    then merges into structured data.
-    """
+    """Handle context_scope passthrough with structured data."""
 
     def can_handle(
         self,
@@ -91,12 +81,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
 
 
 class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
-    """
-    Handle context_scope passthrough with unstructured data.
-
-    Extracts fields from context_scope.passthrough config,
-    then merges into unstructured data.
-    """
+    """Handle context_scope passthrough with unstructured data."""
 
     def can_handle(
         self,
@@ -151,11 +136,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
 
 
 class NoOpStrategy(IPassthroughTransformStrategy):
-    """
-    No-op strategy for structured data with no passthrough fields.
-
-    Returns data as-is without any transformation.
-    """
+    """No-op strategy: returns structured data as-is when no passthrough is needed."""
 
     def can_handle(
         self,
@@ -185,11 +166,7 @@ class NoOpStrategy(IPassthroughTransformStrategy):
 
 
 class DefaultStructureStrategy(IPassthroughTransformStrategy):
-    """
-    Default strategy for unstructured data with no passthrough fields.
-
-    Structures the data using DataTransformer without any merging.
-    """
+    """Default strategy: structures unstructured data without passthrough merging."""
 
     def can_handle(
         self,
@@ -198,11 +175,7 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         agent_config: Dict,
         already_structured: bool,
     ) -> bool:
-        """
-        Fallback strategy - handles all remaining cases.
-
-        Returns True if no other strategy matches.
-        """
+        """Fallback catch-all: always returns True."""
         return True  # Catch-all
 
     def transform(

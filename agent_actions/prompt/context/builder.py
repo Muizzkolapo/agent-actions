@@ -1,9 +1,4 @@
-"""
-LLM Context Builder - Unified implementation for batch and realtime modes.
-
-This module consolidates merge/drop logic into a single shared implementation
-to ensure consistent behavior across processing modes and reduce maintenance burden.
-"""
+"""Unified LLM context builder for batch and realtime modes."""
 
 from typing import Dict, Any, Optional
 from agent_actions.prompt.context.scope import ContextScopeProcessor

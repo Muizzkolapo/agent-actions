@@ -1,9 +1,4 @@
-"""
-Precomputed Passthrough Strategies.
-
-These strategies handle transformation when passthrough_fields
-are pre-computed and provided directly (new behavior).
-"""
+"""Passthrough strategies for pre-computed passthrough_fields."""
 
 from typing import Dict, List, Optional
 
@@ -12,12 +7,7 @@ from .base import IPassthroughTransformStrategy
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
-    """
-    Handle precomputed passthrough fields with structured data.
-
-    Structured data format: [{'source_guid': ..., 'content': {...}}]
-    Merges passthrough fields into each item's 'content' dict.
-    """
+    """Merge precomputed passthrough fields into structured data items."""
 
     def can_handle(
         self,
@@ -54,12 +44,7 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
 
 
 class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
-    """
-    Handle precomputed passthrough fields with unstructured data.
-
-    Unstructured data format: [{...}, {...}] (plain dicts or mixed)
-    Merges passthrough fields directly into items, then structures.
-    """
+    """Merge precomputed passthrough fields into unstructured data, then structure."""
 
     def can_handle(
         self,

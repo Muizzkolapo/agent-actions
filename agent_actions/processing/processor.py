@@ -45,39 +45,7 @@ def _is_empty_output(response: Any) -> bool:
 
 
 class RecordProcessor:
-    """
-    Unified processor replacing StagingProcessor + TargetContentProcessor._process_single_item().
-
-    Handles both first-stage (raw input) and subsequent-stage (structured input) processing.
-
-    Architecture (Phase 3):
-    -----------------------
-    Uses InvocationStrategy pattern for flexible LLM execution:
-    - OnlineStrategy: Synchronous execution with retry/reprompt
-    - BatchStrategy: Queue tasks for batch API submission
-
-    Guard Evaluation:
-    -----------------
-    Guards are evaluated ONCE via TaskPreparer, after prompt preparation,
-    with full context available (input fields, source.*, passthrough fields).
-
-    This is like a SQL WHERE clause - simple and predictable.
-
-    Example:
-    --------
-    # Default usage (OnlineStrategy with configured recovery)
-    processor = RecordProcessor(agent_config, agent_name)
-    result = processor.process(item, context)
-
-    # Custom strategy injection
-    strategy = BatchStrategy(provider)
-    processor = RecordProcessor(agent_config, agent_name, strategy=strategy)
-
-    guard:
-      clause: "status == 'active' and source.priority == 'high'"
-      behavior: "skip"
-    # → Guard has access to all fields, evaluated once before LLM call
-    """
+    """Unified processor for first-stage and subsequent-stage record processing."""
 
     def __init__(
         self,
@@ -87,16 +55,6 @@ class RecordProcessor:
         mode: ProcessingMode = ProcessingMode.ONLINE,
         provider: Optional["BatchProvider"] = None,
     ):
-        """
-        Initialize RecordProcessor.
-
-        Args:
-            agent_config: Agent configuration dict
-            agent_name: Agent name for metadata
-            strategy: Optional invocation strategy (overrides mode-based selection)
-            mode: Processing mode for default strategy selection (ONLINE or BATCH)
-            provider: Batch provider (required when mode=BATCH and no strategy given)
-        """
         self.agent_config = agent_config
         self.agent_name = agent_name
 
@@ -107,8 +65,6 @@ class RecordProcessor:
                 agent_name,
             )
 
-        # Validate granularity setting
-        # kind: "tool" = tool action, "hitl" = HITL action, "llm" = LLM action (default)
         granularity = agent_config.get("granularity", "record")
         action_kind = (agent_config.get("kind") or "").lower()
 
@@ -143,7 +99,6 @@ class RecordProcessor:
 
         self.enrichment_pipeline = EnrichmentPipeline()
 
-        # Initialize invocation strategy (honors mode when no explicit strategy given)
         self._strategy = strategy or InvocationStrategyFactory.create(
             mode=mode,
             agent_config=agent_config,
@@ -151,47 +106,18 @@ class RecordProcessor:
         )
 
     def process(self, item: Any, context: ProcessingContext) -> ProcessingResult:
-        """
-        Process single record (first-stage or subsequent-stage).
-
-        Processing Pipeline:
-        1-4. Prepare task (via TaskPreparer): normalize, source, prompt, guard
-        5. Execute LLM
-        6. Handle non-execution (retry exhausted)
-        7. Detect empty output
-        8. Transform response
-        9. Create success result
-        10. Enrich (lineage, metadata, loop IDs, etc.)
-
-        Guard is evaluated ONCE in TaskPreparer, after prompt preparation,
-        with full context available (like SQL WHERE).
-
-        Args:
-            item: Input item
-                - First-stage: any type (str, list, dict, etc.)
-                - Subsequent-stage: dict with {content, source_guid} (recommended)
-            context: ProcessingContext with config and state
-
-        Returns:
-            ProcessingResult with enriched data
-        """
-        # Steps 1-4: Prepare task via TaskPreparer (unified preparation logic)
+        """Process a single record through the full pipeline (prepare, invoke, transform, enrich)."""
         prep_context = PreparationContext.from_processing_context(context)
         prep_context.current_item = item if isinstance(item, dict) else None
 
         task_preparer = get_task_preparer()
         prepared = task_preparer.prepare(item, prep_context)
 
-        # Extract key fields for backward compatibility and event firing
         input_record = item if isinstance(item, dict) else None
         source_guid = prepared.source_guid
         source_snapshot = prepared.source_snapshot
         content = prepared.original_content
 
-        # Fire RP001: Record processing started
-        # Fires for ALL records including unprocessed — intentional so observability
-        # sees the record was received. The immediately-following CompleteEvent with
-        # status="unprocessed" closes the span.
         fire_event(
             RecordProcessingStartedEvent(
                 agent_name=context.agent_name,
@@ -200,9 +126,6 @@ class RecordProcessor:
             )
         )
 
-        # Handle upstream unprocessed records (dead/failed/skipped by prior action)
-        # No RecordFilteredEvent here — these records aren't filtered (they're preserved
-        # in output with lineage). RecordProcessingCompleteEvent below captures the status.
         if prepared.guard_status == GuardStatus.UPSTREAM_UNPROCESSED:
             preserved_item = dict(item) if isinstance(item, dict) else {"content": item}
             preserved_item["_unprocessed"] = True
@@ -219,7 +142,6 @@ class RecordProcessor:
             )
             return self._finalize_result(result, context, source_guid)
 
-        # Handle Phase 1 guard results (filtered/skipped)
         if prepared.guard_status == GuardStatus.FILTERED:
             fire_event(
                 RecordFilteredEvent(
@@ -259,17 +181,13 @@ class RecordProcessor:
             )
             return self._finalize_result(result, context, source_guid)
 
-        # Step 5: Execute LLM via invocation strategy
-        # Guard evaluation already done in TaskPreparer (strategy uses skip_guard_eval=True)
         invocation_result = self._strategy.invoke(prepared, context)
 
-        # Extract results from InvocationResult
         response = invocation_result.response
         executed = invocation_result.executed
         passthrough_fields = invocation_result.passthrough_fields
         recovery_metadata = invocation_result.recovery_metadata
 
-        # Step 6a: Handle deferred execution (batch mode)
         if invocation_result.deferred:
             return ProcessingResult.deferred(
                 task_id=invocation_result.task_id,
@@ -279,14 +197,9 @@ class RecordProcessor:
                 input_record=input_record,
             )
 
-        # Step 6b: Handle non-execution (retry exhausted)
-        # Note: Guards are evaluated ONCE in TaskPreparer, so executed=False here means
-        # retry exhaustion, not guard filtering
         if not executed:
             if response is None:
-                # Check if this is a retry exhaustion vs guard filter
                 if recovery_metadata and recovery_metadata.retry:
-                    # Build exhausted record with empty schema content for enrichment
                     empty_content = ExhaustedRecordBuilder.build_empty_content(context.agent_config)
                     tombstone = self._build_tombstone_item(
                         empty_content,
@@ -304,7 +217,6 @@ class RecordProcessor:
                         input_record=input_record,
                     )
                     return self._finalize_result(result, context, source_guid)
-                # Fire RP002: Record filtered (LLM layer guard filter)
                 fire_event(
                     RecordFilteredEvent(
                         agent_name=context.agent_name,
@@ -319,8 +231,6 @@ class RecordProcessor:
                     input_record=input_record,
                 )
             else:
-                # response is not None - guard caused skip rather than filter
-                # Fire RP002: Record filtered (LLM layer guard skip)
                 fire_event(
                     RecordFilteredEvent(
                         agent_name=context.agent_name,
@@ -344,12 +254,10 @@ class RecordProcessor:
                 )
                 return self._finalize_result(result, context, source_guid)
 
-        # Step 7: Detect empty output (before transform to avoid wasted work)
         if _is_empty_output(response):
             on_empty = context.agent_config.get("on_empty", "warn")
             input_field_count = len(content) if isinstance(content, dict) else 0
 
-            # Always fire the event for observability; on_empty controls severity
             fire_event(
                 RecordEmptyOutputEvent(
                     agent_name=context.agent_name,
@@ -372,12 +280,10 @@ class RecordProcessor:
                     },
                 )
 
-        # Step 8: Transform response
         transformed = self._transform_response(
             response, content, source_guid, passthrough_fields, context
         )
 
-        # Fire RP003: Record transformed
         input_size = 1 if not isinstance(response, list) else len(response)
         output_size = len(transformed) if isinstance(transformed, list) else 1
         fire_event(
@@ -390,7 +296,6 @@ class RecordProcessor:
             )
         )
 
-        # Step 9: Create success result (with recovery metadata if retry occurred)
         result = ProcessingResult.success(
             data=transformed,
             source_guid=source_guid,
@@ -401,28 +306,12 @@ class RecordProcessor:
             input_record=input_record,
         )
 
-        # Step 10: Enrich and finalize
         return self._finalize_result(result, context, source_guid)
 
     def process_batch(self, items: list[Any], context: ProcessingContext) -> list[ProcessingResult]:
-        """
-        Process multiple records.
-
-        Handles exceptions gracefully - if one item fails, it creates a
-        ProcessingResult.failed() for that item and continues processing
-        remaining items.
-
-        Args:
-            items: List of input items
-            context: Base ProcessingContext
-
-        Returns:
-            List of ProcessingResults (includes both successes and failures)
-        """
-        # CRITICAL: Capture start_time BEFORE firing start event (learned from TICKET-019 P0)
+        """Process multiple records, capturing per-item failures without aborting the batch."""
         start_time = datetime.now(timezone.utc)
 
-        # Fire BP001: Batch processing started
         fire_event(
             BatchProcessingStartedEvent(
                 agent_name=context.agent_name,
@@ -440,13 +329,11 @@ class RecordProcessor:
                 result = self.process(item, item_context)
                 results.append(result)
 
-                # Track success/failure
                 if result.status == ProcessingStatus.SUCCESS:
                     successes += 1
                 elif result.status == ProcessingStatus.FAILED:
                     failures += 1
 
-                # Fire BP002: Batch processing progress (every 10 records or at end)
                 if (idx + 1) % 10 == 0 or (idx + 1) == len(items):
                     fire_event(
                         BatchProcessingProgressEvent(
@@ -459,16 +346,10 @@ class RecordProcessor:
                     )
 
             except ConfigurationError:
-                # ConfigurationError indicates a fundamental workflow misconfiguration
-                # Re-raise immediately to fail the workflow - these cannot be recovered
                 raise
             except EmptyOutputError:
-                # EmptyOutputError means on_empty=error was configured — user explicitly
-                # wants the workflow to stop when an action produces empty output
                 raise
             except TemplateVariableError as e:
-                # TemplateVariableError indicates a code bug (undefined template variables)
-                # Re-raise immediately to fail the workflow - these are not data errors
                 fire_event(
                     TemplateRenderingFailedEvent(
                         agent_name=context.agent_name,
@@ -478,19 +359,14 @@ class RecordProcessor:
                 )
                 raise
             except SchemaValidationError:
-                # SchemaValidationError means the output doesn't match the declared schema.
-                # This is a systemic error — every record will fail the same way.
                 raise
             except Exception as e:
-                # Create failed result instead of propagating exception
-                # This allows batch processing to continue for transient/data errors
                 logger.exception(
                     "[%s] Error processing item %d: %s",
                     context.agent_name,
                     idx,
                     str(e),
                 )
-                # Preserve source_snapshot and source_guid for first-stage source saving
                 input_record = item if isinstance(item, dict) else None
                 source_snapshot = None
                 source_guid = None
@@ -510,7 +386,6 @@ class RecordProcessor:
                 results.append(failed_result)
                 failures += 1
 
-        # Fire BP003: Batch processing complete
         elapsed_time = (datetime.now(timezone.utc) - start_time).total_seconds()
         fire_event(
             BatchProcessingCompleteEvent(
@@ -522,8 +397,6 @@ class RecordProcessor:
 
         return results
 
-    # Private helper methods
-
     @staticmethod
     def _build_tombstone_item(
         content: Any,
@@ -533,18 +406,7 @@ class RecordProcessor:
         *,
         extra_metadata: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        """Build a tombstone item for guard-skipped, exhausted, or unprocessed records.
-
-        Args:
-            content: Content to preserve in the tombstone
-            source_guid: Source GUID for lineage
-            reason: Reason string stored in metadata
-            input_record: Original input record (for target_id preservation)
-            extra_metadata: Additional metadata keys to merge (e.g. retry_exhausted)
-
-        Returns:
-            Tombstone dict ready for ProcessingResult.data
-        """
+        """Build a tombstone item for guard-skipped, exhausted, or unprocessed records."""
         item: dict[str, Any] = {
             "content": content,
             "source_guid": source_guid,
@@ -563,11 +425,7 @@ class RecordProcessor:
         context: ProcessingContext,
         source_guid: Optional[str],
     ) -> ProcessingResult:
-        """Enrich a result and fire the completion event.
-
-        Centralises the enrich → fire-event → return pattern used by every
-        non-filtered exit path in ``process()``.
-        """
+        """Enrich a result and fire the completion event."""
         enriched_result = self.enrichment_pipeline.enrich(result, context)
         fire_event(
             RecordProcessingCompleteEvent(
@@ -587,19 +445,7 @@ class RecordProcessor:
         passthrough_fields: dict[str, Any],
         context: ProcessingContext,
     ) -> list[dict[str, Any]]:
-        """
-        Transform LLM response to output format.
-
-        Args:
-            response: LLM response
-            content: Original content
-            source_guid: Source GUID
-            passthrough_fields: Fields to pass through
-            context: ProcessingContext
-
-        Returns:
-            List of transformed items
-        """
+        """Transform LLM response to output format."""
         from agent_actions.processing.helpers import (
             transform_with_passthrough,
         )
@@ -617,17 +463,7 @@ class RecordProcessor:
     def _create_item_context(
         base_context: ProcessingContext, index: int, item: Any
     ) -> ProcessingContext:
-        """
-        Create per-item context with updated record_index.
-
-        Args:
-            base_context: Base ProcessingContext
-            index: Item index
-            item: Current item
-
-        Returns:
-            New ProcessingContext for this item
-        """
+        """Create per-item context with updated record_index."""
         return replace(
             base_context,
             record_index=index,

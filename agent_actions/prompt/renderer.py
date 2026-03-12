@@ -1,9 +1,4 @@
-"""
-Configuration rendering service.
-
-This module provides services for rendering configuration templates
-and processing the resulting configuration data.
-"""
+"""Configuration rendering service for templates and config data."""
 
 import logging
 from abc import ABC, abstractmethod

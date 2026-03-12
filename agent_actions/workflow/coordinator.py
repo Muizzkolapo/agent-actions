@@ -66,60 +66,39 @@ logger = logging.getLogger(__name__)
 
 
 class AgentWorkflow:
-    """
-    Orchestrates multi-agent workflow execution.
-
-    This refactored version delegates complexity to specialized modules:
-    - AgentStateManager: Status persistence and queries
-    - SkipEvaluator: Skip condition evaluation (strategy pattern)
-    - BatchLifecycleManager: Batch job handling
-    - AgentOutputManager: Output loading and passthrough
-    - AgentExecutor: Single agent execution
-    - ActionLevelOrchestrator: Parallel execution coordination by action level
-    """
+    """Orchestrates multi-agent workflow execution."""
 
     def __init__(self, config: WorkflowConfig):
         """Initialize workflow with configuration and dependencies."""
-        # Fire workflow initialization event
         fire_event(
             WorkflowInitializationStartEvent(
                 workflow_name=config.manager.agent_name if config.manager else "unknown"
             )
         )
 
-        # Store configuration
         self.config = config
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
 
-        # Load configuration
         if config.manager is None:
             config.manager = ConfigManager(config.paths.constructor_path, config.paths.default_path)
         self._load_configs()
 
-        # Validate schema files exist before proceeding (fail fast)
         self._validate_schema_files()
 
-        # Initialize storage backend
         self.storage_backend: Optional["StorageBackend"] = self._initialize_storage_backend()
-
-        # Initialize services
         self.services = self._initialize_services()
-
-        # Initialize dependency orchestration (for upstream/downstream workflows)
         self._init_dependency_orchestrator()
-
-        # Generate and inject workflow session ID
         self.workflow_session_id = self._generate_workflow_session_id()
         self._inject_workflow_session_id()
 
     @property
     def state(self):
-        """Get workflow state from runtime context."""
+        """Return workflow state from runtime context."""
         return self.runtime.state
 
     @property
     def console(self):
-        """Get console from runtime context."""
+        """Return console from runtime context."""
         return self.runtime.console
 
     def _init_dependency_orchestrator(self) -> None:
@@ -164,10 +143,8 @@ class AgentWorkflow:
 
     def _initialize_services(self) -> WorkflowServices:
         """Initialize all workflow services."""
-        # Fire workflow services initialization event
         fire_event(WorkflowServicesInitializationStartEvent(workflow_name=self.agent_name))
 
-        # Create agent runner
         agent_runner = create_agent_runner(
             use_tools=self.config.use_tools,
             storage_backend=self.storage_backend,
@@ -177,12 +154,10 @@ class AgentWorkflow:
         agent_runner.agent_configs = self.agent_configs
         agent_runner.workflow_name = self.agent_name
 
-        # Set workflow-level data_source from YAML defaults (not per-agent)
         workflow_defaults = self.config.manager.user_config.get("defaults") or {}
         agent_runner.data_source_config = workflow_defaults.get("data_source")
 
-        # Import here to avoid circular dependency
-        from agent_actions.llm.batch.service import BatchService
+        from agent_actions.llm.batch.service import BatchService  # avoid circular import
 
         batch_service = BatchService(
             agent_indices=self.agent_indices,
@@ -191,18 +166,15 @@ class AgentWorkflow:
             action_name=self.agent_name,
         )
 
-        # Get agent folder and store for retry tracking
         agent_folder = Path(agent_runner.get_agent_folder(self.agent_name))
-        self._agent_folder = agent_folder  # Store for retry tracker context
+        self._agent_folder = agent_folder
         status_file = agent_folder / ".agent_status.json"
 
-        # Initialize version correlator with storage backend for DB-aware version consumption
         version_correlator = VersionOutputCorrelator(
             agent_folder,
             storage_backend=agent_runner.storage_backend,
         )
 
-        # Initialize modular components
         state_manager = AgentStateManager(status_file, self.execution_order)
         skip_evaluator = SkipEvaluator(self.console)
         batch_manager = BatchLifecycleManager(
@@ -221,7 +193,6 @@ class AgentWorkflow:
             )
         )
 
-        # Initialize agent executor
         agent_executor = AgentExecutor(
             ExecutorDependencies(
                 agent_runner=agent_runner,
@@ -233,16 +204,13 @@ class AgentWorkflow:
             console=self.console,
         )
 
-        # Initialize action-level orchestrator
         action_level_orchestrator = ActionLevelOrchestrator(
             self.execution_order, self.agent_configs, self.console
         )
 
-        # Initialize manifest manager
         agent_io_path = agent_folder
         manifest_manager = ManifestManager(agent_io_path)
 
-        # Compute execution levels and initialize manifest
         levels = action_level_orchestrator.compute_execution_levels()
         manifest_manager.initialize_manifest(
             workflow_name=self.agent_name,
@@ -251,7 +219,6 @@ class AgentWorkflow:
             agent_configs=self.agent_configs,
         )
 
-        # Store manifest manager for use by other components
         agent_runner.manifest_manager = manifest_manager
 
         return WorkflowServices(
@@ -309,14 +276,10 @@ class AgentWorkflow:
         )
 
     def _validate_schema_files(self) -> None:
-        """
-        Validate that all referenced schema files exist.
-
-        This runs during config validation (before workflow execution) to fail fast
-        with a clear error message instead of failing at runtime with obscure errors.
+        """Validate that all referenced schema files exist (fail-fast).
 
         Raises:
-            ConfigValidationError: If any referenced schema files are missing
+            ConfigValidationError: If any referenced schema files are missing.
         """
         # Use same schema directory as SchemaLoader (cwd/schema)
         schema_dir = Path.cwd() / "schema"
@@ -356,14 +319,7 @@ class AgentWorkflow:
             )
 
     def _initialize_storage_backend(self) -> Optional["StorageBackend"]:
-        """
-        Initialize the storage backend for the workflow.
-
-        Creates an SQLite database at: {workflow}/agent_io/target/{workflow_name}.db
-
-        Returns:
-            Initialized StorageBackend instance, or None if initialization fails
-        """
+        """Initialize the SQLite storage backend for the workflow."""
         try:
             # Get workflow directory from config path
             config_path = Path(self.config.paths.constructor_path)
@@ -392,27 +348,27 @@ class AgentWorkflow:
 
     @property
     def agent_name(self) -> str:
-        """Get agent name from metadata."""
+        """Return agent name from metadata."""
         return self.metadata.agent_name
 
     @property
     def execution_order(self) -> list:
-        """Get execution order from metadata."""
+        """Return execution order from metadata."""
         return self.metadata.execution_order
 
     @property
     def agent_indices(self) -> dict:
-        """Get agent indices from metadata."""
+        """Return agent indices from metadata."""
         return self.metadata.agent_indices
 
     @property
     def agent_configs(self) -> dict:
-        """Get agent configs from metadata."""
+        """Return agent configs from metadata."""
         return self.metadata.agent_configs
 
     @property
     def child_pipeline(self) -> Optional[str]:
-        """Get child pipeline from metadata."""
+        """Return child pipeline from metadata."""
         return self.metadata.child_pipeline
 
     def _discover_udfs(self):
@@ -451,21 +407,13 @@ class AgentWorkflow:
         return 0
 
     def _generate_workflow_session_id(self) -> str:
-        """
-        Generate a deterministic workflow session ID.
-
-        Uses only config path + agent name (no time.time()) so the same
-        workflow always produces the same session ID. This ensures
-        version_correlation_id stays consistent across workflow restarts
-        and batch resume operations.
-        """
+        """Generate a deterministic workflow session ID from config path + agent name."""
         config_content = f"{self.config.paths.constructor_path}:{self.agent_name}"
         config_hash = hashlib.sha256(config_content.encode()).hexdigest()[:16]
         return f"workflow_{config_hash}"
 
     def _inject_workflow_session_id(self):
         """Inject workflow session ID into all agent configurations."""
-        # Clear stale correlation IDs from previous runs to prevent unbounded growth
         from agent_actions.utils.correlation import VersionIdGenerator
 
         VersionIdGenerator.clear_version_correlation_registry()
@@ -526,12 +474,10 @@ class AgentWorkflow:
         )
 
     def _resolve_upstream_and_initialize(self) -> Optional[bool]:
-        """
-        Initialize event context and resolve upstream dependencies.
+        """Initialize event context and resolve upstream dependencies.
 
         Returns:
-            True if should continue, False if upstream has pending batches,
-            None if exception occurred (caller should re-raise)
+            True to continue, False if upstream has pending batches.
         """
         # Set workflow context with correlation ID
         get_manager().set_context(workflow_name=self.agent_name, correlation_id=str(uuid4())[:8])
@@ -543,12 +489,7 @@ class AgentWorkflow:
         return True
 
     async def async_run(self, concurrency_limit: int = 5):
-        """
-        Execute workflow level-by-level with parallelism within each level.
-
-        Args:
-            concurrency_limit: Maximum concurrent agents within a level (default 5)
-        """
+        """Execute workflow level-by-level with parallelism within each level."""
         # Initialize event context and resolve upstream
         should_continue = self._resolve_upstream_and_initialize()
         if should_continue is False:
@@ -662,16 +603,10 @@ class AgentWorkflow:
                 raise
 
     def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
-        """
-        Run a single agent in sequential mode.
-
-        Returns:
-            bool: True if workflow should stop, False to continue
-        """
+        """Run a single agent in sequential mode. Return True if workflow should stop."""
         agent_config = self.agent_configs[agent_name]
         start_time = datetime.now()
 
-        # Fire agent start event
         fire_event(
             AgentStartEvent(
                 agent_name=agent_name,
@@ -681,18 +616,15 @@ class AgentWorkflow:
             )
         )
 
-        # Check if already completed
         if self.services.core.state_manager.is_completed(agent_name):
             self._log_agent_skip(idx, agent_name, total_agents, start_time)
             return False
 
-        # Execute agent
         is_last = idx == len(self.execution_order) - 1
         result = self.services.core.agent_executor.execute_agent_sync(
             agent_name, agent_idx=idx, agent_config=agent_config, is_last_agent=is_last
         )
 
-        # Log result
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         self._log_agent_result(
@@ -706,7 +638,6 @@ class AgentWorkflow:
             )
         )
 
-        # Handle result
         if result.success:
             # If batch was submitted, stop workflow to wait for completion
             if result.status == "batch_submitted":
@@ -725,7 +656,6 @@ class AgentWorkflow:
 
     def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, _start_time: datetime):
         """Log skipped agent."""
-        # Fire agent skip event
         fire_event(
             AgentSkipEvent(
                 agent_name=agent_name,
@@ -738,7 +668,6 @@ class AgentWorkflow:
     def _log_agent_result(self, params: AgentLogParams):
         """Log agent execution result via event system."""
         if params.result.success and params.result.status == "completed":
-            # Fire agent complete event
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
@@ -753,7 +682,6 @@ class AgentWorkflow:
                 )
             )
         elif not params.result.success:
-            # Fire agent failed event
             fire_event(
                 AgentFailedEvent(
                     agent_name=params.agent_name,
@@ -771,10 +699,8 @@ class AgentWorkflow:
 
     def _finalize_workflow(self, elapsed_time: float = 0.0):
         """Finalize workflow execution."""
-        # Get status counts from state manager
         summary = self.services.core.state_manager.get_summary()
 
-        # Fire workflow complete event
         fire_event(
             WorkflowCompleteEvent(
                 workflow_name=self.agent_name,
@@ -785,7 +711,6 @@ class AgentWorkflow:
             )
         )
 
-        # Mark workflow as completed in manifest
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_completed()
 
@@ -793,7 +718,6 @@ class AgentWorkflow:
         """Handle workflow execution error with structured output."""
         self.state.failed = True
 
-        # Fire workflow failed event
         fire_event(
             WorkflowFailedEvent(
                 workflow_name=self.agent_name,
@@ -805,13 +729,10 @@ class AgentWorkflow:
             )
         )
 
-        # Mark workflow as failed in manifest
         if self.services.support.manifest_manager:
             self.services.support.manifest_manager.mark_workflow_failed(get_error_detail(error))
 
-        # Mark running agent as failed
         self.services.core.state_manager.mark_running_as_failed()
 
-        # Mark exception as already displayed to prevent duplicate output
-        # The CLI decorator will check for this attribute
+        # CLI decorator checks this attribute to prevent duplicate output
         error._already_displayed = True

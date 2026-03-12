@@ -1,6 +1,4 @@
-"""
-Workflow YAML parser for documentation generation.
-"""
+"""Workflow YAML parser for documentation generation."""
 
 import logging
 from typing import Dict, List, Any, Optional
@@ -12,19 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 def extract_fields_for_docs(raw_schema: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Extract normalized field list from raw schema for documentation.
+    """Extract normalized field list from raw schema for documentation.
 
-    Handles 3 schema formats:
-    1. Unified format: {fields: [{id, type, ...}]}
-    2. Array schema: {type: 'array', items: {properties: {...}}}
-    3. Object schema: {type: 'object', properties: {...}}
-
-    Args:
-        raw_schema: Raw YAML schema data from SchemaLoader.load_schema()
-
-    Returns:
-        List of field dicts with {name, type, description, required}
+    Handles unified format, array schema, and object schema formats.
     """
     fields = []
 
@@ -221,15 +209,7 @@ class WorkflowParser:
 
     @staticmethod
     def extract_input_fields(context_scope: Dict[str, Any]) -> List[str]:
-        """
-        Extract input field names from context_scope.
-
-        Args:
-            context_scope: The context_scope dict from action definition
-
-        Returns:
-            List of input field names (e.g., ['source.page_content', 'seed.exam_syllabus'])
-        """
+        """Extract input field names from context_scope."""
         inputs = []
 
         # Extract from 'observe' - fields that are read as inputs

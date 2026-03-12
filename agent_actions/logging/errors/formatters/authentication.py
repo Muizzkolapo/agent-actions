@@ -9,10 +9,8 @@ class AuthenticationErrorFormatter(ErrorFormatter):
     """Handles authentication errors."""
 
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
-        """Detect authentication errors."""
         exc_names = [type(exc).__name__, type(root).__name__]
 
-        # Check exception types
         if any("Auth" in name for name in exc_names):
             return True
 
@@ -31,8 +29,6 @@ class AuthenticationErrorFormatter(ErrorFormatter):
     def format(
         self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
-        """Handle authentication errors."""
-        # Determine provider from error message or context
         provider = self._extract_provider_name(message, context)
 
         if provider == "anthropic":

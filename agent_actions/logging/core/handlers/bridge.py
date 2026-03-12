@@ -1,13 +1,4 @@
-"""
-Logging bridge that converts Python logging to events.
-
-This handler bridges the gap between Python's standard logging and the
-event system, allowing existing logger.info(), logger.debug() calls to
-automatically become events.
-
-This enables gradual migration - all existing logging code continues to
-work but output flows through the centralized event system.
-"""
+"""Logging bridge that converts Python logging calls to events."""
 
 from __future__ import annotations
 
@@ -19,53 +10,22 @@ if TYPE_CHECKING:
 
 
 class LoggingBridgeHandler(logging.Handler):
-    """
-    Python logging handler that converts log records to events.
-
-    When attached to Python's logging system, this handler intercepts
-    all log records and fires them as events through the EventManager.
-
-    Usage:
-        # Automatic setup via LoggerFactory
-        LoggerFactory.initialize()  # Sets up the bridge
-
-        # Then all logging calls become events
-        logger = logging.getLogger('my_module')
-        logger.info("Hello")  # → fires LogEvent through EventManager
-
-    This allows:
-    - Existing code using logger.* to work unchanged
-    - All output to flow through the event system
-    - Consistent formatting and routing via event handlers
-    """
+    """Python logging handler that converts log records to events via EventManager."""
 
     def __init__(self, level: int = logging.DEBUG) -> None:
-        """
-        Initialize the bridge handler.
-
-        Args:
-            level: Minimum log level to bridge (default: DEBUG - bridge everything)
-        """
+        """Initialize the bridge handler."""
         super().__init__(level)
         self._event_manager = None
 
     def emit(self, record: logging.LogRecord) -> None:
-        """
-        Convert a log record to an event and fire it.
-
-        Args:
-            record: Python LogRecord to convert
-        """
+        """Convert a log record to an event and fire it."""
         try:
-            # Lazy import to avoid circular dependency
             from agent_actions.logging.core.events import EventLevel
             from agent_actions.logging.core.manager import EventManager
 
-            # Get or cache event manager
             if self._event_manager is None:
                 self._event_manager = EventManager.get()
 
-            # Map Python log level to EventLevel
             level_map = {
                 logging.DEBUG: EventLevel.DEBUG,
                 logging.INFO: EventLevel.INFO,
@@ -75,11 +35,8 @@ class LoggingBridgeHandler(logging.Handler):
             }
             event_level = level_map.get(record.levelno, EventLevel.INFO)
 
-            # Determine category from logger name
-            # e.g., "agent_actions.workflow.coordinator" -> "workflow"
             category = self._extract_category(record.name)
 
-            # Create a LogEvent
             event = LogEvent(
                 level=event_level,
                 category=category,
@@ -91,7 +48,6 @@ class LoggingBridgeHandler(logging.Handler):
                 exc_info=record.exc_info,
             )
 
-            # Copy extra fields if present
             if hasattr(record, "operation"):
                 event.data["operation"] = record.operation
             if hasattr(record, "agent_name"):
@@ -99,7 +55,6 @@ class LoggingBridgeHandler(logging.Handler):
             if hasattr(record, "workflow_name"):
                 event.data["workflow_name"] = record.workflow_name
 
-            # Fire the event
             self._event_manager.fire(event)
 
         except Exception:
@@ -108,15 +63,7 @@ class LoggingBridgeHandler(logging.Handler):
             self.handleError(record)
 
     def _extract_category(self, logger_name: str) -> str:
-        """
-        Extract category from logger name.
-
-        Args:
-            logger_name: Full logger name (e.g., "agent_actions.workflow.coordinator")
-
-        Returns:
-            Category string (e.g., "workflow")
-        """
+        """Extract category from logger name (e.g. 'agent_actions.workflow.x' -> 'workflow')."""
         parts = logger_name.split(".")
         if len(parts) >= 2 and parts[0] == "agent_actions":
             return parts[1]  # Return the module name
@@ -134,12 +81,7 @@ from agent_actions.logging.core.events import BaseEvent, EventLevel
 
 @dataclass
 class LogEvent(BaseEvent):
-    """
-    Event representing a Python log record.
-
-    This event type wraps Python logging calls, preserving source information
-    and allowing them to flow through the event system.
-    """
+    """Event representing a Python log record bridged to the event system."""
 
     logger_name: str = ""
     source_file: str = ""
@@ -148,7 +90,6 @@ class LogEvent(BaseEvent):
     exc_info: Optional[Tuple[Type[BaseException], BaseException, Any]] = None
 
     def __post_init__(self) -> None:
-        # Category is set by bridge based on logger name
         if not self.category:
             self.category = "log"
 

@@ -1,7 +1,4 @@
-"""Batch processing service facade for managing batch job lifecycle and results.
-
-This is a thin facade that delegates to specialized services for all operations.
-"""
+"""Batch processing service facade delegating to specialized services."""
 
 import logging
 from pathlib import Path
@@ -41,11 +38,7 @@ def _create_registry_manager_factory() -> Callable[[str], BatchRegistryManager]:
 
 @registry.register_service("batch_service")
 class BatchService:
-    """
-    Thin facade for batch processing that delegates to specialized services.
-
-    Maintains backward-compatible API while internally using focused services.
-    """
+    """Thin facade for batch processing that delegates to specialized services."""
 
     def __init__(
         self,

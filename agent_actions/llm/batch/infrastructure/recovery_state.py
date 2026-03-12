@@ -1,8 +1,4 @@
-"""Recovery state persistence for async batch retry/reprompt.
-
-Manages cross-pass state for recovery batches, following the same
-JSON persistence pattern as BatchContextManager.
-"""
+"""Recovery state persistence for async batch retry/reprompt."""
 
 import json
 import logging
@@ -54,24 +50,11 @@ class RecoveryState:
 
 
 class RecoveryStateManager:
-    """Manages persistence of RecoveryState to disk.
-
-    Follows the BatchContextManager pattern: static methods, JSON files
-    in the batch/ subdirectory, keyed by file_name.
-    """
+    """Persists RecoveryState to JSON files in the batch/ subdirectory."""
 
     @staticmethod
     def save(output_directory: str, file_name: str, state: RecoveryState) -> Path:
-        """Save recovery state to disk.
-
-        Args:
-            output_directory: Output directory path
-            file_name: Original batch file_name key
-            state: RecoveryState to persist
-
-        Returns:
-            Path where state was saved
-        """
+        """Save recovery state to disk."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         ensure_directory_exists(state_path, is_file=True)
 
@@ -89,15 +72,7 @@ class RecoveryStateManager:
 
     @staticmethod
     def load(output_directory: str, file_name: str) -> Optional[RecoveryState]:
-        """Load recovery state from disk.
-
-        Args:
-            output_directory: Output directory path
-            file_name: Original batch file_name key
-
-        Returns:
-            RecoveryState if found, None otherwise
-        """
+        """Load recovery state from disk, or None if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         if not state_path.exists():
             return None
@@ -112,15 +87,7 @@ class RecoveryStateManager:
 
     @staticmethod
     def delete(output_directory: str, file_name: str) -> bool:
-        """Delete recovery state file.
-
-        Args:
-            output_directory: Output directory path
-            file_name: Original batch file_name key
-
-        Returns:
-            True if deleted, False if not found
-        """
+        """Delete recovery state file. Returns True if deleted, False if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         if state_path.exists():
             state_path.unlink()
@@ -130,28 +97,12 @@ class RecoveryStateManager:
 
     @staticmethod
     def exists(output_directory: str, file_name: str) -> bool:
-        """Check if recovery state exists.
-
-        Args:
-            output_directory: Output directory path
-            file_name: Original batch file_name key
-
-        Returns:
-            True if state file exists
-        """
+        """Check if recovery state exists."""
         return RecoveryStateManager._get_path(output_directory, file_name).exists()
 
     @staticmethod
     def _get_path(output_directory: str, file_name: str) -> Path:
-        """Get path to recovery state file.
-
-        Args:
-            output_directory: Output directory path
-            file_name: Original batch file_name key
-
-        Returns:
-            Path to recovery state file
-        """
+        """Get path to recovery state file."""
         if ".." in file_name:
             raise ValueError(f"Invalid file name contains path traversal: {file_name}")
         safe_name = Path(file_name).name

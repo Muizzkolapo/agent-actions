@@ -1,9 +1,4 @@
-"""
-Core event handlers for the centralized logging system.
-
-These handlers process events and output them to various destinations.
-They have no dependencies on agent_actions domain code.
-"""
+"""Core event handlers for the centralized logging system."""
 
 from agent_actions.logging.core.handlers.console import ConsoleEventHandler
 from agent_actions.logging.core.handlers.json_file import JSONFileHandler

@@ -1,6 +1,4 @@
-"""
-Module for prompt formatting and loading.
-"""
+"""Prompt formatting and loading."""
 
 from agent_actions.errors import PromptValidationError
 from agent_actions.prompt.handler import PromptLoader

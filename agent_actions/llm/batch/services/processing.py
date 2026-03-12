@@ -1,11 +1,4 @@
-"""Batch processing service for processing batch job results.
-
-This service encapsulates all result processing functionality, extracted from
-BatchService to follow Single Responsibility Principle.
-
-Retry and reprompt logic is delegated to BatchRetryService (retry.py).
-Result retrieval with reconciliation is delegated to shared.retrieve_and_reconcile().
-"""
+"""Batch processing service for converting batch results to workflow output."""
 
 import logging
 import time

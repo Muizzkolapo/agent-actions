@@ -1,9 +1,4 @@
-"""
-Dataclass models for agent workflow orchestration.
-
-This module contains the data structures used by AgentWorkflow for
-configuration, state management, and service organization.
-"""
+"""Dataclass models for agent workflow orchestration."""
 
 from dataclasses import dataclass
 from datetime import datetime

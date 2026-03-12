@@ -1,8 +1,4 @@
-"""
-Skills management CLI commands.
-
-Provides commands for installing bundled skills for Claude Code or OpenAI Codex.
-"""
+"""Skills management CLI commands."""
 
 import shutil
 from pathlib import Path
@@ -13,12 +9,12 @@ from agent_actions.cli.project_root import find_project_root
 
 
 def get_bundled_skills_path() -> Path:
-    """Get the path to bundled skills in the package."""
+    """Return the path to bundled skills in the package."""
     return Path(__file__).parent.parent / "skills"
 
 
 def get_target_path(tool: str, project_root: Path) -> Path:
-    """Get the target path for skills based on tool choice."""
+    """Return the target installation path for the given tool."""
     if tool == "claude":
         return project_root / ".claude" / "skills"
     if tool == "codex":
@@ -72,7 +68,6 @@ def install(tool: str, force: bool):
             "  agac skills install --codex"
         )
 
-    # Find project root
     project_root = find_project_root()
     if not project_root:
         raise click.ClickException(
@@ -80,7 +75,6 @@ def install(tool: str, force: bool):
             "Run this command from a directory containing agent_actions.yml"
         )
 
-    # Get paths
     bundled_skills = get_bundled_skills_path()
     target_dir = get_target_path(tool, project_root)
 
@@ -90,7 +84,6 @@ def install(tool: str, force: bool):
             "This may indicate a corrupted installation."
         )
 
-    # List available skills
     available_skills = [d.name for d in bundled_skills.iterdir() if d.is_dir()]
     if not available_skills:
         raise click.ClickException("No bundled skills found.")
@@ -99,7 +92,6 @@ def install(tool: str, force: bool):
     click.echo(f"Target: {target_dir}")
     click.echo()
 
-    # Create target directory
     target_dir.mkdir(parents=True, exist_ok=True)
 
     installed = []
@@ -120,7 +112,6 @@ def install(tool: str, force: bool):
             shutil.copytree(source, dest)
             installed.append(skill_name)
 
-    # Report results
     if installed:
         click.echo(click.style("Installed:", fg="green", bold=True))
         for name in installed:
@@ -160,11 +151,9 @@ def list_skills():
         skill_path = bundled_skills / skill_name
         skill_md = skill_path / "SKILL.md"
 
-        # Try to get description from SKILL.md
         description = ""
         if skill_md.exists():
             content = skill_md.read_text()
-            # Look for first line after title
             lines = content.split("\n")
             for line in lines[1:]:
                 line = line.strip()

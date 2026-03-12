@@ -1,6 +1,4 @@
-"""
-Centralized error exports for agent-actions.
-"""
+"""Centralized error exports for agent-actions."""
 
 # Base error
 from agent_actions.errors.base import AgentActionsError, get_error_detail

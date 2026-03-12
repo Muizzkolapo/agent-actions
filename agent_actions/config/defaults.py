@@ -1,9 +1,4 @@
-"""Centralized default values for hardcoded constants.
-
-Each class groups related defaults by domain.  This module must remain
-free of heavyweight imports so it can be imported anywhere without
-circular-dependency risk.
-"""
+"""Centralized default values for hardcoded constants."""
 
 
 class StorageDefaults:
@@ -13,11 +8,7 @@ class StorageDefaults:
 
 
 class LockDefaults:
-    """Defaults for portalocker file-lock timeouts.
-
-    Simple operations use a shorter timeout than atomic
-    read-modify-write operations.
-    """
+    """Defaults for portalocker file-lock timeouts."""
 
     SIMPLE_LOCK_TIMEOUT_SECONDS: float = 5.0
     ATOMIC_LOCK_TIMEOUT_SECONDS: float = 10.0

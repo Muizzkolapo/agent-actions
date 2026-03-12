@@ -1,10 +1,4 @@
-"""
-Agent-actions specific event types.
-
-This module contains event definitions specific to the agent-actions domain.
-These events extend the core event infrastructure with workflow, agent,
-and LLM-specific events.
-"""
+"""Agent-actions specific event types."""
 
 from agent_actions.logging.events.types import (
     # Workflow events

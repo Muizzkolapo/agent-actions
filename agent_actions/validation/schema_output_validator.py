@@ -1,8 +1,4 @@
-"""Post-LLM schema output validation.
-
-Validates LLM responses against expected schemas to catch mismatches
-and provide detailed reports on compliance.
-"""
+"""Post-LLM schema output validation against expected response schemas."""
 
 import logging
 from dataclasses import dataclass, field
@@ -16,16 +12,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SchemaValidationReport:
-    """Report on LLM output schema compliance.
-
-    Provides detailed information about how well the LLM output matches
-    the expected schema, including missing fields, extra fields, and type mismatches.
-
-    Example:
-        report = validate_output_against_schema(llm_response, schema, action_name)
-        if not report.is_compliant:
-            logger.warning(report.format_report())
-    """
+    """Report on LLM output schema compliance."""
 
     action_name: str
     schema_name: str
@@ -64,7 +51,6 @@ class SchemaValidationReport:
             lines.append(f"Actual fields: {', '.join(sorted(self.actual_fields))}")
         lines.append("")
 
-        # Show field compliance
         matched = self.expected_fields & self.actual_fields
         if matched:
             lines.append(f"Matched fields ({len(matched)}): {', '.join(sorted(matched))}")
@@ -124,39 +110,22 @@ def validate_output_against_schema(
     action_name: str,
     strict_mode: bool = False,
 ) -> SchemaValidationReport:
-    """Validate LLM response against expected schema.
-
-    Args:
-        llm_output: The response from the LLM
-        schema: The expected schema (unified or JSON Schema format)
-        action_name: Name of the action for reporting
-        strict_mode: If True, extra fields also cause validation failure
-
-    Returns:
-        SchemaValidationReport with detailed compliance information
-    """
+    """Validate LLM response against expected schema."""
     schema_name = schema.get("name", "unknown")
 
-    # Extract expected fields and their requirements from schema
     expected_fields, required_fields, field_types = _extract_schema_fields(schema)
-
-    # Extract actual fields from LLM output
     actual_fields = _extract_output_fields(llm_output)
 
-    # Analyze compliance
     missing_required = [f for f in required_fields if f not in actual_fields]
     missing_optional = [f for f in (expected_fields - required_fields) if f not in actual_fields]
     extra_fields = [f for f in actual_fields if f not in expected_fields]
 
-    # Check types
     type_errors = _check_field_types(llm_output, field_types)
 
-    # Determine compliance
     is_compliant = len(missing_required) == 0 and len(type_errors) == 0
     if strict_mode and extra_fields:
         is_compliant = False
 
-    # Build validation errors list
     validation_errors = []
     if missing_required:
         validation_errors.append(f"Missing required fields: {', '.join(missing_required)}")
@@ -185,11 +154,7 @@ def validate_output_against_schema(
 
 
 def _extract_schema_fields(schema: Dict[str, Any]) -> Tuple[Set[str], Set[str], Dict[str, str]]:
-    """Extract field names, required fields, and types from schema.
-
-    Returns:
-        Tuple of (all_fields, required_fields, field_types)
-    """
+    """Return (all_fields, required_fields, field_types) from a schema."""
     all_fields: Set[str] = set()
     required_fields: Set[str] = set()
     field_types: Dict[str, str] = {}
@@ -248,11 +213,7 @@ def _check_field_types(
     llm_output: Any,
     field_types: Dict[str, str],
 ) -> Dict[str, Tuple[str, str]]:
-    """Check if field values match expected types.
-
-    Returns:
-        Dict mapping field names to (expected_type, actual_type) for mismatches
-    """
+    """Return field-to-(expected, actual) mapping for type mismatches."""
     type_errors: Dict[str, Tuple[str, str]] = {}
 
     if not isinstance(llm_output, dict):
@@ -298,17 +259,8 @@ def validate_and_raise_if_invalid(
 ) -> SchemaValidationReport:
     """Validate LLM output and raise SchemaValidationError if invalid.
 
-    Args:
-        llm_output: The response from the LLM
-        schema: The expected schema
-        action_name: Name of the action
-        strict_mode: If True, extra fields also cause validation failure
-
-    Returns:
-        SchemaValidationReport if valid
-
     Raises:
-        SchemaValidationError: If validation fails
+        SchemaValidationError: If validation fails.
     """
     report = validate_output_against_schema(llm_output, schema, action_name, strict_mode)
 

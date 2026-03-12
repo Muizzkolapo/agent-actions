@@ -1,9 +1,4 @@
-"""
-Batch Context Manager.
-
-Handles persistence of batch context maps.
-Extracted from BatchService as part of Phase 4 refactoring.
-"""
+"""Persistence of batch context maps to/from the batch directory."""
 
 import json
 import logging
@@ -17,41 +12,13 @@ logger = logging.getLogger(__name__)
 
 
 class BatchContextManager:
-    """
-    Manages batch context map lifecycle.
-
-    Handles saving and loading context maps to/from the batch directory.
-    Separates context persistence from business logic.
-
-    Example:
-        manager = BatchContextManager()
-
-        manager.save_batch_context_map(
-            context_map={'rec_1': {...}},
-            output_directory='/tmp/node_1_Agent',
-            batch_name='test.json'
-        )
-
-        context = manager.load_batch_context_map(
-            output_directory='/tmp/node_1_Agent',
-            batch_name='test.json'
-        )
-    """
+    """Saves and loads batch context maps to/from the batch directory."""
 
     @staticmethod
     def save_batch_context_map(
         context_map: Dict[str, Any], output_directory: str, batch_name: str
     ) -> Path:
-        """
-        Save batch processing context map to batch directory.
-
-        Args:
-            context_map: Context map to save
-            output_directory: Output directory path
-            batch_name: Batch file name
-
-        Returns:
-            Path where context was saved
+        """Save batch processing context map to batch directory.
 
         Raises:
             ProcessingError: If save fails
@@ -77,15 +44,7 @@ class BatchContextManager:
 
     @staticmethod
     def load_batch_context_map(output_directory: str, batch_name: str) -> Dict[str, Any]:
-        """
-        Load batch processing context map from batch directory.
-
-        Args:
-            output_directory: Output directory path
-            batch_name: Batch file name
-
-        Returns:
-            Loaded context map
+        """Load batch processing context map from batch directory.
 
         Raises:
             ProcessingError: If load fails or file not found
@@ -123,31 +82,13 @@ class BatchContextManager:
 
     @staticmethod
     def batch_context_exists(output_directory: str, batch_name: str) -> bool:
-        """
-        Check if batch context map file exists.
-
-        Args:
-            output_directory: Output directory path
-            batch_name: Batch file name
-
-        Returns:
-            True if context map exists
-        """
+        """Check if batch context map file exists."""
         context_path = BatchContextManager._get_context_path(output_directory, batch_name)
         return context_path.exists()
 
     @staticmethod
     def _get_context_path(output_directory: str, batch_name: str) -> Path:
-        """
-        Get path to context map file.
-
-        Args:
-            output_directory: Output directory path (e.g., '.../target/node_1_Agent')
-            batch_name: Batch file name (e.g., 'input.json')
-
-        Returns:
-            Path to context map file (e.g., '.../target/node_1_Agent/batch/.context_map_input.json')
-        """
+        """Get path to context map file."""
         output_dir = Path(output_directory)
         batch_dir = output_dir / "batch"
 
@@ -161,16 +102,7 @@ class BatchContextManager:
 
     @staticmethod
     def delete_batch_context_map(output_directory: str, batch_name: str) -> bool:
-        """
-        Delete batch context map file if it exists.
-
-        Args:
-            output_directory: Output directory path
-            batch_name: Batch file name
-
-        Returns:
-            True if file was deleted, False if it didn't exist
-        """
+        """Delete batch context map file if it exists."""
         context_path = BatchContextManager._get_context_path(output_directory, batch_name)
 
         if context_path.exists():

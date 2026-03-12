@@ -1,11 +1,4 @@
-"""
-Base event types for the centralized logging system.
-
-This module defines the foundational event classes that all domain-specific
-events inherit from. It uses only Python stdlib - no external dependencies.
-
-Uses dataclasses for simplicity.
-"""
+"""Base event types for the centralized logging system."""
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -40,12 +33,7 @@ class EventLevel(Enum):
 
 
 class EventCategory(Enum):
-    """
-    Base event categories.
-
-    Projects can use string categories for extension without modifying this enum.
-    These are the common categories used across projects.
-    """
+    """Base event categories; extensible via string categories."""
 
     SYSTEM = "system"  # System lifecycle events
     LIFECYCLE = "lifecycle"  # Application lifecycle
@@ -55,12 +43,7 @@ class EventCategory(Enum):
 
 @dataclass
 class EventMeta:
-    """
-    Standard metadata attached to all events.
-
-    This provides correlation and tracing information that helps connect
-    related events across a single invocation or request.
-    """
+    """Standard correlation and tracing metadata attached to all events."""
 
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     correlation_id: str | None = None
@@ -81,34 +64,13 @@ class EventMeta:
 
 @dataclass
 class BaseEvent:
-    """
-    Base class for all events in the system.
+    """Base class for all events in the system."""
 
-    All domain-specific events should inherit from this class.
-    Events are immutable data structures that capture something that happened.
-
-    Example:
-        @dataclass
-        class UserLoggedIn(BaseEvent):
-            user_id: str
-            login_method: str = "password"
-
-            def __post_init__(self):
-                super().__post_init__()
-                self.level = EventLevel.INFO
-                self.category = "auth"
-                self.message = f"User {self.user_id} logged in via {self.login_method}"
-    """
-
-    # Required fields with defaults for inheritance
     level: EventLevel = field(default=EventLevel.INFO)
     category: str = field(default="system")
     message: str = field(default="")
 
-    # Metadata - auto-populated
     meta: EventMeta = field(default_factory=EventMeta)
-
-    # Additional structured data
     data: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

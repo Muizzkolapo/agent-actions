@@ -1,16 +1,4 @@
-"""
-Shared utilities for merging JSON records by correlation key.
-
-This module provides common merge logic used across the workflow module:
-- runner.py (file processing with parallel branches)
-- managers/output.py (output merging)
-- managers/loop.py (version iteration correlation)
-
-The merge pattern:
-1. Group records by a correlation key (reduce_key -> parent_target_id -> source_guid)
-2. Deep-merge records with the same key (content dicts, lineage arrays with dedup)
-3. Return merged records plus any that couldn't be correlated
-"""
+"""Shared utilities for merging JSON records by correlation key."""
 
 from __future__ import annotations
 
@@ -23,21 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 def deep_merge_record(existing: Dict[str, Any], new_record: Dict[str, Any]) -> None:
-    """
-    Deep merge a new record into an existing record.
-
-    Handles special cases:
-    - 'content' dicts are merged (new values update existing)
-    - 'lineage' arrays are merged with deduplication (by node_id)
-    - Other fields: first occurrence wins
-
-    Args:
-        existing: Target record to merge into (modified in place)
-        new_record: Source record to merge from
-    """
+    """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other fields first-wins."""
     for key, value in new_record.items():
         if key == "content" and isinstance(value, dict):
-            # Deep merge content dictionaries
             if "content" not in existing:
                 existing["content"] = {}
             if isinstance(existing["content"], dict):
@@ -47,22 +23,16 @@ def deep_merge_record(existing: Dict[str, Any], new_record: Dict[str, Any]) -> N
         elif key == "lineage" and isinstance(value, list):
             _merge_lineage(existing, value)
         elif key not in existing:
-            # First occurrence wins for non-mergeable fields
             existing[key] = value
 
 
 def _merge_lineage(existing: Dict[str, Any], new_lineage: List[Any]) -> None:
-    """
-    Merge lineage arrays with deduplication.
-
-    Lineage entries can be strings (node_ids) or dicts with 'node_id' key.
-    """
+    """Merge lineage arrays with deduplication by node_id."""
     if "lineage" not in existing:
         existing["lineage"] = []
     if not isinstance(existing["lineage"], list):
         return
 
-    # Build set of existing node_ids for dedup
     existing_ids: set = set()
     for entry in existing["lineage"]:
         if isinstance(entry, str):
@@ -70,7 +40,6 @@ def _merge_lineage(existing: Dict[str, Any], new_lineage: List[Any]) -> None:
         elif isinstance(entry, dict) and "node_id" in entry:
             existing_ids.add(entry["node_id"])
 
-    # Add new entries that aren't duplicates
     for entry in new_lineage:
         if isinstance(entry, str):
             if entry not in existing_ids:
@@ -79,33 +48,18 @@ def _merge_lineage(existing: Dict[str, Any], new_lineage: List[Any]) -> None:
         elif isinstance(entry, dict):
             node_id = entry.get("node_id")
             if node_id:
-                # Has node_id: deduplicate by node_id
                 if node_id not in existing_ids:
                     existing["lineage"].append(entry)
                     existing_ids.add(node_id)
             else:
-                # No node_id: always append (cannot deduplicate)
                 existing["lineage"].append(entry)
 
 
 def get_correlation_value(record: Dict[str, Any], key_candidates: List[str]) -> Optional[str]:
-    """
-    Find a correlation value from a record using a fallback chain.
-
-    Tries each key candidate in order, checking both top-level and nested
-    in 'content' dict.
-
-    Args:
-        record: The record to extract correlation value from
-        key_candidates: List of field names to try in order
-
-    Returns:
-        The correlation value if found, None otherwise
-    """
+    """Return the first matching correlation value from top-level or content, or None."""
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
         if not correlation_value:
-            # Try nested in content
             content = record.get("content", {})
             if isinstance(content, dict):
                 correlation_value = content.get(key_name)
@@ -115,24 +69,10 @@ def get_correlation_value(record: Dict[str, Any], key_candidates: List[str]) -> 
 
 
 def merge_records_by_key(records: List[Any], reduce_key: Optional[str] = None) -> List[Any]:
-    """
-    Merge records by correlating on a key field.
-
-    Used when processing data from multiple parallel branches.
-    Records with the same correlation key are merged into a single record.
-
-    Args:
-        records: List of records to merge
-        reduce_key: Field name to use for correlation.
-                   Falls back to: parent_target_id -> source_guid if not specified.
-
-    Returns:
-        List of merged records, correlated by the reduce key
-    """
+    """Merge records sharing the same correlation key (reduce_key -> parent_target_id -> source_guid)."""
     records_by_key: Dict[str, Dict] = {}
     records_without_key: List[Any] = []
 
-    # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
     key_candidates = []
     if reduce_key:
         key_candidates.append(reduce_key)
@@ -156,26 +96,7 @@ def merge_records_by_key(records: List[Any], reduce_key: Optional[str] = None) -
 
 
 def merge_json_files(file_paths: List[Path], reduce_key: Optional[str] = None) -> List[Any]:
-    """
-    Merge JSON contents from multiple files by correlating on a key field.
-
-    Used when processing files from multiple parallel branches that have
-    the same filename. Records with the same correlation key are merged into
-    a single record with all fields combined (MapReduce pattern).
-
-    For example, if validator_1 outputs {"parent_target_id": "x", "answer_1": "A"}
-    and validator_2 outputs {"parent_target_id": "x", "answer_2": "B"},
-    the merged result is {"parent_target_id": "x", "answer_1": "A", "answer_2": "B"}.
-
-    Args:
-        file_paths: List of paths to JSON files to merge
-        reduce_key: Field name to use for correlation (e.g., "parent_target_id").
-                   Falls back to: parent_target_id -> source_guid if not specified.
-
-    Returns:
-        List of merged records, correlated by the reduce key
-    """
-    # Collect all records from all files
+    """Load and merge JSON records from multiple files by correlation key (MapReduce pattern)."""
     all_records: List[Any] = []
     for file_path in file_paths:
         try:

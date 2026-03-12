@@ -1,8 +1,4 @@
-"""
-Abstract base class for invocation strategies.
-
-Part of Phase 3 (#891): Extract LLM invocation into strategy pattern.
-"""
+"""Abstract base class for invocation strategies."""
 
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Protocol, TYPE_CHECKING
@@ -30,15 +26,7 @@ class BatchProvider(Protocol):
 
 
 class InvocationStrategy(ABC):
-    """
-    Abstract base for LLM invocation strategies.
-
-    Strategy pattern allows same PreparedTask to be:
-    - Executed immediately (OnlineStrategy)
-    - Queued for batch submission (BatchStrategy)
-
-    This enables unified preparation with flexible execution.
-    """
+    """Abstract base for LLM invocation strategies (online or batch)."""
 
     @abstractmethod
     def invoke(
@@ -46,36 +34,14 @@ class InvocationStrategy(ABC):
         task: PreparedTask,
         context: "ProcessingContext",
     ) -> InvocationResult:
-        """
-        Invoke LLM for the prepared task.
-
-        Args:
-            task: PreparedTask from TaskPreparer
-            context: ProcessingContext with agent config and state
-
-        Returns:
-            InvocationResult which may be:
-            - Immediate (online): response available now
-            - Deferred (batch): task queued, response later
-            - Skipped: guard blocked execution
-        """
+        """Invoke LLM for the prepared task, returning an InvocationResult."""
         pass
 
     @abstractmethod
     def supports_recovery(self) -> bool:
-        """
-        Whether this strategy supports retry/reprompt recovery.
-
-        Returns:
-            True if strategy handles retry/reprompt internally
-        """
+        """Return True if this strategy handles retry/reprompt internally."""
         pass
 
     def cleanup(self) -> None:
-        """
-        Called when processing is complete.
-
-        Override in subclasses that need cleanup (e.g., BatchStrategy.flush).
-        Default implementation does nothing.
-        """
+        """Called when processing is complete. Override in subclasses that need cleanup."""
         pass

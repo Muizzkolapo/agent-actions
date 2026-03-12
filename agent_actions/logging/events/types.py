@@ -1,8 +1,4 @@
-"""
-Agent-actions specific event type definitions.
-
-This module defines all the event types used within agent-actions for
-workflow orchestration, agent execution, LLM interactions, and validation.
+"""Agent-actions event type definitions.
 
 Event Code Prefixes:
     W - Workflow lifecycle events
@@ -59,22 +55,10 @@ class EventCategories:
 
 
 def _safe_value_repr(value: Any, max_length: int = 100) -> str:
-    """Safely convert a value to a string representation for logging.
-
-    Handles complex objects that may not serialize well to JSON by using repr()
-    and truncating if necessary.
-
-    Args:
-        value: The value to convert
-        max_length: Maximum length of the resulting string
-
-    Returns:
-        A string representation of the value, truncated if necessary
-    """
+    """Safely convert a value to a truncated string for logging."""
     if value is None:
         return ""
     try:
-        # Try simple str first for common types
         if isinstance(value, (str, int, float, bool)):
             result = str(value)
         else:
@@ -1396,11 +1380,7 @@ class ConfigLoadEvent(BaseEvent):
 
 @dataclass
 class ConfigLoadCompleteEvent(BaseEvent):
-    """Fired when all configurations are loaded.
-
-    NOTE: This event is defined but not yet instrumented. Reserved for future use.
-    See TICKET-019 for instrumentation plan.
-    """
+    """Fired when all configurations are loaded (not yet instrumented, see TICKET-019)."""
 
     config_count: int = 0
     elapsed_time: float = 0.0
@@ -1423,11 +1403,7 @@ class ConfigLoadCompleteEvent(BaseEvent):
 
 @dataclass
 class ConfigValidationEvent(BaseEvent):
-    """Fired when configuration validation occurs.
-
-    NOTE: This event is defined but not yet instrumented. Reserved for future use.
-    See TICKET-019 for instrumentation plan.
-    """
+    """Fired when configuration validation occurs (not yet instrumented, see TICKET-019)."""
 
     validation_target: str = ""
     result: str = ""
@@ -1529,11 +1505,7 @@ class CLIInitStartEvent(BaseEvent):
 
 @dataclass
 class CLIArgumentParsingEvent(BaseEvent):
-    """Fired before CLI arguments are parsed.
-
-    Contains raw argv before Click processes the arguments. The args field
-    contains the raw command-line arguments, not the parsed result.
-    """
+    """Fired before CLI arguments are parsed (raw argv, not Click-parsed)."""
 
     command: str = ""
     args: Dict[str, Any] = field(default_factory=dict)
@@ -2661,13 +2633,7 @@ class ContextDependencyInferredEvent(BaseEvent):
 
 @dataclass
 class ContextFieldNotFoundEvent(BaseEvent):
-    """
-    Fired when a referenced field is not found in the available data.
-
-    This event is fired during template rendering when a variable reference
-    cannot be resolved. It provides debugging information about what fields
-    are available in the namespace.
-    """
+    """Fired when a referenced field is not found in the available data."""
 
     action_name: str = ""
     field_ref: str = ""

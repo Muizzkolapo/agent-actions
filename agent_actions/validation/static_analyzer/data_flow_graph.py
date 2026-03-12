@@ -1,8 +1,4 @@
-"""Data flow graph for workflow static analysis.
-
-Represents the workflow as a directed graph where nodes are actions
-and edges represent data dependencies.
-"""
+"""Data flow graph for workflow static analysis."""
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -23,20 +19,7 @@ class AgentKind(Enum):
 
 @dataclass
 class OutputSchema:
-    """Represents the output schema of an action.
-
-    Tracks fields from the schema definition, observe directives,
-    passthrough fields, and dropped fields.
-
-    Attributes:
-        schema_fields: Fields from output schema (LLM generates these)
-        observe_fields: Fields passed through from input via observe
-        passthrough_fields: Fields from context_scope.passthrough
-        dropped_fields: Fields excluded from output via drops
-        json_schema: Full JSON schema for deep validation (optional)
-        is_dynamic: Whether schema is determined at runtime
-        is_schemaless: Whether action has no schema (freeform output)
-    """
+    """Represents the output schema of an action."""
 
     schema_fields: Set[str] = field(default_factory=set)
     observe_fields: Set[str] = field(default_factory=set)
@@ -48,10 +31,7 @@ class OutputSchema:
 
     @property
     def available_fields(self) -> Set[str]:
-        """Compute available fields.
-
-        Formula: (schema_fields + observe_fields + passthrough_fields) - dropped_fields
-        """
+        """Compute available fields after applying drops."""
         all_fields = self.schema_fields | self.observe_fields | self.passthrough_fields
         return all_fields - self.dropped_fields
 
@@ -65,22 +45,7 @@ class OutputSchema:
 
 @dataclass
 class InputSchema:
-    """Represents the input schema of an action.
-
-    Tracks what fields an action expects as input, either from:
-    - Tool/UDF: explicit json_schema from UDF_REGISTRY (legacy with input_type)
-    - Tool/UDF: inferred from context_scope (new style without input_type)
-    - LLM: inferred from template variables
-
-    Attributes:
-        required_fields: Fields that must be provided
-        optional_fields: Fields that can optionally be provided
-        json_schema: Full JSON schema for validation (tools only)
-        is_dynamic: Whether input schema is determined at runtime
-        is_template_based: Whether inputs are inferred from templates (LLMs)
-        derived_from_context_scope: Whether schema was inferred from context_scope
-            (new style UDFs without input_type)
-    """
+    """Represents the input schema of an action."""
 
     required_fields: Set[str] = field(default_factory=set)
     optional_fields: Set[str] = field(default_factory=set)
@@ -111,16 +76,7 @@ class InputSchema:
 
 @dataclass
 class InputRequirement:
-    """A field reference requirement from an action.
-
-    Represents a single field reference found in the action's configuration.
-
-    Attributes:
-        source_agent: Action being referenced (e.g., 'extractor')
-        field_path: Field being referenced (e.g., 'summary' or 'data.count')
-        raw_reference: Original reference string (e.g., '{{ action.extractor.summary }}')
-        location: Where it appears (e.g., 'prompt', 'guard')
-    """
+    """A single field reference found in an action's configuration."""
 
     source_agent: str
     field_path: str
@@ -133,16 +89,7 @@ class InputRequirement:
 
 @dataclass
 class DataFlowNode:
-    """Node in the data flow graph representing an action.
-
-    Attributes:
-        name: Action name
-        agent_kind: Type of action (LLM, TOOL, HITL, SOURCE, etc.)
-        output_schema: What fields this action produces
-        input_schema: What fields this action expects as input
-        input_requirements: What fields this action consumes from upstream
-        dependencies: Explicit dependencies from depends_on config
-    """
+    """Node in the data flow graph representing an action."""
 
     name: str
     agent_kind: AgentKind
@@ -157,13 +104,7 @@ class DataFlowNode:
 
 @dataclass
 class DataFlowEdge:
-    """Edge representing data flow from one action to another.
-
-    Attributes:
-        source: Source action name (producer)
-        target: Target action name (consumer)
-        fields_used: Which fields are referenced
-    """
+    """Edge representing data flow from one action to another."""
 
     source: str
     target: str
@@ -174,42 +115,7 @@ class DataFlowEdge:
 
 
 class DataFlowGraph:
-    """Graph representation of workflow data flow.
-
-    Builds a directed graph where:
-    - Nodes are actions (including special source/seed nodes)
-    - Edges represent data dependencies between actions
-    - Edge labels indicate which fields are used
-
-    Used for static analysis of field references before execution.
-
-    Example:
-        graph = DataFlowGraph()
-
-        # Add actions
-        graph.add_node(DataFlowNode(
-            name='extractor',
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={'summary', 'facts'}),
-            dependencies=set()
-        ))
-
-        graph.add_node(DataFlowNode(
-            name='summarizer',
-            agent_kind=AgentKind.LLM,
-            output_schema=OutputSchema(schema_fields={'final_summary'}),
-            input_requirements=[
-                InputRequirement('extractor', 'summary', '{{ action.extractor.summary }}', 'prompt')
-            ],
-            dependencies={'extractor'}
-        ))
-
-        # Get execution order
-        order = graph.topological_sort()  # ['extractor', 'summarizer']
-    """
-
-    # Use centralized constant from utils.constants
-    # Special namespaces that are always available without explicit dependencies
+    """Directed graph of workflow data flow between action nodes."""
 
     def __init__(self) -> None:
         self.nodes: Dict[str, DataFlowNode] = {}
@@ -258,14 +164,7 @@ class DataFlowGraph:
         return downstream
 
     def get_reachable_upstream_names(self, agent_name: str) -> Set[str]:
-        """Get all upstream action names reachable via dependencies.
-
-        Args:
-            agent_name: Action name to compute reachability for
-
-        Returns:
-            Set of action names that are dependencies or ancestors
-        """
+        """Get all upstream action names reachable via transitive dependencies."""
         node = self.nodes.get(agent_name)
         if not node:
             return set()
@@ -284,15 +183,11 @@ class DataFlowGraph:
         return reachable
 
     def topological_sort(self) -> List[str]:
-        """Return nodes in topological order (Kahn's algorithm).
-
-        Returns:
-            List of action names in execution order
+        """Return nodes in topological order.
 
         Raises:
-            ValueError: If circular dependency detected
+            ValueError: If circular dependency detected.
         """
-        # Calculate in-degree for each node
         in_degree: Dict[str, int] = {name: 0 for name in self.nodes}
 
         for node in self.nodes.values():
@@ -300,7 +195,6 @@ class DataFlowGraph:
                 if dep in self.nodes:
                     in_degree[node.name] += 1
 
-        # Start with nodes that have no dependencies
         queue = [name for name, degree in in_degree.items() if degree == 0]
         result = []
 
@@ -308,7 +202,6 @@ class DataFlowGraph:
             name = queue.pop(0)
             result.append(name)
 
-            # Reduce in-degree for dependent nodes
             for action_name, node in self.nodes.items():
                 if name in node.dependencies:
                     in_degree[action_name] -= 1
@@ -316,7 +209,6 @@ class DataFlowGraph:
                         queue.append(action_name)
 
         if len(result) != len(self.nodes):
-            # Cycle detected
             remaining = set(self.nodes.keys()) - set(result)
             raise ValueError(f"Circular dependency detected involving: {remaining}")
 
@@ -327,7 +219,6 @@ class DataFlowGraph:
         self.edges = []
 
         for node in self.nodes.values():
-            # Group requirements by source action
             fields_by_source: Dict[str, Set[str]] = {}
 
             for req in node.input_requirements:
@@ -336,7 +227,6 @@ class DataFlowGraph:
                         fields_by_source[req.source_agent] = set()
                     fields_by_source[req.source_agent].add(req.field_path)
 
-            # Create edges
             for source_agent, fields in fields_by_source.items():
                 edge = DataFlowEdge(
                     source=source_agent,

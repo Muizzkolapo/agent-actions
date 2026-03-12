@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class InitCommand:
-    """Implementation of the init command."""
+    """Handles project initialization including validation and directory creation."""
 
     def __init__(self, args: InitCommandArgs):
         self.args = args

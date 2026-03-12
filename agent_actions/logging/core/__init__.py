@@ -1,20 +1,4 @@
-"""
-Core event infrastructure for centralized logging.
-
-This module provides a reusable event-based logging system.
-It has ZERO dependencies on agent_actions domain code, making it portable
-to other projects.
-
-Usage:
-    from agent_actions.logging.core import EventManager, BaseEvent, fire_event
-
-    # Register handlers
-    manager = EventManager.get()
-    manager.register(ConsoleEventHandler())
-
-    # Fire events from anywhere
-    fire_event(MyEvent(message="Something happened"))
-"""
+"""Core event infrastructure for centralized logging."""
 
 from agent_actions.logging.core.events import (
     BaseEvent,

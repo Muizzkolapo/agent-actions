@@ -1,7 +1,4 @@
-"""Common errors used across multiple domains.
-
-This module contains cross-cutting errors that don't belong to a specific domain.
-"""
+"""Common errors used across multiple domains."""
 # Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError

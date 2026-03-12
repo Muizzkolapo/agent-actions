@@ -11,18 +11,7 @@ class ExhaustedRecordBuilder:
 
     @staticmethod
     def build_empty_content(agent_config: dict[str, Any]) -> dict[str, Any]:
-        """
-        Build empty content dict from action schema.
-
-        Used by processor.py and result_processor.py to construct
-        placeholder content for exhausted records before enrichment.
-
-        Args:
-            agent_config: Agent configuration with optional schema.
-
-        Returns:
-            Dict with schema fields set to type-appropriate empty values.
-        """
+        """Build empty content dict from action schema with type-appropriate defaults."""
         empty_content: dict[str, Any] = {}
         schema = agent_config.get("schema") if agent_config else None
         if schema and isinstance(schema, dict):
@@ -49,19 +38,7 @@ class ExhaustedRecordBuilder:
         agent_config: dict[str, Any],
         action_name: str,
     ) -> dict[str, Any]:
-        """
-        Build an exhausted retry record.
-
-        Args:
-            source_guid: Source GUID for the record.
-            original_row: Original input row (for lineage and target_id).
-            recovery_metadata: Recovery metadata containing retry info.
-            agent_config: Agent configuration for schema hints.
-            action_name: Action name for node ID generation.
-
-        Returns:
-            Exhausted record dict.
-        """
+        """Build an exhausted retry record with empty content and recovery metadata."""
         resolved_source_guid = source_guid
         if resolved_source_guid is None and isinstance(original_row, dict):
             resolved_source_guid = original_row.get("source_guid")
@@ -81,13 +58,9 @@ class ExhaustedRecordBuilder:
         }
 
         if isinstance(original_row, dict):
-            # Ancestry chain propagation (matches LineageBuilder.add_unified_lineage)
             if original_row.get("target_id"):
                 exhausted_item["target_id"] = original_row["target_id"]
-                # parent_target_id = input's target_id (link to immediate parent)
                 exhausted_item["parent_target_id"] = original_row["target_id"]
-                # root_target_id = input's root_target_id (preserve original ancestor)
-                # If no root_target_id on input, the input is the root
                 if original_row.get("root_target_id"):
                     exhausted_item["root_target_id"] = original_row["root_target_id"]
                 else:

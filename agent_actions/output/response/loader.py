@@ -1,9 +1,4 @@
-"""
-Schema loading utilities.
-
-This module provides schema loading functionality used by both batch and realtime modes.
-Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
-"""
+"""Schema loading utilities for batch and realtime modes."""
 
 from __future__ import annotations
 
@@ -34,28 +29,17 @@ logger = LoggerFactory.get_logger(__name__)
 
 
 class SchemaLoader:
-    """
-    A class for loading schemas.
-    """
+    """Loads, validates, and constructs schemas from YAML files or inline definitions."""
 
     @staticmethod
     def return_schema(agent_name: str) -> set:
-        """
-        Return the set of schema names used by an agent.
+        """Return the set of schema names used by an agent.
 
-        Note: With render-first architecture, schemas are inlined during compilation.
-        This method extracts schema names from the compiled output for validation purposes.
-
-        Args:
-            agent_name (str): The name of the agent
-
-        Returns:
-            set: Set of schema names
+        Extracts schema names from the compiled (render-first) output for validation.
 
         Raises:
             SchemaValidationError: If agent config cannot be found, rendered, or parsed
         """
-        # Resolve paths — FileHandler returns None on failure, not exceptions
         agent_config_dir, _ = FileHandler.get_agent_paths(agent_name)
         if not agent_config_dir:
             raise SchemaValidationError(
@@ -76,7 +60,6 @@ class SchemaLoader:
                 hint="Ensure the agent configuration YAML file exists.",
             )
 
-        # Render templates and parse YAML — expected failures are config/template errors
         try:
             current_dir = Path.cwd()
             template_dir = current_dir / "templates"
@@ -99,7 +82,6 @@ class SchemaLoader:
                 cause=e,
             ) from e
 
-        # Extract schema names from compiled output — pure data traversal, no expected errors
         dynamic_schema_names = set()
         actions = data.get("actions", [])
         for action in actions:
@@ -113,19 +95,7 @@ class SchemaLoader:
 
     @staticmethod
     def load_schema(schema_name: str, schema_dir: Optional[Path] = None) -> dict:
-        """
-        Load a schema from YAML file.
-
-        Returns the raw YAML data for runtime schema compilation.
-        This preserves all fields including 'items' for arrays.
-
-        Parameters:
-            schema_name (str): The name of the schema to load.
-            schema_dir (Path): Optional schema directory. Defaults to cwd/schema.
-
-        Returns:
-            dict: The loaded schema as a dictionary.
-        """
+        """Load raw schema YAML by name, searching schema_dir (default: cwd/schema)."""
         if schema_dir is None:
             schema_dir = Path.cwd() / "schema"
 
@@ -154,7 +124,6 @@ class SchemaLoader:
                 f"or any subdirectory. Ensure the schema file exists in the schema/ directory."
             )
 
-        # Fire event before loading
         fire_event(
             SchemaLoadingStartedEvent(
                 schema_name=schema_name,
@@ -165,10 +134,8 @@ class SchemaLoader:
         with open(schema_file, "r", encoding="utf-8") as f:
             schema_data = yaml.safe_load(f)
 
-        # Count fields in schema
         field_count = len(schema_data.get("fields", [])) if isinstance(schema_data, dict) else 0
 
-        # Fire event after loading
         fire_event(
             SchemaLoadedEvent(
                 schema_name=schema_name,
@@ -183,16 +150,13 @@ class SchemaLoader:
         agent_name: str,
         directory: Optional[str] = None,
     ) -> None:
-        """
-        Validates that each schema file exists anywhere in the project.
+        """Validate that all schema files referenced by an agent exist.
 
         Args:
-            agent_name (str): The name of the agent.
-            directory (str): Deprecated parameter, kept for backward compatibility.
+            directory: Deprecated, kept for backward compatibility.
 
         Raises:
-            SingleSchemaMissingError: If one schema file is missing.
-            MultipleSchemaMissingError: If multiple schema files are missing.
+            ConfigValidationError: If one or more schema files are missing
         """
         schema_names = SchemaLoader.return_schema(agent_name)
         missing_files = []
@@ -224,17 +188,7 @@ class SchemaLoader:
 
     @staticmethod
     def construct_schema_from_dict(schema_dict: dict) -> dict:
-        """
-        Construct a unified schema from a simple key-value dictionary.
-
-        Args:
-            schema_dict (dict): Simple dictionary where keys are field names
-                               and values are data types (e.g., {"name": "string", "age": "number"})
-
-        Returns:
-            dict: A unified schema in the standard format
-        """
-        # Fire event before schema construction
+        """Construct a unified schema from a {field_name: type_string} dictionary."""
         fire_event(
             SchemaConstructionStartedEvent(
                 schema_type="dict",
@@ -288,15 +242,7 @@ class SchemaLoader:
 
     @staticmethod
     def _parse_object_properties(properties_str: str) -> dict:
-        """
-        Parse object properties from string notation like "{'prop': 'type'}"
-
-        Args:
-            properties_str (str): String representation of object properties
-
-        Returns:
-            dict: Object schema with type and properties
-        """
+        """Parse object properties from string notation (e.g., "{'prop': 'type'}")."""
         try:
             properties_str = properties_str.strip()
             try:

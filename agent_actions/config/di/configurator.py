@@ -1,9 +1,4 @@
-"""
-Dependency Injection Configuration for Agent Actions.
-
-This module configures the DI container with all application dependencies
-based on configuration settings.
-"""
+"""Dependency injection configuration for agent-actions."""
 
 from agent_actions.config.di.types import DIConfig
 from agent_actions.config.interfaces import (

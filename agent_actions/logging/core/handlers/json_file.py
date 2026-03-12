@@ -1,9 +1,4 @@
-"""
-JSON file handler for event logging.
-
-Writes events as newline-delimited JSON (NDJSON) to a log file.
-This format is ideal for log aggregation and analysis tools.
-"""
+"""JSON file handler that writes events as newline-delimited JSON."""
 
 from __future__ import annotations
 
@@ -18,22 +13,7 @@ if TYPE_CHECKING:
 
 
 class JSONFileHandler:
-    """
-    Handler that writes events as JSON to a file.
-
-    Events are written as newline-delimited JSON (NDJSON), where each
-    line is a complete JSON object representing one event.
-
-    Features:
-        - Thread-safe file writes
-        - Automatic file rotation by size (optional)
-        - Buffered writes for performance
-        - Automatic directory creation
-
-    Output format (one event per line):
-        {"event_type": "WorkflowStart", "level": "info", "message": "...", ...}
-        {"event_type": "AgentComplete", "level": "info", "message": "...", ...}
-    """
+    """Handler that writes events as NDJSON to a file with buffering and optional rotation."""
 
     def __init__(
         self,
@@ -43,16 +23,7 @@ class JSONFileHandler:
         max_file_size: int | None = None,
         include_all_fields: bool = True,
     ) -> None:
-        """
-        Initialize the JSON file handler.
-
-        Args:
-            file_path: Path to the log file
-            min_level: Minimum event level to log (default: DEBUG - log everything)
-            buffer_size: Number of events to buffer before flushing
-            max_file_size: Max file size in bytes before rotation (None = no rotation)
-            include_all_fields: Whether to include all event fields or just basics
-        """
+        """Initialize the JSON file handler."""
         from agent_actions.logging.core.events import EventLevel
 
         self.file_path = Path(file_path)
@@ -66,38 +37,20 @@ class JSONFileHandler:
         self._file: TextIO | None = None
         self._current_size = 0
 
-        # Ensure directory exists
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
     def accepts(self, event: BaseEvent) -> bool:
-        """
-        Check if this event should be logged.
-
-        Args:
-            event: Event to check
-
-        Returns:
-            True if event should be logged
-        """
+        """Check if this event meets the minimum level threshold."""
         from agent_actions.logging.core.events import EventLevel
 
         level_order = EventLevel.ordered()
         return level_order.index(event.level) >= level_order.index(self.min_level)
 
     def handle(self, event: BaseEvent) -> None:
-        """
-        Write the event to the JSON log file.
-
-        Events are buffered and written in batches for performance.
-
-        Args:
-            event: Event to log
-        """
-        # Convert event to dict
+        """Buffer the event for writing to the JSON log file."""
         if self.include_all_fields:
             event_dict = event.to_dict()
         else:
-            # Minimal fields
             event_dict = {
                 "event_type": event.event_type,
                 "level": event.level.value,
@@ -133,16 +86,13 @@ class JSONFileHandler:
         if not self._buffer:
             return
 
-        # Check for rotation
         if self.max_file_size and self._current_size >= self.max_file_size:
             self._rotate()
 
-        # Open file if needed
         if self._file is None:
             self._file = open(self.file_path, "a", encoding="utf-8")
             self._current_size = self.file_path.stat().st_size if self.file_path.exists() else 0
 
-        # Write events
         for event_dict in self._buffer:
             line = json.dumps(event_dict, default=str) + "\n"
             self._file.write(line)
@@ -156,7 +106,6 @@ class JSONFileHandler:
             self._file.close()
             self._file = None
 
-        # Rename current file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         rotated_path = self.file_path.with_suffix(f".{timestamp}.json")
 

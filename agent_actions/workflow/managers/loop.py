@@ -1,9 +1,4 @@
-"""
-Version output correlation system for parallel map-reduce patterns.
-
-Handles correlation of version iteration outputs for downstream agents
-without breaking existing sequential execution.
-"""
+"""Version output correlation for parallel map-reduce patterns."""
 
 from __future__ import annotations
 
@@ -50,16 +45,7 @@ class VersionOutputCorrelator:
     def detect_explicit_version_consumption(
         self, execution_order: List[str], agent_configs: Dict[str, Any]
     ) -> Dict[str, Dict[str, Any]]:
-        """
-        Detect agents with explicit version consumption configurations.
-
-        Returns:
-            Dict mapping agent_name -> {
-                'source_base_name': str,
-                'pattern': str,
-                'version_agents': List[str]
-            }
-        """
+        """Return map of agent names to their version consumption configurations."""
         version_consumption_map = {}
         version_groups = {}
         for agent_name in execution_order:
@@ -95,15 +81,11 @@ class VersionOutputCorrelator:
     def _load_version_outputs(
         self, version_sources: List[str]
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], set]:
-        """Load outputs from all version sources.
-
-        Tries storage backend first (if available), then falls back to filesystem.
-        """
+        """Load outputs from all version sources, preferring storage backend over filesystem."""
         version_outputs = {}
         version_filenames = set()
 
         for version_agent in version_sources:
-            # Try storage backend first
             if self.storage_backend is not None:
                 outputs, filenames = self._load_from_storage_backend(version_agent)
                 if outputs:
@@ -111,11 +93,9 @@ class VersionOutputCorrelator:
                     version_filenames.update(filenames)
                     continue
 
-            # Fallback to filesystem
             version_idx = self._find_agent_index(version_agent)
             if version_idx is None:
                 continue
-            # Use simple directory name (no index prefix)
             version_output_dir = self.agent_folder / "target" / version_agent
             if version_output_dir.exists():
                 outputs, filenames = self._load_agent_outputs_with_filenames(version_output_dir)
@@ -125,14 +105,7 @@ class VersionOutputCorrelator:
         return version_outputs, version_filenames
 
     def _load_from_storage_backend(self, version_agent: str) -> Tuple[List[Dict[str, Any]], set]:
-        """Load outputs from storage backend for a version agent.
-
-        Args:
-            version_agent: Name of the version agent (e.g., "evaluate_model_1")
-
-        Returns:
-            Tuple of (outputs list, filenames set)
-        """
+        """Load outputs from storage backend for a version agent."""
         if self.storage_backend is None:
             return [], set()
 
@@ -206,21 +179,9 @@ class VersionOutputCorrelator:
     def prepare_correlated_input(
         self, agent_name: str, version_sources: List[str], _current_idx: int
     ) -> Optional[str]:
-        """
-        Prepare correlated input directory for an agent that depends on version outputs.
-
-        Args:
-            agent_name: Name of the agent that needs correlated input
-            version_sources: List of version agent names this agent depends on
-            _current_idx: Unused - kept for API compatibility
-
-        Returns:
-            Path to correlated input directory, or None if correlation failed
-        """
+        """Return path to correlated input directory, or None if correlation failed."""
         try:
-            # Use simple directory name (no index prefix)
             correlation_dir = self.agent_folder / "target" / agent_name
-            # Only create directory when not using storage backend
             if self.storage_backend is None:
                 correlation_dir.mkdir(parents=True, exist_ok=True)
 
@@ -237,28 +198,21 @@ class VersionOutputCorrelator:
             return None
 
     def _find_agent_index(self, agent_name: str) -> Optional[int]:
-        """Find the execution index of an agent.
-
-        With simple directory naming, we check if the directory or storage backend has data.
-        Returns 0 if found (index no longer matters for path construction).
-        """
-        # Check storage backend first
+        """Return 0 if the agent has data in storage or filesystem, None otherwise."""
         if self.storage_backend is not None:
             try:
                 target_files = self.storage_backend.list_target_files(agent_name)
                 if target_files:
-                    return 0  # Data exists in storage backend
+                    return 0
             except Exception as e:
                 logger.debug("Failed to list target files for %s: %s", agent_name, e, exc_info=True)
 
-        # Fallback to filesystem check
         target_dir = self.agent_folder / "target"
         if not target_dir.exists():
             return None
-        # Simple directory name check
         agent_dir = target_dir / agent_name
         if agent_dir.exists() and agent_dir.is_dir():
-            return 0  # Index no longer used for path construction
+            return 0
         return None
 
     def _load_json_from_file(self, params: JsonLoadParams):
@@ -334,7 +288,6 @@ class VersionOutputCorrelator:
                     add_source_file=True,
                 )
             )
-            # If file was successfully loaded, add to filenames
             if len(outputs) > before_count:
                 filenames.add(json_file.name)
 
@@ -360,7 +313,6 @@ class VersionOutputCorrelator:
         correlation_groups = defaultdict(dict)
         for version_agent, outputs in version_outputs.items():
             for record in outputs:
-                # Use dict comprehension instead of copy()+pop() for efficiency
                 record_copy = {k: v for k, v in record.items() if k != "_source_file"}
                 correlation_key = record_copy.get("version_correlation_id")
                 if not correlation_key:
@@ -384,7 +336,6 @@ class VersionOutputCorrelator:
         """Create a merged record from agent records."""
         base_record = next(iter(agent_records.values()))
 
-        # Merge lineages from all agent records (not just base_record)
         merged_lineage = []
         seen_lineage_entries: set = set()
         for record in agent_records.values():
@@ -405,7 +356,6 @@ class VersionOutputCorrelator:
             "content": self._merge_with_pattern(agent_records),
             "_correlation_sources": list(agent_records.keys()),
         }
-        # Check for missing iterations
         all_expected_versions = set(version_outputs.keys())
         present_versions = set(agent_records.keys())
         missing_versions = all_expected_versions - present_versions
@@ -416,15 +366,7 @@ class VersionOutputCorrelator:
     def _correlate_by_source_record(
         self, version_outputs: Dict[str, List[Dict[str, Any]]]
     ) -> List[Dict[str, Any]]:
-        """
-        Correlate version outputs by source record ID using merge pattern.
-
-        Handles the agent-actions data structure where actual content is nested
-        in a 'content' field and correlation is done by 'source_guid'.
-
-        Args:
-            version_outputs: Dict mapping version agent names to their outputs
-        """
+        """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
         correlated_records = []
         for agent_records in correlation_groups.values():
@@ -434,29 +376,10 @@ class VersionOutputCorrelator:
         return correlated_records
 
     def _merge_with_pattern(self, agent_records: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Merge content from multiple version agent records using merge pattern.
-
-        Creates nested namespaces for each version iteration:
-        - extract_raw_qa_1 output: {"questions": [...]}
-        - extract_raw_qa_2 output: {"questions": [...]}
-        - Merged: {
-            "extract_raw_qa_1": {"questions": [...]},
-            "extract_raw_qa_2": {"questions": [...]}
-          }
-
-        This allows template access via: {{ extract_raw_qa_1.questions }}
-
-        Args:
-            agent_records: Dict mapping version agent names to their records
-
-        Returns:
-            Merged content dictionary with nested version namespaces
-        """
+        """Merge content into nested namespaces keyed by version agent name."""
         merged_content = {}
         for agent_name, record in agent_records.items():
             content = record.get("content", {})
-            # Create nested namespace for each version iteration
             merged_content[agent_name] = content
         return merged_content
 
@@ -467,21 +390,15 @@ class VersionOutputCorrelator:
         filename: str = "correlated_data.json",
         action_name: Optional[str] = None,
     ):
-        """Write correlated data to the output directory and create corresponding source data.
-
-        When storage backend is available, writes to DB only.
-        When no storage backend, writes to filesystem.
-        """
+        """Write correlated data to storage backend or filesystem."""
         if not correlated_data:
             return
-        # Use dict comprehension instead of copy()+pop() for efficiency
         keys_to_remove = {"_correlation_sources", "_missing_iterations"}
         cleaned_data = [
             {k: v for k, v in record.items() if k not in keys_to_remove}
             for record in correlated_data
         ]
 
-        # Write to storage backend if available, otherwise write to filesystem
         if self.storage_backend is not None and action_name:
             try:
                 self.storage_backend.write_target(action_name, filename, cleaned_data)
@@ -498,7 +415,6 @@ class VersionOutputCorrelator:
                     e,
                 )
         else:
-            # Write to filesystem only when no storage backend
             output_file = output_dir / filename
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(cleaned_data, f, indent=2)
@@ -507,11 +423,7 @@ class VersionOutputCorrelator:
     def _create_correlation_source_data(
         self, target_file: Path, correlated_data: List[Dict[str, Any]]
     ):
-        """Create source data file that corresponds to the correlation target file.
-
-        Protected by richness check to prevent sparse correlation outputs from
-        overwriting rich initial source data.
-        """
+        """Create source data file for the correlation target, skipping if existing source is richer."""
         try:
             parts = target_file.parts
             agent_io_index = None
@@ -534,11 +446,8 @@ class VersionOutputCorrelator:
                 }
                 source_records.append(source_record)
 
-            # Check if we should save based on richness comparison
-            # Pass target_file (not source_path) so path resolution works correctly
             base_directory = str(target_file.parent)
 
-            # Prevent sparse correlation outputs from overwriting rich source data
             if not _should_save_source_items(
                 source_records, str(target_file), base_directory, None
             ):

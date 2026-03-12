@@ -1,9 +1,4 @@
-"""
-Project validation utilities.
-
-This module provides utilities for validating project creation
-parameters and ensuring they meet the required constraints.
-"""
+"""Project creation parameter validation."""
 
 import logging
 import os
@@ -17,10 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class ProjectValidator(BaseValidator):
-    """
-    Handles project validation operations by inheriting from BaseValidator.
-    Validates project name, directory, and template.
-    """
+    """Validates project name, directory, and template."""
 
     PROJECT_NAME_PATTERN = re.compile("^[a-zA-Z][a-zA-Z0-9_-]*$")
     RESERVED_NAMES: Set[str] = {
@@ -38,9 +30,7 @@ class ProjectValidator(BaseValidator):
     }
 
     def _validate_project_name_logic(self, project_name: str) -> None:
-        """
-        Validates the project name and adds errors if any.
-        """
+        """Validate the project name and add errors if invalid."""
         logger.debug("Validating project name: %s", project_name)
         if not project_name:
             self.add_error("Project name cannot be empty.")
@@ -57,9 +47,7 @@ class ProjectValidator(BaseValidator):
     def _validate_project_directory_logic(
         self, output_dir: Path, project_dir: Path, force: bool = False
     ) -> None:
-        """
-        Validates the project directory location and adds errors if any.
-        """
+        """Validate the project directory location and add errors if invalid."""
         logger.debug(
             "Validating project directory: %s within output directory: %s", project_dir, output_dir
         )
@@ -77,9 +65,7 @@ class ProjectValidator(BaseValidator):
     def _validate_project_template_logic(
         self, template: str, available_templates: List[str]
     ) -> None:
-        """
-        Validates the project template and adds errors if any.
-        """
+        """Validate the project template and add errors if not available."""
         logger.debug("Validating template: %s", template)
         if not template:
             self.add_error("Project template name cannot be empty.")
@@ -91,26 +77,7 @@ class ProjectValidator(BaseValidator):
             )
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Validates project creation parameters.
-
-        Args:
-            data: A dictionary containing the project parameters:
-                - "project_name" (str): The name of the project.
-                - "output_dir" (Path): The parent directory where the project
-                  will be created.
-                - "project_dir" (Path): The full path to the project directory.
-                - "template" (str): The name of the template to use.
-                - "available_templates" (List[str]): A list of available
-                  template names.
-                - "force" (bool, optional): Whether to allow overwriting an
-                  existing project directory. Defaults to False.
-            config: Not used in this validator, but part of the interface.
-
-        Returns:
-            bool: True if all validations pass, False otherwise.
-                  Errors are collected via self.add_error().
-        """
+        """Validate project creation parameters from the data dict."""
         if not self._prepare_validation(data):
             return False
         project_name = data.get("project_name")

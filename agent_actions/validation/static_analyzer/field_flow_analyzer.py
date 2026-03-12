@@ -1,6 +1,4 @@
-"""
-Field flow analyzer for workflow data lineage tracking.
-"""
+"""Field flow analyzer for workflow data lineage tracking."""
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -11,13 +9,7 @@ from .errors import StaticValidationResult
 
 @dataclass
 class FieldConsumer:
-    """A consumer of a field.
-
-    Attributes:
-        agent: Name of the consuming agent
-        location: Where the field is used (prompt, guard, context_scope.observe, etc.)
-        raw_reference: Original reference string (e.g., '{{ action.extractor.summary }}')
-    """
+    """A consumer of a field."""
 
     agent: str
     location: str
@@ -34,17 +26,7 @@ class FieldConsumer:
 
 @dataclass
 class FieldLineage:
-    """Represents a field's journey through the workflow.
-
-    Tracks where a field is produced, how it's transformed, and where it's consumed.
-
-    Attributes:
-        producer: Agent that produces the field
-        field_name: Name of the field
-        field_type: How the field is produced ('schema', 'observe', 'passthrough', 'source')
-        consumers: List of agents that consume this field
-        is_dropped: Whether the field is dropped from output
-    """
+    """Tracks a field's production, transformation, and consumption through the workflow."""
 
     producer: str
     field_name: str
@@ -65,17 +47,7 @@ class FieldLineage:
 
 @dataclass
 class OutputFieldInfo:
-    """Information about an action's output fields.
-
-    Categorizes fields by how they are produced.
-
-    Attributes:
-        schema_fields: Fields from output schema (LLM generates these)
-        observe_fields: Fields passed through from input via observe
-        passthrough_fields: Fields from context_scope.passthrough
-        dropped_fields: Fields excluded from output via drops
-        available_fields: Final computed available fields
-    """
+    """Information about an action's output fields."""
 
     schema_fields: List[str] = field(default_factory=list)
     observe_fields: List[str] = field(default_factory=list)
@@ -100,14 +72,7 @@ class OutputFieldInfo:
 
 @dataclass
 class FieldReference:
-    """A field reference from an upstream agent.
-
-    Attributes:
-        source_agent: Agent being referenced
-        field: Field being referenced
-        location: Where it appears in config
-        raw_reference: Original reference string
-    """
+    """A field reference from an upstream agent."""
 
     source_agent: str
     field: str
@@ -126,13 +91,7 @@ class FieldReference:
 
 @dataclass
 class InputSchemaInfo:
-    """Information about an action's input schema (for tools).
-
-    Attributes:
-        required_fields: Fields required by the tool
-        optional_fields: Fields that are optional
-        is_dynamic: Whether input is dynamic (no schema)
-    """
+    """Information about an action's input schema (for tools)."""
 
     required_fields: List[str] = field(default_factory=list)
     optional_fields: List[str] = field(default_factory=list)
@@ -149,19 +108,7 @@ class InputSchemaInfo:
 
 @dataclass
 class ActionFlowInfo:
-    """Field flow information for a single action.
-
-    Provides complete input/output field information for an action.
-
-    Attributes:
-        name: Action name
-        kind: Type of action (llm, tool, source, seed)
-        inputs: Fields consumed from upstream agents (template references)
-        input_schema: Input schema for tools (from TypedDict)
-        outputs: Fields produced by this action
-        dependencies: Declared dependencies
-        downstream: Actions that depend on this one
-    """
+    """Complete input/output field flow information for a single action."""
 
     name: str
     kind: str
@@ -186,16 +133,7 @@ class ActionFlowInfo:
 
 @dataclass
 class WorkflowFlow:
-    """Complete field flow for a workflow.
-
-    Aggregates all field flow information for the entire workflow.
-
-    Attributes:
-        workflow_name: Name of the workflow
-        actions: Flow information for each action
-        execution_order: Topological order of actions
-        field_lineages: Lineage for each field (key: "agent.field")
-    """
+    """Complete field flow for a workflow."""
 
     workflow_name: str
     actions: List[ActionFlowInfo] = field(default_factory=list)
@@ -213,23 +151,7 @@ class WorkflowFlow:
 
 
 class FieldFlowAnalyzer:
-    """Analyzes field lineage and flow through a workflow.
-
-    Uses the DataFlowGraph to trace how fields move from producers
-    to consumers, tracking transformations along the way.
-
-    Example:
-        graph = analyzer.get_graph()
-        result = analyzer.analyze()
-
-        flow_analyzer = FieldFlowAnalyzer(graph, result)
-        flow = flow_analyzer.get_full_flow()
-
-        # Get lineage for a specific field
-        lineage = flow_analyzer.get_field_lineage("extractor", "summary")
-        print(f"Field produced by: {lineage.producer}")
-        print(f"Consumed by: {[c.agent for c in lineage.consumers]}")
-    """
+    """Analyzes field lineage and flow through a workflow."""
 
     def __init__(
         self,
@@ -237,30 +159,19 @@ class FieldFlowAnalyzer:
         validation_result: StaticValidationResult,
         workflow_name: str = "",
     ):
-        """Initialize the field flow analyzer.
-
-        Args:
-            graph: DataFlowGraph from WorkflowStaticAnalyzer
-            validation_result: Validation result with errors/warnings
-            workflow_name: Name of the workflow being analyzed
-        """
+        """Initialize the field flow analyzer."""
         self.graph = graph
         self.validation_result = validation_result
         self.workflow_name = workflow_name
 
     def get_full_flow(self) -> WorkflowFlow:
-        """Get complete field flow for the entire workflow.
-
-        Returns:
-            WorkflowFlow with all actions, execution order, and field lineages
-        """
+        """Get complete field flow for the entire workflow."""
         try:
             execution_order = self.graph.topological_sort()
         except ValueError:
             # Circular dependency - use whatever order we have
             execution_order = list(self.graph.nodes.keys())
 
-        # Build action flow info for each action
         actions = []
         for action_name in execution_order:
             node = self.graph.get_node(action_name)
@@ -268,7 +179,6 @@ class FieldFlowAnalyzer:
                 action_info = self._build_action_flow_info(node)
                 actions.append(action_info)
 
-        # Build field lineages
         field_lineages = self._build_all_field_lineages()
 
         return WorkflowFlow(
@@ -279,30 +189,18 @@ class FieldFlowAnalyzer:
         )
 
     def get_field_lineage(self, agent_name: str, field_name: str) -> Optional[FieldLineage]:
-        """Trace a single field from production to all consumption points.
-
-        Args:
-            agent_name: Name of the producing agent
-            field_name: Name of the field to trace
-
-        Returns:
-            FieldLineage if field exists, None otherwise
-        """
+        """Trace a single field from production to all consumption points."""
         node = self.graph.get_node(agent_name)
         if not node:
             return None
 
         output_schema = node.output_schema
 
-        # Determine field type
         field_type = self._get_field_type(output_schema, field_name)
         if field_type is None:
             return None
 
-        # Check if field is dropped
         is_dropped = field_name in output_schema.dropped_fields
-
-        # Find all consumers
         consumers = self._find_field_consumers(agent_name, field_name)
 
         return FieldLineage(
@@ -314,25 +212,14 @@ class FieldFlowAnalyzer:
         )
 
     def get_action_flow_info(self, agent_name: str) -> Optional[ActionFlowInfo]:
-        """Get field flow info for a single action.
-
-        Args:
-            agent_name: Name of the action
-
-        Returns:
-            ActionFlowInfo if action exists, None otherwise
-        """
+        """Get field flow info for a single action."""
         node = self.graph.get_node(agent_name)
         if not node:
             return None
         return self._build_action_flow_info(node)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert full analysis to dictionary for JSON serialization.
-
-        Returns:
-            Dictionary containing flow and validation data
-        """
+        """Convert full analysis to dictionary for JSON serialization."""
         flow = self.get_full_flow()
         return {
             "workflow": self.workflow_name,
@@ -343,7 +230,6 @@ class FieldFlowAnalyzer:
 
     def _build_action_flow_info(self, node: DataFlowNode) -> ActionFlowInfo:
         """Build ActionFlowInfo from a DataFlowNode."""
-        # Build inputs from input requirements (template references)
         inputs = [
             FieldReference(
                 source_agent=req.source_agent,
@@ -354,7 +240,6 @@ class FieldFlowAnalyzer:
             for req in node.input_requirements
         ]
 
-        # Build input schema info (for tools with TypedDict input)
         input_schema = InputSchemaInfo()
         if node.input_schema:
             input_schema = InputSchemaInfo(
@@ -363,7 +248,6 @@ class FieldFlowAnalyzer:
                 is_dynamic=node.input_schema.is_dynamic,
             )
 
-        # Build outputs
         outputs = OutputFieldInfo(
             schema_fields=sorted(node.output_schema.schema_fields),
             observe_fields=sorted(node.output_schema.observe_fields),
@@ -374,7 +258,6 @@ class FieldFlowAnalyzer:
             is_schemaless=node.output_schema.is_schemaless,
         )
 
-        # Find downstream agents
         downstream = [n.name for n in self.graph.get_downstream_nodes(node.name)]
 
         return ActionFlowInfo(
@@ -392,17 +275,14 @@ class FieldFlowAnalyzer:
         lineages: Dict[str, FieldLineage] = {}
 
         for node in self.graph.nodes.values():
-            # Process all available fields
             output_schema = node.output_schema
 
-            # Track schema fields
             for field_name in output_schema.schema_fields:
                 key = f"{node.name}.{field_name}"
                 lineage = self.get_field_lineage(node.name, field_name)
                 if lineage:
                     lineages[key] = lineage
 
-            # Track observe fields
             for field_name in output_schema.observe_fields:
                 key = f"{node.name}.{field_name}"
                 if key not in lineages:
@@ -410,7 +290,6 @@ class FieldFlowAnalyzer:
                     if lineage:
                         lineages[key] = lineage
 
-            # Track passthrough fields
             for field_name in output_schema.passthrough_fields:
                 key = f"{node.name}.{field_name}"
                 if key not in lineages:
@@ -421,17 +300,13 @@ class FieldFlowAnalyzer:
         return lineages
 
     def _get_field_type(self, output_schema, field_name: str) -> Optional[str]:
-        """Determine how a field is produced.
-
-        Returns 'schema', 'observe', 'passthrough', or None if not found.
-        """
+        """Determine how a field is produced."""
         if field_name in output_schema.schema_fields:
             return "schema"
         if field_name in output_schema.observe_fields:
             return "observe"
         if field_name in output_schema.passthrough_fields:
             return "passthrough"
-        # For source/seed nodes with dynamic schemas
         if output_schema.is_dynamic or output_schema.is_schemaless:
             return "source"
         return None
@@ -454,14 +329,7 @@ class FieldFlowAnalyzer:
         return consumers
 
     def filter_to_field(self, agent_field: str) -> Optional[FieldLineage]:
-        """Filter analysis to a specific field.
-
-        Args:
-            agent_field: Field reference in "agent.field" format
-
-        Returns:
-            FieldLineage if field exists, None otherwise
-        """
+        """Filter analysis to a specific field in "agent.field" format."""
         if "." not in agent_field:
             return None
 

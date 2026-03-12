@@ -1,6 +1,4 @@
-"""
-Project scanner for finding workflow files and prompts.
-"""
+"""Project scanner for finding workflow files and prompts."""
 
 import ast
 import logging
@@ -25,25 +23,7 @@ class ProjectScanner:
         self.workflows_found = []
 
     def scan(self) -> Dict[str, Dict[str, Any]]:
-        """
-        Scan project directory for workflow files.
-
-        Looks for:
-        1. artefact/rendered_workflows/*.yml (rendered workflows)
-        2. */agent_config/*.yml (original workflows for plan section)
-
-        The artefact/ directory contains all generated files including
-        rendered workflows, catalog, and runs data.
-
-        Returns:
-            Dict mapping workflow names to paths:
-            {
-                'workflow_name': {
-                    'rendered': '/path/to/rendered.yml',
-                    'original': '/path/to/original.yml'
-                }
-            }
-        """
+        """Scan project directory for rendered and original workflow YAML files."""
         workflows = {}
         artefact_dir = self.project_root / "artefact"
 
@@ -111,27 +91,7 @@ class ProjectScanner:
         return readmes
 
     def scan_prompts(self) -> Dict[str, Any]:
-        """
-        Scan project directory for prompt files.
-
-        Looks for prompt_store/*.md files and extracts prompts using the pattern:
-        {prompt prompt_name}
-        ...content...
-        {end_prompt}
-
-        Returns:
-            Dict mapping prompt names to prompt data:
-            {
-                'prompt_name': {
-                    'id': 'prompt_name',
-                    'name': 'prompt_name',
-                    'content': '...',
-                    'source_file': '/path/to/file.md',
-                    'line_start': 1,
-                    'line_end': 10
-                }
-            }
-        """
+        """Scan project directory for prompt files in prompt_store/."""
         prompts = {}
         prompt_store_dir = self.project_root / "prompt_store"
 
@@ -168,12 +128,7 @@ class ProjectScanner:
         return prompts
 
     def scan_schemas(self) -> Dict[str, Any]:
-        """
-        Scan project directory for schema files.
-
-        Returns:
-            Dict mapping schema names to schema data
-        """
+        """Scan project directory for schema YAML files."""
         schemas = {}
         schema_dir = self.project_root / "schema"
 
@@ -206,30 +161,7 @@ class ProjectScanner:
         return schemas
 
     def scan_workflow_data(self) -> Dict[str, Any]:
-        """
-        Scan project for SQLite target databases and export preview data.
-
-        Iterates agent_io/target/ directories, opens each {workflow}.db via
-        SQLiteBackend, and returns storage stats + sample records per node.
-
-        Returns:
-            Dict mapping workflow names to data summaries:
-            {
-                'workflow_name': {
-                    'db_path': '...',
-                    'db_size': '56.0 KB',
-                    'source_count': 1,
-                    'target_count': 3,
-                    'nodes': {
-                        'action_name': {
-                            'record_count': 10,
-                            'files': ['file.json'],
-                            'preview': [{ ... }]
-                        }
-                    }
-                }
-            }
-        """
+        """Scan project for SQLite target databases and export preview data."""
         workflow_data = {}
         artefact_dir = self.project_root / "artefact"
 
@@ -387,22 +319,7 @@ class ProjectScanner:
             conn.close()
 
     def scan_runs(self) -> Dict[str, Any]:
-        """
-        Scan project directory for workflow run data.
-
-        Looks for agent_io/target/run_results.json and events.json files
-        to extract execution metrics and history.
-
-        Returns:
-            Dict mapping workflow names to run data:
-            {
-                'workflow_name': {
-                    'latest_run': {...},
-                    'run_count': N,
-                    'runs': [...]
-                }
-            }
-        """
+        """Scan project directory for workflow run data and execution metrics."""
         import json
 
         runs_data = {}
@@ -478,20 +395,7 @@ class ProjectScanner:
         return runs_data
 
     def scan_logs(self) -> Dict[str, Any]:
-        """
-        Scan project directory for global logs.
-
-        Looks for logs/events.json for CLI and validation events.
-
-        Returns:
-            Dict with log data:
-            {
-                'events_path': '/path/to/logs/events.json',
-                'recent_invocations': [...],
-                'validation_errors': [...],
-                'validation_warnings': [...]
-            }
-        """
+        """Scan project directory for global CLI and validation logs."""
         import json
 
         logs_data = {
@@ -573,21 +477,7 @@ class ProjectScanner:
         return logs_data
 
     def _extract_action_metrics(self, events_path: Path) -> Dict[str, Any]:
-        """
-        Extract per-action metrics from events.json file.
-
-        Returns:
-            Dict mapping action names to metrics:
-            {
-                'action_name': {
-                    'execution_time': 0.5,
-                    'tokens': {'prompt': 100, 'completion': 50},
-                    'record_count': 10,
-                    'success_count': 8,
-                    'failed_count': 2
-                }
-            }
-        """
+        """Extract per-action metrics from events.json file."""
         import json
 
         action_metrics = {}
@@ -652,28 +542,7 @@ class ProjectScanner:
         return action_metrics
 
     def scan_tool_functions(self) -> Dict[str, Any]:
-        """
-        Scan project directory for tool function implementations.
-
-        Looks for Python files in user_code/ directory and extracts
-        function definitions decorated with @udf_tool, including their
-        input/output type schemas defined as TypedDict classes.
-
-        Returns:
-            Dict mapping function names to function data:
-            {
-                'function_name': {
-                    'found': True,
-                    'file_path': '/path/to/file.py',
-                    'signature': 'def function_name(arg1, arg2):',
-                    'docstring': '...',
-                    'source_code': '...',
-                    'is_udf': True,
-                    'input_schema': {'name': 'InputType', 'fields': [...]},
-                    'output_schema': {'name': 'OutputType', 'fields': [...]}
-                }
-            }
-        """
+        """Scan project directory for @udf_tool function implementations."""
         tool_functions = {}
 
         # Look for user_code directory
@@ -718,18 +587,7 @@ class ProjectScanner:
         return tool_functions
 
     def _extract_typed_dicts(self, tree: ast.AST) -> Dict[str, List[Dict[str, str]]]:
-        """
-        Extract TypedDict class definitions from AST.
-
-        Returns:
-            Dict mapping class name to list of field definitions:
-            {
-                'MyInputType': [
-                    {'name': 'field1', 'type': 'str', 'required': True},
-                    {'name': 'field2', 'type': 'List[int]', 'required': False}
-                ]
-            }
-        """
+        """Extract TypedDict class definitions from AST."""
         typed_dicts = {}
 
         for node in ast.walk(tree):
@@ -866,24 +724,7 @@ class ProjectScanner:
     # =========================================================================
 
     def scan_vendors(self) -> Dict[str, Any]:
-        """
-        Scan for LLM vendor configurations.
-
-        Parses agent_actions/llm/config/vendor.py using AST to extract the
-        VendorType enum and per-vendor config classes.
-
-        Returns:
-            Dict mapping vendor name to vendor data:
-            {
-                'openai': {
-                    'id': 'openai',
-                    'enum_value': 'openai',
-                    'config_class': 'OpenAIConfig',
-                    'fields': [{'name': 'api_key_env_name', 'default': 'OPENAI_API_KEY'}, ...],
-                    'docstring': '...'
-                }
-            }
-        """
+        """Scan for LLM vendor configurations via AST parsing."""
         vendors = {}
         vendor_file = self.project_root.parent / "agent_actions" / "llm" / "config" / "vendor.py"
 
@@ -981,25 +822,7 @@ class ProjectScanner:
         return vendors
 
     def scan_error_types(self) -> Dict[str, Any]:
-        """
-        Scan for error/exception class hierarchy.
-
-        Parses agent_actions/errors/*.py using AST to extract the exception
-        class hierarchy organized by domain category.
-
-        Returns:
-            Dict mapping category to error data:
-            {
-                'configuration': {
-                    'id': 'configuration',
-                    'base_class': 'ConfigurationError',
-                    'errors': [
-                        {'name': 'ConfigValidationError', 'parent': 'ConfigurationError',
-                         'docstring': '...', 'source_file': 'configuration.py'}
-                    ]
-                }
-            }
-        """
+        """Scan for error/exception class hierarchy via AST parsing."""
         error_types = {}
         errors_dir = Path(__file__).resolve().parent.parent.parent / "errors"
 
@@ -1073,24 +896,7 @@ class ProjectScanner:
         return error_types
 
     def scan_event_types(self) -> Dict[str, Any]:
-        """
-        Scan for event type definitions.
-
-        Parses agent_actions/logging/events/types.py using AST to extract
-        event dataclasses and their categories.
-
-        Returns:
-            Dict mapping category to event data:
-            {
-                'workflow': {
-                    'id': 'workflow',
-                    'events': [
-                        {'name': 'WorkflowStartEvent', 'code': 'W001',
-                         'docstring': '...', 'fields': [...]}
-                    ]
-                }
-            }
-        """
+        """Scan for event type definitions via AST parsing."""
         event_types = {}
         events_file = (
             Path(__file__).resolve().parent.parent.parent / "logging" / "events" / "types.py"
@@ -1188,28 +994,7 @@ class ProjectScanner:
         return event_types
 
     def scan_examples(self) -> Dict[str, Any]:
-        """
-        Scan for example projects in the examples/ directory.
-
-        Looks for example project directories that contain agent_actions.yml
-        and scans their structure (workflows, prompts, schemas, tools).
-
-        Returns:
-            Dict mapping example name to project data:
-            {
-                'book_catalog_enrichment': {
-                    'id': 'book_catalog_enrichment',
-                    'name': 'book_catalog_enrichment',
-                    'path': 'examples/book_catalog_enrichment',
-                    'has_workflows': True,
-                    'workflows': ['workflow_name'],
-                    'has_prompts': True,
-                    'has_schemas': True,
-                    'has_tools': True,
-                    'description': '...'
-                }
-            }
-        """
+        """Scan for example projects in the examples/ directory."""
         examples = {}
         examples_dir = self.project_root.parent / "examples"
 
@@ -1289,25 +1074,7 @@ class ProjectScanner:
         return examples
 
     def scan_data_loaders(self) -> Dict[str, Any]:
-        """
-        Scan for data loader implementations.
-
-        Parses agent_actions/input/loaders/*.py using AST to extract
-        BaseLoader subclasses and their supported file types.
-
-        Returns:
-            Dict mapping loader name to loader data:
-            {
-                'JsonLoader': {
-                    'id': 'JsonLoader',
-                    'name': 'JsonLoader',
-                    'source_file': 'json.py',
-                    'docstring': '...',
-                    'supported_types': ['.json'],
-                    'base_class': 'BaseLoader'
-                }
-            }
-        """
+        """Scan for data loader implementations via AST parsing."""
         loaders = {}
         loaders_dir = Path(__file__).resolve().parent.parent.parent / "input" / "loaders"
 
@@ -1386,31 +1153,7 @@ class ProjectScanner:
         return loaders
 
     def scan_processing_states(self) -> Dict[str, Any]:
-        """
-        Scan for processing state/status enums and types.
-
-        Parses agent_actions/processing/types.py using AST to extract
-        ProcessingStatus, ProcessingMode enums and key dataclasses.
-
-        Returns:
-            Dict with processing type data:
-            {
-                'ProcessingStatus': {
-                    'id': 'ProcessingStatus',
-                    'type': 'enum',
-                    'values': [
-                        {'name': 'SUCCESS', 'value': 'success', 'docstring': '...'}
-                    ]
-                },
-                'ProcessingMode': {...},
-                'ProcessingResult': {
-                    'id': 'ProcessingResult',
-                    'type': 'dataclass',
-                    'fields': [...],
-                    'factory_methods': [...]
-                }
-            }
-        """
+        """Scan for processing state/status enums and dataclasses."""
         processing_types = {}
         types_file = Path(__file__).resolve().parent.parent.parent / "processing" / "types.py"
 

@@ -1,9 +1,4 @@
-"""
-Schema validation utilities.
-
-This module provides utilities for validating schema files and
-ensuring they meet the required format and constraints.
-"""
+"""Schema file validation with JSON Schema meta-schema checks."""
 
 import json
 import logging
@@ -52,9 +47,7 @@ def _collect_all_keys(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
 
 
 class SchemaValidator(BaseValidator):
-    """
-    Handles schema validation operations by inheriting from BaseValidator.
-    """
+    """Validates schema files against JSON Schema meta-schema."""
 
     JSON_SCHEMA_RESERVED_KEYWORDS: Set[str] = {
         "type",
@@ -98,10 +91,7 @@ class SchemaValidator(BaseValidator):
     def _process_schema_file(
         self, file_path: Path, schema_name: str, agent_name: Optional[str] = "general"
     ) -> None:
-        """
-        Validates a single schema file and adds errors to the instance.
-        Corresponds to the old _validate_schema_file but uses self.add_error.
-        """
+        """Validate a single schema file and add errors to the instance."""
         display_name = f"schema '{schema_name}'"
         if agent_name:
             display_name += f" for agent '{agent_name}'"
@@ -184,7 +174,7 @@ class SchemaValidator(BaseValidator):
 
     @staticmethod
     def _is_valid_json_schema_structure(schema_data: Dict[str, Any]) -> bool:
-        """Checks if a dictionary appears to be a JSON Schema document."""
+        """Return True if the dict appears to be a JSON Schema document."""
         if not isinstance(schema_data, dict):
             return False
         schema_keywords = {
@@ -203,7 +193,7 @@ class SchemaValidator(BaseValidator):
 
     @staticmethod
     def _validate_against_meta_schema_static(schema_data: Dict[str, Any]) -> None:
-        """Validates a schema against the JSON Schema meta-schema. Raises error on failure."""
+        """Validate schema against the JSON Schema meta-schema; raises on failure."""
         validator_cls = jsonschema.validators.validator_for(schema_data)
         validator_cls.check_schema(schema_data)
 
@@ -211,10 +201,7 @@ class SchemaValidator(BaseValidator):
     def _check_common_schema_issues_static(
         cls, schema_data: Dict[str, Any], schema_name: str
     ) -> List[str]:
-        """Checks for common issues in JSON Schema documents.
-
-        Returns list of issue strings.
-        """
+        """Return list of common issue strings found in a JSON Schema document."""
         issues = []
         if "type" not in schema_data:
             issues.append(f"Missing 'type' property at the root level of schema '{schema_name}'.")
@@ -265,27 +252,10 @@ class SchemaValidator(BaseValidator):
         return issues
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        """
-        Validates schema files for a given agent in a specified directory.
-
-        Args:
-            data: A dictionary containing:
-                - "agent_name" (str): Name of the agent.
-                - "schema_dir" (Path): Directory containing the agent's schema
-                  files (e.g., *.json).
-                - "schema_files" (Optional[List[str]]): Specific schema
-                  filenames to validate. If None, will attempt to find all
-                  .json files.
-            config: Optional. Could be used for future extensions, e.g.,
-                specifying schema dialect.
-
-        Returns:
-            bool: True if all schema validations pass, False otherwise.
-        """
+        """Validate schema files for a given agent in the specified directory."""
         agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
         target = f"schema:{agent_name}" if agent_name else "schema"
 
-        # Fire validation started event
         fire_event(
             DataValidationStartedEvent(
                 validator_type="SchemaValidator",
@@ -295,7 +265,6 @@ class SchemaValidator(BaseValidator):
 
         if not self._prepare_validation(data, target=target):
             result = self._complete_validation()
-            # Fire validation failed event
             fire_event(
                 DataValidationFailedEvent(
                     validator_type="SchemaValidator",
@@ -374,7 +343,6 @@ class SchemaValidator(BaseValidator):
                     field="schema_files",
                 )
                 result = self._complete_validation()
-                # No files means validation passed (with warning)
                 fire_event(
                     DataValidationPassedEvent(
                         validator_type="SchemaValidator",
@@ -388,7 +356,6 @@ class SchemaValidator(BaseValidator):
 
         result = self._complete_validation()
 
-        # Fire validation result event
         if result:
             fire_event(
                 DataValidationPassedEvent(
@@ -460,13 +427,7 @@ class SchemaValidator(BaseValidator):
         schema1_name: str = "Schema 1",
         schema2_name: str = "Schema 2",
     ) -> bool:
-        """
-        Validates that two schemas are compatible.
-
-        Adds errors to the instance if not. This method is separate from the
-        main file-based validation flow. It CLEARS existing errors on the
-        instance before running.
-        """
+        """Return True if two schemas are compatible; clears and repopulates errors."""
         self.clear_errors()
         logger.debug(
             "Checking schema compatibility between '%s' and '%s'.", schema1_name, schema2_name

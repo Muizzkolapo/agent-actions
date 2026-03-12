@@ -1,11 +1,4 @@
-"""
-Reprompt validation UDF system.
-
-Provides decorator for registering validation functions and
-feedback message management.
-
-Thread-safe: All registry access is protected by a lock for concurrent environments.
-"""
+"""Thread-safe reprompt validation UDF registry."""
 
 from typing import Callable
 import functools
@@ -21,47 +14,25 @@ from agent_actions.logging.events import (
 
 logger = logging.getLogger(__name__)
 
-# Global registry: UDF name -> (function, message)
 _VALIDATION_REGISTRY: dict[str, tuple[Callable[[dict], bool], str]] = {}
-
-# Lock for thread-safe registry access
 _REGISTRY_LOCK = threading.Lock()
 
 
 def reprompt_validation(feedback_message: str):
-    """
-    Decorator to register reprompt validation UDFs.
+    """Decorator to register a reprompt validation UDF.
 
-    The decorated function should validate an LLM response and return
-    True if valid (pass) or False to trigger reprompt.
+    The decorated function receives a dict response and returns True (pass)
+    or False (trigger reprompt). The function name becomes the UDF identifier.
 
     Args:
         feedback_message: Message shown to LLM when validation fails.
-                         This explains what needs to be corrected.
-
-    Returns:
-        Decorator function
-
-    Example:
-        @reprompt_validation("Response must not contain forbidden words")
-        def check_no_forbidden_words(response: dict) -> bool:
-            forbidden = ["spam", "scam"]
-            text = str(response).lower()
-            return not any(word in text for word in forbidden)
-
-    Note:
-        - Function name becomes the UDF identifier
-        - Function must accept dict parameter and return bool
-        - Registered functions are stored in global registry
     """
 
     def decorator(func: Callable[[dict], bool]) -> Callable[[dict], bool]:
         func_name = func.__name__
 
-        # Create wrapper that fires events
         @functools.wraps(func)
         def wrapped_func(response: dict) -> bool:
-            # Fire validation started event
             fire_event(
                 DataValidationStartedEvent(
                     validator_type=f"RepromptValidation:{func_name}",
@@ -69,7 +40,6 @@ def reprompt_validation(feedback_message: str):
                 )
             )
 
-            # Execute validation
             try:
                 result = func(response)
                 if result:
@@ -103,7 +73,6 @@ def reprompt_validation(feedback_message: str):
                     )
                 raise
 
-        # Thread-safe registration
         with _REGISTRY_LOCK:
             if func_name in _VALIDATION_REGISTRY:
                 logger.warning("Overwriting existing reprompt validation: %s", func_name)
@@ -115,23 +84,11 @@ def reprompt_validation(feedback_message: str):
 
 
 def get_validation_function(name: str) -> tuple[Callable[[dict], bool], str]:
-    """
-    Get validation function and feedback message by name.
-
-    Args:
-        name: UDF function name (as registered by decorator)
-
-    Returns:
-        Tuple of (validation_function, feedback_message)
+    """Return (validation_function, feedback_message) for the named UDF.
 
     Raises:
-        ValueError: If UDF not found in registry
-
-    Example:
-        validator, message = get_validation_function("check_no_forbidden_words")
-        is_valid = validator(response)
+        ValueError: If UDF not found in registry.
     """
-    # Thread-safe lookup
     with _REGISTRY_LOCK:
         if name not in _VALIDATION_REGISTRY:
             available = list(_VALIDATION_REGISTRY.keys())
@@ -140,16 +97,6 @@ def get_validation_function(name: str) -> tuple[Callable[[dict], bool], str]:
 
 
 def list_validation_functions() -> list[str]:
-    """
-    List all registered validation function names.
-
-    Returns:
-        List of UDF names in registry
-
-    Example:
-        >>> list_validation_functions()
-        ['check_no_forbidden_words', 'check_format', 'check_required_fields']
-    """
-    # Thread-safe list copy
+    """Return all registered validation function names."""
     with _REGISTRY_LOCK:
         return list(_VALIDATION_REGISTRY.keys())

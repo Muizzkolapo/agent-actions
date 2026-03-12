@@ -1,9 +1,4 @@
-"""
-Retry Service for handling transport-layer failures.
-
-This module provides retry logic for LLM calls in both online and batch modes.
-It wraps operations with configurable retry behavior and tracks recovery metadata.
-"""
+"""Retry service for handling transport-layer failures in LLM calls."""
 
 import logging
 from dataclasses import dataclass
@@ -16,22 +11,12 @@ from agent_actions.logging.events.types import RetryExhaustedEvent
 logger = logging.getLogger(__name__)
 
 
-# Errors that should trigger a retry
 RETRIABLE_ERRORS = (NetworkError, RateLimitError)
 
 
 @dataclass
 class RetryResult:
-    """
-    Result of a retry-wrapped operation.
-
-    Attributes:
-        response: The successful response (or last response if exhausted)
-        attempts: Number of attempts made (1 = no retry needed)
-        reason: Reason for retry if any occurred (None if no retry needed)
-        exhausted: Whether max attempts were exhausted without success
-        last_error: The last error encountered (if any)
-    """
+    """Result of a retry-wrapped operation."""
 
     response: Optional[Any]
     attempts: int = 1
@@ -41,20 +26,12 @@ class RetryResult:
 
     @property
     def needed_retry(self) -> bool:
-        """Whether a transport-layer failure occurred (attempts > 1 or exhausted on first attempt)."""
+        """Return True if a transport-layer failure occurred."""
         return self.attempts > 1 or self.exhausted
 
 
 def classify_error(error: Exception) -> str:
-    """
-    Classify an error for retry reason tracking.
-
-    Args:
-        error: The exception to classify
-
-    Returns:
-        Reason string: "timeout", "rate_limit", "api_error", or "network_error"
-    """
+    """Classify an error into a retry reason string."""
     error_str = str(error).lower()
 
     if isinstance(error, RateLimitError):
@@ -70,54 +47,21 @@ def classify_error(error: Exception) -> str:
 
 
 def is_retriable_error(error: Exception) -> bool:
-    """
-    Check if an error should trigger a retry.
-
-    Args:
-        error: The exception to check
-
-    Returns:
-        True if the error is retriable, False otherwise
-    """
+    """Return True if the error is retriable (NetworkError or RateLimitError)."""
     return isinstance(error, RETRIABLE_ERRORS)
 
 
 class RetryService:
-    """
-    Service for executing operations with retry logic.
-
-    This service wraps callable operations and retries them on transient failures.
-    It tracks retry attempts and provides metadata for the _recovery field.
-
-    This service is intentionally limited to retry mechanics only.  The
-    ``on_exhausted`` policy ("raise" vs "return_last") lives in the config
-    schema and is enforced by callers (ResultCollector, RepromptService, batch
-    processing) — not here — so that all orchestration paths share the same
-    raise-vs-return decision point.
-
-    Example:
-        retry_service = RetryService(max_attempts=3)
-
-        result = retry_service.execute(
-            lambda: llm_client.call(prompt),
-        )
-
-        if result.needed_retry:
-            print(f"Retried {result.attempts} times due to {result.reason}")
-    """
+    """Wraps callable operations with configurable retry logic for transient failures."""
 
     def __init__(
         self,
         max_attempts: int = 3,
     ):
-        """
-        Initialize the RetryService.
-
-        Args:
-            max_attempts: Maximum number of attempts (must be >= 1)
+        """Initialize with max_attempts (must be >= 1).
 
         Raises:
-            ValueError: If max_attempts < 1
+            ValueError: If max_attempts < 1.
         """
         if max_attempts < 1:
             raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
@@ -129,19 +73,10 @@ class RetryService:
         operation: Callable[[], Any],
         context: Optional[str] = None,
     ) -> RetryResult:
-        """
-        Execute an operation with retry logic.
-
-        Args:
-            operation: A callable that performs the operation (e.g., LLM call)
-            context: Optional context string for logging
-
-        Returns:
-            RetryResult containing the response and retry metadata.
-            On exhaustion when all attempts raised, ``response`` is ``None``.
+        """Execute an operation with retry logic.
 
         Raises:
-            Exception: Re-raises non-retriable errors immediately
+            Exception: Re-raises non-retriable errors immediately.
         """
         last_error: Optional[Exception] = None
         reason: Optional[str] = None
@@ -149,7 +84,6 @@ class RetryService:
         for attempt in range(1, self.max_attempts + 1):
             try:
                 response = operation()
-                # Success - return with retry metadata if we retried
                 return RetryResult(
                     response=response,
                     attempts=attempt,
@@ -163,7 +97,6 @@ class RetryService:
                 reason = classify_error(e)
 
                 if is_retriable_error(e):
-                    # Retriable error - log and retry
                     log_context = f" ({context})" if context else ""
                     if attempt < self.max_attempts:
                         logger.info(
@@ -176,7 +109,6 @@ class RetryService:
                         )
                         continue
                     else:
-                        # Exhausted retries
                         logger.warning(
                             "Retry exhausted after %d attempts%s: %s - %s",
                             attempt,
@@ -193,7 +125,6 @@ class RetryService:
                             )
                         )
                 else:
-                    # Non-retriable error - don't retry, re-raise immediately
                     logger.error(
                         "Non-retriable error%s: %s",
                         f" ({context})" if context else "",
@@ -201,9 +132,6 @@ class RetryService:
                     )
                     raise
 
-        # Exhausted all retries — return result with exhausted=True.
-        # The on_exhausted policy is enforced by the caller (e.g. ResultCollector)
-        # so that batch and online paths share the same raise-vs-return decision.
         return RetryResult(
             response=None,
             attempts=self.max_attempts,
@@ -216,16 +144,7 @@ class RetryService:
 def create_retry_service_from_config(
     retry_config: Optional[dict],
 ) -> Optional[RetryService]:
-    """
-    Create a RetryService from action configuration.
-
-    Args:
-        retry_config: The retry configuration dict from action config.
-                     Expected format: {"enabled": bool, "max_attempts": int}
-
-    Returns:
-        RetryService if retry is enabled, None otherwise
-    """
+    """Create a RetryService from action config, or return None if not enabled."""
     if retry_config is None:
         return None
 

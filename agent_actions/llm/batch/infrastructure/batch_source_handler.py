@@ -8,12 +8,7 @@ if TYPE_CHECKING:
 
 
 class BatchSourceHandler:
-    """
-    Handles batch source data persistence.
-
-    Delegates to UnifiedSourceDataSaver for file locking, deduplication,
-    and source saving.
-    """
+    """Handles batch source data persistence via UnifiedSourceDataSaver."""
 
     def save_task_source(
         self,
@@ -23,16 +18,7 @@ class BatchSourceHandler:
         _output_directory: str,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> None:
-        """
-        Save task source data using unified source saver.
-
-        Args:
-            src_text: Single item (Dict) or list of items (List[Dict]) in flat format
-                     with 'source_guid' field. Accepts both for convenience.
-            file_path: Path to the file being processed
-            base_directory: Base directory for input files
-            _output_directory: Output directory for processed files (unused)
-        """
+        """Save task source data using unified source saver."""
         from agent_actions.output.saver import UnifiedSourceDataSaver
 
         relative_path = Path(file_path).relative_to(base_directory)

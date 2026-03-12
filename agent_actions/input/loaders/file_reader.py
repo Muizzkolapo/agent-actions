@@ -1,4 +1,4 @@
-"""Module for reading data loading and processing."""
+"""File reader for various file formats."""
 
 import csv
 import json

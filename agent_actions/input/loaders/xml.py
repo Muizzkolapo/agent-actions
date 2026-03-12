@@ -20,15 +20,7 @@ class XmlLoader(BaseLoader[ET.Element]):
     """Loader for XML content."""
 
     def process(self, content: Any, file_path: Optional[str] = None) -> ET.Element:
-        """Load and return XML root element from a file or in-memory content.
-
-        Args:
-            content: Content to process if file_path is not provided.
-            file_path: Path to the XML file.
-
-        Returns:
-            Parsed XML ElementTree root element.
-        """
+        """Load and return XML root element from a file or in-memory content."""
         try:
             if file_path:
                 content_str = self.load_file(file_path)
@@ -59,14 +51,7 @@ class XmlLoader(BaseLoader[ET.Element]):
             raise
 
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
-        """Process an XML element into a dictionary.
-
-        Args:
-            element: XML element
-
-        Returns:
-            Dictionary representation of the XML element
-        """
+        """Process an XML element into a dictionary."""
         try:
             result = {
                 "tag": element.tag,

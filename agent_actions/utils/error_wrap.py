@@ -1,8 +1,4 @@
-"""
-Error wrapping utilities for validation errors.
-
-This module provides decorators for wrapping exceptions.
-"""
+"""Decorator for wrapping exceptions as validation errors."""
 
 from functools import wraps
 from typing import Callable, Type

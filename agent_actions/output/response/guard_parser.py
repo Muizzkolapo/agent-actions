@@ -37,20 +37,7 @@ class GuardParser:
 
     @classmethod
     def parse(cls, guard: str) -> GuardExpression:
-        """
-        Parse a guard expression and determine its type.
-
-        Args:
-            guard: Guard expression string
-
-        Returns:
-            GuardExpression with parsed type and expression
-
-        Examples:
-            parse('questionable != "Low Value"')
-                -> GuardExpression(SQL, 'questionable != "Low Value"')
-            parse('udf:module.function') -> GuardExpression(UDF, 'module.function')
-        """
+        """Parse a guard expression string into a typed GuardExpression (SQL or UDF)."""
         if not guard or not isinstance(guard, str):
             raise ValidationError(
                 "Guard expression must be a non-empty string",
@@ -99,14 +86,10 @@ class GuardParser:
 
     @classmethod
     def _validate_udf_expression(cls, expression: str) -> None:
-        """
-        Validate UDF expression format.
-
-        Args:
-            expression: UDF expression (e.g., 'module.function')
+        """Validate UDF expression format (e.g., 'module.function').
 
         Raises:
-            ValueError: If expression format is invalid
+            ValidationError: If expression format is invalid or contains dangerous patterns
         """
         pattern = "^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
         if not re.match(pattern, expression):
@@ -154,14 +137,10 @@ class GuardParser:
 
     @classmethod
     def _validate_sql_expression(cls, expression: str) -> None:
-        """
-        Validate SQL-like expression for basic safety.
-
-        Args:
-            expression: SQL-like expression
+        """Validate that a SQL-like expression does not contain dangerous patterns.
 
         Raises:
-            ValueError: If expression contains dangerous patterns
+            ValidationError: If expression contains dangerous patterns
         """
         expression_lower = expression.lower()
         matched = contains_dangerous_pattern(expression_lower, DANGEROUS_PATTERNS)

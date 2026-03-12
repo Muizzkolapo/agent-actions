@@ -1,6 +1,4 @@
-"""
-UDF (User-Defined Function) Registry for Agent Actions.
-"""
+"""UDF (User-Defined Function) registry for Agent Actions."""
 
 import inspect
 import threading
@@ -13,36 +11,10 @@ from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 @dataclass
 class FileUDFResult:
-    """
-    Result type for FILE-level UDFs with explicit source mapping.
+    """Result type for FILE-level UDFs with explicit source mapping.
 
-    Enables UDFs to declare exactly which input record(s) produced each output,
-    supporting proper lineage tracking for filter, dedup, and merge operations.
-
-    Attributes:
-        outputs: List of output records
-        source_mapping: Maps output_idx -> input_idx(es)
-            - int: one-to-one (output[i] from input[j])
-            - List[int]: many-to-one (output[i] from inputs[j,k,...])
-        input_count: Number of input records (optional, for validation)
-
-    Examples:
-        # Dedup: output 0 from input 0, output 1 from input 2 (skipped input 1)
-        FileUDFResult(
-            outputs=[{"a": 1}, {"c": 3}],
-            source_mapping={0: 0, 1: 2},
-            input_count=3
-        )
-
-        # Merge: output 0 aggregates inputs 0, 1, 2
-        FileUDFResult(
-            outputs=[{"merged": "abc"}],
-            source_mapping={0: [0, 1, 2]},
-            input_count=3
-        )
-
-        # Without mapping: falls back to legacy lineage behavior
-        FileUDFResult(outputs=[{"result": "x"}])
+    ``source_mapping`` maps output index to input index(es), enabling
+    proper lineage tracking for filter, dedup, and merge operations.
     """
 
     outputs: List[Dict]
@@ -50,19 +22,17 @@ class FileUDFResult:
     input_count: Optional[int] = None
 
     def __post_init__(self):
-        """Validate source_mapping bounds at creation time."""
+        """Validate source_mapping bounds."""
         if self.source_mapping is None:
             return
 
         for output_idx, source_idx in self.source_mapping.items():
-            # Validate output index is within bounds
             if output_idx < 0 or output_idx >= len(self.outputs):
                 raise ValueError(
                     f"source_mapping key {output_idx} out of bounds "
                     f"for outputs (length {len(self.outputs)})"
                 )
 
-            # Validate input indices if input_count is provided
             if self.input_count is not None:
                 indices = source_idx if isinstance(source_idx, list) else [source_idx]
                 for idx in indices:
@@ -85,33 +55,12 @@ def udf_tool(
     *,
     granularity: Granularity = Granularity.RECORD,
 ) -> Callable:
-    """
-    Decorator to register a UDF.
-
-    Output schema is defined via YAML ``schema:`` in the workflow config
-    (the single source of truth). Runtime output validation is fed from
-    the compiled ``json_output_schema`` in agent config.
-
-    Args:
-        func: The function to register
-        granularity: RECORD (default) or FILE processing
-
-    Examples:
-        @udf_tool()
-        def process_user(data, **kwargs):
-            return {'status': 'processed'}
-
-        @udf_tool(granularity=Granularity.FILE)
-        def process_users_batch(data, **kwargs):
-            return [{'status': 'processed'} for _ in data]
-    """
+    """Decorator to register a UDF with optional granularity (RECORD or FILE)."""
 
     def decorator(f: Callable) -> Callable:
-        # Thread-safe registration
         with _registry_lock:
             func_name_lower = f.__name__.lower()
 
-            # Check for duplicates (atomic check-and-register)
             if func_name_lower in UDF_REGISTRY:
                 existing = UDF_REGISTRY[func_name_lower]
                 new_file = inspect.getfile(f)
@@ -148,21 +97,10 @@ def udf_tool(
 
 
 def get_udf(func_name: str) -> Callable:
-    """
-    Retrieve a registered UDF by name (case-insensitive).
-
-    Args:
-        func_name: Name of the function to retrieve
-
-    Returns:
-        The registered function
+    """Retrieve a registered UDF by name (case-insensitive).
 
     Raises:
-        FunctionNotFoundError: If function not found in registry
-
-    Example:
-        func = get_udf('process_user')
-        result = func(data)
+        FunctionNotFoundError: If function not found in registry.
     """
     with _registry_lock:
         func_name_lower = func_name.lower()
@@ -176,18 +114,10 @@ def get_udf(func_name: str) -> Callable:
 
 
 def get_udf_metadata(func_name: str) -> Dict[str, Any]:
-    """
-    Get complete UDF metadata including schema and granularity.
-    Thread-safe. Returns a shallow copy to prevent accidental registry mutation.
-
-    Args:
-        func_name: Name of the function
-
-    Returns:
-        Dictionary containing all metadata
+    """Get complete UDF metadata (shallow copy to prevent registry mutation).
 
     Raises:
-        FunctionNotFoundError: If function not found
+        FunctionNotFoundError: If function not found.
     """
     with _registry_lock:
         func_name_lower = func_name.lower()
@@ -201,17 +131,7 @@ def get_udf_metadata(func_name: str) -> Dict[str, Any]:
 
 
 def list_udfs() -> List[Dict[str, Any]]:
-    """
-    List all registered UDFs with their metadata.
-
-    Returns:
-        List of dicts containing function metadata
-
-    Example:
-        udfs = list_udfs()
-        for udf in udfs:
-            print(f"{udf['name']} - {udf['file']}")
-    """
+    """List all registered UDFs with their metadata."""
     with _registry_lock:
         return [
             {
@@ -226,15 +146,6 @@ def list_udfs() -> List[Dict[str, Any]]:
 
 
 def clear_registry() -> None:
-    """
-    Clear the UDF registry. Thread-safe.
-
-    This function should only be called in test cleanup.
-
-    Example:
-        @pytest.fixture(autouse=True)
-        def cleanup():
-            clear_registry()
-    """
+    """Clear the UDF registry (testing only, thread-safe)."""
     with _registry_lock:
         UDF_REGISTRY.clear()

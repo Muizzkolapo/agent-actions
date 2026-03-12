@@ -1,9 +1,4 @@
-"""
-Batch Task Preparator.
-
-Handles preparation of batch tasks from raw data without state mutation.
-Uses TaskPreparer for unified preparation logic shared with online mode.
-"""
+"""Batch task preparation from raw data using shared TaskPreparer logic."""
 
 import logging
 import warnings
@@ -29,26 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class BatchTaskPreparator:
-    """
-    Prepares batch tasks from raw data.
-
-    Uses TaskPreparer for unified preparation logic - same code path as online mode.
-    Guard evaluation happens ONCE with full context (like SQL WHERE).
-
-    Example:
-        preparator = BatchTaskPreparator()
-
-        result = preparator.prepare_tasks(
-            agent_config=config,
-            data=[{'content': 'test'}],
-            provider=provider,
-            output_directory='/tmp/node_1_Agent',
-            batch_name='test.json'
-        )
-
-        # result is PreparedBatchTasks with tasks, context_map, and stats
-        provider.submit_batch(result.tasks)
-    """
+    """Prepares batch tasks from raw data using TaskPreparer for unified preparation."""
 
     def __init__(
         self,
@@ -58,15 +34,11 @@ class BatchTaskPreparator:
         guard_handler=None,
         storage_backend: Optional[Any] = None,
     ):
-        """
-        Initialize task preparator.
+        """Initialize task preparator.
 
         Args:
             filter_service: DEPRECATED - no longer used, guards handled by TaskPreparer
-            agent_indices: Dict mapping agent names to node indices
-            dependency_configs: Dict mapping dependency names to configs
             guard_handler: DEPRECATED - no longer used, guards handled by TaskPreparer
-            storage_backend: Optional storage backend for historical data loading
         """
         if filter_service is not None:
             warnings.warn(
@@ -94,27 +66,12 @@ class BatchTaskPreparator:
         source_data: Optional[List[Any]] = None,
         workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> PreparedBatchTasks:
-        """
-        Prepare batch tasks from raw data.
-
-        Uses TaskPreparer for unified preparation (same as online mode).
-
-        Args:
-            agent_config: Agent configuration
-            data: List of raw data items
-            provider: Batch provider instance
-            output_directory: Output directory path
-            batch_name: Batch file name
-            source_data: Optional source data for lookups
-            workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
-
-        Returns:
-            PreparedBatchTasks with tasks, context_map, and stats
+        """Prepare batch tasks from raw data.
 
         Raises:
             ConfigurationError: If configuration is invalid
         """
-        # 0. Validate agent_config is not None
+        # Validate agent_config is not None
         if agent_config is None:
             raise ConfigurationError(
                 "agent_config is None in batch task preparation. "
@@ -126,13 +83,12 @@ class BatchTaskPreparator:
                 },
             )
 
-        # 1. Validate configuration
+        # Validate configuration
         self._validate_config(agent_config, provider)
 
-        # 2. Setup context
         PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 
-        # 2.1 Pre-flight validation
+        # Pre-flight validation
         self._run_preflight_validation(
             agent_config,
             data,
@@ -145,15 +101,13 @@ class BatchTaskPreparator:
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
-        # 3. Prepare schema
         schema = self._prepare_schema(agent_config, provider)
 
-        # 4. Initialize builders
         context_map_builder: Dict[str, Any] = {}
         tasks_builder: List[Dict[str, Any]] = []
         stats = BatchTaskPreparationStats(total_items=len(data))
 
-        # 5. Build PreparationContext for TaskPreparer
+        # Build PreparationContext for TaskPreparer
         prep_context = self._build_preparation_context(
             agent_config=agent_config,
             output_directory=output_directory,
@@ -163,7 +117,7 @@ class BatchTaskPreparator:
             tools_path=tools_path,
         )
 
-        # 6. Process each data item using TaskPreparer
+        # Process each data item using TaskPreparer
         task_preparer = get_task_preparer()
 
         for row in data:
@@ -184,12 +138,12 @@ class BatchTaskPreparator:
                 logger.exception("Failed to prepare task for row: %s", e)
                 stats.error_items += 1
 
-        # 7. Finalize tasks with provider
+        # Finalize tasks with provider
         provider_config = agent_config.copy()
         provider_config["compiled_schema"] = schema
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
 
-        # 8. Return immutable result
+        # Return immutable result
         return PreparedBatchTasks(
             tasks=final_tasks,
             context_map=context_map_builder,
@@ -343,11 +297,7 @@ class BatchTaskPreparator:
         source_data: Optional[List[Any]] = None,
         workflow_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """
-        Run pre-flight validation on first data row.
-
-        Uses TaskPreparer to validate template rendering.
-        """
+        """Run pre-flight validation on first data row to catch template errors early."""
         if not data:
             return
 

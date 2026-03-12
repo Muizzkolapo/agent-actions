@@ -1,9 +1,4 @@
-"""
-Context debug handler for aggregating and displaying context debug information.
-
-This handler collects context-related events during workflow execution and
-provides a summary display for the --debug-context flag and inspect context command.
-"""
+"""Context debug handler for aggregating and displaying context debug information."""
 
 from __future__ import annotations
 
@@ -34,34 +29,16 @@ class ActionContextInfo:
 
 
 class ContextDebugHandler:
-    """
-    Handler that aggregates context events for debug display.
-
-    Collects ContextNamespaceLoadedEvent, ContextFieldSkippedEvent,
-    ContextScopeAppliedEvent, etc. and provides display_summary() for
-    rich output.
-
-    Usage:
-        handler = ContextDebugHandler()
-        manager.register(handler)
-        # ... workflow execution ...
-        handler.display_summary()
-    """
+    """Handler that aggregates context events for debug display via display_summary()."""
 
     # Event codes we handle
     CONTEXT_EVENT_CODES = {"CX001", "CX002", "CX003", "CX005", "CX006"}
 
     def __init__(self, console: Optional[Any] = None) -> None:
-        """
-        Initialize the context debug handler.
-
-        Args:
-            console: Rich Console instance (creates new one if not provided)
-        """
+        """Initialize the context debug handler."""
         self._actions: Dict[str, ActionContextInfo] = {}
         self._event_count = 0
 
-        # Initialize Rich console if available
         if RICH_AVAILABLE and Console is not None:
             self._console = console or Console()
             self._use_rich = True
@@ -76,27 +53,13 @@ class ContextDebugHandler:
         return self._actions[action_name]
 
     def accepts(self, event: BaseEvent) -> bool:
-        """
-        Check if this is a context event we should collect.
-
-        Args:
-            event: Event to check
-
-        Returns:
-            True if this is a context introspection event
-        """
+        """Return True for context introspection events (CX prefix)."""
         return event.code in self.CONTEXT_EVENT_CODES
 
     def handle(self, event: BaseEvent) -> None:
-        """
-        Collect context event data.
-
-        Args:
-            event: Context event to process
-        """
+        """Collect context event data."""
         self._event_count += 1
 
-        # Get action name from event data
         action_name = getattr(event, "action_name", "unknown")
         action_info = self._get_or_create_action(action_name)
 
@@ -162,12 +125,7 @@ class ContextDebugHandler:
         return self._event_count
 
     def display_summary(self, action_name: Optional[str] = None) -> None:
-        """
-        Display collected context debug information.
-
-        Args:
-            action_name: If provided, only show info for this action
-        """
+        """Display collected context debug information."""
         if self._use_rich and self._console:
             self._display_rich_summary(action_name)
         else:
@@ -308,15 +266,7 @@ class ContextDebugHandler:
                 print()
 
     def to_dict(self, action_name: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Convert collected data to a dictionary for JSON output.
-
-        Args:
-            action_name: If provided, only include this action
-
-        Returns:
-            Dictionary representation of context debug info
-        """
+        """Convert collected data to a dictionary for JSON output."""
         actions_to_show = (
             {action_name: self._actions[action_name]}
             if action_name and action_name in self._actions

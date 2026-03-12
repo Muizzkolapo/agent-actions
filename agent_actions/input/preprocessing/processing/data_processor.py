@@ -1,4 +1,4 @@
-"""Module for processing generated data."""
+"""Post-processing of generated data with passthrough transformations."""
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional
@@ -29,11 +29,11 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
         self.agent_config = agent_config
 
     def supports_async(self) -> bool:
-        """Return True as this processor supports async operations."""
+        """Return whether this processor supports async operations."""
         return True
 
     def get_processing_mode(self) -> ProcessingMode:
-        """Return AUTO processing mode to let system choose."""
+        """Return AUTO processing mode."""
         return ProcessingMode.AUTO
 
     def process_item(

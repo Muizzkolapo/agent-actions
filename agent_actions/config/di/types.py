@@ -1,9 +1,4 @@
-"""Typed dictionaries for DI configuration boundaries.
-
-These replace Dict[str, Any] at the DI config parameter boundary,
-giving callers and implementers a clear contract for the shape of
-configuration profiles (development, production, testing).
-"""
+"""Typed dictionaries for DI configuration boundaries."""
 
 from typing import TypedDict
 
@@ -30,10 +25,7 @@ class ServicesConfig(TypedDict):
 
 
 class DIConfig(TypedDict):
-    """Top-level DI configuration profile shape.
-
-    Matches the structure returned by ConfigurationProfile methods.
-    """
+    """Top-level DI configuration profile shape."""
 
     environment: str
     logging: LoggingConfig
