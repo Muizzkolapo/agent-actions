@@ -13,15 +13,16 @@ Also tests:
 - primary_dependency override for fan-in
 """
 
-import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-import tempfile
 import shutil
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock
 
-from agent_actions.workflow.runner import AgentRunner
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+import pytest
+
 from agent_actions.errors import DependencyError
+from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.workflow.runner import AgentRunner
 
 
 class TestIsParallelBranches:

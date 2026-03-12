@@ -3,13 +3,12 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Optional
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
+    EnricherExecutedEvent,
     EnrichmentPipelineCompleteEvent,
     EnrichmentPipelineStartedEvent,
-    EnricherExecutedEvent,
 )
 
 from .types import ProcessingContext, ProcessingResult, ProcessingStatus
@@ -60,9 +59,7 @@ class LineageEnricher(Enricher):
         result.node_id = base_node_id
         return result
 
-    def _get_parent_item(
-        self, source_guid: Optional[str], context: ProcessingContext
-    ) -> Optional[dict]:
+    def _get_parent_item(self, source_guid: str | None, context: ProcessingContext) -> dict | None:
         """Look up parent item for lineage chaining; returns None for first-stage."""
         if context.is_first_stage or not source_guid:
             return None
@@ -191,7 +188,7 @@ class RecoveryEnricher(Enricher):
 class EnrichmentPipeline:
     """Pipeline of enrichers applied in sequence."""
 
-    def __init__(self, enrichers: Optional[list[Enricher]] = None):
+    def __init__(self, enrichers: list[Enricher] | None = None):
         self.enrichers = (
             enrichers
             if enrichers is not None

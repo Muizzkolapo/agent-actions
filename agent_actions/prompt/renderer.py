@@ -3,19 +3,19 @@
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, cast
+from typing import Any, cast
 
 import yaml
-from yaml import YAMLError
 from pydantic import ValidationError
+from yaml import YAMLError
 
-from agent_actions.utils.error_handler import ErrorHandler
-from agent_actions.utils.error_wrap import as_validation_error
+from agent_actions.config.types import AgentConfigMap, AgentEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.realtime.handlers import AgentManager
-from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.output.response.config_schema import AgentConfig
-from agent_actions.config.types import AgentEntryDict, AgentConfigMap
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.utils.error_handler import ErrorHandler
+from agent_actions.utils.error_wrap import as_validation_error
 from agent_actions.validation.config_validator import ConfigValidator
 from agent_actions.validation.path_validator import PathValidator
 from agent_actions.validation.schema_validator import SchemaValidator
@@ -27,7 +27,7 @@ class TemplateRenderer(ABC):
     """Abstract interface for template rendering."""
 
     @abstractmethod
-    def render(self, config_path: str, template_dir: str, output_path: Optional[str] = None) -> str:
+    def render(self, config_path: str, template_dir: str, output_path: str | None = None) -> str:
         """
         Render a template with the given configuration.
 
@@ -51,7 +51,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
         self,
         config_path: str,
         template_dir: str,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
     ) -> str:
         """
         Render a template with the given configuration using Jinja.
@@ -104,7 +104,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
             if not path_validator.validate(data_template_dir):
                 all_validations_passed = False
                 error_messages.extend(path_validator.get_errors())
-            output_file_to_write: Optional[str] = None
+            output_file_to_write: str | None = None
             if output_path:
                 output_dir_as_path = Path(output_path)
                 data_output_dir = {
@@ -153,7 +153,7 @@ class ConfigRenderingService:
 
     def __init__(
         self,
-        template_renderer: Optional[TemplateRenderer] = None,
+        template_renderer: TemplateRenderer | None = None,
     ):
         """
         Initialize the configuration rendering service.
@@ -193,7 +193,7 @@ class ConfigRenderingService:
             )
         return cast(AgentConfigMap, data)
 
-    def _build_agent_entry_from_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
         agent_entry = {
             "agent_type": action.get("name", "unknown"),
@@ -222,7 +222,7 @@ class ConfigRenderingService:
         return agent_entry
 
     def _validate_entry_with_pydantic(
-        self, entry: Dict[str, Any], agent_name: str, config_key: str
+        self, entry: dict[str, Any], agent_name: str, config_key: str
     ) -> AgentEntryDict:
         """Validate a single entry using Pydantic model."""
         try:
@@ -236,7 +236,7 @@ class ConfigRenderingService:
                 cause=e,
             ) from e
 
-    def _validate_new_format(self, config: AgentConfigMap, agent_name: str) -> List[AgentEntryDict]:
+    def _validate_new_format(self, config: AgentConfigMap, agent_name: str) -> list[AgentEntryDict]:
         """Validate new format config with 'actions' key."""
         actions = config.get("actions", [])
         validated_entries = []
@@ -251,9 +251,9 @@ class ConfigRenderingService:
 
     def _validate_legacy_format(
         self, config: AgentConfigMap, agent_name: str
-    ) -> List[AgentEntryDict]:
+    ) -> list[AgentEntryDict]:
         """Validate legacy format config with agent_name key."""
-        agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
+        agent_entries_list = cast(list[AgentEntryDict], config.get(agent_name))
         if agent_entries_list is None:
             raise ConfigValidationError(
                 config_key="agent_configuration",
@@ -269,7 +269,7 @@ class ConfigRenderingService:
         return validated_entries
 
     def _run_config_validator(
-        self, validated_entries: List[AgentEntryDict], agent_name: str, project_root: Path
+        self, validated_entries: list[AgentEntryDict], agent_name: str, project_root: Path
     ) -> None:
         """Run ConfigValidator on validated entries."""
         config_validator_instance = ConfigValidator()
@@ -308,9 +308,9 @@ class ConfigRenderingService:
     def render_and_load_config(
         self,
         agent_name: str,
-        config_path: Union[str, Path],
-        template_dir: Union[str, Path],
-        output_dir: Optional[Union[str, Path]] = None,
+        config_path: str | Path,
+        template_dir: str | Path,
+        output_dir: str | Path | None = None,
     ) -> AgentConfigMap:
         """
         Render templates and load configuration data.
@@ -387,7 +387,7 @@ class ConfigRenderer:
         agent_name: str,
         config_path: Path,
         template_dir: Path,
-        output_dir: Optional[Path] = None,
+        output_dir: Path | None = None,
     ) -> AgentConfigMap:
         """
         Static method for backwards compatibility.

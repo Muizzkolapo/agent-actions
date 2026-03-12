@@ -1,23 +1,23 @@
 """Module for orchestrating data processing pipelines through configured agents."""
 
-from dataclasses import dataclass, field
-from hashlib import sha256
-from pathlib import Path
 import json
 import logging
 import warnings
-from typing import Optional, Dict, Any, List, TYPE_CHECKING
+from dataclasses import dataclass, field
+from hashlib import sha256
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.config.types import AgentConfigDict
-from agent_actions.input.loaders.file_reader import FileReader
-from agent_actions.output.writer import FileWriter
-from agent_actions.llm.realtime.output import OutputHandler
-from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError
-from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID, DISPOSITION_PASSTHROUGH
-from agent_actions.utils.constants import MODEL_VENDOR_KEY
-from agent_actions.llm.batch.service import BatchService
 from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.utils.safe_format import safe_format_error
+from agent_actions.config.types import AgentConfigDict
+from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError
+from agent_actions.input.loaders.file_reader import FileReader
+from agent_actions.llm.batch.service import BatchService
+from agent_actions.llm.realtime.output import OutputHandler
+from agent_actions.logging import fire_event
+from agent_actions.logging.events.types import ContextFieldSkippedEvent
+from agent_actions.output.writer import FileWriter
+from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
@@ -26,10 +26,10 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
-from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.prompt.context.scope import ContextScopeProcessor
-from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import ContextFieldSkippedEvent
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
+from agent_actions.utils.constants import MODEL_VENDOR_KEY
+from agent_actions.utils.safe_format import safe_format_error
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -47,10 +47,10 @@ class PipelineConfig:
     agent_config: AgentConfigDict
     agent_name: str
     idx: int
-    agent_configs: Optional[Dict[str, Any]] = None
-    workflow_metadata: Optional[Dict[str, Any]] = None
+    agent_configs: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
-    source_relative_path: Optional[str] = None  # For storage backend source lookups
+    source_relative_path: str | None = None  # For storage backend source lookups
 
 
 @dataclass
@@ -62,11 +62,11 @@ class BatchPipelineParams:
     batch_file_path: str
     batch_base_directory: str
     batch_output_directory: str
-    batch_agent_configs: Optional[Dict[str, Any]] = None
-    source_data: Optional[Any] = None
-    workflow_metadata: Optional[Dict[str, Any]] = None
+    batch_agent_configs: dict[str, Any] | None = None
+    source_data: Any | None = None
+    workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
-    data: Optional[List[Dict[str, Any]]] = None  # Pre-loaded data (skips file read)
+    data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
 
 
 @dataclass
@@ -86,9 +86,9 @@ class ProcessParams:
     agent_name: str
     paths: FilePathsConfig
     idx: int
-    processor_factory: Optional[ProcessorFactory]
-    agent_configs: Optional[Dict[str, Any]] = None
-    workflow_metadata: Optional[Dict[str, Any]] = None
+    processor_factory: ProcessorFactory | None
+    agent_configs: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
 
 
@@ -273,7 +273,7 @@ class ProcessingPipeline:
         file_path: str,
         base_directory: str,
         output_directory: str,
-        data: Optional[List[Dict[str, Any]]] = None,
+        data: list[dict[str, Any]] | None = None,
     ) -> str:
         """
         Process input file and generate output.
@@ -309,7 +309,7 @@ class ProcessingPipeline:
                 },
                 cause=e,
             ) from e
-        except (OSError, IOError, TypeError, KeyError) as e:
+        except (OSError, TypeError, KeyError) as e:
             raise AgentActionsException(
                 f"Unexpected error generating target: {safe_format_error(e)}",
                 context={
@@ -332,7 +332,7 @@ class ProcessingPipeline:
         file_path: str,
         base_directory: str,
         output_directory: str,
-        source_data: Optional[Any] = None,
+        source_data: Any | None = None,
     ):
         """Handle batch mode processing.
 
@@ -422,8 +422,6 @@ class ProcessingPipeline:
             }
             dependency_configs = self.config.agent_configs
 
-        agent_ids = agent_indices
-
         # Extract version context for versioned agents
         # This enables {{ i }}, {{ version.length }}, etc. in Jinja2 templates
         version_context = None
@@ -482,7 +480,7 @@ class ProcessingPipeline:
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
-    def _apply_observe_filter(data: List[Dict], agent_config: AgentConfigDict) -> List[Dict]:
+    def _apply_observe_filter(data: list[dict], agent_config: AgentConfigDict) -> list[dict]:
         """Filter records to context_scope.observe fields in defined order.
 
         Returns filtered copy; original data is unchanged.
@@ -562,8 +560,8 @@ class ProcessingPipeline:
         return filtered
 
     def _process_file_mode_tool(
-        self, data: List[Dict], original_data: List[Dict], context: ProcessingContext
-    ) -> List:
+        self, data: list[dict], original_data: list[dict], context: ProcessingContext
+    ) -> list:
         """
         Process tool in FILE granularity mode.
 
@@ -668,8 +666,8 @@ class ProcessingPipeline:
             ) from e
 
     def _process_file_mode_hitl(
-        self, data: List[Dict], original_data: List[Dict], context: ProcessingContext
-    ) -> List:
+        self, data: list[dict], original_data: list[dict], context: ProcessingContext
+    ) -> list:
         """
         Process HITL action in FILE granularity mode.
 
@@ -850,10 +848,10 @@ def create_processing_pipeline_from_params(
     agent_name: str,
     idx: int,
     processor_factory: ProcessorFactory,
-    agent_configs: Optional[Dict[str, Any]] = None,
-    workflow_metadata: Optional[Dict[str, Any]] = None,
+    agent_configs: dict[str, Any] | None = None,
+    workflow_metadata: dict[str, Any] | None = None,
     storage_backend: Optional["StorageBackend"] = None,
-    source_relative_path: Optional[str] = None,
+    source_relative_path: str | None = None,
 ) -> ProcessingPipeline:
     """
     Factory function for creating a ProcessingPipeline instance from individual parameters.

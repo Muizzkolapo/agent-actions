@@ -1,23 +1,24 @@
 """Error translation facade using formatter strategies."""
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 from agent_actions.utils.safe_format import extract_root_cause, safe_get_exception_message
-from .user_error import UserError
+
 from .formatters import (
-    ErrorFormatter,
-    ConfigurationErrorFormatter,
-    ModelErrorFormatter,
-    AuthenticationErrorFormatter,
-    FileErrorFormatter,
     APIErrorFormatter,
-    YAMLSyntaxErrorFormatter,
+    AuthenticationErrorFormatter,
+    ConfigurationErrorFormatter,
+    ErrorFormatter,
+    FileErrorFormatter,
     FunctionNotFoundFormatter,
-    TemplateErrorFormatter,
     GenericErrorFormatter,
+    ModelErrorFormatter,
+    TemplateErrorFormatter,
+    YAMLSyntaxErrorFormatter,
 )
 from .services import ErrorContextService
+from .user_error import UserError
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class ErrorTranslator:
 
     def __init__(self):
         """Initialize formatter chain."""
-        self.formatters: List[ErrorFormatter] = [
+        self.formatters: list[ErrorFormatter] = [
             YAMLSyntaxErrorFormatter(),  # Check YAML first (most specific)
             FunctionNotFoundFormatter(),  # Check function errors
             TemplateErrorFormatter(),  # Template variable errors
@@ -39,7 +40,7 @@ class ErrorTranslator:
             GenericErrorFormatter(),  # Fallback - always matches
         ]
 
-    def translate(self, exc: Exception, context: Optional[Dict[str, Any]] = None) -> UserError:
+    def translate(self, exc: Exception, context: dict[str, Any] | None = None) -> UserError:
         """Convert any exception to a UserError with user-friendly message."""
         merged_context = ErrorContextService.merge_exception_context(exc, context)
 

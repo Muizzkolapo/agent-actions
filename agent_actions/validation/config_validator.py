@@ -5,10 +5,10 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from agent_actions.output.file_handler import FileHandler
 from agent_actions.config.types import AgentConfigMap
+from agent_actions.output.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
     AgentEntryValidationOrchestrator,
@@ -47,9 +47,9 @@ class ConfigValidator(BaseValidator):
                 value=full_path_str,
             )
 
-    def _collect_agent_config_files(self, project_dir_str: str) -> Dict[str, List[str]]:
+    def _collect_agent_config_files(self, project_dir_str: str) -> dict[str, list[str]]:
         """Collect all agent config files, returning name-to-paths mapping."""
-        name_locations: Dict[str, List[str]] = {}
+        name_locations: dict[str, list[str]] = {}
         for root, dirs, _ in os.walk(project_dir_str):
             if "agent_config" not in dirs:
                 continue
@@ -60,7 +60,7 @@ class ConfigValidator(BaseValidator):
         return name_locations
 
     def _scan_config_directory(
-        self, agent_cfg_dir: Path, name_locations: Dict[str, List[str]]
+        self, agent_cfg_dir: Path, name_locations: dict[str, list[str]]
     ) -> None:
         """Scan a config directory for agent YAML files."""
         for ext_pattern in ("*.yaml", "*.yml"):
@@ -71,9 +71,9 @@ class ConfigValidator(BaseValidator):
     def _find_name_conflicts(
         self,
         agent_name: str,
-        name_locations: Dict[str, List[str]],
-        exclude_path: Optional[str] = None,
-    ) -> List[str]:
+        name_locations: dict[str, list[str]],
+        exclude_path: str | None = None,
+    ) -> list[str]:
         """Find conflicting file paths for an agent name."""
         conflicts = name_locations.get(agent_name.lower(), [])
         if exclude_path:
@@ -84,7 +84,7 @@ class ConfigValidator(BaseValidator):
         self,
         agent_name_to_check: str,
         project_dir_str: str,
-        current_file_path_str: Optional[str] = None,
+        current_file_path_str: str | None = None,
     ) -> None:
         """Check that agent name is unique in the project."""
         try:
@@ -113,7 +113,7 @@ class ConfigValidator(BaseValidator):
             )
 
     def _validate_single_agent_entry_logic(
-        self, entry: Dict[str, Any], cfg_ctx_name: str, proj_root: Optional[Path] = None
+        self, entry: dict[str, Any], cfg_ctx_name: str, proj_root: Path | None = None
     ) -> None:
         """Validate a single agent entry via the orchestrator chain."""
         orchestrator = AgentEntryValidationOrchestrator()
@@ -125,7 +125,7 @@ class ConfigValidator(BaseValidator):
         for warning in orchestrator.get_validation_warnings():
             self.add_warning(warning)
 
-    def _parse_properties_dict(self, properties_part: str) -> Optional[Dict[str, Any]]:
+    def _parse_properties_dict(self, properties_part: str) -> dict[str, Any] | None:
         """Parse properties part of array[object:...] type."""
         try:
             return json.loads(properties_part)
@@ -165,7 +165,7 @@ class ConfigValidator(BaseValidator):
         return self._is_valid_array_object_type(type_str)
 
     def _validate_agent_entries_list_logic(
-        self, agent_cfg_list: Any, agent_name_ctx: str, proj_root: Optional[Path] = None
+        self, agent_cfg_list: Any, agent_name_ctx: str, proj_root: Path | None = None
     ) -> None:
         """Validate a list of agent entries."""
         if not isinstance(agent_cfg_list, list):
@@ -185,10 +185,10 @@ class ConfigValidator(BaseValidator):
         for entry in agent_cfg_list:
             self._validate_single_agent_entry_logic(entry, agent_name_ctx, proj_root)
 
-    def _extract_dependencies_from_entry(self, entry: Dict[str, Any]) -> Set[str]:
+    def _extract_dependencies_from_entry(self, entry: dict[str, Any]) -> set[str]:
         """Extract dependencies from an agent entry."""
         entry_ci = _ci_dict(entry) if isinstance(entry, dict) else {}
-        deps: Set[str] = set()
+        deps: set[str] = set()
         if isinstance(entry_ci.get("dependencies"), list):
             deps.update(dep.lower() for dep in entry_ci["dependencies"] if isinstance(dep, str))
         return deps
@@ -212,8 +212,8 @@ class ConfigValidator(BaseValidator):
                 )
 
     def _build_agent_sets(
-        self, agent_cfgs_map: Dict[str, Dict[str, Any]]
-    ) -> tuple[Set[str], Set[str]]:
+        self, agent_cfgs_map: dict[str, dict[str, Any]]
+    ) -> tuple[set[str], set[str]]:
         """Return (active_agents, all_agents) sets with lowercased names."""
         active_agents = {
             name.lower()
@@ -227,9 +227,9 @@ class ConfigValidator(BaseValidator):
         self,
         agent_name: str,
         dep: Any,
-        all_agents: Set[str],
-        active_agents: Set[str],
-        agent_cfgs_map: Dict[str, Dict[str, Any]],
+        all_agents: set[str],
+        active_agents: set[str],
+        agent_cfgs_map: dict[str, dict[str, Any]],
     ) -> None:
         """Validate a single dependency for an agent."""
         if not isinstance(dep, str):
@@ -258,10 +258,10 @@ class ConfigValidator(BaseValidator):
     def _validate_agent_dependencies(
         self,
         agent_name: str,
-        cfg: Dict[str, Any],
-        all_agents: Set[str],
-        active_agents: Set[str],
-        agent_cfgs_map: Dict[str, Dict[str, Any]],
+        cfg: dict[str, Any],
+        all_agents: set[str],
+        active_agents: set[str],
+        agent_cfgs_map: dict[str, dict[str, Any]],
     ) -> None:
         """Validate all dependencies for a single agent."""
         cfg_ci = _ci_dict(cfg) if isinstance(cfg, dict) else {}
@@ -281,7 +281,7 @@ class ConfigValidator(BaseValidator):
             )
 
     def _validate_operational_dependencies_logic(
-        self, agent_cfgs_map: Dict[str, Dict[str, Any]]
+        self, agent_cfgs_map: dict[str, dict[str, Any]]
     ) -> None:
         """Validate operational dependencies."""
         active_agents, all_agents = self._build_agent_sets(agent_cfgs_map)
@@ -292,7 +292,7 @@ class ConfigValidator(BaseValidator):
 
     def _check_circular_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         """Check for circular dependencies in agent configuration."""
-        graph: Dict[str, List[str]] = {}
+        graph: dict[str, list[str]] = {}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
                 continue
@@ -301,8 +301,8 @@ class ConfigValidator(BaseValidator):
                 if isinstance(entry, dict):
                     deps.update(self._extract_dependencies_from_entry(entry))
             graph[agent_name.lower()] = list(deps)
-        visited: Set[str] = set()
-        stack: List[str] = []
+        visited: set[str] = set()
+        stack: list[str] = []
 
         def dfs(node: str) -> bool:
             visited.add(node)
@@ -328,7 +328,7 @@ class ConfigValidator(BaseValidator):
                 dfs(n)
                 stack.clear()  # Reset for next component (early return leaves stale entries)
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Run validation based on the operation key in data."""
         operation = data.get("operation", "") if isinstance(data, dict) else ""
         agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
@@ -387,7 +387,7 @@ class ConfigValidator(BaseValidator):
         return True
 
     def _validate_agent_config_file_meta_operation(
-        self, data: Dict[str, Any], project_root_path: Optional[Path]
+        self, data: dict[str, Any], project_root_path: Path | None
     ) -> None:
         """Validate agent config file metadata."""
         cfg_path = data.get("config_path")
@@ -410,7 +410,7 @@ class ConfigValidator(BaseValidator):
             )
 
     def _validate_agent_entries_operation(
-        self, data: Dict[str, Any], project_root_path: Optional[Path]
+        self, data: dict[str, Any], project_root_path: Path | None
     ) -> None:
         """Validate agent entries operation."""
         cfg_list = data.get("agent_config_data")

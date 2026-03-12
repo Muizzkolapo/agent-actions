@@ -5,7 +5,7 @@ statistical aggregate score to produce a final decision of BLOCK,
 REVIEW, or PASS. Handles LLM overrides of statistical consensus.
 """
 
-from typing import Any, Dict, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -13,8 +13,8 @@ from agent_actions import udf_tool
 class ComputeCompositeRiskInput(TypedDict, total=False):
     """Input schema for compute_composite_risk."""
 
-    aggregate_detection_scores: Dict[str, Any]
-    meta_detector_judgment: Dict[str, Any]
+    aggregate_detection_scores: dict[str, Any]
+    meta_detector_judgment: dict[str, Any]
 
 
 class ComputeCompositeRiskOutput(TypedDict, total=False):
@@ -102,9 +102,7 @@ def compute_composite_risk(data: dict) -> dict:
 
     # Build reasoning
     reasoning_parts = []
-    reasoning_parts.append(
-        f"Statistical aggregate: {aggregate_score:.3f} ({statistical_verdict})"
-    )
+    reasoning_parts.append(f"Statistical aggregate: {aggregate_score:.3f} ({statistical_verdict})")
     reasoning_parts.append(
         f"LLM judgment: {'injection' if is_injection else 'safe'} "
         f"(confidence={llm_confidence:.2f}, risk={llm_risk_level})"

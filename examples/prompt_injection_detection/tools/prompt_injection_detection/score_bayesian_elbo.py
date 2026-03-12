@@ -7,7 +7,7 @@ indicates how unexpected the prompt is relative to the baseline corpus.
 """
 
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -16,7 +16,7 @@ class ScoreBayesianElboInput(TypedDict, total=False):
     """Input schema for score_bayesian_elbo."""
 
     prompt_text: str
-    legitimate_corpus_stats: Dict[str, Any]
+    legitimate_corpus_stats: dict[str, Any]
 
 
 class ScoreBayesianElboOutput(TypedDict, total=False):
@@ -27,11 +27,12 @@ class ScoreBayesianElboOutput(TypedDict, total=False):
     repetition_score: float
     vocab_surprise: float
     elbo_score: float
-    anomaly_flags: List[str]
+    anomaly_flags: list[str]
 
 
-def _bigram_novelty(tokens: List[str], baseline_novelty_mean: float,
-                     baseline_novelty_std: float) -> float:
+def _bigram_novelty(
+    tokens: list[str], baseline_novelty_mean: float, baseline_novelty_std: float
+) -> float:
     """Compute bigram novelty score.
 
     Measures the fraction of unique bigrams (consecutive token pairs),
@@ -60,7 +61,7 @@ def _length_anomaly(text: str, mean_chars: float, std_chars: float) -> float:
     return round(min(z / 3.0, 1.0), 4)
 
 
-def _repetition_score(tokens: List[str], n: int = 3) -> float:
+def _repetition_score(tokens: list[str], n: int = 3) -> float:
     """Compute fraction of repeated n-grams."""
     if len(tokens) < n:
         return 0.0
@@ -75,8 +76,9 @@ def _repetition_score(tokens: List[str], n: int = 3) -> float:
     return round(repeated_fraction, 4)
 
 
-def _vocabulary_surprise(tokens: List[str], baseline_unique_mean: float,
-                          baseline_unique_std: float) -> float:
+def _vocabulary_surprise(
+    tokens: list[str], baseline_unique_mean: float, baseline_unique_std: float
+) -> float:
     """Compute vocabulary surprise based on unique token ratio deviation."""
     if not tokens:
         return 0.0
@@ -144,12 +146,7 @@ def score_bayesian_elbo(data: dict) -> dict:
     )
 
     # Pseudo-ELBO: higher = more anomalous
-    elbo_score = (
-        0.30 * b_novelty
-        + 0.25 * l_anomaly
-        + 0.20 * rep_anomaly
-        + 0.25 * v_surprise
-    )
+    elbo_score = 0.30 * b_novelty + 0.25 * l_anomaly + 0.20 * rep_anomaly + 0.25 * v_surprise
     elbo_score = round(min(elbo_score, 1.0), 4)
 
     # Anomaly flags

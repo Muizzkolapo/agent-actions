@@ -1,8 +1,5 @@
 """Tests for FileWriter relative path handling."""
 
-import json
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock
 
 from agent_actions.output.writer import FileWriter

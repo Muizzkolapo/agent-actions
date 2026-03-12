@@ -4,9 +4,10 @@ This is an abstraction layer for catalog search.
 Currently implements JSON file search.
 Can be swapped to Vector DB (ChromaDB/Pinecone) or SQL without workflow changes.
 """
+
 import json
 import os
-from typing import Any, Dict, List, TypedDict
+from typing import TypedDict
 
 from agent_actions import udf_tool
 
@@ -20,17 +21,17 @@ class SearchBookCatalogInput(TypedDict, total=False):
 
     # Search criteria from LLM
     query_text: str
-    genres: List[str]
-    keywords: List[str]
+    genres: list[str]
+    keywords: list[str]
     target_audience: str
     exclude_isbn: str
 
     # Passthrough fields from upstream
     isbn: str
     title: str
-    authors: List[str]
+    authors: list[str]
     marketing_description: str
-    bisac_codes: List[str]
+    bisac_codes: list[str]
 
 
 class SearchMetadata(TypedDict, total=False):
@@ -40,8 +41,8 @@ class SearchMetadata(TypedDict, total=False):
     candidates_found: int
     returned: int
     search_method: str
-    genres_searched: List[str]
-    keywords_searched: List[str]
+    genres_searched: list[str]
+    keywords_searched: list[str]
     error: str
 
 
@@ -50,8 +51,8 @@ class MatchingBook(TypedDict, total=False):
 
     isbn: str
     title: str
-    authors: List[str]
-    genres: List[str]
+    authors: list[str]
+    genres: list[str]
     description: str
     relevance_score: float
 
@@ -59,7 +60,7 @@ class MatchingBook(TypedDict, total=False):
 class SearchBookCatalogOutput(TypedDict, total=False):
     """Output schema for search_book_catalog."""
 
-    matching_books: List[MatchingBook]
+    matching_books: list[MatchingBook]
     search_metadata: SearchMetadata
 
 
@@ -70,7 +71,7 @@ CATALOG_PATH = os.path.join(
 )
 
 
-def _load_catalog() -> List[Dict]:
+def _load_catalog() -> list[dict]:
     """Load book catalog from seed data."""
     # Normalize path
     catalog_path = os.path.normpath(CATALOG_PATH)
@@ -84,13 +85,13 @@ def _load_catalog() -> List[Dict]:
         )
 
     if os.path.exists(catalog_path):
-        with open(catalog_path, "r", encoding="utf-8") as f:
+        with open(catalog_path, encoding="utf-8") as f:
             return json.load(f)
 
     return []
 
 
-def _calculate_relevance_score(book: Dict, genres: List[str], keywords: List[str]) -> float:
+def _calculate_relevance_score(book: dict, genres: list[str], keywords: list[str]) -> float:
     """Calculate relevance score for a book based on search criteria."""
     score = 0.0
 

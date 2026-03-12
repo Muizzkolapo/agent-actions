@@ -1,16 +1,15 @@
 """Application container for managing DI configuration and bootstrapping."""
 
 import logging
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from agent_actions.config.di.configurator import DIConfigurator, ConfigurationProfile
-from agent_actions.config.di.types import DIConfig
-from agent_actions.errors import ConfigValidationError
+from agent_actions.config.di.configurator import ConfigurationProfile, DIConfigurator
 from agent_actions.config.di.container import (
     DependencyContainer,
     ProcessorFactory,
 )
-
+from agent_actions.config.di.types import DIConfig
+from agent_actions.errors import ConfigValidationError
 from agent_actions.workflow.runner import AgentRunner
 
 if TYPE_CHECKING:
@@ -24,9 +23,9 @@ class ApplicationContainer:
 
     def __init__(
         self,
-        config: Optional[DIConfig] = None,
+        config: DIConfig | None = None,
         *,
-        container: Optional[DependencyContainer] = None,
+        container: DependencyContainer | None = None,
     ):
         """Initialize the application container.
 

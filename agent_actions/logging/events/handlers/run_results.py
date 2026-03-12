@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -138,7 +138,7 @@ class RunResultsCollector:
         self._metadata["started_at"] = (
             event.meta.timestamp.isoformat()
             if event.meta.timestamp
-            else datetime.now(timezone.utc).isoformat()
+            else datetime.now(UTC).isoformat()
         )
         self._metadata["status"] = "running"
         self.workflow_name = self._metadata["workflow_name"]
@@ -147,7 +147,7 @@ class RunResultsCollector:
         self._metadata["completed_at"] = (
             event.meta.timestamp.isoformat()
             if event.meta.timestamp
-            else datetime.now(timezone.utc).isoformat()
+            else datetime.now(UTC).isoformat()
         )
         self._metadata["elapsed_time"] = event.data.get("elapsed_time", 0.0)
         self._metadata["status"] = "success"
@@ -157,7 +157,7 @@ class RunResultsCollector:
         self._metadata["completed_at"] = (
             event.meta.timestamp.isoformat()
             if event.meta.timestamp
-            else datetime.now(timezone.utc).isoformat()
+            else datetime.now(UTC).isoformat()
         )
         self._metadata["elapsed_time"] = event.data.get("elapsed_time", 0.0)
         self._metadata["status"] = "error"

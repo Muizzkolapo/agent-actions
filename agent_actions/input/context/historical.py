@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -19,16 +19,16 @@ class HistoricalDataRequest:
     """
 
     action_name: str
-    lineage: List[str]
+    lineage: list[str]
     source_guid: str
     file_path: str
-    agent_indices: Dict[str, int]
-    caller_lineage: Optional[List[str]] = None
+    agent_indices: dict[str, int]
+    caller_lineage: list[str] | None = None
     # Ancestry Chain fields (RFC: docs/specs/RFC_ancestry_chain.md)
-    parent_target_id: Optional[str] = None
-    root_target_id: Optional[str] = None
+    parent_target_id: str | None = None
+    root_target_id: str | None = None
     # Output directory for SQLite fallback (optional)
-    output_directory: Optional[str] = None
+    output_directory: str | None = None
     # Storage backend for querying from SQLite/TinyDB
     storage_backend: Optional["StorageBackend"] = None
 
@@ -40,7 +40,7 @@ class HistoricalNodeDataLoader:
         return f"{self.__class__.__name__}()"
 
     @staticmethod
-    def load_historical_node_data(request: HistoricalDataRequest) -> Optional[Dict[str, Any]]:
+    def load_historical_node_data(request: HistoricalDataRequest) -> dict[str, Any] | None:
         """Load historical node data for a specific action. Returns content dict or None."""
         logger.debug(
             "Starting load historical node data",
@@ -147,8 +147,8 @@ class HistoricalNodeDataLoader:
 
     @staticmethod
     def _find_node_in_lineage(
-        action_name: str, lineage: List[str], agent_indices: Dict[str, int]
-    ) -> Optional[str]:
+        action_name: str, lineage: list[str], agent_indices: dict[str, int]
+    ) -> str | None:
         """Find the node_id in lineage that corresponds to the given action."""
         if not lineage:
             return None
@@ -166,7 +166,7 @@ class HistoricalNodeDataLoader:
         storage_backend: "StorageBackend",
         action_name: str,
         file_path: str,
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> list[dict[str, Any]] | None:
         """Load target data from the storage backend."""
         from pathlib import Path as PathLib
 
@@ -205,7 +205,7 @@ class HistoricalNodeDataLoader:
                     )
                     return None
 
-                all_records: List[Dict[str, Any]] = []
+                all_records: list[dict[str, Any]] = []
                 for f in all_files:
                     try:
                         records = storage_backend.read_target(action_name, f)
@@ -241,9 +241,7 @@ class HistoricalNodeDataLoader:
             return None
 
     @staticmethod
-    def _lineages_match(
-        record_lineage: Optional[List[str]], caller_lineage: Optional[List[str]]
-    ) -> bool:
+    def _lineages_match(record_lineage: list[str] | None, caller_lineage: list[str] | None) -> bool:
         """Check if record's lineage is a prefix of caller's lineage.
 
         Example: record lineage [A, B, C] matches caller lineage [A, B, C, D, E]
@@ -259,15 +257,15 @@ class HistoricalNodeDataLoader:
 
     @staticmethod
     def _find_record_by_identifiers(
-        data: List[Dict],
+        data: list[dict],
         source_guid: str,
         _node_id: str,
-        caller_lineage: Optional[List[str]] = None,
-        parent_target_id: Optional[str] = None,
-        root_target_id: Optional[str] = None,
+        caller_lineage: list[str] | None = None,
+        parent_target_id: str | None = None,
+        root_target_id: str | None = None,
         is_parallel_sibling: bool = False,
-        action_name: Optional[str] = None,
-    ) -> Optional[Dict]:
+        action_name: str | None = None,
+    ) -> dict | None:
         """Find a record using multi-strategy matching (RFC: docs/specs/RFC_ancestry_chain.md).
 
         Priority: lineage prefix match > parent_target_id (Diamond) > root_target_id (Map-Reduce).

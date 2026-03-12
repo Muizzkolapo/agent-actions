@@ -1,7 +1,6 @@
 """Interface for passthrough transformation strategies."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
 
 
 class IPassthroughTransformStrategy(ABC):
@@ -10,9 +9,9 @@ class IPassthroughTransformStrategy(ABC):
     @abstractmethod
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if this strategy can handle the given inputs."""
@@ -20,10 +19,10 @@ class IPassthroughTransformStrategy(ABC):
     @abstractmethod
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Execute the transformation and return the transformed data list."""

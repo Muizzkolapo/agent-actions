@@ -1,7 +1,5 @@
 """Tests for BatchContextAdapter."""
 
-import pytest
-
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.types import (
     ProcessingStatus,

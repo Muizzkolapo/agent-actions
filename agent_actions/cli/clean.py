@@ -2,7 +2,7 @@
 
 import click
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.llm.realtime.cleaner import Cleaner
 from agent_actions.validation.clean_validator import CleanCommandArgs
 

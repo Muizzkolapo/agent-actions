@@ -1,7 +1,7 @@
 """Centralized normalization for context_scope directives."""
 
-from typing import Dict, Any, List, Optional
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +18,9 @@ DIRECTIVE_REGISTRY = {
 
 
 def normalize_context_scope(
-    context_scope: Optional[Dict[str, Any]],
-    version_base_map: Dict[str, List[str]],
-) -> Optional[Dict[str, Any]]:
+    context_scope: dict[str, Any] | None,
+    version_base_map: dict[str, list[str]],
+) -> dict[str, Any] | None:
     """Expand version references in list directives, preserving dict directives as-is."""
     if not context_scope:
         return context_scope
@@ -46,9 +46,9 @@ def normalize_context_scope(
 
 
 def _expand_list_directive(
-    field_refs: List[str],
-    version_base_map: Dict[str, List[str]],
-) -> List[str]:
+    field_refs: list[str],
+    version_base_map: dict[str, list[str]],
+) -> list[str]:
     """Expand version base name references in a list of field references.
 
     Converts wildcard references like "extract_raw_qa.*" to field prefix
@@ -82,8 +82,8 @@ def _expand_list_directive(
 
 
 def normalize_all_agent_configs(
-    agent_configs: Dict[str, Dict[str, Any]],
-    execution_order: List[str],
+    agent_configs: dict[str, dict[str, Any]],
+    execution_order: list[str],
 ) -> None:
     """Normalize context_scope for all agents in-place.
 
@@ -110,11 +110,11 @@ def normalize_all_agent_configs(
 
 
 def _build_version_base_name_map(
-    agent_configs: Dict[str, Dict[str, Any]],
-    execution_order: List[str],
-) -> Dict[str, List[str]]:
+    agent_configs: dict[str, dict[str, Any]],
+    execution_order: list[str],
+) -> dict[str, list[str]]:
     """Build mapping from version base names to their expanded agent names."""
-    version_base_map: Dict[str, List[str]] = {}
+    version_base_map: dict[str, list[str]] = {}
 
     for agent_name in execution_order:
         config = agent_configs.get(agent_name, {})

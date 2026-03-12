@@ -7,10 +7,9 @@ Note: Due to circular imports in the main codebase, we test the helper
 methods through a minimal mock class that mimics BatchService structure.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-from typing import Dict, Any, List, Optional
+from typing import Any
+from unittest.mock import MagicMock
 
 
 # Minimal mock of BatchService for testing extracted methods
@@ -35,7 +34,7 @@ class MockBatchService:
             return False
 
     def _determine_output_path(
-        self, output_directory: str, file_name: Optional[str], batch_id: str
+        self, output_directory: str, file_name: str | None, batch_id: str
     ) -> Path:
         """Determine the output file path for batch results."""
         if file_name and file_name != "default":
@@ -45,12 +44,12 @@ class MockBatchService:
     def _write_batch_output(
         self,
         output_file: Path,
-        main_output: List[Dict[str, Any]],
+        main_output: list[dict[str, Any]],
         output_directory: str,
     ) -> None:
         """Write batch output file."""
-        from agent_actions.utils.path_utils import ensure_directory_exists
         from agent_actions.output.writer import FileWriter
+        from agent_actions.utils.path_utils import ensure_directory_exists
 
         # Only create directory if not using storage backend
         if self._storage_backend is None:

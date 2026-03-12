@@ -1,23 +1,23 @@
 """Strategy classes for field chunking operations."""
 
 from agent_actions.input.preprocessing.chunking.strategies.chunking_strategies import (
-    ChunkingStrategy,
-    TiktokenChunkingStrategy,
     CharBasedChunkingStrategy,
+    ChunkingStrategy,
     SpacyChunkingStrategy,
+    TiktokenChunkingStrategy,
 )
 from agent_actions.input.preprocessing.chunking.strategies.fallback_strategies import (
+    ErrorStrategy,
     FallbackStrategy,
     PreserveOriginalStrategy,
-    TruncateStrategy,
     SkipStrategy,
-    ErrorStrategy,
+    TruncateStrategy,
 )
 from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies import (
-    MetadataStrategy,
-    MetadataContext,
     BasicMetadataStrategy,
     EnhancedMetadataStrategy,
+    MetadataContext,
+    MetadataStrategy,
 )
 from agent_actions.input.preprocessing.chunking.strategies.validation import ConfigValidator
 

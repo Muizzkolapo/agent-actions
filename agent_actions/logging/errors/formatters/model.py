@@ -1,9 +1,10 @@
 """Model validation error formatter."""
 
 import re
-from typing import Dict, Any
-from .base import ErrorFormatter
+from typing import Any
+
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class ModelErrorFormatter(ErrorFormatter):
@@ -21,7 +22,7 @@ class ModelErrorFormatter(ErrorFormatter):
         return any(pattern in message_lower for pattern in model_patterns)
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         model = self._extract_model_name(message, context)
         provider = context.get("provider", self._guess_provider_from_model(model))
@@ -41,7 +42,7 @@ class ModelErrorFormatter(ErrorFormatter):
             docs_url=f"https://docs.agent-actions.com/models/{provider}",
         )
 
-    def _extract_model_name(self, message: str, context: Dict) -> str:
+    def _extract_model_name(self, message: str, context: dict) -> str:
         """Extract model name from error message or context."""
         match = re.search(r"['\"]([^'\"]+)['\"].*not supported", message)
         if match:

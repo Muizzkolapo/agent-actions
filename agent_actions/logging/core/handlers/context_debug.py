@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent
@@ -16,16 +16,16 @@ class ActionContextInfo:
     """Aggregated context information for a single action."""
 
     action_name: str
-    namespaces: Dict[str, List[str]] = field(default_factory=dict)
-    dropped_fields: Dict[str, List[str]] = field(default_factory=dict)
-    observe_fields: List[str] = field(default_factory=list)
-    passthrough_fields: List[str] = field(default_factory=list)
-    drop_fields: List[str] = field(default_factory=list)
-    input_sources: List[str] = field(default_factory=list)
-    context_sources: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    skipped_fields: List[Dict[str, str]] = field(default_factory=list)
-    not_found_fields: List[Dict[str, Any]] = field(default_factory=list)
+    namespaces: dict[str, list[str]] = field(default_factory=dict)
+    dropped_fields: dict[str, list[str]] = field(default_factory=dict)
+    observe_fields: list[str] = field(default_factory=list)
+    passthrough_fields: list[str] = field(default_factory=list)
+    drop_fields: list[str] = field(default_factory=list)
+    input_sources: list[str] = field(default_factory=list)
+    context_sources: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    skipped_fields: list[dict[str, str]] = field(default_factory=list)
+    not_found_fields: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ContextDebugHandler:
@@ -34,9 +34,9 @@ class ContextDebugHandler:
     # Event codes we handle
     CONTEXT_EVENT_CODES = {"CX001", "CX002", "CX003", "CX005", "CX006"}
 
-    def __init__(self, console: Optional[Any] = None) -> None:
+    def __init__(self, console: Any | None = None) -> None:
         """Initialize the context debug handler."""
-        self._actions: Dict[str, ActionContextInfo] = {}
+        self._actions: dict[str, ActionContextInfo] = {}
         self._event_count = 0
 
         if RICH_AVAILABLE and Console is not None:
@@ -112,11 +112,11 @@ class ContextDebugHandler:
         """Flush is a no-op for this handler."""
         pass
 
-    def get_action_info(self, action_name: str) -> Optional[ActionContextInfo]:
+    def get_action_info(self, action_name: str) -> ActionContextInfo | None:
         """Get context info for a specific action."""
         return self._actions.get(action_name)
 
-    def get_all_actions(self) -> Dict[str, ActionContextInfo]:
+    def get_all_actions(self) -> dict[str, ActionContextInfo]:
         """Get all collected action context info."""
         return self._actions
 
@@ -124,14 +124,14 @@ class ContextDebugHandler:
         """Get total number of context events processed."""
         return self._event_count
 
-    def display_summary(self, action_name: Optional[str] = None) -> None:
+    def display_summary(self, action_name: str | None = None) -> None:
         """Display collected context debug information."""
         if self._use_rich and self._console:
             self._display_rich_summary(action_name)
         else:
             self._display_plain_summary(action_name)
 
-    def _display_rich_summary(self, action_filter: Optional[str] = None) -> None:
+    def _display_rich_summary(self, action_filter: str | None = None) -> None:
         """Display summary using Rich formatting."""
         if not self._console:
             return
@@ -212,7 +212,7 @@ class ContextDebugHandler:
                     self._console.print(f"  [yellow]! {warning}[/yellow]")
                 self._console.print()
 
-    def _display_plain_summary(self, action_filter: Optional[str] = None) -> None:
+    def _display_plain_summary(self, action_filter: str | None = None) -> None:
         """Display summary using plain text."""
         actions_to_show = (
             {action_filter: self._actions[action_filter]}
@@ -265,7 +265,7 @@ class ContextDebugHandler:
                     print(f"  ! {warning}")
                 print()
 
-    def to_dict(self, action_name: Optional[str] = None) -> Dict[str, Any]:
+    def to_dict(self, action_name: str | None = None) -> dict[str, Any]:
         """Convert collected data to a dictionary for JSON output."""
         actions_to_show = (
             {action_name: self._actions[action_name]}

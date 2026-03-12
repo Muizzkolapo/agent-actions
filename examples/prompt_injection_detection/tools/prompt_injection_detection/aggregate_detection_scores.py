@@ -5,7 +5,7 @@ and score_bayesian_elbo, then computes a weighted aggregate score and
 a statistical verdict.
 """
 
-from typing import Any, Dict, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -13,16 +13,16 @@ from agent_actions import udf_tool
 class AggregateDetectionScoresInput(TypedDict, total=False):
     """Input schema for aggregate_detection_scores."""
 
-    scan_dlp_regex: Dict[str, Any]
-    score_pfd_embedding: Dict[str, Any]
-    score_topic_jsd: Dict[str, Any]
-    score_bayesian_elbo: Dict[str, Any]
+    scan_dlp_regex: dict[str, Any]
+    score_pfd_embedding: dict[str, Any]
+    score_topic_jsd: dict[str, Any]
+    score_bayesian_elbo: dict[str, Any]
 
 
 class AggregateDetectionScoresOutput(TypedDict, total=False):
     """Output schema for aggregate_detection_scores."""
 
-    layer_scores: Dict[str, float]
+    layer_scores: dict[str, float]
     aggregate_score: float
     unanimous_safe: bool
     unanimous_risky: bool

@@ -2,12 +2,13 @@
 
 import logging
 import threading
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from agent_actions.processing.prepared_task import (
     GuardStatus,
-    PreparedTask,
     PreparationContext,
+    PreparedTask,
 )
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ class TaskPreparer:
 
     def __init__(
         self,
-        id_generator: Optional[Callable[[Any], str]] = None,
+        id_generator: Callable[[Any], str] | None = None,
     ):
         self._id_generator = id_generator
 
@@ -26,7 +27,7 @@ class TaskPreparer:
         self,
         item: Any,
         context: PreparationContext,
-        existing_target_id: Optional[str] = None,
+        existing_target_id: str | None = None,
         skip_guard: bool = False,
     ) -> PreparedTask:
         """Prepare a single task: normalize, load context, evaluate guard, render prompt."""
@@ -101,7 +102,7 @@ class TaskPreparer:
 
     def _normalize_input(
         self, item: Any, context: PreparationContext
-    ) -> tuple[Any, Optional[str], Optional[Any]]:
+    ) -> tuple[Any, str | None, Any | None]:
         """Normalize input to (content, source_guid, source_snapshot)."""
         if context.is_first_stage:
             from agent_actions.utils.id_generation import IDGenerator
@@ -134,8 +135,8 @@ class TaskPreparer:
         return snapshot
 
     def _get_source_content(
-        self, source_guid: Optional[str], context: PreparationContext
-    ) -> Optional[Any]:
+        self, source_guid: str | None, context: PreparationContext
+    ) -> Any | None:
         """Look up source content by source_guid, or return None."""
         if source_guid is None:
             return None
@@ -168,7 +169,7 @@ class TaskPreparer:
         content: Any,
         source_content: Any,
         context: PreparationContext,
-        current_item: Optional[dict] = None,
+        current_item: dict | None = None,
     ) -> dict[str, Any]:
         """Load full context (source, upstream, version, workflow) for guard and prompt."""
         from agent_actions.prompt.context.scope import ContextScopeProcessor
@@ -194,8 +195,8 @@ class TaskPreparer:
     @staticmethod
     def _evaluate_guard(
         content: Any,
-        guard_config: Optional[dict[str, Any]],
-        conditional_clause: Optional[str],
+        guard_config: dict[str, Any] | None,
+        conditional_clause: str | None,
         field_context: dict[str, Any],
     ):
         """Evaluate guard with full context; wraps non-dict content as ``{"_raw": content}``."""
@@ -248,7 +249,7 @@ class TaskPreparer:
         return IDGenerator.generate_target_id()
 
 
-_task_preparer: Optional[TaskPreparer] = None
+_task_preparer: TaskPreparer | None = None
 _task_preparer_lock = threading.Lock()
 
 

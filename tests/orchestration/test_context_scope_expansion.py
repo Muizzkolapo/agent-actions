@@ -12,13 +12,10 @@ These tests verify that:
 3. The expanded form has correct field prefix patterns
 """
 
-import pytest
-from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
 from agent_actions.input.context.normalizer import (
-    normalize_context_scope,
     normalize_all_agent_configs,
-    _build_version_base_name_map,
 )
+from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
 
 
 class TestContextScopeExpansion:

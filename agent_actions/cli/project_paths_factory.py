@@ -3,15 +3,14 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
+from agent_actions.config.paths import PathManager, PathType
 from agent_actions.errors import (
     DirectoryError,
-    ValidationError,
     FileLoadError,
+    ValidationError,
 )
 from agent_actions.output.file_handler import FileHandler
-from agent_actions.config.paths import PathManager, PathType
 from agent_actions.utils.path_utils import resolve_absolute_path
 from agent_actions.validation.path_validator import PathValidator
 
@@ -86,7 +85,7 @@ class ProjectPaths:
     template_dir: Path
     rendered_workflows_dir: Path
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "current_dir": str(self.current_dir),
             "prompt_dir": str(self.prompt_dir),
@@ -109,11 +108,11 @@ class ProjectPathsFactory:
     REQUIRED_DIRECTORIES = ["agent_config_dir", "schema_dir"]
     AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
-    def __init__(self, path_manager: Optional[PathManager] = None):
+    def __init__(self, path_manager: PathManager | None = None):
         self.path_manager = path_manager or PathManager()
 
     @staticmethod
-    def get_agent_paths(agent_name: str) -> Tuple[Path, Path]:
+    def get_agent_paths(agent_name: str) -> tuple[Path, Path]:
         try:
             agent_config_dir_str, io_dir_str = FileHandler.get_agent_paths(agent_name)
 

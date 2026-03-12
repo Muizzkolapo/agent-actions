@@ -1,9 +1,10 @@
 """Unified passthrough item construction for batch and online modes."""
 
-from typing import Dict, Optional, Any
+from typing import Any
+
 from agent_actions.utils.field_management.manager import FieldManager
-from agent_actions.utils.lineage.builder import LineageBuilder
 from agent_actions.utils.id_generation.generator import IDGenerator
+from agent_actions.utils.lineage.builder import LineageBuilder
 
 
 class PassthroughItemBuilder:
@@ -11,13 +12,13 @@ class PassthroughItemBuilder:
 
     @staticmethod
     def build_item(
-        row: Dict[str, Any],
+        row: dict[str, Any],
         reason: str,
         action_name: str,
-        source_guid: Optional[str] = None,
-        custom_id: Optional[str] = None,
+        source_guid: str | None = None,
+        custom_id: str | None = None,
         mode: str = "batch",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build a passthrough (tombstone) item with required fields and metadata.
 
         The returned item has ``_unprocessed = True`` and

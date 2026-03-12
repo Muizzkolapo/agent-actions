@@ -1,5 +1,6 @@
 """Filter catalog entries by quality score."""
-from typing import Any, Dict, List, TypedDict
+
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -17,35 +18,35 @@ class FilterQualityInput(TypedDict, total=False):
 
     # Core metadata
     title: str
-    authors: List[str]
+    authors: list[str]
     publisher: str
     publish_year: int
     page_count: int
 
     # Classification
     primary_category: str
-    categories: List[str]
-    bisac_codes: List[str]
+    categories: list[str]
+    bisac_codes: list[str]
 
     # Marketing content
     short_description: str
     full_description: str
-    key_selling_points: List[str]
+    key_selling_points: list[str]
     target_audience: str
 
     # SEO
-    seo_keywords: List[str]
+    seo_keywords: list[str]
     meta_title: str
     meta_description: str
 
     # Recommendations
-    similar_titles: List[Dict[str, Any]]
+    similar_titles: list[dict[str, Any]]
     reading_path: str
 
     # Reading info
     difficulty_level: str
     experience_required: str
-    prerequisites: List[str]
+    prerequisites: list[str]
     reading_time_hours: str
 
     # Quality
@@ -54,7 +55,7 @@ class FilterQualityInput(TypedDict, total=False):
 
     # Metadata
     enrichment_version: str
-    enriched_fields: List[str]
+    enriched_fields: list[str]
 
 
 MINIMUM_QUALITY_SCORE = 3.0

@@ -7,16 +7,15 @@ preserving all indentation, comments, and code structure.
 """
 
 import ast
-import sys
 import json
+import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class ImportRewriter(ast.NodeTransformer):
     """AST transformer that rewrites import statements."""
 
-    def __init__(self, mapping: Dict[str, str]):
+    def __init__(self, mapping: dict[str, str]):
         """
         Initialize rewriter with path mapping.
 
@@ -26,7 +25,7 @@ class ImportRewriter(ast.NodeTransformer):
         self.mapping = mapping
         self.changes = []
 
-    def _find_replacement(self, module: str) -> Optional[str]:
+    def _find_replacement(self, module: str) -> str | None:
         """
         Find replacement for a module path.
 
@@ -60,8 +59,6 @@ class ImportRewriter(ast.NodeTransformer):
         Returns:
             Modified or original node
         """
-        modified = False
-
         for alias in node.names:
             new_name = self._find_replacement(alias.name)
             if new_name and new_name != alias.name:
@@ -73,7 +70,6 @@ class ImportRewriter(ast.NodeTransformer):
                     }
                 )
                 alias.name = new_name
-                modified = True
 
         return node
 
@@ -102,7 +98,7 @@ class ImportRewriter(ast.NodeTransformer):
         return node
 
 
-def load_migration_map(plan_file: str) -> Dict[str, str]:
+def load_migration_map(plan_file: str) -> dict[str, str]:
     """
     Create a mapping of old paths to new paths from migration plan.
 
@@ -139,7 +135,7 @@ def load_migration_map(plan_file: str) -> Dict[str, str]:
     return mapping
 
 
-def fix_file_imports_ast(file_path: Path, mapping: Dict[str, str], dry_run: bool = True) -> int:
+def fix_file_imports_ast(file_path: Path, mapping: dict[str, str], dry_run: bool = True) -> int:
     """
     Fix imports in a file using AST transformation.
 
@@ -178,7 +174,7 @@ def fix_file_imports_ast(file_path: Path, mapping: Dict[str, str], dry_run: bool
             except ImportError:
                 # Last resort: use compile + rewrite manually
                 # This is complex, so we'll use a different approach
-                print(f"   ⚠️  Python 3.9+ required for ast.unparse, or install 'astor'")
+                print("   ⚠️  Python 3.9+ required for ast.unparse, or install 'astor'")
                 return 0
 
         # Write changes
@@ -195,7 +191,7 @@ def fix_file_imports_ast(file_path: Path, mapping: Dict[str, str], dry_run: bool
         return 0
 
 
-def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
+def find_python_files(root: Path, include_tests: bool = False) -> list[Path]:
     """Find all Python files to process."""
     files = []
 
@@ -242,11 +238,6 @@ def main():
 
     print("🔧 AST-based Import Fixer\n")
 
-    # Check Python version
-    if sys.version_info < (3, 9):
-        print("⚠️  Warning: Python 3.9+ recommended for best results")
-        print("   Attempting to use 'astor' library...\n")
-
     # Load migration mapping
     print(f"📋 Loading migration mapping from {plan_file}...")
     mapping = load_migration_map(plan_file)
@@ -278,18 +269,18 @@ def main():
                 rel_path = file_path
             print(f"   ✏️  {rel_path}: {changes} import(s) fixed")
 
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Files scanned: {len(python_files)}")
     print(f"   Files changed: {files_changed}")
     print(f"   Total imports fixed: {total_changes}")
 
     if not execute and total_changes > 0:
-        print(f"\n⚠️  To apply changes, run:")
+        print("\n⚠️  To apply changes, run:")
         print(f"   python ast_import_fixer.py {plan_file} --execute --tests")
     elif execute and total_changes > 0:
-        print(f"\n✅ Import paths updated successfully!")
+        print("\n✅ Import paths updated successfully!")
     else:
-        print(f"\n✅ No import changes needed!")
+        print("\n✅ No import changes needed!")
 
 
 if __name__ == "__main__":

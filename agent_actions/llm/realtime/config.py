@@ -1,25 +1,27 @@
 """Module for Configuration Validation Functions."""
 
-import yaml
 import logging
 from pathlib import Path
+from typing import Any
+
+import yaml
 from pydantic import ValidationError
-from agent_actions.utils.path_utils import topological_sort
-from agent_actions.prompt.render_workflow import render_pipeline_with_templates
-from agent_actions.validation.config_validator import ConfigValidator
-from typing import Dict, Any, Optional, List
-from agent_actions.errors import ConfigurationError, TemplateRenderingError
-from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
+
 from agent_actions.config.environment import EnvironmentConfig
-from agent_actions.workflow.models import WorkflowConfig
-from agent_actions.workflow.pipeline import PipelineConfig
 from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager
-from agent_actions.output.response.expander import ActionExpander
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
+from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.input.context.normalizer import normalize_all_agent_configs
 from agent_actions.logging import fire_event
-from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
+from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
+from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
+from agent_actions.output.response.expander import ActionExpander
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.utils.path_utils import topological_sort
+from agent_actions.validation.config_validator import ConfigValidator
+from agent_actions.workflow.models import WorkflowConfig
+from agent_actions.workflow.pipeline import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -28,19 +30,19 @@ class ConfigManager:
     def __init__(self, constructor_path: str, default_path: str):
         self.constructor_path = constructor_path
         self.default_path = default_path
-        self.user_config: Optional[Dict[str, Any]] = None
-        self.default_config: Optional[Dict[str, Any]] = None
-        self.agent_name: Optional[str] = None
-        self.agent_configs: Dict[str, AgentConfig] = {}
-        self.execution_order: List[str] = []
-        self.child_pipeline: Optional[str] = None
-        self.tool_path: Optional[str] = None
+        self.user_config: dict[str, Any] | None = None
+        self.default_config: dict[str, Any] | None = None
+        self.agent_name: str | None = None
+        self.agent_configs: dict[str, AgentConfig] = {}
+        self.execution_order: list[str] = []
+        self.child_pipeline: str | None = None
+        self.tool_path: str | None = None
         self.template_dir = str(Path.cwd() / "templates")
-        self.environment_config: Optional[EnvironmentConfig] = None
-        self.workflow_config: Optional[WorkflowConfig] = None
-        self.pipeline_config: Optional[PipelineConfig] = None
+        self.environment_config: EnvironmentConfig | None = None
+        self.workflow_config: WorkflowConfig | None = None
+        self.pipeline_config: PipelineConfig | None = None
 
-    def _load_single_config(self, config_path: str, config_type: str) -> Dict[str, Any]:
+    def _load_single_config(self, config_path: str, config_type: str) -> dict[str, Any]:
         """Load and parse a single config file with template rendering.
 
         Args:
@@ -67,13 +69,13 @@ class ConfigManager:
                     "operation": f"load_{config_type}_config",
                 },
                 cause=e,
-            )
+            ) from e
         except yaml.YAMLError as e:
             raise ConfigurationError(
                 f"Error parsing YAML for {config_type} config",
                 context={"config_path": str(config_path), "operation": "parse_yaml"},
                 cause=e,
-            )
+            ) from e
         except Exception as e:
             raise ConfigurationError(
                 f"Unexpected error loading {config_type} config",
@@ -82,7 +84,7 @@ class ConfigManager:
                     "operation": f"load_{config_type}_config",
                 },
                 cause=e,
-            )
+            ) from e
 
     def load_configs(self):
         self.user_config = self._load_single_config(self.constructor_path, "workflow")
@@ -115,7 +117,7 @@ class ConfigManager:
         else:
             self.tool_path = project_tool_path
 
-    def find_agent_name(self, config: Dict[str, Any]) -> str:
+    def find_agent_name(self, config: dict[str, Any]) -> str:
         """
         Find the name of the agent from the configuration.
 
@@ -192,7 +194,7 @@ class ConfigManager:
                         f"Action '{action_name}' has invalid configuration",
                         context={"action": action_name},
                         cause=e,
-                    )
+                    ) from e
 
             # Validate workflow defaults (project defaults validated by DefaultAgentConfig)
             if workflow_defaults and isinstance(workflow_defaults, dict):
@@ -203,7 +205,7 @@ class ConfigManager:
                         "Defaults section has invalid configuration",
                         context={"section": "defaults"},
                         cause=e,
-                    )
+                    ) from e
 
             agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
             workflow_name = self.user_config.get("name", "workflow")
@@ -221,7 +223,7 @@ class ConfigManager:
                 ]
             return user_agents
 
-    def merge_agent_configs(self, user_agents: List[Dict[str, Any]]) -> None:
+    def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
         default_model = DefaultAgentConfig.model_validate(
             self.default_config.get("default_agent_config", {}) if self.default_config else {}
         )
@@ -237,7 +239,7 @@ class ConfigManager:
                         "operation": "merge_agent_configs",
                     },
                     cause=e,
-                )
+                ) from e
             agent_type = agent_model.agent_type
             agent_dict = agent_model.model_dump(exclude_unset=True)
             merged_dict = {**default_agent_config}
@@ -316,15 +318,15 @@ class ConfigManager:
                 cause=e,
             ) from e
 
-    def get_agent_config(self, agent_type: str) -> Optional[AgentConfig]:
+    def get_agent_config(self, agent_type: str) -> AgentConfig | None:
         """Get typed agent configuration by agent type."""
         return self.agent_configs.get(agent_type)
 
-    def get_all_agent_configs(self) -> Dict[str, AgentConfig]:
+    def get_all_agent_configs(self) -> dict[str, AgentConfig]:
         """Get all typed agent configurations."""
         return self.agent_configs.copy()
 
-    def get_all_agent_configs_as_dicts(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_agent_configs_as_dicts(self) -> dict[str, dict[str, Any]]:
         """Get all agent configurations as dictionaries for backward compatibility."""
         result = {}
         for agent_type, config in self.agent_configs.items():
@@ -366,7 +368,7 @@ class ConfigManager:
             result[agent_type] = config_dict
         return result
 
-    def create_workflow_config(self, workflow_data: Dict[str, Any]) -> WorkflowConfig:
+    def create_workflow_config(self, workflow_data: dict[str, Any]) -> WorkflowConfig:
         """Create a typed workflow configuration from dictionary data."""
         try:
             self.workflow_config = WorkflowConfig.model_validate(workflow_data)
@@ -379,9 +381,9 @@ class ConfigManager:
                     "operation": "create_workflow_config",
                 },
                 cause=e,
-            )
+            ) from e
 
-    def create_pipeline_config(self, pipeline_data: Dict[str, Any]) -> PipelineConfig:
+    def create_pipeline_config(self, pipeline_data: dict[str, Any]) -> PipelineConfig:
         """Create a typed pipeline configuration from dictionary data."""
         try:
             self.pipeline_config = PipelineConfig.model_validate(pipeline_data)
@@ -394,7 +396,7 @@ class ConfigManager:
                     "operation": "create_pipeline_config",
                 },
                 cause=e,
-            )
+            ) from e
 
     def validate_all_configs(self) -> None:
         """Validate all loaded configurations."""
@@ -410,7 +412,7 @@ class ConfigManager:
                     cause=e,
                 ) from e
 
-    def get_configuration_summary(self) -> Dict[str, Any]:
+    def get_configuration_summary(self) -> dict[str, Any]:
         """Get a summary of all loaded configurations."""
         return {
             "environment": {

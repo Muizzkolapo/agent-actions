@@ -1,7 +1,7 @@
 """Provider-agnostic metadata extraction from LLM responses."""
 
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .types import ResponseMetadata, UnifiedMetadata
 
@@ -10,7 +10,7 @@ class MetadataExtractor:
     """Extracts and normalizes metadata from LLM responses across providers."""
 
     # Provider name mappings for normalization
-    PROVIDER_ALIASES: Dict[str, str] = {
+    PROVIDER_ALIASES: dict[str, str] = {
         "openai": "openai",
         "azure": "openai",
         "azure_openai": "openai",
@@ -29,10 +29,10 @@ class MetadataExtractor:
     def extract_from_response(
         cls,
         response: Any,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        latency_ms: Optional[float] = None,
-        agent_config: Optional[Dict[str, Any]] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        latency_ms: float | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> ResponseMetadata:
         """Extract and normalize metadata from an LLM response."""
         normalized_provider = cls._normalize_provider(provider, agent_config)
@@ -56,11 +56,11 @@ class MetadataExtractor:
     @classmethod
     def _extract_from_dict(
         cls,
-        response: Dict[str, Any],
-        provider: Optional[str],
-        model: Optional[str],
-        latency_ms: Optional[float],
-        agent_config: Optional[Dict[str, Any]],
+        response: dict[str, Any],
+        provider: str | None,
+        model: str | None,
+        latency_ms: float | None,
+        agent_config: dict[str, Any] | None,
     ) -> ResponseMetadata:
         """Extract metadata from a dictionary response."""
         extracted_model = response.get("model") or model or cls._get_model_from_config(agent_config)
@@ -86,10 +86,10 @@ class MetadataExtractor:
     def _extract_from_object(
         cls,
         response: Any,
-        provider: Optional[str],
-        model: Optional[str],
-        latency_ms: Optional[float],
-        agent_config: Optional[Dict[str, Any]],
+        provider: str | None,
+        model: str | None,
+        latency_ms: float | None,
+        agent_config: dict[str, Any] | None,
     ) -> ResponseMetadata:
         """Extract metadata from an SDK response object."""
         extracted_model = model or cls._get_model_from_config(agent_config)
@@ -97,7 +97,7 @@ class MetadataExtractor:
         status_code = None
         request_id = None
         usage = None
-        raw: Dict[str, Any] = {}
+        raw: dict[str, Any] = {}
 
         if hasattr(response, "model"):
             extracted_model = response.model or extracted_model
@@ -135,7 +135,7 @@ class MetadataExtractor:
         )
 
     @classmethod
-    def _extract_usage(cls, response: Dict[str, Any]) -> Optional[Dict[str, int]]:
+    def _extract_usage(cls, response: dict[str, Any]) -> dict[str, int] | None:
         """Extract token usage, normalizing OpenAI and Anthropic key names."""
         usage = response.get("usage")
         if not usage:
@@ -164,9 +164,9 @@ class MetadataExtractor:
         return None
 
     @classmethod
-    def _extract_usage_from_object(cls, usage: Any) -> Optional[Dict[str, int]]:
+    def _extract_usage_from_object(cls, usage: Any) -> dict[str, int] | None:
         """Extract usage from an SDK usage object."""
-        result: Dict[str, int] = {}
+        result: dict[str, int] = {}
 
         if hasattr(usage, "prompt_tokens"):
             result["prompt_tokens"] = usage.prompt_tokens or 0
@@ -188,10 +188,10 @@ class MetadataExtractor:
 
     @classmethod
     def _extract_raw_metadata(
-        cls, response: Dict[str, Any], provider: Optional[str]
-    ) -> Dict[str, Any]:
+        cls, response: dict[str, Any], provider: str | None
+    ) -> dict[str, Any]:
         """Extract provider-specific raw metadata."""
-        raw: Dict[str, Any] = {}
+        raw: dict[str, Any] = {}
 
         if provider == "openai":
             if "system_fingerprint" in response:
@@ -207,8 +207,8 @@ class MetadataExtractor:
 
     @classmethod
     def _normalize_provider(
-        cls, provider: Optional[str], agent_config: Optional[Dict[str, Any]]
-    ) -> Optional[str]:
+        cls, provider: str | None, agent_config: dict[str, Any] | None
+    ) -> str | None:
         """Normalize provider name to canonical form."""
         if provider:
             lower_provider = provider.lower()
@@ -223,7 +223,7 @@ class MetadataExtractor:
         return None
 
     @classmethod
-    def _get_model_from_config(cls, agent_config: Optional[Dict[str, Any]]) -> Optional[str]:
+    def _get_model_from_config(cls, agent_config: dict[str, Any] | None) -> str | None:
         """Get model name from agent configuration."""
         if not agent_config:
             return None
@@ -232,7 +232,7 @@ class MetadataExtractor:
     @classmethod
     def build_unified_metadata(
         cls,
-        response_metadata: Optional[ResponseMetadata] = None,
+        response_metadata: ResponseMetadata | None = None,
     ) -> UnifiedMetadata:
         """Build a UnifiedMetadata container from response metadata."""
         return UnifiedMetadata(response=response_metadata)
@@ -242,8 +242,8 @@ class MetadataTimer:
     """Context manager for tracking operation latency in milliseconds."""
 
     def __init__(self):
-        self._start_time: Optional[float] = None
-        self._end_time: Optional[float] = None
+        self._start_time: float | None = None
+        self._end_time: float | None = None
 
     def __enter__(self) -> "MetadataTimer":
         self._start_time = time.perf_counter()
@@ -253,7 +253,7 @@ class MetadataTimer:
         self._end_time = time.perf_counter()
 
     @property
-    def elapsed_ms(self) -> Optional[float]:
+    def elapsed_ms(self) -> float | None:
         """Get elapsed time in milliseconds."""
         if self._start_time is None:
             return None

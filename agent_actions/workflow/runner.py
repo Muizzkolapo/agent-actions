@@ -6,23 +6,23 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Tuple, Dict, Optional, List, Any, Set, Union
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from agent_actions.workflow.managers.manifest import ManifestManager
     from agent_actions.storage.backend import StorageBackend
+    from agent_actions.workflow.managers.manifest import ManifestManager
+from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.output.file_handler import FileHandler
-from agent_actions.workflow.strategies import (
-    InitialStrategy,
-    StandardStrategy,
-    AgentStrategy,
-    StrategyExecutionParams,
-)
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
-from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.workflow.strategies import (
+    AgentStrategy,
+    InitialStrategy,
+    StandardStrategy,
+    StrategyExecutionParams,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +31,13 @@ logger = logging.getLogger(__name__)
 class FileProcessParams:
     """Parameters for processing files."""
 
-    agent_config: Dict
+    agent_config: dict
     agent_name: str
     strategy: AgentStrategy
-    upstream_data_dirs: List[str]
+    upstream_data_dirs: list[str]
     output_directory: str
     idx: int
-    file_type_filter: Optional[Set[str]] = None
+    file_type_filter: set[str] | None = None
 
 
 @dataclass
@@ -55,22 +55,22 @@ class SingleFileProcessParams:
     """Parameters for processing a single file."""
 
     locations: FileLocationParams
-    agent_config: Dict
+    agent_config: dict
     agent_name: str
     strategy: AgentStrategy
     idx: int
-    source_relative_path: Optional[str] = None  # For storage backend reads
-    data: Optional[List[Dict[str, Any]]] = None  # Pre-loaded data (skips file read)
+    source_relative_path: str | None = None  # For storage backend reads
+    data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
 
 
 @dataclass
 class ProcessGenerateParams:
     """Parameters for process_and_generate_for_agent method."""
 
-    agent_config: Dict
+    agent_config: dict
     agent_name: str
     strategy: AgentStrategy
-    previous_agent_type: Optional[str]
+    previous_agent_type: str | None
     idx: int
 
 
@@ -80,18 +80,18 @@ class AgentRunner:
     def __init__(
         self,
         use_tools: bool,
-        processor_factory: Optional[ProcessorFactory] = None,
-        storage_backend: Optional["StorageBackend"] = None,
+        processor_factory: ProcessorFactory | None = None,
+        storage_backend: StorageBackend | None = None,
     ) -> None:
         """Initialize the AgentRunner with strategy configurations."""
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
         self.storage_backend = storage_backend
-        self.agent_configs: Optional[Dict[str, Dict]] = None
-        self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
-        self.manifest_manager: Optional[ManifestManager] = None  # Set by AgentWorkflow
-        self.data_source_config: Optional[Union[str, Dict[str, Any]]] = None  # Set by coordinator
-        self.strategies: Dict[str, AgentStrategy] = {
+        self.agent_configs: dict[str, dict] | None = None
+        self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
+        self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
+        self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
+        self.strategies: dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
             "terminal": StandardStrategy(processor_factory),
@@ -105,7 +105,7 @@ class AgentRunner:
         """
         current_dir: Path = Path.cwd()
         folder_name = self.workflow_name if self.workflow_name else agent_name
-        agent_folder: Optional[str] = FileHandler.find_specific_folder(
+        agent_folder: str | None = FileHandler.find_specific_folder(
             str(current_dir), folder_name, "agent_io"
         )
         if agent_folder is None:
@@ -120,7 +120,7 @@ class AgentRunner:
             )
         return agent_folder
 
-    def _resolve_upstream_from_manifest(self, agent_folder: Path) -> Optional[List[Path]]:
+    def _resolve_upstream_from_manifest(self, agent_folder: Path) -> list[Path] | None:
         """Resolve upstream directories from manifest file, or None."""
         agent_io_dir = (
             agent_folder / "agent_io" if "agent_io" not in str(agent_folder) else agent_folder
@@ -137,7 +137,7 @@ class AgentRunner:
         logger.debug("Resolved upstream from manifest: %s", upstream_path)
         return [upstream_path]
 
-    def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> List[Path]:
+    def _resolve_start_node_directories(self, agent_folder: Path, agent_name: str) -> list[Path]:
         """Resolve upstream directories for a start node (no dependencies)."""
         manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
         if manifest_dirs:
@@ -146,8 +146,8 @@ class AgentRunner:
         return result.directories
 
     def _resolve_dependency_directories(
-        self, agent_folder: Path, dependencies: List[str], agent_config: Dict, agent_name: str
-    ) -> List[Path]:
+        self, agent_folder: Path, dependencies: list[str], agent_config: dict, agent_name: str
+    ) -> list[Path]:
         """Resolve upstream directories from dependencies (input sources).
 
         Raises:
@@ -235,7 +235,7 @@ class AgentRunner:
 
         return resolved_dirs
 
-    def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Optional[Path]:
+    def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Path | None:
         """Resolve a single dependency directory, or None if not found."""
         # Try storage backend first if available
         if self.storage_backend is not None:
@@ -280,8 +280,8 @@ class AgentRunner:
         return agent_folder / "target" / previous_agent_type
 
     def setup_directories(
-        self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int
-    ) -> Tuple[List[str], str]:
+        self, agent_folder: str, agent_config: dict, previous_agent_type: str | None, idx: int
+    ) -> tuple[list[str], str]:
         """Set up input and output directories for the agent."""
         agent_folder_path = Path(agent_folder)
         agent_type = agent_config["agent_type"]
@@ -336,7 +336,7 @@ class AgentRunner:
         item: Path,
         input_path: Path,
         processed_paths: set,
-        file_type_filter: Optional[Set[str]] = None,
+        file_type_filter: set[str] | None = None,
     ) -> bool:
         """Check if an item should be skipped during processing."""
         if "batch" in item.parts:
@@ -352,9 +352,9 @@ class AgentRunner:
             return True
         return False
 
-    def _collect_files_from_upstream(self, upstream_data_dirs: List[str]) -> Dict[Path, List[Path]]:
+    def _collect_files_from_upstream(self, upstream_data_dirs: list[str]) -> dict[Path, list[Path]]:
         """Collect files from upstream directories, grouped by relative path."""
-        files_by_relative_path: Dict[Path, List[Path]] = {}
+        files_by_relative_path: dict[Path, list[Path]] = {}
 
         for input_directory in upstream_data_dirs:
             input_path = Path(input_directory)
@@ -477,7 +477,7 @@ class AgentRunner:
 
                 original_content = None
                 if merged_file.exists():
-                    with open(merged_file, "r", encoding="utf-8") as f:
+                    with open(merged_file, encoding="utf-8") as f:
                         original_content = f.read()
 
                 merged_file.parent.mkdir(parents=True, exist_ok=True)
@@ -508,7 +508,7 @@ class AgentRunner:
 
         return files_processed_count
 
-    def _process_from_storage_backend(self, params: FileProcessParams) -> Tuple[int, int]:
+    def _process_from_storage_backend(self, params: FileProcessParams) -> tuple[int, int]:
         """Process data from storage backend instead of filesystem.
 
         Returns:
@@ -521,7 +521,7 @@ class AgentRunner:
         output_path = Path(params.output_directory)
         processing_errors = []
 
-        data_by_path: Dict[str, List[Tuple[str, Any]]] = {}
+        data_by_path: dict[str, list[tuple[str, Any]]] = {}
 
         for input_directory in params.upstream_data_dirs:
             input_path = Path(input_directory)
@@ -738,9 +738,9 @@ class AgentRunner:
 
     def run_agent(
         self,
-        agent_config: Dict,
+        agent_config: dict,
         agent_name: str,
-        previous_agent_type: Optional[str],
+        previous_agent_type: str | None,
         idx: int,
     ) -> str:
         """Run an agent with the appropriate strategy based on its position."""

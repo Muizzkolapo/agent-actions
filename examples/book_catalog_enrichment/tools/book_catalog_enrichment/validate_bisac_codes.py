@@ -1,5 +1,6 @@
 """Validate BISAC classification codes."""
-from typing import List, TypedDict
+
+from typing import TypedDict
 
 from agent_actions import udf_tool
 
@@ -14,7 +15,7 @@ class ValidateBisacInput(TypedDict, total=False):
     # Book metadata
     isbn: str
     title: str
-    authors: List[str]
+    authors: list[str]
     publisher: str
     publish_year: int
     page_count: int
@@ -23,7 +24,7 @@ class ValidateBisacInput(TypedDict, total=False):
     # Classification from LLM
     primary_bisac_code: str
     primary_bisac_name: str
-    secondary_bisac_codes: List[str]
+    secondary_bisac_codes: list[str]
     classification_reasoning: str
 
 
@@ -44,15 +45,15 @@ class ValidateBisacOutput(TypedDict, total=False):
     # Passthrough metadata
     isbn: str
     title: str
-    authors: List[str]
+    authors: list[str]
     publisher: str
     publish_year: int
     page_count: int
     description: str
 
     bisac_valid: bool
-    bisac_codes: List[str]
-    bisac_names: List[str]
+    bisac_codes: list[str]
+    bisac_names: list[str]
     validation_notes: str
 
 

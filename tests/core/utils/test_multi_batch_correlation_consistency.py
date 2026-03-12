@@ -8,11 +8,9 @@ for the same logical records.
 
 import threading
 import time
+
 import pytest
-from typing import Dict, List, Set
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.field_management import FieldManager
-from agent_actions.utils.lineage import LineageBuilder
+
 from agent_actions.utils.correlation import VersionIdGenerator
 
 
@@ -105,10 +103,10 @@ class TestMultiBatchCorrelationConsistency:
             source_guid_key = source_guid
             for record in source_records:
                 if record.get("source_guid") == source_guid_key:
-                    actual_source_guid = record["source_guid"]
+                    _actual_source_guid = record["source_guid"]
                     break
             else:
-                actual_source_guid = source_guid_key
+                _actual_source_guid = source_guid_key
         for record in source_records:
             source_guid = record["source_guid"]
             batch_1_2_id = original_results[source_guid]
@@ -116,7 +114,7 @@ class TestMultiBatchCorrelationConsistency:
             assert batch_1_2_id == batch_3_id, (
                 f"Correlation ID mismatch for {source_guid}: Batch 1&2: {batch_1_2_id}, Batch 3: {batch_3_id}"
             )
-        print(f"✅ All batches produced consistent correlation IDs:")
+        print("✅ All batches produced consistent correlation IDs:")
         for record in source_records:
             source_guid = record["source_guid"]
             correlation_id = original_results[source_guid]
@@ -153,7 +151,7 @@ class TestMultiBatchCorrelationConsistency:
         shared_session_id = self.get_shared_session_id()
         source_records = [f"record-{i}" for i in range(10)]
         version_base_name = "concurrent_loop"
-        all_results: Dict[int, Dict[str, str]] = {}
+        all_results: dict[int, dict[str, str]] = {}
         results_lock = threading.Lock()
 
         def simulate_batch(batch_id: int):

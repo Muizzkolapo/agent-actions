@@ -9,13 +9,14 @@ The simplified design uses TaskPreparer for unified guard evaluation:
 - Same code path as online mode
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.core.batch_models import BatchTaskPreparationStats
+import pytest
+
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys
-from agent_actions.processing.prepared_task import GuardStatus, PreparedTask, PreparationContext
+from agent_actions.llm.batch.core.batch_models import BatchTaskPreparationStats
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.processing.prepared_task import GuardStatus, PreparationContext, PreparedTask
 
 
 class TestBatchTaskPreparatorUsesTaskPreparer:
@@ -217,7 +218,7 @@ class TestBatchTaskPreparatorUsesTaskPreparer:
         with patch("agent_actions.llm.batch.processing.preparator.IDGenerator") as mock_id_gen:
             mock_id_gen.generate_target_id.return_value = "auto_generated_id"
 
-            result = preparator._process_single_item(
+            _result = preparator._process_single_item(
                 row=row,
                 prep_context=prep_context,
                 task_preparer=mock_task_preparer,

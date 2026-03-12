@@ -1,7 +1,7 @@
 """Abstract base class for invocation strategies."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Protocol, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.prepared_task import PreparedTask
@@ -21,7 +21,7 @@ class BatchProvider(Protocol):
         self,
         tasks: list[dict[str, Any]],
         batch_name: str,
-        output_directory: Optional[str] = None,
+        output_directory: str | None = None,
     ) -> tuple[str, str]: ...
 
 
@@ -42,6 +42,6 @@ class InvocationStrategy(ABC):
         """Return True if this strategy handles retry/reprompt internally."""
         pass
 
-    def cleanup(self) -> None:
+    def cleanup(self) -> None:  # noqa: B027
         """Called when processing is complete. Override in subclasses that need cleanup."""
         pass

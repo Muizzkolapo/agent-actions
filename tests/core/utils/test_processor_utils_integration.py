@@ -4,12 +4,11 @@ Integration tests for ProcessorUtils thread safety in realistic scenarios.
 
 import threading
 import time
-import pytest
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Dict, Any
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.field_management import FieldManager
-from agent_actions.utils.lineage import LineageBuilder
+from typing import Any
+
+import pytest
+
 from agent_actions.utils.correlation import VersionIdGenerator
 
 
@@ -34,10 +33,10 @@ class TestProcessorUtilsIntegration:
         source_records = [{"source_guid": f"record-{i}", "content": f"data-{i}"} for i in range(10)]
         loop_agents = ["generate_distractors_1", "generate_distractors_2", "generate_distractors_3"]
         version_base_name = "generate_distractors"
-        results: Dict[str, List[str]] = {}
+        results: dict[str, list[str]] = {}
         results_lock = threading.Lock()
 
-        def simulate_loop_agent(agent_name: str, records: List[Dict]):
+        def simulate_loop_agent(agent_name: str, records: list[dict]):
             """Simulate a loop agent processing records."""
             for record in records:
                 source_guid = record["source_guid"]
@@ -76,7 +75,7 @@ class TestProcessorUtilsIntegration:
         num_parallel_processors = 4
         version_base_name = "batch_processor"
         file_context = "batch_file.json"
-        results: Dict[int, List[str]] = {}
+        results: dict[int, list[str]] = {}
         results_lock = threading.Lock()
 
         def simulate_batch_processor(processor_id: int):
@@ -118,8 +117,8 @@ class TestProcessorUtilsIntegration:
         source_guids = [f"guid-{i}" for i in range(5)]
         positions = list(range(5))
         version_base_name = "mixed_loop"
-        guid_results: Dict[str, List[str]] = {}
-        position_results: Dict[int, List[str]] = {}
+        guid_results: dict[str, list[str]] = {}
+        position_results: dict[int, list[str]] = {}
         results_lock = threading.Lock()
 
         def worker_source_guid(source_guid: str):
@@ -180,10 +179,10 @@ class TestProcessorUtilsIntegration:
             "version_base_name": "workflow_loop",
             "workflow_session_id": self.get_test_session_id(),
         }
-        all_outputs: List[Dict[str, Any]] = []
+        all_outputs: list[dict[str, Any]] = []
         outputs_lock = threading.Lock()
 
-        def simulate_loop_agent_processing(agent_id: int, data_subset: List[Dict]):
+        def simulate_loop_agent_processing(agent_id: int, data_subset: list[dict]):
             """Simulate a loop agent processing a subset of data."""
             for record_index, item in enumerate(data_subset):
                 processed_item = VersionIdGenerator.add_version_correlation_id(
@@ -208,7 +207,7 @@ class TestProcessorUtilsIntegration:
             for future in futures:
                 future.result()
         assert len(all_outputs) == len(input_data)
-        outputs_by_guid: Dict[str, List[Dict]] = {}
+        outputs_by_guid: dict[str, list[dict]] = {}
         for output in all_outputs:
             source_guid = output["source_guid"]
             if source_guid not in outputs_by_guid:

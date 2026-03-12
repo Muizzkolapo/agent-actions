@@ -9,12 +9,11 @@ When multiple files map to the same destination, this tool helps:
 4. Generate resolution plan
 """
 
+import difflib
+import hashlib
 import json
 import sys
-import difflib
 from pathlib import Path
-from typing import Dict, List, Tuple
-import hashlib
 
 
 def load_plan(plan_file: str) -> dict:
@@ -30,7 +29,7 @@ def get_file_hash(file_path: Path) -> str:
     return hashlib.md5(file_path.read_bytes()).hexdigest()
 
 
-def compare_files(file1: Path, file2: Path) -> Tuple[bool, float]:
+def compare_files(file1: Path, file2: Path) -> tuple[bool, float]:
     """
     Compare two files.
 
@@ -56,7 +55,7 @@ def compare_files(file1: Path, file2: Path) -> Tuple[bool, float]:
     return (False, ratio)
 
 
-def analyze_conflicts(plan: dict) -> Dict[str, List[dict]]:
+def analyze_conflicts(plan: dict) -> dict[str, list[dict]]:
     """Analyze conflicts and suggest resolutions."""
     conflicts_by_dest = {}
 
@@ -79,7 +78,7 @@ def analyze_conflicts(plan: dict) -> Dict[str, List[dict]]:
     return conflicts_by_dest
 
 
-def suggest_resolutions(conflicts: Dict[str, List[dict]]) -> List[dict]:
+def suggest_resolutions(conflicts: dict[str, list[dict]]) -> list[dict]:
     """Suggest resolutions for each conflict."""
     resolutions = []
 
@@ -160,7 +159,7 @@ def suggest_resolutions(conflicts: Dict[str, List[dict]]) -> List[dict]:
     return resolutions
 
 
-def generate_resolution_plan(resolutions: List[dict], output_file: str):
+def generate_resolution_plan(resolutions: list[dict], output_file: str):
     """Generate detailed resolution plan."""
     plan = {
         "total_conflicts": len(resolutions),
@@ -179,14 +178,14 @@ def generate_resolution_plan(resolutions: List[dict], output_file: str):
     print(f"\n📄 Resolution plan saved to: {output_file}")
 
     # Print summary
-    print(f"\n📊 Conflict Resolution Summary:")
+    print("\n📊 Conflict Resolution Summary:")
     print(f"   Total conflicts: {len(resolutions)}")
     print(f"   Keep one (identical files): {len(plan['actions']['KEEP_ONE'])}")
     print(f"   Merge (similar files): {len(plan['actions']['MERGE'])}")
     print(f"   Rename (different files): {len(plan['actions']['RENAME'])}")
 
 
-def print_detailed_report(resolutions: List[dict]):
+def print_detailed_report(resolutions: list[dict]):
     """Print detailed conflict report."""
     print("\n" + "=" * 80)
     print("DETAILED CONFLICT ANALYSIS")
@@ -207,7 +206,7 @@ def print_detailed_report(resolutions: List[dict]):
         print(f"      {suggestion['action']}")
 
         if suggestion["type"] == "RENAME":
-            print(f"\n      Rename suggestions:")
+            print("\n      Rename suggestions:")
             for rename in suggestion["renames"]:
                 src = Path(rename["source"])
                 new_dest = rename["suggested_dest"]
@@ -216,7 +215,7 @@ def print_detailed_report(resolutions: List[dict]):
 
         # Show similarity scores
         if res["comparisons"]:
-            print(f"\n      Similarity scores:")
+            print("\n      Similarity scores:")
             for comp in res["comparisons"]:
                 f1 = Path(comp["file1"]).parent.name
                 f2 = Path(comp["file2"]).parent.name

@@ -1,15 +1,15 @@
 """Project root detection utilities."""
 
-from pathlib import Path
 import os
-from typing import Optional
+from pathlib import Path
+
 from agent_actions.errors import ProjectNotFoundError
 
 PROJECT_MARKER_FILE = "agent_actions.yml"
 MAX_PARENT_LEVELS = 100
 
 
-def find_project_root(start_path: Optional[str] = None) -> Optional[Path]:
+def find_project_root(start_path: str | None = None) -> Path | None:
     """Walk up from start_path (or cwd) looking for agent_actions.yml."""
     current = Path(start_path or os.getcwd()).resolve()
     for i, directory in enumerate([current, *current.parents]):

@@ -1,5 +1,6 @@
 """Format the final enriched catalog entry."""
-from typing import Any, Dict, List, TypedDict
+
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -14,42 +15,42 @@ class FormatCatalogInput(TypedDict, total=False):
     # Original book metadata
     isbn: str
     title: str
-    authors: List[str]
+    authors: list[str]
     publisher: str
     publish_year: int
     page_count: int
     description: str
 
     # Enriched data - Classification
-    bisac_codes: List[str]
-    bisac_names: List[str]
+    bisac_codes: list[str]
+    bisac_names: list[str]
 
     # Enriched data - Marketing
     marketing_description: str
     hook_sentence: str
-    key_benefits: List[str]
+    key_benefits: list[str]
     target_audience: str
 
     # Enriched data - SEO
-    primary_keywords: List[str]
-    long_tail_keywords: List[str]
+    primary_keywords: list[str]
+    long_tail_keywords: list[str]
     meta_title: str
     meta_description: str
 
     # Enriched data - Recommendations
-    similar_books: List[Dict[str, str]]
+    similar_books: list[dict[str, str]]
     reading_path: str
 
     # Enriched data - Reading Level
     reading_level: str
     years_experience_needed: str
-    prerequisites: List[str]
+    prerequisites: list[str]
     estimated_reading_time: str
 
     # Quality scores
     overall_score: int
-    dimension_scores: Dict[str, int]
-    improvement_suggestions: List[str]
+    dimension_scores: dict[str, int]
+    improvement_suggestions: list[str]
     ready_for_publication: bool
 
 
@@ -62,35 +63,35 @@ class CatalogEntryOutput(TypedDict, total=False):
 
     # Core metadata
     title: str
-    authors: List[str]
+    authors: list[str]
     publisher: str
     publish_year: int
     page_count: int
 
     # Classification
     primary_category: str
-    categories: List[str]
-    bisac_codes: List[str]
+    categories: list[str]
+    bisac_codes: list[str]
 
     # Marketing content
     short_description: str
     full_description: str
-    key_selling_points: List[str]
+    key_selling_points: list[str]
     target_audience: str
 
     # SEO
-    seo_keywords: List[str]
+    seo_keywords: list[str]
     meta_title: str
     meta_description: str
 
     # Recommendations
-    similar_titles: List[Dict[str, Any]]
+    similar_titles: list[dict[str, Any]]
     reading_path: str
 
     # Reading info
     difficulty_level: str
     experience_required: str
-    prerequisites: List[str]
+    prerequisites: list[str]
     reading_time_hours: str
 
     # Quality
@@ -99,7 +100,7 @@ class CatalogEntryOutput(TypedDict, total=False):
 
     # Metadata
     enrichment_version: str
-    enriched_fields: List[str]
+    enriched_fields: list[str]
 
 
 @udf_tool()
@@ -139,7 +140,9 @@ def format_catalog_entry(data: dict) -> dict:
     # Marketing content
     hook = data.get("hook_sentence", "")
     full_desc = data.get("marketing_description", "")
-    entry["short_description"] = hook if hook else full_desc[:200] + "..." if len(full_desc) > 200 else full_desc
+    entry["short_description"] = (
+        hook if hook else full_desc[:200] + "..." if len(full_desc) > 200 else full_desc
+    )
     entry["full_description"] = full_desc
     entry["key_selling_points"] = data.get("key_benefits", [])
     entry["target_audience"] = data.get("target_audience", "")

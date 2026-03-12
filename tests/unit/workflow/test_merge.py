@@ -1,16 +1,14 @@
 """Dedicated unit tests for workflow/merge.py module."""
 
 import json
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 from agent_actions.workflow.merge import (
     deep_merge_record,
     get_correlation_value,
-    merge_records_by_key,
     merge_json_files,
+    merge_records_by_key,
 )
 
 

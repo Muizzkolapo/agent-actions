@@ -5,7 +5,7 @@ Groq Batch API client implementation.
 import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from ..batch_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
@@ -37,7 +37,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         "cancelled": "cancelled",
     }
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize Groq client with optional API key.
 
@@ -68,8 +68,8 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return "llama-3.3-70b-versatile"
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Transform our BatchTask to Groq's expected format.
 
@@ -86,7 +86,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": model_name,
             "messages": [
                 {"role": "system", "content": batch_task.prompt},
@@ -113,12 +113,12 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSONL file for Groq."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "groq")
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit batch to Groq API."""
         from agent_actions.errors import VendorAPIError
 
@@ -196,7 +196,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         return result_content
 
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Groq response with Groq-specific fields."""
         # Get base metadata from mixin
         metadata = super()._extract_metadata_from_response(raw_response)

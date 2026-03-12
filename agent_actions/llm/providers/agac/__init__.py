@@ -12,8 +12,8 @@ Usage:
     )
 """
 
-from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.batch_client import AgacBatchClient
+from agent_actions.llm.providers.agac.client import AgacClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 
 __all__ = [

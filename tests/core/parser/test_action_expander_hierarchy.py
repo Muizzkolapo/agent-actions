@@ -1,9 +1,9 @@
 """Tests for configuration hierarchy resolution (project → workflow → action)."""
 
 import pytest
+
 from agent_actions.output.response.expander import ActionExpander
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
-
 
 HIERARCHY_CASES = [
     pytest.param(

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
@@ -113,7 +113,7 @@ class OnlineStrategy(InvocationStrategy):
                 failures=failures,
                 succeeded=succeeded,
                 reason=retry_result.reason or "unknown",
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
 
     def _invoke_with_retry(

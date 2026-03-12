@@ -3,10 +3,10 @@
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
-from .reference_parser import ParsedReference, ReferenceFormat, ReferenceParser
 from .exceptions import ReferenceNotFoundError
+from .reference_parser import ParsedReference, ReferenceFormat, ReferenceParser
 from .validator import ReferenceValidator
 
 logger = logging.getLogger(__name__)
@@ -18,9 +18,9 @@ class ResolvedReference:
 
     value: Any
     source_action: str
-    field_path: List[str]
+    field_path: list[str]
     success: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class FieldReferenceResolver:
@@ -32,9 +32,7 @@ class FieldReferenceResolver:
         self.validate_dependencies = validate_dependencies
         self._parser = ReferenceParser()
 
-    def parse(
-        self, reference: str, format_hint: Optional[ReferenceFormat] = None
-    ) -> ParsedReference:
+    def parse(self, reference: str, format_hint: ReferenceFormat | None = None) -> ParsedReference:
         """Parse a field reference string into structured format.
 
         Raises:
@@ -43,15 +41,15 @@ class FieldReferenceResolver:
         return self._parser.parse(reference, format_hint, self.strict_mode)
 
     def parse_batch(
-        self, text: str, format_hint: Optional[ReferenceFormat] = None
-    ) -> List[ParsedReference]:
+        self, text: str, format_hint: ReferenceFormat | None = None
+    ) -> list[ParsedReference]:
         """Extract all field references from a text string."""
         return self._parser.parse_batch(text, format_hint, self.strict_mode)
 
     def resolve(
         self,
-        reference: Union[str, ParsedReference],
-        field_context: Dict[str, Any],
+        reference: str | ParsedReference,
+        field_context: dict[str, Any],
         fallback_value: Any = None,
     ) -> ResolvedReference:
         """Resolve a field reference to its value in the context.
@@ -124,8 +122,8 @@ class FieldReferenceResolver:
             )
 
     def resolve_batch(
-        self, references: List[Union[str, ParsedReference]], field_context: Dict[str, Any]
-    ) -> Dict[str, ResolvedReference]:
+        self, references: list[str | ParsedReference], field_context: dict[str, Any]
+    ) -> dict[str, ResolvedReference]:
         """Resolve multiple references efficiently."""
         results = {}
 
@@ -138,8 +136,8 @@ class FieldReferenceResolver:
     def substitute(
         self,
         text: str,
-        field_context: Dict[str, Any],
-        format_hint: Optional[ReferenceFormat] = None,
+        field_context: dict[str, Any],
+        format_hint: ReferenceFormat | None = None,
     ) -> str:
         """Replace all field references in text with their resolved values."""
         if not text:
@@ -162,11 +160,11 @@ class FieldReferenceResolver:
 
     def validate_references(
         self,
-        references: List[Union[str, ParsedReference]],
-        agent_config: Dict[str, Any],
-        agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None,
-    ) -> List[str]:
+        references: list[str | ParsedReference],
+        agent_config: dict[str, Any],
+        agent_indices: dict[str, int],
+        current_agent_name: str | None = None,
+    ) -> list[str]:
         """Validate that referenced actions exist in the dependency graph."""
         validator = ReferenceValidator()
         return validator.validate(
@@ -176,7 +174,7 @@ class FieldReferenceResolver:
             current_agent_name=current_agent_name,
         )
 
-    def _resolve_nested_path(self, data: Any, path: List[str]) -> Any:
+    def _resolve_nested_path(self, data: Any, path: list[str]) -> Any:
         """Resolve a nested path, supporting both dict key access and array index access."""
         current = data
 

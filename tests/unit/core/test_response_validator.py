@@ -8,21 +8,21 @@ Covers:
 - Protocol structural typing
 """
 
-import pytest
 from unittest.mock import patch
 
+import pytest
+
 from agent_actions.processing.recovery.response_validator import (
-    ResponseValidator,
-    UdfValidator,
-    SchemaValidator,
     ComposedValidator,
+    ResponseValidator,
+    SchemaValidator,
+    UdfValidator,
     build_validation_feedback,
 )
 from agent_actions.processing.recovery.validation import (
-    reprompt_validation,
     _VALIDATION_REGISTRY,
+    reprompt_validation,
 )
-
 
 # ---------------------------------------------------------------------------
 # UdfValidator
@@ -108,9 +108,8 @@ class TestSchemaValidator:
         ):
             # Direct call to the real implementation (not patched)
             pass
-        # Instead, test through the real code path by mocking the import
-        original_validate = SchemaValidator.validate
 
+        # Instead, test through the real code path by mocking the import
         def mock_validate(self, response):
             # Simulate ImportError inside validate
             try:

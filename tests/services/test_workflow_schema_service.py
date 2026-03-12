@@ -1,7 +1,5 @@
 """Tests for the WorkflowSchemaService."""
 
-import pytest
-
 from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSource
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 

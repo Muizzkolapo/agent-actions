@@ -1,7 +1,7 @@
 """User-facing error data structure."""
 
 from dataclasses import dataclass
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 # Fields to display prominently with their labels
 _PRIORITY_FIELDS = [
@@ -44,7 +44,7 @@ _USEFUL_DEBUG_FIELDS = {
 }
 
 
-def _truncate_list(items: List[Any], max_items: int = 10) -> List[Any]:
+def _truncate_list(items: list[Any], max_items: int = 10) -> list[Any]:
     """Truncate a list and add a count of remaining items."""
     if len(items) <= max_items:
         return items
@@ -57,12 +57,12 @@ class UserError:
 
     category: str  # Configuration, Model, Provider, File, Network, Authentication
     title: str  # Brief description
-    details: Optional[str] = None  # What went wrong
-    fix: Optional[str] = None  # How to fix it
-    context: Optional[Dict[str, Any]] = None  # agent, file, field, etc.
-    docs_url: Optional[str] = None
+    details: str | None = None  # What went wrong
+    fix: str | None = None  # How to fix it
+    context: dict[str, Any] | None = None  # agent, file, field, etc.
+    docs_url: str | None = None
 
-    def _format_context(self, lines: List[str]) -> None:
+    def _format_context(self, lines: list[str]) -> None:
         """Format context fields into output lines."""
         if not self.context:
             return

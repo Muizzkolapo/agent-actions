@@ -10,11 +10,9 @@ Covers:
   serialize/deserialize_results
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 from agent_actions.llm.providers.batch_base import BatchResult
-
 
 # ---------------------------------------------------------------------------
 # shared.retrieve_and_reconcile
@@ -470,8 +468,8 @@ class TestValidateAndRepromptPassedFlag:
 
     def test_passed_reflects_post_reprompt_validation(self):
         """REGRESSION: .passed should be True when reprompted result passes validation."""
-        from agent_actions.llm.batch.services.retry import BatchRetryService
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.services.retry import BatchRetryService
 
         service = BatchRetryService()
         provider = MagicMock()
@@ -544,8 +542,8 @@ class TestValidateAndRepromptPassedFlag:
         Uses max_attempts=2 so the reprompt is actually submitted on attempt 1,
         and the still-bad result is re-validated on attempt 2 (exhaustion).
         """
-        from agent_actions.llm.batch.services.retry import BatchRetryService
         from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.services.retry import BatchRetryService
 
         service = BatchRetryService()
         provider = MagicMock()

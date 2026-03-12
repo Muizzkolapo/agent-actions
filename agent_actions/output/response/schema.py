@@ -2,18 +2,19 @@
 Schema compilation and transformation utilities for multi-vendor support.
 """
 
-from typing import Tuple, Dict, Any, Optional, Union
 import json
 import logging
+from typing import Any
+
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
+from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
-from agent_actions.output.response.loader import SchemaLoader
 
 logger = logging.getLogger(__name__)
 
 
-def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, Any]:
+def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, Any]:
     """
     Convert JSON Schema format (type: array) to unified format (fields: [...]).
 
@@ -109,7 +110,7 @@ def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, An
     }
 
 
-def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]:
+def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]:
     """
     Convert a single unified field into the shape required by the target system.
     If custom name-mappings exist for that system, apply them.
@@ -121,7 +122,7 @@ def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]
     if not field_id:
         raise KeyError(f"Field missing both 'id' and 'name' keys: {field}")
     target_field = field.get("mappings", {}).get(target_system.lower(), field_id)
-    prop: Dict[str, Any] = {"type": field["type"]}
+    prop: dict[str, Any] = {"type": field["type"]}
     for k in ("title", "description", "pattern", "minItems", "maxItems"):
         if k in field:
             prop[k] = field[k]
@@ -138,7 +139,7 @@ def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]
     return (target_field, prop)
 
 
-def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[str, Any]:
+def compile_unified_schema(unified: dict[str, Any], target_system: str) -> dict[str, Any]:
     """
     Convert a unified YAML/JSON definition into the schema dialect required by
     OpenAI, Anthropic, Gemini, **or Ollama** (new).
@@ -162,7 +163,7 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
         )
         unified = _convert_json_schema_to_unified(unified)
 
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
     required: list[str] = []
     for field in unified.get("fields", []):
         key, schema_prop = compile_field(field, target_system)
@@ -235,10 +236,10 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
 
 def _inject_functions_into_schema(
     schema: Any,
-    tools_path: Optional[str],
-    context_data_str: Optional[str],
-    agent_config: Optional[Dict[str, Any]],
-    captured_results: Dict[str, Any],
+    tools_path: str | None,
+    context_data_str: str | None,
+    agent_config: dict[str, Any] | None,
+    captured_results: dict[str, Any],
 ) -> Any:
     """
     Recursively traverse schema and replace dispatch_task() calls.
@@ -283,8 +284,8 @@ def _inject_functions_into_schema(
 
 
 def _prepare_context_data_str(
-    context_data: Optional[Union[Dict, str]],
-    tools_path: Optional[str],
+    context_data: dict | str | None,
+    tools_path: str | None,
 ) -> str:
     """
     Prepare context data as JSON string for dispatch_task processing.
@@ -305,10 +306,10 @@ def _prepare_context_data_str(
 
 def _resolve_dispatch_in_schema(
     schema: Any,
-    tools_path: Optional[str],
+    tools_path: str | None,
     context_data_str: str,
-    agent_config: Dict[str, Any],
-    captured_results: Dict[str, Any],
+    agent_config: dict[str, Any],
+    captured_results: dict[str, Any],
 ) -> Any:
     """
     Resolve dispatch_task calls in schema string.
@@ -347,11 +348,11 @@ def _is_unified_format(schema: Any) -> bool:
 
 def _load_inline_schema(
     inline_schema: Any,
-    tools_path: Optional[str],
+    tools_path: str | None,
     context_data_str: str,
-    agent_config: Dict[str, Any],
-    captured_results: Dict[str, Any],
-) -> Tuple[Dict[str, Any], str]:
+    agent_config: dict[str, Any],
+    captured_results: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
     """
     Load and prepare inline schema from agent config.
 
@@ -380,7 +381,7 @@ def _load_inline_schema(
     return base_schema, schema_name
 
 
-def _load_named_schema(agent_config: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
+def _load_named_schema(agent_config: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
     """
     Load schema by name from schema store.
 
@@ -396,7 +397,7 @@ def _load_named_schema(agent_config: Dict[str, Any]) -> Tuple[Optional[Dict[str,
     return SchemaLoader.load_schema(schema_name), schema_name
 
 
-def _unwrap_nested_schema(base_schema: Dict[str, Any]) -> Dict[str, Any]:
+def _unwrap_nested_schema(base_schema: dict[str, Any]) -> dict[str, Any]:
     """
     Unwrap nested schema structure if present.
 
@@ -431,10 +432,10 @@ def _unwrap_nested_schema(base_schema: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _compile_schema_for_vendor(
-    base_schema: Dict[str, Any],
+    base_schema: dict[str, Any],
     vendor: str,
     schema_name: str,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Compile schema for specific vendor with error handling.
 
@@ -459,11 +460,11 @@ def _compile_schema_for_vendor(
 
 
 def prepare_schema_unified(
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     vendor: str,
-    tools_path: Optional[str] = None,
-    context_data: Optional[Union[Dict, str]] = None,
-) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
+    tools_path: str | None = None,
+    context_data: dict | str | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """
     Unified schema preparation for both online and batch modes.
 
@@ -485,7 +486,7 @@ def prepare_schema_unified(
     Side Effects:
         Logs a WARNING if schema is requested but vendor doesn't support it
     """
-    captured_results: Dict[str, Any] = {}
+    captured_results: dict[str, Any] = {}
 
     # Tool vendor doesn't use schemas
     if vendor == "tool":

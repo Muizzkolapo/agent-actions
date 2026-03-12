@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 
 class ErrorSeverity(Enum):
@@ -18,7 +18,7 @@ class FieldLocation:
 
     agent_name: str
     config_field: str  # 'prompt', 'guard', 'context_scope.observe', etc.
-    line_number: Optional[int] = None
+    line_number: int | None = None
     raw_reference: str = ""
 
 
@@ -31,8 +31,8 @@ class StaticTypeIssue:
     location: FieldLocation
     referenced_agent: str
     referenced_field: str
-    available_fields: Set[str] = field(default_factory=set)
-    hint: Optional[str] = None
+    available_fields: set[str] = field(default_factory=set)
+    hint: str | None = None
 
     def format_message(self) -> str:
         """Format error for display."""
@@ -65,8 +65,8 @@ class StaticTypeError(StaticTypeIssue):
         location: FieldLocation,
         referenced_agent: str,
         referenced_field: str,
-        available_fields: Optional[Set[str]] = None,
-        hint: Optional[str] = None,
+        available_fields: set[str] | None = None,
+        hint: str | None = None,
     ):
         super().__init__(
             message=message,
@@ -88,8 +88,8 @@ class StaticTypeWarning(StaticTypeIssue):
         location: FieldLocation,
         referenced_agent: str,
         referenced_field: str,
-        available_fields: Optional[Set[str]] = None,
-        hint: Optional[str] = None,
+        available_fields: set[str] | None = None,
+        hint: str | None = None,
     ):
         super().__init__(
             message=message,
@@ -106,8 +106,8 @@ class StaticValidationResult:
     """Aggregated result of static type checking."""
 
     def __init__(self) -> None:
-        self.errors: List[StaticTypeError] = []
-        self.warnings: List[StaticTypeWarning] = []
+        self.errors: list[StaticTypeError] = []
+        self.warnings: list[StaticTypeWarning] = []
         self._strict_mode = False
 
     @property
@@ -140,7 +140,7 @@ class StaticValidationResult:
             lines.append("  All field references validated successfully.")
             lines.append("")
         else:
-            by_agent: Dict[str, List[StaticTypeIssue]] = {}
+            by_agent: dict[str, list[StaticTypeIssue]] = {}
             for issue in self.errors + self.warnings:
                 agent = issue.location.agent_name
                 if agent not in by_agent:
@@ -181,7 +181,7 @@ class StaticValidationResult:
         self.errors.extend(other.errors)
         self.warnings.extend(other.warnings)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert result to dictionary for JSON serialization."""
         return {
             "is_valid": self.is_valid,

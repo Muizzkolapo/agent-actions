@@ -8,7 +8,7 @@ potential injection.
 
 import math
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -17,24 +17,24 @@ class ScoreTopicJsdInput(TypedDict, total=False):
     """Input schema for score_topic_jsd."""
 
     prompt_text: str
-    topic_reference_distribution: Dict[str, Any]
+    topic_reference_distribution: dict[str, Any]
 
 
 class ScoreTopicJsdOutput(TypedDict, total=False):
     """Output schema for score_topic_jsd."""
 
-    detected_topics: Dict[str, float]
+    detected_topics: dict[str, float]
     jsd_score: float
     dominant_topic: str
-    topic_anomaly_flags: List[str]
+    topic_anomaly_flags: list[str]
 
 
 def _compute_topic_distribution(
-    text: str, topic_keywords: Dict[str, List[str]]
-) -> Dict[str, float]:
+    text: str, topic_keywords: dict[str, list[str]]
+) -> dict[str, float]:
     """Compute topic distribution based on keyword frequency."""
     tokens = set(re.findall(r"\b\w+\b", text.lower()))
-    topic_counts: Dict[str, int] = {}
+    topic_counts: dict[str, int] = {}
     total = 0
 
     for topic, keywords in topic_keywords.items():
@@ -50,9 +50,7 @@ def _compute_topic_distribution(
     return {topic: count / total for topic, count in topic_counts.items()}
 
 
-def _jensen_shannon_divergence(
-    p: Dict[str, float], q: Dict[str, float]
-) -> float:
+def _jensen_shannon_divergence(p: dict[str, float], q: dict[str, float]) -> float:
     """Compute Jensen-Shannon Divergence between two distributions.
 
     JSD is symmetric and bounded [0, 1] when using log base 2.

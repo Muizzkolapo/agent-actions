@@ -1,7 +1,8 @@
 """Tests for RecordProcessor."""
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.types import (
@@ -139,8 +140,9 @@ class TestConfigurationErrorHandling:
 
     def test_template_variable_error_is_reraised(self):
         """Test that TemplateVariableError is re-raised immediately (code bug, not data error)."""
-        from agent_actions.errors.operations import TemplateVariableError
         from jinja2 import UndefinedError
+
+        from agent_actions.errors.operations import TemplateVariableError
 
         class FailingProcessor(RecordProcessor):
             def process(self, item, context):

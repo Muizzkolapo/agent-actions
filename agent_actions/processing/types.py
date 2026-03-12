@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.config.types import AgentConfigDict
 
@@ -34,7 +34,7 @@ class RetryState:
     """Retry-related state for a processing operation."""
 
     attempts: int = 0
-    last_error: Optional[str] = None
+    last_error: str | None = None
     exhausted: bool = False
 
 
@@ -46,7 +46,7 @@ class RetryMetadata:
     failures: int
     succeeded: bool
     reason: str  # "timeout", "api_error", "missing", "rate_limit", "network_error"
-    timestamp: Optional[str] = None  # ISO format (e.g., "2024-01-13T12:30:45Z")
+    timestamp: str | None = None  # ISO format (e.g., "2024-01-13T12:30:45Z")
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -82,8 +82,8 @@ class RepromptMetadata:
 class RecoveryMetadata:
     """Container for recovery metadata, stored under the _recovery output key."""
 
-    retry: Optional[RetryMetadata] = None
-    reprompt: Optional[RepromptMetadata] = None
+    retry: RetryMetadata | None = None
+    reprompt: RepromptMetadata | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization. Returns empty dict if no recovery."""
@@ -106,31 +106,31 @@ class ProcessingResult:
     status: ProcessingStatus
     data: list[dict[str, Any]] = field(default_factory=list)
 
-    source_guid: Optional[str] = None
-    node_id: Optional[str] = None
-    source_snapshot: Optional[dict[str, Any]] = None
-    input_record: Optional[dict[str, Any]] = None
+    source_guid: str | None = None
+    node_id: str | None = None
+    source_snapshot: dict[str, Any] | None = None
+    input_record: dict[str, Any] | None = None
     executed: bool = True
-    skip_reason: Optional[str] = None
+    skip_reason: str | None = None
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
     retry_state: RetryState = field(default_factory=RetryState)
-    recovery_metadata: Optional[RecoveryMetadata] = None
-    raw_response: Optional[Any] = None
-    pre_extracted_metadata: Optional[dict[str, Any]] = None
+    recovery_metadata: RecoveryMetadata | None = None
+    raw_response: Any | None = None
+    pre_extracted_metadata: dict[str, Any] | None = None
 
     @classmethod
     def success(
         cls,
         data: list[dict[str, Any]],
         *,
-        source_guid: Optional[str] = None,
-        passthrough_fields: Optional[dict[str, Any]] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        raw_response: Optional[Any] = None,
+        source_guid: str | None = None,
+        passthrough_fields: dict[str, Any] | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        raw_response: Any | None = None,
         recovery_metadata: Optional["RecoveryMetadata"] = None,
-        input_record: Optional[dict[str, Any]] = None,
-        pre_extracted_metadata: Optional[dict[str, Any]] = None,
+        input_record: dict[str, Any] | None = None,
+        pre_extracted_metadata: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for successful result."""
         return cls(
@@ -152,7 +152,7 @@ class ProcessingResult:
         passthrough_data: Any,
         reason: str,
         *,
-        source_guid: Optional[str] = None,
+        source_guid: str | None = None,
     ) -> "ProcessingResult":
         """Factory for skipped (passthrough) result."""
         if passthrough_data is None:
@@ -173,9 +173,9 @@ class ProcessingResult:
     def filtered(
         cls,
         *,
-        source_guid: Optional[str] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        input_record: Optional[dict[str, Any]] = None,
+        source_guid: str | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for filtered (excluded) result."""
         return cls(
@@ -192,9 +192,9 @@ class ProcessingResult:
         cls,
         error: str,
         *,
-        source_guid: Optional[str] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        input_record: Optional[dict[str, Any]] = None,
+        source_guid: str | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for failed result."""
         return cls(
@@ -212,11 +212,11 @@ class ProcessingResult:
         cls,
         error: str,
         *,
-        data: Optional[list[dict[str, Any]]] = None,
-        source_guid: Optional[str] = None,
+        data: list[dict[str, Any]] | None = None,
+        source_guid: str | None = None,
         recovery_metadata: Optional["RecoveryMetadata"] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        input_record: Optional[dict[str, Any]] = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for exhausted (retry) result."""
         return cls(
@@ -236,9 +236,9 @@ class ProcessingResult:
         data: list[dict[str, Any]],
         reason: str,
         *,
-        source_guid: Optional[str] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        input_record: Optional[dict[str, Any]] = None,
+        source_guid: str | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for unprocessed (upstream dead/failed/skipped) result."""
         return cls(
@@ -256,10 +256,10 @@ class ProcessingResult:
         cls,
         task_id: str,
         *,
-        source_guid: Optional[str] = None,
-        passthrough_fields: Optional[dict[str, Any]] = None,
-        source_snapshot: Optional[dict[str, Any]] = None,
-        input_record: Optional[dict[str, Any]] = None,
+        source_guid: str | None = None,
+        passthrough_fields: dict[str, Any] | None = None,
+        source_snapshot: dict[str, Any] | None = None,
+        input_record: dict[str, Any] | None = None,
     ) -> "ProcessingResult":
         """Factory for deferred (batch) result."""
         return cls(
@@ -274,7 +274,7 @@ class ProcessingResult:
         )
 
     @property
-    def task_id(self) -> Optional[str]:
+    def task_id(self) -> str | None:
         """Batch task ID (only meaningful when status is DEFERRED)."""
         return self.node_id if self.status == ProcessingStatus.DEFERRED else None
 
@@ -288,14 +288,14 @@ class ProcessingContext:
     mode: ProcessingMode = ProcessingMode.ONLINE
     is_first_stage: bool = False
     source_data: list[dict[str, Any]] = field(default_factory=list)
-    file_path: Optional[str] = None
-    output_directory: Optional[str] = None
-    version_context: Optional[dict[str, Any]] = None
-    workflow_metadata: Optional[dict[str, Any]] = None
+    file_path: str | None = None
+    output_directory: str | None = None
+    version_context: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
     record_index: int = 0
-    agent_indices: Optional[dict[str, int]] = None
-    dependency_configs: Optional[dict[str, Any]] = None
-    current_item: Optional[dict[str, Any]] = None
+    agent_indices: dict[str, int] | None = None
+    dependency_configs: dict[str, Any] | None = None
+    current_item: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = None
 
     @property

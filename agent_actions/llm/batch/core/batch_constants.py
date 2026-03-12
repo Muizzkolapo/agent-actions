@@ -1,7 +1,6 @@
 """Constants for batch processing: status enums and metadata keys."""
 
 from enum import Enum
-from typing import Set
 
 
 class BatchStatus(str, Enum):
@@ -20,12 +19,12 @@ class BatchStatus(str, Enum):
         return self.value
 
     @classmethod
-    def terminal_states(cls) -> Set["BatchStatus"]:
+    def terminal_states(cls) -> set["BatchStatus"]:
         """Return the set of terminal (final) batch states."""
         return {cls.COMPLETED, cls.FAILED, cls.CANCELLED}
 
     @classmethod
-    def in_flight_states(cls) -> Set["BatchStatus"]:
+    def in_flight_states(cls) -> set["BatchStatus"]:
         """Return the set of in-flight (active) batch states."""
         return {cls.SUBMITTED, cls.VALIDATING, cls.IN_PROGRESS, cls.FINALIZING}
 
@@ -58,6 +57,6 @@ class ContextMetaKeys:
     PASSTHROUGH_FIELDS = "_passthrough_fields"
 
     @classmethod
-    def all_internal_keys(cls) -> Set[str]:
+    def all_internal_keys(cls) -> set[str]:
         """Return set of all internal metadata key names."""
         return {cls.FILTER_STATUS, cls.FILTER_PHASE, cls.PASSTHROUGH_FIELDS}

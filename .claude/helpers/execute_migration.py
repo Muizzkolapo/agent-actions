@@ -6,10 +6,10 @@ Usage:
     python execute_migration.py plan_final.json --execute --backup
 """
 
+import argparse
 import json
 import shutil
 import sys
-import argparse
 from pathlib import Path
 
 
@@ -87,10 +87,10 @@ def execute_migration(plan: dict, dry_run: bool = True):
             print(f"   ❌ Error moving {source}: {e}")
 
     if dry_run:
-        print(f"\n✅ Dry run complete!")
+        print("\n✅ Dry run complete!")
         print(f"   Would move: {moved} files")
     else:
-        print(f"\n✅ Migration complete!")
+        print("\n✅ Migration complete!")
         print(f"   Moved: {moved}")
         print(f"   Errors: {errors}")
 
@@ -129,7 +129,7 @@ Examples:
     print(f"📋 Loading migration plan from {args.plan_file}...")
     plan = load_plan(args.plan_file)
 
-    print(f"\n📊 Migration Plan Summary:")
+    print("\n📊 Migration Plan Summary:")
     print(f"   Files to migrate: {len(plan['rules'])}")
     print(f"   Remaining conflicts: {plan['stats']['conflicts']}")
 

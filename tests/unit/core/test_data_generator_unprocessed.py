@@ -6,10 +6,10 @@ which caused downstream stages to treat upstream-failed records as real outputs.
 Fix: Explicit UNPROCESSED branch returns (data, False, ...).
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from agent_actions.prompt.data_generator import DataGenerator
 from agent_actions.processing.types import ProcessingResult
+from agent_actions.prompt.data_generator import DataGenerator
 
 
 class TestDataGeneratorUnprocessed:

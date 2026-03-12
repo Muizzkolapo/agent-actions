@@ -13,26 +13,25 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from ollama import Client, ResponseError
 import httpx
+from ollama import Client, ResponseError
 
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
-from agent_actions.llm.providers.usage_tracker import set_last_usage
-from agent_actions.utils.constants import MODEL_NAME_KEY
-from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
 from agent_actions.logging.events.types import LLMJSONParseErrorEvent
+from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class OllamaClient(BaseClient):
     """
 
     @staticmethod
-    def _prep_messages(prompt_config: str, context_data: str) -> List[Dict[str, str]]:
+    def _prep_messages(prompt_config: str, context_data: str) -> list[dict[str, str]]:
         """Prepare messages with system and user roles."""
         return [
             {"role": "system", "content": prompt_config},
@@ -67,13 +66,13 @@ class OllamaClient(BaseClient):
         ]
 
     @staticmethod
-    def _get_client(agent_config: Dict[str, Any]) -> Client:
+    def _get_client(agent_config: dict[str, Any]) -> Client:
         """Return an Ollama Client pointed at the correct host."""
         host = agent_config.get("base_url") or os.getenv("OLLAMA_HOST")
         return Client(host=host) if host else Client()
 
     @staticmethod
-    def _extract_ollama_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _extract_ollama_schema(schema: dict[str, Any] | None) -> dict[str, Any] | None:
         """
         Extract the inner JSON schema for Ollama's format parameter.
 
@@ -107,12 +106,12 @@ class OllamaClient(BaseClient):
 
     @staticmethod
     def call_json(
-        _api_key: Optional[str],
-        agent_config: Dict[str, Any],
+        _api_key: str | None,
+        agent_config: dict[str, Any],
         prompt_config: str,
         context_data: Any,
-        schema: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
+        schema: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Call Ollama API in JSON mode with structured output.
 
@@ -165,7 +164,7 @@ class OllamaClient(BaseClient):
 
         start_time = datetime.now()
         try:
-            chat_kwargs: Dict[str, Any] = {
+            chat_kwargs: dict[str, Any] = {
                 "model": model,
                 "messages": messages,
                 "stream": False,
@@ -242,12 +241,12 @@ class OllamaClient(BaseClient):
 
     @staticmethod
     def call_non_json(
-        _api_key: Optional[str],
-        agent_config: Dict[str, Any],
+        _api_key: str | None,
+        agent_config: dict[str, Any],
         prompt_config: str,
         context_data: Any,
-        _schema: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, str]]:
+        _schema: dict[str, Any] | None = None,
+    ) -> list[dict[str, str]]:
         """
         Plain-text chat (no schema enforcement).
 
@@ -288,7 +287,7 @@ class OllamaClient(BaseClient):
                 key_map={"max_tokens": "num_predict"},
                 stop_as_list=True,
             )
-            non_json_kwargs: Dict[str, Any] = {
+            non_json_kwargs: dict[str, Any] = {
                 "model": model,
                 "messages": messages,
                 "stream": False,

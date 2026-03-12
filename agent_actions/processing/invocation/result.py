@@ -1,7 +1,7 @@
 """Invocation result type for LLM execution."""
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 
@@ -10,22 +10,22 @@ from agent_actions.processing.types import RecoveryMetadata
 class InvocationResult:
     """Result of LLM invocation, covering both immediate (online) and deferred (batch) modes."""
 
-    response: Optional[Any] = None
+    response: Any | None = None
     executed: bool = False
 
     deferred: bool = False
-    task_id: Optional[str] = None
+    task_id: str | None = None
 
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
-    recovery_metadata: Optional[RecoveryMetadata] = None
+    recovery_metadata: RecoveryMetadata | None = None
 
     @classmethod
     def immediate(
         cls,
         response: Any,
         executed: bool,
-        passthrough_fields: Optional[dict[str, Any]] = None,
-        recovery: Optional[RecoveryMetadata] = None,
+        passthrough_fields: dict[str, Any] | None = None,
+        recovery: RecoveryMetadata | None = None,
     ) -> "InvocationResult":
         """Create an immediate execution result."""
         return cls(
@@ -40,7 +40,7 @@ class InvocationResult:
     def queued(
         cls,
         task_id: str,
-        passthrough_fields: Optional[dict[str, Any]] = None,
+        passthrough_fields: dict[str, Any] | None = None,
     ) -> "InvocationResult":
         """Create a queued (batch) result."""
         return cls(
@@ -53,8 +53,8 @@ class InvocationResult:
     @classmethod
     def skipped(
         cls,
-        passthrough_data: Optional[Any] = None,
-        passthrough_fields: Optional[dict[str, Any]] = None,
+        passthrough_data: Any | None = None,
+        passthrough_fields: dict[str, Any] | None = None,
     ) -> "InvocationResult":
         """Create a skipped (guard skip) result."""
         return cls(

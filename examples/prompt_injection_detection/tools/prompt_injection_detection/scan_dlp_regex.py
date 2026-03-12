@@ -7,7 +7,7 @@ delimiter injection.
 """
 
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -16,14 +16,14 @@ class ScanDlpRegexInput(TypedDict, total=False):
     """Input schema for scan_dlp_regex."""
 
     prompt_text: str
-    attack_patterns: Dict[str, Any]
+    attack_patterns: dict[str, Any]
 
 
 class ScanDlpRegexOutput(TypedDict, total=False):
     """Output schema for scan_dlp_regex."""
 
-    matched_patterns: List[Dict[str, str]]
-    category_scores: Dict[str, float]
+    matched_patterns: list[dict[str, str]]
+    category_scores: dict[str, float]
     dlp_risk_score: float
     highest_category: str
 
@@ -61,8 +61,8 @@ def scan_dlp_regex(data: dict) -> dict:
     patterns_db = seed_patterns.get("patterns", {})
     category_weights = seed_patterns.get("category_weights", DEFAULT_CATEGORY_WEIGHTS)
 
-    matched_patterns: List[Dict[str, str]] = []
-    category_scores: Dict[str, float] = {}
+    matched_patterns: list[dict[str, str]] = []
+    category_scores: dict[str, float] = {}
 
     for category, patterns in patterns_db.items():
         match_count = 0

@@ -15,12 +15,11 @@ Confidence Tiers:
 """
 
 import ast
-import sys
-import subprocess
 import re
-from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple
+import subprocess
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -34,7 +33,7 @@ class DeadCodeItem:
     confidence: int  # 0-100
     reason: str
     size_lines: int = 0  # How many lines this item spans
-    detected_by: List[str] = field(default_factory=list)  # Which tools found it
+    detected_by: list[str] = field(default_factory=list)  # Which tools found it
     false_positive_risk: str = ""  # Why this might be a false positive
 
 
@@ -42,10 +41,10 @@ class DeadCodeItem:
 class DeadCodeReport:
     """Complete dead code analysis for a file or directory."""
 
-    analyzed_paths: List[str] = field(default_factory=list)
+    analyzed_paths: list[str] = field(default_factory=list)
     total_files: int = 0
     total_dead_items: int = 0
-    dead_items: List[DeadCodeItem] = field(default_factory=list)
+    dead_items: list[DeadCodeItem] = field(default_factory=list)
 
     # Statistics by type
     unused_functions: int = 0
@@ -60,7 +59,7 @@ class DeadCodeReport:
     dead_lines_total: int = 0
 
     # Tool availability
-    tools_available: Dict[str, bool] = field(default_factory=dict)
+    tools_available: dict[str, bool] = field(default_factory=dict)
 
 
 # =============================================================================
@@ -111,8 +110,8 @@ FALSE_POSITIVE_PATTERNS = {
 
 
 def check_false_positive_risk(
-    item: DeadCodeItem, file_content: Optional[str] = None
-) -> Tuple[bool, str]:
+    item: DeadCodeItem, file_content: str | None = None
+) -> tuple[bool, str]:
     """
     Check if an item is likely a false positive.
 
@@ -120,7 +119,7 @@ def check_false_positive_risk(
         (is_risky, reason) tuple
     """
     # Check name patterns
-    for pattern_type, pattern_info in FALSE_POSITIVE_PATTERNS.items():
+    for _pattern_type, pattern_info in FALSE_POSITIVE_PATTERNS.items():
         for indicator in pattern_info["indicators"]:
             if re.search(indicator, item.item_name):
                 return True, pattern_info["description"]
@@ -150,7 +149,7 @@ def check_false_positive_risk(
 # =============================================================================
 
 
-def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
+def run_ruff_analysis(target_path: Path) -> list[DeadCodeItem]:
     """
     Run Ruff for accurate import and variable detection.
 
@@ -199,7 +198,7 @@ def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
                                 detected_by=["ruff"],
                             )
                         )
-            except Exception as e:
+            except Exception:
                 print(f"Warning: Could not parse ruff line: {line}", file=sys.stderr)
                 continue
 
@@ -224,7 +223,7 @@ def run_ruff_analysis(target_path: Path) -> List[DeadCodeItem]:
 # =============================================================================
 
 
-def run_vulture_analysis(target_path: Path) -> List[DeadCodeItem]:
+def run_vulture_analysis(target_path: Path) -> list[DeadCodeItem]:
     """
     Run vulture to detect dead code.
 
@@ -303,11 +302,11 @@ class DeadCodeDetector(ast.NodeVisitor):
 
     def __init__(self, file_path: str):
         self.file_path = file_path
-        self.defined_names: Dict[str, int] = {}
-        self.used_names: Set[str] = set()
-        self.imports: Dict[str, int] = {}
-        self.class_methods: Dict[str, List[str]] = {}
-        self.current_class: Optional[str] = None
+        self.defined_names: dict[str, int] = {}
+        self.used_names: set[str] = set()
+        self.imports: dict[str, int] = {}
+        self.class_methods: dict[str, list[str]] = {}
+        self.current_class: str | None = None
 
     def visit_Import(self, node: ast.Import):
         """Track imports."""
@@ -356,7 +355,7 @@ class DeadCodeDetector(ast.NodeVisitor):
         self.used_names.add(node.attr)
         self.generic_visit(node)
 
-    def get_unused_imports(self) -> List[DeadCodeItem]:
+    def get_unused_imports(self) -> list[DeadCodeItem]:
         """Find imports that are never used."""
         unused = []
         for name, line in self.imports.items():
@@ -376,10 +375,10 @@ class DeadCodeDetector(ast.NodeVisitor):
         return unused
 
 
-def analyze_file_ast(file_path: Path) -> List[DeadCodeItem]:
+def analyze_file_ast(file_path: Path) -> list[DeadCodeItem]:
     """Analyze a single file using AST."""
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             source = f.read()
 
         tree = ast.parse(source, filename=str(file_path))
@@ -401,8 +400,8 @@ def analyze_file_ast(file_path: Path) -> List[DeadCodeItem]:
 
 
 def merge_and_score_findings(
-    ruff_items: List[DeadCodeItem], vulture_items: List[DeadCodeItem], ast_items: List[DeadCodeItem]
-) -> List[DeadCodeItem]:
+    ruff_items: list[DeadCodeItem], vulture_items: list[DeadCodeItem], ast_items: list[DeadCodeItem]
+) -> list[DeadCodeItem]:
     """
     Merge findings from multiple tools and adjust confidence scores.
 
@@ -413,7 +412,7 @@ def merge_and_score_findings(
     - 60-69%: Vulture only, unfiltered (high false positive risk)
     """
     # Create a map of findings by (file, line, name)
-    findings_map: Dict[Tuple[str, int, str], DeadCodeItem] = {}
+    findings_map: dict[tuple[str, int, str], DeadCodeItem] = {}
 
     # Add Ruff findings (highest priority)
     for item in ruff_items:
@@ -461,9 +460,9 @@ def merge_and_score_findings(
 # =============================================================================
 
 
-def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
+def calculate_line_spans(dead_items: list[DeadCodeItem]) -> None:
     """Calculate the actual line span for each dead code item."""
-    items_by_file: Dict[str, List[DeadCodeItem]] = {}
+    items_by_file: dict[str, list[DeadCodeItem]] = {}
 
     for item in dead_items:
         if item.file_path not in items_by_file:
@@ -472,7 +471,7 @@ def calculate_line_spans(dead_items: List[DeadCodeItem]) -> None:
 
     for file_path, items in items_by_file.items():
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 lines = f.readlines()
 
             tree = ast.parse("".join(lines), filename=file_path)
@@ -640,7 +639,7 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
         lines.append("")
 
         if high_conf:
-            items_by_file: Dict[str, List[DeadCodeItem]] = {}
+            items_by_file: dict[str, list[DeadCodeItem]] = {}
             for item in high_conf:
                 if item.file_path not in items_by_file:
                     items_by_file[item.file_path] = []
@@ -670,7 +669,7 @@ def generate_ascii_report(report: DeadCodeReport, show_details: bool = True) -> 
         lines.append("")
 
         if med_conf:
-            items_by_file: Dict[str, List[DeadCodeItem]] = {}
+            items_by_file: dict[str, list[DeadCodeItem]] = {}
             for item in med_conf:
                 if item.file_path not in items_by_file:
                     items_by_file[item.file_path] = []
@@ -757,8 +756,6 @@ def main():
 
     target_path = Path(sys.argv[1])
     show_details = "--brief" not in sys.argv
-    show_all = "--show-all" in sys.argv
-
     if not target_path.exists():
         print(f"Error: {target_path} does not exist", file=sys.stderr)
         sys.exit(1)

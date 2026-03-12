@@ -5,19 +5,20 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Dict, Optional, Callable
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
-from agent_actions.utils.path_utils import ensure_directory_exists
+
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
     CacheHitEvent,
-    CacheMissEvent,
-    CacheUpdateEvent,
     CacheInvalidationEvent,
     CacheLoadEvent,
+    CacheMissEvent,
+    CacheUpdateEvent,
 )
+from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class BatchRegistryManager:
             registry_path: Path to .batch_registry.json file
         """
         self._registry_path = Path(registry_path)
-        self._cache: Optional[Dict[str, BatchJobEntry]] = None
+        self._cache: dict[str, BatchJobEntry] | None = None
         self._lock = threading.Lock()
         logger.debug("Initialized BatchRegistryManager for %s", registry_path)
 
@@ -66,7 +67,7 @@ class BatchRegistryManager:
             logger.info("Removed batch job entry for %s", file_name)
             return True
 
-    def get_batch_job(self, file_name: str) -> Optional[BatchJobEntry]:
+    def get_batch_job(self, file_name: str) -> BatchJobEntry | None:
         """Retrieve batch job entry by file name."""
         with self._lock:
             self._ensure_cache_loaded()
@@ -83,7 +84,7 @@ class BatchRegistryManager:
 
             return entry
 
-    def get_batch_job_by_id(self, batch_id: str) -> Optional[BatchJobEntry]:
+    def get_batch_job_by_id(self, batch_id: str) -> BatchJobEntry | None:
         """Retrieve batch job entry by batch ID."""
         with self._lock:
             self._ensure_cache_loaded()
@@ -119,7 +120,7 @@ class BatchRegistryManager:
             logger.warning("Batch ID %s not found in registry", batch_id)
             return False
 
-    def get_all_jobs(self) -> Dict[str, BatchJobEntry]:
+    def get_all_jobs(self) -> dict[str, BatchJobEntry]:
         """Get all batch jobs in registry."""
         with self._lock:
             self._ensure_cache_loaded()
@@ -151,7 +152,7 @@ class BatchRegistryManager:
         stats = self.get_registry_stats()
         return stats.overall_status
 
-    def are_all_jobs_completed(self, check_provider: Optional[Callable[[str], str]] = None) -> bool:
+    def are_all_jobs_completed(self, check_provider: Callable[[str], str] | None = None) -> bool:
         """Check if all batch jobs are in terminal state.
 
         Args:
@@ -214,7 +215,7 @@ class BatchRegistryManager:
         if self._cache is None:
             self._cache = self._load_registry()
 
-    def _load_registry(self) -> Dict[str, BatchJobEntry]:
+    def _load_registry(self) -> dict[str, BatchJobEntry]:
         """
         Load registry from disk.
 
@@ -231,7 +232,7 @@ class BatchRegistryManager:
             return {}
 
         try:
-            with open(self._registry_path, "r", encoding="utf-8") as f:
+            with open(self._registry_path, encoding="utf-8") as f:
                 raw_data = json.load(f)
 
             registry = {}
@@ -265,7 +266,7 @@ class BatchRegistryManager:
             )
             return {}
 
-    def _persist_registry(self, registry: Dict[str, BatchJobEntry]) -> None:
+    def _persist_registry(self, registry: dict[str, BatchJobEntry]) -> None:
         """
         Atomically write registry to disk.
 
@@ -299,4 +300,4 @@ class BatchRegistryManager:
         except Exception as e:
             if tmp_path.exists():
                 tmp_path.unlink()
-            raise IOError(f"Failed to persist registry to {self._registry_path}: {e}") from e
+            raise OSError(f"Failed to persist registry to {self._registry_path}: {e}") from e

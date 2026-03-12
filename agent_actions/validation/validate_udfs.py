@@ -1,7 +1,7 @@
 """Validate-udfs CLI command for checking UDF references without running workflows."""
 
 from pathlib import Path
-from typing import Any, Dict, Set
+from typing import Any
 
 import click
 from rich.console import Console
@@ -19,7 +19,7 @@ from agent_actions.input.loaders.udf import (
 from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.errors import format_user_error
-from agent_actions.logging.events import ValidationStartEvent, ValidationCompleteEvent
+from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
 from agent_actions.utils.udf_management.registry import (
     clear_registry,
     get_udf_metadata,
@@ -36,7 +36,7 @@ class ValidateUDFsCommand:
         self.user_code = Path(user_code)
         self.console = Console()
 
-    def validate(self) -> Dict[str, Any]:
+    def validate(self) -> dict[str, Any]:
         """Perform UDF validation and return the result dict."""
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent_file)
         filename = f"{self.agent_name}.yml"
@@ -121,9 +121,9 @@ class ValidateUDFsCommand:
                     "user_code": str(self.user_code),
                 },
             )
-            raise click.ClickException(error_message)
+            raise click.ClickException(error_message) from e
 
-    def _count_impl_references(self, config: dict) -> Set[str]:
+    def _count_impl_references(self, config: dict) -> set[str]:
         """Return set of unique impl reference names from config."""
         impl_refs = set()
 

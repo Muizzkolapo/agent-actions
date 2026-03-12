@@ -1,7 +1,7 @@
 """Safe error formatting utilities that never crash."""
 
 import logging
-from typing import Any, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
     if not isinstance(exc, Exception):
         return exc
 
-    visited: Set[id] = set()
+    visited: set[id] = set()
     current = exc
     depth = 0
 
@@ -81,7 +81,7 @@ def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
         return [exc]
 
     chain = []
-    visited: Set[id] = set()
+    visited: set[id] = set()
     current = exc
     depth = 0
 

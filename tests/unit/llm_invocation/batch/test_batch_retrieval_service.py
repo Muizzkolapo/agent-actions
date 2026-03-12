@@ -4,10 +4,10 @@ TDD: These tests are written BEFORE the implementation to define
 the expected behavior of the retrieval service.
 """
 
-import json
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 
 class TestBatchRetrievalServiceInit:
@@ -207,10 +207,10 @@ class TestRetrieveResults:
 
     def test_raises_external_service_error_on_failure(self, tmp_path):
         """Should raise ExternalServiceError when retrieval fails."""
+        from agent_actions.errors import ExternalServiceError
         from agent_actions.llm.batch.services.retrieval import (
             BatchRetrievalService,
         )
-        from agent_actions.errors import ExternalServiceError
 
         manager = MagicMock()
         manager.get_batch_job_by_id.side_effect = Exception("API error")

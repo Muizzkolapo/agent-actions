@@ -1,9 +1,10 @@
 """Function/UDF error formatter."""
 
 from difflib import SequenceMatcher
-from typing import Dict, Any, List
-from .base import ErrorFormatter
+from typing import Any
+
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class FunctionNotFoundFormatter(ErrorFormatter):
@@ -20,7 +21,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         return False
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         function_name = context.get("function_name", "unknown")
         available_functions = context.get("available_functions", [])
@@ -60,7 +61,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             docs_url="https://docs.agent-actions.com/user-defined-functions",
         )
 
-    def _find_similar_functions(self, target: str, available: List[str]) -> List[str]:
+    def _find_similar_functions(self, target: str, available: list[str]) -> list[str]:
         """Find similar function names using substring and similarity matching."""
         if not available:
             return []

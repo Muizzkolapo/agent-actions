@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ class ComposedValidator:
         if not validators:
             raise ValueError("ComposedValidator requires at least one validator")
         self._validators = validators
-        self._last_failed: Optional[ResponseValidator] = None
+        self._last_failed: ResponseValidator | None = None
 
     def validate(self, response: Any) -> bool:  # noqa: D401
         for v in self._validators:

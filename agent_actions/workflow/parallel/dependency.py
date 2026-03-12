@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.workspace_index import WorkspaceIndex
@@ -34,7 +35,7 @@ class WorkflowDependencyOrchestrator:
         self.console = console
         self.workflow_factory = workflow_factory
         self.artifact_linker = ArtifactLinker(workflows_root)
-        self._workspace_index: Optional[WorkspaceIndex] = None
+        self._workspace_index: WorkspaceIndex | None = None
 
     @property
     def workspace_index(self) -> WorkspaceIndex:
@@ -47,8 +48,8 @@ class WorkflowDependencyOrchestrator:
     def resolve_upstream_workflows(
         self,
         agent_configs: dict,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
+        user_code_path: str | None,
+        default_path: str | None,
         use_tools: bool,
     ) -> bool:
         """Recursively resolve and execute upstream dependencies.
@@ -83,10 +84,10 @@ class WorkflowDependencyOrchestrator:
     def _execute_upstream_workflow(
         self,
         upstream_name: str,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
+        user_code_path: str | None,
+        default_path: str | None,
         use_tools: bool,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Execute a single upstream workflow and link artifacts.
 
         Returns:
@@ -158,14 +159,14 @@ class WorkflowDependencyOrchestrator:
             return False
 
         try:
-            with open(upstream_status_file, "r", encoding="utf-8") as f:
+            with open(upstream_status_file, encoding="utf-8") as f:
                 status_data = json.load(f)
             return all(details.get("status") == "completed" for details in status_data.values())
-        except (OSError, IOError, json.JSONDecodeError, KeyError):
+        except (OSError, json.JSONDecodeError, KeyError):
             return False
 
     def resolve_downstream_workflows(
-        self, user_code_path: Optional[str], default_path: Optional[str], use_tools: bool
+        self, user_code_path: str | None, default_path: str | None, use_tools: bool
     ) -> bool:
         """Execute all downstream workflows after current workflow completes.
 
@@ -209,10 +210,10 @@ class WorkflowDependencyOrchestrator:
     def _execute_downstream_workflow(
         self,
         downstream_name: str,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
+        user_code_path: str | None,
+        default_path: str | None,
         use_tools: bool,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Execute a single downstream workflow. Return None if batch pending."""
         self.console.print(
             f"\n[bold cyan]>> Downstream: Executing workflow '{downstream_name}'...[/bold cyan]"

@@ -124,11 +124,11 @@ def generate_typeddict(
         "",
         "",
         f"class {class_name}(TypedDict, total=False):",
-        f'    """Input schema for function.',
-        f"",
+        '    """Input schema for function.',
+        "",
         f"    Source: {source_node} output",
         f"    Destination: {dest_node} output",
-        f'    """',
+        '    """',
     ]
 
     if core_fields:

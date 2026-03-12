@@ -2,8 +2,8 @@
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 from agent_actions.errors import SchemaValidationError
 
@@ -17,22 +17,22 @@ class SchemaValidationReport:
     action_name: str
     schema_name: str
     is_compliant: bool
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # Field analysis
-    expected_fields: Set[str] = field(default_factory=set)
-    actual_fields: Set[str] = field(default_factory=set)
-    missing_required: List[str] = field(default_factory=list)
-    missing_optional: List[str] = field(default_factory=list)
-    extra_fields: List[str] = field(default_factory=list)
+    expected_fields: set[str] = field(default_factory=set)
+    actual_fields: set[str] = field(default_factory=set)
+    missing_required: list[str] = field(default_factory=list)
+    missing_optional: list[str] = field(default_factory=list)
+    extra_fields: list[str] = field(default_factory=list)
 
     # Type analysis
-    type_errors: Dict[str, Tuple[str, str]] = field(
+    type_errors: dict[str, tuple[str, str]] = field(
         default_factory=dict
     )  # field: (expected, actual)
 
     # Validation details
-    validation_errors: List[str] = field(default_factory=list)
+    validation_errors: list[str] = field(default_factory=list)
 
     def format_report(self) -> str:
         """Format a human-readable validation report."""
@@ -85,7 +85,7 @@ class SchemaValidationReport:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert report to dictionary for serialization."""
         return {
             "action_name": self.action_name,
@@ -106,7 +106,7 @@ class SchemaValidationReport:
 
 def validate_output_against_schema(
     llm_output: Any,
-    schema: Dict[str, Any],
+    schema: dict[str, Any],
     action_name: str,
     strict_mode: bool = False,
 ) -> SchemaValidationReport:
@@ -153,11 +153,11 @@ def validate_output_against_schema(
     )
 
 
-def _extract_schema_fields(schema: Dict[str, Any]) -> Tuple[Set[str], Set[str], Dict[str, str]]:
+def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], dict[str, str]]:
     """Return (all_fields, required_fields, field_types) from a schema."""
-    all_fields: Set[str] = set()
-    required_fields: Set[str] = set()
-    field_types: Dict[str, str] = {}
+    all_fields: set[str] = set()
+    required_fields: set[str] = set()
+    field_types: dict[str, str] = {}
 
     # Handle unified format with 'fields' array
     if "fields" in schema:
@@ -198,7 +198,7 @@ def _extract_schema_fields(schema: Dict[str, Any]) -> Tuple[Set[str], Set[str], 
     return all_fields, required_fields, field_types
 
 
-def _extract_output_fields(llm_output: Any) -> Set[str]:
+def _extract_output_fields(llm_output: Any) -> set[str]:
     """Extract field names from LLM output."""
     if isinstance(llm_output, dict):
         return set(llm_output.keys())
@@ -211,10 +211,10 @@ def _extract_output_fields(llm_output: Any) -> Set[str]:
 
 def _check_field_types(
     llm_output: Any,
-    field_types: Dict[str, str],
-) -> Dict[str, Tuple[str, str]]:
+    field_types: dict[str, str],
+) -> dict[str, tuple[str, str]]:
     """Return field-to-(expected, actual) mapping for type mismatches."""
-    type_errors: Dict[str, Tuple[str, str]] = {}
+    type_errors: dict[str, tuple[str, str]] = {}
 
     if not isinstance(llm_output, dict):
         return type_errors
@@ -253,7 +253,7 @@ def _check_field_types(
 
 def validate_and_raise_if_invalid(
     llm_output: Any,
-    schema: Dict[str, Any],
+    schema: dict[str, Any],
     action_name: str,
     strict_mode: bool = False,
 ) -> SchemaValidationReport:

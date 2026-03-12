@@ -1,7 +1,7 @@
 """Chunking strategies for field-level text processing."""
 
 from abc import ABC, abstractmethod
-from typing import List
+
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 
 
@@ -15,7 +15,7 @@ class ChunkingStrategy(ABC):
     @abstractmethod
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text content into smaller chunks according to the strategy."""
 
 
@@ -32,7 +32,7 @@ class TiktokenChunkingStrategy(ChunkingStrategy):
 
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text into chunks based on token count using tiktoken tokenizer."""
         if not text_content:
             return [""]
@@ -55,7 +55,7 @@ class CharBasedChunkingStrategy(ChunkingStrategy):
 
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text into chunks based on character count."""
         if not text_content:
             return [""]
@@ -74,7 +74,7 @@ class SpacyChunkingStrategy(ChunkingStrategy):
 
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text into chunks based on spaCy sentence boundaries."""
         if not text_content:
             return [""]

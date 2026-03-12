@@ -4,17 +4,17 @@ import asyncio
 import logging
 import traceback
 from pathlib import Path
-from typing import Literal, Optional, cast
+from typing import Literal, cast
 
 import click
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
-from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.logging import LoggerFactory
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 
 logger = logging.getLogger(__name__)
 from agent_actions.validation.run_validator import RunCommandArgs
@@ -173,7 +173,7 @@ class RunCommand:
 @requires_project
 def run(
     agent: str,
-    user_code: Optional[str],
+    user_code: str | None,
     use_tools: bool,
     execution_mode: str = "auto",
     concurrency_limit: int = 5,

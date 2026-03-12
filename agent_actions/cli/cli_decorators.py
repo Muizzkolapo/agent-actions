@@ -1,9 +1,11 @@
 """CLI decorators for agent-actions commands."""
 
-import os
 import functools
+import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Any
+from typing import Any
+
 import click
 
 from agent_actions.cli.project_root import ensure_in_project

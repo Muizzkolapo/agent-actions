@@ -6,19 +6,20 @@ across all LLM provider clients by centralising the extraction logic
 with vendor-specific key mapping and stop-sequence normalisation.
 """
 
-from typing import Any, Dict, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 # Core generation parameters checked by all providers
 _CORE_PARAMS = ("temperature", "max_tokens", "top_p", "stop")
 
 
 def extract_generation_params(
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     *,
-    key_map: Optional[Dict[str, str]] = None,
+    key_map: dict[str, str] | None = None,
     stop_as_list: bool = False,
     extra_params: Sequence[str] = (),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Extract generation parameters from agent config with vendor-specific key mapping.
 
     Args:
@@ -37,7 +38,7 @@ def extract_generation_params(
         Only includes params whose value in *agent_config* is not ``None``.
     """
     mapping = key_map or {}
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
 
     for param in (*_CORE_PARAMS, *extra_params):
         value = agent_config.get(param)

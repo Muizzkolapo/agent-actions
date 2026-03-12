@@ -1,8 +1,8 @@
 """Detector for unknown/unexpected keys in agent configuration."""
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
     AgentEntryValidationResult,
+    BaseAgentEntryValidator,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,

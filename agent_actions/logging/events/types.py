@@ -26,7 +26,7 @@ Event Code Prefixes:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 
@@ -771,7 +771,7 @@ class CacheHitEvent(BaseEvent):
 
     cache_type: str = ""
     key: str = ""
-    hit_rate: Optional[float] = None
+    hit_rate: float | None = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -893,7 +893,7 @@ class CacheStatsEvent(BaseEvent):
     hit_count: int = 0
     miss_count: int = 0
     total_entries: int = 0
-    size_bytes: Optional[int] = None
+    size_bytes: int | None = None
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -929,7 +929,7 @@ class TemplateRenderingFailedEvent(BaseEvent):
     """Fired when template rendering fails due to undefined variables."""
 
     agent_name: str = ""
-    missing_variables: List[str] = field(default_factory=list)
+    missing_variables: list[str] = field(default_factory=list)
     error_message: str = ""
 
     def __post_init__(self) -> None:
@@ -1508,7 +1508,7 @@ class CLIArgumentParsingEvent(BaseEvent):
     """Fired before CLI arguments are parsed (raw argv, not Click-parsed)."""
 
     command: str = ""
-    args: Dict[str, Any] = field(default_factory=dict)
+    args: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -2052,7 +2052,7 @@ class DataValidationFailedEvent(BaseEvent):
     """Fired when data validation fails."""
 
     validator_type: str = ""
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
@@ -2518,8 +2518,8 @@ class ContextNamespaceLoadedEvent(BaseEvent):
     action_name: str = ""
     namespace: str = ""
     field_count: int = 0
-    fields: List[str] = field(default_factory=list)
-    dropped_fields: List[str] = field(default_factory=list)
+    fields: list[str] = field(default_factory=list)
+    dropped_fields: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -2578,9 +2578,9 @@ class ContextScopeAppliedEvent(BaseEvent):
     observe_count: int = 0
     passthrough_count: int = 0
     drop_count: int = 0
-    observe_fields: List[str] = field(default_factory=list)
-    passthrough_fields: List[str] = field(default_factory=list)
-    drop_fields: List[str] = field(default_factory=list)
+    observe_fields: list[str] = field(default_factory=list)
+    passthrough_fields: list[str] = field(default_factory=list)
+    drop_fields: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -2610,8 +2610,8 @@ class ContextDependencyInferredEvent(BaseEvent):
     """Fired when dependencies are auto-inferred from context_scope."""
 
     action_name: str = ""
-    input_sources: List[str] = field(default_factory=list)
-    context_sources: List[str] = field(default_factory=list)
+    input_sources: list[str] = field(default_factory=list)
+    context_sources: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
@@ -2638,7 +2638,7 @@ class ContextFieldNotFoundEvent(BaseEvent):
     action_name: str = ""
     field_ref: str = ""
     namespace: str = ""
-    available_fields: List[str] = field(default_factory=list)
+    available_fields: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN

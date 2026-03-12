@@ -1,7 +1,5 @@
 """Tests for conflict detector functionality."""
 
-import pytest
-
 from agent_actions.validation.static_analyzer import (
     AffectedReference,
     Conflict,

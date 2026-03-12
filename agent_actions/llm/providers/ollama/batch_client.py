@@ -12,16 +12,17 @@ import os
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-
-from agent_actions.config.defaults import OllamaDefaults
+from typing import Any
 
 from ollama import Client
-from ..batch_base import BaseBatchClient, BatchTask, BatchResult
-from ..mixins import OpenAICompatibleResponseMixin
+
+from agent_actions.config.defaults import OllamaDefaults
 from agent_actions.llm.providers.ollama.failure_injection import (
     should_fail_batch_record,
 )
+
+from ..batch_base import BaseBatchClient, BatchResult, BatchTask
+from ..mixins import OpenAICompatibleResponseMixin
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     the same interface as true async clients (OpenAI, Anthropic).
     """
 
-    def __init__(self, base_url: Optional[str] = None):
+    def __init__(self, base_url: str | None = None):
         """
         Initialize Ollama batch provider.
 
@@ -45,8 +46,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         self.client = Client(host=self.base_url)
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Format task as OpenAI-compatible JSONL (for consistency).
         """
@@ -88,12 +89,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return 1.0
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSONL file for Ollama."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
-    def _extract_ollama_schema(self, schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def _extract_ollama_schema(self, schema: dict[str, Any] | None) -> dict[str, Any] | None:
         """
         Extract the inner JSON schema for Ollama's format parameter.
 
@@ -113,14 +114,14 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         return schema
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Process batch synchronously with Ollama (no actual API submission)."""
         # Generate batch ID
         batch_id = f"batch_{uuid.uuid4().hex}"
 
         # Read tasks from input file
         tasks = []
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     tasks.append(json.loads(line))
@@ -216,8 +217,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return raw_status
 
     def retrieve_results(
-        self, batch_id: str, output_directory: Optional[str] = None
-    ) -> List[BatchResult]:
+        self, batch_id: str, output_directory: str | None = None
+    ) -> list[BatchResult]:
         """
         Retrieve results from output JSONL file.
 

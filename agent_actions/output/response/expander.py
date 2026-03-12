@@ -13,34 +13,35 @@ Implementation details are split across focused submodules:
 """
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
-from agent_actions.config.types import AgentConfigMap, AgentEntryDict, AgentConfigList
+from agent_actions.config.types import AgentConfigList, AgentConfigMap, AgentEntryDict
+
 from .config_fields import inherit_simple_fields
-from .expander_validation import (
-    validate_vendor_exists,
-    validate_action_name,
-    validate_required_fields,
-)
-from .expander_schema import (
-    process_schema_config,
-    compile_output_schema,
-)
 from .expander_action_types import (
     process_guard_config,
-    process_tool_action,
     process_hitl_action,
-)
-from .expander_merge import (
-    merge_directive_value,
-    deep_merge_context_scope,
-    process_chunk_config,
-    initialize_optional_fields,
+    process_tool_action,
 )
 from .expander_guard_validation import (
     build_schema_registry,
     validate_agent_guards,
     validate_guard_references,
+)
+from .expander_merge import (
+    deep_merge_context_scope,
+    initialize_optional_fields,
+    merge_directive_value,
+    process_chunk_config,
+)
+from .expander_schema import (
+    compile_output_schema,
+    process_schema_config,
+)
+from .expander_validation import (
+    validate_action_name,
+    validate_required_fields,
+    validate_vendor_exists,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,11 +63,11 @@ class ActionExpander:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
+    def _validate_vendor_exists(vendor: str | None, action_name: str) -> None:
         return validate_vendor_exists(vendor, action_name)
 
     @staticmethod
-    def _validate_action_name(action_name: Optional[str]) -> None:
+    def _validate_action_name(action_name: str | None) -> None:
         return validate_action_name(action_name)
 
     @staticmethod
@@ -79,31 +80,31 @@ class ActionExpander:
 
     @staticmethod
     def _deep_merge_context_scope(
-        defaults_scope: Optional[Dict[str, Any]], action_scope: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        defaults_scope: dict[str, Any] | None, action_scope: dict[str, Any] | None
+    ) -> dict[str, Any]:
         return deep_merge_context_scope(defaults_scope, action_scope)
 
     @staticmethod
     def _process_schema_config(
-        agent: AgentEntryDict, action: Dict[str, Any], template_replacer
+        agent: AgentEntryDict, action: dict[str, Any], template_replacer
     ) -> None:
         return process_schema_config(agent, action, template_replacer)
 
     @staticmethod
-    def _process_guard_config(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
+    def _process_guard_config(agent: AgentEntryDict, action: dict[str, Any]) -> None:
         return process_guard_config(agent, action)
 
     @staticmethod
-    def _process_tool_action(agent: AgentEntryDict, action: Dict[str, Any], run_mode: str) -> None:
+    def _process_tool_action(agent: AgentEntryDict, action: dict[str, Any], run_mode: str) -> None:
         return process_tool_action(agent, action, run_mode)
 
     @staticmethod
-    def _compile_output_schema(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
+    def _compile_output_schema(agent: AgentEntryDict, action: dict[str, Any]) -> None:
         return compile_output_schema(agent, action)
 
     @staticmethod
     def _process_chunk_config(
-        agent: AgentEntryDict, action: Dict[str, Any], defaults: Dict[str, Any]
+        agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
     ) -> None:
         return process_chunk_config(agent, action, defaults)
 
@@ -112,15 +113,15 @@ class ActionExpander:
         return initialize_optional_fields(agent)
 
     @staticmethod
-    def _build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
+    def _build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
         return build_schema_registry(agents)
 
     @staticmethod
     def _validate_agent_guards(
         agent: AgentEntryDict,
         validator,
-        agent_indices: Dict[str, int],
-        action_schemas: Dict[str, Any],
+        agent_indices: dict[str, int],
+        action_schemas: dict[str, Any],
     ) -> list[str]:
         return validate_agent_guards(agent, validator, agent_indices, action_schemas)
 
@@ -165,9 +166,9 @@ class ActionExpander:
 
     @staticmethod
     def _expand_versioned_action(
-        action: Dict[str, Any],
-        version_config: Dict[str, Any],
-        defaults: Dict[str, Any],
+        action: dict[str, Any],
+        version_config: dict[str, Any],
+        defaults: dict[str, Any],
     ) -> AgentConfigList:
         """
         Expand a versioned action into multiple agent configurations.
@@ -210,7 +211,7 @@ class ActionExpander:
 
             # Compile version context for Jinja2 template rendering
             # This enables {{ i }}, {{ idx }}, {{ version.length }}, etc. in prompts
-            version_context: Dict[str, Any] = {
+            version_context: dict[str, Any] = {
                 "i": i,
                 "idx": idx,
                 "length": total_versions,
@@ -233,8 +234,8 @@ class ActionExpander:
 
     @staticmethod
     def _create_agent_from_action(
-        action: Dict[str, Any],
-        defaults: Dict[str, Any],
+        action: dict[str, Any],
+        defaults: dict[str, Any],
         agent: AgentEntryDict,
         template_replacer,
     ) -> AgentEntryDict:
@@ -338,7 +339,7 @@ class ActionExpander:
         return agent
 
     @staticmethod
-    def expand_actions_to_agents(action_config: Dict[str, Any]) -> AgentConfigMap:
+    def expand_actions_to_agents(action_config: dict[str, Any]) -> AgentConfigMap:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
 

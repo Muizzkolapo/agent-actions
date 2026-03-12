@@ -1,8 +1,8 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
     AgentEntryValidationResult,
+    BaseAgentEntryValidator,
 )
 
 

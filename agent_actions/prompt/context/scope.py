@@ -6,8 +6,8 @@
 import json
 import logging
 from collections import Counter
-from typing import Dict, List, Tuple, Any, Optional, TYPE_CHECKING
 from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -15,10 +15,10 @@ if TYPE_CHECKING:
 from agent_actions.errors import ConfigurationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
+    ContextDependencyInferredEvent,
     ContextFieldSkippedEvent,
     ContextNamespaceLoadedEvent,
     ContextScopeAppliedEvent,
-    ContextDependencyInferredEvent,
 )
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 from agent_actions.utils.dict import get_nested_value, nested_field_exists, set_nested_value
@@ -54,7 +54,7 @@ class ContextScopeProcessor:
     """
 
     @staticmethod
-    def parse_field_reference(field_ref: str) -> Tuple[str, str]:
+    def parse_field_reference(field_ref: str) -> tuple[str, str]:
         """
         Parse field reference in 'action.field' format, returning (action_name, field_name).
 
@@ -97,8 +97,8 @@ class ContextScopeProcessor:
 
     @staticmethod
     def extract_field_names_from_references(
-        field_refs: List[str], _return_type: str = "list"
-    ) -> List[str]:
+        field_refs: list[str], _return_type: str = "list"
+    ) -> list[str]:
         """
         Extract field names from list of field references.
 
@@ -132,7 +132,7 @@ class ContextScopeProcessor:
         return field_names
 
     @staticmethod
-    def extract_action_names_from_context_scope(context_scope: Optional[Dict]) -> set:
+    def extract_action_names_from_context_scope(context_scope: dict | None) -> set:
         """
         Extract unique action names referenced in context_scope.
 
@@ -179,7 +179,7 @@ class ContextScopeProcessor:
         return referenced_actions
 
     @staticmethod
-    def extract_action_names_from_template(template: Optional[str]) -> set:
+    def extract_action_names_from_template(template: str | None) -> set:
         """
         Extract unique action names referenced in a Jinja2 template.
 
@@ -235,7 +235,7 @@ class ContextScopeProcessor:
         return action_name
 
     @staticmethod
-    def _is_parallel_branches(dependencies: List[str]) -> bool:
+    def _is_parallel_branches(dependencies: list[str]) -> bool:
         """
         Detect if dependencies are parallel branches of the same action.
 
@@ -260,7 +260,7 @@ class ContextScopeProcessor:
         return len(base_names) == 1
 
     @staticmethod
-    def _get_version_branches(base_name: str, dependencies: List[str]) -> List[str]:
+    def _get_version_branches(base_name: str, dependencies: list[str]) -> list[str]:
         """
         Find all dependencies that are version branches of a base name.
 
@@ -286,9 +286,9 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _resolve_input_sources_for_fan_in(
-        dependencies: List[str],
-        primary_dependency: Optional[str] = None,
-    ) -> Tuple[List[str], List[str]]:
+        dependencies: list[str],
+        primary_dependency: str | None = None,
+    ) -> tuple[list[str], list[str]]:
         """
         Resolve which dependencies are input sources vs context sources for fan-in pattern.
 
@@ -347,8 +347,8 @@ class ContextScopeProcessor:
 
     @staticmethod
     def infer_dependencies(
-        action_config: Dict, workflow_actions: List[str], action_name: str = "unknown"
-    ) -> Tuple[List[str], List[str]]:
+        action_config: dict, workflow_actions: list[str], action_name: str = "unknown"
+    ) -> tuple[list[str], list[str]]:
         """
         Infer input sources and context sources from action configuration.
 
@@ -499,8 +499,8 @@ class ContextScopeProcessor:
         # 4. Expand version base names to their variants (e.g., extract_raw_qa -> [extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3])
         # This handles version_consumption where context_scope references the base name
         def expand_version_base_names(
-            action_list: List[str],
-        ) -> List[str]:
+            action_list: list[str],
+        ) -> list[str]:
             """Expand version base names to their actual variants in the workflow."""
             expanded = []
             for action in action_list:
@@ -590,7 +590,7 @@ class ContextScopeProcessor:
         return input_sources_expanded, context_sources_expanded
 
     @staticmethod
-    def extract_field_value(field_context: Dict, action_name: str, field_name: str) -> Any:
+    def extract_field_value(field_context: dict, action_name: str, field_name: str) -> Any:
         """Extract field value from nested field_context structure, returning None if not found."""
         if not isinstance(field_context, dict):
             return None
@@ -614,7 +614,7 @@ class ContextScopeProcessor:
         return None
 
     @staticmethod
-    def extract_action_fields(field_context: Dict, action_name: str) -> Optional[Dict]:
+    def extract_action_fields(field_context: dict, action_name: str) -> dict | None:
         """Return all fields for an action if present and dict-like, otherwise None."""
         if not isinstance(field_context, dict):
             return None
@@ -627,11 +627,11 @@ class ContextScopeProcessor:
 
     @staticmethod
     def apply_context_scope(
-        field_context: Dict,
-        context_scope: Dict,
-        static_data: Optional[Dict] = None,
+        field_context: dict,
+        context_scope: dict,
+        static_data: dict | None = None,
         action_name: str = "unknown",
-    ) -> Tuple[Dict, Dict, Dict]:
+    ) -> tuple[dict, dict, dict]:
         """
         Apply context_scope rules, returning (prompt_context, llm_context, passthrough_fields).
 
@@ -774,7 +774,7 @@ class ContextScopeProcessor:
         return (prompt_context, llm_context, passthrough_fields)
 
     @staticmethod
-    def format_llm_context(llm_context: Dict) -> str:
+    def format_llm_context(llm_context: dict) -> str:
         """Format llm_context dict as readable text for LLM message injection."""
         if not llm_context:
             return ""
@@ -789,7 +789,7 @@ class ContextScopeProcessor:
         return "\n".join(lines)
 
     @staticmethod
-    def merge_passthrough_fields(llm_response: List[Dict], passthrough_fields: Dict) -> List[Dict]:
+    def merge_passthrough_fields(llm_response: list[dict], passthrough_fields: dict) -> list[dict]:
         """Merge passthrough fields into LLM response.
 
         Returns a new structure — the caller's original is never mutated.
@@ -825,7 +825,7 @@ class ContextScopeProcessor:
         return llm_response
 
     @staticmethod
-    def _extract_content_data(source_content: Any) -> Dict:
+    def _extract_content_data(source_content: Any) -> dict:
         """
         Extract content portion from record structure.
 
@@ -845,8 +845,8 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _enrich_source_namespace(
-        base_namespace: Dict[str, Any], current_item: Optional[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        base_namespace: dict[str, Any], current_item: dict[str, Any] | None
+    ) -> dict[str, Any]:
         """
         Merge fallback fields into the source namespace from the current item.
 
@@ -868,15 +868,15 @@ class ContextScopeProcessor:
     @staticmethod
     def _load_historical_node(
         action_name: str,
-        lineage: List[str],
+        lineage: list[str],
         source_guid: str,
         file_path: str,
-        agent_indices: Dict[str, int],
-        parent_target_id: Optional[str] = None,
-        root_target_id: Optional[str] = None,
-        output_directory: Optional[str] = None,
+        agent_indices: dict[str, int],
+        parent_target_id: str | None = None,
+        root_target_id: str | None = None,
+        output_directory: str | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> Optional[Dict]:
+    ) -> dict | None:
         """
         Load historical node data from saved files or storage backend.
 
@@ -895,8 +895,8 @@ class ContextScopeProcessor:
             storage_backend: Optional storage backend for SQLite/TinyDB queries
         """
         from agent_actions.input.context.historical import (
-            HistoricalNodeDataLoader,
             HistoricalDataRequest,
+            HistoricalNodeDataLoader,
         )
 
         request = HistoricalDataRequest(
@@ -916,8 +916,8 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _detect_version_namespaces(
-        input_data: Dict[str, Any], input_sources: List[str]
-    ) -> List[str]:
+        input_data: dict[str, Any], input_sources: list[str]
+    ) -> list[str]:
         """
         Detect if input_data contains nested version namespaces from version_consumption merge.
 
@@ -978,13 +978,13 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _filter_and_store_fields(
-        field_context: Dict,
+        field_context: dict,
         name: str,
-        data: Dict,
-        allowed_fields: Optional[List[str]],
+        data: dict,
+        allowed_fields: list[str] | None,
         source_type: str = "FIELD",
         warn_missing: bool = False,
-        metadata_collector: Optional[Dict] = None,
+        metadata_collector: dict | None = None,
     ) -> None:
         """
         Filter data by allowed_fields and store in field_context.
@@ -1064,8 +1064,8 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _extract_allowed_fields_per_dependency(
-        dependencies: List[str], context_scope: Optional[Dict], action_name: str = "unknown"
-    ) -> Dict[str, Optional[List[str]]]:
+        dependencies: list[str], context_scope: dict | None, action_name: str = "unknown"
+    ) -> dict[str, list[str] | None]:
         """
         Extract which fields are allowed for each dependency from context_scope.
 
@@ -1100,7 +1100,7 @@ class ContextScopeProcessor:
                 )
             return {}
 
-        allowed_per_dep: Dict[str, Optional[List[str]]] = {}
+        allowed_per_dep: dict[str, list[str] | None] = {}
 
         # Collect field references from observe and passthrough
         # (both need to be loaded into field_context)
@@ -1202,21 +1202,21 @@ class ContextScopeProcessor:
     @staticmethod
     # Complex field context building with historical data requires all these parameters
     def build_field_context_with_history(
-        contents: Dict,  # Legacy parameter, not used
+        contents: dict,  # Legacy parameter, not used
         agent_name: str,
-        agent_config: Optional[Dict],
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,  # Legacy, not used
-        source_content: Optional[Any] = None,
-        version_context: Optional[Dict] = None,
-        workflow_metadata: Optional[Dict] = None,
-        current_item: Optional[Dict] = None,
-        file_path: Optional[str] = None,
-        context_scope: Optional[Dict] = None,
-        output_directory: Optional[str] = None,
+        agent_config: dict | None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,  # Legacy, not used
+        source_content: Any | None = None,
+        version_context: dict | None = None,
+        workflow_metadata: dict | None = None,
+        current_item: dict | None = None,
+        file_path: str | None = None,
+        context_scope: dict | None = None,
+        output_directory: str | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-        metadata_collector: Optional[Dict] = None,
-    ) -> Dict:
+        metadata_collector: dict | None = None,
+    ) -> dict:
         """
         Build field context with explicit namespace structure.
 
@@ -1653,9 +1653,9 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _resolve_observe_refs(
-        observe_refs: List[str],
+        observe_refs: list[str],
         action_name: str = "unknown",
-    ) -> List[Tuple[str, str, str]]:
+    ) -> list[tuple[str, str, str]]:
         """Parse observe refs and detect bare-key collisions.
 
         Returns list of ``(namespace, field_name, output_key)`` triples.
@@ -1665,8 +1665,8 @@ class ContextScopeProcessor:
         * *output_key* – the key to use in the filtered output dict.  Bare by
           default; qualified (``namespace.field``) when collisions are detected.
         """
-        parsed: List[Tuple[str, str, str]] = []  # will be re-keyed below
-        valid_pairs: List[Tuple[str, str]] = []  # (namespace, field_name)
+        parsed: list[tuple[str, str, str]] = []  # will be re-keyed below
+        valid_pairs: list[tuple[str, str]] = []  # (namespace, field_name)
 
         for ref in observe_refs:
             try:
@@ -1696,13 +1696,13 @@ class ContextScopeProcessor:
     @staticmethod
     def _load_file_mode_cross_namespace_data(
         needed_ns: set,
-        record: Dict,
+        record: dict,
         agent_name: str,
-        agent_indices: Optional[Dict[str, int]] = None,
-        file_path: Optional[str] = None,
-        source_record: Optional[Dict] = None,
+        agent_indices: dict[str, int] | None = None,
+        file_path: str | None = None,
+        source_record: dict | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> Dict[str, Dict]:
+    ) -> dict[str, dict]:
         """Load data for namespaces NOT present in the per-record content.
 
         Returns ``{namespace: {field: value}}`` for source and context-dep
@@ -1716,7 +1716,7 @@ class ContextScopeProcessor:
         Called once per unique ancestry key in a file; the caller caches the
         result so that records sharing the same key skip redundant I/O.
         """
-        cross_ns: Dict[str, Dict] = {}
+        cross_ns: dict[str, dict] = {}
 
         # Defensive copy — we mutate via discard below.
         needed_ns = set(needed_ns)
@@ -1812,14 +1812,14 @@ class ContextScopeProcessor:
 
     @staticmethod
     def apply_observe_for_file_mode(
-        data: List[Dict],
-        agent_config: Dict,
+        data: list[dict],
+        agent_config: dict,
         agent_name: str,
-        agent_indices: Optional[Dict[str, int]] = None,
-        file_path: Optional[str] = None,
-        source_data: Optional[List[Dict]] = None,
+        agent_indices: dict[str, int] | None = None,
+        file_path: str | None = None,
+        source_data: list[dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Namespace-aware observe filter for file-mode (array-level) data.
 
         Replaces the simplified ``_apply_observe_filter`` which stripped
@@ -1915,7 +1915,7 @@ class ContextScopeProcessor:
                 needed_ns.add(ns)
 
         # Build source index for matching source records by source_guid.
-        source_index: Dict[Optional[str], Dict] = {}
+        source_index: dict[str | None, dict] = {}
         if "source" in needed_ns and source_data:
             for src in source_data:
                 sguid = src.get("source_guid") if isinstance(src, dict) else None
@@ -1926,8 +1926,8 @@ class ContextScopeProcessor:
         # Historical lookups depend on source_guid + lineage + parent/root target IDs,
         # so the cache key must include all discriminators to avoid returning stale
         # data when records share a source_guid but diverge in ancestry.
-        cross_ns_cache: Dict[tuple, Dict[str, Dict]] = {}
-        filtered: List[Dict] = []
+        cross_ns_cache: dict[tuple, dict[str, dict]] = {}
+        filtered: list[dict] = []
         for item in data:
             if not isinstance(item, dict):
                 filtered.append(item)
@@ -1963,7 +1963,7 @@ class ContextScopeProcessor:
             else:
                 cross_ns_data = {}
 
-            ordered: Dict[str, Any] = {}
+            ordered: dict[str, Any] = {}
             for ns, field, output_key in resolved:
                 # Cross-namespace data takes priority for non-input namespaces.
                 if ns in cross_ns_data and field in cross_ns_data[ns]:

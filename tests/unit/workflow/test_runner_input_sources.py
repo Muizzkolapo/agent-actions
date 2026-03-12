@@ -6,13 +6,12 @@ default behavior, string shorthand, and security constraints.
 
 import json
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.errors import ConfigurationError, FileSystemError
-
+from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 
 # ---------------------------------------------------------------------------
 # Helpers

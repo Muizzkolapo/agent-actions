@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Dict, List, Any, Optional, Type
+from typing import Any
 
 NODE_LEVEL_RECORD_ID = "__node__"
 """Sentinel record_id for node-level disposition signals."""
@@ -40,12 +40,12 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def write_target(self, action_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
+    def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
         """Write target data for a specific node."""
         ...
 
     @abstractmethod
-    def read_target(self, action_name: str, relative_path: str) -> List[Dict[str, Any]]:
+    def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Read target data for a specific node.
 
         Raises:
@@ -57,14 +57,14 @@ class StorageBackend(ABC):
     def write_source(
         self,
         relative_path: str,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         enable_deduplication: bool = True,
     ) -> str:
         """Write source data with optional deduplication by source_guid."""
         ...
 
     @abstractmethod
-    def read_source(self, relative_path: str) -> List[Dict[str, Any]]:
+    def read_source(self, relative_path: str) -> list[dict[str, Any]]:
         """Read source data.
 
         Raises:
@@ -73,12 +73,12 @@ class StorageBackend(ABC):
         ...
 
     @abstractmethod
-    def list_target_files(self, action_name: str) -> List[str]:
+    def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         ...
 
     @abstractmethod
-    def list_source_files(self) -> List[str]:
+    def list_source_files(self) -> list[str]:
         """List all source file paths."""
         ...
 
@@ -88,23 +88,23 @@ class StorageBackend(ABC):
         action_name: str,
         limit: int = 10,
         offset: int = 0,
-        relative_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        relative_path: str | None = None,
+    ) -> dict[str, Any]:
         """Preview target data for a node with pagination."""
         ...
 
     @abstractmethod
-    def get_storage_stats(self) -> Dict[str, Any]:
+    def get_storage_stats(self) -> dict[str, Any]:
         """Get storage statistics (record counts, DB size, per-node breakdown)."""
         ...
 
-    def set_disposition(
+    def set_disposition(  # noqa: B027
         self,
         action_name: str,
         record_id: str,
         disposition: str,
-        reason: Optional[str] = None,
-        relative_path: Optional[str] = None,
+        reason: str | None = None,
+        relative_path: str | None = None,
     ) -> None:
         """Write a disposition record (use NODE_LEVEL_RECORD_ID for node-level signals)."""
         # No-op: subclass must override to persist dispositions.
@@ -112,9 +112,9 @@ class StorageBackend(ABC):
     def get_disposition(
         self,
         action_name: str,
-        record_id: Optional[str] = None,
-        disposition: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        record_id: str | None = None,
+        disposition: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Query disposition records with optional filters."""
         return []
 
@@ -122,7 +122,7 @@ class StorageBackend(ABC):
         self,
         action_name: str,
         disposition: str,
-        record_id: Optional[str] = None,
+        record_id: str | None = None,
     ) -> bool:
         """Check whether at least one matching disposition exists."""
         return False
@@ -130,13 +130,13 @@ class StorageBackend(ABC):
     def clear_disposition(
         self,
         action_name: str,
-        disposition: Optional[str] = None,
-        record_id: Optional[str] = None,
+        disposition: str | None = None,
+        record_id: str | None = None,
     ) -> int:
         """Delete matching disposition records. Returns count deleted."""
         return 0
 
-    def close(self) -> None:
+    def close(self) -> None:  # noqa: B027
         """Close the storage backend and release resources."""
         pass
 
@@ -146,9 +146,9 @@ class StorageBackend(ABC):
 
     def __exit__(
         self,
-        _exc_type: Optional[Type[BaseException]],
-        _exc_val: Optional[BaseException],
-        _exc_tb: Optional[TracebackType],
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: TracebackType | None,
     ) -> None:
         """Context manager exit - ensures cleanup."""
         self.close()

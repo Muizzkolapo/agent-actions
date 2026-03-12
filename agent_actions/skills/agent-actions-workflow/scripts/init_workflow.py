@@ -5,7 +5,6 @@ import argparse
 import sys
 from pathlib import Path
 
-
 WORKFLOW_YAML_TEMPLATE = """################################################################################
 # {title}
 ################################################################################
@@ -138,7 +137,7 @@ def init_workflow(name: str, output_dir: Path) -> None:
 
     print(f"✅ Created workflow: {workflow_dir}")
     print(f"   ├── agent_config/{name}.yml")
-    print(f"   ├── agent_io/source/example_source.json")
+    print("   ├── agent_io/source/example_source.json")
     print(f"   └── prompt_store/{name}.md")
     print()
     print("Next steps:")

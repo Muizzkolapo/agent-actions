@@ -3,21 +3,23 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.config.types import AgentEntryDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.config.interfaces import IGenerator, ProcessingMode
 from agent_actions.config.di.container import registry
+from agent_actions.config.interfaces import IGenerator, ProcessingMode
+from agent_actions.errors import GenerationError
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.types import (
     ProcessingContext,
-    ProcessingMode as CoreProcessingMode,
     ProcessingStatus,
 )
-from agent_actions.errors import GenerationError
+from agent_actions.processing.types import (
+    ProcessingMode as CoreProcessingMode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +32,9 @@ class DataGenerator(IGenerator):
         self,
         agent_config: AgentEntryDict,
         agent_name: str,
-        dependency_configs: Optional[Dict[str, AgentEntryDict]] = None,
-        agent_indices: Optional[Dict[str, int]] = None,
-        storage_backend: Optional["StorageBackend"] = None,
+        dependency_configs: dict[str, AgentEntryDict] | None = None,
+        agent_indices: dict[str, int] | None = None,
+        storage_backend: StorageBackend | None = None,
     ):
         """Initialize the data generator with agent config and optional dependency info."""
         self.agent_config = agent_config
@@ -57,12 +59,12 @@ class DataGenerator(IGenerator):
     def create_agent_with_data(
         self,
         contents: Any,
-        source_content: Optional[Any] = None,
-        version_context: Optional[Dict] = None,
-        workflow_metadata: Optional[Dict] = None,
-        current_item: Optional[Dict] = None,
-        file_path: Optional[str] = None,
-    ) -> Tuple[List[Dict], bool, Dict]:
+        source_content: Any | None = None,
+        version_context: dict | None = None,
+        workflow_metadata: dict | None = None,
+        current_item: dict | None = None,
+        file_path: str | None = None,
+    ) -> tuple[list[dict], bool, dict]:
         """
         Create an agent with the provided data and generate results.
 

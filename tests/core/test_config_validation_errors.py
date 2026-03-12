@@ -1,10 +1,12 @@
 """Tests for configuration validation error message quality."""
 
-import pytest
 import os
-from agent_actions.output.response.expander import ActionExpander
+
+import pytest
+
+from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.errors import ConfigValidationError, ConfigurationError
+from agent_actions.output.response.expander import ActionExpander
 
 
 class TestConfigValidationErrorMessages:
@@ -64,8 +66,8 @@ class TestConfigValidationErrorMessages:
 
     def test_where_clause_config_validation_empty_clause(self):
         """Test WHERE clause config validation rejects empty clause."""
-        from agent_actions.output.response.config_schema import WhereClauseConfig
         from agent_actions.errors import ValidationError
+        from agent_actions.output.response.config_schema import WhereClauseConfig
 
         with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
             WhereClauseConfig(clause="")
@@ -74,8 +76,8 @@ class TestConfigValidationErrorMessages:
 
     def test_where_clause_config_validation_dangerous_patterns(self):
         """Test WHERE clause config validates against dangerous patterns."""
-        from agent_actions.output.response.config_schema import WhereClauseConfig
         from agent_actions.errors import ValidationError
+        from agent_actions.output.response.config_schema import WhereClauseConfig
 
         dangerous_clauses = [
             "field = __import__('os')",

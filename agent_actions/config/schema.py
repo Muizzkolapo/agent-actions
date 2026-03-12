@@ -1,12 +1,12 @@
 """Schema definitions for the new workflow format."""
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from agent_actions.output.response.guard_parser import GuardParser
 from agent_actions.output.response.consolidated_guard import parse_guard_config
+from agent_actions.output.response.guard_parser import GuardParser
 
 
 class ActionKind(str, Enum):
@@ -62,7 +62,7 @@ class VersionConfig(BaseModel):
     """Configuration for version-based actions."""
 
     param: str = Field(default="i", description="Parameter name for version variable")
-    range: List[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
+    range: list[int] = Field(  # noqa: A003 — shadows builtin; rename breaks YAML compat
         ..., description="Range of values for version parameter"
     )
     mode: VersionMode = Field(default=VersionMode.PARALLEL, description="Execution mode")
@@ -107,7 +107,7 @@ class RepromptConfig(BaseModel):
     (e.g. via ``on_schema_mismatch: reprompt``).
     """
 
-    validation: Optional[str] = Field(default=None, description="Name of validation UDF function")
+    validation: str | None = Field(default=None, description="Name of validation UDF function")
     max_attempts: int = Field(
         default=2,
         ge=1,
@@ -154,59 +154,59 @@ class ActionConfig(BaseModel):
     name: str = Field(..., description="Unique action name")
     intent: str = Field(..., description="Clear description of action purpose")
     kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
-    impl: Optional[str] = Field(default=None, description="Implementation path for tool actions")
-    model_vendor: Optional[str] = Field(
+    impl: str | None = Field(default=None, description="Implementation path for tool actions")
+    model_vendor: str | None = Field(
         default=None, description="Model vendor (openai, anthropic, etc.)"
     )
-    model_name: Optional[str] = Field(default=None, description="Model name")
-    output_schema: Optional[Union[str, Dict[str, Any]]] = Field(
+    model_name: str | None = Field(default=None, description="Model name")
+    output_schema: str | dict[str, Any] | None = Field(
         default=None,
         description="Output schema",
         alias="schema",  # noqa: A003 — shadows builtin; rename breaks YAML compat
     )
-    drops: List[str] = Field(
+    drops: list[str] = Field(
         default_factory=list, description="Fields to exclude from LLM prompt and final output"
     )
-    observe: List[str] = Field(
+    observe: list[str] = Field(
         default_factory=list,
         description="Fields to pass-through from input to output without LLM "
         "generation (visible to LLM but not regenerated)",
     )
-    granularity: Optional[Granularity] = Field(default=None, description="Execution granularity")
-    guard: Optional[Union[str, Dict[str, Any]]] = Field(
+    granularity: Granularity | None = Field(default=None, description="Execution granularity")
+    guard: str | dict[str, Any] | None = Field(
         default=None, description="Condition for action execution"
     )
-    policy: Optional[str] = Field(default=None, description="Execution policy")
-    versions: Optional[VersionConfig] = Field(default=None, description="Version configuration")
-    version_consumption: Optional[VersionConsumptionConfig] = Field(
+    policy: str | None = Field(default=None, description="Execution policy")
+    versions: VersionConfig | None = Field(default=None, description="Version configuration")
+    version_consumption: VersionConsumptionConfig | None = Field(
         default=None, description="Version output consumption configuration"
     )
-    retry: Optional[RetryConfig] = Field(
+    retry: RetryConfig | None = Field(
         default=None, description="Retry configuration for transport-layer failures"
     )
-    reprompt: Optional[RepromptConfig] = Field(
+    reprompt: RepromptConfig | None = Field(
         default=None, description="Reprompt configuration for validation failures"
     )
-    strict_schema: Optional[bool] = Field(
+    strict_schema: bool | None = Field(
         default=None, description="Enable strict schema validation (reject on mismatch)"
     )
-    on_schema_mismatch: Optional[Literal["warn", "reprompt", "reject"]] = Field(
+    on_schema_mismatch: Literal["warn", "reprompt", "reject"] | None = Field(
         default=None, description="Schema mismatch mode: warn, reprompt, or reject"
     )
-    idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
-    prompt: Optional[str] = Field(default=None, description="Prompt template or reference")
-    dependencies: List[str] = Field(
+    idempotency_key: str | None = Field(default=None, description="Idempotency key template")
+    prompt: str | None = Field(default=None, description="Prompt template or reference")
+    dependencies: list[str] = Field(
         default_factory=list, description="List of upstream dependencies"
     )
-    primary_dependency: Optional[str] = Field(
+    primary_dependency: str | None = Field(
         default=None,
         description="Primary dependency for fan-in pattern (determines execution count)",
     )
-    reduce_key: Optional[str] = Field(
+    reduce_key: str | None = Field(
         default=None,
         description="Key for aggregation pattern (groups merged outputs by this field)",
     )
-    hitl: Optional[HitlConfig] = Field(
+    hitl: HitlConfig | None = Field(
         default=None,
         description="HITL configuration (required when kind=hitl)",
     )
@@ -217,54 +217,50 @@ class ActionConfig(BaseModel):
     )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
-    api_key: Optional[str] = Field(default=None, description="API key")
-    base_url: Optional[str] = Field(default=None, description="Base URL for vendors like Ollama")
-    run_mode: Optional[str] = Field(default=None, description="Execution run mode")
-    is_operational: Optional[bool] = Field(default=None, description="Whether action is enabled")
-    json_mode: Optional[bool] = Field(default=None, description="JSON mode setting")
-    prompt_debug: Optional[bool] = Field(default=None, description="Debug output for prompts")
-    output_field: Optional[str] = Field(default=None, description="Output field name")
-    temperature: Optional[float] = Field(default=None, description="Generation temperature")
-    max_tokens: Optional[int] = Field(default=None, description="Maximum tokens")
-    top_p: Optional[float] = Field(default=None, description="Top-p sampling parameter")
-    stop: Optional[Union[str, List[str]]] = Field(default=None, description="Stop sequences")
-    constraints: Optional[Any] = Field(default=None, description="Constraints for reprompting")
+    api_key: str | None = Field(default=None, description="API key")
+    base_url: str | None = Field(default=None, description="Base URL for vendors like Ollama")
+    run_mode: str | None = Field(default=None, description="Execution run mode")
+    is_operational: bool | None = Field(default=None, description="Whether action is enabled")
+    json_mode: bool | None = Field(default=None, description="JSON mode setting")
+    prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
+    output_field: str | None = Field(default=None, description="Output field name")
+    temperature: float | None = Field(default=None, description="Generation temperature")
+    max_tokens: int | None = Field(default=None, description="Maximum tokens")
+    top_p: float | None = Field(default=None, description="Top-p sampling parameter")
+    stop: str | list[str] | None = Field(default=None, description="Stop sequences")
+    constraints: Any | None = Field(default=None, description="Constraints for reprompting")
 
     # --- Runtime-consumed keys (from AgentConfig) ---
-    where_clause: Optional[Dict[str, Any]] = Field(
+    where_clause: dict[str, Any] | None = Field(
         default=None, description="WHERE clause configuration for filtering"
     )
-    ephemeral: Optional[bool] = Field(default=None, description="Ephemeral action outputs")
-    anthropic_version: Optional[str] = Field(
+    ephemeral: bool | None = Field(default=None, description="Ephemeral action outputs")
+    anthropic_version: str | None = Field(
         default=None, description="API version header for Anthropic requests"
     )
-    enable_prompt_caching: Optional[bool] = Field(
+    enable_prompt_caching: bool | None = Field(
         default=None, description="Enable Anthropic prompt caching"
     )
-    max_execution_time: Optional[int] = Field(
+    max_execution_time: int | None = Field(
         default=None, description="Maximum execution time in seconds"
     )
-    enable_caching: Optional[bool] = Field(
-        default=None, description="Enable caching for performance"
-    )
+    enable_caching: bool | None = Field(default=None, description="Enable caching for performance")
 
     # --- Expander-consumed keys ---
-    interceptors: Optional[List[Dict[str, Any]]] = Field(
+    interceptors: list[dict[str, Any]] | None = Field(
         default=None, description="Interceptor configuration"
     )
-    chunk_config: Optional[Dict[str, Any]] = Field(
-        default=None, description="Chunking configuration"
-    )
-    chunk_size: Optional[int] = Field(default=None, description="Chunk size")
-    chunk_overlap: Optional[int] = Field(default=None, description="Chunk overlap")
-    context_scope: Optional[Dict[str, Any]] = Field(
+    chunk_config: dict[str, Any] | None = Field(default=None, description="Chunking configuration")
+    chunk_size: int | None = Field(default=None, description="Chunk size")
+    chunk_overlap: int | None = Field(default=None, description="Chunk overlap")
+    context_scope: dict[str, Any] | None = Field(
         default=None, description="Context scope configuration"
     )
-    version_mode: Optional[str] = Field(default=None, description="Version execution mode")
-    child: Optional[List[str]] = Field(default=None, description="Child pipeline reference")
+    version_mode: str | None = Field(default=None, description="Version execution mode")
+    child: list[str] | None = Field(default=None, description="Child pipeline reference")
 
     # --- Internal (injected by render step) ---
-    version_context: Optional[Dict[str, Any]] = Field(
+    version_context: dict[str, Any] | None = Field(
         default=None, alias="_version_context", description="Version context injected by renderer"
     )
 
@@ -321,24 +317,24 @@ class DefaultsConfig(BaseModel):
     # consumed by extract_generation_params(). Typed fields still validate known keys.
     model_config = ConfigDict(extra="ignore")
 
-    model_vendor: Optional[str] = Field(default=None, description="Default model vendor")
-    model_name: Optional[str] = Field(default=None, description="Default model name")
-    json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
-    granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
-    run_mode: Optional[str] = Field(default=None, description="Default run mode")
-    drops: Optional[List[str]] = Field(
+    model_vendor: str | None = Field(default=None, description="Default model vendor")
+    model_name: str | None = Field(default=None, description="Default model name")
+    json_mode: bool | None = Field(default=None, description="Default JSON mode setting")
+    granularity: Granularity | None = Field(default=None, description="Default granularity")
+    run_mode: str | None = Field(default=None, description="Default run mode")
+    drops: list[str] | None = Field(
         default=None, description="Default fields to exclude from LLM prompt and output"
     )
-    observe: Optional[List[str]] = Field(
+    observe: list[str] | None = Field(
         default=None,
         description="Default fields to pass-through from input to output "
         "(visible to LLM but not regenerated)",
     )
-    data_source: Optional[Union[str, Dict[str, Any]]] = Field(
+    data_source: str | dict[str, Any] | None = Field(
         default=None,
         description="Default data source for start-node input",
     )
-    hitl_timeout: Optional[int] = Field(
+    hitl_timeout: int | None = Field(
         default=None,
         ge=5,
         le=3600,
@@ -346,33 +342,33 @@ class DefaultsConfig(BaseModel):
     )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
-    api_key: Optional[str] = Field(default=None, description="Default API key")
-    base_url: Optional[str] = Field(default=None, description="Default base URL")
-    kind: Optional[ActionKind] = Field(default=None, description="Default action kind")
-    is_operational: Optional[bool] = Field(default=None, description="Default operational flag")
-    prompt_debug: Optional[bool] = Field(default=None, description="Default prompt debug setting")
-    output_field: Optional[str] = Field(default=None, description="Default output field name")
-    temperature: Optional[float] = Field(default=None, description="Default temperature")
-    max_tokens: Optional[int] = Field(default=None, description="Default max tokens")
-    top_p: Optional[float] = Field(default=None, description="Default top-p")
-    stop: Optional[Union[str, List[str]]] = Field(default=None, description="Default stop seq")
-    reprompt: Optional[RepromptConfig] = Field(
+    api_key: str | None = Field(default=None, description="Default API key")
+    base_url: str | None = Field(default=None, description="Default base URL")
+    kind: ActionKind | None = Field(default=None, description="Default action kind")
+    is_operational: bool | None = Field(default=None, description="Default operational flag")
+    prompt_debug: bool | None = Field(default=None, description="Default prompt debug setting")
+    output_field: str | None = Field(default=None, description="Default output field name")
+    temperature: float | None = Field(default=None, description="Default temperature")
+    max_tokens: int | None = Field(default=None, description="Default max tokens")
+    top_p: float | None = Field(default=None, description="Default top-p")
+    stop: str | list[str] | None = Field(default=None, description="Default stop seq")
+    reprompt: RepromptConfig | None = Field(
         default=None, description="Default reprompt configuration"
     )
-    constraints: Optional[Any] = Field(default=None, description="Default constraints")
-    retry: Optional[RetryConfig] = Field(default=None, description="Default retry configuration")
-    strict_schema: Optional[bool] = Field(default=None, description="Default strict schema flag")
-    on_schema_mismatch: Optional[Literal["warn", "reprompt", "reject"]] = Field(
+    constraints: Any | None = Field(default=None, description="Default constraints")
+    retry: RetryConfig | None = Field(default=None, description="Default retry configuration")
+    strict_schema: bool | None = Field(default=None, description="Default strict schema flag")
+    on_schema_mismatch: Literal["warn", "reprompt", "reject"] | None = Field(
         default=None, description="Default schema mismatch mode"
     )
 
     # --- Expander-consumed keys ---
-    context_scope: Optional[Dict[str, Any]] = Field(default=None, description="Default ctx scope")
-    chunk_config: Optional[Dict[str, Any]] = Field(
+    context_scope: dict[str, Any] | None = Field(default=None, description="Default ctx scope")
+    chunk_config: dict[str, Any] | None = Field(
         default=None, description="Default chunk configuration"
     )
-    chunk_size: Optional[int] = Field(default=None, description="Default chunk size")
-    chunk_overlap: Optional[int] = Field(default=None, description="Default chunk overlap")
+    chunk_size: int | None = Field(default=None, description="Default chunk size")
+    chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
 
     @field_validator("retry", mode="before")
     @classmethod
@@ -403,8 +399,8 @@ class WorkflowConfigV2(BaseModel):
     name: str = Field(..., description="Workflow name")
     description: str = Field(..., description="Workflow description")
     version: str = Field(..., description="Workflow version")
-    defaults: Optional[DefaultsConfig] = Field(default=None, description="Default settings")
-    actions: List[ActionConfig] = Field(..., description="Workflow actions")
+    defaults: DefaultsConfig | None = Field(default=None, description="Default settings")
+    actions: list[ActionConfig] = Field(..., description="Workflow actions")
 
     @model_validator(mode="after")
     def validate_workflow_invariants(self):
@@ -458,11 +454,11 @@ class WorkflowConfigV2(BaseModel):
 
         return self
 
-    def get_action(self, name: str) -> Optional[ActionConfig]:
+    def get_action(self, name: str) -> ActionConfig | None:
         """Get an action by name."""
         return next((action for action in self.actions if action.name == name), None)
 
-    def get_dependency_graph(self) -> Dict[str, List[str]]:
+    def get_dependency_graph(self) -> dict[str, list[str]]:
         """Extract dependency graph from action definitions."""
         dependencies = {}
         for action in self.actions:

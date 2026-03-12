@@ -1,6 +1,7 @@
 """Tests for metadata strategies."""
 
 import pytest
+
 from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies import (
     EnhancedMetadataStrategy,
     MetadataContext,

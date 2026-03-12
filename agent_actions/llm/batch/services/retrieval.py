@@ -2,14 +2,15 @@
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional, List, Callable
 
-from agent_actions.llm.batch.infrastructure.context import (
-    BatchContextManager,
-)
+from agent_actions.errors import ExternalServiceError
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
+)
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
 )
 from agent_actions.llm.batch.infrastructure.registry import (
     BatchRegistryManager,
@@ -17,7 +18,6 @@ from agent_actions.llm.batch.infrastructure.registry import (
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.utils.path_utils import ensure_directory_exists
-from agent_actions.errors import ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class BatchRetrievalService:
         self,
         batch_id: str,
         output_dir: str,
-        file_path: Optional[str] = None,
+        file_path: str | None = None,
     ) -> Path:
         """Retrieve and save results from a completed batch job.
 
@@ -106,7 +106,7 @@ class BatchRetrievalService:
                 vendor, f"Failed to retrieve batch results: {e}", cause=e
             ) from e
 
-    def _write_results_to_jsonl(self, result_file: Path, batch_results: List[BatchResult]) -> None:
+    def _write_results_to_jsonl(self, result_file: Path, batch_results: list[BatchResult]) -> None:
         """Write batch results to JSONL file.
 
         Args:

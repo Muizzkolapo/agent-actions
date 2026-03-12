@@ -1,7 +1,8 @@
 """Base error formatter interface for Strategy Pattern."""
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any
+
 from ..user_error import UserError
 
 
@@ -14,11 +15,11 @@ class ErrorFormatter(ABC):
 
     @abstractmethod
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         """Format the error into a user-friendly UserError."""
 
-    def _extract_provider_name(self, message: str, context: Dict[str, Any]) -> str:
+    def _extract_provider_name(self, message: str, context: dict[str, Any]) -> str:
         """Extract provider name from error message or context, defaulting to 'API'."""
         message_lower = message.lower()
 

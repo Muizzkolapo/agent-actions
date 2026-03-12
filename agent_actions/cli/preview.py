@@ -2,15 +2,14 @@
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
-from rich.table import Table
-from rich.syntax import Syntax
 from rich.panel import Panel
+from rich.syntax import Syntax
+from rich.table import Table
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.storage import get_storage_backend
 
@@ -19,7 +18,7 @@ class PreviewCommand:
     def __init__(
         self,
         workflow: str,
-        action: Optional[str] = None,
+        action: str | None = None,
         limit: int = 10,
         offset: int = 0,
         format_type: str = "table",
@@ -167,7 +166,7 @@ class PreviewCommand:
         if len(display_keys) > 6:
             display_keys = display_keys[:6]
             self.console.print(
-                f"[dim]Showing first 6 columns. Use --format json to see all fields.[/dim]\n"
+                "[dim]Showing first 6 columns. Use --format json to see all fields.[/dim]\n"
             )
 
         table = Table(show_lines=True)
@@ -232,7 +231,7 @@ class PreviewCommand:
 @requires_project
 def preview(
     workflow: str,
-    action: Optional[str],
+    action: str | None,
     limit: int,
     offset: int,
     format_type: str,

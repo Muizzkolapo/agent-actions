@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from agent_actions.validation.base_validator import BaseValidator
 
@@ -136,7 +136,7 @@ class PathValidator(BaseValidator):
                 extra={"operation": operation_desc, "path": str(path_obj)},
             )
 
-    def _validate_user_code_path_logic(self, user_code_path_str: Optional[str]) -> None:
+    def _validate_user_code_path_logic(self, user_code_path_str: str | None) -> None:
         """Validate the user code path if provided; adds errors on failure."""
         operation_desc = f"validate user code path '{user_code_path_str}'"
         logger.debug("Starting %s", operation_desc, extra={"operation": operation_desc})
@@ -161,7 +161,7 @@ class PathValidator(BaseValidator):
                 extra={"operation": operation_desc, "path": str(path_obj)},
             )
 
-    def _parse_path_input(self, path_input: Any, operation: str) -> Optional[Path]:
+    def _parse_path_input(self, path_input: Any, operation: str) -> Path | None:
         """Parse path input to Path object."""
         if isinstance(path_input, str) and operation != "validate_user_code_path":
             return Path(path_input)
@@ -177,7 +177,7 @@ class PathValidator(BaseValidator):
             self._validate_user_code_path_logic(path_input)
 
     def _handle_file_or_directory_operation(
-        self, operation: str, path_obj: Path, data: Dict[str, Any]
+        self, operation: str, path_obj: Path, data: dict[str, Any]
     ) -> None:
         """Handle validate_file or validate_directory operations."""
         path_name = data.get("path_name", str(path_obj))
@@ -194,7 +194,7 @@ class PathValidator(BaseValidator):
             path_obj, entity_type=entity_type, entity_name=path_name, options=options
         )
 
-    def _handle_ensure_directory_operation(self, path_obj: Path, data: Dict[str, Any]) -> None:
+    def _handle_ensure_directory_operation(self, path_obj: Path, data: dict[str, Any]) -> None:
         """Handle ensure_directory_exists operation."""
         path_name = data.get("path_name", str(path_obj))
         if not isinstance(path_name, str):
@@ -206,7 +206,7 @@ class PathValidator(BaseValidator):
             must_be_writable_after_creation=data.get("must_be_writable_after_creation", True),
         )
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate file or directory paths based on the operation specified in data."""
         if not self._prepare_validation(data):
             return False

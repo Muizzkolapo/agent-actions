@@ -5,9 +5,11 @@ Tests the workspace scanning, dependency graph building, and downstream
 workflow discovery.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from agent_actions.workflow.workspace_index import WorkspaceIndex
 
 

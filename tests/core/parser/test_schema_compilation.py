@@ -8,20 +8,16 @@ These tests verify that:
 """
 
 import pytest
-import tempfile
-import os
-from pathlib import Path
-
 import yaml
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.render_workflow import (
-    _load_named_schema,
-    _expand_inline_schema,
-    _is_inline_schema_dict,
     _compile_action_schemas,
     _compile_workflow_schemas,
+    _expand_inline_schema,
+    _is_inline_schema_dict,
+    _load_named_schema,
 )
-from agent_actions.errors import ConfigurationError
 
 
 class TestLoadNamedSchema:

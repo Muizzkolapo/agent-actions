@@ -2,7 +2,7 @@
 
 # Similar loader pattern is intentional across different file type loaders
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from agent_actions.errors import FileLoadError
 from agent_actions.input.loaders.base import BaseLoader
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class TextLoader(BaseLoader[str]):
     """Loader for text-based content like TXT, MD, PDF, DOCX, and HTML."""
 
-    def process(self, content: Any, file_path: Optional[str] = None) -> str:
+    def process(self, content: Any, file_path: str | None = None) -> str:
         """Load and return text content from a file or in-memory content."""
         try:
             if file_path:

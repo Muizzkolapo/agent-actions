@@ -6,8 +6,9 @@ import atexit
 import contextvars
 import logging
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 # Use a non-propagating logger to avoid re-entering EventManager.fire()
 # via LoggingBridgeHandler when a handler fails. Messages go directly

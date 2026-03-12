@@ -1,7 +1,7 @@
 """Data models for batch processing registry entries and task preparation."""
 
-from dataclasses import dataclass, asdict, field
-from typing import Literal, Optional, List, Dict, Any
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal
 
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
@@ -14,16 +14,16 @@ class BatchJobEntry:
     status: str
     timestamp: str
     provider: str
-    record_count: Optional[int] = None
-    workflow_session_id: Optional[str] = None
-    file_name: Optional[str] = None
+    record_count: int | None = None
+    workflow_session_id: str | None = None
+    file_name: str | None = None
     # Version context fields for loop correlation
-    is_versioned_agent: Optional[bool] = None
-    version_base_name: Optional[str] = None
+    is_versioned_agent: bool | None = None
+    version_base_name: str | None = None
     # Recovery fields for async retry/reprompt batches
-    parent_file_name: Optional[str] = None  # links to original batch's file_name key
-    recovery_type: Optional[Literal["retry", "reprompt"]] = None
-    recovery_attempt: Optional[int] = None  # attempt number (1, 2, 3...)
+    parent_file_name: str | None = None  # links to original batch's file_name key
+    recovery_type: Literal["retry", "reprompt"] | None = None
+    recovery_attempt: int | None = None  # attempt number (1, 2, 3...)
 
     def __post_init__(self):
         """Warn on unrecognized status to avoid breaking existing registries."""
@@ -94,8 +94,8 @@ class BatchFilterResult:
 
     status: str
     should_include: bool
-    reason: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    reason: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -132,10 +132,10 @@ class BatchTaskPreparationStats:
 class PreparedBatchTasks:
     """Immutable result of BatchTaskPreparator.prepare_tasks()."""
 
-    tasks: List[Dict[str, Any]]
-    context_map: Dict[str, Any]
+    tasks: list[dict[str, Any]]
+    context_map: dict[str, Any]
     stats: BatchTaskPreparationStats
-    config: Optional[Dict[str, Any]] = None
+    config: dict[str, Any] | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -152,8 +152,8 @@ class PreparedBatchTasks:
 class SubmissionResult:
     """Result of a batch submission."""
 
-    batch_id: Optional[str] = None
-    passthrough: Optional[Dict[str, Any]] = None
+    batch_id: str | None = None
+    passthrough: dict[str, Any] | None = None
 
     @property
     def is_submitted(self) -> bool:

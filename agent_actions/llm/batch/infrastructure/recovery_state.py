@@ -2,9 +2,9 @@
 
 import json
 import logging
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -34,19 +34,19 @@ class RecoveryState:
     # Retry state
     retry_attempt: int = 0
     retry_max_attempts: int = 3
-    missing_ids: List[str] = field(default_factory=list)
-    record_failure_counts: Dict[str, int] = field(default_factory=dict)
+    missing_ids: list[str] = field(default_factory=list)
+    record_failure_counts: dict[str, int] = field(default_factory=dict)
 
     # Reprompt state
     reprompt_attempt: int = 0
     reprompt_max_attempts: int = 2
-    validation_name: Optional[str] = None
-    reprompt_attempts_per_record: Dict[str, int] = field(default_factory=dict)
-    validation_status: Dict[str, bool] = field(default_factory=dict)
+    validation_name: str | None = None
+    reprompt_attempts_per_record: dict[str, int] = field(default_factory=dict)
+    validation_status: dict[str, bool] = field(default_factory=dict)
     on_exhausted: str = "return_last"
 
     # Accumulated results (serialized BatchResult dicts)
-    accumulated_results: List[Dict[str, Any]] = field(default_factory=list)
+    accumulated_results: list[dict[str, Any]] = field(default_factory=list)
 
 
 class RecoveryStateManager:
@@ -71,14 +71,14 @@ class RecoveryStateManager:
         return state_path
 
     @staticmethod
-    def load(output_directory: str, file_name: str) -> Optional[RecoveryState]:
+    def load(output_directory: str, file_name: str) -> RecoveryState | None:
         """Load recovery state from disk, or None if not found."""
         state_path = RecoveryStateManager._get_path(output_directory, file_name)
         if not state_path.exists():
             return None
 
         try:
-            with open(state_path, "r", encoding="utf-8") as f:
+            with open(state_path, encoding="utf-8") as f:
                 data = json.load(f)
             return RecoveryState(**data)
         except (json.JSONDecodeError, TypeError) as e:

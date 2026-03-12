@@ -9,8 +9,6 @@ and imports need to be updated to reflect these new names.
 import re
 import sys
 from pathlib import Path
-from typing import Dict
-
 
 # Mapping of old import paths to new paths (accounting for renamed files)
 RENAMED_MODULES = {
@@ -63,7 +61,6 @@ def fix_imports_in_file(file_path: Path, dry_run: bool = True) -> int:
     """
     try:
         content = file_path.read_text()
-        original_content = content
         changes = 0
 
         # Fix each known renamed module
@@ -123,18 +120,18 @@ def main():
             rel_path = file_path.relative_to(directory)
             print(f"   ✏️  {rel_path}: {changes} import(s) fixed")
 
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Files scanned: {len(python_files)}")
     print(f"   Files changed: {files_changed}")
     print(f"   Total imports fixed: {total_changes}")
 
     if not execute and total_changes > 0:
-        print(f"\n⚠️  To apply changes, run:")
+        print("\n⚠️  To apply changes, run:")
         print(f"   python fix_renamed_imports.py {directory} --execute")
     elif execute and total_changes > 0:
-        print(f"\n✅ Import paths updated successfully!")
+        print("\n✅ Import paths updated successfully!")
     else:
-        print(f"\n✅ No import changes needed!")
+        print("\n✅ No import changes needed!")
 
 
 if __name__ == "__main__":

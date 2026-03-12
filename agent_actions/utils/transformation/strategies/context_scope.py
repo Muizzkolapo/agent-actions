@@ -1,9 +1,8 @@
 """Passthrough strategies that extract fields from context_scope.passthrough config."""
 
-from typing import Dict, List, Optional
-
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.prompt.context.scope import ContextScopeProcessor
+
 from .base import IPassthroughTransformStrategy
 
 
@@ -12,9 +11,9 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if we have no precomputed fields, structured data."""
@@ -27,12 +26,12 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Extract and merge context_scope passthrough fields."""
         fields_to_merge = self.extract_context_scope_fields(agent_config)
 
@@ -63,13 +62,13 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
         return DataTransformer.transform_structure([{source_guid: updated}])
 
     @staticmethod
-    def has_passthrough_config(agent_config: Dict) -> bool:
+    def has_passthrough_config(agent_config: dict) -> bool:
         """Check if agent_config has passthrough configuration."""
         context_scope = agent_config.get("context_scope", {})
         return bool(context_scope and context_scope.get("passthrough"))
 
     @staticmethod
-    def extract_context_scope_fields(agent_config: Dict) -> List[str]:
+    def extract_context_scope_fields(agent_config: dict) -> list[str]:
         """Extract field names from context_scope.passthrough."""
         context_scope = agent_config.get("context_scope", {})
 
@@ -85,9 +84,9 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if we have no precomputed fields, unstructured data."""
@@ -100,12 +99,12 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Extract and merge context_scope passthrough fields."""
         fields_to_merge = ContextScopeStructuredStrategy.extract_context_scope_fields(agent_config)
 
@@ -140,9 +139,9 @@ class NoOpStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if structured data with no passthrough."""
@@ -155,12 +154,12 @@ class NoOpStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Return data unchanged."""
         return data
 
@@ -170,9 +169,9 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Fallback catch-all: always returns True."""
@@ -180,11 +179,11 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Structure data without passthrough."""
         return DataTransformer.transform_structure([{source_guid: data}])

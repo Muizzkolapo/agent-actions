@@ -1,8 +1,9 @@
 """File operation error formatter."""
 
-from typing import Dict, Any
-from .base import ErrorFormatter
+from typing import Any
+
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class FileErrorFormatter(ErrorFormatter):
@@ -26,7 +27,7 @@ class FileErrorFormatter(ErrorFormatter):
         return any(pattern in message_lower for pattern in file_patterns)
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         if "not found" in message.lower():
             file_path = context.get("file_path", "unknown")

@@ -1,7 +1,7 @@
 """Configuration schema models for agent response processing."""
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -98,22 +98,20 @@ class SkipConditionConfig(BaseModel):
     condition_type: Literal[
         "previous_outputs_empty", "previous_outputs_count", "field_condition", "custom"
     ] = Field(description="Type of skip condition")
-    agent_name: Optional[str] = Field(
+    agent_name: str | None = Field(
         default=None, description="Name of the agent to check outputs for"
     )
-    threshold: Optional[int] = Field(
-        default=None, description="Threshold for count-based conditions"
-    )
-    comparison: Optional[Literal["==", "!=", "<", "<=", ">", ">="]] = Field(
+    threshold: int | None = Field(default=None, description="Threshold for count-based conditions")
+    comparison: Literal["==", "!=", "<", "<=", ">", ">="] | None = Field(
         default="==", description="Comparison operator for threshold"
     )
-    field_path: Optional[str] = Field(
+    field_path: str | None = Field(
         default=None, description="Path to field in previous outputs (dot notation)"
     )
-    expected_value: Optional[Any] = Field(
+    expected_value: Any | None = Field(
         default=None, description="Expected value for field condition"
     )
-    expression: Optional[str] = Field(
+    expression: str | None = Field(
         default=None, description="Safe expression for custom conditions (no eval())"
     )
 
@@ -152,9 +150,9 @@ class SkipConditionConfig(BaseModel):
 class DefaultAgentConfig(BaseModel):
     """Default settings applied to each agent configuration."""
 
-    api_key: Optional[str] = None
-    model_name: Optional[str] = None
-    chunk_config: Optional[Dict[str, Any]] = None
+    api_key: str | None = None
+    model_name: str | None = None
+    chunk_config: dict[str, Any] | None = None
     is_operational: bool = True
     run_mode: str = "online"
     model_config = ConfigDict(extra="allow")
@@ -164,52 +162,52 @@ class AgentConfig(BaseModel):
     """Schema for an individual agent configuration entry."""
 
     agent_type: str
-    name: Optional[str] = None
-    model_name: Optional[str] = None
-    model_vendor: Optional[str] = Field(
+    name: str | None = None
+    model_name: str | None = None
+    model_vendor: str | None = Field(
         default=None,
         description=("Model vendor/provider: 'openai', 'gemini', 'anthropic', 'groq', or 'tool'"),
     )
-    api_key: Optional[str] = None
-    code_path: Optional[str] = None
-    dependencies: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
-    prompt: Optional[str] = None
-    schema_name: Optional[str] = None
-    chunk_config: Dict[str, Any] = Field(default_factory=dict)
-    observe: List[str] = Field(default_factory=list)
-    drops: List[str] = Field(default_factory=list)
+    api_key: str | None = None
+    code_path: str | None = None
+    dependencies: list[str | dict[str, Any]] = Field(default_factory=list)
+    prompt: str | None = None
+    schema_name: str | None = None
+    chunk_config: dict[str, Any] = Field(default_factory=dict)
+    observe: list[str] = Field(default_factory=list)
+    drops: list[str] = Field(default_factory=list)
     is_operational: bool = True
-    ephemeral: Optional[bool] = None
-    add_dispatch: Optional[bool] = None
+    ephemeral: bool | None = None
+    add_dispatch: bool | None = None
     run_mode: str = "online"
     json_mode: bool = Field(default=True, description="Enable JSON mode for structured output")
     prompt_debug: bool = Field(
         default=False, description="Enable debug output showing prompts being sent to the agent"
     )
-    anthropic_version: Optional[str] = Field(
+    anthropic_version: str | None = Field(
         default=None, description="API version header for Anthropic requests (e.g., '2023-06-01')"
     )
-    enable_prompt_caching: Optional[bool] = Field(
+    enable_prompt_caching: bool | None = Field(
         default=None,
         description="Enable Anthropic's prompt caching feature for improved performance",
     )
-    conditional_clause: Optional[str] = Field(
+    conditional_clause: str | None = Field(
         default=None, description="Legacy conditional clause (deprecated, use where_clause instead)"
     )
-    skip_if: Optional[str] = Field(
+    skip_if: str | None = Field(
         default=None, description="Legacy skip condition (deprecated, use skip_condition instead)"
     )
-    where_clause: Optional[WhereClauseConfig] = Field(
+    where_clause: WhereClauseConfig | None = Field(
         default=None, description="WHERE clause configuration for advanced filtering"
     )
-    skip_condition: Optional[SkipConditionConfig] = Field(
+    skip_condition: SkipConditionConfig | None = Field(
         default=None, description="Safe skip condition configuration"
     )
-    max_execution_time: Optional[int] = Field(
+    max_execution_time: int | None = Field(
         default=300, description="Maximum execution time in seconds"
     )
     enable_caching: bool = Field(default=True, description="Enable caching for performance")
-    context_scope: Optional[Dict[str, Any]] = Field(
+    context_scope: dict[str, Any] | None = Field(
         default=None,
         description="Context scope configuration for data visibility and flow control "
         "(seed_data, observe, drop directives). Normalized in-place by config pipeline "

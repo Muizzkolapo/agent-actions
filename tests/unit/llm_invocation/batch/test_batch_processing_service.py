@@ -4,10 +4,9 @@ TDD: These tests are written BEFORE the implementation to define
 the expected behavior of the processing service.
 """
 
-import json
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestBatchProcessingServiceInit:
@@ -59,10 +58,10 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_true_when_completed(self):
         """Should return True when batch status is completed."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.COMPLETED
@@ -85,10 +84,10 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_false_when_in_progress(self):
         """Should return False when batch is still in progress."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.IN_PROGRESS
@@ -224,10 +223,10 @@ class TestApplyWorkflowSessionId:
 
     def test_restores_context_when_agent_config_missing(self):
         """Should restore workflow context from entry when agent_config is None."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 
         entry = BatchJobEntry(
             batch_id="batch-123",
@@ -261,10 +260,10 @@ class TestApplyWorkflowSessionId:
 
     def test_preserves_agent_config_when_entry_has_no_values(self):
         """Should preserve agent_config values when entry has no workflow context."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 
         entry = BatchJobEntry(
             batch_id="batch-123",
@@ -281,10 +280,10 @@ class TestApplyWorkflowSessionId:
 
     def test_preserves_entry_session_id(self):
         """Should overwrite agent_config session ID with entry session ID."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 
         entry = BatchJobEntry(
             batch_id="batch-123",
@@ -303,10 +302,10 @@ class TestApplyWorkflowSessionId:
 
     def test_merges_version_context_from_entry(self):
         """Should merge version context fields from entry into result."""
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 
         entry = BatchJobEntry(
             batch_id="batch-123",
@@ -332,10 +331,10 @@ class TestProcessAllBatchResults:
 
     def test_raises_when_no_registry(self):
         """Should raise ProcessingError when no registry found."""
+        from agent_actions.errors import ProcessingError
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.errors import ProcessingError
 
         manager = MagicMock()
         manager.get_all_jobs.return_value = {}
@@ -354,11 +353,11 @@ class TestProcessAllBatchResults:
 
     def test_skips_batches_not_completed(self, tmp_path):
         """Should skip batches that are not completed."""
+        from agent_actions.errors import ProcessingError
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-        from agent_actions.errors import ProcessingError
 
         # Setup entry that is not completed
         entry = MagicMock()
@@ -394,10 +393,10 @@ class TestProcessAllBatchResults:
 
     def test_processes_completed_batches(self, tmp_path):
         """Should process completed batches and return file paths."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         # Setup completed entry
         entry = MagicMock()
@@ -451,11 +450,11 @@ class TestProcessBatchResults:
 
     def test_raises_when_not_completed(self):
         """Should raise ProcessingError when batch not completed."""
+        from agent_actions.errors import ProcessingError
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-        from agent_actions.errors import ProcessingError
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.IN_PROGRESS
@@ -493,11 +492,11 @@ class TestProcessAllBatchResultsSkipsRecoveryEntries:
 
     def test_skips_entries_with_parent_file_name(self, tmp_path):
         """Should skip recovery entries (parent_file_name is set)."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
         from agent_actions.llm.batch.services.processing import (
             BatchProcessingService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
-        from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 
         # Original entry — completed
         original_entry = MagicMock(spec=BatchJobEntry)
@@ -557,13 +556,12 @@ class TestProcessAllBatchResultsToleratesEmptyWhenRecoveryPending:
 
     def test_returns_empty_list_when_recovery_in_progress(self, tmp_path):
         """Should return [] without raising when recovery batches are pending."""
-        from agent_actions.llm.batch.services.processing import (
-            BatchProcessingService,
-        )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.core.batch_models import (
             BatchJobEntry,
             BatchRegistryStats,
+        )
+        from agent_actions.llm.batch.services.processing import (
+            BatchProcessingService,
         )
 
         # Recovery entry still in progress
@@ -648,10 +646,10 @@ class TestCheckAndSubmitReprompt:
 
     def test_returns_false_when_reprompt_submitted(self):
         """Should return False when a reprompt batch is submitted."""
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
         from agent_actions.llm.batch.infrastructure.recovery_state import (
             RecoveryStateManager,
         )
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
 
         service = BatchProcessingService(
             client_resolver=MagicMock(),
@@ -685,10 +683,10 @@ class TestCheckAndSubmitReprompt:
 
     def test_returns_true_when_reprompt_exhausted(self):
         """Should return True and apply metadata when attempts exhausted."""
-        from agent_actions.llm.batch.services.processing import BatchProcessingService
         from agent_actions.llm.batch.infrastructure.recovery_state import (
             RecoveryState,
         )
+        from agent_actions.llm.batch.services.processing import BatchProcessingService
 
         service = BatchProcessingService(
             client_resolver=MagicMock(),

@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
-from collections import defaultdict
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import DataValidationError
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
@@ -23,8 +23,8 @@ class JsonLoadParams:
     """Parameters for loading JSON from file."""
 
     json_file: Path
-    outputs: List
-    corrupted_files: List
+    outputs: list
+    corrupted_files: list
     output_dir: Path
     operation: str
     add_source_file: bool = False
@@ -36,15 +36,15 @@ class VersionOutputCorrelator:
     def __init__(
         self,
         agent_folder: Path,
-        storage_backend: Optional["StorageBackend"] = None,
+        storage_backend: StorageBackend | None = None,
     ):
         self.agent_folder = agent_folder
         self.storage_backend = storage_backend
         self.correlations_cache = {}
 
     def detect_explicit_version_consumption(
-        self, execution_order: List[str], agent_configs: Dict[str, Any]
-    ) -> Dict[str, Dict[str, Any]]:
+        self, execution_order: list[str], agent_configs: dict[str, Any]
+    ) -> dict[str, dict[str, Any]]:
         """Return map of agent names to their version consumption configurations."""
         version_consumption_map = {}
         version_groups = {}
@@ -79,8 +79,8 @@ class VersionOutputCorrelator:
         return version_consumption_map
 
     def _load_version_outputs(
-        self, version_sources: List[str]
-    ) -> Tuple[Dict[str, List[Dict[str, Any]]], set]:
+        self, version_sources: list[str]
+    ) -> tuple[dict[str, list[dict[str, Any]]], set]:
         """Load outputs from all version sources, preferring storage backend over filesystem."""
         version_outputs = {}
         version_filenames = set()
@@ -104,7 +104,7 @@ class VersionOutputCorrelator:
 
         return version_outputs, version_filenames
 
-    def _load_from_storage_backend(self, version_agent: str) -> Tuple[List[Dict[str, Any]], set]:
+    def _load_from_storage_backend(self, version_agent: str) -> tuple[list[dict[str, Any]], set]:
         """Load outputs from storage backend for a version agent."""
         if self.storage_backend is None:
             return [], set()
@@ -158,7 +158,7 @@ class VersionOutputCorrelator:
 
     def _process_version_files(
         self,
-        version_outputs: Dict[str, List[Dict[str, Any]]],
+        version_outputs: dict[str, list[dict[str, Any]]],
         version_filenames: set,
         correlation_dir: Path,
         action_name: str,
@@ -177,8 +177,8 @@ class VersionOutputCorrelator:
                 )
 
     def prepare_correlated_input(
-        self, agent_name: str, version_sources: List[str], _current_idx: int
-    ) -> Optional[str]:
+        self, agent_name: str, version_sources: list[str], _current_idx: int
+    ) -> str | None:
         """Return path to correlated input directory, or None if correlation failed."""
         try:
             correlation_dir = self.agent_folder / "target" / agent_name
@@ -193,11 +193,11 @@ class VersionOutputCorrelator:
                 version_outputs, version_filenames, correlation_dir, action_name=agent_name
             )
             return str(correlation_dir)
-        except (OSError, IOError, ValueError, KeyError) as e:
+        except (OSError, ValueError, KeyError) as e:
             logger.exception("Error preparing correlated input for %s: %s", agent_name, e)
             return None
 
-    def _find_agent_index(self, agent_name: str) -> Optional[int]:
+    def _find_agent_index(self, agent_name: str) -> int | None:
         """Return 0 if the agent has data in storage or filesystem, None otherwise."""
         if self.storage_backend is not None:
             try:
@@ -218,7 +218,7 @@ class VersionOutputCorrelator:
     def _load_json_from_file(self, params: JsonLoadParams):
         """Load JSON from a file and handle errors."""
         try:
-            with open(params.json_file, "r", encoding="utf-8") as f:
+            with open(params.json_file, encoding="utf-8") as f:
                 data = json.load(f)
                 if params.add_source_file:
                     if isinstance(data, list):
@@ -244,7 +244,7 @@ class VersionOutputCorrelator:
                 },
             )
             params.corrupted_files.append(str(params.json_file.name))
-        except (OSError, IOError) as e:
+        except OSError as e:
             logger.error(
                 "Failed to read version output file",
                 extra={
@@ -270,7 +270,7 @@ class VersionOutputCorrelator:
 
     def _load_agent_outputs_with_filenames(
         self, output_dir: Path
-    ) -> Tuple[List[Dict[str, Any]], set]:
+    ) -> tuple[list[dict[str, Any]], set]:
         """Load all JSON outputs with filenames."""
         outputs = []
         filenames = set()
@@ -307,7 +307,7 @@ class VersionOutputCorrelator:
         return (outputs, filenames)
 
     def _build_correlation_groups(
-        self, version_outputs: Dict[str, List[Dict[str, Any]]]
+        self, version_outputs: dict[str, list[dict[str, Any]]]
     ) -> defaultdict:
         """Build correlation groups from version outputs."""
         correlation_groups = defaultdict(dict)
@@ -330,9 +330,9 @@ class VersionOutputCorrelator:
 
     def _create_merged_record(
         self,
-        agent_records: Dict[str, Dict[str, Any]],
-        version_outputs: Dict[str, List[Dict[str, Any]]],
-    ) -> Dict[str, Any]:
+        agent_records: dict[str, dict[str, Any]],
+        version_outputs: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
         """Create a merged record from agent records."""
         base_record = next(iter(agent_records.values()))
 
@@ -364,8 +364,8 @@ class VersionOutputCorrelator:
         return merged_record
 
     def _correlate_by_source_record(
-        self, version_outputs: Dict[str, List[Dict[str, Any]]]
-    ) -> List[Dict[str, Any]]:
+        self, version_outputs: dict[str, list[dict[str, Any]]]
+    ) -> list[dict[str, Any]]:
         """Correlate version outputs by source record ID using merge pattern."""
         correlation_groups = self._build_correlation_groups(version_outputs)
         correlated_records = []
@@ -375,7 +375,7 @@ class VersionOutputCorrelator:
                 correlated_records.append(merged_record)
         return correlated_records
 
-    def _merge_with_pattern(self, agent_records: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge_with_pattern(self, agent_records: dict[str, dict[str, Any]]) -> dict[str, Any]:
         """Merge content into nested namespaces keyed by version agent name."""
         merged_content = {}
         for agent_name, record in agent_records.items():
@@ -386,9 +386,9 @@ class VersionOutputCorrelator:
     def _write_correlated_data(
         self,
         output_dir: Path,
-        correlated_data: List[Dict[str, Any]],
+        correlated_data: list[dict[str, Any]],
         filename: str = "correlated_data.json",
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ):
         """Write correlated data to storage backend or filesystem."""
         if not correlated_data:
@@ -421,7 +421,7 @@ class VersionOutputCorrelator:
             self._create_correlation_source_data(output_file, cleaned_data)
 
     def _create_correlation_source_data(
-        self, target_file: Path, correlated_data: List[Dict[str, Any]]
+        self, target_file: Path, correlated_data: list[dict[str, Any]]
     ):
         """Create source data file for the correlation target, skipping if existing source is richer."""
         try:
@@ -459,7 +459,7 @@ class VersionOutputCorrelator:
 
             with open(source_path, "w", encoding="utf-8") as f:
                 json.dump(source_records, f, indent=2)
-        except (OSError, IOError, ValueError) as e:
+        except (OSError, ValueError) as e:
             logger.warning("Could not create correlation source data: %s", e)
 
 

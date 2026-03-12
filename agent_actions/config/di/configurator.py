@@ -1,16 +1,16 @@
 """Dependency injection configuration for agent-actions."""
 
+from agent_actions.config.di.container import (
+    DependencyContainer,
+    ProcessorFactory,
+    registry,
+)
 from agent_actions.config.di.types import DIConfig
 from agent_actions.config.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
     ISourceDataLoader,
-)
-from agent_actions.config.di.container import (
-    DependencyContainer,
-    ProcessorFactory,
-    registry,
 )
 
 
@@ -29,8 +29,8 @@ class DIConfigurator:
     @staticmethod
     def _register_core_services(container: DependencyContainer):
         """Register core application services."""
-        from agent_actions.llm.batch.service import BatchService
         from agent_actions.config.paths import PathManager
+        from agent_actions.llm.batch.service import BatchService
 
         container.register_singleton(PathManager, PathManager)
         container.register_singleton(BatchService, BatchService)
@@ -84,8 +84,8 @@ class DIConfigurator:
 
         container.register_factory(IDataProcessor, processor_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
         container.register_factory(IGenerator, generator_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
-        from agent_actions.llm.batch.service import BatchService
         from agent_actions.config.paths import PathManager
+        from agent_actions.llm.batch.service import BatchService
 
         container.register_instance(PathManager, Mock(spec=PathManager))
         container.register_instance(BatchService, Mock(spec=BatchService))

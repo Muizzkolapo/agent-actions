@@ -6,17 +6,18 @@ the evaluate_node() recursive evaluator.
 """
 
 import pytest
+
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
     ComparisonNode,
+    ComparisonOperator,
     FieldNode,
     FunctionNode,
     LiteralNode,
     LogicalNode,
-    ComparisonOperator,
     LogicalOperator,
     WhereClauseAST,
-    evaluate_node,
     _field_exists,
+    evaluate_node,
 )
 
 

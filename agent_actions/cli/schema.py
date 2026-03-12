@@ -2,7 +2,7 @@
 
 import json as json_lib
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import click
 from rich.console import Console
@@ -10,17 +10,17 @@ from rich.console import Console
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
 from agent_actions.cli.renderers import SchemaRenderer
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
-from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.workflow import WorkflowSchemaService
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 
 
 class SchemaCommand:
     def __init__(
         self,
         agent: str,
-        user_code: Optional[str],
+        user_code: str | None,
         json_output: bool,
         verbose: bool,
     ):
@@ -62,7 +62,7 @@ class SchemaCommand:
             ],
         }
 
-        udf_registry: Dict[str, Any] = {}
+        udf_registry: dict[str, Any] = {}
         try:
             from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
@@ -149,7 +149,7 @@ class SchemaCommand:
 @requires_project
 def schema(
     agent: str,
-    user_code: Optional[str],
+    user_code: str | None,
     json_output: bool,
     verbose: bool,
 ) -> None:

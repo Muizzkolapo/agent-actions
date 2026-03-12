@@ -6,9 +6,9 @@ This script runs all or specific Playwright tests to validate the
 documentation site functionality.
 """
 
+import glob
 import subprocess
 import sys
-import glob
 
 
 def main():

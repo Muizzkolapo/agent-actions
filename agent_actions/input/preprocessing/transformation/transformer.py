@@ -1,7 +1,7 @@
 """Data transformation utilities for agent actions."""
 
 import copy
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class DataTransformer:
@@ -25,7 +25,7 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def remove_schema_objects(data: Dict[str, Any], keys_to_remove: List[str]) -> Dict[str, Any]:
+    def remove_schema_objects(data: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
         """Return a new dictionary with specified keys removed."""
         if not isinstance(data, dict):
             return data
@@ -36,8 +36,8 @@ class DataTransformer:
 
     @staticmethod
     def update_schema_objects(
-        data_old: Dict[str, Any], data_new: Dict[str, Any], keys_to_update: List[str]
-    ) -> Dict[str, Any]:
+        data_old: dict[str, Any], data_new: dict[str, Any], keys_to_update: list[str]
+    ) -> dict[str, Any]:
         """Merge keys from data_old into data_new: replace if same type, combine if types differ."""
         result = copy.deepcopy(data_new)
 
@@ -57,7 +57,7 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def transform_structure(data: List[Dict]) -> List[Dict]:
+    def transform_structure(data: list[dict]) -> list[dict]:
         """Flatten nested {source_guid: contents} structure to list of dicts."""
         result = []
 
@@ -73,7 +73,7 @@ class DataTransformer:
         return result
 
     @staticmethod
-    def get_content_by_source_guid(data: List[Dict[str, Any]], source_guid: str) -> Optional[Any]:
+    def get_content_by_source_guid(data: list[dict[str, Any]], source_guid: str) -> Any | None:
         """Find and return the item matching the given source_guid, or None."""
         for item in data:
             if isinstance(item, dict):

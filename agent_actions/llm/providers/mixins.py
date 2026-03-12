@@ -7,7 +7,8 @@ eliminating duplicate code across different provider implementations.
 
 import json
 import logging
-from typing import Any, Union, Dict, List, Optional
+from typing import Any
+
 from agent_actions.errors import VendorAPIError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import LLMJSONParseErrorEvent
@@ -29,7 +30,7 @@ class JSONResponseMixin:
         vendor_name: str,
         operation: str,
         model_name: str,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Parse JSON response with error dict pattern for repair support.
 
@@ -134,7 +135,7 @@ class OpenAICompatibleResponseMixin:
     from OpenAI-style batch responses.
     """
 
-    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from OpenAI-compatible response."""
         if raw_response.get("error"):
             return str(raw_response["error"])
@@ -144,7 +145,7 @@ class OpenAICompatibleResponseMixin:
             return f"HTTP {status_code}"
         return None
 
-    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+    def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
@@ -154,7 +155,7 @@ class OpenAICompatibleResponseMixin:
                 return choice["message"]["content"]
         return None
 
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
@@ -167,9 +168,7 @@ class OpenAICompatibleResponseMixin:
             "status_code": response_data.get("status_code"),
         }
 
-    def _extract_usage_from_response(
-        self, raw_response: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any] | None:
         """Extract usage from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})

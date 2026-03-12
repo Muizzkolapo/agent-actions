@@ -1,7 +1,5 @@
 """Render command validation module."""
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 
@@ -11,6 +9,6 @@ class RenderCommandArgs(BaseModel):
     agent_name: str = Field(
         ..., min_length=1, description="Name of the agent to render template for"
     )
-    template_dir: Optional[str] = Field(
+    template_dir: str | None = Field(
         None, description="Directory containing templates (default: ./templates)"
     )

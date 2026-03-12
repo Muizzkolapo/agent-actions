@@ -2,7 +2,7 @@
 
 import json as json_lib
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 import click
 from rich.console import Console
@@ -10,7 +10,7 @@ from rich.table import Table
 
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.input.loaders.udf import discover_udfs
-from agent_actions.utils.udf_management.registry import list_udfs, clear_registry
+from agent_actions.utils.udf_management.registry import clear_registry, list_udfs
 
 
 class ListUDFsCommand:
@@ -39,7 +39,7 @@ class ListUDFsCommand:
         else:
             self._output_table(udfs)
 
-    def _output_json(self, udfs: List[Dict[str, Any]]) -> None:
+    def _output_json(self, udfs: list[dict[str, Any]]) -> None:
         output = []
         for udf in udfs:
             entry = {
@@ -53,7 +53,7 @@ class ListUDFsCommand:
             output.append(entry)
         click.echo(json_lib.dumps(output, indent=2))
 
-    def _output_table(self, udfs: List[Dict[str, Any]]) -> None:
+    def _output_table(self, udfs: list[dict[str, Any]]) -> None:
         table = Table(title="Available User-Defined Functions")
         table.add_column("Function", style="cyan", no_wrap=True)
         table.add_column("Location", style="green")

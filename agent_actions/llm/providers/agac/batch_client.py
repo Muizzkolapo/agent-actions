@@ -7,19 +7,19 @@ without hitting real APIs. Uses schema-based fake data generation.
 Auto-completes after configurable time (default 5 seconds).
 """
 
-import time
-import uuid
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import time
+import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
+from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
     BatchTask,
 )
-from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class MockBatchState:
     """Tracks state of a mock batch job."""
 
     batch_id: str
-    tasks: List[BatchTask] = field(default_factory=list)
+    tasks: list[BatchTask] = field(default_factory=list)
     status: str = "in_progress"
     poll_count: int = 0
     polls_until_complete: int = 0
@@ -54,13 +54,13 @@ class AgacBatchClient(BaseBatchClient):
     """
 
     # Class-level storage for batch state (persists across CLI runs via disk)
-    _batches: Dict[str, MockBatchState] = {}
-    _tasks_by_batch: Dict[str, List[Dict[str, Any]]] = {}
+    _batches: dict[str, MockBatchState] = {}
+    _tasks_by_batch: dict[str, list[dict[str, Any]]] = {}
 
     def __init__(
         self,
-        polls_until_complete: Optional[int] = None,
-        complete_after_seconds: Optional[float] = None,
+        polls_until_complete: int | None = None,
+        complete_after_seconds: float | None = None,
         **kwargs,
     ):
         """
@@ -98,8 +98,8 @@ class AgacBatchClient(BaseBatchClient):
         return "agac-model"
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Format task for mock processing."""
         return {
             "custom_id": batch_task.custom_id,
@@ -213,18 +213,18 @@ class AgacBatchClient(BaseBatchClient):
         return f"{batch_id}_mock_results.jsonl"
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to input file."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "mock")
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit mock batch job."""
         batch_id = f"mock_batch_{uuid.uuid4().hex[:12]}"
 
         # Read tasks from input file
         tasks = []
-        with open(input_file, "r", encoding="utf-8") as f:
+        with open(input_file, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     tasks.append(json.loads(line))
@@ -247,7 +247,7 @@ class AgacBatchClient(BaseBatchClient):
 
         return batch_id, "in_progress"
 
-    def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Check for error in response."""
         if isinstance(raw_response, dict):
             error = raw_response.get("error")
@@ -266,7 +266,7 @@ class AgacBatchClient(BaseBatchClient):
                 return message.get("content", "")
         return ""
 
-    def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: Any) -> dict[str, Any]:
         """Extract metadata from response."""
         metadata = {}
         if isinstance(raw_response, dict):
@@ -278,7 +278,7 @@ class AgacBatchClient(BaseBatchClient):
                 metadata["finish_reason"] = choices[0].get("finish_reason", "stop")
         return metadata
 
-    def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
         """Extract usage info from response."""
         if isinstance(raw_response, dict):
             response = raw_response.get("response", {})
@@ -296,6 +296,6 @@ class AgacBatchClient(BaseBatchClient):
         logger.debug("AgacBatchClient state reset")
 
     @classmethod
-    def get_batch_state(cls, batch_id: str) -> Optional[MockBatchState]:
+    def get_batch_state(cls, batch_id: str) -> MockBatchState | None:
         """Get internal state of a batch (for testing/debugging)."""
         return cls._batches.get(batch_id)

@@ -1,8 +1,8 @@
 """Data loader for batch processing from JSON and JSONL files."""
 
-from pathlib import Path
 import json
-from typing import List, Dict, Any
+from pathlib import Path
+from typing import Any
 
 from agent_actions.config.interfaces import IDataLoader, ProcessingMode
 
@@ -18,13 +18,13 @@ class BatchDataLoader(IDataLoader):
         """Return AUTO processing mode to let system choose."""
         return ProcessingMode.AUTO
 
-    def load_data(self, file_path: str) -> List[Dict[str, Any]]:
+    def load_data(self, file_path: str) -> list[dict[str, Any]]:
         """Load data from a JSON or JSONL file."""
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"The specified file does not exist: {file_path}")
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 if path.suffix == ".jsonl":
                     return [json.loads(line) for line in f if line.strip()]
                 if path.suffix == ".json":
@@ -35,4 +35,4 @@ class BatchDataLoader(IDataLoader):
         except json.JSONDecodeError as e:
             raise ValueError(f"Error decoding JSON from {file_path}: {e}") from e
         except Exception as e:
-            raise IOError(f"Could not read file: {file_path}") from e
+            raise OSError(f"Could not read file: {file_path}") from e

@@ -6,17 +6,17 @@ from agent_actions.logging.core.events import (
     EventLevel,
     EventMeta,
 )
+from agent_actions.logging.core.handlers import (
+    ConsoleEventHandler,
+    ContextDebugHandler,
+    JSONFileHandler,
+)
 from agent_actions.logging.core.manager import EventManager, fire_event, get_manager
 from agent_actions.logging.core.protocols import (
     CategoryFilter,
     EventFilter,
     EventHandler,
     LevelFilter,
-)
-from agent_actions.logging.core.handlers import (
-    ConsoleEventHandler,
-    JSONFileHandler,
-    ContextDebugHandler,
 )
 
 __all__ = [

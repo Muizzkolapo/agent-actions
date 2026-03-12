@@ -2,9 +2,9 @@
 
 import json
 import logging
-from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, Optional
+from pathlib import Path
+from typing import Any
 
 import click
 
@@ -20,13 +20,13 @@ from .scanner import ProjectScanner
 class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
-    def __init__(self, workflows_data: Dict[str, Dict], project_path: Optional[str] = None):
+    def __init__(self, workflows_data: dict[str, dict], project_path: str | None = None):
         self.workflows_data = workflows_data
         self.parser = WorkflowParser()
         self.project_path = Path(project_path) if project_path else None
         self.schema_dir = self._find_schema_dir()
 
-    def _find_schema_dir(self) -> Optional[Path]:
+    def _find_schema_dir(self) -> Path | None:
         """Find the schema directory in the project."""
         if not self.project_path:
             return None
@@ -44,7 +44,7 @@ class CatalogGenerator:
 
         return None
 
-    def _enrich_action_with_fields(self, action: Dict[str, Any]) -> Dict[str, Any]:
+    def _enrich_action_with_fields(self, action: dict[str, Any]) -> dict[str, Any]:
         """Enrich action with input/output field information for lineage."""
         enriched = action.copy()
 
@@ -90,20 +90,20 @@ class CatalogGenerator:
 
     def generate(
         self,
-        prompts_data: Optional[Dict[str, Any]] = None,
-        schemas_data: Optional[Dict[str, Any]] = None,
-        tool_functions_data: Optional[Dict[str, Any]] = None,
-        runs_data: Optional[Dict[str, Any]] = None,
-        logs_data: Optional[Dict[str, Any]] = None,
-        vendors_data: Optional[Dict[str, Any]] = None,
-        error_types_data: Optional[Dict[str, Any]] = None,
-        event_types_data: Optional[Dict[str, Any]] = None,
-        examples_data: Optional[Dict[str, Any]] = None,
-        data_loaders_data: Optional[Dict[str, Any]] = None,
-        processing_states_data: Optional[Dict[str, Any]] = None,
-        workflow_data: Optional[Dict[str, Any]] = None,
-        readmes_data: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Any]:
+        prompts_data: dict[str, Any] | None = None,
+        schemas_data: dict[str, Any] | None = None,
+        tool_functions_data: dict[str, Any] | None = None,
+        runs_data: dict[str, Any] | None = None,
+        logs_data: dict[str, Any] | None = None,
+        vendors_data: dict[str, Any] | None = None,
+        error_types_data: dict[str, Any] | None = None,
+        event_types_data: dict[str, Any] | None = None,
+        examples_data: dict[str, Any] | None = None,
+        data_loaders_data: dict[str, Any] | None = None,
+        processing_states_data: dict[str, Any] | None = None,
+        workflow_data: dict[str, Any] | None = None,
+        readmes_data: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
         """Generate the complete catalog structure."""
         # Initialize prompts with used_by tracking
         prompts_with_refs = {}

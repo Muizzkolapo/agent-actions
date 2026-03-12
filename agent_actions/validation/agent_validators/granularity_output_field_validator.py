@@ -1,13 +1,13 @@
 """Validator for granularity and output_field configuration."""
 
+from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
     AgentEntryValidationResult,
+    BaseAgentEntryValidator,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,
 )
-from agent_actions.utils.constants import JSON_MODE_KEY
 
 
 class GranularityAndOutputFieldValidator(BaseAgentEntryValidator):

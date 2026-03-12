@@ -1,8 +1,9 @@
 """Authentication error formatter."""
 
-from typing import Dict, Any
-from .base import ErrorFormatter
+from typing import Any
+
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class AuthenticationErrorFormatter(ErrorFormatter):
@@ -27,7 +28,7 @@ class AuthenticationErrorFormatter(ErrorFormatter):
         return any(pattern in message_lower for pattern in auth_patterns)
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         provider = self._extract_provider_name(message, context)
 

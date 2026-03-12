@@ -1,7 +1,7 @@
 """Field flow analyzer for workflow data lineage tracking."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .data_flow_graph import DataFlowGraph, DataFlowNode
 from .errors import StaticValidationResult
@@ -15,7 +15,7 @@ class FieldConsumer:
     location: str
     raw_reference: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "agent": self.agent,
@@ -31,10 +31,10 @@ class FieldLineage:
     producer: str
     field_name: str
     field_type: str  # 'schema', 'observe', 'passthrough', 'source'
-    consumers: List[FieldConsumer] = field(default_factory=list)
+    consumers: list[FieldConsumer] = field(default_factory=list)
     is_dropped: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "producer": self.producer,
@@ -49,15 +49,15 @@ class FieldLineage:
 class OutputFieldInfo:
     """Information about an action's output fields."""
 
-    schema_fields: List[str] = field(default_factory=list)
-    observe_fields: List[str] = field(default_factory=list)
-    passthrough_fields: List[str] = field(default_factory=list)
-    dropped_fields: List[str] = field(default_factory=list)
-    available_fields: List[str] = field(default_factory=list)
+    schema_fields: list[str] = field(default_factory=list)
+    observe_fields: list[str] = field(default_factory=list)
+    passthrough_fields: list[str] = field(default_factory=list)
+    dropped_fields: list[str] = field(default_factory=list)
+    available_fields: list[str] = field(default_factory=list)
     is_dynamic: bool = False
     is_schemaless: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "schema_fields": self.schema_fields,
@@ -79,7 +79,7 @@ class FieldReference:
     location: str
     raw_reference: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "source_agent": self.source_agent,
@@ -93,11 +93,11 @@ class FieldReference:
 class InputSchemaInfo:
     """Information about an action's input schema (for tools)."""
 
-    required_fields: List[str] = field(default_factory=list)
-    optional_fields: List[str] = field(default_factory=list)
+    required_fields: list[str] = field(default_factory=list)
+    optional_fields: list[str] = field(default_factory=list)
     is_dynamic: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "required_fields": self.required_fields,
@@ -112,13 +112,13 @@ class ActionFlowInfo:
 
     name: str
     kind: str
-    inputs: List[FieldReference] = field(default_factory=list)
+    inputs: list[FieldReference] = field(default_factory=list)
     input_schema: InputSchemaInfo = field(default_factory=InputSchemaInfo)
     outputs: OutputFieldInfo = field(default_factory=OutputFieldInfo)
-    dependencies: List[str] = field(default_factory=list)
-    downstream: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
+    downstream: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "name": self.name,
@@ -136,11 +136,11 @@ class WorkflowFlow:
     """Complete field flow for a workflow."""
 
     workflow_name: str
-    actions: List[ActionFlowInfo] = field(default_factory=list)
-    execution_order: List[str] = field(default_factory=list)
-    field_lineages: Dict[str, FieldLineage] = field(default_factory=dict)
+    actions: list[ActionFlowInfo] = field(default_factory=list)
+    execution_order: list[str] = field(default_factory=list)
+    field_lineages: dict[str, FieldLineage] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "workflow_name": self.workflow_name,
@@ -188,7 +188,7 @@ class FieldFlowAnalyzer:
             field_lineages=field_lineages,
         )
 
-    def get_field_lineage(self, agent_name: str, field_name: str) -> Optional[FieldLineage]:
+    def get_field_lineage(self, agent_name: str, field_name: str) -> FieldLineage | None:
         """Trace a single field from production to all consumption points."""
         node = self.graph.get_node(agent_name)
         if not node:
@@ -211,14 +211,14 @@ class FieldFlowAnalyzer:
             is_dropped=is_dropped,
         )
 
-    def get_action_flow_info(self, agent_name: str) -> Optional[ActionFlowInfo]:
+    def get_action_flow_info(self, agent_name: str) -> ActionFlowInfo | None:
         """Get field flow info for a single action."""
         node = self.graph.get_node(agent_name)
         if not node:
             return None
         return self._build_action_flow_info(node)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert full analysis to dictionary for JSON serialization."""
         flow = self.get_full_flow()
         return {
@@ -270,9 +270,9 @@ class FieldFlowAnalyzer:
             downstream=sorted(downstream),
         )
 
-    def _build_all_field_lineages(self) -> Dict[str, FieldLineage]:
+    def _build_all_field_lineages(self) -> dict[str, FieldLineage]:
         """Build lineage for all fields in the workflow."""
-        lineages: Dict[str, FieldLineage] = {}
+        lineages: dict[str, FieldLineage] = {}
 
         for node in self.graph.nodes.values():
             output_schema = node.output_schema
@@ -299,7 +299,7 @@ class FieldFlowAnalyzer:
 
         return lineages
 
-    def _get_field_type(self, output_schema, field_name: str) -> Optional[str]:
+    def _get_field_type(self, output_schema, field_name: str) -> str | None:
         """Determine how a field is produced."""
         if field_name in output_schema.schema_fields:
             return "schema"
@@ -311,7 +311,7 @@ class FieldFlowAnalyzer:
             return "source"
         return None
 
-    def _find_field_consumers(self, producer_name: str, field_name: str) -> List[FieldConsumer]:
+    def _find_field_consumers(self, producer_name: str, field_name: str) -> list[FieldConsumer]:
         """Find all agents that consume a specific field."""
         consumers = []
 
@@ -328,7 +328,7 @@ class FieldFlowAnalyzer:
 
         return consumers
 
-    def filter_to_field(self, agent_field: str) -> Optional[FieldLineage]:
+    def filter_to_field(self, agent_field: str) -> FieldLineage | None:
         """Filter analysis to a specific field in "agent.field" format."""
         if "." not in agent_field:
             return None

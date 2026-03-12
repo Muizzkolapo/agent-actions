@@ -1,22 +1,23 @@
 """Batch processing service facade delegating to specialized services."""
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.llm.batch.infrastructure.batch_data_loader import BatchDataLoader
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 from agent_actions.config.di.container import registry
-from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
-from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
-from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def _create_registry_manager_factory() -> Callable[[str], BatchRegistryManager]:
     """Create a factory that creates/caches registry managers."""
-    _cache: Dict[str, BatchRegistryManager] = {}
+    _cache: dict[str, BatchRegistryManager] = {}
 
     def get_registry_manager(output_directory: str) -> BatchRegistryManager:
         if output_directory not in _cache:
@@ -43,28 +44,28 @@ class BatchService:
     def __init__(
         self,
         # Pre-built services (for testing/dependency injection)
-        submission_service: Optional[Any] = None,
-        retrieval_service: Optional[Any] = None,
-        processing_service: Optional[Any] = None,
+        submission_service: Any | None = None,
+        retrieval_service: Any | None = None,
+        processing_service: Any | None = None,
         # Legacy params for backward compatibility
-        provider: Optional[BaseBatchClient] = None,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
+        provider: BaseBatchClient | None = None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
         force_batch: bool = False,
-        task_preparator: Optional[BatchTaskPreparator] = None,
-        result_processor: Optional[BatchResultProcessor] = None,
-        context_manager: Optional[BatchContextManager] = None,
-        client_resolver: Optional[BatchClientResolver] = None,
-        job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
-        source_handler: Optional[Any] = None,  # BatchSourceHandler
+        task_preparator: BatchTaskPreparator | None = None,
+        result_processor: BatchResultProcessor | None = None,
+        context_manager: BatchContextManager | None = None,
+        client_resolver: BatchClientResolver | None = None,
+        job_manager: Any | None = None,  # BatchJobManager, uses Any to avoid circular import
+        source_handler: Any | None = None,  # BatchSourceHandler
         storage_backend: Optional["StorageBackend"] = None,
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ):
         """Initialize batch service facade with optional pre-built services."""
-        from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
         from agent_actions.llm.batch.infrastructure.batch_source_handler import (
             BatchSourceHandler,
         )
+        from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
 
         # Store pre-built services
         self._submission_service = submission_service
@@ -75,7 +76,7 @@ class BatchService:
         self.data_loader = BatchDataLoader()
         self.provider = provider
         self.force_batch = force_batch
-        self._provider_cache: Dict[str, Any] = {}
+        self._provider_cache: dict[str, Any] = {}
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
@@ -96,7 +97,7 @@ class BatchService:
 
         # Registry manager factory (shared across services)
         self._registry_manager_factory = _create_registry_manager_factory()
-        self._registry_manager: Optional[BatchRegistryManager] = None
+        self._registry_manager: BatchRegistryManager | None = None
 
         # Job manager (special case - still used directly for status queries)
         self._job_manager = job_manager or BatchJobManager(client_resolver=self._client_resolver)
@@ -178,8 +179,8 @@ class BatchService:
         data,
         output_directory=None,
         force=False,
-        source_data: Optional[Any] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
+        source_data: Any | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ):
         """Submit a batch job for processing (delegates to submission service)."""
         return self._get_submission_service().submit_batch_job(
@@ -206,7 +207,7 @@ class BatchService:
         output_directory: str,
         base_directory: str,
         file_path: str,
-        agent_config: Optional[Dict[str, Any]] = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> str:
         """Process batch results to workflow output (delegates to processing service)."""
         return self._get_processing_service().process_batch_results(
@@ -216,9 +217,9 @@ class BatchService:
     def process_all_batch_results(
         self,
         output_directory: str,
-        agent_config: Optional[Dict[str, Any]] = None,
-        action_name: Optional[str] = None,
-    ) -> List[str]:
+        agent_config: dict[str, Any] | None = None,
+        action_name: str | None = None,
+    ) -> list[str]:
         """Process all completed batch jobs (delegates to processing service)."""
         return self._get_processing_service().process_all_batch_results(
             output_directory, agent_config, action_name=action_name

@@ -6,14 +6,13 @@ Analyzes all Python files and updates import paths to match the new
 stage-based structure.
 """
 
+import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
-import json
 
 
-def load_migration_map(plan_file: str) -> Dict[str, str]:
+def load_migration_map(plan_file: str) -> dict[str, str]:
     """
     Create a mapping of old paths to new paths from migration plan.
 
@@ -51,7 +50,7 @@ def load_migration_map(plan_file: str) -> Dict[str, str]:
     return mapping
 
 
-def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
+def find_python_files(root: Path, include_tests: bool = False) -> list[Path]:
     """Find all Python files in the new structure."""
     files = []
 
@@ -86,7 +85,7 @@ def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
     return files
 
 
-def extract_imports(content: str) -> List[Tuple[str, str, str]]:
+def extract_imports(content: str) -> list[tuple[str, str, str]]:
     """
     Extract import statements from file.
 
@@ -120,7 +119,7 @@ def extract_imports(content: str) -> List[Tuple[str, str, str]]:
     return imports
 
 
-def fix_import(old_import: str, module: str, items: str, mapping: Dict[str, str]) -> str:
+def fix_import(old_import: str, module: str, items: str, mapping: dict[str, str]) -> str:
     """Fix a single import statement."""
 
     # Check if module needs updating
@@ -146,10 +145,9 @@ def fix_import(old_import: str, module: str, items: str, mapping: Dict[str, str]
     return old_import
 
 
-def fix_file_imports(file_path: Path, mapping: Dict[str, str], dry_run: bool = True) -> int:
+def fix_file_imports(file_path: Path, mapping: dict[str, str], dry_run: bool = True) -> int:
     """Fix imports in a single file. Returns number of changes."""
     content = file_path.read_text()
-    original_content = content
 
     imports = extract_imports(content)
     changes = 0
@@ -212,18 +210,18 @@ def main():
                 rel_path = file_path
             print(f"   ✏️  {rel_path}: {changes} import(s) fixed")
 
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Files scanned: {len(python_files)}")
     print(f"   Files changed: {files_changed}")
     print(f"   Total imports fixed: {total_changes}")
 
     if not execute and total_changes > 0:
-        print(f"\n⚠️  To apply changes, run:")
+        print("\n⚠️  To apply changes, run:")
         print(f"   python fix_imports.py {plan_file} --execute")
     elif execute and total_changes > 0:
-        print(f"\n✅ Import paths updated successfully!")
+        print("\n✅ Import paths updated successfully!")
     else:
-        print(f"\n✅ No import changes needed!")
+        print("\n✅ No import changes needed!")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@ Test error handling parity between batch and online modes.
 Behavioral tests for guard exception handling (GitHub Issue #800).
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from agent_actions.input.preprocessing.filtering.evaluator import GuardEvaluator
 

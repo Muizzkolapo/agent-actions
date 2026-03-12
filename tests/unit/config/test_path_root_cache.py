@@ -1,6 +1,6 @@
 """Tests for get_project_root() cache behaviour with explicit start_path."""
 
-from agent_actions.config.paths import PathManager, PathConfig, PathType
+from agent_actions.config.paths import PathConfig, PathManager
 
 
 def test_explicit_start_path_caches_for_follow_on_calls(tmp_path):

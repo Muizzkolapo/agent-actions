@@ -5,8 +5,10 @@ Action-level execution orchestration module.
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import Any
+
 from rich.console import Console
+
 from agent_actions.errors import WorkflowError, get_error_detail
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import AgentCompleteEvent, AgentFailedEvent
@@ -16,8 +18,8 @@ from agent_actions.logging.events import AgentCompleteEvent, AgentFailedEvent
 class ParallelExecutionParams:
     """Parameters for executing parallel agents."""
 
-    pending_agents: List[str]
-    agent_indices: Dict
+    pending_agents: list[str]
+    agent_indices: dict
     agent_executor: Any
     concurrency_limit: int
     level_idx: int
@@ -28,8 +30,8 @@ class LevelExecutionParams:
     """Parameters for executing a level."""
 
     level_idx: int
-    level_agents: List[str]
-    agent_indices: Dict[str, int]
+    level_agents: list[str]
+    agent_indices: dict[str, int]
     state_manager: Any
     agent_executor: Any
     concurrency_limit: int = 5
@@ -40,18 +42,18 @@ class ActionLevelOrchestrator:
 
     def __init__(
         self,
-        execution_order: List[str],
-        agent_configs: Dict[str, Dict[str, Any]],
-        console: Optional[Console] = None,
+        execution_order: list[str],
+        agent_configs: dict[str, dict[str, Any]],
+        console: Console | None = None,
     ):
         """Initialize level orchestrator."""
         self.execution_order = execution_order
         self.agent_configs = agent_configs
         self.console = console or Console()
 
-    def _build_version_base_name_map(self) -> Dict[str, List[str]]:
+    def _build_version_base_name_map(self) -> dict[str, list[str]]:
         """Build a mapping from version base names to their expanded agent names."""
-        version_base_map: Dict[str, List[str]] = {}
+        version_base_map: dict[str, list[str]] = {}
         for agent_name in self.execution_order:
             config = self.agent_configs[agent_name]
             if config.get("is_versioned_agent"):
@@ -63,8 +65,8 @@ class ActionLevelOrchestrator:
         return version_base_map
 
     def _expand_version_dependencies(
-        self, dependencies: List[str], version_base_map: Dict[str, List[str]]
-    ) -> List[str]:
+        self, dependencies: list[str], version_base_map: dict[str, list[str]]
+    ) -> list[str]:
         """Expand dependencies that reference version base names to their expanded variants."""
         expanded = []
         for dep in dependencies:
@@ -76,7 +78,7 @@ class ActionLevelOrchestrator:
                 expanded.append(dep)
         return expanded
 
-    def compute_execution_levels(self) -> List[List[str]]:
+    def compute_execution_levels(self) -> list[list[str]]:
         """Compute execution levels from dependency graph.
 
         Raises:
@@ -142,7 +144,7 @@ class ActionLevelOrchestrator:
         levels = self.compute_execution_levels()
         return any(len(level) > 1 for level in levels)
 
-    def log_execution_levels(self, levels: List[List[str]], agent_indices: Dict[str, int]):
+    def log_execution_levels(self, levels: list[list[str]], agent_indices: dict[str, int]):
         """Log execution levels for user transparency."""
         self.console.print(f"[blue]📊 Execution: {len(levels)} action(s)[/blue]")
 
@@ -156,7 +158,7 @@ class ActionLevelOrchestrator:
             else:
                 self.console.print(f"[dim]  Action {i}: {level[0]} (sequential)[/dim]")
 
-    async def _execute_single_agent(self, agent_name: str, agent_indices: Dict, agent_executor):
+    async def _execute_single_agent(self, agent_name: str, agent_indices: dict, agent_executor):
         """Execute a single agent asynchronously."""
         original_idx = agent_indices[agent_name]
         agent_config = self.agent_configs[agent_name]
@@ -213,7 +215,7 @@ class ActionLevelOrchestrator:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         errors = []
-        for agent, result in zip(params.pending_agents, results):
+        for agent, result in zip(params.pending_agents, results, strict=True):
             if isinstance(result, Exception):
                 errors.append((agent, result))
             elif not result.success:
@@ -255,7 +257,7 @@ class ActionLevelOrchestrator:
         # batch_submitted: BatchSubmittedEvent already fired by executor
 
     def _check_batch_status(
-        self, level_idx: int, level_agents: List[str], state_manager, start_time: datetime
+        self, level_idx: int, level_agents: list[str], state_manager, start_time: datetime
     ) -> bool:
         """Check batch submission status and handle accordingly."""
         batch_pending = state_manager.get_batch_submitted_agents(level_agents)

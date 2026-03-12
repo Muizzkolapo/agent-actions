@@ -119,7 +119,7 @@ def test_action_config_non_hitl_with_hitl_config():
 
 def test_hitl_output_schema_constant_matches_server_fields():
     """Validate that HITL_OUTPUT_SCHEMA fields match _make_terminal_response output."""
-    from agent_actions.utils.constants import HITL_OUTPUT_SCHEMA, HITL_OUTPUT_JSON_SCHEMA
+    from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
 
     # The three core fields from _make_terminal_response in hitl/server.py
     expected_fields = {"hitl_status", "user_comment", "timestamp"}

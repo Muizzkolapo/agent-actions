@@ -12,13 +12,12 @@ gate to catch any divergence.
 See: https://github.com/Muizzkolapo/agent-actions/issues/640
 """
 
+from typing import Any
+
 import pytest
-from typing import Dict, Any
-from unittest.mock import patch, MagicMock
 
 from agent_actions.prompt.service import (
     PromptPreparationService,
-    PromptPreparationResult,
 )
 
 
@@ -213,7 +212,7 @@ class TestPromptPreparationParityWithContextScope:
     )
     def test_parity_with_context_scope_config(
         self,
-        context_scope_config: Dict[str, Any],
+        context_scope_config: dict[str, Any],
         description: str,
         parity_contents,
         parity_current_item,

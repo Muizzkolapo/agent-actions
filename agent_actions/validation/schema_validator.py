@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 
 import jsonschema
 
@@ -19,9 +19,9 @@ from agent_actions.validation.base_validator import BaseValidator
 logger = logging.getLogger(__name__)
 
 
-def _find_refs(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
+def _find_refs(obj: dict[str, Any] | list[Any]) -> set[str]:
     """Find all $ref values in a schema object (recursive)."""
-    refs: Set[str] = set()
+    refs: set[str] = set()
     if isinstance(obj, dict):
         if "$ref" in obj and isinstance(obj["$ref"], str):
             refs.add(obj["$ref"])
@@ -33,9 +33,9 @@ def _find_refs(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
     return refs
 
 
-def _collect_all_keys(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
+def _collect_all_keys(obj: dict[str, Any] | list[Any]) -> set[str]:
     """Collect all keys used in a schema object (recursive)."""
-    keys: Set[str] = set()
+    keys: set[str] = set()
     if isinstance(obj, dict):
         keys.update(obj.keys())
         for value in obj.values():
@@ -49,7 +49,7 @@ def _collect_all_keys(obj: Union[Dict[str, Any], List[Any]]) -> Set[str]:
 class SchemaValidator(BaseValidator):
     """Validates schema files against JSON Schema meta-schema."""
 
-    JSON_SCHEMA_RESERVED_KEYWORDS: Set[str] = {
+    JSON_SCHEMA_RESERVED_KEYWORDS: set[str] = {
         "type",
         "properties",
         "required",
@@ -89,7 +89,7 @@ class SchemaValidator(BaseValidator):
     }
 
     def _process_schema_file(
-        self, file_path: Path, schema_name: str, agent_name: Optional[str] = "general"
+        self, file_path: Path, schema_name: str, agent_name: str | None = "general"
     ) -> None:
         """Validate a single schema file and add errors to the instance."""
         display_name = f"schema '{schema_name}'"
@@ -117,7 +117,7 @@ class SchemaValidator(BaseValidator):
             )
             return
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 schema_data = json.load(f)
         except json.JSONDecodeError as e:
             self.add_error(
@@ -173,7 +173,7 @@ class SchemaValidator(BaseValidator):
         logger.debug("Successfully processed schema file: %s", file_path.name)
 
     @staticmethod
-    def _is_valid_json_schema_structure(schema_data: Dict[str, Any]) -> bool:
+    def _is_valid_json_schema_structure(schema_data: dict[str, Any]) -> bool:
         """Return True if the dict appears to be a JSON Schema document."""
         if not isinstance(schema_data, dict):
             return False
@@ -192,15 +192,15 @@ class SchemaValidator(BaseValidator):
         return bool(set(schema_data.keys()) & schema_keywords)
 
     @staticmethod
-    def _validate_against_meta_schema_static(schema_data: Dict[str, Any]) -> None:
+    def _validate_against_meta_schema_static(schema_data: dict[str, Any]) -> None:
         """Validate schema against the JSON Schema meta-schema; raises on failure."""
         validator_cls = jsonschema.validators.validator_for(schema_data)
         validator_cls.check_schema(schema_data)
 
     @classmethod
     def _check_common_schema_issues_static(
-        cls, schema_data: Dict[str, Any], schema_name: str
-    ) -> List[str]:
+        cls, schema_data: dict[str, Any], schema_name: str
+    ) -> list[str]:
         """Return list of common issue strings found in a JSON Schema document."""
         issues = []
         if "type" not in schema_data:
@@ -251,7 +251,7 @@ class SchemaValidator(BaseValidator):
             )
         return issues
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate schema files for a given agent in the specified directory."""
         agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
         target = f"schema:{agent_name}" if agent_name else "schema"
@@ -375,11 +375,11 @@ class SchemaValidator(BaseValidator):
 
     def _check_type_compatibility(
         self,
-        schema1_data: Dict[str, Any],
-        schema2_data: Dict[str, Any],
+        schema1_data: dict[str, Any],
+        schema2_data: dict[str, Any],
         schema1_name: str,
         schema2_name: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Check if schema types are compatible."""
         issues = []
         s1_type = schema1_data.get("type")
@@ -393,11 +393,11 @@ class SchemaValidator(BaseValidator):
 
     def _check_object_compatibility(
         self,
-        schema1_data: Dict[str, Any],
-        schema2_data: Dict[str, Any],
+        schema1_data: dict[str, Any],
+        schema2_data: dict[str, Any],
         schema1_name: str,
         schema2_name: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Check if object schemas are compatible."""
         issues = []
         props1 = schema1_data.get("properties", {})
@@ -422,8 +422,8 @@ class SchemaValidator(BaseValidator):
 
     def check_schema_compatibility(
         self,
-        schema1_data: Dict[str, Any],
-        schema2_data: Dict[str, Any],
+        schema1_data: dict[str, Any],
+        schema2_data: dict[str, Any],
         schema1_name: str = "Schema 1",
         schema2_name: str = "Schema 2",
     ) -> bool:

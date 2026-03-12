@@ -3,13 +3,12 @@ Thread-safe token usage tracking for LLM providers.
 """
 
 import threading
-from typing import Dict, Optional
 
 # Thread-local storage for token usage
 _thread_local = threading.local()
 
 
-def set_last_usage(usage: Optional[Dict[str, int]]) -> None:
+def set_last_usage(usage: dict[str, int] | None) -> None:
     """
     Store token usage in thread-local storage.
 
@@ -34,7 +33,7 @@ def set_last_usage(usage: Optional[Dict[str, int]]) -> None:
     _thread_local.last_usage = usage
 
 
-def get_last_usage() -> Optional[Dict[str, int]]:
+def get_last_usage() -> dict[str, int] | None:
     """
     Retrieve token usage from thread-local storage.
 

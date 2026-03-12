@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Any
+from typing import Any
 
 
 @dataclass
@@ -10,11 +10,11 @@ class WorkflowPaths:
     """Path configuration for workflow."""
 
     constructor_path: str
-    user_code_path: Optional[str]
+    user_code_path: str | None
     default_path: str
-    parent_output: Optional[str] = None
-    parent_source: Optional[str] = None
-    parent_pipeline: Optional[str] = None
+    parent_output: str | None = None
+    parent_source: str | None = None
+    parent_pipeline: str | None = None
 
 
 @dataclass
@@ -32,7 +32,7 @@ class WorkflowConfig:
 class WorkflowState:
     """Runtime state for workflow execution."""
 
-    previous_agent_type: Optional[str] = None
+    previous_agent_type: str | None = None
     ephemeral_directories: list = None
     failed: bool = False
 
@@ -58,7 +58,7 @@ class WorkflowMetadata:
     execution_order: list
     agent_indices: dict
     agent_configs: dict
-    child_pipeline: Optional[str] = None
+    child_pipeline: str | None = None
 
 
 @dataclass

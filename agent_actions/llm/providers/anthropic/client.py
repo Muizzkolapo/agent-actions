@@ -11,24 +11,23 @@ consistent retry handling across all providers.
 import uuid
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import anthropic
 
-from agent_actions.llm.providers.usage_tracker import set_last_usage
-from agent_actions.llm.providers.client_base import BaseClient
-from agent_actions.llm.providers.generation_params import extract_generation_params
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError
+from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
+from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
+from agent_actions.llm.providers.generation_params import extract_generation_params
+from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
 )
-
+from agent_actions.utils.constants import MODEL_NAME_KEY
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="anthropic",
@@ -55,9 +54,9 @@ class AnthropicClient(BaseClient):
     def _build_api_args(
         model_name: str,
         prompt_dedent: str,
-        schema: Optional[Dict[str, Any]],
-        agent_config: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        schema: dict[str, Any] | None,
+        agent_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Build API arguments for the Anthropic call."""
         cfg = agent_config or {}
         params = extract_generation_params(
@@ -68,7 +67,7 @@ class AnthropicClient(BaseClient):
         # max_tokens is always required for Anthropic; default 1024
         params.setdefault("max_tokens", 1024)
 
-        api_args: Dict[str, Any] = {
+        api_args: dict[str, Any] = {
             "model": model_name,
             "messages": [{"role": "user", "content": prompt_dedent}],
             **params,
@@ -92,7 +91,7 @@ class AnthropicClient(BaseClient):
     @staticmethod
     def _extract_response_content(
         response: Any, model_name: str
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Extract content from response, raising error if not found."""
         response_content = next(
             (block.input for block in response.content if hasattr(block, "input")), None
@@ -116,11 +115,11 @@ class AnthropicClient(BaseClient):
 
     @staticmethod
     def _call_api(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-        schema: Optional[Dict[str, Any]],
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+        schema: dict[str, Any] | None,
         mode: str,
     ) -> tuple:
         """Shared API call with timing, usage tracking, and event handling.
@@ -176,12 +175,12 @@ class AnthropicClient(BaseClient):
 
     @staticmethod
     def call_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-        schema: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+        schema: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
         response, model_name, request_id = AnthropicClient._call_api(
             api_key, agent_config, prompt_config, context_data, schema, "json"
         )
@@ -202,11 +201,11 @@ class AnthropicClient(BaseClient):
 
     @staticmethod
     def call_non_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-    ) -> List[Dict[str, str]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+    ) -> list[dict[str, str]]:
         """Plain-text (non-JSON) mode for Claude."""
         response, model_name, request_id = AnthropicClient._call_api(
             api_key, agent_config, prompt_config, context_data, None, "non_json"

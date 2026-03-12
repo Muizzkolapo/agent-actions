@@ -4,7 +4,6 @@ import ast
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from ruamel.yaml import YAML
 
@@ -22,7 +21,7 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-def find_project_root(start_path: Path) -> Optional[Path]:
+def find_project_root(start_path: Path) -> Path | None:
     """Find project root by looking for agent_actions.yml.
 
     Searches upward first, then searches subdirectories if not found.

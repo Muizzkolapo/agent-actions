@@ -2,17 +2,17 @@
 
 import collections
 import logging
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.errors import AgentActionsException
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
-    ResultCollectionStartedEvent,
+    ExhaustedRecordEvent,
     ResultCollectedEvent,
     ResultCollectionCompleteEvent,
-    ExhaustedRecordEvent,
+    ResultCollectionStartedEvent,
 )
+from agent_actions.processing.types import ProcessingResult, ProcessingStatus
 from agent_actions.storage.backend import (
     DISPOSITION_EXHAUSTED,
     DISPOSITION_FAILED,

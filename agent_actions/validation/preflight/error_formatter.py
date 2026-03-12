@@ -1,7 +1,7 @@
 """Unified error formatter for pre-flight validation."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -11,12 +11,12 @@ class ValidationIssue:
     message: str
     issue_type: str = "error"
     category: str = "general"
-    missing_refs: List[str] = field(default_factory=list)
-    available_refs: List[str] = field(default_factory=list)
-    hint: Optional[str] = None
-    agent_name: Optional[str] = None
-    location: Optional[str] = None
-    extra_context: Dict[str, Any] = field(default_factory=dict)
+    missing_refs: list[str] = field(default_factory=list)
+    available_refs: list[str] = field(default_factory=list)
+    hint: str | None = None
+    agent_name: str | None = None
+    location: str | None = None
+    extra_context: dict[str, Any] = field(default_factory=dict)
 
 
 class PreFlightErrorFormatter:
@@ -62,7 +62,7 @@ class PreFlightErrorFormatter:
         return "\n".join(lines)
 
     @staticmethod
-    def format_issues(issues: List[ValidationIssue], mode: str = "unknown") -> str:
+    def format_issues(issues: list[ValidationIssue], mode: str = "unknown") -> str:
         """Format multiple validation issues into a summary string."""
         if not issues:
             return "Pre-flight validation passed with no issues."
@@ -95,9 +95,9 @@ class PreFlightErrorFormatter:
     def create_vendor_config_issue(
         message: str,
         vendor: str,
-        missing_fields: Optional[List[str]] = None,
-        unsupported_features: Optional[List[str]] = None,
-        agent_name: Optional[str] = None,
+        missing_fields: list[str] | None = None,
+        unsupported_features: list[str] | None = None,
+        agent_name: str | None = None,
     ) -> ValidationIssue:
         """Create a ValidationIssue for vendor configuration problems."""
         hint_parts = []
@@ -122,9 +122,9 @@ class PreFlightErrorFormatter:
     @staticmethod
     def create_path_issue(
         message: str,
-        invalid_paths: List[str],
+        invalid_paths: list[str],
         path_type: str = "file",
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
     ) -> ValidationIssue:
         """Create a ValidationIssue for invalid paths."""
         return ValidationIssue(

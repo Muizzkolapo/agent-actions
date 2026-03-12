@@ -2,14 +2,14 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
+from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import AgentConfigDict
 from agent_actions.input.preprocessing.staging.initial_pipeline import (
-    process_initial_stage,
     InitialStageContext,
+    process_initial_stage,
 )
-from agent_actions.config.di.container import ProcessorFactory
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -25,16 +25,16 @@ class StrategyExecutionParams:
     base_directory: str
     output_directory: str
     idx: int
-    agent_configs: Optional[Dict[str, Dict]] = None
+    agent_configs: dict[str, dict] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
-    source_relative_path: Optional[str] = None  # For storage backend source lookups
-    data: Optional[List[Dict[str, Any]]] = None  # Pre-loaded data (skips file read)
+    source_relative_path: str | None = None  # For storage backend source lookups
+    data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
 
 
 class AgentStrategy(ABC):
     """Abstract base class for agent execution strategies."""
 
-    def __init__(self, processor_factory: Optional[ProcessorFactory] = None):
+    def __init__(self, processor_factory: ProcessorFactory | None = None):
         """Initialize the strategy with optional processor factory."""
         self.processor_factory = processor_factory
 

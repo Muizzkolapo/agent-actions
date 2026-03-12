@@ -1,7 +1,6 @@
 """Base class for agent entry validators."""
 
 from abc import ABC, abstractmethod
-from typing import List
 from dataclasses import dataclass, field
 
 
@@ -9,8 +8,8 @@ from dataclasses import dataclass, field
 class AgentEntryValidationResult:
     """Result from a single validator execution."""
 
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     is_critical_failure: bool = False
 
     @classmethod
@@ -24,12 +23,12 @@ class AgentEntryValidationResult:
         return cls(errors=[error_message], warnings=[], is_critical_failure=True)
 
     @classmethod
-    def with_errors(cls, errors: List[str]) -> "AgentEntryValidationResult":
+    def with_errors(cls, errors: list[str]) -> "AgentEntryValidationResult":
         """Create a result with errors (but not critical)."""
         return cls(errors=errors, warnings=[], is_critical_failure=False)
 
     @classmethod
-    def with_warnings(cls, warnings: List[str]) -> "AgentEntryValidationResult":
+    def with_warnings(cls, warnings: list[str]) -> "AgentEntryValidationResult":
         """Create a result with warnings only."""
         return cls(errors=[], warnings=warnings, is_critical_failure=False)
 

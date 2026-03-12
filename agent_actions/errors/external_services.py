@@ -1,6 +1,7 @@
 """External service and vendor API errors."""
 
-from typing import Optional, Dict, Any
+from typing import Any
+
 from agent_actions.errors.base import AgentActionsError
 
 
@@ -15,12 +16,12 @@ class VendorAPIError(ExternalServiceError):
 
     def __init__(
         self,
-        message: Optional[str] = None,
+        message: str | None = None,
         *,
-        vendor: Optional[str] = None,
-        endpoint: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        vendor: str | None = None,
+        endpoint: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
 

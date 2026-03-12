@@ -3,7 +3,7 @@
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, List, Dict, Optional
+from typing import Any
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -19,8 +19,8 @@ class BaseValidator(ABC):
 
     def __init__(self, fire_events: bool = True) -> None:
         """Initialize the validator with empty error and warning lists."""
-        self._errors: List[str] = []
-        self._warnings: List[str] = []
+        self._errors: list[str] = []
+        self._warnings: list[str] = []
         self._validation_target: str = ""
         self._validation_start_time: float = 0.0
         self._fire_events: bool = fire_events
@@ -31,7 +31,7 @@ class BaseValidator(ABC):
         return self.__class__.__name__
 
     @abstractmethod
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Perform validation; return True if no errors found."""
         raise NotImplementedError("Subclasses must implement validate()")
 
@@ -61,11 +61,11 @@ class BaseValidator(ABC):
                 )
             )
 
-    def get_errors(self) -> List[str]:
+    def get_errors(self) -> list[str]:
         """Return all recorded validation errors."""
         return self._errors
 
-    def get_warnings(self) -> List[str]:
+    def get_warnings(self) -> list[str]:
         """Return all recorded validation warnings."""
         return self._warnings
 

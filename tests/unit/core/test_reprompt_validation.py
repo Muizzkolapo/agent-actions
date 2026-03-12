@@ -5,10 +5,11 @@ Tests the decorator, registry, and validation function management.
 """
 
 import pytest
+
 from agent_actions.processing.recovery.validation import (
-    reprompt_validation,
-    get_validation_function,
     _VALIDATION_REGISTRY,
+    get_validation_function,
+    reprompt_validation,
 )
 
 

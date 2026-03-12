@@ -1,8 +1,7 @@
 """Tests for FILE granularity HITL pipeline behavior."""
 
-from unittest.mock import patch
-
 import warnings
+from unittest.mock import patch
 
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.prompt.context.scope import ContextScopeProcessor

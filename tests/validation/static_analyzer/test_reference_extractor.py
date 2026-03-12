@@ -1,7 +1,5 @@
 """Tests for the reference extractor."""
 
-import pytest
-
 from agent_actions.validation.static_analyzer import ReferenceExtractor
 
 

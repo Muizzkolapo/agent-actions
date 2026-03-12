@@ -1,8 +1,5 @@
 """CLI integration tests for the inspect commands."""
 
-import os
-from pathlib import Path
-
 import pytest
 from click.testing import CliRunner
 

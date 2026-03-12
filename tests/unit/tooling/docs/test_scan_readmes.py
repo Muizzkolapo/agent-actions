@@ -1,7 +1,8 @@
 """Tests for ProjectScanner.scan_readmes()."""
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from agent_actions.tooling.docs.scanner import ProjectScanner
 

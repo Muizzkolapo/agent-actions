@@ -2,8 +2,9 @@
 
 import inspect
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any
 
 from agent_actions.config.schema import Granularity
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
@@ -17,9 +18,9 @@ class FileUDFResult:
     proper lineage tracking for filter, dedup, and merge operations.
     """
 
-    outputs: List[Dict]
-    source_mapping: Optional[Dict[int, Union[int, List[int]]]] = None
-    input_count: Optional[int] = None
+    outputs: list[dict]
+    source_mapping: dict[int, int | list[int]] | None = None
+    input_count: int | None = None
 
     def __post_init__(self):
         """Validate source_mapping bounds."""
@@ -47,11 +48,11 @@ class FileUDFResult:
 _registry_lock = threading.RLock()
 
 # Registry with cached compiled schemas
-UDF_REGISTRY: Dict[str, Dict[str, Any]] = {}
+UDF_REGISTRY: dict[str, dict[str, Any]] = {}
 
 
 def udf_tool(
-    func: Optional[Callable] = None,
+    func: Callable | None = None,
     *,
     granularity: Granularity = Granularity.RECORD,
 ) -> Callable:
@@ -113,7 +114,7 @@ def get_udf(func_name: str) -> Callable:
         return UDF_REGISTRY[func_name_lower]["function"]
 
 
-def get_udf_metadata(func_name: str) -> Dict[str, Any]:
+def get_udf_metadata(func_name: str) -> dict[str, Any]:
     """Get complete UDF metadata (shallow copy to prevent registry mutation).
 
     Raises:
@@ -130,7 +131,7 @@ def get_udf_metadata(func_name: str) -> Dict[str, Any]:
         return UDF_REGISTRY[func_name_lower].copy()
 
 
-def list_udfs() -> List[Dict[str, Any]]:
+def list_udfs() -> list[dict[str, Any]]:
     """List all registered UDFs with their metadata."""
     with _registry_lock:
         return [

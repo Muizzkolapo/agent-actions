@@ -14,9 +14,11 @@ Test Strategy:
 """
 
 import json
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from agent_actions.input.context.historical import (
     HistoricalDataRequest,
     HistoricalNodeDataLoader,
@@ -70,7 +72,7 @@ def parallel_branch_temp_dir(parallel_branch_records):
         target_dir = tmp_path / "agent_io" / "target"
 
         # Get records by node
-        parent = parallel_branch_records[0]
+        _parent = parallel_branch_records[0]
         branch_a = parallel_branch_records[1]
         branch_b = parallel_branch_records[2]
         branch_c = parallel_branch_records[3]

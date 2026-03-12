@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,15 +30,15 @@ class DataSourceConfig(BaseModel):
     """Configuration for a start-node data source, instantiated only at resolution time."""
 
     type: DataSourceType = Field(default=DataSourceType.STAGING, description="Data source type")
-    folder: Optional[str] = Field(default=None, description="Local folder path (for type=local)")
-    file_type: Optional[List[str]] = Field(
+    folder: str | None = Field(default=None, description="Local folder path (for type=local)")
+    file_type: list[str] | None = Field(
         default=None, description="File type filter, e.g. ['json', 'csv']"
     )
-    url: Optional[str] = Field(default=None, description="API endpoint URL (for type=api)")
-    headers: Optional[Dict[str, str]] = Field(
+    url: str | None = Field(default=None, description="API endpoint URL (for type=api)")
+    headers: dict[str, str] | None = Field(
         default=None, description="HTTP headers for API requests"
     )
-    query: Optional[Dict[str, str]] = Field(
+    query: dict[str, str] | None = Field(
         default=None, description="Query parameters for API requests"
     )
 
@@ -60,8 +60,8 @@ _KNOWN_TYPES = {t.value for t in DataSourceType}
 class DataSourceResolutionResult:
     """Result of resolving a data source to concrete directories."""
 
-    directories: List[Path]
-    file_type_filter: Optional[Set[str]] = field(default=None)
+    directories: list[Path]
+    file_type_filter: set[str] | None = field(default=None)
 
 
 def _parse_data_source(raw: Any) -> DataSourceConfig:
@@ -107,7 +107,7 @@ def _validate_project_containment(folder: Path, project_root: Path) -> None:
                 "project_root": str(project_root),
                 "operation": "resolve_local_data_source",
             },
-        )
+        ) from None
 
 
 def _resolve_local(config: DataSourceConfig, agent_folder: Path) -> DataSourceResolutionResult:

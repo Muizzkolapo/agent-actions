@@ -1,18 +1,18 @@
 """Factory functions for creating components with dependency injection."""
 
 from contextlib import contextmanager
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from agent_actions.workflow.runner import AgentRunner
 from agent_actions.config.di.application import ApplicationContainer
 from agent_actions.config.di.types import DIConfig
+from agent_actions.workflow.runner import AgentRunner
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
 
 @contextmanager
-def application_container_context(config: Optional[DIConfig] = None):
+def application_container_context(config: DIConfig | None = None):
     """Context manager for DI container lifecycle management.
 
     Yields:
@@ -27,7 +27,7 @@ def application_container_context(config: Optional[DIConfig] = None):
 
 
 def create_agent_runner(
-    config: Optional[DIConfig] = None,
+    config: DIConfig | None = None,
     use_tools: bool = True,
     storage_backend: Optional["StorageBackend"] = None,
 ) -> AgentRunner:

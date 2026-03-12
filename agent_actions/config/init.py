@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ProjectInitializer:
     """Initialize new Agent Actions projects with standard structure."""
 
-    def __init__(self, project_name: str, base_path: Optional[Path] = None) -> None:
+    def __init__(self, project_name: str, base_path: Path | None = None) -> None:
         """
         Initialize a new ProjectInitializer instance.
 

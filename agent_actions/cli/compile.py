@@ -3,11 +3,10 @@
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import click
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -68,7 +67,7 @@ class RenderCommand:
         )
 
 
-def _execute_render(agent_name: str, template_dir: Optional[str] = None) -> None:
+def _execute_render(agent_name: str, template_dir: str | None = None) -> None:
     """Shared implementation for render/compile commands."""
     args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
     command = RenderCommand(args)
@@ -82,7 +81,7 @@ def _execute_render(agent_name: str, template_dir: Optional[str] = None) -> None
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
 @handles_user_errors("render")
 @requires_project
-def render(agent_name: str, template_dir: Optional[str] = None) -> None:
+def render(agent_name: str, template_dir: str | None = None) -> None:
     """
     Compile and render workflow configuration.
 
@@ -114,7 +113,7 @@ def render(agent_name: str, template_dir: Optional[str] = None) -> None:
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
 @handles_user_errors("compile")
 @requires_project
-def compile(agent_name: str, template_dir: Optional[str] = None) -> None:
+def compile(agent_name: str, template_dir: str | None = None) -> None:
     """
     Alias for 'render' - compile workflow configuration.
 

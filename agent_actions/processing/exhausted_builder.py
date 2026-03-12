@@ -1,6 +1,6 @@
 """Utilities for constructing exhausted retry records."""
 
-from typing import Any, Optional
+from typing import Any
 
 from agent_actions.processing.types import RecoveryMetadata
 from agent_actions.utils.id_generation import IDGenerator
@@ -32,8 +32,8 @@ class ExhaustedRecordBuilder:
     @staticmethod
     def build_exhausted_item(
         *,
-        source_guid: Optional[str],
-        original_row: Optional[dict[str, Any]],
+        source_guid: str | None,
+        original_row: dict[str, Any] | None,
         recovery_metadata: RecoveryMetadata,
         agent_config: dict[str, Any],
         action_name: str,

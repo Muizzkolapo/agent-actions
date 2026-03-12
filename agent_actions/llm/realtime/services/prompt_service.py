@@ -2,7 +2,7 @@
 
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 import click
 
@@ -14,10 +14,10 @@ class PromptService:
 
     @staticmethod
     def debug_print_prompt(
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         prompt_config: str,
         context_data: str = "",
-        schema: Optional[Dict[str, Any]] = None,
+        schema: dict[str, Any] | None = None,
     ) -> None:
         """
         Print prompt for debugging if enabled.

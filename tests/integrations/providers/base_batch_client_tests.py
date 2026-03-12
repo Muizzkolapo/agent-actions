@@ -36,13 +36,13 @@ Contract Tests Overview:
     11. test_retrieve_invalid_batch_id_raises_error - Error handling
 """
 
-import pytest
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Dict, Any
+from typing import Any
+
+import pytest
+
 from agent_actions.llm.providers.batch_base import (
     BaseBatchClient,
-    BatchTask,
     BatchResult,
 )
 
@@ -77,7 +77,7 @@ class BaseBatchClientTests(ABC):
 
     @pytest.fixture
     @abstractmethod
-    def provider_success_response_json(self) -> Dict[str, Any]:
+    def provider_success_response_json(self) -> dict[str, Any]:
         """
         Return a mock successful response with JSON content in provider format.
 
@@ -102,7 +102,7 @@ class BaseBatchClientTests(ABC):
 
     @pytest.fixture
     @abstractmethod
-    def provider_success_response_string(self) -> Dict[str, Any]:
+    def provider_success_response_string(self) -> dict[str, Any]:
         """
         Return a mock successful response with plain text content.
 
@@ -127,7 +127,7 @@ class BaseBatchClientTests(ABC):
 
     @pytest.fixture
     @abstractmethod
-    def provider_error_response(self) -> Dict[str, Any]:
+    def provider_error_response(self) -> dict[str, Any]:
         """
         Return a mock error response in provider format.
 
@@ -261,8 +261,8 @@ class BaseBatchClientTests(ABC):
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_json_mode)
         assert isinstance(tasks, list), "Must return list"
         assert len(tasks) == 3, "Must convert all data rows"
-        assert all((isinstance(task, dict) for task in tasks)), "All tasks must be dicts"
-        assert all(("custom_id" in task for task in tasks)), "All tasks must have custom_id"
+        assert all(isinstance(task, dict) for task in tasks), "All tasks must be dicts"
+        assert all("custom_id" in task for task in tasks), "All tasks must have custom_id"
         custom_ids = [task["custom_id"] for task in tasks]
         assert "1" in custom_ids, "custom_id from target_id must be preserved"
         assert "2" in custom_ids
@@ -282,7 +282,7 @@ class BaseBatchClientTests(ABC):
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
         assert isinstance(tasks, list), "Must return list"
         assert len(tasks) == 3, "Must convert all data rows"
-        assert all(("custom_id" in task for task in tasks)), "All tasks need custom_id"
+        assert all("custom_id" in task for task in tasks), "All tasks need custom_id"
 
     def test_check_status_returns_valid_state(self, provider):
         """
@@ -350,7 +350,7 @@ class BaseBatchClientTests(ABC):
             results = provider.retrieve_results(batch_id, str(tmp_path))
             assert isinstance(results, list), "Results must be a list"
             assert len(results) > 0, "Should have at least some results"
-            assert all((isinstance(r, BatchResult) for r in results)), (
+            assert all(isinstance(r, BatchResult) for r in results), (
                 "All results must be BatchResult objects"
             )
             result_ids = [r.custom_id for r in results]

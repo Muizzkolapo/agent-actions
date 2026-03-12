@@ -3,7 +3,7 @@
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class BatchSubmissionResult:
     """Result of batch submission via flush()."""
 
-    batch_id: Optional[str]
+    batch_id: str | None
     task_count: int
     context_map: dict[str, Any] = field(default_factory=dict)
 
@@ -34,7 +34,7 @@ class BatchStrategy(InvocationStrategy):
 
     def __init__(self, provider: BatchProvider):
         self._provider = provider
-        self._agent_config: Optional[dict[str, Any]] = None
+        self._agent_config: dict[str, Any] | None = None
         self._queued: list[PreparedTask] = []
         self._context_map: dict[str, Any] = {}
 
@@ -87,8 +87,8 @@ class BatchStrategy(InvocationStrategy):
 
     def flush(
         self,
-        batch_name: Optional[str] = None,
-        output_directory: Optional[str] = None,
+        batch_name: str | None = None,
+        output_directory: str | None = None,
     ) -> BatchSubmissionResult:
         """Submit all queued tasks to batch API and reset internal state."""
         if not self._queued:

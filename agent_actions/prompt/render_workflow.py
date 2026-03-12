@@ -3,13 +3,13 @@
 import logging
 import textwrap
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
-from agent_actions.errors import TemplateRenderingError, ConfigurationError
+from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
 
@@ -73,7 +73,7 @@ def _save_failed_render(rendered_yaml_content, workflow_name):
             f"\nRendered output saved to: {failed_render_path}\n"
             f"Debug with: agac render {workflow_name}"
         )
-    except IOError:
+    except OSError:
         return ""
 
 
@@ -115,7 +115,7 @@ def _resolve_prompt_fields(item):
 # =============================================================================
 
 
-def _load_named_schema(schema_name: str, schema_dir: Optional[Path] = None) -> Dict[str, Any]:
+def _load_named_schema(schema_name: str, schema_dir: Path | None = None) -> dict[str, Any]:
     """
     Load a named schema from the schema/ directory.
 
@@ -146,11 +146,11 @@ def _load_named_schema(schema_name: str, schema_dir: Optional[Path] = None) -> D
             },
         )
 
-    with open(schema_file, "r", encoding="utf-8") as f:
+    with open(schema_file, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-def _expand_inline_schema(schema_dict: Dict[str, str]) -> Dict[str, Any]:
+def _expand_inline_schema(schema_dict: dict[str, str]) -> dict[str, Any]:
     """
     Expand inline schema dict format to unified schema format.
 
@@ -235,11 +235,11 @@ def _is_inline_schema_dict(schema_value: Any) -> bool:
 
 
 def _compile_action_schemas(
-    action: Dict[str, Any],
-    schema_dir: Optional[Path] = None,
+    action: dict[str, Any],
+    schema_dir: Path | None = None,
     strict: bool = False,
-    errors: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Compile schemas for a single action, inlining named schemas and expanding inline ones.
 
@@ -299,8 +299,8 @@ def _compile_action_schemas(
 
 
 def _compile_workflow_schemas(
-    data: Dict[str, Any],
-    schema_dir: Optional[Path] = None,
+    data: dict[str, Any],
+    schema_dir: Path | None = None,
     strict: bool = False,
 ) -> None:
     """
@@ -316,7 +316,7 @@ def _compile_workflow_schemas(
     Raises:
         ConfigurationError: If strict=True and any schema fails to load
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     # Compile schemas in actions list
     actions = data.get("actions", [])
@@ -346,7 +346,7 @@ def _compile_workflow_schemas(
 
 
 def _apply_version_template(
-    value: Any, param_name: str, current_val: int, idx: int, values: List[int]
+    value: Any, param_name: str, current_val: int, idx: int, values: list[int]
 ) -> Any:
     """
     Apply version template substitution to a value.
@@ -385,7 +385,7 @@ def _apply_version_template(
     return value
 
 
-def _expand_versioned_action(action: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _expand_versioned_action(action: dict[str, Any]) -> list[dict[str, Any]]:
     """
     Expand a versioned action into multiple actions.
 
@@ -447,7 +447,7 @@ def _expand_versioned_action(action: Dict[str, Any]) -> List[Dict[str, Any]]:
     return expanded_actions
 
 
-def _expand_workflow_versions(data: Dict[str, Any]) -> None:
+def _expand_workflow_versions(data: dict[str, Any]) -> None:
     """
     Expand all versioned actions in a workflow.
 
@@ -491,9 +491,9 @@ def _load_yaml_content(yaml_path):
         ConfigurationError: If file cannot be read or prompt loading fails
     """
     try:
-        with open(yaml_path, "r", encoding="utf-8") as yaml_file:
+        with open(yaml_path, encoding="utf-8") as yaml_file:
             content = yaml_file.read()
-    except (FileNotFoundError, IOError) as e:
+    except (OSError, FileNotFoundError) as e:
         raise ConfigurationError(
             "Error reading YAML configuration file",
             context={"yaml_path": yaml_path, "operation": "file_io"},
@@ -514,9 +514,9 @@ def _load_yaml_content(yaml_path):
 
 
 def render_pipeline_with_templates(
-    yaml_path: Union[str, Path],
-    templates_folder: Union[str, Path],
-    schema_dir: Optional[Path] = None,
+    yaml_path: str | Path,
+    templates_folder: str | Path,
+    schema_dir: Path | None = None,
     compile_schemas: bool = True,
     strict: bool = False,
 ) -> str:

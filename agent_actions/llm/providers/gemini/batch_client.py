@@ -5,7 +5,7 @@ Gemini Batch API client implementation.
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class GeminiBatchClient(BaseBatchClient):
     - Output: Gemini response → BatchResult
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize Gemini client."""
         if not GEMINI_AVAILABLE:
             from agent_actions.errors import DependencyError
@@ -46,8 +46,8 @@ class GeminiBatchClient(BaseBatchClient):
         self.client = genai.Client(api_key=api_key, http_options={"api_version": "v1alpha"})
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Transform our BatchTask to Gemini's expected format.
 
@@ -81,11 +81,11 @@ class GeminiBatchClient(BaseBatchClient):
             request["response_mime_type"] = "application/json"
         return {"key": batch_task.custom_id, "request": request}
 
-    def _extract_custom_id(self, raw_response: Dict[str, Any]) -> str:
+    def _extract_custom_id(self, raw_response: dict[str, Any]) -> str:
         """Extract custom_id from Gemini response (uses 'key' instead)."""
         return raw_response.get("key", "unknown")
 
-    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from Gemini response."""
         if "error" in raw_response:
             return str(raw_response["error"])
@@ -101,7 +101,7 @@ class GeminiBatchClient(BaseBatchClient):
             return "No content in response"
         return None
 
-    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+    def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Gemini response."""
         response_data = raw_response.get("response", {})
         candidates = response_data.get("candidates", [])
@@ -113,7 +113,7 @@ class GeminiBatchClient(BaseBatchClient):
                 return parts[0].get("text", "")
         return None
 
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Gemini response."""
         response_data = raw_response.get("response", {})
         candidates = response_data.get("candidates", [])
@@ -123,9 +123,7 @@ class GeminiBatchClient(BaseBatchClient):
             "finish_reason": candidates[0].get("finishReason") if candidates else None,
         }
 
-    def _extract_usage_from_response(
-        self, raw_response: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any] | None:
         """Extract usage from Gemini response."""
         response_data = raw_response.get("response", {})
         usage_metadata = response_data.get("usageMetadata", {})
@@ -140,7 +138,7 @@ class GeminiBatchClient(BaseBatchClient):
         return "gemini-2.5-flash"
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSONL file for Gemini."""
         file_name = f"{Path(batch_name).stem}_batch_input.json"

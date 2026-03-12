@@ -3,7 +3,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 # Generic type variable for interfaces
 T = TypeVar("T")
@@ -62,18 +62,18 @@ class ISourceDataLoader(ILoader):
     """Interface for source data loading operations."""
 
     @abstractmethod
-    def load_source_data(self, source_relative_path: str) -> List[Dict]:
+    def load_source_data(self, source_relative_path: str) -> list[dict]:
         """Load source data from the storage backend."""
 
-    async def load_source_data_async(self, source_relative_path: str) -> List[Dict]:
+    async def load_source_data_async(self, source_relative_path: str) -> list[dict]:
         """Async version of load_source_data."""
         return await asyncio.to_thread(self.load_source_data, source_relative_path)
 
     @abstractmethod
-    def save_source_data(self, relative_path: str, data: List[Dict]) -> None:
+    def save_source_data(self, relative_path: str, data: list[dict]) -> None:
         """Save source data to the storage backend."""
 
-    async def save_source_data_async(self, relative_path: str, data: List[Dict]) -> None:
+    async def save_source_data_async(self, relative_path: str, data: list[dict]) -> None:
         """Async version of save_source_data."""
         return await asyncio.to_thread(self.save_source_data, relative_path, data)
 
@@ -85,20 +85,20 @@ class IDataProcessor(IProcessor):
     @abstractmethod
     def process_item(
         self,
-        contents: Dict,
-        generated_data: List[Dict],
+        contents: dict,
+        generated_data: list[dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List[Dict]:
+        passthrough_fields: dict | None = None,
+    ) -> list[dict]:
         """Process a single data item."""
 
     async def process_item_async(
         self,
-        contents: Dict,
-        generated_data: List[Dict],
+        contents: dict,
+        generated_data: list[dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List[Dict]:
+        passthrough_fields: dict | None = None,
+    ) -> list[dict]:
         """Async version of process_item."""
         return await asyncio.to_thread(
             self.process_item, contents, generated_data, source_guid, passthrough_fields

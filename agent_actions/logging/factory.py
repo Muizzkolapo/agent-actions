@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from agent_actions.logging.config import LoggingConfig
 
@@ -19,22 +19,22 @@ class LoggerFactory:
     """Centralized logging factory routing all output through EventManager."""
 
     _initialized: bool = False
-    _config: Optional[LoggingConfig] = None
+    _config: LoggingConfig | None = None
     _root_logger_name: str = "agent_actions"
-    _event_manager: Optional["EventManager"] = None
-    _run_results_collector: Optional["RunResultsCollector"] = None
+    _event_manager: EventManager | None = None
+    _run_results_collector: RunResultsCollector | None = None
 
     @classmethod
     def initialize(
         cls,
-        config: Optional[LoggingConfig] = None,
-        output_dir: Optional[str | Path] = None,
+        config: LoggingConfig | None = None,
+        output_dir: str | Path | None = None,
         workflow_name: str = "",
-        invocation_id: Optional[str] = None,
+        invocation_id: str | None = None,
         verbose: bool = False,
         quiet: bool = False,
         force: bool = False,
-    ) -> "EventManager":
+    ) -> EventManager:
         """Initialize the unified logging system and return the EventManager."""
         if cls._initialized and not force:
             return cls._event_manager  # type: ignore
@@ -49,14 +49,8 @@ class LoggerFactory:
             console_level_str = cls._config.default_level
 
         from agent_actions.logging.core import (
-            ConsoleEventHandler,
-            EventLevel,
             EventManager,
-            JSONFileHandler,
         )
-        from agent_actions.logging.core.handlers import LoggingBridgeHandler
-        from agent_actions.logging.events import AgentActionsFormatter
-        from agent_actions.logging.events.handlers import RunResultsCollector
 
         manager = EventManager.get()
         cls._event_manager = manager
@@ -198,7 +192,7 @@ class LoggerFactory:
         root_logger.propagate = False
 
     @classmethod
-    def _get_log_file_path(cls) -> Optional[Path]:
+    def _get_log_file_path(cls) -> Path | None:
         """Determine the log file path."""
         if not cls._config:
             return None
@@ -213,7 +207,7 @@ class LoggerFactory:
         return Path.home() / ".agent-actions" / "logs" / "events.json"
 
     @classmethod
-    def _get_project_root(cls) -> Optional[Path]:
+    def _get_project_root(cls) -> Path | None:
         """Find the project root directory."""
         current = Path.cwd()
         for parent in [current] + list(current.parents):
@@ -233,7 +227,7 @@ class LoggerFactory:
         return logging.getLogger(name)
 
     @classmethod
-    def set_level(cls, level: str, logger_name: Optional[str] = None) -> None:
+    def set_level(cls, level: str, logger_name: str | None = None) -> None:
         """Set log level for a logger."""
         if not cls._initialized:
             cls.initialize()
@@ -254,7 +248,7 @@ class LoggerFactory:
         cls.set_level(level)
 
     @classmethod
-    def get_config(cls) -> Optional[LoggingConfig]:
+    def get_config(cls) -> LoggingConfig | None:
         """Get the current logging configuration."""
         return cls._config
 
@@ -281,12 +275,12 @@ class LoggerFactory:
         EventManager.reset()
 
     @classmethod
-    def get_event_manager(cls) -> Optional["EventManager"]:
+    def get_event_manager(cls) -> EventManager | None:
         """Get the current EventManager instance."""
         return cls._event_manager
 
     @classmethod
-    def get_run_results_collector(cls) -> Optional["RunResultsCollector"]:
+    def get_run_results_collector(cls) -> RunResultsCollector | None:
         """Get the RunResultsCollector instance."""
         return cls._run_results_collector
 
@@ -303,7 +297,7 @@ class LoggerFactory:
             cls._event_manager.flush()
 
     @classmethod
-    def enable_context_debug(cls) -> "ContextDebugHandler":
+    def enable_context_debug(cls) -> ContextDebugHandler:
         """Enable and return the context debug handler for --debug-context."""
         if not cls._initialized:
             cls.initialize()

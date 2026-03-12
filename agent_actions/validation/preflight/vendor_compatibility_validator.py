@@ -1,13 +1,12 @@
 """Vendor compatibility validator for pre-flight validation."""
 
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
     ValidationIssue,
 )
-
 
 # Vendor-specific feature support
 VENDOR_CAPABILITIES = {
@@ -86,9 +85,9 @@ class VendorCompatibilityValidator(BaseValidator):
 
     def __init__(self) -> None:
         super().__init__()
-        self.issues: List[ValidationIssue] = []
+        self.issues: list[ValidationIssue] = []
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate vendor configuration."""
         self.clear_errors()
         self.clear_warnings()
@@ -165,8 +164,8 @@ class VendorCompatibilityValidator(BaseValidator):
 
     def validate_vendor_config(
         self,
-        agent_config: Dict[str, Any],
-        agent_name: Optional[str] = None,
+        agent_config: dict[str, Any],
+        agent_name: str | None = None,
         mode: str = "unknown",
     ) -> bool:
         """Validate vendor config directly without wrapping in a data dict."""
@@ -175,8 +174,8 @@ class VendorCompatibilityValidator(BaseValidator):
         return self.validate(data, config)
 
     def _check_required_fields(
-        self, agent_config: Dict[str, Any], required_fields: List[str]
-    ) -> List[str]:
+        self, agent_config: dict[str, Any], required_fields: list[str]
+    ) -> list[str]:
         """Return list of missing required field names."""
         missing = []
         for field in required_fields:
@@ -186,10 +185,10 @@ class VendorCompatibilityValidator(BaseValidator):
 
     def _check_feature_compatibility(
         self,
-        agent_config: Dict[str, Any],
-        capabilities: Dict[str, Any],
+        agent_config: dict[str, Any],
+        capabilities: dict[str, Any],
         mode: str,
-    ) -> List[tuple]:
+    ) -> list[tuple]:
         """Return list of (feature_name, reason) tuples for unsupported features."""
         unsupported = []
 
@@ -208,14 +207,14 @@ class VendorCompatibilityValidator(BaseValidator):
 
         return unsupported
 
-    def get_supported_vendors(self) -> Set[str]:
+    def get_supported_vendors(self) -> set[str]:
         """Get set of supported vendor names."""
         return VALID_VENDORS.copy()
 
-    def get_vendor_capabilities(self, vendor: str) -> Optional[Dict[str, Any]]:
+    def get_vendor_capabilities(self, vendor: str) -> dict[str, Any] | None:
         """Get capabilities for a specific vendor."""
         return VENDOR_CAPABILITIES.get(vendor.lower())
 
-    def get_issues(self) -> List[ValidationIssue]:
+    def get_issues(self) -> list[ValidationIssue]:
         """Get the list of validation issues found."""
         return self.issues

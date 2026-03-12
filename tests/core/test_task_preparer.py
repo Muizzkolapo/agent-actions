@@ -1,12 +1,13 @@
 """Unit tests for TaskPreparer (Phase 2 #890)."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from agent_actions.processing import (
     GuardStatus,
-    PreparedTask,
     PreparationContext,
+    PreparedTask,
     TaskPreparer,
 )
 

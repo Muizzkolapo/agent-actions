@@ -1,9 +1,9 @@
 """Thread-safe reprompt validation UDF registry."""
 
-from typing import Callable
 import functools
 import logging
 import threading
+from collections.abc import Callable
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (

@@ -1,6 +1,6 @@
 """Adapter to bridge batch processing state into the enrichment pipeline."""
 
-from typing import Any, Optional
+from typing import Any
 
 from agent_actions.processing.types import (
     ProcessingContext,
@@ -18,7 +18,7 @@ class BatchContextAdapter:
         agent_config: dict[str, Any],
         original_row: dict[str, Any],
         record_index: int,
-        output_directory: Optional[str] = None,
+        output_directory: str | None = None,
     ) -> ProcessingContext:
         """Build a ProcessingContext from batch-side state."""
         return ProcessingContext(
@@ -35,9 +35,9 @@ class BatchContextAdapter:
     def to_processing_result(
         data: list[dict[str, Any]],
         source_guid: str,
-        pre_extracted_metadata: Optional[dict[str, Any]] = None,
-        recovery_metadata: Optional[RecoveryMetadata] = None,
-        passthrough_fields: Optional[dict[str, Any]] = None,
+        pre_extracted_metadata: dict[str, Any] | None = None,
+        recovery_metadata: RecoveryMetadata | None = None,
+        passthrough_fields: dict[str, Any] | None = None,
     ) -> ProcessingResult:
         """Build a ProcessingResult from batch-side data."""
         return ProcessingResult.success(

@@ -1,6 +1,6 @@
 """Run command validation module."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, DirectoryPath, Field
 
@@ -9,7 +9,7 @@ class RunCommandArgs(BaseModel):
     """Pydantic model for the run command arguments."""
 
     agent: str = Field(..., description="Agent configuration file name without path or extension")
-    user_code: Optional[DirectoryPath] = Field(
+    user_code: DirectoryPath | None = Field(
         None, description="Path to the user's code folder containing UDFs"
     )
     use_tools: bool = Field(False, description="Enable tool usage for agents")

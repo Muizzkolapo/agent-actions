@@ -3,12 +3,11 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional
 
-from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
+from agent_actions.llm.batch.infrastructure.registry import BatchRegistryManager
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class BatchJobManager:
     def __init__(
         self,
         client_resolver: BatchClientResolver,
-        registry_manager: Optional[BatchRegistryManager] = None,
+        registry_manager: BatchRegistryManager | None = None,
     ):
         """Initialize batch job manager.
 
@@ -40,7 +39,7 @@ class BatchJobManager:
         client = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
         return client.check_status(batch_id)
 
-    def _get_registry_manager(self, output_directory: str) -> Optional[BatchRegistryManager]:
+    def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager | None:
         if self._registry_manager is not None:
             return self._registry_manager
 
@@ -67,7 +66,7 @@ class BatchJobManager:
             return True
 
         try:
-            with open(registry_path, "r", encoding="utf-8") as f:
+            with open(registry_path, encoding="utf-8") as f:
                 json.load(f)
         except (json.JSONDecodeError, OSError):
             logger.warning("Registry file is malformed: %s", registry_path, exc_info=True)

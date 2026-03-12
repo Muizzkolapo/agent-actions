@@ -3,7 +3,7 @@
 import json as json_lib
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import click
 from rich.console import Console
@@ -17,8 +17,8 @@ from agent_actions.cli.project_paths_factory import (
     ProjectPathsFactory,
     find_config_file,
 )
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 
 logger = logging.getLogger(__name__)
 
@@ -26,13 +26,13 @@ logger = logging.getLogger(__name__)
 class BaseInspectCommand:
     """Base class for inspect commands."""
 
-    def __init__(self, agent: str, user_code: Optional[str], json_output: bool):
+    def __init__(self, agent: str, user_code: str | None, json_output: bool):
         self.agent = agent
         self.agent_name = Path(agent).stem
         self.user_code = user_code
         self.json_output = json_output
         self.console = Console()
-        self.paths: Optional[ProjectPaths] = None  # Will be set by _load_workflow
+        self.paths: ProjectPaths | None = None  # Will be set by _load_workflow
 
     def _load_workflow(self) -> AgentWorkflow:
         paths = ProjectPathsFactory.create_project_paths(
@@ -56,7 +56,7 @@ class BaseInspectCommand:
         )
         return workflow
 
-    def _analyze_dependencies(self, workflow: AgentWorkflow) -> Dict[str, Any]:
+    def _analyze_dependencies(self, workflow: AgentWorkflow) -> dict[str, Any]:
         from agent_actions.prompt.context.scope import ContextScopeProcessor
 
         workflow_actions = list(workflow.agent_configs.keys())
@@ -101,7 +101,7 @@ class BaseInspectCommand:
         return result
 
     @staticmethod
-    def _get_action_type(input_sources: List[str], context_sources: List[str]) -> str:
+    def _get_action_type(input_sources: list[str], context_sources: list[str]) -> str:
         if not input_sources:
             return "Source"
         if len(input_sources) > 1:
@@ -110,8 +110,8 @@ class BaseInspectCommand:
 
     @staticmethod
     def _get_output_fields(
-        action_config: Dict[str, Any], schema_dir: Optional[Path] = None
-    ) -> List[str]:
+        action_config: dict[str, Any], schema_dir: Path | None = None
+    ) -> list[str]:
         import yaml
 
         schema = action_config.get("schema", {})
@@ -129,7 +129,7 @@ class BaseInspectCommand:
             schema_file = schema_dir / f"{schema_name}.yml"
             if schema_file.exists():
                 try:
-                    with open(schema_file, "r", encoding="utf-8") as f:
+                    with open(schema_file, encoding="utf-8") as f:
                         schema_data = yaml.safe_load(f)
                     if schema_data:
                         if "properties" in schema_data:
@@ -153,7 +153,7 @@ class BaseInspectCommand:
         return []
 
     @staticmethod
-    def _get_input_fields(action_config: Dict[str, Any]) -> List[str]:
+    def _get_input_fields(action_config: dict[str, Any]) -> list[str]:
         fields = []
         ctx = action_config.get("context_scope", {})
         for field_ref in ctx.get("observe", []):
@@ -174,9 +174,9 @@ class DependenciesCommand(BaseInspectCommand):
     def __init__(
         self,
         agent: str,
-        user_code: Optional[str],
+        user_code: str | None,
         json_output: bool,
-        action_filter: Optional[str],
+        action_filter: str | None,
     ):
         super().__init__(agent, user_code, json_output)
         self.action_filter = action_filter
@@ -201,11 +201,11 @@ class DependenciesCommand(BaseInspectCommand):
         else:
             self._output_rich(dependency_info, workflow.execution_order)
 
-    def _output_json(self, dependency_info: Dict[str, Any]) -> None:
+    def _output_json(self, dependency_info: dict[str, Any]) -> None:
         output = {"workflow": self.agent_name, "actions": dependency_info}
         click.echo(json_lib.dumps(output, indent=2))
 
-    def _output_rich(self, dependency_info: Dict[str, Any], execution_order: list) -> None:
+    def _output_rich(self, dependency_info: dict[str, Any], execution_order: list) -> None:
         deprecated = [n for n, i in dependency_info.items() if i["has_primary_dependency"]]
         if deprecated:
             self.console.print("[yellow]⚠ Deprecated 'primary_dependency' in:[/yellow]")
@@ -244,7 +244,7 @@ class DependenciesCommand(BaseInspectCommand):
 @handles_user_errors("inspect dependencies")
 @requires_project
 def dependencies(
-    agent: str, user_code: Optional[str], json_output: bool, action_filter: Optional[str]
+    agent: str, user_code: str | None, json_output: bool, action_filter: str | None
 ) -> None:
     """
     Analyze workflow dependencies and auto-inferred context.
@@ -277,8 +277,8 @@ class GraphCommand(BaseInspectCommand):
     def _output_json(
         self,
         workflow: AgentWorkflow,
-        dependency_info: Dict[str, Any],
-        execution_order: List[str],
+        dependency_info: dict[str, Any],
+        execution_order: list[str],
     ) -> None:
         output = {
             "workflow": self.agent_name,
@@ -298,8 +298,8 @@ class GraphCommand(BaseInspectCommand):
     def _output_rich(
         self,
         workflow: AgentWorkflow,
-        dependency_info: Dict[str, Any],
-        execution_order: List[str],
+        dependency_info: dict[str, Any],
+        execution_order: list[str],
     ) -> None:
         flow_str = " → ".join(execution_order) if execution_order else "none"
         self.console.print(f"[bold cyan]Workflow: {self.agent_name}[/bold cyan]")
@@ -345,7 +345,7 @@ class GraphCommand(BaseInspectCommand):
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @handles_user_errors("inspect graph")
 @requires_project
-def graph(agent: str, user_code: Optional[str], json_output: bool) -> None:
+def graph(agent: str, user_code: str | None, json_output: bool) -> None:
     """
     Show workflow structure as a dependency graph.
 
@@ -365,7 +365,7 @@ class ActionCommand(BaseInspectCommand):
     def __init__(
         self,
         agent: str,
-        user_code: Optional[str],
+        user_code: str | None,
         json_output: bool,
         action_name: str,
     ):
@@ -390,7 +390,7 @@ class ActionCommand(BaseInspectCommand):
         else:
             self._output_rich(action_config, info)
 
-    def _output_json(self, action_config: Dict[str, Any], info: Dict[str, Any]) -> None:
+    def _output_json(self, action_config: dict[str, Any], info: dict[str, Any]) -> None:
         output = {
             "workflow": self.agent_name,
             "action": self.action_name,
@@ -404,7 +404,7 @@ class ActionCommand(BaseInspectCommand):
         }
         click.echo(json_lib.dumps(output, indent=2))
 
-    def _output_rich(self, action_config: Dict[str, Any], info: Dict[str, Any]) -> None:
+    def _output_rich(self, action_config: dict[str, Any], info: dict[str, Any]) -> None:
         action_type = self._get_action_type(info["input_sources"], info["context_sources"])
 
         self.console.print(f"[bold cyan]Action: {self.action_name}[/bold cyan]")
@@ -473,7 +473,7 @@ class ActionCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect action")
 @requires_project
-def action(agent: str, user_code: Optional[str], json_output: bool, action_name: str) -> None:
+def action(agent: str, user_code: str | None, json_output: bool, action_name: str) -> None:
     """
     Show details for a specific action.
 
@@ -494,7 +494,7 @@ class ContextCommand(BaseInspectCommand):
     def __init__(
         self,
         agent: str,
-        user_code: Optional[str],
+        user_code: str | None,
         json_output: bool,
         action_name: str,
     ):
@@ -525,10 +525,10 @@ class ContextCommand(BaseInspectCommand):
     def _build_context_data(
         self,
         workflow,
-        action_config: Dict[str, Any],
-        info: Dict[str, Any],
-        schema_dir: Optional[Path],
-    ) -> Dict[str, Any]:
+        action_config: dict[str, Any],
+        info: dict[str, Any],
+        schema_dir: Path | None,
+    ) -> dict[str, Any]:
         namespaces = {}
         namespaces["source"] = ["[from source data]"]
 
@@ -566,10 +566,10 @@ class ContextCommand(BaseInspectCommand):
             "total_template_variables": total_vars,
         }
 
-    def _output_json(self, context_data: Dict[str, Any]) -> None:
+    def _output_json(self, context_data: dict[str, Any]) -> None:
         click.echo(json_lib.dumps(context_data, indent=2))
 
-    def _output_rich(self, context_data: Dict[str, Any]) -> None:
+    def _output_rich(self, context_data: dict[str, Any]) -> None:
         action_name = context_data["action_name"]
 
         self.console.print()
@@ -637,7 +637,7 @@ class ContextCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect context")
 @requires_project
-def context(agent: str, user_code: Optional[str], json_output: bool, action_name: str) -> None:
+def context(agent: str, user_code: str | None, json_output: bool, action_name: str) -> None:
     """
     Show context debug information for a specific action.
 

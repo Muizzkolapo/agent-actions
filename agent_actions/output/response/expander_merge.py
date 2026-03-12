@@ -1,6 +1,6 @@
 """Config merge and initialization functions extracted from ActionExpander."""
 
-from typing import Dict, Any, Optional
+from typing import Any
 
 from agent_actions.config.types import AgentEntryDict
 
@@ -15,8 +15,8 @@ def merge_directive_value(existing: Any, new_value: Any) -> Any:
 
 
 def deep_merge_context_scope(
-    defaults_scope: Optional[Dict[str, Any]], action_scope: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+    defaults_scope: dict[str, Any] | None, action_scope: dict[str, Any] | None
+) -> dict[str, Any]:
     """
     Deep merge context_scope directives from defaults and action levels.
 
@@ -40,7 +40,7 @@ def deep_merge_context_scope(
 
 
 def process_chunk_config(
-    agent: AgentEntryDict, action: Dict[str, Any], defaults: Dict[str, Any]
+    agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
     """Process chunk configuration for an agent."""
     chunk_config = action.get("chunk_config", defaults.get("chunk_config", {}))

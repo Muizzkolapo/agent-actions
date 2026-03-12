@@ -1,11 +1,11 @@
 """Common dictionary utility functions."""
 
-from typing import Any, Optional
+from typing import Any
 
 _MISSING = object()
 
 
-def get_nested_value(data: Any, field_path: str, default: Any = None) -> Optional[Any]:
+def get_nested_value(data: Any, field_path: str, default: Any = None) -> Any | None:
     """Get a nested value from a dictionary using dot-separated *field_path*."""
     keys = field_path.split(".")
     value = data

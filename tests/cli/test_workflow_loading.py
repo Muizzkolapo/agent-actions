@@ -1,9 +1,8 @@
 """Integration tests for workflow loading pattern used by CLI commands."""
 
 import pytest
-from pathlib import Path
 
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory, ProjectPaths
+from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 
 
 class TestConfigDiscoveryPattern:

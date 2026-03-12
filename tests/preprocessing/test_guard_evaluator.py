@@ -4,8 +4,9 @@ Tests for the unified GuardEvaluator.
 Related: GitHub Issue #875, #888 (Phase 1a)
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from agent_actions.input.preprocessing.filtering.evaluator import (
     GuardEvaluator,

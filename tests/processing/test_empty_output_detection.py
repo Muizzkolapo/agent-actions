@@ -6,10 +6,9 @@ import pytest
 
 from agent_actions.config.schema import ActionConfig
 from agent_actions.errors import EmptyOutputError
-from agent_actions.logging.events.types import RecordEmptyOutputEvent
 from agent_actions.logging.events.handlers.run_results import AgentResult, RunResultsCollector
+from agent_actions.logging.events.types import RecordEmptyOutputEvent
 from agent_actions.processing.processor import _is_empty_output
-
 
 # =============================================================================
 # _is_empty_output helper tests

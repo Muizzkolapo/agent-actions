@@ -1,6 +1,6 @@
 """Configuration validation utilities for field chunking."""
 
-from typing import Dict, Any, List
+from typing import Any
 
 from agent_actions.input.preprocessing.chunking.errors import FieldChunkingValidationError
 
@@ -9,7 +9,7 @@ class ConfigValidator:
     """Validator for field chunking configuration."""
 
     @staticmethod
-    def validate_field_analyzer_config(chunk_config: Dict[str, Any]) -> None:
+    def validate_field_analyzer_config(chunk_config: dict[str, Any]) -> None:
         """Validate FieldAnalyzer configuration.
 
         Raises:
@@ -44,7 +44,7 @@ class ConfigValidator:
             )
 
     @staticmethod
-    def validate_field_chunker_config(chunk_config: Dict[str, Any]) -> None:
+    def validate_field_chunker_config(chunk_config: dict[str, Any]) -> None:
         """Validate FieldChunker configuration.
 
         Raises:
@@ -82,8 +82,8 @@ class ConfigValidator:
 
     @staticmethod
     def _validate_conflicting_fields(
-        chunk_fields: List[str], preserve_fields: List[str]
-    ) -> List[str]:
+        chunk_fields: list[str], preserve_fields: list[str]
+    ) -> list[str]:
         """Return error messages for fields that are both chunked and preserved."""
         errors = []
         if chunk_fields and preserve_fields:
@@ -95,7 +95,7 @@ class ConfigValidator:
         return errors
 
     @staticmethod
-    def _validate_field_rules(field_rules: Dict[str, Any]) -> List[str]:
+    def _validate_field_rules(field_rules: dict[str, Any]) -> list[str]:
         """Return error messages for invalid field-specific rules."""
         errors = []
         if not field_rules:

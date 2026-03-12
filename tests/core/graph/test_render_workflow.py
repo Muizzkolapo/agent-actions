@@ -7,13 +7,15 @@ This module tests:
 3. Backward compatibility
 """
 
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 import yaml
-import tempfile
-import shutil
-from pathlib import Path
-from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
 from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 
 
 class TestFailedRenderCache:
@@ -48,7 +50,7 @@ class TestFailedRenderCache:
         )
         cache_dir = Path(".agent-actions/cache/rendered_workflows")
         expected_cache_file = cache_dir / "broken_workflow_failed.yml"
-        with pytest.raises(ConfigurationError) as exc_info:
+        with pytest.raises(ConfigurationError):
             render_pipeline_with_templates(
                 yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
             )

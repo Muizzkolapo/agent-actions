@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Callable, Any, Optional, TYPE_CHECKING
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import RepromptValidationFailedEvent
+
 from .response_validator import UdfValidator, build_validation_feedback
 
 if TYPE_CHECKING:
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 class RepromptResult:
     """Result of reprompt execution."""
 
-    response: Optional[Any]  # The actual LLM response content
+    response: Any | None  # The actual LLM response content
     executed: bool  # Whether LLM was executed (False if guard skipped)
     attempts: int
     passed: bool  # Whether validation ultimately passed
@@ -36,7 +38,7 @@ class RepromptService:
         validation_name: str = "",
         max_attempts: int = 2,
         on_exhausted: str = "return_last",
-        validator: Optional[ResponseValidator] = None,
+        validator: ResponseValidator | None = None,
     ):
         """Initialize with either a ``validation_name`` or a pre-built ``validator``.
 
@@ -81,7 +83,7 @@ class RepromptService:
         llm_operation: Callable[[str], tuple[Any, bool]],
         original_prompt: str,
         context: str = "",
-        on_exhausted: Optional[str] = None,
+        on_exhausted: str | None = None,
     ) -> RepromptResult:
         """Execute LLM with reprompt loop until validation passes or attempts exhausted.
 
@@ -192,9 +194,9 @@ class RepromptService:
 
 
 def create_reprompt_service_from_config(
-    reprompt_config: Optional[dict],
-    validator: Optional["ResponseValidator"] = None,
-) -> Optional[RepromptService]:
+    reprompt_config: dict | None,
+    validator: ResponseValidator | None = None,
+) -> RepromptService | None:
     """Create RepromptService from action config, or return None if not enabled.
 
     Raises:

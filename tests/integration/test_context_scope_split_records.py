@@ -11,10 +11,12 @@ Tests the full integration:
             -> _find_record_by_identifiers() with lineage matching
 """
 
-import pytest
 import json
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 

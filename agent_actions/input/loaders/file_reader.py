@@ -41,7 +41,7 @@ class FileReader(ProcessorErrorHandlerMixin):
             except FileNotFoundError as e:
                 self.handle_file_error(e, "read", self.file_path, file_type=self.file_type)
                 raise
-            except IOError as e:
+            except OSError as e:
                 self.handle_file_error(e, "read", self.file_path, file_type=self.file_type)
                 raise
             except Exception as e:
@@ -61,7 +61,7 @@ class FileReader(ProcessorErrorHandlerMixin):
             )
 
     def _read_json(self):
-        with open(self.file_path, "r", encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8") as file:
             data = json.load(file)
             is_batch_placeholder = (
                 isinstance(data, dict)
@@ -83,11 +83,11 @@ class FileReader(ProcessorErrorHandlerMixin):
             return data
 
     def _read_text(self):
-        with open(self.file_path, "r", encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8") as file:
             return file.read()
 
     def _read_csv(self):
-        with open(self.file_path, "r", encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8") as file:
             reader = csv.reader(file)
             return list(reader)
 
@@ -111,6 +111,6 @@ class FileReader(ProcessorErrorHandlerMixin):
         return df.to_dict(orient="records")
 
     def _read_html(self):
-        with open(self.file_path, "r", encoding="utf-8") as file:
+        with open(self.file_path, encoding="utf-8") as file:
             soup = BeautifulSoup(file, "html.parser")
             return soup.get_text()

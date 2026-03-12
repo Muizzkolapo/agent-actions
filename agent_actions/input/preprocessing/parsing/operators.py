@@ -3,7 +3,7 @@
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 
 
 class OperatorType(Enum):
@@ -99,7 +99,7 @@ OPERATORS: dict[str, Any] = {
 }
 
 
-def _length(args: List[Any]) -> int:
+def _length(args: list[Any]) -> int:
     if len(args) != 1:
         raise ValueError("LENGTH function requires exactly 1 argument")
     arg = args[0]
@@ -110,19 +110,19 @@ def _length(args: List[Any]) -> int:
     return len(str(arg))
 
 
-def _upper(args: List[Any]) -> str:
+def _upper(args: list[Any]) -> str:
     if len(args) != 1:
         raise ValueError("UPPER function requires exactly 1 argument")
     return str(args[0]).upper() if args[0] is not None else ""
 
 
-def _lower(args: List[Any]) -> str:
+def _lower(args: list[Any]) -> str:
     if len(args) != 1:
         raise ValueError("LOWER function requires exactly 1 argument")
     return str(args[0]).lower() if args[0] is not None else ""
 
 
-def _trim(args: List[Any]) -> str:
+def _trim(args: list[Any]) -> str:
     if len(args) != 1:
         raise ValueError("TRIM function requires exactly 1 argument")
     return str(args[0]).strip() if args[0] is not None else ""
@@ -200,7 +200,7 @@ OPERATOR_INFO: dict[str, OperatorInfo] = {
 }
 
 
-def list_operators(operator_type: Optional[OperatorType] = None) -> List[OperatorInfo]:
+def list_operators(operator_type: OperatorType | None = None) -> list[OperatorInfo]:
     """List all operators, optionally filtered by type."""
     ops = list(OPERATOR_INFO.values())
     if operator_type is not None:
@@ -208,6 +208,6 @@ def list_operators(operator_type: Optional[OperatorType] = None) -> List[Operato
     return sorted(ops, key=lambda x: (x.operator_type.value, x.precedence, x.name))
 
 
-def get_operator_info(name: str) -> Optional[OperatorInfo]:
+def get_operator_info(name: str) -> OperatorInfo | None:
     """Get operator info by name."""
     return OPERATOR_INFO.get(name)

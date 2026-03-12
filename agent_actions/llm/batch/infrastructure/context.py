@@ -3,10 +3,10 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
-from agent_actions.utils.path_utils import ensure_directory_exists
 from agent_actions.errors import ProcessingError
+from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class BatchContextManager:
 
     @staticmethod
     def save_batch_context_map(
-        context_map: Dict[str, Any], output_directory: str, batch_name: str
+        context_map: dict[str, Any], output_directory: str, batch_name: str
     ) -> Path:
         """Save batch processing context map to batch directory.
 
@@ -43,7 +43,7 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
-    def load_batch_context_map(output_directory: str, batch_name: str) -> Dict[str, Any]:
+    def load_batch_context_map(output_directory: str, batch_name: str) -> dict[str, Any]:
         """Load batch processing context map from batch directory.
 
         Raises:
@@ -58,7 +58,7 @@ class BatchContextManager:
                     context={"output_directory": output_directory, "batch_name": batch_name},
                 )
 
-            with open(context_path, "r", encoding="utf-8") as f:
+            with open(context_path, encoding="utf-8") as f:
                 context_map = json.load(f)
 
             logger.debug("Loaded context map from %s (%d entries)", context_path, len(context_map))

@@ -6,7 +6,7 @@ functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 """
 
 import json
-from typing import Dict, Any, List, Optional, Union
+from typing import Any
 
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
@@ -16,7 +16,7 @@ class ToolClient:
     """Client for executing user-defined functions as LLM clients."""
 
     @staticmethod
-    def _strip_internal_fields(data: Union[str, Dict, List]) -> Union[str, Dict, List]:
+    def _strip_internal_fields(data: str | dict | list) -> str | dict | list:
         """Strip internal metadata fields from context data before UDF invocation.
 
         Internal fields like batch_id, source_guid, node_id, _batch_filter_status
@@ -53,10 +53,10 @@ class ToolClient:
 
     @staticmethod
     def invoke(
-        agent_config: Dict[str, Any],
-        context_data: Union[str, Dict],
-        tool_args: Optional[Dict[str, Any]] = None,
-        source_content: Optional[Any] = None,
+        agent_config: dict[str, Any],
+        context_data: str | dict,
+        tool_args: dict[str, Any] | None = None,
+        source_content: Any | None = None,
     ) -> Any:
         """
         Invoke a user-defined function (UDF) specified in the configuration.

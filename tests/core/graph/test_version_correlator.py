@@ -2,8 +2,10 @@
 
 import json
 import tempfile
-import pytest
 from pathlib import Path
+
+import pytest
+
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 
@@ -170,10 +172,10 @@ class TestVersionOutputCorrelator:
             "consumer", ["distractor_1", "distractor_2", "distractor_3"], 4
         )
         output_file = Path(result_dir) / "data.json"
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             correlated_data = json.load(f)
         assert len(correlated_data) == 3
-        record1 = next((r for r in correlated_data if r["source_guid"] == "guid-1"))
+        record1 = next(r for r in correlated_data if r["source_guid"] == "guid-1")
         # Version namespaces are now nested, not prefixed
         assert "distractor_1" in record1["content"]
         assert "distractor_2" in record1["content"]
@@ -181,13 +183,13 @@ class TestVersionOutputCorrelator:
         assert record1["content"]["distractor_1"]["field_1"] == "value1"
         assert record1["content"]["distractor_2"]["field_2"] == "value1"
         assert record1["content"]["distractor_3"]["field_3"] == "value1"
-        record2 = next((r for r in correlated_data if r["source_guid"] == "guid-2"))
+        record2 = next(r for r in correlated_data if r["source_guid"] == "guid-2")
         assert "distractor_1" in record2["content"]
         assert "distractor_2" in record2["content"]
         assert "distractor_3" not in record2["content"]
         assert record2["content"]["distractor_1"]["field_1"] == "value2"
         assert record2["content"]["distractor_2"]["field_2"] == "value2"
-        record3 = next((r for r in correlated_data if r["source_guid"] == "guid-3"))
+        record3 = next(r for r in correlated_data if r["source_guid"] == "guid-3")
         assert "distractor_1" in record3["content"]
         assert "distractor_2" not in record3["content"]
         assert "distractor_3" not in record3["content"]
@@ -226,7 +228,7 @@ class TestVersionOutputCorrelator:
         for filename in files:
             output_file = Path(result_dir) / filename
             assert output_file.exists(), f"File {filename} not correlated"
-            with open(output_file, "r") as f:
+            with open(output_file) as f:
                 data = json.load(f)
                 assert len(data) == 1
                 # Version namespaces are now nested, not prefixed
@@ -272,14 +274,14 @@ class TestVersionOutputCorrelator:
         }
         result = correlator._correlate_by_source_record(version_outputs)
         assert len(result) == 2
-        rec_a = next((r for r in result if r["source_guid"] == "guid-a"))
+        rec_a = next(r for r in result if r["source_guid"] == "guid-a")
         # Content is now nested by agent name (not flattened)
         assert rec_a["content"] == {
             "loop_1": {"f1": "v1"},
             "loop_2": {"f2": "v3"},
             "loop_3": {"f3": "v5"},
         }
-        rec_b = next((r for r in result if r["source_guid"] == "guid-b"))
+        rec_b = next(r for r in result if r["source_guid"] == "guid-b")
         assert rec_b["content"] == {
             "loop_1": {"f1": "v2"},
             "loop_2": {"f2": "v4"},
@@ -296,7 +298,7 @@ class TestVersionOutputCorrelator:
         if result:
             output_files = list(Path(result).glob("*.json"))
             if output_files:
-                with open(output_files[0], "r") as f:
+                with open(output_files[0]) as f:
                     data = json.load(f)
                     assert data == []
 
@@ -347,7 +349,7 @@ class TestVersionOutputCorrelatorIntegration:
         assert result is not None
         output_file = Path(result) / "output.json"
         assert output_file.exists()
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             data = json.load(f)
             assert len(data) == 1
             # Content is nested by agent name (not flattened)
@@ -391,14 +393,14 @@ class TestLoopCorrelatorWithSequentialMode:
         assert result_dir is not None
         output_file = Path(result_dir) / "output.json"
         assert output_file.exists()
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             data = json.load(f)
             assert len(data) == 3
             # Content is nested by agent name
             # Extract iteration values from nested namespaces
             iterations = set()
             for item in data:
-                for agent_name, content in item["content"].items():
+                for _agent_name, content in item["content"].items():
                     if isinstance(content, dict) and "iteration" in content:
                         iterations.add(content["iteration"])
             assert iterations == {1, 2, 3}
@@ -423,7 +425,7 @@ class TestLoopCorrelatorWithSequentialMode:
         assert result_dir is not None
         output_file = Path(result_dir) / "result.json"
         if output_file.exists():
-            with open(output_file, "r") as f:
+            with open(output_file) as f:
                 data = json.load(f)
                 assert len(data) <= 2
                 if len(data) > 0:
@@ -452,7 +454,7 @@ class TestLoopCorrelatorWithSequentialMode:
         assert result_dir is not None
         output_file = Path(result_dir) / "data.json"
         assert output_file.exists()
-        with open(output_file, "r") as f:
+        with open(output_file) as f:
             data = json.load(f)
             assert len(data) == 1
             # Content is nested by agent name
@@ -500,9 +502,9 @@ class TestLoopCorrelatorWithSequentialMode:
         par_file = Path(par_result) / "output.json"
         assert seq_file.exists()
         assert par_file.exists()
-        with open(seq_file, "r") as f:
+        with open(seq_file) as f:
             seq_data = json.load(f)
-        with open(par_file, "r") as f:
+        with open(par_file) as f:
             par_data = json.load(f)
         assert len(seq_data) == 1
         assert len(par_data) == 1
@@ -583,7 +585,7 @@ class TestVersionCorrelatorSourceProtection:
             assert result is not None
 
             # Verify: Rich source data should NOT be overwritten
-            with open(source_file, "r") as f:
+            with open(source_file) as f:
                 final_source_data = json.load(f)
 
             # Should still have rich data (8 fields), not sparse data (2 fields)
@@ -598,7 +600,7 @@ class TestVersionCorrelatorSourceProtection:
         """Test that correlation outputs with MORE fields can update source."""
         with tempfile.TemporaryDirectory() as tmpdir:
             agent_folder = Path(tmpdir)
-            correlator = VersionOutputCorrelator(agent_folder)
+            _correlator = VersionOutputCorrelator(agent_folder)
 
             # Setup: Create sparse source data
             source_dir = agent_folder / "agent_io" / "source"
@@ -614,7 +616,7 @@ class TestVersionCorrelatorSourceProtection:
             # correlation NEVER enriches source data, it only protects existing rich data.
 
             # Just verify source file exists and has sparse data
-            with open(source_file, "r") as f:
+            with open(source_file) as f:
                 source_data = json.load(f)
             assert len(source_data[0]) == 2
 

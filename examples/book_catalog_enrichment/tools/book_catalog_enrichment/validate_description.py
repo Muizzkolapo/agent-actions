@@ -1,5 +1,6 @@
 """Validate marketing description quality and length."""
-from typing import List, TypedDict
+
+from typing import TypedDict
 
 from agent_actions import udf_tool
 
@@ -14,12 +15,12 @@ class ValidateDescriptionInput(TypedDict, total=False):
     # Book metadata
     isbn: str
     title: str
-    authors: List[str]
+    authors: list[str]
 
     # Description from LLM
     marketing_description: str
     hook_sentence: str
-    key_benefits: List[str]
+    key_benefits: list[str]
     target_audience: str
 
 
@@ -36,7 +37,7 @@ class ValidateDescriptionOutput(TypedDict, total=False):
     description_valid: bool
     word_count: int
     benefit_count: int
-    validation_issues: List[str]
+    validation_issues: list[str]
 
 
 @udf_tool()

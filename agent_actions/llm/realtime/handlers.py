@@ -1,9 +1,9 @@
-import shutil
-from typing import Optional
-from pathlib import Path
-from agent_actions.errors import AgentNotFoundError
 import logging
 import os
+import shutil
+from pathlib import Path
+
+from agent_actions.errors import AgentNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +14,7 @@ class AgentManager:
     """
 
     @staticmethod
-    def find_project_root(
-        start_path: Path, marker_file: str = "agent_actions.yml"
-    ) -> Optional[Path]:
+    def find_project_root(start_path: Path, marker_file: str = "agent_actions.yml") -> Path | None:
         """
         Find the project root directory by searching for a marker file.
 

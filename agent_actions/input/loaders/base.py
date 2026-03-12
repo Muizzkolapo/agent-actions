@@ -8,7 +8,7 @@ import functools
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TypeVar, Generic, Tuple, Type
+from typing import Any, Generic, TypeVar
 
 from agent_actions.config.interfaces import IDataLoader, ProcessingMode
 from agent_actions.config.types import AgentEntryDict
@@ -18,7 +18,7 @@ from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 def retry(
     max_attempts: int = 3,
     delay: float = 0.5,
-    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Simple retry decorator for file operations."""
 
@@ -66,7 +66,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
 
         @retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
         def _load_file() -> str:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return f.read()
 
         try:
@@ -94,11 +94,11 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
             raise
 
     @abstractmethod
-    def process(self, content: Any, file_path: Optional[str] = None) -> T:
+    def process(self, content: Any, file_path: str | None = None) -> T:
         """Load and parse content from a file or in-memory input."""
         pass
 
-    async def process_async(self, content: Any, file_path: Optional[str] = None) -> T:
+    async def process_async(self, content: Any, file_path: str | None = None) -> T:
         """Async version of process method."""
         try:
             import anyio

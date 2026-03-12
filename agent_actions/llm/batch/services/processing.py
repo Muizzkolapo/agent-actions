@@ -2,9 +2,10 @@
 
 import logging
 import time
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Callable
+from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.logging import fire_event
 from agent_actions.storage.backend import (
@@ -16,33 +17,33 @@ from agent_actions.storage.backend import (
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.logging.events import BatchCompleteEvent
-from agent_actions.processing.types import RecoveryMetadata
-from agent_actions.output.writer import FileWriter
-from agent_actions.utils.path_utils import ensure_directory_exists
+from agent_actions.errors import ProcessingError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.infrastructure.context import (
-    BatchContextManager,
-)
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm.batch.infrastructure.registry import (
-    BatchRegistryManager,
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
 )
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,
 )
+from agent_actions.llm.batch.infrastructure.registry import (
+    BatchRegistryManager,
+)
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.processing.result_processor import (
     BatchResultProcessor,
 )
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry
-from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.batch.services.retry import BatchRetryService
-from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BatchResult
-from agent_actions.errors import ProcessingError
+from agent_actions.logging.events import BatchCompleteEvent
+from agent_actions.output.writer import FileWriter
+from agent_actions.processing.types import RecoveryMetadata
+from agent_actions.utils.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +61,11 @@ class BatchProcessingService:
         context_manager: BatchContextManager,
         result_processor: BatchResultProcessor,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
-        source_handler: Optional[Any] = None,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
+        source_handler: Any | None = None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ):
         """Initialize processing service with dependencies.
 
@@ -100,7 +101,7 @@ class BatchProcessingService:
         output_directory: str,
         base_directory: str,
         file_path: str,
-        agent_config: Optional[Dict[str, Any]] = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> str:
         """Process batch results and integrate them into workflow output system.
 
@@ -185,9 +186,9 @@ class BatchProcessingService:
     def process_all_batch_results(
         self,
         output_directory: str,
-        agent_config: Optional[Dict[str, Any]] = None,
-        action_name: Optional[str] = None,
-    ) -> List[str]:
+        agent_config: dict[str, Any] | None = None,
+        action_name: str | None = None,
+    ) -> list[str]:
         """Process all completed batch jobs in the registry.
 
         Skips recovery entries (processed via their parent). Tolerates empty
@@ -286,7 +287,7 @@ class BatchProcessingService:
             return False
 
     def _determine_output_path(
-        self, output_directory: str, file_name: Optional[str], batch_id: str
+        self, output_directory: str, file_name: str | None, batch_id: str
     ) -> Path:
         """Determine the output file path for batch results.
 
@@ -305,9 +306,9 @@ class BatchProcessingService:
     def _write_batch_output(
         self,
         output_file: Path,
-        main_output: List[Dict[str, Any]],
+        main_output: list[dict[str, Any]],
         output_directory: str,
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ) -> None:
         """Write batch output file.
 
@@ -332,10 +333,10 @@ class BatchProcessingService:
         file_name: str,
         entry: BatchJobEntry,
         output_directory: str,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
-        action_name: Optional[str] = None,
-    ) -> Optional[str]:
+        action_name: str | None = None,
+    ) -> str | None:
         """Process a single batch file and return output path.
 
         Supports two modes:
@@ -386,10 +387,10 @@ class BatchProcessingService:
         file_name: str,
         entry: BatchJobEntry,
         output_directory: str,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
-        action_name: Optional[str] = None,
-    ) -> Optional[str]:
+        action_name: str | None = None,
+    ) -> str | None:
         """Process an original (non-recovery) batch file.
 
         1. Retrieve results
@@ -442,7 +443,7 @@ class BatchProcessingService:
                     recovery_entry = BatchJobEntry(
                         batch_id=retry_batch_id,
                         status=BatchStatus.SUBMITTED,
-                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        timestamp=datetime.now(UTC).isoformat(),
                         provider=entry.provider,
                         record_count=record_count,
                         file_name=recovery_file_name,
@@ -508,10 +509,10 @@ class BatchProcessingService:
         file_name: str,
         entry: BatchJobEntry,
         output_directory: str,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
-        action_name: Optional[str] = None,
-    ) -> Optional[str]:
+        action_name: str | None = None,
+    ) -> str | None:
         """Process a recovery batch (retry or reprompt).
 
         Loads recovery state, merges new results, and determines next action.
@@ -584,18 +585,18 @@ class BatchProcessingService:
     def _handle_retry_recovery(
         self,
         state: RecoveryState,
-        recovery_results: List[BatchResult],
-        accumulated: List[BatchResult],
-        context_map: Dict[str, Any],
+        recovery_results: list[BatchResult],
+        accumulated: list[BatchResult],
+        context_map: dict[str, Any],
         output_directory: str,
         parent_file_name: str,
         entry: BatchJobEntry,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         provider: Any,
-        action_name: Optional[str],
+        action_name: str | None,
         start_time: float,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Handle retry recovery batch completion."""
         missing_ids = set(state.missing_ids)
 
@@ -623,7 +624,7 @@ class BatchProcessingService:
                 recovery_entry = BatchJobEntry(
                     batch_id=retry_batch_id,
                     status=BatchStatus.SUBMITTED,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                     provider=entry.provider,
                     record_count=record_count,
                     file_name=recovery_file_name,
@@ -678,18 +679,18 @@ class BatchProcessingService:
     def _handle_reprompt_recovery(
         self,
         state: RecoveryState,
-        recovery_results: List[BatchResult],
-        accumulated: List[BatchResult],
-        context_map: Dict[str, Any],
+        recovery_results: list[BatchResult],
+        accumulated: list[BatchResult],
+        context_map: dict[str, Any],
         output_directory: str,
         parent_file_name: str,
         entry: BatchJobEntry,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         provider: Any,
-        action_name: Optional[str],
+        action_name: str | None,
         start_time: float,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Handle reprompt recovery batch completion."""
         merged = self._retry_service.process_reprompt_results(
             reprompt_results=recovery_results,
@@ -718,7 +719,7 @@ class BatchProcessingService:
                 recovery_entry = BatchJobEntry(
                     batch_id=reprompt_batch_id,
                     status=BatchStatus.SUBMITTED,
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                     provider=entry.provider,
                     record_count=record_count,
                     file_name=recovery_file_name,
@@ -776,16 +777,16 @@ class BatchProcessingService:
 
     def _check_and_submit_reprompt(
         self,
-        batch_results: List[BatchResult],
-        context_map: Dict[str, Any],
+        batch_results: list[BatchResult],
+        context_map: dict[str, Any],
         output_directory: str,
         file_name: str,
         entry: BatchJobEntry,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
         provider: Any,
-        recovery_state: Optional[RecoveryState] = None,
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
+        recovery_state: RecoveryState | None = None,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> bool:
         """Check if reprompt is needed and submit async batch if so.
 
@@ -842,7 +843,7 @@ class BatchProcessingService:
         recovery_entry = BatchJobEntry(
             batch_id=reprompt_batch_id,
             status=BatchStatus.SUBMITTED,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             provider=entry.provider,
             record_count=record_count,
             file_name=recovery_file_name,
@@ -879,7 +880,7 @@ class BatchProcessingService:
         )
         return False  # Recovery pending — caller should return None
 
-    def _write_record_dispositions(self, items: List[Dict[str, Any]], action_name: str) -> None:
+    def _write_record_dispositions(self, items: list[dict[str, Any]], action_name: str) -> None:
         """Write dispositions for non-success records in batch output.
 
         Called from both process_batch_results() (single-batch legacy API) and
@@ -932,15 +933,15 @@ class BatchProcessingService:
 
     def _finalize_batch_output(
         self,
-        batch_results: List[BatchResult],
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]],
-        context_map: Dict[str, Any],
+        batch_results: list[BatchResult],
+        exhausted_recovery: dict[str, RecoveryMetadata] | None,
+        context_map: dict[str, Any],
         output_directory: str,
         file_name: str,
         batch_id: str,
-        agent_config: Optional[Dict[str, Any]],
+        agent_config: dict[str, Any] | None,
         manager: BatchRegistryManager,
-        action_name: Optional[str],
+        action_name: str | None,
         start_time: float,
     ) -> str:
         """Finalize batch processing: convert, write output, fire events."""
@@ -995,13 +996,13 @@ class BatchProcessingService:
 
     def _convert_batch_results_to_workflow_format(
         self,
-        batch_results: List[BatchResult],
+        batch_results: list[BatchResult],
         *,
-        context_map: Optional[Dict[str, Any]] = None,
-        output_directory: Optional[str] = None,
-        agent_config: Optional[Dict[str, Any]] = None,
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
-    ) -> List[Dict[str, Any]]:
+        context_map: dict[str, Any] | None = None,
+        output_directory: str | None = None,
+        agent_config: dict[str, Any] | None = None,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
+    ) -> list[dict[str, Any]]:
         """Convert batch results to workflow format.
 
         Args:
@@ -1024,9 +1025,9 @@ class BatchProcessingService:
 
     @staticmethod
     def _apply_workflow_session_id(
-        agent_config: Optional[Dict[str, Any]],
-        entry: Optional[BatchJobEntry],
-    ) -> Optional[Dict[str, Any]]:
+        agent_config: dict[str, Any] | None,
+        entry: BatchJobEntry | None,
+    ) -> dict[str, Any] | None:
         """
         Preserve workflow context used at batch submission time.
 

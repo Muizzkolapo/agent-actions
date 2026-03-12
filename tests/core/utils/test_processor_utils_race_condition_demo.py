@@ -7,11 +7,8 @@ that could occur when parallel loop agents generate correlation IDs simultaneous
 
 import threading
 import time
-from typing import List, Set
 from concurrent.futures import ThreadPoolExecutor
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.field_management import FieldManager
-from agent_actions.utils.lineage import LineageBuilder
+
 from agent_actions.utils.correlation import VersionIdGenerator
 
 
@@ -37,7 +34,7 @@ def demonstrate_race_condition_fix():
     source_guid = "demo-record-123"
     version_base_name = "generate_distractors"
     num_threads = 20
-    correlation_ids: List[str] = []
+    correlation_ids: list[str] = []
     correlation_ids_lock = threading.Lock()
 
     def worker(worker_id: int):
@@ -66,7 +63,7 @@ def demonstrate_race_condition_fix():
     end_time = time.time()
     print(f"\n2. Results after {end_time - start_time:.3f} seconds:")
     print(f"   Total correlation IDs generated: {len(correlation_ids)}")
-    unique_ids: Set[str] = set(correlation_ids)
+    unique_ids: set[str] = set(correlation_ids)
     print(f"   Unique correlation IDs: {len(unique_ids)}")
     if len(unique_ids) == 1:
         print("   ✅ SUCCESS: All threads got the same correlation ID!")
@@ -111,7 +108,7 @@ def demonstrate_position_based_consistency():
                 futures.append(future)
         for future in futures:
             future.result()
-    print(f"\n2. Position-based consistency results:")
+    print("\n2. Position-based consistency results:")
     all_position_ids = set()
     for position, correlation_ids in results.items():
         unique_ids_for_position = set(correlation_ids)
@@ -167,7 +164,7 @@ def demonstrate_mixed_usage():
         pos_futures = [executor.submit(position_worker, pos) for pos in positions]
         for future in guid_futures + pos_futures:
             future.result()
-    print(f"\n2. Mixed strategy results:")
+    print("\n2. Mixed strategy results:")
     print(f"   GUID-based IDs: {len(set(guid_results.values()))} unique")
     print(f"   Position-based IDs: {len(set(position_results.values()))} unique")
     guid_ids = set(guid_results.values())

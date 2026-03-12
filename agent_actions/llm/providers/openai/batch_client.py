@@ -4,8 +4,10 @@ OpenAI Batch API client implementation.
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
+
 from openai import OpenAI
+
 from ..batch_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
@@ -21,13 +23,13 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     - Output: OpenAI response → BatchResult
     """
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """Initialize OpenAI client."""
         self.client = OpenAI(api_key=api_key)
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Transform our BatchTask to OpenAI's expected format.
 
@@ -71,7 +73,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             "body": body,
         }
 
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from OpenAI response with OpenAI-specific fields."""
         metadata = super()._extract_metadata_from_response(raw_response)
         # Add OpenAI-specific fields if response body exists
@@ -87,12 +89,12 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         return "gpt-4o-mini"
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSONL file for OpenAI."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "openai")
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit batch to OpenAI API."""
         with open(input_file, "rb") as f:
             batch_file = self.client.files.create(file=f, purpose="batch")

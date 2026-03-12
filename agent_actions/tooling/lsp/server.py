@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
@@ -41,8 +40,8 @@ class AgentActionsLanguageServer(LanguageServer):
 
     def __init__(self):
         super().__init__("agent-actions-lsp", "v0.1.0")
-        self.index: Optional[ProjectIndex] = None
-        self.project_root: Optional[Path] = None
+        self.index: ProjectIndex | None = None
+        self.project_root: Path | None = None
 
 
 # Create server instance
@@ -97,7 +96,7 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
 
 
 @server.feature(lsp.TEXT_DOCUMENT_DEFINITION)
-def goto_definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
+def goto_definition(params: lsp.DefinitionParams) -> lsp.Location | None:
     """Handle go to definition request."""
     if not server.index:
         return None
@@ -134,7 +133,7 @@ def goto_definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
 
 
 @server.feature(lsp.TEXT_DOCUMENT_HOVER)
-def hover(params: lsp.HoverParams) -> Optional[lsp.Hover]:
+def hover(params: lsp.HoverParams) -> lsp.Hover | None:
     """Handle hover request."""
     if not server.index:
         return None
@@ -164,7 +163,7 @@ def hover(params: lsp.HoverParams) -> Optional[lsp.Hover]:
     )
 
 
-def _build_hover_content(reference, index: ProjectIndex) -> Optional[str]:
+def _build_hover_content(reference, index: ProjectIndex) -> str | None:
     """Build markdown hover content for a reference."""
     if reference.type == ReferenceType.PROMPT:
         prompt = index.get_prompt(reference.value)
@@ -472,7 +471,7 @@ def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
 
 
 @server.feature(lsp.TEXT_DOCUMENT_SIGNATURE_HELP)
-def signature_help(params: lsp.SignatureHelpParams) -> Optional[lsp.SignatureHelp]:
+def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
     """Provide signature help for guard/reprompt conditions."""
     if not server.index:
         return None
@@ -683,7 +682,7 @@ def _build_diagnostic(
     )
 
 
-def _split_context_reference(value: str) -> tuple[str, Optional[str]]:
+def _split_context_reference(value: str) -> tuple[str, str | None]:
     """Split context reference into action name and field."""
     if "." in value:
         action_name, field = value.split(".", 1)

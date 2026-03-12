@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.hitl.server import HitlServer
@@ -16,11 +16,11 @@ class HitlClient:
 
     @staticmethod
     def invoke(
-        agent_config: Dict[str, Any],
-        context_data: Union[str, Dict],
-        tool_args: Optional[Dict[str, Any]] = None,
-        source_content: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        agent_config: dict[str, Any],
+        context_data: str | dict,
+        tool_args: dict[str, Any] | None = None,
+        source_content: Any | None = None,
+    ) -> dict[str, Any]:
         """
         Launch approval UI and block until user responds.
 

@@ -4,13 +4,13 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.batch_base import BaseBatchClient
 from agent_actions.llm.providers.batch_client_factory import BatchClientFactory
-from agent_actions.errors import ConfigurationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent
 
@@ -20,8 +20,8 @@ class BatchClientResolver:
 
     def __init__(
         self,
-        client_cache: Optional[Dict[str, BaseBatchClient]] = None,
-        default_client: Optional[BaseBatchClient] = None,
+        client_cache: dict[str, BaseBatchClient] | None = None,
+        default_client: BaseBatchClient | None = None,
     ):
         """
         Initialize client resolver.
@@ -33,7 +33,7 @@ class BatchClientResolver:
         self._client_cache = client_cache if client_cache is not None else {}
         self._default_client = default_client
 
-    def get_for_config(self, agent_config: Dict[str, Any]) -> BaseBatchClient:
+    def get_for_config(self, agent_config: dict[str, Any]) -> BaseBatchClient:
         """
         Get the appropriate client based on agent configuration.
 
@@ -113,7 +113,7 @@ class BatchClientResolver:
             ) from e
 
     def get_for_batch_id(
-        self, batch_id: str, registry_manager, output_directory: Optional[str] = None
+        self, batch_id: str, registry_manager, output_directory: str | None = None
     ) -> BaseBatchClient:
         """
         Get the client that was used for a specific batch ID.
@@ -158,7 +158,7 @@ class BatchClientResolver:
             context={"batch_id": batch_id, "output_directory": output_directory},
         )
 
-    def _find_cached_client(self, client_type: str) -> Optional[BaseBatchClient]:
+    def _find_cached_client(self, client_type: str) -> BaseBatchClient | None:
         if client_type in self._client_cache:
             return self._client_cache[client_type]
         # When cache uses hashed keys (vendor:hash), return a match only if
@@ -173,7 +173,7 @@ class BatchClientResolver:
         return None
 
     @staticmethod
-    def _build_cache_key(client_type: str, agent_config: Dict[str, Any]) -> str:
+    def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
         api_key = agent_config.get("api_key") or agent_config.get(f"{client_type}_api_key") or ""
         if api_key:
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
@@ -181,8 +181,8 @@ class BatchClientResolver:
         return client_type
 
     def _resolve_client_type(
-        self, batch_id: str, registry_manager, output_directory: Optional[str]
-    ) -> Optional[str]:
+        self, batch_id: str, registry_manager, output_directory: str | None
+    ) -> str | None:
         if registry_manager:
             entry = registry_manager.get_batch_job_by_id(batch_id)
             if entry:
@@ -195,13 +195,13 @@ class BatchClientResolver:
 
         return None
 
-    def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> Optional[str]:
+    def _lookup_client_from_file(self, batch_id: str, output_directory: str) -> str | None:
         registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
         if not registry_file.exists():
             return None
 
         try:
-            with open(registry_file, "r", encoding="utf-8") as f:
+            with open(registry_file, encoding="utf-8") as f:
                 registry = json.load(f)
 
             for entry in registry.values():

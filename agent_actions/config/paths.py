@@ -1,13 +1,12 @@
 """Centralized path management for all agent-actions path operations."""
 
-from pathlib import Path
-from typing import Optional, Dict, Union, List
+import logging
+import os
+import shutil
+import stat
 from dataclasses import dataclass
 from enum import Enum
-import os
-import stat
-import logging
-import shutil
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +75,13 @@ class PathManager:
         PathType.SCHEMA: {"must_exist": True, "must_be_readable": True},
     }
 
-    def __init__(self, config: Optional[PathConfig] = None, project_root: Optional[Path] = None):
+    def __init__(self, config: PathConfig | None = None, project_root: Path | None = None):
         """Initialize PathManager with optional configuration and project root."""
         self.config = config or PathConfig()
         self._project_root = Path(project_root).resolve() if project_root else None
-        self._path_cache: Dict[str, Path] = {}
+        self._path_cache: dict[str, Path] = {}
 
-    def get_project_root(self, start_path: Optional[Path] = None) -> Path:
+    def get_project_root(self, start_path: Path | None = None) -> Path:
         """Find and return the project root directory.
 
         Raises:
@@ -127,8 +126,8 @@ class PathManager:
     def get_standard_path(
         self,
         path_type: PathType,
-        agent_name: Optional[str] = None,
-        action_name: Optional[str] = None,
+        agent_name: str | None = None,
+        action_name: str | None = None,
         **template_vars,
     ) -> Path:
         """Get a standard path based on type and parameters."""
@@ -166,7 +165,7 @@ class PathManager:
 
         return resolved_path
 
-    def get_agent_paths(self, agent_name: str) -> Dict[str, Path]:
+    def get_agent_paths(self, agent_name: str) -> dict[str, Path]:
         """Get all standard paths for a specific agent."""
         return {
             "config": self.get_standard_path(PathType.AGENT_CONFIG, agent_name=agent_name),
@@ -190,7 +189,7 @@ class PathManager:
         return path
 
     def _check_permissions(
-        self, path: Path, requirements: Dict[str, bool], errors: List[str]
+        self, path: Path, requirements: dict[str, bool], errors: list[str]
     ) -> None:
         """Check path permissions and append errors if checks fail."""
         mode = path.stat().st_mode
@@ -212,7 +211,7 @@ class PathManager:
                 if not has_permission:
                     errors.append(f"Path is not {perm_name}: {path}")
 
-    def validate_path(self, path: Path, requirements: Optional[Dict[str, bool]] = None) -> bool:
+    def validate_path(self, path: Path, requirements: dict[str, bool] | None = None) -> bool:
         """Validate a path against requirements.
 
         Raises:
@@ -246,7 +245,7 @@ class PathManager:
         requirements = self.VALIDATION_RULES.get(path_type, {})
         return self.validate_path(path, requirements)
 
-    def normalize_path(self, path: Union[str, Path]) -> Path:
+    def normalize_path(self, path: str | Path) -> Path:
         """Normalize a path to a resolved Path object."""
         return Path(path).resolve()
 
@@ -265,7 +264,7 @@ class PathManager:
         normalized_path = self.normalize_path(path)
         return normalized_path.relative_to(project_root)
 
-    def find_files_by_pattern(self, pattern: str, base_path: Optional[Path] = None) -> List[Path]:
+    def find_files_by_pattern(self, pattern: str, base_path: Path | None = None) -> list[Path]:
         """Find files matching a glob pattern within the project."""
         search_base = base_path or self.get_project_root()
         search_base = self.normalize_path(search_base)

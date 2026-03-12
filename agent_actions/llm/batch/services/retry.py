@@ -2,16 +2,15 @@
 
 import logging
 import time
-from dataclasses import asdict
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional, Dict, Any, List, Set, Tuple
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.logging import fire_event
-from agent_actions.logging.events import BatchProgressEvent
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.batch.services.shared import retrieve_and_reconcile
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
-from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import BatchProgressEvent
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
 from agent_actions.utils.module_loader import ensure_path_importable, load_module_from_path
 
@@ -26,8 +25,8 @@ class BatchRetryService:
 
     def __init__(
         self,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
         self._agent_indices = agent_indices or {}
@@ -44,11 +43,11 @@ class BatchRetryService:
         batch_id: str,
         output_directory: str,
         *,
-        context_map: Dict[str, Any],
-        record_count: Optional[int] = None,
-        file_name: Optional[str] = None,
-        agent_config: Optional[Dict[str, Any]] = None,
-    ) -> tuple[List[BatchResult], Optional[Dict[str, RecoveryMetadata]]]:
+        context_map: dict[str, Any],
+        record_count: int | None = None,
+        file_name: str | None = None,
+        agent_config: dict[str, Any] | None = None,
+    ) -> tuple[list[BatchResult], dict[str, RecoveryMetadata] | None]:
         """Retrieve batch results with retry for missing records.
 
         DEPRECATED: This method blocks via wait_for_batch_completion().
@@ -86,7 +85,7 @@ class BatchRetryService:
         # =========================================================================
         # PHASE 1: RETRY - Ensure we have all records we can get
         # =========================================================================
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None
 
         if not retry_enabled:
             pass
@@ -101,7 +100,7 @@ class BatchRetryService:
             else:
                 # Per-record failure tracking: each record tracks its own failure count
                 # Initial failure = 1 (the initial batch didn't return this record)
-                record_failure_counts: Dict[str, int] = {rid: 1 for rid in missing_ids}
+                record_failure_counts: dict[str, int] = {rid: 1 for rid in missing_ids}
 
                 retry_attempts = 0
 
@@ -134,7 +133,7 @@ class BatchRetryService:
                                         failures=failures,
                                         succeeded=True,
                                         reason="missing",
-                                        timestamp=datetime.now(timezone.utc).isoformat(),
+                                        timestamp=datetime.now(UTC).isoformat(),
                                     )
                                 )
 
@@ -164,7 +163,7 @@ class BatchRetryService:
                                 failures=failures,
                                 succeeded=False,
                                 reason="missing",
-                                timestamp=datetime.now(timezone.utc).isoformat(),
+                                timestamp=datetime.now(UTC).isoformat(),
                             )
                         )
                     logger.warning(
@@ -192,12 +191,12 @@ class BatchRetryService:
     def _resubmit_missing_records(
         self,
         provider: BaseBatchClient,
-        missing_ids: Set[str],
-        context_map: Dict[str, Any],
+        missing_ids: set[str],
+        context_map: dict[str, Any],
         output_directory: str,
-        file_name: Optional[str],
-        agent_config: Optional[Dict[str, Any]],
-    ) -> List[BatchResult]:
+        file_name: str | None,
+        agent_config: dict[str, Any] | None,
+    ) -> list[BatchResult]:
         """Resubmit missing records as a new batch and wait for completion.
 
         DEPRECATED: Blocks via wait_for_batch_completion().
@@ -276,15 +275,15 @@ class BatchRetryService:
 
     def validate_and_reprompt(
         self,
-        results: List[BatchResult],
+        results: list[BatchResult],
         provider: BaseBatchClient,
-        context_map: Dict[str, Any],
+        context_map: dict[str, Any],
         output_directory: str,
-        file_name: Optional[str],
-        agent_config: Optional[Dict[str, Any]],
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
-    ) -> List[BatchResult]:
+        file_name: str | None,
+        agent_config: dict[str, Any] | None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
+    ) -> list[BatchResult]:
         """Validate results and reprompt failures with feedback.
 
         DEPRECATED: Blocks via wait_for_batch_completion().
@@ -306,12 +305,12 @@ class BatchRetryService:
         Returns:
             Consolidated list of batch results (original passes + reprompt results)
         """
-        from agent_actions.processing.recovery.validation import get_validation_function
-        from agent_actions.processing.recovery.response_validator import build_validation_feedback
-        from agent_actions.processing.types import RepromptMetadata
         from agent_actions.llm.batch.processing.preparator import (
             BatchTaskPreparator,
         )
+        from agent_actions.processing.recovery.response_validator import build_validation_feedback
+        from agent_actions.processing.recovery.validation import get_validation_function
+        from agent_actions.processing.types import RepromptMetadata
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
         reprompt_config = (agent_config or {}).get("reprompt")
@@ -355,8 +354,8 @@ class BatchRetryService:
             logger.error("Failed to get validation function: %s", e)
             return results
 
-        reprompt_attempts: Dict[str, int] = {}
-        validation_status: Dict[str, bool] = {}
+        reprompt_attempts: dict[str, int] = {}
+        validation_status: dict[str, bool] = {}
         result_map = {r.custom_id: r for r in results}
 
         attempt = 0
@@ -538,12 +537,12 @@ class BatchRetryService:
     def submit_retry_batch(
         self,
         provider: BaseBatchClient,
-        missing_ids: Set[str],
-        context_map: Dict[str, Any],
+        missing_ids: set[str],
+        context_map: dict[str, Any],
         output_directory: str,
-        file_name: Optional[str],
-        agent_config: Optional[Dict[str, Any]],
-    ) -> Optional[Tuple[str, int]]:
+        file_name: str | None,
+        agent_config: dict[str, Any] | None,
+    ) -> tuple[str, int] | None:
         """Submit a retry batch for missing records without blocking.
 
         Unlike _resubmit_missing_records, this returns immediately after
@@ -609,12 +608,12 @@ class BatchRetryService:
 
     def process_retry_results(
         self,
-        results: List[BatchResult],
-        accumulated_results: List[BatchResult],
-        context_map: Dict[str, Any],
-        record_failure_counts: Dict[str, int],
-        missing_ids: Set[str],
-    ) -> Tuple[List[BatchResult], Set[str], Dict[str, int], Optional[Dict[str, RecoveryMetadata]]]:
+        results: list[BatchResult],
+        accumulated_results: list[BatchResult],
+        context_map: dict[str, Any],
+        record_failure_counts: dict[str, int],
+        missing_ids: set[str],
+    ) -> tuple[list[BatchResult], set[str], dict[str, int], dict[str, RecoveryMetadata] | None]:
         """Process retry batch results and determine if more retries are needed.
 
         Args:
@@ -641,7 +640,7 @@ class BatchRetryService:
                             failures=failures,
                             succeeded=True,
                             reason="missing",
-                            timestamp=datetime.now(timezone.utc).isoformat(),
+                            timestamp=datetime.now(UTC).isoformat(),
                         )
                     )
 
@@ -658,8 +657,8 @@ class BatchRetryService:
         return all_results, missing_ids, updated_counts, None
 
     def build_exhausted_recovery(
-        self, missing_ids: Set[str], record_failure_counts: Dict[str, int]
-    ) -> Dict[str, RecoveryMetadata]:
+        self, missing_ids: set[str], record_failure_counts: dict[str, int]
+    ) -> dict[str, RecoveryMetadata]:
         """Build recovery metadata for records that exhausted all retry attempts.
 
         Args:
@@ -669,7 +668,7 @@ class BatchRetryService:
         Returns:
             Dict mapping custom_id -> RecoveryMetadata for exhausted records
         """
-        exhausted_recovery: Dict[str, RecoveryMetadata] = {}
+        exhausted_recovery: dict[str, RecoveryMetadata] = {}
         for rid in missing_ids:
             failures = record_failure_counts.get(rid, 1)
             exhausted_recovery[rid] = RecoveryMetadata(
@@ -678,7 +677,7 @@ class BatchRetryService:
                     failures=failures,
                     succeeded=False,
                     reason="missing",
-                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                 )
             )
         logger.warning(
@@ -689,9 +688,9 @@ class BatchRetryService:
 
     def validate_results(
         self,
-        results: List[BatchResult],
-        agent_config: Optional[Dict[str, Any]],
-    ) -> Tuple[List[BatchResult], Optional[str]]:
+        results: list[BatchResult],
+        agent_config: dict[str, Any] | None,
+    ) -> tuple[list[BatchResult], str | None]:
         """Validate results using configured UDF without resubmitting.
 
         Args:
@@ -766,13 +765,13 @@ class BatchRetryService:
     def submit_reprompt_batch(
         self,
         provider: BaseBatchClient,
-        failed_results: List[BatchResult],
-        context_map: Dict[str, Any],
+        failed_results: list[BatchResult],
+        context_map: dict[str, Any],
         output_directory: str,
-        file_name: Optional[str],
-        agent_config: Optional[Dict[str, Any]],
+        file_name: str | None,
+        agent_config: dict[str, Any] | None,
         attempt: int,
-    ) -> Optional[Tuple[str, int]]:
+    ) -> tuple[str, int] | None:
         """Submit a reprompt batch for failed validation records without blocking.
 
         Args:
@@ -787,11 +786,11 @@ class BatchRetryService:
         Returns:
             Tuple of (batch_id, record_count) if submitted, None if nothing to submit
         """
-        from agent_actions.processing.recovery.validation import get_validation_function
-        from agent_actions.processing.recovery.response_validator import build_validation_feedback
         from agent_actions.llm.batch.processing.preparator import (
             BatchTaskPreparator,
         )
+        from agent_actions.processing.recovery.response_validator import build_validation_feedback
+        from agent_actions.processing.recovery.validation import get_validation_function
 
         reprompt_config = (agent_config or {}).get("reprompt", {})
         validation_name = reprompt_config.get("validation")
@@ -865,9 +864,9 @@ class BatchRetryService:
 
     def process_reprompt_results(
         self,
-        reprompt_results: List[BatchResult],
-        accumulated_results: List[BatchResult],
-    ) -> List[BatchResult]:
+        reprompt_results: list[BatchResult],
+        accumulated_results: list[BatchResult],
+    ) -> list[BatchResult]:
         """Merge reprompt results into accumulated results (override by custom_id).
 
         Args:
@@ -893,12 +892,12 @@ class BatchRetryService:
 
     def apply_exhausted_reprompt_metadata(
         self,
-        results: List[BatchResult],
-        failed_ids: Set[str],
+        results: list[BatchResult],
+        failed_ids: set[str],
         validation_name: str,
         attempt: int,
         on_exhausted: str,
-    ) -> List[BatchResult]:
+    ) -> list[BatchResult]:
         """Apply reprompt exhaustion metadata to failed records.
 
         Mutates results in-place (sets recovery_metadata on individual items)
@@ -941,7 +940,7 @@ class BatchRetryService:
         return results
 
     @staticmethod
-    def serialize_results(results: List[BatchResult]) -> List[Dict[str, Any]]:
+    def serialize_results(results: list[BatchResult]) -> list[dict[str, Any]]:
         """Serialize BatchResult objects for JSON persistence.
 
         Args:
@@ -952,7 +951,7 @@ class BatchRetryService:
         """
         serialized = []
         for r in results:
-            d: Dict[str, Any] = {
+            d: dict[str, Any] = {
                 "custom_id": r.custom_id,
                 "content": r.content,
                 "success": r.success,
@@ -965,7 +964,7 @@ class BatchRetryService:
         return serialized
 
     @staticmethod
-    def deserialize_results(data: List[Dict[str, Any]]) -> List[BatchResult]:
+    def deserialize_results(data: list[dict[str, Any]]) -> list[BatchResult]:
         """Deserialize BatchResult objects from JSON.
 
         Args:
@@ -1082,7 +1081,7 @@ def wait_for_batch_completion(
     return provider.check_status(batch_id)
 
 
-def _import_validation_module(validation_module: str, validation_path: Optional[str]) -> None:
+def _import_validation_module(validation_module: str, validation_path: str | None) -> None:
     """Import validation module to register UDFs via decorators.
 
     Args:

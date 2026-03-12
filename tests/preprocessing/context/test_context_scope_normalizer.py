@@ -7,13 +7,12 @@ Verifies that:
 3. normalize_all_agent_configs normalizes context_scope in-place
 """
 
-import pytest
 from agent_actions.input.context.normalizer import (
     DIRECTIVE_REGISTRY,
-    normalize_context_scope,
-    normalize_all_agent_configs,
-    _expand_list_directive,
     _build_version_base_name_map,
+    _expand_list_directive,
+    normalize_all_agent_configs,
+    normalize_context_scope,
 )
 
 

@@ -5,11 +5,10 @@ Covers: 1-A malformed registry, 1-B stale result reuse, 1-C model hardcoding,
 delegation, 2-D StopIteration + JSONL blanks, 2-E vendor type, 2-F SubmissionResult.
 """
 
-import json
-import pytest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 
 # ── 1-A: are_all_jobs_completed returns False on malformed registry ──
 
@@ -491,7 +490,7 @@ class TestVendorTypeGoogleGeminiAlias:
         assert VendorType.GOOGLE.value == "gemini"
 
     def test_google_config_uses_gemini_vendor_type(self):
-        from agent_actions.llm.config.vendor import GoogleConfig, GeminiConfig
+        from agent_actions.llm.config.vendor import GeminiConfig, GoogleConfig
 
         assert GoogleConfig is GeminiConfig
 

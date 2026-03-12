@@ -5,23 +5,22 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
 
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.config.init import ProjectInitializer
 from agent_actions.errors import (
-    ValidationError,
-    FileSystemError,
     ConfigurationError,
+    FileSystemError,
+    ValidationError,
 )
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
-    ProjectInitializationStartEvent,
-    ProjectValidationEvent,
     ProjectDirectoryCreatedEvent,
+    ProjectInitializationStartEvent,
     ProjectInitializedEvent,
+    ProjectValidationEvent,
 )
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project_validator import ProjectValidator
@@ -85,7 +84,7 @@ class InitCommand:
                     },
                 )
 
-    def _get_available_templates(self) -> List[str]:
+    def _get_available_templates(self) -> list[str]:
         return ["default", "minimal", "full"]
 
     def _create_project_directory(self) -> None:
@@ -197,7 +196,7 @@ class InitCommand:
 @handles_user_errors("init")
 def init(
     project_name: str,
-    output_dir: Optional[str] = None,
+    output_dir: str | None = None,
     template: str = "default",
     force: bool = False,
 ) -> None:

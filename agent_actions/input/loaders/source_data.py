@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from agent_actions.config.interfaces import ISourceDataLoader, ProcessingMode
 from agent_actions.errors import DependencyError
@@ -20,7 +20,7 @@ class SourceDataLoader(ISourceDataLoader):
     def __init__(
         self,
         agent_name: str,
-        storage_backend: "StorageBackend",
+        storage_backend: StorageBackend,
     ):
         self.agent_name = agent_name
         if storage_backend is None:
@@ -35,7 +35,7 @@ class SourceDataLoader(ISourceDataLoader):
         """Return AUTO processing mode."""
         return ProcessingMode.AUTO
 
-    def load_source_data(self, source_relative_path: str) -> List[Dict]:
+    def load_source_data(self, source_relative_path: str) -> list[dict]:
         """Load source data from the storage backend."""
         logger.debug(
             "Loading source data from backend: %s",
@@ -44,7 +44,7 @@ class SourceDataLoader(ISourceDataLoader):
         )
         return self.storage_backend.read_source(source_relative_path)
 
-    def save_source_data(self, relative_path: str, data: List[Dict]) -> None:
+    def save_source_data(self, relative_path: str, data: list[dict]) -> None:
         """Save source data to the storage backend."""
         logger.debug(
             "Saving source data to backend: %s",

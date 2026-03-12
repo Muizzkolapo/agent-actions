@@ -2,16 +2,17 @@
 Shared utilities for agent configuration validation.
 """
 
-from typing import Dict, Any, Set, Optional
+from typing import Any
+
 from agent_actions.utils.constants import (
-    MODEL_VENDOR_KEY,
-    MODEL_NAME_KEY,
-    JSON_MODE_KEY,
     API_KEY_KEY,
-    PROMPT_KEY,
-    SCHEMA_NAME_KEY,
-    SCHEMA_KEY,
     CHUNK_CONFIG_KEY,
+    JSON_MODE_KEY,
+    MODEL_NAME_KEY,
+    MODEL_VENDOR_KEY,
+    PROMPT_KEY,
+    SCHEMA_KEY,
+    SCHEMA_NAME_KEY,
 )
 
 
@@ -25,12 +26,12 @@ class AgentConfigValidationUtilities:
 
     # ===== Configuration Constants =====
 
-    _REQUIRED_AGENT_KEYS: Set[str] = {
+    _REQUIRED_AGENT_KEYS: set[str] = {
         "agent_type",
         MODEL_NAME_KEY,  # 'model_name'
     }
 
-    _OPTIONAL_AGENT_KEYS: Set[str] = {
+    _OPTIONAL_AGENT_KEYS: set[str] = {
         "description",
         "version",
         "author",
@@ -57,20 +58,20 @@ class AgentConfigValidationUtilities:
         "constraints",
     }
 
-    _AGENT_TYPE_SPECIFIC_KEYS: Dict[str, Set[str]] = {
+    _AGENT_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {
         "llm": {MODEL_NAME_KEY},
         "function": {"code_path"},
         "tool": {MODEL_NAME_KEY},
     }
 
-    _VALID_BATCH_VENDORS: Set[str] = {"openai", "gemini", "anthropic", "groq", "mistral"}
+    _VALID_BATCH_VENDORS: set[str] = {"openai", "gemini", "anthropic", "groq", "mistral"}
 
-    _VALID_GRANULARITY_VALUES: Set[str] = {"record", "file"}
+    _VALID_GRANULARITY_VALUES: set[str] = {"record", "file"}
 
     # ===== Case-Insensitive Dict Operations =====
 
     @staticmethod
-    def normalize_entry_keys_to_lowercase(entry: Dict[str, Any]) -> Dict[str, Any]:
+    def normalize_entry_keys_to_lowercase(entry: dict[str, Any]) -> dict[str, Any]:
         """
         Convert all dictionary keys to lowercase for case-insensitive comparison.
 
@@ -87,7 +88,7 @@ class AgentConfigValidationUtilities:
         return {str(k).lower(): v for k, v in entry.items()}
 
     @staticmethod
-    def get_case_insensitive_value(entry: Dict[str, Any], key: str, default: Any = None) -> Any:
+    def get_case_insensitive_value(entry: dict[str, Any], key: str, default: Any = None) -> Any:
         """
         Get value from dict using case-insensitive key lookup.
 
@@ -111,7 +112,7 @@ class AgentConfigValidationUtilities:
     # ===== Context & Error Formatting =====
 
     @staticmethod
-    def format_validation_context(entry: Dict[str, Any], context_name: str) -> str:
+    def format_validation_context(entry: dict[str, Any], context_name: str) -> str:
         """
         Format a standardized description for error messages.
 
@@ -135,17 +136,17 @@ class AgentConfigValidationUtilities:
     # ===== Configuration Accessors =====
 
     @staticmethod
-    def get_required_agent_keys() -> Set[str]:
+    def get_required_agent_keys() -> set[str]:
         """Get set of required agent configuration keys."""
         return AgentConfigValidationUtilities._REQUIRED_AGENT_KEYS.copy()
 
     @staticmethod
-    def get_optional_agent_keys() -> Set[str]:
+    def get_optional_agent_keys() -> set[str]:
         """Get set of optional agent configuration keys."""
         return AgentConfigValidationUtilities._OPTIONAL_AGENT_KEYS.copy()
 
     @staticmethod
-    def get_agent_type_specific_keys(agent_type: str) -> Set[str]:
+    def get_agent_type_specific_keys(agent_type: str) -> set[str]:
         """
         Get required keys for a specific agent type.
 
@@ -160,7 +161,7 @@ class AgentConfigValidationUtilities:
         ).copy()
 
     @staticmethod
-    def get_all_known_agent_keys(agent_type: Optional[str] = None) -> Set[str]:
+    def get_all_known_agent_keys(agent_type: str | None = None) -> set[str]:
         """
         Get all known agent keys (required + optional + type-specific).
 
@@ -182,11 +183,11 @@ class AgentConfigValidationUtilities:
         return all_keys
 
     @staticmethod
-    def get_valid_batch_vendors() -> Set[str]:
+    def get_valid_batch_vendors() -> set[str]:
         """Get set of valid batch processing vendors."""
         return AgentConfigValidationUtilities._VALID_BATCH_VENDORS.copy()
 
     @staticmethod
-    def get_valid_granularity_values() -> Set[str]:
+    def get_valid_granularity_values() -> set[str]:
         """Get set of valid granularity values."""
         return AgentConfigValidationUtilities._VALID_GRANULARITY_VALUES.copy()

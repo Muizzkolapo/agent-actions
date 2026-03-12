@@ -1,6 +1,7 @@
 """Tests for HITL routing and expansion semantics."""
 
 import pytest
+
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.output.response.expander import ActionExpander
 
@@ -64,8 +65,8 @@ def test_get_all_agent_configs_raises_on_none_model_vendor():
     """LLM actions with model_vendor=None should raise ConfigurationError."""
     # Trigger coordinator import first to avoid circular import with ConfigManager.
     import agent_actions.workflow.coordinator  # noqa: F401
-    from agent_actions.llm.realtime.config import ConfigManager
     from agent_actions.errors import ConfigurationError
+    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -108,8 +109,8 @@ def test_get_all_agent_configs_raises_on_empty_string_model_vendor():
     """LLM actions with model_vendor='' should also raise ConfigurationError."""
     # Trigger coordinator import first to avoid circular import with ConfigManager.
     import agent_actions.workflow.coordinator  # noqa: F401
-    from agent_actions.llm.realtime.config import ConfigManager
     from agent_actions.errors import ConfigurationError
+    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -131,8 +132,8 @@ def test_get_all_agent_configs_raises_when_kind_is_none():
     """Actions with kind=None (absent/unset) should still validate model_vendor."""
     # Trigger coordinator import first to avoid circular import with ConfigManager.
     import agent_actions.workflow.coordinator  # noqa: F401
-    from agent_actions.llm.realtime.config import ConfigManager
     from agent_actions.errors import ConfigurationError
+    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {

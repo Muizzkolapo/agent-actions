@@ -2,10 +2,10 @@
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.output.writer import FileWriter
 from agent_actions.errors import AgentActionsException
+from agent_actions.output.writer import FileWriter
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -21,7 +21,7 @@ class OutputHandler:
     def __init__(
         self,
         storage_backend: Optional["StorageBackend"] = None,
-        action_name: Optional[str] = None,
+        action_name: str | None = None,
     ):
         """
         Initialize output handler.
@@ -35,7 +35,7 @@ class OutputHandler:
 
     def save_main_output(
         self,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         file_path: str,
         base_directory: str,
         output_directory: str,
@@ -64,7 +64,7 @@ class OutputHandler:
                 output_directory=output_directory,
             )
             file_writer.write_target(data)
-        except IOError as e:
+        except OSError as e:
             raise AgentActionsException(
                 "IOError saving main output",
                 context={
@@ -73,7 +73,7 @@ class OutputHandler:
                     "operation": "save_main_output",
                 },
                 cause=e,
-            )
+            ) from e
         except Exception as e:
             raise AgentActionsException(
                 "Error saving main output",
@@ -83,7 +83,7 @@ class OutputHandler:
                     "operation": "save_main_output",
                 },
                 cause=e,
-            )
+            ) from e
 
     def _ensure_directory_exists(self, file_path):
         """Ensure the directory for the file path exists."""
@@ -93,7 +93,7 @@ class OutputHandler:
     def _load_existing_content(self, file_path):
         """Load existing content from file if it exists."""
         if Path(file_path).exists():
-            with open(file_path, "r", encoding="utf-8") as file:
+            with open(file_path, encoding="utf-8") as file:
                 try:
                     existing_content = json.load(file)
                 except json.JSONDecodeError:

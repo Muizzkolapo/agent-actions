@@ -1,26 +1,27 @@
 """Preprocessing module for Agent Actions framework."""
 
+from agent_actions.input.context.context_preprocessor import ContextPreprocessor
+from agent_actions.input.context.historical import HistoricalNodeDataLoader
+
+from .chunking.field_chunking import FieldAnalysisResult, FieldAnalyzer, FieldChunker
+from .filtering.guard_filter import FilterMetrics, FilterResult, GuardFilter
 from .parsing.ast_nodes import (
     ASTNode,
-    FieldNode,
-    LiteralNode,
     ComparisonNode,
-    LogicalNode,
-    FunctionNode,
-    NodeType,
-    LogicalOperator,
     ComparisonOperator,
+    FieldNode,
+    FunctionNode,
+    LiteralNode,
+    LogicalNode,
+    LogicalOperator,
+    NodeType,
     WhereClauseAST,
     evaluate_node,
     format_node,
 )
 from .parsing.parser import WhereClauseParser
-from .filtering.guard_filter import GuardFilter, FilterResult, FilterMetrics
-from .chunking.field_chunking import FieldChunker, FieldAnalyzer, FieldAnalysisResult
-from .transformation.transformer import DataTransformer
 from .transformation.string_transformer import StringProcessor, Tokenizer
-from agent_actions.input.context.context_preprocessor import ContextPreprocessor
-from agent_actions.input.context.historical import HistoricalNodeDataLoader
+from .transformation.transformer import DataTransformer
 
 # Lazy imports to avoid circular dependencies:
 # - staging.initial_pipeline: imports BatchService -> DataTransformer (circular)

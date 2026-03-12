@@ -1,7 +1,5 @@
 """Tests for the static type checker."""
 
-import pytest
-
 from agent_actions.validation.static_analyzer import (
     AgentKind,
     DataFlowGraph,
@@ -257,7 +255,7 @@ class TestStaticTypeChecker:
         )
 
         checker = StaticTypeChecker(graph)
-        result = checker.check_all()
+        _result = checker.check_all()
         warnings = checker.check_unused_dependencies()
 
         assert len(warnings) >= 1

@@ -1,10 +1,10 @@
 """Prompt loading and validation from markdown files."""
 
-import re
 import logging
+import re
 from collections import Counter
 from pathlib import Path
-from typing import List
+
 from agent_actions.output.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ class PromptLoader:
         return prompt_body.strip()
 
     @staticmethod
-    def get_all_prompt_names(content: str) -> List[str]:
+    def get_all_prompt_names(content: str) -> list[str]:
         """Return all prompt names found in the content."""
         return PROMPT_PATTERN.findall(content)
 

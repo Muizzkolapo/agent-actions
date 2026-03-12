@@ -1,13 +1,13 @@
 """Tests for guard expression parser."""
 
 import pytest
+
+from agent_actions.errors import ValidationError  # New modular pattern!
 from agent_actions.output.response.guard_parser import (
     GuardParser,
     GuardType,
-    GuardExpression,
     parse_guard,
 )
-from agent_actions.errors import ValidationError  # New modular pattern!
 
 
 class TestGuardParser:

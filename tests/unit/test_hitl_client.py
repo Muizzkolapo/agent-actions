@@ -1,10 +1,11 @@
 """Tests for HITL client."""
 
-import pytest
 from unittest.mock import Mock, patch
 
-from agent_actions.llm.providers.hitl.client import HitlClient
+import pytest
+
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.providers.hitl.client import HitlClient
 
 
 def test_hitl_client_invoke_missing_config():

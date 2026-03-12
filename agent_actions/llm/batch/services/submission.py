@@ -1,31 +1,32 @@
 """Batch submission service for task preparation and job submission."""
 
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple, List, Callable
+from typing import Any
 
+from agent_actions.errors import ConfigValidationError, ExternalServiceError
+from agent_actions.llm.batch.core.batch_constants import BatchStatus
+from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
+from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm.batch.infrastructure.context import (
+    BatchContextManager,
+)
+from agent_actions.llm.batch.infrastructure.registry import (
+    BatchRegistryManager,
+)
+from agent_actions.llm.batch.processing.batch_passthrough_builder import (
+    BatchPassthroughBuilder,
+)
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import BatchSubmittedEvent
 from agent_actions.logging.events.types import (
     BatchStatusCheckFailedEvent,
     BatchSubmissionFailedEvent,
 )
-from agent_actions.llm.batch.core.batch_constants import BatchStatus
-from agent_actions.llm.batch.infrastructure.context import (
-    BatchContextManager,
-)
-from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
-    BatchClientResolver,
-)
-from agent_actions.llm.batch.infrastructure.registry import (
-    BatchRegistryManager,
-)
-from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
-from agent_actions.llm.batch.processing.batch_passthrough_builder import (
-    BatchPassthroughBuilder,
-)
-from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
-from agent_actions.errors import ConfigValidationError, ExternalServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +62,13 @@ class BatchSubmissionService:
 
     def prepare_batch_tasks(
         self,
-        agent_config: Dict[str, Any],
-        data: List[Dict[str, Any]],
-        output_directory: Optional[str] = None,
-        batch_name: Optional[str] = None,
-        source_data: Optional[Any] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        agent_config: dict[str, Any],
+        data: list[dict[str, Any]],
+        output_directory: str | None = None,
+        batch_name: str | None = None,
+        source_data: Any | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Prepare batch tasks from data.
 
         Args:
@@ -98,7 +99,7 @@ class BatchSubmissionService:
         )
         return prepared.tasks, prepared.context_map
 
-    def check_status(self, batch_id: str, output_directory: Optional[str] = None) -> BatchStatus:
+    def check_status(self, batch_id: str, output_directory: str | None = None) -> BatchStatus:
         """Check the status of a batch job.
 
         Args:
@@ -131,13 +132,13 @@ class BatchSubmissionService:
 
     def submit_batch_job(
         self,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         batch_name: str,
-        data: List[Dict[str, Any]],
-        output_directory: Optional[str] = None,
+        data: list[dict[str, Any]],
+        output_directory: str | None = None,
         force: bool = False,
-        source_data: Optional[Any] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
+        source_data: Any | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> SubmissionResult:
         """Submit a batch job for processing.
 
@@ -186,10 +187,10 @@ class BatchSubmissionService:
 
     def _handle_empty_tasks(
         self,
-        agent_config: Dict[str, Any],
-        context_map: Dict[str, Any],
-        data: List[Dict[str, Any]],
-        output_directory: Optional[str],
+        agent_config: dict[str, Any],
+        context_map: dict[str, Any],
+        data: list[dict[str, Any]],
+        output_directory: str | None,
     ) -> SubmissionResult:
         """Handle case where no tasks remain after filtering.
 
@@ -219,10 +220,10 @@ class BatchSubmissionService:
 
     def _submit_to_provider(
         self,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         batch_name: str,
-        tasks: List[Dict[str, Any]],
-        output_directory: Optional[str],
+        tasks: list[dict[str, Any]],
+        output_directory: str | None,
     ) -> SubmissionResult:
         """Submit batch to provider and save to registry.
 

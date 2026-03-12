@@ -5,9 +5,9 @@ Tests for issue #790: Schema validation should fail during config validation,
 not at runtime.
 """
 
-import pytest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from agent_actions.errors.configuration import ConfigValidationError
 

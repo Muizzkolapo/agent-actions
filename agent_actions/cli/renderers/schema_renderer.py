@@ -1,7 +1,5 @@
 """Unified Rich rendering for schema display."""
 
-from typing import Dict, List, Optional
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -18,9 +16,9 @@ class SchemaRenderer:
 
     def render_summary_table(
         self,
-        schemas: Dict[str, ActionSchema],
-        execution_order: List[str],
-        title: Optional[str] = None,
+        schemas: dict[str, ActionSchema],
+        execution_order: list[str],
+        title: str | None = None,
     ) -> Table:
         """Render a summary table of all actions."""
         table = Table(title=title, show_lines=True)
@@ -42,8 +40,8 @@ class SchemaRenderer:
 
     def render_flow_tree(
         self,
-        schemas: Dict[str, ActionSchema],
-        execution_order: List[str],
+        schemas: dict[str, ActionSchema],
+        execution_order: list[str],
         verbose: bool = False,
     ) -> Tree:
         """Render workflow flow as a tree."""
@@ -69,7 +67,7 @@ class SchemaRenderer:
 
         if schema.upstream_refs:
             inputs_branch = tree.add("[green]uses (from templates):[/green]")
-            by_source: Dict[str, list] = {}
+            by_source: dict[str, list] = {}
             for ref in schema.upstream_refs:
                 if ref.source_agent not in by_source:
                     by_source[ref.source_agent] = []
@@ -99,8 +97,8 @@ class SchemaRenderer:
 
     def render_data_flow_panel(
         self,
-        schemas: Dict[str, ActionSchema],
-        execution_order: List[str],
+        schemas: dict[str, ActionSchema],
+        execution_order: list[str],
     ) -> Panel:
         """Render a data flow panel (verbose tree view)."""
         tree = self.render_flow_tree(schemas, execution_order, verbose=True)

@@ -1,8 +1,5 @@
 """Tests for docs server path traversal protection and localhost binding."""
 
-from pathlib import Path
-from unittest.mock import patch
-
 import pytest
 
 from agent_actions.tooling.docs.server import DocsRequestHandler
@@ -71,8 +68,9 @@ class TestPathTraversal:
 class TestLocalhostBinding:
     def test_serve_docs_binds_to_localhost(self):
         """Verify HTTPServer is called with 127.0.0.1, not empty string."""
-        from agent_actions.tooling.docs import server as srv_mod
         import inspect
+
+        from agent_actions.tooling.docs import server as srv_mod
 
         source = inspect.getsource(srv_mod.serve_docs)
         assert '"127.0.0.1"' in source or "'127.0.0.1'" in source

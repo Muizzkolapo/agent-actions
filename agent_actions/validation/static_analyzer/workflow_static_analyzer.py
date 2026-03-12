@@ -5,9 +5,11 @@ similar to TypeScript's compile-time type checking.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 from .data_flow_graph import (
     AgentKind,
@@ -21,7 +23,6 @@ from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
 from .schema_structure_validator import SchemaStructureValidator
 from .type_checker import StaticTypeChecker
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 
 class WorkflowStaticAnalyzer:
@@ -53,12 +54,12 @@ class WorkflowStaticAnalyzer:
 
     def __init__(
         self,
-        workflow_config: Dict[str, Any],
-        udf_registry: Optional[Dict[str, Any]] = None,
-        schema_loader: Optional[Any] = None,
-        source_schema: Optional[Dict[str, Any]] = None,
-        schema_dir: Optional[Any] = None,
-        project_root: Optional[Any] = None,
+        workflow_config: dict[str, Any],
+        udf_registry: dict[str, Any] | None = None,
+        schema_loader: Any | None = None,
+        source_schema: dict[str, Any] | None = None,
+        schema_dir: Any | None = None,
+        project_root: Any | None = None,
     ) -> None:
         """Initialize the analyzer.
 
@@ -131,9 +132,9 @@ class WorkflowStaticAnalyzer:
 
         self._built = True
 
-    def _check_reserved_action_names(self) -> List[StaticTypeError]:
+    def _check_reserved_action_names(self) -> list[StaticTypeError]:
         """Return errors for actions using reserved names."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
         actions = self.workflow_config.get("actions", [])
         for action in actions:
             if not isinstance(action, dict):
@@ -154,7 +155,7 @@ class WorkflowStaticAnalyzer:
                 )
         return errors
 
-    def _check_context_scope_fields(self) -> List[StaticTypeError]:
+    def _check_context_scope_fields(self) -> list[StaticTypeError]:
         """Validate context_scope field references against dependency schemas.
 
         Checks that fields referenced in context_scope.observe and context_scope.passthrough
@@ -163,7 +164,7 @@ class WorkflowStaticAnalyzer:
         Returns:
             List of StaticTypeError for invalid field references
         """
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
         actions = self.workflow_config.get("actions", [])
 
         for action in actions:
@@ -255,7 +256,7 @@ class WorkflowStaticAnalyzer:
 
         return errors
 
-    def _check_schema_structures(self) -> List[StaticTypeError]:
+    def _check_schema_structures(self) -> list[StaticTypeError]:
         """Validate schema definitions for structural correctness.
 
         Pre-flight validation that catches schema issues before LLM execution:
@@ -267,7 +268,7 @@ class WorkflowStaticAnalyzer:
         Returns:
             List of StaticTypeError for invalid schema structures
         """
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
         validator = SchemaStructureValidator()
         actions = self.workflow_config.get("actions", [])
 
@@ -289,7 +290,7 @@ class WorkflowStaticAnalyzer:
                 errors.append(
                     StaticTypeError(
                         message=(
-                            f"'output_schema' is deprecated and ignored. Use 'schema:' instead."
+                            "'output_schema' is deprecated and ignored. Use 'schema:' instead."
                         ),
                         location=FieldLocation(
                             agent_name=action_name,
@@ -320,7 +321,7 @@ class WorkflowStaticAnalyzer:
         )
         self.graph.add_node(node)
 
-    def _add_agent_node(self, action_config: Dict[str, Any]) -> None:
+    def _add_agent_node(self, action_config: dict[str, Any]) -> None:
         """Add an action node to the graph."""
         name = action_config.get("name", "unknown")
 
@@ -398,7 +399,7 @@ class WorkflowStaticAnalyzer:
             self._build_graph()
         return self.graph
 
-    def get_agent_schema(self, agent_name: str) -> Optional[OutputSchema]:
+    def get_agent_schema(self, agent_name: str) -> OutputSchema | None:
         """Get the output schema for a specific action.
 
         Args:
@@ -413,7 +414,7 @@ class WorkflowStaticAnalyzer:
         node = self.graph.get_node(agent_name)
         return node.output_schema if node else None
 
-    def get_agent_input_schema(self, agent_name: str) -> Optional[InputSchema]:
+    def get_agent_input_schema(self, agent_name: str) -> InputSchema | None:
         """Get the input schema for a specific action.
 
         Args:
@@ -428,7 +429,7 @@ class WorkflowStaticAnalyzer:
         node = self.graph.get_node(agent_name)
         return node.input_schema if node else None
 
-    def get_action_schemas(self) -> Dict[str, Dict[str, Any]]:
+    def get_action_schemas(self) -> dict[str, dict[str, Any]]:
         """Get input and output schemas for all actions.
 
         Returns a dictionary mapping action names to their schemas:
@@ -452,14 +453,14 @@ class WorkflowStaticAnalyzer:
         if not self._built:
             self._build_graph()
 
-        result: Dict[str, Dict[str, Any]] = {}
+        result: dict[str, dict[str, Any]] = {}
 
         for name, node in self.graph.nodes.items():
             # Skip special namespaces
             if self.graph.is_special_namespace(name):
                 continue
 
-            action_info: Dict[str, Any] = {
+            action_info: dict[str, Any] = {
                 "kind": node.agent_kind.value,
                 "input": {},
                 "output": {},
@@ -492,7 +493,7 @@ class WorkflowStaticAnalyzer:
 
         return result
 
-    def _format_input_schema(self, input_info: Dict[str, Any]) -> List[str]:
+    def _format_input_schema(self, input_info: dict[str, Any]) -> list[str]:
         """Format input schema section as lines."""
         if input_info["is_template_based"]:
             return ["    (template-based - see field references)"]
@@ -508,7 +509,7 @@ class WorkflowStaticAnalyzer:
             lines.append("    (no fields)")
         return lines
 
-    def _format_output_schema(self, output_info: Dict[str, Any]) -> List[str]:
+    def _format_output_schema(self, output_info: dict[str, Any]) -> list[str]:
         """Format output schema section as lines."""
         if output_info["is_schemaless"]:
             return ["    (schemaless - freeform output)"]
@@ -536,14 +537,14 @@ class WorkflowStaticAnalyzer:
 
         return "\n".join(lines)
 
-    def _get_execution_order(self) -> List[str]:
+    def _get_execution_order(self) -> list[str]:
         """Get execution order, falling back to node keys if cycle detected."""
         try:
             return self.graph.topological_sort()
         except ValueError:
             return list(self.graph.nodes.keys())
 
-    def _build_agent_references(self, node: DataFlowNode) -> List[Dict[str, str]]:
+    def _build_agent_references(self, node: DataFlowNode) -> list[dict[str, str]]:
         """Build references list for an action node."""
         return [
             {"agent": req.source_agent, "field": req.field_path}
@@ -551,7 +552,7 @@ class WorkflowStaticAnalyzer:
             if req.source_agent not in SPECIAL_NAMESPACES
         ]
 
-    def _build_agent_info(self, node: DataFlowNode) -> Dict[str, Any]:
+    def _build_agent_info(self, node: DataFlowNode) -> dict[str, Any]:
         """Build action info dictionary for a node."""
         return {
             "name": node.name,
@@ -561,7 +562,7 @@ class WorkflowStaticAnalyzer:
             "references": self._build_agent_references(node),
         }
 
-    def get_data_flow_summary(self) -> Dict[str, Any]:
+    def get_data_flow_summary(self) -> dict[str, Any]:
         """Get a summary of data flow in the workflow.
 
         Returns:
@@ -591,8 +592,8 @@ class WorkflowStaticAnalyzer:
     def from_workflow_file(
         cls,
         workflow_path: str,
-        udf_registry: Optional[Dict[str, Any]] = None,
-        schema_loader: Optional[Any] = None,
+        udf_registry: dict[str, Any] | None = None,
+        schema_loader: Any | None = None,
     ) -> "WorkflowStaticAnalyzer":
         """Create analyzer from workflow file path.
 
@@ -606,16 +607,16 @@ class WorkflowStaticAnalyzer:
         """
         import yaml
 
-        with open(workflow_path, "r", encoding="utf-8") as f:
+        with open(workflow_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         return cls(config, udf_registry=udf_registry, schema_loader=schema_loader)
 
 
 def analyze_workflow(
-    workflow_config: Dict[str, Any],
-    udf_registry: Optional[Dict[str, Any]] = None,
-    schema_loader: Optional[Any] = None,
+    workflow_config: dict[str, Any],
+    udf_registry: dict[str, Any] | None = None,
+    schema_loader: Any | None = None,
     strict: bool = False,
 ) -> StaticValidationResult:
     """Convenience function to analyze a workflow configuration.

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from agent_actions.logging.core.events import BaseEvent, EventLevel

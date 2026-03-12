@@ -1,14 +1,13 @@
 """Thread-safe version correlation ID generation for workflow sessions."""
 
-import threading
 import hashlib
-from typing import Dict, Optional
+import threading
 
 
 class VersionIdGenerator:
     """Thread-safe version correlation ID generator using a class-level registry."""
 
-    _version_correlation_registry: Dict[str, str] = {}
+    _version_correlation_registry: dict[str, str] = {}
     _version_correlation_lock = threading.RLock()
 
     @classmethod
@@ -62,8 +61,8 @@ class VersionIdGenerator:
 
     @classmethod
     def add_version_correlation_id(
-        cls, obj: Dict, agent_config: Dict, record_index: Optional[int] = None
-    ) -> Dict:
+        cls, obj: dict, agent_config: dict, record_index: int | None = None
+    ) -> dict:
         """Add version correlation ID to an object if agent is versioned.
 
         Raises:

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, List, Pattern
+from re import Pattern
+from typing import Any
 
 
 def _redact_sensitive_data(
@@ -46,7 +47,7 @@ def _redact_sensitive_data(
 class RedactingFilter(logging.Filter):
     """Redacts sensitive information (API keys, tokens, etc.) from log records."""
 
-    DEFAULT_PATTERNS: List[str] = [
+    DEFAULT_PATTERNS: list[str] = [
         r'api[_-]?key["\']?\s*[:=]\s*["\']?[\w-]+',
         r'secret["\']?\s*[:=]\s*["\']?[\w-]+',
         r'token["\']?\s*[:=]\s*["\']?[\w-]+',
@@ -58,13 +59,13 @@ class RedactingFilter(logging.Filter):
 
     def __init__(
         self,
-        patterns: List[str] | None = None,
+        patterns: list[str] | None = None,
         name: str = "",
     ) -> None:
         """Initialize the redacting filter."""
         super().__init__(name)
         pattern_list = patterns if patterns is not None else self.DEFAULT_PATTERNS
-        self._compiled_patterns: List[tuple[Pattern, str]] = []
+        self._compiled_patterns: list[tuple[Pattern, str]] = []
 
         for pattern in pattern_list:
             try:

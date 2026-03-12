@@ -6,12 +6,9 @@ the first line of JSONL data to be processed when no output_directory is given.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from unittest.mock import patch
+from typing import Any
 
-import pytest
-
-from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
+from agent_actions.llm.providers.batch_base import BaseBatchClient
 
 
 class StubBatchClient(BaseBatchClient):
@@ -44,16 +41,16 @@ class StubBatchClient(BaseBatchClient):
     def _submit_to_provider_api(self, input_file, batch_name):
         return ("stub-id", "completed")
 
-    def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: Any) -> str | None:
         return raw_response.get("error")
 
     def _extract_content_from_response(self, raw_response: Any) -> Any:
         return raw_response.get("content", "")
 
-    def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: Any) -> dict[str, Any]:
         return {}
 
-    def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
         return None
 
 

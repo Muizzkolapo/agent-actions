@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -17,10 +16,10 @@ from agent_actions.errors import (
 from agent_actions.errors.operations import TemplateRenderingError
 from agent_actions.logging import LoggerFactory, fire_event
 from agent_actions.logging.events import (
-    SchemaLoadingStartedEvent,
-    SchemaLoadedEvent,
-    SchemaConstructionStartedEvent,
     SchemaConstructionCompleteEvent,
+    SchemaConstructionStartedEvent,
+    SchemaLoadedEvent,
+    SchemaLoadingStartedEvent,
 )
 from agent_actions.output.file_handler import FileHandler
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -94,7 +93,7 @@ class SchemaLoader:
         return dynamic_schema_names
 
     @staticmethod
-    def load_schema(schema_name: str, schema_dir: Optional[Path] = None) -> dict:
+    def load_schema(schema_name: str, schema_dir: Path | None = None) -> dict:
         """Load raw schema YAML by name, searching schema_dir (default: cwd/schema)."""
         if schema_dir is None:
             schema_dir = Path.cwd() / "schema"
@@ -131,7 +130,7 @@ class SchemaLoader:
             )
         )
 
-        with open(schema_file, "r", encoding="utf-8") as f:
+        with open(schema_file, encoding="utf-8") as f:
             schema_data = yaml.safe_load(f)
 
         field_count = len(schema_data.get("fields", [])) if isinstance(schema_data, dict) else 0
@@ -148,7 +147,7 @@ class SchemaLoader:
     @staticmethod
     def validate_schemas_exist(
         agent_name: str,
-        directory: Optional[str] = None,
+        directory: str | None = None,
     ) -> None:
         """Validate that all schema files referenced by an agent exist.
 

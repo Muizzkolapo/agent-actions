@@ -2,11 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from agent_actions.tooling.docs.scanner import ProjectScanner
 from agent_actions.output.response.loader import SchemaLoader
-
+from agent_actions.tooling.docs.scanner import ProjectScanner
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
@@ -19,24 +18,24 @@ class SchemaExtractor:
 
     def __init__(
         self,
-        udf_registry: Optional[Dict[str, Any]] = None,
-        schema_dir: Optional[Path] = None,
-        project_root: Optional[Path] = None,
+        udf_registry: dict[str, Any] | None = None,
+        schema_dir: Path | None = None,
+        project_root: Path | None = None,
     ) -> None:
         """Initialize the schema extractor."""
         self.udf_registry = udf_registry or {}
         self.schema_dir = schema_dir or Path.cwd() / "schema"
         self.project_root = project_root or Path.cwd()
-        self._tool_schemas: Optional[Dict[str, Any]] = None
+        self._tool_schemas: dict[str, Any] | None = None
 
-    def _get_tool_schemas(self) -> Dict[str, Any]:
+    def _get_tool_schemas(self) -> dict[str, Any]:
         """Lazy-load tool schemas from Python files using ProjectScanner."""
         if self._tool_schemas is None:
             scanner = ProjectScanner(str(self.project_root))
             self._tool_schemas = scanner.scan_tool_functions()
         return self._tool_schemas
 
-    def _convert_fields_to_json_schema(self, fields: List[Dict[str, str]]) -> Dict[str, Any]:
+    def _convert_fields_to_json_schema(self, fields: list[dict[str, str]]) -> dict[str, Any]:
         """Convert scanner field format to JSON schema format."""
         properties = {}
         required = []
@@ -84,8 +83,8 @@ class SchemaExtractor:
 
     def extract_schema(
         self,
-        agent_config: Dict[str, Any],
-        schema_loader: Optional[Any] = None,
+        agent_config: dict[str, Any],
+        schema_loader: Any | None = None,
     ) -> OutputSchema:
         """Extract output schema from action config."""
         output = OutputSchema()
@@ -106,8 +105,8 @@ class SchemaExtractor:
 
     def extract_input_schema(
         self,
-        agent_config: Dict[str, Any],
-        reference_extractor: Optional[Any] = None,
+        agent_config: dict[str, Any],
+        reference_extractor: Any | None = None,
     ) -> InputSchema:
         """Extract input schema from action config."""
         input_schema = InputSchema()
@@ -126,9 +125,9 @@ class SchemaExtractor:
 
     def _extract_llm_input_schema(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         input_schema: InputSchema,
-        reference_extractor: Optional[Any] = None,
+        reference_extractor: Any | None = None,
     ) -> None:
         """Extract input schema from LLM action config."""
         if reference_extractor is None:
@@ -151,7 +150,7 @@ class SchemaExtractor:
 
     def _extract_tool_input_schema(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
         """Extract input schema from tool/UDF action."""
@@ -187,7 +186,7 @@ class SchemaExtractor:
 
     def _infer_tool_input_from_context_scope(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
         """Infer input schema from context_scope declarations."""
@@ -227,7 +226,7 @@ class SchemaExtractor:
 
     def _extract_input_fields_from_json_schema(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
         """Extract required and optional fields from JSON schema."""
@@ -242,9 +241,9 @@ class SchemaExtractor:
 
     def _extract_llm_schema(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         output: OutputSchema,
-        schema_loader: Optional[Any],
+        schema_loader: Any | None,
     ) -> None:
         """Extract schema from LLM action."""
         schema_def = config.get("schema")
@@ -316,7 +315,7 @@ class SchemaExtractor:
 
     def _extract_tool_schema(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         output: OutputSchema,
     ) -> None:
         """Extract schema from tool/UDF action using YAML config."""
@@ -369,7 +368,7 @@ class SchemaExtractor:
         output.json_schema = HITL_OUTPUT_JSON_SCHEMA
         output.schema_fields = self.extract_fields_from_json_schema(HITL_OUTPUT_JSON_SCHEMA)
 
-    def _apply_context_scope(self, config: Dict[str, Any], output: OutputSchema) -> None:
+    def _apply_context_scope(self, config: dict[str, Any], output: OutputSchema) -> None:
         """Apply context_scope directives to output schema."""
         observe = config.get("observe", [])
         for ref in observe:
@@ -406,9 +405,9 @@ class SchemaExtractor:
         if config.get("return_collection"):
             output.schema_fields.add("input_data")
 
-    def extract_fields_from_json_schema(self, schema: Dict[str, Any]) -> Set[str]:
+    def extract_fields_from_json_schema(self, schema: dict[str, Any]) -> set[str]:
         """Extract top-level field names from JSON schema."""
-        fields: Set[str] = set()
+        fields: set[str] = set()
 
         schema_type = schema.get("type", "object")
 
@@ -473,7 +472,7 @@ class SchemaExtractor:
 
         return fields
 
-    def _extract_field_name(self, reference: str) -> Optional[str]:
+    def _extract_field_name(self, reference: str) -> str | None:
         """Extract field name from a reference string."""
         if not reference:
             return None
@@ -489,11 +488,11 @@ class SchemaExtractor:
 
     def extract_from_workflow(
         self,
-        workflow_config: Dict[str, Any],
-        schema_loader: Optional[Any] = None,
-    ) -> Dict[str, OutputSchema]:
+        workflow_config: dict[str, Any],
+        schema_loader: Any | None = None,
+    ) -> dict[str, OutputSchema]:
         """Extract schemas from all actions in a workflow."""
-        schemas: Dict[str, OutputSchema] = {}
+        schemas: dict[str, OutputSchema] = {}
 
         actions = workflow_config.get("actions", [])
         for action in actions:

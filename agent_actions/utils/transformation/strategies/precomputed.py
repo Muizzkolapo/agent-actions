@@ -1,8 +1,7 @@
 """Passthrough strategies for pre-computed passthrough_fields."""
 
-from typing import Dict, List, Optional
-
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
+
 from .base import IPassthroughTransformStrategy
 
 
@@ -11,9 +10,9 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if we have precomputed fields and structured data."""
@@ -26,12 +25,12 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Merge passthrough fields into each item's content."""
         result = []
         for item in data:
@@ -48,9 +47,9 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
 
     def can_handle(
         self,
-        data: List,
-        passthrough_fields: Optional[Dict],
-        agent_config: Dict,
+        data: list,
+        passthrough_fields: dict | None,
+        agent_config: dict,
         already_structured: bool,
     ) -> bool:
         """Check if we have precomputed fields and unstructured data."""
@@ -63,12 +62,12 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
 
     def transform(
         self,
-        data: List,
-        context_data: Dict,
+        data: list,
+        context_data: dict,
         source_guid: str,
-        agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List:
+        agent_config: dict,
+        passthrough_fields: dict | None = None,
+    ) -> list:
         """Merge passthrough fields directly into items."""
         merged = []
         for item in data:

@@ -3,11 +3,12 @@ Tests for safe_format module error handling utilities.
 """
 
 from unittest.mock import Mock
+
 from agent_actions.utils.safe_format import (
-    safe_format_error,
     extract_root_cause,
-    get_error_chain,
     format_exception_context,
+    get_error_chain,
+    safe_format_error,
 )
 
 

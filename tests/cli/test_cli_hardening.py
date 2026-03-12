@@ -1,14 +1,13 @@
 """Regression tests for CLI hardening fixes."""
 
-import json
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 
 
@@ -30,7 +29,7 @@ class TestBannerNotOnStdout:
             return_value=MagicMock(relative_to=MagicMock(return_value=".")),
         ):
             with patch("os.chdir"), patch("os.getcwd", return_value="/tmp"):
-                result = runner.invoke(dummy)
+                _result = runner.invoke(dummy)
 
         import inspect as inspect_mod
 
@@ -190,6 +189,7 @@ class TestStatusCorruptedFileExitCode:
 
     def test_corrupted_json_exits_nonzero(self):
         import click
+
         from agent_actions.cli.status import StatusCommand
         from agent_actions.validation.status_validator import StatusCommandArgs
 
@@ -210,6 +210,7 @@ class TestStatusCorruptedFileExitCode:
 
     def test_non_dict_status_exits_nonzero(self):
         import click
+
         from agent_actions.cli.status import StatusCommand
         from agent_actions.validation.status_validator import StatusCommandArgs
 

@@ -9,7 +9,7 @@ import secrets
 import socket
 import tempfile
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -632,4 +632,4 @@ def _sanitize_context(data: Any) -> Any:
 
 def _utc_timestamp() -> str:
     """Return ISO-8601 UTC timestamp with Z suffix."""
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")

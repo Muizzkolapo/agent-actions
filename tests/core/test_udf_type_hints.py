@@ -9,12 +9,12 @@ The json_output_schema parameter replaces the removed output_type decorator arg.
 
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.utils.udf_management.registry import (
-    udf_tool,
     clear_registry,
+    udf_tool,
 )
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
-from agent_actions.errors import SchemaValidationError
 
 
 @pytest.fixture(autouse=True)

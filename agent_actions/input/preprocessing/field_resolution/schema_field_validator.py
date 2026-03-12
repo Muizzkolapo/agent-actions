@@ -1,18 +1,18 @@
 """Schema-aware field validation for UDF output schemas."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 
 @dataclass
 class SchemaFieldValidationResult:
     """Result of validating a field path against a JSON Schema."""
 
-    field_path: List[str]  # Field path components (e.g., ['result', 'count'])
+    field_path: list[str]  # Field path components (e.g., ['result', 'count'])
     action_name: str  # Name of action being validated
     exists: bool  # Whether field path exists in schema
-    field_type: Optional[str] = None  # JSON Schema type if found
-    error: Optional[str] = None  # Error message if validation failed
+    field_type: str | None = None  # JSON Schema type if found
+    error: str | None = None  # Error message if validation failed
     is_required: bool = False  # Whether field is in 'required' list
 
     def __repr__(self) -> str:
@@ -27,13 +27,13 @@ class SchemaFieldValidator:
     """Validates field paths against JSON Schema definitions."""
 
     def validate_multiple_paths(
-        self, field_paths: List[List[str]], json_schema: Dict[str, Any], action_name: str
-    ) -> List[SchemaFieldValidationResult]:
+        self, field_paths: list[list[str]], json_schema: dict[str, Any], action_name: str
+    ) -> list[SchemaFieldValidationResult]:
         """Validate multiple field paths at once."""
         return [self.validate_field_path(path, json_schema, action_name) for path in field_paths]
 
     def validate_field_path(
-        self, field_path: List[str], json_schema: Dict[str, Any], action_name: str
+        self, field_path: list[str], json_schema: dict[str, Any], action_name: str
     ) -> SchemaFieldValidationResult:
         """Validate that a field path exists in the JSON Schema."""
         if not field_path:
@@ -72,8 +72,8 @@ class SchemaFieldValidator:
         )
 
     def _traverse_schema_path(
-        self, schema: Dict[str, Any], path: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+        self, schema: dict[str, Any], path: list[str]
+    ) -> tuple[bool, str | None]:
         """Traverse nested JSON Schema following field path. Returns (exists, json_type)."""
         if not path:
             return (True, schema.get("type"))
@@ -90,8 +90,8 @@ class SchemaFieldValidator:
         return (False, None)
 
     def _traverse_object_schema(
-        self, schema: Dict[str, Any], field_name: str, remaining_path: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+        self, schema: dict[str, Any], field_name: str, remaining_path: list[str]
+    ) -> tuple[bool, str | None]:
         """Traverse object schema properties."""
         properties = schema.get("properties", {})
 
@@ -106,8 +106,8 @@ class SchemaFieldValidator:
         return self._traverse_schema_path(field_schema, remaining_path)
 
     def _traverse_array_schema(
-        self, schema: Dict[str, Any], path: List[str]
-    ) -> Tuple[bool, Optional[str]]:
+        self, schema: dict[str, Any], path: list[str]
+    ) -> tuple[bool, str | None]:
         """Traverse array schema items."""
         items_schema = schema.get("items")
         if not items_schema:
@@ -115,7 +115,7 @@ class SchemaFieldValidator:
 
         return self._traverse_schema_path(items_schema, path)
 
-    def _extract_available_fields(self, schema: Dict[str, Any]) -> List[str]:
+    def _extract_available_fields(self, schema: dict[str, Any]) -> list[str]:
         """Extract list of available field names from schema."""
         if schema.get("type") != "object":
             return []
@@ -123,7 +123,7 @@ class SchemaFieldValidator:
         properties = schema.get("properties", {})
         return sorted(properties.keys())
 
-    def _is_field_required(self, schema: Dict[str, Any], field_path: List[str]) -> bool:
+    def _is_field_required(self, schema: dict[str, Any], field_path: list[str]) -> bool:
         """Check if a field is in the 'required' list."""
         if not field_path:
             return False

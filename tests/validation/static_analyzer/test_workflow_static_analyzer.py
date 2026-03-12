@@ -3,9 +3,9 @@
 import pytest
 
 from agent_actions.validation.static_analyzer import (
+    StaticValidationResult,
     WorkflowStaticAnalyzer,
     analyze_workflow,
-    StaticValidationResult,
 )
 
 
@@ -257,7 +257,7 @@ class TestAnalyzeWorkflowFunction:
         }
 
         result_normal = analyze_workflow(workflow_config, strict=False)
-        result_strict = analyze_workflow(workflow_config, strict=True)
+        _result_strict = analyze_workflow(workflow_config, strict=True)
 
         # Normal mode: warnings are warnings
         # Strict mode: may treat warnings as errors
@@ -274,7 +274,7 @@ class TestStaticValidationResult:
 
     def test_is_valid_with_errors(self):
         """Test is_valid is False when errors exist."""
-        from agent_actions.validation.static_analyzer import StaticTypeError, FieldLocation
+        from agent_actions.validation.static_analyzer import FieldLocation, StaticTypeError
 
         result = StaticValidationResult()
         result.add_error(
@@ -291,9 +291,9 @@ class TestStaticValidationResult:
     def test_format_report(self):
         """Test format_report returns readable string."""
         from agent_actions.validation.static_analyzer import (
+            FieldLocation,
             StaticTypeError,
             StaticTypeWarning,
-            FieldLocation,
         )
 
         result = StaticValidationResult()

@@ -3,7 +3,6 @@
 import importlib
 import os
 import re
-from typing import List
 
 import tiktoken
 
@@ -118,7 +117,7 @@ class Tokenizer:
         overlap: int,
         tokenizer_model: str = "cl100k_base",
         split_method: str = "tiktoken",
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text into overlapping chunks using the specified method."""
         if chunk_size <= 0:
             raise ConfigurationError(
@@ -167,7 +166,7 @@ class Tokenizer:
     @staticmethod
     def _split_with_tiktoken(
         text: str, chunk_size: int, overlap: int, tokenizer_model: str
-    ) -> List[str]:
+    ) -> list[str]:
         encoding = tiktoken.get_encoding(tokenizer_model)
         try:
             tokens = encoding.encode(text)
@@ -188,7 +187,7 @@ class Tokenizer:
         return chunks
 
     @staticmethod
-    def _split_by_chars(text: str, chunk_size: int, overlap: int) -> List[str]:
+    def _split_by_chars(text: str, chunk_size: int, overlap: int) -> list[str]:
         chunks = []
         start_idx = 0
         while start_idx < len(text):
@@ -200,7 +199,7 @@ class Tokenizer:
     @staticmethod
     def _split_with_spacy(
         text: str, chunk_size: int, overlap: int, tokenizer_model: str
-    ) -> List[str]:
+    ) -> list[str]:
         """Split text using spaCy sentence tokenization."""
         if not HAS_SPACY:
             raise ConfigurationError(
@@ -232,7 +231,7 @@ class Tokenizer:
                     -max(1, int(len(current_chunk) * overlap / chunk_size)) :
                 ]
                 current_chunk = overlap_sentences
-                current_length = sum((len(encoding.encode(s)) for s in current_chunk))
+                current_length = sum(len(encoding.encode(s)) for s in current_chunk)
             current_chunk.append(sentence)
             current_length += sentence_tokens
         if current_chunk:
@@ -242,7 +241,7 @@ class Tokenizer:
     @staticmethod
     def _split_with_custom_method(
         text: str, chunk_size: int, overlap: int, tokenizer_model: str, split_method: str
-    ) -> List[str]:
+    ) -> list[str]:
         try:
             tools_path = os.environ.get("TOOLS_PATH", "tools")
             if tools_path:

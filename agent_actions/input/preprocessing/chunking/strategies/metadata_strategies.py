@@ -2,7 +2,8 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Any
+
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 
 
@@ -10,7 +11,7 @@ from agent_actions.input.preprocessing.transformation.string_transformer import 
 class MetadataContext:
     """Context information for metadata creation."""
 
-    record: Dict[str, Any]
+    record: dict[str, Any]
     field_name: str
     field_value: str
     chunk: str
@@ -26,7 +27,7 @@ class MetadataStrategy(ABC):
         return f"{self.__class__.__name__}()"
 
     @abstractmethod
-    def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
+    def create_metadata(self, context: MetadataContext) -> dict[str, Any]:
         """Create metadata for a chunk."""
 
 
@@ -37,7 +38,7 @@ class BasicMetadataStrategy(MetadataStrategy):
         """Return string representation of BasicMetadataStrategy."""
         return "BasicMetadataStrategy()"
 
-    def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
+    def create_metadata(self, context: MetadataContext) -> dict[str, Any]:
         """Create basic metadata with source_field, chunk_index, and total_chunks."""
         return {
             "source_field": context.field_name,
@@ -49,7 +50,7 @@ class BasicMetadataStrategy(MetadataStrategy):
 class EnhancedMetadataStrategy(MetadataStrategy):
     """Enhanced metadata strategy with configurable additional fields."""
 
-    def __init__(self, config: Dict[str, Any], tokenizer_model: str):
+    def __init__(self, config: dict[str, Any], tokenizer_model: str):
         """Initialize enhanced metadata strategy."""
         self.config = config
         self.tokenizer_model = tokenizer_model
@@ -58,7 +59,7 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         """Return string representation of EnhancedMetadataStrategy."""
         return f"EnhancedMetadataStrategy(tokenizer_model={self.tokenizer_model!r})"
 
-    def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
+    def create_metadata(self, context: MetadataContext) -> dict[str, Any]:
         """Create enhanced metadata with configurable additional fields."""
         metadata = {
             "source_field": context.field_name,
@@ -88,7 +89,7 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         original_id = context.record.get("id", "unknown")
         return f"{original_id}_{context.field_name}_{context.chunk_index}"
 
-    def _calculate_character_positions(self, context: MetadataContext) -> Dict[str, Any]:
+    def _calculate_character_positions(self, context: MetadataContext) -> dict[str, Any]:
         """Calculate and return character position metadata for the chunk."""
         chunk_size_in_characters = len(context.chunk)
         estimated_start_position = (context.chunk_index - 1) * chunk_size_in_characters
@@ -101,7 +102,7 @@ class EnhancedMetadataStrategy(MetadataStrategy):
             "original_field_size_chars": len(context.field_value),
         }
 
-    def _calculate_token_counts(self, context: MetadataContext) -> Dict[str, Any]:
+    def _calculate_token_counts(self, context: MetadataContext) -> dict[str, Any]:
         """Calculate and return token count metadata for the chunk."""
         chunk_token_count = Tokenizer.num_tokens_from_string(context.chunk, self.tokenizer_model)
         original_field_token_count = Tokenizer.num_tokens_from_string(

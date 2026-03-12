@@ -7,8 +7,8 @@ NameError at runtime. The fix replaces `self.get_agent_paths(...)` with
 
 from unittest.mock import patch
 
-from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.errors import AgentNotFoundError
+from agent_actions.llm.realtime.handlers import AgentManager
 
 
 class TestAgentExists:

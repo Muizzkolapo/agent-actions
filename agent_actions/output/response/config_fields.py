@@ -3,7 +3,7 @@ Centralized config field definitions for ActionExpander.
 """
 
 import copy
-from typing import Dict, Any
+from typing import Any
 
 # Simple config fields that follow standard inheritance pattern
 # Format: 'field_name': default_value
@@ -49,7 +49,7 @@ SIMPLE_CONFIG_FIELDS = {
 
 
 def inherit_simple_fields(
-    agent: Dict[str, Any], action: Dict[str, Any], defaults: Dict[str, Any]
+    agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
     """
     Automatically inherit simple config fields from action/defaults.

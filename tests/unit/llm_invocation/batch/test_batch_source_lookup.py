@@ -9,12 +9,13 @@ instead of source_guid, causing failures when:
 Regression test for: Multiple derived records from same source document
 """
 
-import pytest
+from typing import Any
 from unittest.mock import MagicMock, patch
-from typing import List, Dict, Any
 
-from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+import pytest
+
 from agent_actions.llm.batch.core.batch_models import PreparedBatchTasks
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
 
 
 class TestSourceDataLookup:
@@ -41,7 +42,7 @@ class TestSourceDataLookup:
         }
 
     @pytest.fixture
-    def source_data_17_records(self) -> List[Dict[str, Any]]:
+    def source_data_17_records(self) -> list[dict[str, Any]]:
         """
         17 source records (simulating original page content).
 
@@ -57,7 +58,7 @@ class TestSourceDataLookup:
         ]
 
     @pytest.fixture
-    def input_data_61_records(self) -> List[Dict[str, Any]]:
+    def input_data_61_records(self) -> list[dict[str, Any]]:
         """
         61 processed records derived from 17 source records.
 
@@ -93,7 +94,7 @@ class TestSourceDataLookup:
 
         for source_idx, count in distribution:
             source_guid = f"source-guid-{source_idx}"
-            for j in range(count):
+            for _j in range(count):
                 records.append(
                     {
                         "target_id": f"target-{len(records)}",

@@ -12,24 +12,25 @@ import json
 import uuid
 from datetime import datetime
 from textwrap import dedent
-from typing import Any, Dict, List, Optional, Union
-from openai import OpenAI
+from typing import Any
+
 import openai
-from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
+from openai import OpenAI
+from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
+
+from agent_actions.errors import VendorAPIError
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.usage_tracker import set_last_usage
-from agent_actions.utils.constants import MODEL_NAME_KEY
-from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
 )
-
+from agent_actions.utils.constants import MODEL_NAME_KEY
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="openai",
@@ -54,17 +55,17 @@ class OpenAIClient(BaseClient):
 
     @staticmethod
     def call_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-        schema: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+        schema: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         context_data_str: str = StringProcessor.process_as_string(context_data)
         prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: ALWAYS READ INPUT AS STRING\n        "
-        messages: List[ChatCompletionSystemMessageParam] = [
+        messages: list[ChatCompletionSystemMessageParam] = [
             {"role": "system", "content": dedent(prompt)}
         ]
 
@@ -79,7 +80,7 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        completion_kwargs: Dict[str, Any] = {
+        completion_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": messages,
             "response_format": {"type": "json_schema", "json_schema": schema},
@@ -124,7 +125,7 @@ class OpenAIClient(BaseClient):
         )
 
         response_message = response.choices[0].message
-        response_content: Optional[str] = response_message.content
+        response_content: str | None = response_message.content
         if response_content is None:
             fire_event(
                 LLMErrorEvent(
@@ -143,24 +144,24 @@ class OpenAIClient(BaseClient):
                     "api_operation": "chat.completions.create",
                 },
             )
-        response_data: Union[Dict[str, Any], List[Dict[str, Any]]] = json.loads(response_content)
-        response_list: List[Dict[str, Any]] = (
+        response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
+        response_list: list[dict[str, Any]] = (
             response_data if isinstance(response_data, list) else [response_data]
         )
         return response_list
 
     @staticmethod
     def call_non_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-    ) -> List[Dict[str, str]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+    ) -> list[dict[str, str]]:
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         context_data_str: str = StringProcessor.process_as_string(context_data)
         prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
-        messages: List[ChatCompletionUserMessageParam] = [
+        messages: list[ChatCompletionUserMessageParam] = [
             {"role": "user", "content": dedent(prompt)}
         ]
 
@@ -175,7 +176,7 @@ class OpenAIClient(BaseClient):
             )
         )
 
-        completion_kwargs: Dict[str, Any] = {
+        completion_kwargs: dict[str, Any] = {
             "model": model_name,
             "messages": messages,
             **extract_generation_params(
@@ -220,7 +221,7 @@ class OpenAIClient(BaseClient):
 
         response_message = response.choices[0].message
         output_field: str = agent_config.get("output_field", "raw_response")
-        content: Optional[str] = response_message.content
+        content: str | None = response_message.content
         if content is None:
             fire_event(
                 LLMErrorEvent(
@@ -240,5 +241,5 @@ class OpenAIClient(BaseClient):
                     "output_field": output_field,
                 },
             )
-        response_content: Dict[str, str] = {output_field: content}
+        response_content: dict[str, str] = {output_field: content}
         return [response_content]

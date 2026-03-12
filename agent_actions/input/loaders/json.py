@@ -3,7 +3,7 @@
 # Similar loader pattern is intentional across different file type loaders
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
@@ -11,12 +11,12 @@ from agent_actions.input.loaders.base import BaseLoader
 logger = logging.getLogger(__name__)
 
 
-class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
+class JsonLoader(BaseLoader[dict[str, Any] | list[dict[str, Any]]]):
     """Loader for JSON content."""
 
     def process(
-        self, content: Any, file_path: Optional[str] = None
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        self, content: Any, file_path: str | None = None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Load and return raw JSON content from a file or memory."""
         try:
             if file_path:

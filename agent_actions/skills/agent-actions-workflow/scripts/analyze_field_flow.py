@@ -143,7 +143,7 @@ def analyze_workflow(target_dir: Path) -> None:
 
     prev_fields: set[str] = set()
 
-    for i, node in enumerate(nodes):
+    for _i, node in enumerate(nodes):
         curr_fields = set(node["fields"].keys())
 
         added = curr_fields - prev_fields
@@ -180,7 +180,7 @@ def analyze_workflow(target_dir: Path) -> None:
 
     all_fields: dict[str, list[str]] = defaultdict(list)
     for node in nodes:
-        for field, ftype in node["fields"].items():
+        for field, _ftype in node["fields"].items():
             all_fields[field].append(f"node_{node['num']}")
 
     print(f"\nTotal unique fields: {len(all_fields)}")

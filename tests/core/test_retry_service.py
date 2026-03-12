@@ -3,16 +3,17 @@
 Tests based on RFC_recovery.md test cases for retry mechanism.
 """
 
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
+from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.processing.recovery.retry import (
     RetryService,
     classify_error,
-    is_retriable_error,
     create_retry_service_from_config,
+    is_retriable_error,
 )
-from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 
 
 class TestClassifyError:

@@ -12,19 +12,16 @@ Tests cover:
 import pytest
 
 from agent_actions.input.preprocessing.field_resolution import (
-    FieldReferenceResolver,
-    ReferenceParser,
-    ParsedReference,
-    ReferenceFormat,
-    ReferenceValidator,
-    EvaluationContextProvider,
-    EvaluationContext,
-    InvalidReferenceError,
-    ReferenceNotFoundError,
     DependencyValidationError,
-    SPECIAL_NAMESPACES,
+    EvaluationContext,
+    EvaluationContextProvider,
+    FieldReferenceResolver,
+    InvalidReferenceError,
+    ReferenceFormat,
+    ReferenceNotFoundError,
+    ReferenceParser,
+    ReferenceValidator,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -460,7 +457,7 @@ class TestIntegration:
     def test_context_provider_with_resolver(self, field_context):
         """Test using context provider with resolver."""
         provider = EvaluationContextProvider()
-        resolver = FieldReferenceResolver()
+        _resolver = FieldReferenceResolver()
 
         # Build context
         context = provider.build_minimal_context(

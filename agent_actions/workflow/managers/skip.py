@@ -2,12 +2,13 @@
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Any
+
 from rich.console import Console
 
 from agent_actions.input.preprocessing.filtering.guard_filter import (
-    get_global_guard_filter,
     FilterItemRequest,
+    get_global_guard_filter,
 )
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.events import AgentSkipEvent
@@ -18,11 +19,11 @@ logger = logging.getLogger(__name__)
 class SkipStrategy(ABC):
     """Base strategy for evaluating skip conditions."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Console | None = None):
         self.console = console or Console()
 
     @abstractmethod
-    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
+    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
         """Return True if the agent should be skipped."""
 
     @abstractmethod
@@ -36,7 +37,7 @@ class SkipConditionStrategy(SkipStrategy):
     def get_strategy_name(self) -> str:
         return "skip_condition"
 
-    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
+    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
         """Evaluate skip_condition using modern WHERE filter."""
         skip_condition = agent_config.get("skip_condition")
         if not skip_condition:
@@ -121,7 +122,7 @@ class GuardStrategy(SkipStrategy):
         )
         return True
 
-    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
+    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
         """Evaluate agent-level guard condition."""
         guard_config = agent_config.get("guard")
 
@@ -193,7 +194,7 @@ class LegacySkipIfStrategy(SkipStrategy):
     def get_strategy_name(self) -> str:
         return "skip_if (legacy)"
 
-    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
+    def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
         """Evaluate legacy skip_if condition using modern WHERE filter."""
         skip_if = agent_config.get("skip_if")
         if not skip_if:
@@ -246,7 +247,7 @@ class LegacySkipIfStrategy(SkipStrategy):
 class SkipEvaluator:
     """Orchestrates skip condition evaluation in precedence order."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Console | None = None):
         """Initialize skip evaluator with strategies."""
         self.console = console or Console()
         self.strategies = [
@@ -259,7 +260,7 @@ class SkipEvaluator:
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 
     def should_skip_agent(
-        self, agent_config: Dict[str, Any], previous_outputs: Optional[Dict[str, Any]] = None
+        self, agent_config: dict[str, Any], previous_outputs: dict[str, Any] | None = None
     ) -> bool:
         """
         Determine if an agent should be skipped based on skip conditions.

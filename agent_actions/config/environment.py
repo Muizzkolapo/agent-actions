@@ -1,6 +1,5 @@
 """Environment configuration models with validation using pydantic-settings."""
 
-from typing import Optional
 from enum import Enum
 
 from pydantic import Field, SecretStr, field_validator
@@ -31,13 +30,13 @@ class EnvironmentConfig(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="forbid"
     )
-    openai_api_key: Optional[SecretStr] = Field(
+    openai_api_key: SecretStr | None = Field(
         default=None, description="OpenAI API Key for GPT models"
     )
-    anthropic_api_key: Optional[SecretStr] = Field(
+    anthropic_api_key: SecretStr | None = Field(
         default=None, description="Anthropic API Key for Claude models"
     )
-    gemini_api_key: Optional[SecretStr] = Field(default=None, description="Google Gemini API Key")
+    gemini_api_key: SecretStr | None = Field(default=None, description="Google Gemini API Key")
     agent_actions_env: Environment = Field(
         default=Environment.DEVELOPMENT, description="Application environment setting"
     )
@@ -56,7 +55,7 @@ class EnvironmentConfig(BaseSettings):
     max_concurrency: int = Field(
         default=10, ge=1, le=100, description="Maximum number of concurrent operations"
     )
-    database_url: Optional[str] = Field(default=None, description="Database connection URL")
+    database_url: str | None = Field(default=None, description="Database connection URL")
 
     @field_validator("openai_api_key", "anthropic_api_key", "gemini_api_key", mode="before")
     @classmethod

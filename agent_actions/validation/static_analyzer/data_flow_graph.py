@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
@@ -21,16 +21,16 @@ class AgentKind(Enum):
 class OutputSchema:
     """Represents the output schema of an action."""
 
-    schema_fields: Set[str] = field(default_factory=set)
-    observe_fields: Set[str] = field(default_factory=set)
-    passthrough_fields: Set[str] = field(default_factory=set)
-    dropped_fields: Set[str] = field(default_factory=set)
-    json_schema: Optional[Dict[str, Any]] = None
+    schema_fields: set[str] = field(default_factory=set)
+    observe_fields: set[str] = field(default_factory=set)
+    passthrough_fields: set[str] = field(default_factory=set)
+    dropped_fields: set[str] = field(default_factory=set)
+    json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False
 
     @property
-    def available_fields(self) -> Set[str]:
+    def available_fields(self) -> set[str]:
         """Compute available fields after applying drops."""
         all_fields = self.schema_fields | self.observe_fields | self.passthrough_fields
         return all_fields - self.dropped_fields
@@ -47,15 +47,15 @@ class OutputSchema:
 class InputSchema:
     """Represents the input schema of an action."""
 
-    required_fields: Set[str] = field(default_factory=set)
-    optional_fields: Set[str] = field(default_factory=set)
-    json_schema: Optional[Dict[str, Any]] = None
+    required_fields: set[str] = field(default_factory=set)
+    optional_fields: set[str] = field(default_factory=set)
+    json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_template_based: bool = False
     derived_from_context_scope: bool = False
 
     @property
-    def all_fields(self) -> Set[str]:
+    def all_fields(self) -> set[str]:
         """Get all input fields (required + optional)."""
         return self.required_fields | self.optional_fields
 
@@ -94,9 +94,9 @@ class DataFlowNode:
     name: str
     agent_kind: AgentKind
     output_schema: OutputSchema
-    input_schema: Optional[InputSchema] = None
-    input_requirements: List[InputRequirement] = field(default_factory=list)
-    dependencies: Set[str] = field(default_factory=set)
+    input_schema: InputSchema | None = None
+    input_requirements: list[InputRequirement] = field(default_factory=list)
+    dependencies: set[str] = field(default_factory=set)
 
     def __repr__(self) -> str:
         return f"DataFlowNode({self.name}, kind={self.agent_kind.value})"
@@ -108,7 +108,7 @@ class DataFlowEdge:
 
     source: str
     target: str
-    fields_used: Set[str] = field(default_factory=set)
+    fields_used: set[str] = field(default_factory=set)
 
     def __repr__(self) -> str:
         return f"DataFlowEdge({self.source} -> {self.target}, fields={self.fields_used})"
@@ -118,8 +118,8 @@ class DataFlowGraph:
     """Directed graph of workflow data flow between action nodes."""
 
     def __init__(self) -> None:
-        self.nodes: Dict[str, DataFlowNode] = {}
-        self.edges: List[DataFlowEdge] = []
+        self.nodes: dict[str, DataFlowNode] = {}
+        self.edges: list[DataFlowEdge] = []
 
     def add_node(self, node: DataFlowNode) -> None:
         """Add a node to the graph."""
@@ -129,7 +129,7 @@ class DataFlowGraph:
         """Add an edge to the graph."""
         self.edges.append(edge)
 
-    def get_node(self, name: str) -> Optional[DataFlowNode]:
+    def get_node(self, name: str) -> DataFlowNode | None:
         """Get a node by name."""
         return self.nodes.get(name)
 
@@ -141,7 +141,7 @@ class DataFlowGraph:
         """Check if name is a special namespace (source, loop, etc.)."""
         return name in SPECIAL_NAMESPACES
 
-    def get_upstream_nodes(self, agent_name: str) -> List[DataFlowNode]:
+    def get_upstream_nodes(self, agent_name: str) -> list[DataFlowNode]:
         """Get all nodes that this action depends on."""
         node = self.nodes.get(agent_name)
         if not node:
@@ -155,7 +155,7 @@ class DataFlowGraph:
 
         return upstream
 
-    def get_downstream_nodes(self, agent_name: str) -> List[DataFlowNode]:
+    def get_downstream_nodes(self, agent_name: str) -> list[DataFlowNode]:
         """Get all nodes that depend on this action."""
         downstream = []
         for node in self.nodes.values():
@@ -163,13 +163,13 @@ class DataFlowGraph:
                 downstream.append(node)
         return downstream
 
-    def get_reachable_upstream_names(self, agent_name: str) -> Set[str]:
+    def get_reachable_upstream_names(self, agent_name: str) -> set[str]:
         """Get all upstream action names reachable via transitive dependencies."""
         node = self.nodes.get(agent_name)
         if not node:
             return set()
 
-        reachable: Set[str] = set()
+        reachable: set[str] = set()
         stack = list(node.dependencies)
         while stack:
             dep_name = stack.pop()
@@ -182,13 +182,13 @@ class DataFlowGraph:
 
         return reachable
 
-    def topological_sort(self) -> List[str]:
+    def topological_sort(self) -> list[str]:
         """Return nodes in topological order.
 
         Raises:
             ValueError: If circular dependency detected.
         """
-        in_degree: Dict[str, int] = {name: 0 for name in self.nodes}
+        in_degree: dict[str, int] = {name: 0 for name in self.nodes}
 
         for node in self.nodes.values():
             for dep in node.dependencies:
@@ -219,7 +219,7 @@ class DataFlowGraph:
         self.edges = []
 
         for node in self.nodes.values():
-            fields_by_source: Dict[str, Set[str]] = {}
+            fields_by_source: dict[str, set[str]] = {}
 
             for req in node.input_requirements:
                 if not self.is_special_namespace(req.source_agent):
@@ -235,7 +235,7 @@ class DataFlowGraph:
                 )
                 self.edges.append(edge)
 
-    def get_all_agent_names(self) -> Set[str]:
+    def get_all_agent_names(self) -> set[str]:
         """Get names of all non-special action nodes."""
         return {name for name in self.nodes if not self.is_special_namespace(name)}
 

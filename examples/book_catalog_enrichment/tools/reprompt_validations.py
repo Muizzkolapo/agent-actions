@@ -9,10 +9,10 @@ Validates LLM responses for:
 
 from agent_actions import reprompt_validation
 
-
 # =============================================================================
 # PARSE ERROR VALIDATION
 # =============================================================================
+
 
 @reprompt_validation(
     "Your response could not be parsed as valid JSON. "
@@ -54,6 +54,7 @@ def check_no_parse_error(response) -> bool:
 # =============================================================================
 # BISAC CODE VALIDATION
 # =============================================================================
+
 
 @reprompt_validation(
     "Your response must include a valid BISAC code. "
@@ -103,6 +104,7 @@ def check_valid_bisac(response) -> bool:
 # COMBINED VALIDATION (Parse + BISAC)
 # =============================================================================
 
+
 @reprompt_validation(
     "Your response must be valid JSON with a proper BISAC classification. "
     "Requirements: (1) No markdown code blocks or trailing commas, "
@@ -146,6 +148,7 @@ def check_genre_classification(response) -> bool:
 # =============================================================================
 # MARKETING DESCRIPTION VALIDATION
 # =============================================================================
+
 
 @reprompt_validation(
     "Your marketing_description must have at least 50 words. "

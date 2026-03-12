@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any
 
 from .data_flow_graph import DataFlowGraph
 
@@ -31,7 +31,7 @@ class FieldProducer:
     action: str
     field_source: str  # 'schema', 'observe', 'passthrough'
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "action": self.action,
@@ -47,7 +47,7 @@ class AffectedReference:
     location: str
     raw_reference: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for JSON serialization."""
         return {
             "action": self.action,
@@ -65,10 +65,10 @@ class Conflict:
     field_name: str
     message: str
     resolution: str
-    producers: List[FieldProducer] = field(default_factory=list)
-    affected_references: List[AffectedReference] = field(default_factory=list)
+    producers: list[FieldProducer] = field(default_factory=list)
+    affected_references: list[AffectedReference] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "type": self.conflict_type.value,
@@ -86,7 +86,7 @@ class ConflictAnalysisResult:
     """Result of conflict analysis."""
 
     workflow_name: str
-    conflicts: List[Conflict] = field(default_factory=list)
+    conflicts: list[Conflict] = field(default_factory=list)
     actions_analyzed: int = 0
     unique_fields: int = 0
     shadowed_fields: int = 0
@@ -124,7 +124,7 @@ class ConflictAnalysisResult:
             shadowed_fields=self.shadowed_fields,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "workflow_name": self.workflow_name,
@@ -152,7 +152,7 @@ class ConflictDetector:
         self.graph = graph
         self.workflow_name = workflow_name
 
-        self._field_producers: Dict[str, List[FieldProducer]] = {}
+        self._field_producers: dict[str, list[FieldProducer]] = {}
         self._build_field_mapping()
 
     def _build_field_mapping(self) -> None:
@@ -186,7 +186,7 @@ class ConflictDetector:
 
     def detect_all(self) -> ConflictAnalysisResult:
         """Detect all conflicts in the workflow."""
-        conflicts: List[Conflict] = []
+        conflicts: list[Conflict] = []
 
         conflicts.extend(self._detect_shadowing())
         conflicts.extend(self._detect_ambiguous_references())
@@ -203,7 +203,7 @@ class ConflictDetector:
             shadowed_fields=len(shadowed),
         )
 
-    def _detect_shadowing(self) -> List[Conflict]:
+    def _detect_shadowing(self) -> list[Conflict]:
         """Detect fields produced by multiple actions."""
         conflicts = []
 
@@ -233,7 +233,7 @@ class ConflictDetector:
 
         return conflicts
 
-    def _detect_ambiguous_references(self) -> List[Conflict]:
+    def _detect_ambiguous_references(self) -> list[Conflict]:
         """Detect unqualified references to shadowed fields."""
         conflicts = []
         shadowed_fields = {f for f, p in self._field_producers.items() if len(p) > 1}
@@ -275,7 +275,7 @@ class ConflictDetector:
 
         return conflicts
 
-    def _detect_reserved_names(self) -> List[Conflict]:
+    def _detect_reserved_names(self) -> list[Conflict]:
         """Detect fields using reserved namespace names."""
         conflicts = []
 
@@ -298,11 +298,11 @@ class ConflictDetector:
 
         return conflicts
 
-    def _detect_drop_recreate(self) -> List[Conflict]:
+    def _detect_drop_recreate(self) -> list[Conflict]:
         """Detect fields that are dropped then recreated."""
         conflicts = []
 
-        dropped_by: Dict[str, str] = {}
+        dropped_by: dict[str, str] = {}
 
         for node in self.graph.nodes.values():
             if self.graph.is_special_namespace(node.name):
@@ -334,7 +334,7 @@ class ConflictDetector:
 
         return conflicts
 
-    def _find_field_references(self, field_name: str) -> List[AffectedReference]:
+    def _find_field_references(self, field_name: str) -> list[AffectedReference]:
         """Find all references to a field name."""
         references = []
 
@@ -354,7 +354,7 @@ class ConflictDetector:
 
         return references
 
-    def get_shadowed_fields(self) -> Dict[str, List[str]]:
+    def get_shadowed_fields(self) -> dict[str, list[str]]:
         """Get mapping of shadowed field names to their producer action names."""
         return {
             field_name: [p.action for p in producers]

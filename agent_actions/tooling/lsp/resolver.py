@@ -2,13 +2,12 @@
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from .models import Location, ProjectIndex, Reference, ReferenceType
 from .utils import is_in_context_scope_list, is_in_dependencies_context
 
 
-def get_reference_at_position(content: str, line: int, character: int) -> Optional[Reference]:
+def get_reference_at_position(content: str, line: int, character: int) -> Reference | None:
     """Detect what reference (if any) is at the given position."""
     lines = content.split("\n")
     if line >= len(lines):
@@ -133,8 +132,8 @@ def get_reference_at_position(content: str, line: int, character: int) -> Option
 
 
 def resolve_reference(
-    reference: Reference, index: ProjectIndex, current_file: Optional[Path] = None
-) -> Optional[Location]:
+    reference: Reference, index: ProjectIndex, current_file: Path | None = None
+) -> Location | None:
     """Resolve a reference to its target location."""
     if reference.type == ReferenceType.PROMPT:
         prompt = index.get_prompt(reference.value)

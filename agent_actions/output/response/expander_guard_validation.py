@@ -1,13 +1,13 @@
 """Guard reference validation functions extracted from ActionExpander."""
 
-from typing import Dict, Any
+from typing import Any
 
+from agent_actions.config.types import AgentConfigList, AgentEntryDict
 from agent_actions.errors import ConfigValidationError
-from agent_actions.input.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
-from agent_actions.config.types import AgentEntryDict, AgentConfigList
+from agent_actions.input.preprocessing.field_resolution import ReferenceParser, ReferenceValidator
 
 
-def build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
+def build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
     """
     Build schema registry from agent configs.
 
@@ -31,8 +31,8 @@ def build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
 def validate_agent_guards(
     agent: AgentEntryDict,
     validator: ReferenceValidator,
-    agent_indices: Dict[str, int],
-    action_schemas: Dict[str, Any],
+    agent_indices: dict[str, int],
+    action_schemas: dict[str, Any],
 ) -> list[str]:
     """
     Validate guard references for a single agent.

@@ -1,5 +1,14 @@
 """Static workflow analysis for compile-time type checking."""
 
+from .conflict_detector import (
+    AffectedReference,
+    Conflict,
+    ConflictAnalysisResult,
+    ConflictDetector,
+    ConflictSeverity,
+    ConflictType,
+    FieldProducer,
+)
 from .data_flow_graph import (
     AgentKind,
     DataFlowEdge,
@@ -17,6 +26,16 @@ from .errors import (
     StaticTypeWarning,
     StaticValidationResult,
 )
+from .field_flow_analyzer import (
+    ActionFlowInfo,
+    FieldConsumer,
+    FieldFlowAnalyzer,
+    FieldLineage,
+    FieldReference,
+    InputSchemaInfo,
+    OutputFieldInfo,
+    WorkflowFlow,
+)
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
 from .schema_structure_validator import SchemaStructureValidator
@@ -24,25 +43,6 @@ from .type_checker import StaticTypeChecker
 from .workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
-)
-from .field_flow_analyzer import (
-    FieldFlowAnalyzer,
-    FieldLineage,
-    FieldConsumer,
-    FieldReference,
-    ActionFlowInfo,
-    InputSchemaInfo,
-    OutputFieldInfo,
-    WorkflowFlow,
-)
-from .conflict_detector import (
-    ConflictDetector,
-    ConflictAnalysisResult,
-    Conflict,
-    ConflictType,
-    ConflictSeverity,
-    FieldProducer,
-    AffectedReference,
 )
 
 __all__ = [

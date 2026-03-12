@@ -1,7 +1,6 @@
 """Tests for logging configuration."""
 
 import os
-import pytest
 from unittest.mock import patch
 
 from agent_actions.logging.config import LoggingConfig

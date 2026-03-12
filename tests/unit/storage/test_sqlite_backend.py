@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_actions.storage import get_storage_backend, BACKENDS
+from agent_actions.storage import BACKENDS, get_storage_backend
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 

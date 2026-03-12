@@ -3,11 +3,13 @@
 import logging
 import signal
 import sys
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import click
 
-from agent_actions.cli.compile import render, compile
+from agent_actions.__version__ import __version__
+from agent_actions.cli.clean import clean_cli as clean
+from agent_actions.cli.compile import compile, render
 from agent_actions.cli.docs import docs
 from agent_actions.cli.init import init
 from agent_actions.cli.inspect import inspect
@@ -17,19 +19,17 @@ from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
 from agent_actions.cli.skills import skills
 from agent_actions.cli.status import status
-from agent_actions.cli.clean import clean_cli as clean
 from agent_actions.errors import ProjectNotFoundError
 from agent_actions.llm.batch.batch_cli import batch
 from agent_actions.logging import LoggerFactory, LoggingConfig, fire_event
-from agent_actions.logging.events import (
-    CLIInitStartEvent,
-    CLIInitCompleteEvent,
-    CLIArgumentParsingEvent,
-)
-from agent_actions.validation.validate_udfs import validate_udfs_cmd
 from agent_actions.logging.errors import format_user_error
+from agent_actions.logging.events import (
+    CLIArgumentParsingEvent,
+    CLIInitCompleteEvent,
+    CLIInitStartEvent,
+)
 from agent_actions.utils.safe_format import format_exception_chain_for_debug
-from agent_actions.__version__ import __version__
+from agent_actions.validation.validate_udfs import validate_udfs_cmd
 
 
 class CLI:
@@ -116,7 +116,7 @@ class CLI:
         print(f"Agent Actions CLI v{__version__}")
         return 0
 
-    def execute(self, argv: Optional[Sequence[str]] = None) -> int:
+    def execute(self, argv: Sequence[str] | None = None) -> int:
         try:
             if argv is None:
                 argv = sys.argv[1:]
@@ -178,7 +178,7 @@ class CLI:
             return 1
 
 
-def main_entrypoint(argv: Optional[Sequence[str]] = None) -> int:
+def main_entrypoint(argv: Sequence[str] | None = None) -> int:
     from dotenv import load_dotenv
 
     load_dotenv()

@@ -9,9 +9,8 @@ Provides AST parsing, lineage tracking, and ASCII diagram generation.
 import ast
 import json
 import subprocess
-from pathlib import Path
-from typing import Dict, List, Set, Optional
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -19,13 +18,13 @@ class CodeLineage:
     """Represents the lineage/dependencies of a code module."""
 
     module_path: str
-    imports: List[str] = field(default_factory=list)
-    from_imports: Dict[str, List[str]] = field(default_factory=dict)
-    classes: List[str] = field(default_factory=list)
-    functions: List[str] = field(default_factory=list)
-    function_calls: Set[str] = field(default_factory=set)
-    dependencies: Set[str] = field(default_factory=set)
-    base_classes: Dict[str, List[str]] = field(default_factory=dict)
+    imports: list[str] = field(default_factory=list)
+    from_imports: dict[str, list[str]] = field(default_factory=dict)
+    classes: list[str] = field(default_factory=list)
+    functions: list[str] = field(default_factory=list)
+    function_calls: set[str] = field(default_factory=set)
+    dependencies: set[str] = field(default_factory=set)
+    base_classes: dict[str, list[str]] = field(default_factory=dict)
     complexity_score: int = 0
 
 
@@ -138,7 +137,7 @@ def analyze_code(file_path: Path) -> CodeLineage:
     Returns:
         CodeLineage object with extracted information
     """
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         source = f.read()
 
     try:
@@ -148,7 +147,7 @@ def analyze_code(file_path: Path) -> CodeLineage:
         analyzer.visit(tree)
         analyzer.lineage.complexity_score = analyzer.complexity
         return analyzer.lineage
-    except SyntaxError as e:
+    except SyntaxError:
         # Return empty lineage if file has syntax errors
         lineage = CodeLineage(module_path=str(file_path))
         return lineage
@@ -245,12 +244,12 @@ def generate_dependency_graph(lineage: CodeLineage) -> str:
     lines.append("")
 
     module_name = Path(lineage.module_path).stem
-    lines.append(f"        ┌─────────────────┐")
+    lines.append("        ┌─────────────────┐")
     lines.append(f"        │  {module_name:<15} │  (this module)")
-    lines.append(f"        └─────────────────┘")
-    lines.append(f"                │")
-    lines.append(f"                ├─────→ Dependencies:")
-    lines.append(f"                │")
+    lines.append("        └─────────────────┘")
+    lines.append("                │")
+    lines.append("                ├─────→ Dependencies:")
+    lines.append("                │")
 
     deps = sorted(lineage.dependencies)[:8]  # Show first 8
     for i, dep in enumerate(deps):
@@ -265,7 +264,7 @@ def generate_dependency_graph(lineage: CodeLineage) -> str:
     return "\n".join(lines)
 
 
-def run_radon_complexity(file_path: Path) -> Dict:
+def run_radon_complexity(file_path: Path) -> dict:
     """
     Run radon to analyze cyclomatic complexity.
 
@@ -287,7 +286,7 @@ def run_radon_complexity(file_path: Path) -> Dict:
         return {}
 
 
-def run_radon_maintainability(file_path: Path) -> Dict:
+def run_radon_maintainability(file_path: Path) -> dict:
     """
     Run radon to calculate maintainability index.
 
@@ -309,7 +308,7 @@ def run_radon_maintainability(file_path: Path) -> Dict:
         return {}
 
 
-def run_radon_raw_metrics(file_path: Path) -> Dict:
+def run_radon_raw_metrics(file_path: Path) -> dict:
     """
     Run radon to get raw metrics (LOC, LLOC, etc.).
 
@@ -331,7 +330,7 @@ def run_radon_raw_metrics(file_path: Path) -> Dict:
         return {}
 
 
-def run_prospector(file_path: Path) -> Dict:
+def run_prospector(file_path: Path) -> dict:
     """
     Run prospector for comprehensive code quality analysis.
 
@@ -356,7 +355,7 @@ def run_prospector(file_path: Path) -> Dict:
         return {}
 
 
-def run_vulture(file_path: Path) -> List[str]:
+def run_vulture(file_path: Path) -> list[str]:
     """
     Run vulture to find dead code.
 

@@ -5,22 +5,22 @@ Handles client routing and invocation for different LLM providers.
 
 import importlib
 import logging
-from typing import Dict, Any, Optional, List, Union
+from typing import Any
 
-from agent_actions.llm.providers.openai.client import OpenAIClient
-from agent_actions.llm.providers.ollama.client import OllamaClient
-from agent_actions.llm.providers.cohere.client import CohereClient
-from agent_actions.llm.providers.mistral.client import MistralClient
-from agent_actions.llm.providers.anthropic.client import AnthropicClient
-from agent_actions.llm.providers.groq.client import GroqClient
-from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.llm.providers.agac.client import AgacClient
+from agent_actions.llm.providers.anthropic.client import AnthropicClient
+from agent_actions.llm.providers.cohere.client import CohereClient
+from agent_actions.llm.providers.groq.client import GroqClient
 from agent_actions.llm.providers.hitl.client import HitlClient
+from agent_actions.llm.providers.mistral.client import MistralClient
+from agent_actions.llm.providers.ollama.client import OllamaClient
+from agent_actions.llm.providers.openai.client import OpenAIClient
+from agent_actions.llm.providers.tools.client import ToolClient
 
 logger = logging.getLogger(__name__)
 
 # Client registry
-CLIENT_REGISTRY: Dict[str, Any] = {
+CLIENT_REGISTRY: dict[str, Any] = {
     "openai": OpenAIClient,
     "ollama": OllamaClient,
     # Lazy import avoids deprecated SDK warnings for non-Gemini commands.
@@ -56,16 +56,16 @@ class ClientInvocationService:
     @staticmethod
     def invoke_client(
         model_vendor: str,
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         prompt_config: str,
-        context_data: Union[str, Dict],
-        schema: Optional[Dict[str, Any]],
+        context_data: str | dict,
+        schema: dict[str, Any] | None,
         granularity: str,
-        formatted_prompt: Optional[str] = None,
-        tool_args: Optional[Dict[str, Any]] = None,
-        source_content: Optional[Any] = None,
-        action_name: Optional[str] = None,
-    ) -> List[Any]:
+        formatted_prompt: str | None = None,
+        tool_args: dict[str, Any] | None = None,
+        source_content: Any | None = None,
+        action_name: str | None = None,
+    ) -> list[Any]:
         """
         Delegate to the specific client and normalize the response.
 

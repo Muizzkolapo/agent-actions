@@ -5,8 +5,9 @@ Anthropic Batch API client implementation.
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
-from ..batch_base import BaseBatchClient, BatchTask, BatchResult
+from typing import Any
+
+from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,8 @@ class AnthropicBatchClient(BaseBatchClient):
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        version: Optional[str] = None,
+        api_key: str | None = None,
+        version: str | None = None,
         enable_prompt_caching: bool = False,
     ):
         """
@@ -77,11 +78,11 @@ class AnthropicBatchClient(BaseBatchClient):
                     "api_key_source": "environment variable or parameter",
                 },
                 cause=e,
-            )
+            ) from e
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Transform our BatchTask to Anthropic's Message Batches API format.
 
@@ -118,7 +119,7 @@ class AnthropicBatchClient(BaseBatchClient):
             params["extra_headers"] = {"anthropic-beta": "prompt-caching-2024-07-31"}
         return {"custom_id": batch_task.custom_id, "params": params}
 
-    def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error from Anthropic response."""
         result = self._get_attribute_or_key(raw_response, "result")
         if result is None:
@@ -170,7 +171,7 @@ class AnthropicBatchClient(BaseBatchClient):
         # Fallback: try first item
         return self._fallback_content_extraction(content_list[0])
 
-    def _extract_tool_use_content(self, content_list: list) -> Optional[Any]:
+    def _extract_tool_use_content(self, content_list: list) -> Any | None:
         """Extract content from tool_use blocks."""
         for content_block in content_list:
             # Check object with type='tool_use'
@@ -191,7 +192,7 @@ class AnthropicBatchClient(BaseBatchClient):
 
         return None
 
-    def _extract_text_content(self, content_list: list) -> Optional[str]:
+    def _extract_text_content(self, content_list: list) -> str | None:
         """Extract text from text blocks."""
         for content_block in content_list:
             # Check object with type='text'
@@ -240,7 +241,7 @@ class AnthropicBatchClient(BaseBatchClient):
         # Last resort: stringify
         return str(content_item)
 
-    def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: Any) -> dict[str, Any]:
         """Extract metadata from Anthropic response."""
         result = self._get_attribute_or_key(raw_response, "result")
         result_type = self._get_attribute_or_key(result, "type")
@@ -253,7 +254,7 @@ class AnthropicBatchClient(BaseBatchClient):
             "result_type": result_type,
         }
 
-    def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
         """Extract usage from Anthropic response."""
         result = self._get_attribute_or_key(raw_response, "result")
         message = self._get_attribute_or_key(result, "message", {})
@@ -268,7 +269,7 @@ class AnthropicBatchClient(BaseBatchClient):
         return "claude-3-sonnet-20240229"
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSON file for Anthropic."""
         file_name = f"{Path(batch_name).stem}_anthropic_batch_input.json"
@@ -278,11 +279,11 @@ class AnthropicBatchClient(BaseBatchClient):
         logger.info("Anthropic batch input saved at: %s", file_path)
         return file_path
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit batch to Anthropic API."""
         try:
             # Read tasks from file to submit
-            with open(input_file, "r", encoding="utf-8") as f:
+            with open(input_file, encoding="utf-8") as f:
                 data = json.load(f)
                 tasks = data["requests"]
 
@@ -338,8 +339,8 @@ class AnthropicBatchClient(BaseBatchClient):
         return status_mapping.get(raw_status, raw_status)
 
     def retrieve_results(
-        self, batch_id: str, output_directory: Optional[str] = None
-    ) -> List[BatchResult]:
+        self, batch_id: str, output_directory: str | None = None
+    ) -> list[BatchResult]:
         """
         Retrieve and transform Anthropic batch results to our format.
 
@@ -414,7 +415,7 @@ class AnthropicBatchClient(BaseBatchClient):
         """Not used by Anthropic (overrides retrieve_results entirely)."""
         raise NotImplementedError("Anthropic uses custom streaming-based retrieve_results()")
 
-    def _create_json_tool_from_schema(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _create_json_tool_from_schema(self, schema: dict[str, Any]) -> list[dict[str, Any]]:
         """
         Create an Anthropic tool definition from a JSON schema to force structured output.
 
@@ -462,8 +463,8 @@ class AnthropicBatchClient(BaseBatchClient):
         return [tool_definition]
 
     def _validate_provider_specific_config(
-        self, agent_config: Dict[str, Any]
-    ) -> Tuple[bool, Optional[str]]:
+        self, agent_config: dict[str, Any]
+    ) -> tuple[bool, str | None]:
         """Validate Anthropic-specific configuration."""
         anthropic_version = agent_config.get("anthropic_version")
         if anthropic_version and not isinstance(anthropic_version, str):

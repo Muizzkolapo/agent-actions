@@ -7,7 +7,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.validation.status_validator import StatusCommandArgs
 
@@ -30,10 +30,10 @@ class StatusCommand:
             )
             return
         try:
-            with open(status_file, "r", encoding="utf-8") as f:
+            with open(status_file, encoding="utf-8") as f:
                 status_data = json.load(f)
         except json.JSONDecodeError as e:
-            raise click.ClickException(f"Status file is corrupted: {status_file}\n{e}")
+            raise click.ClickException(f"Status file is corrupted: {status_file}\n{e}") from e
         if not isinstance(status_data, dict):
             raise click.ClickException(
                 f"Status file has unexpected format (expected JSON object): {status_file}"

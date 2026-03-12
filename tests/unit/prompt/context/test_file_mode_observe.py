@@ -4,10 +4,9 @@ Covers cross-namespace resolution, collision handling, graceful degradation,
 and backward compatibility with the old _apply_observe_filter behaviour.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from agent_actions.prompt.context.scope import ContextScopeProcessor
-
 
 # -----------------------------------------------------------------------
 # _resolve_observe_refs

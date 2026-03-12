@@ -1,23 +1,24 @@
 """Ensures required fields are present in data objects."""
 
-from typing import Dict, Any, Optional, List
+from typing import Any
+
 from agent_actions.utils.id_generation import IDGenerator
 
 
 class FieldManager:
     """Manages required fields in data objects."""
 
-    def __init__(self, id_generator: Optional[IDGenerator] = None):
+    def __init__(self, id_generator: IDGenerator | None = None):
         """Initialize with an optional ID generator (defaults to IDGenerator)."""
         self.id_generator = id_generator or IDGenerator
 
     def ensure_required_fields(
         self,
-        obj: Dict,
+        obj: dict,
         source_guid: str,
         action_name: str = "unknown_action",
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict:
         """Ensure an object has target_id, source_guid, node_id, and optional metadata."""
         obj = obj.copy()
         if "target_id" not in obj or not obj["target_id"]:
@@ -36,14 +37,14 @@ class FieldManager:
         self,
         source_guid: str,
         content: Any,
-        target_id: Optional[str] = None,
-        node_id: Optional[str] = None,
-        lineage: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        target_id: str | None = None,
+        node_id: str | None = None,
+        lineage: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
         action_name: str = "unknown_action",
-    ) -> Dict:
+    ) -> dict:
         """Create a standard processed item with all required fields."""
-        item: Dict[str, Any] = {
+        item: dict[str, Any] = {
             "source_guid": source_guid,
             "content": content,
             "target_id": target_id or self.id_generator.generate_target_id(),
@@ -58,9 +59,9 @@ class FieldManager:
 
     @staticmethod
     def add_metadata(
-        obj: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        obj: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Add metadata to *obj* in place and return it."""
         if metadata is not None:
             obj["metadata"] = metadata

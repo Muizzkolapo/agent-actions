@@ -4,9 +4,9 @@ TDD: These tests are written BEFORE the implementation to define
 the expected behavior of the submission service.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 
 class TestBatchSubmissionServiceInit:
@@ -97,10 +97,10 @@ class TestCheckStatus:
 
     def test_returns_status_from_provider(self):
         """Should return status from provider."""
+        from agent_actions.llm.batch.core.batch_constants import BatchStatus
         from agent_actions.llm.batch.services.submission import (
             BatchSubmissionService,
         )
-        from agent_actions.llm.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.COMPLETED
@@ -121,10 +121,10 @@ class TestCheckStatus:
 
     def test_raises_external_error_on_failure(self):
         """Should raise ExternalServiceError when check fails."""
+        from agent_actions.errors import ExternalServiceError
         from agent_actions.llm.batch.services.submission import (
             BatchSubmissionService,
         )
-        from agent_actions.errors import ExternalServiceError
 
         manager = MagicMock()
         client_resolver = MagicMock()
@@ -313,10 +313,10 @@ class TestSubmitBatchJob:
 
     def test_raises_config_error_when_no_vendor(self):
         """Should raise ConfigValidationError when model_vendor missing."""
+        from agent_actions.errors import ConfigValidationError
         from agent_actions.llm.batch.services.submission import (
             BatchSubmissionService,
         )
-        from agent_actions.errors import ConfigValidationError
 
         prepared = MagicMock()
         prepared.tasks = [{"id": "1"}]

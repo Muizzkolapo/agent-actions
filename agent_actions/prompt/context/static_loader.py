@@ -8,7 +8,7 @@ import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 
@@ -17,8 +17,8 @@ from agent_actions.errors import FileSystemError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
     CacheHitEvent,
-    CacheMissEvent,
     CacheInvalidationEvent,
+    CacheMissEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,9 @@ class StaticDataLoadError(FileSystemError):
     def __init__(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         *,
-        cause: Optional[Exception] = None,
+        cause: Exception | None = None,
     ):
         """Initialize StaticDataLoadError with message, context, and optional cause."""
         ctx = context or {}
@@ -57,11 +57,11 @@ class StaticDataLoader:
             raise ValueError(f"Static data path is not a directory: {static_data_dir}")
 
         self.static_data_dir = static_data_dir.resolve()
-        self._cache: Dict[str, Any] = {}
+        self._cache: dict[str, Any] = {}
 
         logger.debug("StaticDataLoader initialized with directory: %s", self.static_data_dir)
 
-    def load_static_data(self, static_data_config: Dict[str, str]) -> Dict[str, Any]:
+    def load_static_data(self, static_data_config: dict[str, str]) -> dict[str, Any]:
         """Load all static data files specified in context_scope.static_data."""
         if not static_data_config:
             logger.debug("No static data config provided, skipping load")
@@ -228,7 +228,7 @@ class StaticDataLoader:
     def _load_json(self, file_path: Path, field_name: str) -> Any:
         """Load and parse JSON file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return json.load(f)
         except json.JSONDecodeError as e:
             logger.error("JSON parse error in field '%s': %s", field_name, e)
@@ -260,7 +260,7 @@ class StaticDataLoader:
     def _load_yaml(self, file_path: Path, field_name: str) -> Any:
         """Load and parse YAML file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return yaml.safe_load(f)
         except yaml.YAMLError as e:
             logger.error("YAML parse error in field '%s': %s", field_name, e)
@@ -290,7 +290,7 @@ class StaticDataLoader:
     def _load_text(self, file_path: Path, field_name: str) -> str:
         """Load plain text or Markdown file."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
             logger.error("Error reading text file for field '%s': %s", field_name, e)
@@ -308,7 +308,7 @@ class StaticDataLoader:
     def _load_csv(self, file_path: Path, field_name: str) -> list:
         """Load CSV file as list of dictionaries with headers as keys."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 return list(reader)
         except csv.Error as e:
@@ -349,7 +349,7 @@ class StaticDataLoader:
             )
         )
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics for debugging."""
         import sys
 

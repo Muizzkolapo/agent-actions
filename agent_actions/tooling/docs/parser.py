@@ -1,7 +1,7 @@
 """Workflow YAML parser for documentation generation."""
 
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 import click
 import yaml
@@ -9,7 +9,7 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-def extract_fields_for_docs(raw_schema: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_fields_for_docs(raw_schema: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract normalized field list from raw schema for documentation.
 
     Handles unified format, array schema, and object schema formats.
@@ -82,10 +82,10 @@ class WorkflowParser:
     """Parse and extract information from agent workflow YAML files."""
 
     @staticmethod
-    def parse_workflow(yaml_path: str) -> Optional[Dict[str, Any]]:
+    def parse_workflow(yaml_path: str) -> dict[str, Any] | None:
         """Parse a workflow YAML file and extract all relevant information."""
         try:
-            with open(yaml_path, "r", encoding="utf-8") as f:
+            with open(yaml_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
             # Dual-channel: logger for log aggregation, click.echo for CLI visibility
@@ -208,7 +208,7 @@ class WorkflowParser:
         return workflow
 
     @staticmethod
-    def extract_input_fields(context_scope: Dict[str, Any]) -> List[str]:
+    def extract_input_fields(context_scope: dict[str, Any]) -> list[str]:
         """Extract input field names from context_scope."""
         inputs = []
 

@@ -1,7 +1,5 @@
 """Static type checker for workflow field references."""
 
-from typing import List
-
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
 from .data_flow_graph import DataFlowGraph, DataFlowNode, InputRequirement
@@ -187,9 +185,9 @@ class StaticTypeChecker:
 
         return f"Available fields: {', '.join(sorted(available))}"
 
-    def check_unused_dependencies(self) -> List[StaticTypeWarning]:
+    def check_unused_dependencies(self) -> list[StaticTypeWarning]:
         """Find declared dependencies that are never referenced."""
-        warnings: List[StaticTypeWarning] = []
+        warnings: list[StaticTypeWarning] = []
 
         for action_name, node in self.graph.nodes.items():
             if self.graph.is_special_namespace(action_name):
@@ -219,9 +217,9 @@ class StaticTypeChecker:
 
         return warnings
 
-    def check_missing_dependencies(self) -> List[StaticTypeWarning]:
+    def check_missing_dependencies(self) -> list[StaticTypeWarning]:
         """Find actions referenced but not declared in dependencies."""
-        warnings: List[StaticTypeWarning] = []
+        warnings: list[StaticTypeWarning] = []
 
         for action_name, node in self.graph.nodes.items():
             if self.graph.is_special_namespace(action_name):

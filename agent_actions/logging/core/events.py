@@ -1,7 +1,7 @@
 """Base event types for the centralized logging system."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -45,7 +45,7 @@ class EventCategory(Enum):
 class EventMeta:
     """Standard correlation and tracing metadata attached to all events."""
 
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     correlation_id: str | None = None
     invocation_id: str | None = None
     thread_id: str | None = None

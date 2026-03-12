@@ -1,6 +1,6 @@
 """Pre-flight validation errors for unified batch/online error handling."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.errors.base import AgentActionsError
 
@@ -60,13 +60,13 @@ class PreFlightValidationError(AgentActionsError):
         self,
         message: str,
         *,
-        available_references: Optional[List[str]] = None,
-        missing_references: Optional[List[str]] = None,
-        hint: Optional[str] = None,
-        mode: Optional[str] = None,
-        agent_name: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        available_references: list[str] | None = None,
+        missing_references: list[str] | None = None,
+        hint: str | None = None,
+        mode: str | None = None,
+        agent_name: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if available_references is not None:
@@ -113,13 +113,13 @@ class VendorConfigError(PreFlightValidationError):
         self,
         message: str,
         *,
-        vendor: Optional[str] = None,
-        missing_fields: Optional[List[str]] = None,
-        unsupported_features: Optional[List[str]] = None,
-        agent_name: Optional[str] = None,
-        mode: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        vendor: str | None = None,
+        missing_fields: list[str] | None = None,
+        unsupported_features: list[str] | None = None,
+        agent_name: str | None = None,
+        mode: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if vendor is not None:
@@ -156,12 +156,12 @@ class ContextStructureError(PreFlightValidationError):
         self,
         message: str,
         *,
-        expected_fields: Optional[List[str]] = None,
-        actual_fields: Optional[List[str]] = None,
-        agent_name: Optional[str] = None,
-        mode: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        expected_fields: list[str] | None = None,
+        actual_fields: list[str] | None = None,
+        agent_name: str | None = None,
+        mode: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if expected_fields is not None:
@@ -170,7 +170,7 @@ class ContextStructureError(PreFlightValidationError):
             ctx["actual_fields"] = actual_fields
 
         hint = None
-        missing_list: Optional[List[str]] = None
+        missing_list: list[str] | None = None
         if expected_fields and actual_fields is not None:
             # actual_fields=[] means "known empty" — compute the real diff
             missing = sorted(set(expected_fields) - set(actual_fields))
@@ -203,12 +203,12 @@ class PathValidationError(PreFlightValidationError):
         self,
         message: str,
         *,
-        invalid_paths: Optional[List[str]] = None,
-        path_type: Optional[str] = None,
-        agent_name: Optional[str] = None,
-        mode: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        invalid_paths: list[str] | None = None,
+        path_type: str | None = None,
+        agent_name: str | None = None,
+        mode: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if path_type is not None:

@@ -1,11 +1,10 @@
 """Documentation HTTP server for agent-actions workflows."""
 
 import logging
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-from functools import partial
-from pathlib import Path
-from typing import Optional
 import urllib.parse
+from functools import partial
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from pathlib import Path
 
 import click
 
@@ -58,7 +57,7 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
         """Suppress default logging for cleaner output."""
 
 
-def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
+def serve_docs(port: int = 8000, artefact_path: str | None = None) -> bool:
     """Start HTTP server to serve documentation."""
     # Find docs_site directory (in package)
     docs_site_dir = Path(__file__).parent / "docs_site"

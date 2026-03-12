@@ -3,17 +3,16 @@
 import csv
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, TypeVar
 from xml.etree import ElementTree as ET
 
 import yaml
 
-from agent_actions.errors import ProcessingError
-from agent_actions.errors import get_error_detail
+from agent_actions.errors import ProcessingError, get_error_detail
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import DataParsingErrorEvent, DataLoadingErrorEvent
+from agent_actions.logging.events.types import DataLoadingErrorEvent, DataParsingErrorEvent
 
 T = TypeVar("T", bound=ProcessingError)
 
@@ -42,11 +41,11 @@ class ProcessorErrorHandlerMixin:
         self._logger = value
 
     def get_error_context(
-        self, operation: str, file_path: Optional[Union[str, Path]] = None, **kwargs
-    ) -> Dict[str, Any]:
+        self, operation: str, file_path: str | Path | None = None, **kwargs
+    ) -> dict[str, Any]:
         """Build contextual information for error logging."""
         context = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "processor": self.__class__.__name__,
             "operation": operation,
         }
@@ -63,7 +62,7 @@ class ProcessorErrorHandlerMixin:
         self,
         error: Exception,
         operation: str,
-        error_type: Optional[Type[T]] = None,
+        error_type: type[T] | None = None,
         reraise: bool = True,
         **context_kwargs,
     ) -> None:
@@ -116,7 +115,7 @@ class ProcessorErrorHandlerMixin:
         self,
         error: Exception,
         target: str,
-        file_path: Optional[Union[str, Path]] = None,
+        file_path: str | Path | None = None,
         **context_kwargs,
     ) -> None:
         """Handle a validation error.
@@ -136,7 +135,7 @@ class ProcessorErrorHandlerMixin:
         )
 
     def handle_file_error(
-        self, error: Exception, operation: str, file_path: Union[str, Path], **context_kwargs
+        self, error: Exception, operation: str, file_path: str | Path, **context_kwargs
     ) -> None:
         """Handle a file operation error.
 

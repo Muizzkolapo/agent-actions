@@ -2,16 +2,16 @@
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar, Union
+from typing import Any, TypeVar
 
 from agent_actions.errors import (
     AgentActionsException,
-    ValidationError,
+    AgentExecutionError,
+    ConfigurationError,
     FileLoadError,
     FileSystemError,
-    ConfigurationError,
     TemplateRenderingError,
-    AgentExecutionError,
+    ValidationError,
     get_error_detail,
 )
 from agent_actions.logging.errors import format_user_error
@@ -24,7 +24,7 @@ class ErrorHandler:
     """Utility class for handling errors in a consistent way."""
 
     @staticmethod
-    def format_for_user(error: Exception, context: Optional[Dict[str, Any]] = None) -> str:
+    def format_for_user(error: Exception, context: dict[str, Any] | None = None) -> str:
         """Format an error into a user-friendly message."""
         return format_user_error(error, context)
 
@@ -32,8 +32,8 @@ class ErrorHandler:
     def handle_error(
         error: Exception,
         message: str,
-        error_type: Optional[Type[T]] = None,
-        context: Optional[Dict[str, Any]] = None,
+        error_type: type[T] | None = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         """Log and re-raise as *error_type* (or AgentActionsException)."""
         error_details = {"error": get_error_detail(error), **(context or {})}
@@ -48,7 +48,7 @@ class ErrorHandler:
 
     @staticmethod
     def handle_validation_error(
-        error: Exception, target: str, context: Optional[Dict[str, Any]] = None
+        error: Exception, target: str, context: dict[str, Any] | None = None
     ) -> None:
         """Re-raise as ValidationError for the given *target*."""
         message = f"Validation failed for {target}"
@@ -58,8 +58,8 @@ class ErrorHandler:
     def handle_file_error(
         error: Exception,
         operation: str,
-        path: Union[str, Path],
-        context: Optional[Dict[str, Any]] = None,
+        path: str | Path,
+        context: dict[str, Any] | None = None,
     ) -> None:
         """Re-raise as FileLoadError or FileSystemError."""
 
@@ -74,7 +74,7 @@ class ErrorHandler:
 
     @staticmethod
     def handle_config_error(
-        error: Exception, operation: str, config_name: str, context: Optional[Dict[str, Any]] = None
+        error: Exception, operation: str, config_name: str, context: dict[str, Any] | None = None
     ) -> None:
         """Re-raise as ConfigurationError for the given *config_name*."""
 
@@ -86,7 +86,7 @@ class ErrorHandler:
         error: Exception,
         operation: str,
         template_name: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> None:
         """Re-raise as TemplateRenderingError for the given *template_name*."""
 
@@ -95,7 +95,7 @@ class ErrorHandler:
 
     @staticmethod
     def handle_execution_error(
-        error: Exception, operation: str, target: str, context: Optional[Dict[str, Any]] = None
+        error: Exception, operation: str, target: str, context: dict[str, Any] | None = None
     ) -> None:
         """Re-raise as AgentExecutionError for the given *target*."""
 

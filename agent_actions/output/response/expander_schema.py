@@ -1,17 +1,17 @@
 """Schema processing functions extracted from ActionExpander."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
+from agent_actions.config.types import AgentEntryDict
 from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.utils.schema_utils import is_compiled_schema
-from agent_actions.config.types import AgentEntryDict
 
 logger = logging.getLogger(__name__)
 
 
-def process_schema_config(agent: AgentEntryDict, action: Dict[str, Any], template_replacer) -> None:
+def process_schema_config(agent: AgentEntryDict, action: dict[str, Any], template_replacer) -> None:
     """
     Process schema configuration for an agent.
 
@@ -34,7 +34,7 @@ def process_schema_config(agent: AgentEntryDict, action: Dict[str, Any], templat
                 agent["schema"] = schema_value
 
 
-def compile_output_schema(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
+def compile_output_schema(agent: AgentEntryDict, action: dict[str, Any]) -> None:
     """Compile YAML schema: to json_output_schema for any action type.
 
     Skips if json_output_schema is already set (e.g. from HITL

@@ -4,7 +4,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from agent_actions.validation.base_validator import BaseValidator
 
@@ -15,7 +15,7 @@ class ProjectValidator(BaseValidator):
     """Validates project name, directory, and template."""
 
     PROJECT_NAME_PATTERN = re.compile("^[a-zA-Z][a-zA-Z0-9_-]*$")
-    RESERVED_NAMES: Set[str] = {
+    RESERVED_NAMES: set[str] = {
         "agent",
         "actions",
         "cli",
@@ -63,7 +63,7 @@ class ProjectValidator(BaseValidator):
             )
 
     def _validate_project_template_logic(
-        self, template: str, available_templates: List[str]
+        self, template: str, available_templates: list[str]
     ) -> None:
         """Validate the project template and add errors if not available."""
         logger.debug("Validating template: %s", template)
@@ -76,7 +76,7 @@ class ProjectValidator(BaseValidator):
                 f"Template '{template}' not found. Available templates: {templates_str}."
             )
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate project creation parameters from the data dict."""
         if not self._prepare_validation(data):
             return False

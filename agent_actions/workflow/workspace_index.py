@@ -3,7 +3,6 @@
 import logging
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Dict, List, Set
 
 import yaml
 
@@ -18,8 +17,8 @@ class WorkspaceIndex:
     def __init__(self, workflows_root: Path):
         """Initialize the workspace index."""
         self.workflows_root = Path(workflows_root)
-        self.dependency_graph: Dict[str, List[str]] = {}
-        self.reverse_dependency_graph: Dict[str, Set[str]] = defaultdict(set)
+        self.dependency_graph: dict[str, list[str]] = {}
+        self.reverse_dependency_graph: dict[str, set[str]] = defaultdict(set)
 
     def scan_workspace(self) -> None:
         """Scan all agent_config/*.yml files to build dependency graphs."""
@@ -57,7 +56,7 @@ class WorkspaceIndex:
     def _load_workflow_deps(self, workflow_name: str, config_file: Path) -> None:
         """Load workflow dependencies from config file."""
         try:
-            with open(config_file, "r", encoding="utf-8") as f:
+            with open(config_file, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
             if config is None:
@@ -88,7 +87,7 @@ class WorkspaceIndex:
             for dep in dependencies:
                 self.reverse_dependency_graph[dep].add(workflow)
 
-    def topological_sort_downstream(self, start_workflow: str) -> List[str]:
+    def topological_sort_downstream(self, start_workflow: str) -> list[str]:
         """
         Return all downstream workflows in topological execution order.
 
@@ -105,7 +104,7 @@ class WorkspaceIndex:
             self.scan_workspace()
 
         # Find all reachable downstream workflows (BFS)
-        reachable: Set[str] = set()
+        reachable: set[str] = set()
         queue = deque(self.reverse_dependency_graph.get(start_workflow, []))
         while queue:
             node = queue.popleft()
@@ -117,7 +116,7 @@ class WorkspaceIndex:
             return []
 
         # Kahn's algorithm for topological sort
-        in_degree: Dict[str, int] = {node: 0 for node in reachable}
+        in_degree: dict[str, int] = {node: 0 for node in reachable}
         for node in reachable:
             for dep in self.dependency_graph.get(node, []):
                 if dep in reachable:

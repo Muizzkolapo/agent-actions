@@ -2,7 +2,6 @@
 
 import json
 import logging
-from typing import Dict, Any, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -12,10 +11,10 @@ class ContextService:
 
     @staticmethod
     def prepare_context_data(
-        context_data_str: Union[str, Dict],
-        original_context: Optional[Union[str, Dict]],
+        context_data_str: str | dict,
+        original_context: str | dict | None,
         is_tool: bool,
-    ) -> Union[str, Dict]:
+    ) -> str | dict:
         """
         Prepare context data for LLM/tool invocation.
 
@@ -41,7 +40,7 @@ class ContextService:
 
     @staticmethod
     def prepare_tool_context(
-        context_data_str: Union[str, Dict], original_context: Optional[Union[str, Dict]]
+        context_data_str: str | dict, original_context: str | dict | None
     ) -> str:
         """
         Prepare tool context as JSON string for tool injection.

@@ -8,7 +8,6 @@ and sample execution runs for testing the documentation site.
 
 import subprocess
 import sys
-import os
 
 
 def main():

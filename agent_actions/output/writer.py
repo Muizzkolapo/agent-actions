@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from agent_actions.errors import AgentActionsException
 from agent_actions.logging import fire_event
@@ -61,7 +62,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     bytes_written=bytes_written,
                 )
             )
-        except IOError as e:
+        except OSError as e:
             self.handle_file_error(e, operation_name, self.file_path, file_type=self.file_type)
         except Exception as e:
             self.handle_processing_error(

@@ -1,14 +1,16 @@
 """Project-specific path configuration loading."""
 
-from typing import Dict, Any
 from pathlib import Path
+from typing import Any
+
 import yaml
+
 from agent_actions.errors import ConfigValidationError
 from agent_actions.logging import fire_event
-from agent_actions.logging.events import ConfigLoadStartEvent, ConfigLoadEvent
+from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
 
 
-def load_project_config(project_root: Path) -> Dict[str, Any]:
+def load_project_config(project_root: Path) -> dict[str, Any]:
     """
     Load project-specific configuration from YAML files.
 
@@ -38,7 +40,7 @@ def load_project_config(project_root: Path) -> Dict[str, Any]:
         if config_file.exists():
             fire_event(ConfigLoadStartEvent(config_file=str(config_file)))
             try:
-                with open(config_file, "r", encoding="utf-8") as f:
+                with open(config_file, encoding="utf-8") as f:
                     config = yaml.safe_load(f) or {}
                 fire_event(ConfigLoadEvent(config_file=str(config_file), config_type="project"))
                 return config

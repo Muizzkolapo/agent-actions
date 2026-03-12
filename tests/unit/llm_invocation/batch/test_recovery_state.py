@@ -8,10 +8,6 @@ Covers:
 - Corrupt file handling
 """
 
-import json
-import pytest
-from pathlib import Path
-
 from agent_actions.llm.batch.infrastructure.recovery_state import (
     RecoveryState,
     RecoveryStateManager,

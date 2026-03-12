@@ -3,7 +3,7 @@
 import logging
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
@@ -29,10 +29,10 @@ class BatchTaskPreparator:
     def __init__(
         self,
         filter_service=None,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
         guard_handler=None,
-        storage_backend: Optional[Any] = None,
+        storage_backend: Any | None = None,
     ):
         """Initialize task preparator.
 
@@ -58,13 +58,13 @@ class BatchTaskPreparator:
 
     def prepare_tasks(
         self,
-        agent_config: Dict[str, Any],
-        data: List[Dict[str, Any]],
+        agent_config: dict[str, Any],
+        data: list[dict[str, Any]],
         provider,
-        output_directory: Optional[str] = None,
-        batch_name: Optional[str] = None,
-        source_data: Optional[List[Any]] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
+        output_directory: str | None = None,
+        batch_name: str | None = None,
+        source_data: list[Any] | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> PreparedBatchTasks:
         """Prepare batch tasks from raw data.
 
@@ -103,8 +103,8 @@ class BatchTaskPreparator:
 
         schema = self._prepare_schema(agent_config, provider)
 
-        context_map_builder: Dict[str, Any] = {}
-        tasks_builder: List[Dict[str, Any]] = []
+        context_map_builder: dict[str, Any] = {}
+        tasks_builder: list[dict[str, Any]] = []
         stats = BatchTaskPreparationStats(total_items=len(data))
 
         # Build PreparationContext for TaskPreparer
@@ -153,12 +153,12 @@ class BatchTaskPreparator:
 
     def _process_single_item(
         self,
-        row: Dict[str, Any],
+        row: dict[str, Any],
         prep_context: PreparationContext,
         task_preparer: TaskPreparer,
-        context_map_builder: Dict[str, Any],
+        context_map_builder: dict[str, Any],
         stats: BatchTaskPreparationStats,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Process a single data item using TaskPreparer.
 
@@ -224,7 +224,7 @@ class BatchTaskPreparator:
             "prompt": prepared.formatted_prompt,
         }
 
-    def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
+    def _validate_config(self, agent_config: dict[str, Any], provider) -> None:
         """Validate agent configuration."""
         schema = self._prepare_schema(agent_config, provider)
         json_mode = agent_config.get(JSON_MODE_KEY, True)
@@ -239,7 +239,7 @@ class BatchTaskPreparator:
                 },
             )
 
-    def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
+    def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""
         from agent_actions.output.response.schema import prepare_schema_unified
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
@@ -251,20 +251,20 @@ class BatchTaskPreparator:
         schema, _captured_results = prepare_schema_unified(agent_config, vendor)
         return schema
 
-    def _add_tools_to_path(self, tools_path: Optional[str]) -> None:
+    def _add_tools_to_path(self, tools_path: str | None) -> None:
         """Add tools path to sys.path if not already present."""
         if tools_path:
             ensure_path_importable(tools_path)
 
     def _build_preparation_context(
         self,
-        agent_config: Dict[str, Any],
-        output_directory: Optional[str],
-        batch_name: Optional[str],
-        source_data: Optional[List[Any]],
-        workflow_metadata: Optional[Dict[str, Any]],
-        tools_path: Optional[str],
-        current_item: Optional[Dict[str, Any]] = None,
+        agent_config: dict[str, Any],
+        output_directory: str | None,
+        batch_name: str | None,
+        source_data: list[Any] | None,
+        workflow_metadata: dict[str, Any] | None,
+        tools_path: str | None,
+        current_item: dict[str, Any] | None = None,
     ) -> PreparationContext:
         """Build PreparationContext with common settings."""
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
@@ -290,12 +290,12 @@ class BatchTaskPreparator:
 
     def _run_preflight_validation(
         self,
-        agent_config: Dict[str, Any],
-        data: List[Dict[str, Any]],
-        output_directory: Optional[str] = None,
-        batch_name: Optional[str] = None,
-        source_data: Optional[List[Any]] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None,
+        agent_config: dict[str, Any],
+        data: list[dict[str, Any]],
+        output_directory: str | None = None,
+        batch_name: str | None = None,
+        source_data: list[Any] | None = None,
+        workflow_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Run pre-flight validation on first data row to catch template errors early."""
         if not data:

@@ -8,8 +8,9 @@ modern AST-based implementation in preprocessing/parsing/.
 """
 
 import pytest
-from agent_actions.output.response.config_schema import WhereClauseConfig
+
 from agent_actions.errors import ValidationError
+from agent_actions.output.response.config_schema import WhereClauseConfig
 
 
 class TestWhereClauseConfig:

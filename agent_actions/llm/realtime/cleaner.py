@@ -1,13 +1,17 @@
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+
 import click
-from agent_actions.llm.realtime.handlers import AgentManager
+
 from agent_actions.errors import (
     AgentNotFoundError,
+)
+from agent_actions.errors import (
     FileSystemError as AgentFileSystemError,
 )
+from agent_actions.llm.realtime.handlers import AgentManager
 
 logger = logging.getLogger(__name__)
 

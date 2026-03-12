@@ -1,7 +1,5 @@
 """Tests for LineageBuilder.add_unified_lineage() method."""
 
-import pytest
-
 from agent_actions.utils.lineage.builder import LineageBuilder
 
 

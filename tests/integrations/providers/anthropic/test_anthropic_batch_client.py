@@ -9,10 +9,11 @@ Total tests for Anthropic:
 - Additional Anthropic-specific tests
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
+
 from agent_actions.llm.providers.anthropic.batch_client import AnthropicBatchClient
-from agent_actions.llm.providers.batch_base import BatchResult
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 

@@ -3,7 +3,7 @@ Vendor configuration models for LLM providers.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,11 +42,11 @@ class BaseVendorConfig(BaseModel):
     model_name: str = Field(..., description="Model name to use")
     default_timeout: int = Field(default=60, ge=1, description="Default request timeout in seconds")
     json_mode: bool = Field(default=True, description="Enable JSON mode by default")
-    max_tokens: Optional[int] = Field(default=None, ge=1, description="Maximum tokens in response")
-    temperature: Optional[float] = Field(
+    max_tokens: int | None = Field(default=None, ge=1, description="Maximum tokens in response")
+    temperature: float | None = Field(
         default=None, ge=0.0, le=2.0, description="Sampling temperature"
     )
-    top_p: Optional[float] = Field(
+    top_p: float | None = Field(
         default=None, ge=0.0, le=1.0, description="Top-p sampling parameter"
     )
     model_config = {"extra": "allow"}
@@ -57,9 +57,9 @@ class OpenAIConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.OPENAI] = VendorType.OPENAI
     api_key_env_name: str = "OPENAI_API_KEY"
-    frequency_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
-    presence_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
-    top_k: Optional[int] = Field(default=None, ge=1)
+    frequency_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    presence_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    top_k: int | None = Field(default=None, ge=1)
     response_format: ResponseFormat = Field(default=ResponseFormat.JSON_SCHEMA)
 
 
@@ -78,8 +78,8 @@ class GeminiConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.GEMINI] = VendorType.GEMINI
     api_key_env_name: str = "GEMINI_API_KEY"
-    safety_settings: Optional[Dict[str, Any]] = Field(default=None)
-    generation_config: Optional[Dict[str, Any]] = Field(default=None)
+    safety_settings: dict[str, Any] | None = Field(default=None)
+    generation_config: dict[str, Any] | None = Field(default=None)
 
 
 GoogleConfig = GeminiConfig
@@ -97,8 +97,8 @@ class CohereConfig(BaseVendorConfig):
 
     vendor_type: Literal[VendorType.COHERE] = VendorType.COHERE
     api_key_env_name: str = "COHERE_API_KEY"
-    k: Optional[int] = Field(default=None, ge=1, description="Top-k sampling")
-    p: Optional[float] = Field(default=None, ge=0.0, le=1.0, description="Top-p sampling")
+    k: int | None = Field(default=None, ge=1, description="Top-k sampling")
+    p: float | None = Field(default=None, ge=0.0, le=1.0, description="Top-p sampling")
 
 
 class MistralConfig(BaseVendorConfig):
@@ -150,36 +150,36 @@ class AgacProviderConfig(BaseVendorConfig):
     json_mode: bool = True
 
 
-VendorConfig = Union[
-    OpenAIConfig,
-    AnthropicConfig,
-    GoogleConfig,
-    GroqConfig,
-    CohereConfig,
-    MistralConfig,
-    OllamaConfig,
-    ToolVendorConfig,
-    HitlVendorConfig,
-    AgacProviderConfig,
-]
+VendorConfig = (
+    OpenAIConfig
+    | AnthropicConfig
+    | GoogleConfig
+    | GroqConfig
+    | CohereConfig
+    | MistralConfig
+    | OllamaConfig
+    | ToolVendorConfig
+    | HitlVendorConfig
+    | AgacProviderConfig
+)
 
 
 class VendorRegistry(BaseModel):
     """Registry for all configured vendors."""
 
-    vendors: Dict[str, VendorConfig] = Field(
+    vendors: dict[str, VendorConfig] = Field(
         default_factory=dict, description="Map of vendor name to vendor configuration"
     )
-    default_vendor: Optional[str] = Field(
+    default_vendor: str | None = Field(
         default=None,
         description="Default vendor to use when not specified (must be explicitly configured)",
     )
 
-    def get_vendor_config(self, vendor_name: str) -> Optional[VendorConfig]:
+    def get_vendor_config(self, vendor_name: str) -> VendorConfig | None:
         """Get configuration for a specific vendor."""
         return self.vendors.get(vendor_name)
 
-    def get_default_vendor_config(self) -> Optional[VendorConfig]:
+    def get_default_vendor_config(self) -> VendorConfig | None:
         """Get the default vendor configuration."""
         return self.vendors.get(self.default_vendor)
 
@@ -187,7 +187,7 @@ class VendorRegistry(BaseModel):
         """Register a new vendor configuration."""
         self.vendors[name] = config
 
-    def list_vendor_types(self) -> List[VendorType]:
+    def list_vendor_types(self) -> list[VendorType]:
         """Get list of all registered vendor types."""
         return [config.vendor_type for config in self.vendors.values()]
 

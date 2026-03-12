@@ -1,10 +1,8 @@
 """Tests for clean_path() project-boundary enforcement."""
 
-import os
-
 import pytest
 
-from agent_actions.config.paths import PathManager, PathConfig
+from agent_actions.config.paths import PathConfig, PathManager
 
 
 @pytest.fixture

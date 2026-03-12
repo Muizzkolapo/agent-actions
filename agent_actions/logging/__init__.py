@@ -1,9 +1,6 @@
 """Agent Actions logging infrastructure."""
 
 from agent_actions.logging.config import LoggingConfig, LogLevel
-from agent_actions.logging.factory import LoggerFactory
-from agent_actions.logging.filters import RedactingFilter
-from agent_actions.logging.formatters import JSONFormatter
 
 # Event system exports
 from agent_actions.logging.core import (
@@ -13,6 +10,9 @@ from agent_actions.logging.core import (
     fire_event,
     get_manager,
 )
+from agent_actions.logging.factory import LoggerFactory
+from agent_actions.logging.filters import RedactingFilter
+from agent_actions.logging.formatters import JSONFormatter
 
 __all__ = [
     # Factory

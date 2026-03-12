@@ -1,6 +1,6 @@
 """Validation-related errors."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from agent_actions.errors.base import AgentActionsError
 from agent_actions.errors.preflight import _render_sections
@@ -31,20 +31,20 @@ class SchemaValidationError(ValidationError):
         self,
         message: str,
         *,
-        schema_name: Optional[str] = None,
-        validation_type: Optional[str] = None,
-        action_name: Optional[str] = None,
-        expected_fields: Optional[List[str]] = None,
-        actual_fields: Optional[List[str]] = None,
-        missing_fields: Optional[List[str]] = None,
-        extra_fields: Optional[List[str]] = None,
-        type_errors: Optional[Dict[str, Tuple[str, str]]] = None,
-        error_path: Optional[str] = None,
-        failed_value: Optional[Any] = None,
-        schema_constraint: Optional[Dict[str, Any]] = None,
-        hint: Optional[str] = None,
-        context: Optional[Dict[str, Any]] = None,
-        cause: Optional[Exception] = None,
+        schema_name: str | None = None,
+        validation_type: str | None = None,
+        action_name: str | None = None,
+        expected_fields: list[str] | None = None,
+        actual_fields: list[str] | None = None,
+        missing_fields: list[str] | None = None,
+        extra_fields: list[str] | None = None,
+        type_errors: dict[str, tuple[str, str]] | None = None,
+        error_path: str | None = None,
+        failed_value: Any | None = None,
+        schema_constraint: dict[str, Any] | None = None,
+        hint: str | None = None,
+        context: dict[str, Any] | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if schema_name is not None:

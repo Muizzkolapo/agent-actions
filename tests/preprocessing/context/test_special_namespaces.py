@@ -6,8 +6,9 @@ differently from regular workflow actions.
 """
 
 import pytest
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+
 from agent_actions.errors import ConfigurationError
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 
 class TestSpecialNamespaceValidationBypass:

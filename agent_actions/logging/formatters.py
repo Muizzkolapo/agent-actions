@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Set
+from datetime import UTC, datetime
+from typing import Any
 
 
 class JSONFormatter(logging.Formatter):
     """Formats log records as single-line JSON for log aggregation."""
 
-    EXCLUDED_FIELDS: Set[str] = {
+    EXCLUDED_FIELDS: set[str] = {
         "args",
         "asctime",
         "created",
@@ -37,7 +37,7 @@ class JSONFormatter(logging.Formatter):
         "taskName",
     }
 
-    CONTEXT_FIELDS: Set[str] = {
+    CONTEXT_FIELDS: set[str] = {
         "correlation_id",
         "workflow_name",
         "agent_name",
@@ -58,8 +58,8 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as a single-line JSON string."""
-        log_dict: Dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        log_dict: dict[str, Any] = {
+            "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

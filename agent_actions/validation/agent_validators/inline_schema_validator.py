@@ -1,12 +1,12 @@
 """Validator for inline schema configuration."""
 
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
-    AgentEntryValidationResult,
-)
-from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.schema_utils import is_compiled_schema
+from agent_actions.validation.agent_validators.base_agent_validator import (
+    AgentEntryValidationResult,
+    BaseAgentEntryValidator,
+)
+from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 
 
 class InlineSchemaValidator(BaseAgentEntryValidator):

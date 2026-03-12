@@ -1,14 +1,15 @@
 """Convenience functions for common path operations."""
 
-from pathlib import Path
-from typing import Optional, Union, Dict, List, Set, TypeVar
 import logging
 from collections import deque
+from pathlib import Path
+from typing import TypeVar
+
 from agent_actions.config.paths import PathManager
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
-_global_path_manager: Optional[PathManager] = None
+_global_path_manager: PathManager | None = None
 
 
 def get_path_manager() -> PathManager:
@@ -19,22 +20,22 @@ def get_path_manager() -> PathManager:
     return _global_path_manager
 
 
-def ensure_directory_exists(path: Union[str, Path], is_file: bool = False) -> Path:
+def ensure_directory_exists(path: str | Path, is_file: bool = False) -> Path:
     """Ensure a directory exists, creating it if necessary."""
     return get_path_manager().ensure_path_exists(Path(path), is_file=is_file)
 
 
-def resolve_absolute_path(path: Union[str, Path]) -> Path:
+def resolve_absolute_path(path: str | Path) -> Path:
     """Resolve path to an absolute Path object."""
     return get_path_manager().normalize_path(path)
 
 
-def check_path_exists(path: Union[str, Path]) -> bool:
+def check_path_exists(path: str | Path) -> bool:
     """Check if a path exists."""
     return Path(path).exists()
 
 
-def find_project_root(start_path: Optional[Path] = None) -> Path:
+def find_project_root(start_path: Path | None = None) -> Path:
     """Find project root by looking for marker file.
 
     Raises:
@@ -44,13 +45,13 @@ def find_project_root(start_path: Optional[Path] = None) -> Path:
     return pm.get_project_root(start_path)
 
 
-def create_mirror_source_path(target_path: Union[str, Path]) -> Path:
+def create_mirror_source_path(target_path: str | Path) -> Path:
     """Create a source path by mirroring the target path structure."""
     return get_path_manager().create_mirror_path(Path(target_path), "target", "source")
 
 
 def validate_path_permissions(
-    path: Union[str, Path], readable: bool = False, writable: bool = False
+    path: str | Path, readable: bool = False, writable: bool = False
 ) -> bool:
     """Validate path permissions, returning False on failure."""
     requirements = {}
@@ -74,19 +75,19 @@ def validate_path_permissions(
         return False
 
 
-def clean_directory(directory: Union[str, Path], recursive: bool = False) -> bool:
+def clean_directory(directory: str | Path, recursive: bool = False) -> bool:
     """Clean/remove a directory."""
     return get_path_manager().clean_path(Path(directory), recursive=recursive)
 
 
-def get_relative_path(path: Union[str, Path], base: Union[str, Path]) -> Path:
+def get_relative_path(path: str | Path, base: str | Path) -> Path:
     """Get path relative to base directory."""
     abs_path = resolve_absolute_path(path)
     abs_base = resolve_absolute_path(base)
     return abs_path.relative_to(abs_base)
 
 
-def find_files_by_extension(directory: Union[str, Path], extension: str) -> list[Path]:
+def find_files_by_extension(directory: str | Path, extension: str) -> list[Path]:
     """Find all files with the given extension in directory (recursive)."""
     if not extension.startswith("."):
         extension = f".{extension}"
@@ -94,7 +95,7 @@ def find_files_by_extension(directory: Union[str, Path], extension: str) -> list
     return get_path_manager().find_files_by_pattern(pattern, Path(directory))
 
 
-def safe_path_join(*parts: Union[str, Path]) -> Path:
+def safe_path_join(*parts: str | Path) -> Path:
     """Join path parts, raising FileSystemError if result is outside the project."""
     joined_path = Path()
     for part in parts:
@@ -130,7 +131,7 @@ DEFAULT_MARKER_FILE = "agent_actions.yml"
 COMMON_EXTENSIONS = [".json", ".yml", ".yaml", ".txt", ".py"]
 
 
-def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
+def topological_sort(dependencies: dict[T, list[T]]) -> list[T]:
     """Topologically sort a dependency graph, returning nodes in processing order.
 
     Raises:
@@ -147,12 +148,12 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
     all_nodes = set(dependencies.keys())
     for dependent_nodes in dependencies.values():
         all_nodes.update(dependent_nodes)
-    in_degree: Dict[T, int] = {node: 0 for node in all_nodes}
-    for node, dependent_nodes in dependencies.items():
+    in_degree: dict[T, int] = {node: 0 for node in all_nodes}
+    for _node, dependent_nodes in dependencies.items():
         for dep_node in dependent_nodes:
             in_degree[dep_node] += 1
     queue = deque([node for node, degree in in_degree.items() if degree == 0])
-    sorted_nodes: List[T] = []
+    sorted_nodes: list[T] = []
     while queue:
         current = queue.popleft()
         sorted_nodes.append(current)
@@ -164,7 +165,7 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
     if len(sorted_nodes) != len(all_nodes):
         from agent_actions.errors import WorkflowError
 
-        cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
+        cycle_nodes: set[T] = all_nodes - set(sorted_nodes)
         message = "Cyclic dependency detected in the workflow"
         raise WorkflowError(
             message,

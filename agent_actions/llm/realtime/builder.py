@@ -6,29 +6,30 @@ with support for multiple LLM vendors.
 """
 
 import json
-import sys
-from typing import Dict, Any, Optional, List, Union
+from typing import Any
+
+from agent_actions.output.response.schema import prepare_schema_unified
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.module_loader import ensure_path_importable
-from agent_actions.output.response.schema import prepare_schema_unified
+
 from .services import (
-    PromptService,
-    ContextService,
     ClientInvocationService,
+    ContextService,
+    PromptService,
 )
 
 
 def create_dynamic_agent(
-    agent_config: Dict[str, Any],
+    agent_config: dict[str, Any],
     udf: Any,
-    context_data_str: Union[str, Dict],
-    formatted_prompt: Optional[str] = None,
-    tools_path: Optional[str] = None,
-    tool_args: Optional[Dict[str, Any]] = None,
-    source_content: Optional[Any] = None,
-    additional_context: Optional[Dict] = None,
-    original_context: Optional[Union[str, Dict]] = None,
-) -> List[Any]:
+    context_data_str: str | dict,
+    formatted_prompt: str | None = None,
+    tools_path: str | None = None,
+    tool_args: dict[str, Any] | None = None,
+    source_content: Any | None = None,
+    additional_context: dict | None = None,
+    original_context: str | dict | None = None,
+) -> list[Any]:
     """
     Build and execute a prompt against the selected vendor.
 

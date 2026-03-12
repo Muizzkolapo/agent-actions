@@ -4,24 +4,24 @@ from .enrichment import (
     Enricher,
     EnrichmentPipeline,
     LineageEnricher,
-    VersionIdEnricher,
     MetadataEnricher,
     PassthroughEnricher,
     RequiredFieldsEnricher,
+    VersionIdEnricher,
 )
 from .invocation import (
     BatchProvider,
-    InvocationResult,
-    InvocationStrategy,
-    OnlineStrategy,
     BatchStrategy,
     BatchSubmissionResult,
+    InvocationResult,
+    InvocationStrategy,
     InvocationStrategyFactory,
+    OnlineStrategy,
 )
 from .prepared_task import (
     GuardStatus,
-    PreparedTask,
     PreparationContext,
+    PreparedTask,
 )
 from .processor import RecordProcessor
 from .task_preparer import (

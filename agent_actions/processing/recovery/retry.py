@@ -1,8 +1,9 @@
 """Retry service for handling transport-layer failures in LLM calls."""
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging import fire_event
@@ -18,11 +19,11 @@ RETRIABLE_ERRORS = (NetworkError, RateLimitError)
 class RetryResult:
     """Result of a retry-wrapped operation."""
 
-    response: Optional[Any]
+    response: Any | None
     attempts: int = 1
-    reason: Optional[str] = None
+    reason: str | None = None
     exhausted: bool = False
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
     @property
     def needed_retry(self) -> bool:
@@ -71,15 +72,15 @@ class RetryService:
     def execute(
         self,
         operation: Callable[[], Any],
-        context: Optional[str] = None,
+        context: str | None = None,
     ) -> RetryResult:
         """Execute an operation with retry logic.
 
         Raises:
             Exception: Re-raises non-retriable errors immediately.
         """
-        last_error: Optional[Exception] = None
-        reason: Optional[str] = None
+        last_error: Exception | None = None
+        reason: str | None = None
 
         for attempt in range(1, self.max_attempts + 1):
             try:
@@ -142,8 +143,8 @@ class RetryService:
 
 
 def create_retry_service_from_config(
-    retry_config: Optional[dict],
-) -> Optional[RetryService]:
+    retry_config: dict | None,
+) -> RetryService | None:
     """Create a RetryService from action config, or return None if not enabled."""
     if retry_config is None:
         return None

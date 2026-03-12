@@ -6,9 +6,11 @@ from overwriting rich initial source data.
 """
 
 import json
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
+
 from agent_actions.input.preprocessing.staging.initial_pipeline import _should_save_source_items
 
 

@@ -1,21 +1,21 @@
 """Utility helpers shared across processors."""
 
 from __future__ import annotations
+
 import logging
-from typing import Any, Optional
+from typing import Any
+
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utils.udf_management.tooling import execute_user_defined_function
-from agent_actions.llm.realtime import builder as agent_builder
 from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+from agent_actions.llm.realtime import builder as agent_builder
+from agent_actions.utils.constants import ON_SCHEMA_MISMATCH_KEY, SCHEMA_KEY, STRICT_SCHEMA_KEY
 from agent_actions.utils.transformation import PassthroughTransformer
-from agent_actions.utils.constants import SCHEMA_KEY, STRICT_SCHEMA_KEY, ON_SCHEMA_MISMATCH_KEY
+from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
 
 
-def evaluate_guard_condition(
-    agent_config: dict[str, Any], context: Any
-) -> tuple[bool, Optional[str]]:
+def evaluate_guard_condition(agent_config: dict[str, Any], context: Any) -> tuple[bool, str | None]:
     """Evaluate guard conditions, returning (should_execute, skip_behavior)."""
     evaluator = get_guard_evaluator()
     return evaluator.evaluate(
@@ -31,10 +31,10 @@ def run_dynamic_agent(
     context: Any,
     formatted_prompt: str,
     *,
-    tools_path: Optional[str] = None,
-    tool_args: Optional[dict[str, Any]] = None,
-    source_content: Optional[Any] = None,
-    llm_context: Optional[Any] = None,
+    tools_path: str | None = None,
+    tool_args: dict[str, Any] | None = None,
+    source_content: Any | None = None,
+    llm_context: Any | None = None,
     skip_guard_eval: bool = False,
     skip_schema_validation: bool = False,
 ) -> tuple[Any, bool]:
@@ -206,8 +206,8 @@ def transform_with_passthrough(
     source_guid: str,
     agent_config: dict[str, Any],
     action_name: str = "unknown_action",
-    passthrough_fields: Optional[dict[str, Any]] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    passthrough_fields: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data."""
     transformer = PassthroughTransformer()

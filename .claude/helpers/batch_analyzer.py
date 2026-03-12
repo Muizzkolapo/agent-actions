@@ -5,12 +5,11 @@ Batch code analyzer for reviewing multiple modules.
 Scans a directory and generates a prioritized summary report.
 """
 
-import sys
-from pathlib import Path
-from typing import List, Dict, Tuple
-import subprocess
 import json
+import subprocess
+import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -22,13 +21,13 @@ class FileAnalysis:
     maintainability_index: float = 0.0
     loc: int = 0
     violations_count: int = 0
-    violations_by_severity: Dict[str, int] = field(default_factory=dict)
-    violations_details: List[Dict] = field(default_factory=list)  # NEW: actual violations
+    violations_by_severity: dict[str, int] = field(default_factory=dict)
+    violations_details: list[dict] = field(default_factory=list)  # NEW: actual violations
     dead_code_count: int = 0
-    dead_code_details: List[str] = field(default_factory=list)  # NEW: actual dead code items
-    high_complexity_functions: List[str] = field(default_factory=list)
-    imports: List[str] = field(default_factory=list)  # NEW: what this file imports
-    imported_by: List[str] = field(default_factory=list)  # NEW: what files import this
+    dead_code_details: list[str] = field(default_factory=list)  # NEW: actual dead code items
+    high_complexity_functions: list[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)  # NEW: what this file imports
+    imported_by: list[str] = field(default_factory=list)  # NEW: what files import this
 
 
 def analyze_file(file_path: Path) -> FileAnalysis:
@@ -126,7 +125,7 @@ def analyze_file(file_path: Path) -> FileAnalysis:
 
     # Parse imports using AST
     try:
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             source = f.read()
         import ast
 
@@ -144,7 +143,7 @@ def analyze_file(file_path: Path) -> FileAnalysis:
     return result
 
 
-def build_dependency_graph(analyses: List[FileAnalysis]) -> None:
+def build_dependency_graph(analyses: list[FileAnalysis]) -> None:
     """Build cross-reference of imports (what files import what)."""
     # Create a mapping of module names to file paths
     module_to_file = {}
@@ -175,7 +174,7 @@ def build_dependency_graph(analyses: List[FileAnalysis]) -> None:
                             break
 
 
-def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> str:
+def generate_summary_report(analyses: list[FileAnalysis], directory: Path) -> str:
     """Generate a summary report from multiple file analyses."""
     lines = []
 
@@ -318,7 +317,7 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
 
         # Show sample violations
         if analysis.violations_details:
-            lines.append(f"   Sample violations:")
+            lines.append("   Sample violations:")
             # Group by severity and show top 3
             by_severity = {}
             for v in analysis.violations_details:
@@ -340,7 +339,7 @@ def generate_summary_report(analyses: List[FileAnalysis], directory: Path) -> st
 
         # Show dead code details
         if analysis.dead_code_details:
-            lines.append(f"   Dead code findings (showing first 3):")
+            lines.append("   Dead code findings (showing first 3):")
             for detail in analysis.dead_code_details[:3]:
                 lines.append(f"      • {detail}")
 

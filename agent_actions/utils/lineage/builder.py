@@ -1,7 +1,7 @@
 """Lineage chain construction and ancestry tracking for data processing."""
 
 import re
-from typing import Dict, List, Any
+from typing import Any
 
 # Pattern for valid node IDs: {action_name}_{identifier}
 # action_name: valid Python identifier (starts with letter/underscore)
@@ -19,7 +19,7 @@ class LineageBuilder:
     """Builds and tracks lineage chains for data processing."""
 
     @staticmethod
-    def _propagate_ancestry_chain(obj: Dict, parent_item: Dict) -> None:
+    def _propagate_ancestry_chain(obj: dict, parent_item: dict) -> None:
         """Propagate parent_target_id and root_target_id from parent to *obj* in place."""
         if "target_id" in parent_item:
             obj["parent_target_id"] = parent_item["target_id"]
@@ -29,14 +29,14 @@ class LineageBuilder:
             obj["root_target_id"] = parent_item["target_id"]
 
     @staticmethod
-    def filter_node_lineage(lineage: List[Any]) -> List[str]:
+    def filter_node_lineage(lineage: list[Any]) -> list[str]:
         """Filter lineage to only include valid node IDs."""
         if not isinstance(lineage, list):
             return []
         return [nid for nid in lineage if isinstance(nid, str) and _is_valid_node_id(nid)]
 
     @staticmethod
-    def build_lineage(item: Dict, node_id: str) -> List[str]:
+    def build_lineage(item: dict, node_id: str) -> list[str]:
         """Build lineage by appending *node_id* to the item's existing lineage."""
         if "lineage" in item and isinstance(item["lineage"], list):
             filtered_lineage = LineageBuilder.filter_node_lineage(item["lineage"])
@@ -44,7 +44,7 @@ class LineageBuilder:
         return [node_id]
 
     @staticmethod
-    def add_lineage_tracking(obj: Dict, item: Dict, node_id: str) -> Dict:
+    def add_lineage_tracking(obj: dict, item: dict, node_id: str) -> dict:
         """Add lineage and ancestry chain fields to *obj* based on source *item*."""
         obj = obj.copy()
         obj["node_id"] = node_id
@@ -57,8 +57,8 @@ class LineageBuilder:
 
     @staticmethod
     def add_lineage_tracking_from_sources(
-        obj: Dict, source_items: List[Dict], node_id: str
-    ) -> Dict:
+        obj: dict, source_items: list[dict], node_id: str
+    ) -> dict:
         """Add lineage from multiple source items (many-to-one).
 
         For multiple sources, adds a ``lineage_sources`` field with all parent
@@ -94,7 +94,7 @@ class LineageBuilder:
         return obj
 
     @staticmethod
-    def add_unified_lineage(obj: Dict, node_id: str, parent_item: Dict = None) -> Dict:
+    def add_unified_lineage(obj: dict, node_id: str, parent_item: dict = None) -> dict:
         """Add lineage, node_id, and ancestry chain to *obj* from an optional parent."""
         obj = obj.copy()
         obj["node_id"] = node_id
@@ -111,8 +111,8 @@ class LineageBuilder:
 
     @staticmethod
     def create_conditional_response(
-        source_guid: str, content: Any, node_id: str, item: Dict = None
-    ) -> Dict:
+        source_guid: str, content: Any, node_id: str, item: dict = None
+    ) -> dict:
         """Create a standard response with lineage and ancestry for conditional scenarios."""
         lineage = LineageBuilder.build_lineage(item, node_id) if item else [node_id]
         response = {

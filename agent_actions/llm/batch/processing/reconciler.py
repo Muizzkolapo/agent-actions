@@ -1,11 +1,11 @@
 """Reconciliation of batch request IDs to batch responses."""
 
 import logging
-from typing import Dict, Set, List, Any, Tuple, Optional
 from dataclasses import dataclass
+from typing import Any
 
-from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.core.batch_constants import FilterStatus
+from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -14,35 +14,35 @@ logger = logging.getLogger(__name__)
 class BatchReconciliationResult:
     """Result of reconciling batch results with expected records."""
 
-    processed_ids: Set[str]
-    missing_ids: Set[str]
-    passthrough_records: List[Tuple[str, Dict[str, Any]]]
+    processed_ids: set[str]
+    missing_ids: set[str]
+    passthrough_records: list[tuple[str, dict[str, Any]]]
 
 
 class BatchResultReconciler:
     """Reconciles batch results with expected records from context map."""
 
-    def __init__(self, context_map: Dict[str, Any]):
+    def __init__(self, context_map: dict[str, Any]):
         """Initialize reconciler with context map."""
         self.context_map = context_map or {}
-        self._processed_ids: Set[str] = set()
+        self._processed_ids: set[str] = set()
 
     def mark_processed(self, custom_id: Any) -> None:
         """Mark a custom_id as processed."""
         if custom_id is not None:
             self._processed_ids.add(str(custom_id))
 
-    def get_expected_ids(self) -> Set[str]:
+    def get_expected_ids(self) -> set[str]:
         """Get custom_ids expected in batch results (status='included' only)."""
         return self.collect_expected_custom_ids(self.context_map)
 
-    def get_missing_ids(self) -> Set[str]:
+    def get_missing_ids(self) -> set[str]:
         """Get custom_ids that were expected but not processed."""
         expected_ids = self.get_expected_ids()
         missing_ids = expected_ids - self._processed_ids
         return missing_ids
 
-    def get_passthrough_records(self) -> List[Tuple[str, Dict[str, Any]]]:
+    def get_passthrough_records(self) -> list[tuple[str, dict[str, Any]]]:
         """Get records needing passthrough (skipped or missing, excluding filtered)."""
         passthrough_records = []
 
@@ -79,7 +79,7 @@ class BatchResultReconciler:
             passthrough_records=passthrough_records,
         )
 
-    def get_record_by_id(self, custom_id: str) -> Dict[str, Any]:
+    def get_record_by_id(self, custom_id: str) -> dict[str, Any]:
         """Get original record data by custom_id, or empty dict if not found."""
         return self.context_map.get(str(custom_id), {})
 
@@ -97,7 +97,7 @@ class BatchResultReconciler:
             return -1
 
     @staticmethod
-    def collect_expected_custom_ids(context_map: Dict[str, Any]) -> set:
+    def collect_expected_custom_ids(context_map: dict[str, Any]) -> set:
         """Collect custom_ids of records submitted to batch API (status='included' only)."""
         return {
             str(custom_id)
@@ -107,7 +107,7 @@ class BatchResultReconciler:
         }
 
     @staticmethod
-    def collect_result_custom_ids(batch_results: List[Any]) -> set:
+    def collect_result_custom_ids(batch_results: list[Any]) -> set:
         """Collect custom_ids from batch results, ignoring error_line_* placeholders."""
         result_ids: set = set()
         for batch_result in batch_results or []:
@@ -122,7 +122,7 @@ class BatchResultReconciler:
 
     @staticmethod
     def log_batch_reconciliation(
-        *, batch_id: str, expected_count: int, received_count: int, file_name: Optional[str] = None
+        *, batch_id: str, expected_count: int, received_count: int, file_name: str | None = None
     ) -> None:
         """Log batch reconciliation status (expected vs received counts)."""
         if expected_count == 0:

@@ -3,13 +3,15 @@
 import importlib
 import importlib.util
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any
+
 from agent_actions.errors import AgentActionsException, ConfigurationError
 from agent_actions.utils.safe_format import safe_format_error
 
 
-def _split_udf_name(udf_name: str) -> Tuple[str, str]:
+def _split_udf_name(udf_name: str) -> tuple[str, str]:
     """Split ``module_name.function_name`` into its parts.
 
     Raises:
@@ -69,9 +71,9 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
 
 def execute_user_defined_function(
     udf_name: str,
-    input_data: Union[Dict[str, Any], List[Any]],
+    input_data: dict[str, Any] | list[Any],
     validate_output: bool = True,
-    json_output_schema: Optional[Dict[str, Any]] = None,
+    json_output_schema: dict[str, Any] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Execute a registered UDF with optional output schema validation.
@@ -105,7 +107,7 @@ def execute_user_defined_function(
     return result
 
 
-def _validate_udf_output(udf_name: str, result: Any, json_output_schema: Dict[str, Any]) -> None:
+def _validate_udf_output(udf_name: str, result: Any, json_output_schema: dict[str, Any]) -> None:
     """Validate UDF output against a per-item JSON Schema."""
     from agent_actions.utils.udf_management.registry import FileUDFResult
 
@@ -121,10 +123,10 @@ def _validate_udf_output(udf_name: str, result: Any, json_output_schema: Dict[st
 
 
 def _validate_against_schema(
-    data: Dict[str, Any],
-    compiled_schema: Dict[str, Any],
+    data: dict[str, Any],
+    compiled_schema: dict[str, Any],
     func_name: str,
-    item_index: Optional[int] = None,
+    item_index: int | None = None,
     validation_type: str = "input",
 ) -> None:
     """Validate data against a compiled JSON Schema.
@@ -134,6 +136,7 @@ def _validate_against_schema(
     """
     import jsonschema
     from jsonschema import ValidationError as JsonSchemaValidationError
+
     from agent_actions.errors import SchemaValidationError
 
     try:

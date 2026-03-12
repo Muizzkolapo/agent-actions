@@ -28,7 +28,6 @@ See also: agent_actions.llm.providers.ollama.failure_injection (count-based inje
 import logging
 import os
 import random
-from typing import Set, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +44,8 @@ class FailureInjector:
     def __init__(self):
         """Initialize from environment variables."""
         self._rate: float = float(os.getenv("FAILURE_INJECTION_RATE", "0"))
-        self._ids: Set[str] = self._parse_ids(os.getenv("FAILURE_INJECTION_IDS", ""))
-        self._seed: Optional[int] = self._parse_seed(os.getenv("FAILURE_INJECTION_SEED", ""))
+        self._ids: set[str] = self._parse_ids(os.getenv("FAILURE_INJECTION_IDS", ""))
+        self._seed: int | None = self._parse_seed(os.getenv("FAILURE_INJECTION_SEED", ""))
         self._rng: random.Random = random.Random(self._seed)
 
         if self.is_enabled():
@@ -58,12 +57,12 @@ class FailureInjector:
             )
 
     @staticmethod
-    def _parse_ids(ids_str: str) -> Set[str]:
+    def _parse_ids(ids_str: str) -> set[str]:
         """Parse comma-separated IDs into a set."""
         return {id_.strip() for id_ in ids_str.split(",") if id_.strip()}
 
     @staticmethod
-    def _parse_seed(seed_str: str) -> Optional[int]:
+    def _parse_seed(seed_str: str) -> int | None:
         """Parse seed string into int or None."""
         return int(seed_str) if seed_str.isdigit() else None
 
@@ -118,7 +117,7 @@ class FailureInjector:
             logger.info("[FAILURE INJECTION] Raising %s", error_class.__name__)
             raise error_class(message, context={"injected": True, **context})
 
-    def reset(self, seed: Optional[int] = None) -> None:
+    def reset(self, seed: int | None = None) -> None:
         """
         Reset the RNG state. Useful for reproducible test sequences.
 
@@ -155,6 +154,6 @@ def is_enabled() -> bool:
     return _injector.is_enabled()
 
 
-def reset(seed: Optional[int] = None) -> None:
+def reset(seed: int | None = None) -> None:
     """Reset RNG state for reproducible tests."""
     _injector.reset(seed)

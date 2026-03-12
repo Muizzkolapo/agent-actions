@@ -8,8 +8,7 @@ how to classify vendor-specific exception types into our unified error hierarchy
 """
 
 import logging
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple, Type
+from dataclasses import dataclass
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging import fire_event
@@ -18,7 +17,7 @@ from agent_actions.logging.events import LLMErrorEvent, RateLimitEvent
 logger = logging.getLogger(__name__)
 
 
-def _extract_retry_after(e: Exception) -> Optional[float]:
+def _extract_retry_after(e: Exception) -> float | None:
     """Extract retry-after header from an API error response.
 
     Works with OpenAI, Anthropic, and Groq SDKs that expose
@@ -62,11 +61,11 @@ class VendorErrorMapping:
     """
 
     vendor_name: str
-    rate_limit_types: Tuple[Type[Exception], ...] = ()
-    network_error_types: Tuple[Type[Exception], ...] = ()
-    base_api_error_type: Optional[Type[Exception]] = None
-    status_code_error_types: Tuple[Type[Exception], ...] = ()
-    extra_network_types: Tuple[Type[Exception], ...] = ()
+    rate_limit_types: tuple[type[Exception], ...] = ()
+    network_error_types: tuple[type[Exception], ...] = ()
+    base_api_error_type: type[Exception] | None = None
+    status_code_error_types: tuple[type[Exception], ...] = ()
+    extra_network_types: tuple[type[Exception], ...] = ()
     supports_retry_after: bool = False
 
 
@@ -92,7 +91,7 @@ def wrap_vendor_error(
         or the original exception if it doesn't match any known category.
     """
     vendor = mapping.vendor_name
-    context: Dict[str, object] = {"vendor": vendor, "model": model_name}
+    context: dict[str, object] = {"vendor": vendor, "model": model_name}
 
     # --- Type-based rate-limit detection ---
     if mapping.rate_limit_types and isinstance(e, mapping.rate_limit_types):

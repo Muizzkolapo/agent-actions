@@ -1,6 +1,6 @@
 """Error context extraction and merging service."""
 
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 class ErrorContextService:
@@ -8,13 +8,13 @@ class ErrorContextService:
 
     @staticmethod
     def merge_exception_context(
-        exc: Exception, additional_context: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        exc: Exception, additional_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Merge context from the entire exception chain; outer overrides inner."""
         merged_context = {}
 
         chain = []
-        current: Optional[Exception] = exc
+        current: Exception | None = exc
         visited = set()
 
         while current and id(current) not in visited:

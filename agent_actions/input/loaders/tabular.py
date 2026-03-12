@@ -3,7 +3,7 @@
 # Similar loader pattern is intentional across different file type loaders
 import csv
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.errors import AgentActionsException, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
@@ -11,10 +11,10 @@ from agent_actions.input.loaders.base import BaseLoader
 logger = logging.getLogger(__name__)
 
 
-class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
+class TabularLoader(BaseLoader[list[dict[str, Any]]]):
     """Loader for tabular content like CSV and Excel."""
 
-    def process(self, content: Any, file_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    def process(self, content: Any, file_path: str | None = None) -> list[dict[str, Any]]:
         """Load and return tabular content from a CSV/TSV file or in-memory content."""
         try:
             if file_path:
@@ -48,7 +48,7 @@ class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
                 "loader_type": "tabular",
             }
             raise AgentActionsException("Invalid CSV data", context=error_context, cause=e) from e
-        except IOError as e:
+        except OSError as e:
             self.handle_processing_error(e, f"reading tabular file {file_path}")
             error_context = {
                 "agent_name": self.agent_name,

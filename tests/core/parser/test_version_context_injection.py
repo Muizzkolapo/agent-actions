@@ -5,6 +5,7 @@ being available in prompt store references.
 """
 
 import pytest
+
 from agent_actions.output.response.expander import ActionExpander
 
 

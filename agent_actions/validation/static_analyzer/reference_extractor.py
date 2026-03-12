@@ -1,7 +1,7 @@
 """Extract field references from action configurations."""
 
 import re
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from jinja2 import Environment, nodes
 from jinja2.exceptions import TemplateSyntaxError
@@ -41,9 +41,9 @@ class ReferenceExtractor:
         """Initialize with a Jinja2 environment for AST parsing."""
         self._env = Environment()
 
-    def extract_from_agent(self, agent_config: Dict[str, Any]) -> List[InputRequirement]:
+    def extract_from_agent(self, agent_config: dict[str, Any]) -> list[InputRequirement]:
         """Extract all field references from an action configuration."""
-        requirements: List[InputRequirement] = []
+        requirements: list[InputRequirement] = []
         agent_name = agent_config.get("name", "unknown")
 
         prompt = agent_config.get("prompt", "")
@@ -81,10 +81,10 @@ class ReferenceExtractor:
         template: str,
         _agent_name: str,
         location: str,
-    ) -> List[InputRequirement]:
+    ) -> list[InputRequirement]:
         """Extract references from Jinja2 template using AST parsing."""
-        requirements: List[InputRequirement] = []
-        seen: Set[str] = set()
+        requirements: list[InputRequirement] = []
+        seen: set[str] = set()
 
         jinja_refs = self._extract_jinja_references(template)
         for source, field, raw_ref in jinja_refs:
@@ -132,9 +132,9 @@ class ReferenceExtractor:
 
         return requirements
 
-    def _extract_jinja_references(self, template: str) -> List[tuple]:
+    def _extract_jinja_references(self, template: str) -> list[tuple]:
         """Extract variable references from Jinja2 template using AST."""
-        references: List[tuple] = []
+        references: list[tuple] = []
 
         try:
             ast = self._env.parse(template)
@@ -148,8 +148,8 @@ class ReferenceExtractor:
     def _walk_ast(
         self,
         node: nodes.Node,
-        references: List[tuple],
-        local_vars: Set[str],
+        references: list[tuple],
+        local_vars: set[str],
     ) -> None:
         """Recursively walk AST to extract variable references."""
         if isinstance(node, nodes.For):
@@ -182,7 +182,7 @@ class ReferenceExtractor:
         for child in node.iter_child_nodes():
             self._walk_ast(child, references, local_vars)
 
-    def _extract_getattr_chain(self, node: nodes.Getattr) -> Optional[tuple]:
+    def _extract_getattr_chain(self, node: nodes.Getattr) -> tuple | None:
         """Extract the full attribute chain from a Getattr node."""
         attrs = [node.attr]
         current = node.node
@@ -203,12 +203,12 @@ class ReferenceExtractor:
         guard: Any,
         _agent_name: str,
         location: str = "guard",
-    ) -> List[InputRequirement]:
+    ) -> list[InputRequirement]:
         """Extract references from guard expression."""
-        requirements: List[InputRequirement] = []
+        requirements: list[InputRequirement] = []
 
         if isinstance(guard, str):
-            seen: Set[str] = set()
+            seen: set[str] = set()
             action_spans = []
             for match in self.ACTION_DOT_PATTERN.finditer(guard):
                 source = match.group(1)
@@ -267,12 +267,12 @@ class ReferenceExtractor:
 
     def _extract_from_context_scope(
         self,
-        references: List[str],
+        references: list[str],
         _agent_name: str,
         location: str,
-    ) -> List[InputRequirement]:
+    ) -> list[InputRequirement]:
         """Extract from context_scope directive (observe, drop, passthrough)."""
-        requirements: List[InputRequirement] = []
+        requirements: list[InputRequirement] = []
 
         for ref in references:
             if not isinstance(ref, str):
@@ -298,9 +298,9 @@ class ReferenceExtractor:
 
         return requirements
 
-    def get_referenced_agents(self, requirements: List[InputRequirement]) -> Set[str]:
+    def get_referenced_agents(self, requirements: list[InputRequirement]) -> set[str]:
         """Get set of all actions referenced (excluding special namespaces)."""
-        agents: Set[str] = set()
+        agents: set[str] = set()
         for req in requirements:
             if req.source_agent not in SPECIAL_NAMESPACES:
                 agents.add(req.source_agent)
@@ -308,10 +308,10 @@ class ReferenceExtractor:
 
     def extract_from_workflow(
         self,
-        workflow_config: Dict[str, Any],
-    ) -> Dict[str, List[InputRequirement]]:
+        workflow_config: dict[str, Any],
+    ) -> dict[str, list[InputRequirement]]:
         """Extract references from all actions in a workflow."""
-        requirements: Dict[str, List[InputRequirement]] = {}
+        requirements: dict[str, list[InputRequirement]] = {}
 
         actions = workflow_config.get("actions", [])
         for action in actions:

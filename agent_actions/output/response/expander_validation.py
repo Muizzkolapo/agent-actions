@@ -1,14 +1,12 @@
 """Validation functions extracted from ActionExpander."""
 
-from typing import Optional
-
+from agent_actions.config.types import AgentEntryDict
 from agent_actions.errors import ConfigValidationError
 from agent_actions.llm.config.vendor import VendorType
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
-from agent_actions.config.types import AgentEntryDict
 
 
-def validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
+def validate_vendor_exists(vendor: str | None, action_name: str) -> None:
     """
     Validate vendor is a known/supported vendor.
 
@@ -35,7 +33,7 @@ def validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
         )
 
 
-def validate_action_name(action_name: Optional[str]) -> None:
+def validate_action_name(action_name: str | None) -> None:
     """Validate action name is not reserved."""
     if not action_name or not isinstance(action_name, str):
         raise ConfigValidationError(

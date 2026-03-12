@@ -1,9 +1,10 @@
 """Prompt validation utilities for prompt files."""
 
-import re
 import logging
+import re
 from pathlib import Path
-from typing import Dict, List, Set, Any, Optional, Tuple
+from typing import Any
+
 from agent_actions.config.defaults import PromptDefaults
 from agent_actions.validation.base_validator import BaseValidator
 
@@ -18,19 +19,19 @@ class PromptValidator(BaseValidator):
     _MAX_PROMPT_SIZE = PromptDefaults.MAX_PROMPT_SIZE_BYTES
 
     @staticmethod
-    def _find_prompt_sections_in_content(content: str) -> List[str]:
+    def _find_prompt_sections_in_content(content: str) -> list[str]:
         """Find all prompt section titles in the content."""
         pattern = PromptValidator._PROMPT_SECTION_PATTERN
         return [match.group(1) for match in pattern.finditer(content)]
 
     @staticmethod
-    def _find_prompt_ids_in_content(content: str) -> List[str]:
+    def _find_prompt_ids_in_content(content: str) -> list[str]:
         """Find all prompt IDs in the content."""
         pattern = PromptValidator._PROMPT_ID_PATTERN
         return [match.group(1) for match in pattern.finditer(content)]
 
     @staticmethod
-    def _find_duplicate_ids_in_list(ids: List[str]) -> Set[str]:
+    def _find_duplicate_ids_in_list(ids: list[str]) -> set[str]:
         """Find duplicate IDs in a list."""
         seen = set()
         duplicates = set()
@@ -51,7 +52,7 @@ class PromptValidator(BaseValidator):
             return False
         return True
 
-    def _read_prompt_file(self, prompt_file: Path) -> Optional[str]:
+    def _read_prompt_file(self, prompt_file: Path) -> str | None:
         try:
             return prompt_file.read_text(encoding="utf-8")
         except (OSError, ValueError, UnicodeDecodeError) as e:
@@ -59,8 +60,8 @@ class PromptValidator(BaseValidator):
             return None
 
     def _check_prompt_id_duplicates(
-        self, file_name: str, prompt_ids_in_file: List[str], all_prompt_ids_seen: Set[str]
-    ) -> Tuple[Set[str], List[str]]:
+        self, file_name: str, prompt_ids_in_file: list[str], all_prompt_ids_seen: set[str]
+    ) -> tuple[set[str], list[str]]:
         duplicates = self._find_duplicate_ids_in_list(prompt_ids_in_file)
         if duplicates:
             id_list = ", ".join(duplicates)
@@ -87,7 +88,7 @@ class PromptValidator(BaseValidator):
                 f"PromptLoader validation or internal format check failed for '{file_name}': {e}."
             )
 
-    def _validate_single_prompt_file(self, prompt_file: Path, all_prompt_ids_seen: Set[str]) -> int:
+    def _validate_single_prompt_file(self, prompt_file: Path, all_prompt_ids_seen: set[str]) -> int:
         """Validate a single prompt file and return the number of valid prompts found."""
         file_prompts_count = 0
         try:
@@ -120,7 +121,7 @@ class PromptValidator(BaseValidator):
         has_errors = bool(duplicates or cross_file)
         return 0 if has_errors else file_prompts_count
 
-    def _validate_prompt_format_logic(self, content: str, file_name: str) -> Optional[str]:
+    def _validate_prompt_format_logic(self, content: str, file_name: str) -> str | None:
         """Return an error message if prompt format is invalid, None otherwise."""
         sections = self._find_prompt_sections_in_content(content)
         prompt_ids = self._find_prompt_ids_in_content(content)
@@ -144,7 +145,7 @@ class PromptValidator(BaseValidator):
                 return f"Empty prompt content for ID '{prompt_id}' in file '{file_name}'."
         return None
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate all prompt files in the directory specified by data (Path)."""
         self.clear_errors()
         self.clear_warnings()
@@ -161,7 +162,7 @@ class PromptValidator(BaseValidator):
         if not self._is_directory(prompt_dir):
             self.add_error(f"Prompt path is not a directory: {prompt_dir}.")
             return False
-        all_prompt_ids_seen: Set[str] = set()
+        all_prompt_ids_seen: set[str] = set()
         stats = {"total_files_processed": 0, "files_with_errors": 0, "total_prompts_validated": 0}
         prompt_files = list(prompt_dir.glob("*.md"))
         if not prompt_files:

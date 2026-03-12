@@ -1,8 +1,8 @@
 """Validator for agent entry basic structure."""
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
     AgentEntryValidationResult,
+    BaseAgentEntryValidator,
 )
 
 

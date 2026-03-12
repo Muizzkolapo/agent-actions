@@ -20,21 +20,21 @@ from textwrap import dedent
 import groq
 from groq import Groq
 
-from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
+from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
+from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
+from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
+from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import JSONResponseMixin
 from agent_actions.llm.providers.usage_tracker import set_last_usage
-from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.utils.constants import MODEL_NAME_KEY
-from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
+    LLMErrorEvent,
     LLMRequestEvent,
     LLMResponseEvent,
-    LLMErrorEvent,
 )
+from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +238,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
                     "response": str(response)[:200],
                 },
                 cause=e,
-            )
+            ) from e
         except Exception as e:
             fire_event(
                 LLMErrorEvent(

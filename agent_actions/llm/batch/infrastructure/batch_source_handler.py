@@ -1,7 +1,7 @@
 """Batch source data persistence handler."""
 
 from pathlib import Path
-from typing import Dict, List, Any, Union, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -12,7 +12,7 @@ class BatchSourceHandler:
 
     def save_task_source(
         self,
-        src_text: Union[Dict[str, Any], List[Dict[str, Any]]],
+        src_text: dict[str, Any] | list[dict[str, Any]],
         file_path: str,
         base_directory: str,
         _output_directory: str,

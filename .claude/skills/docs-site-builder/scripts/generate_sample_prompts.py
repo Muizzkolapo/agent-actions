@@ -33,7 +33,7 @@ def main():
         Path(__file__).parent / "agent_actions/docs/docs_site/sample_artefact/catalog.json"
     )
 
-    with open(catalog_path, "r") as f:
+    with open(catalog_path) as f:
         catalog = json.load(f)
 
     # Add prompts and schemas collections
@@ -48,7 +48,7 @@ def main():
     with open(catalog_path, "w") as f:
         json.dump(catalog, f, indent=2)
 
-    print(f"✅ Updated catalog")
+    print("✅ Updated catalog")
     print(f"   - {len(prompts)} prompts")
     print(f"   - {len(schemas)} schemas")
     print(f"   Catalog: {catalog_path}")

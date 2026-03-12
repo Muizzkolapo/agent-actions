@@ -3,14 +3,14 @@
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError
 from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 
-def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
+def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
     Raises:
@@ -69,13 +69,13 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
     return UDF_REGISTRY
 
 
-def validate_udf_references(config: Dict[str, Any]) -> None:
+def validate_udf_references(config: dict[str, Any]) -> None:
     """Validate that all 'impl' references in config exist in the UDF registry.
 
     Raises:
         FunctionNotFoundError: If a referenced function is not in the registry.
     """
-    impl_references: List[str] = []
+    impl_references: list[str] = []
 
     def extract_impl_refs(obj: Any, path: str = "") -> None:
         """Recursively extract all 'impl' field values."""

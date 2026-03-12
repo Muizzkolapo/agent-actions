@@ -9,7 +9,7 @@ import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +32,11 @@ class ManifestManager:
         self.agent_io_path = Path(agent_io_path)
         self.target_dir = self.agent_io_path / "target"
         self.manifest_path = self.target_dir / MANIFEST_FILENAME
-        self._manifest: Optional[Dict[str, Any]] = None
+        self._manifest: dict[str, Any] | None = None
         self._lock = threading.RLock()
 
     @property
-    def manifest(self) -> Dict[str, Any]:
+    def manifest(self) -> dict[str, Any]:
         """Return the current manifest, loading from disk if needed."""
         if self._manifest is None:
             with self._lock:
@@ -47,10 +47,10 @@ class ManifestManager:
     def initialize_manifest(
         self,
         workflow_name: str,
-        execution_order: List[str],
-        levels: List[List[str]],
-        agent_configs: Dict[str, Dict[str, Any]],
-        workflow_run_id: Optional[str] = None,
+        execution_order: list[str],
+        levels: list[list[str]],
+        agent_configs: dict[str, dict[str, Any]],
+        workflow_run_id: str | None = None,
     ) -> None:
         """Initialize a new manifest for a workflow run.
 
@@ -116,14 +116,14 @@ class ManifestManager:
             self._save_manifest()
             logger.info("Initialized manifest for workflow %s", workflow_name)
 
-    def load_manifest(self) -> Dict[str, Any]:
+    def load_manifest(self) -> dict[str, Any]:
         """Load manifest from disk, returning empty dict if not found."""
         if not self.manifest_path.exists():
             logger.debug("No manifest found at %s", self.manifest_path)
             return {}
 
         try:
-            with open(self.manifest_path, "r", encoding="utf-8") as f:
+            with open(self.manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
 
             # Validate schema version
@@ -171,7 +171,7 @@ class ManifestManager:
             raise KeyError(f"Action '{action_name}' not found in manifest")
         return self.target_dir / action["output_dir"]
 
-    def get_dependency_directories(self, action_name: str) -> List[Path]:
+    def get_dependency_directories(self, action_name: str) -> list[Path]:
         """Return output directories for all dependencies of an action."""
         action = self.manifest.get("actions", {}).get(action_name)
         if not action:
@@ -189,7 +189,7 @@ class ManifestManager:
                 )
         return dep_dirs
 
-    def get_previous_action_directory(self, action_name: str) -> Optional[Path]:
+    def get_previous_action_directory(self, action_name: str) -> Path | None:
         """Return the output directory of the previous action, or None if first."""
         execution_order = self.manifest.get("execution_order", [])
         if action_name not in execution_order:
@@ -202,14 +202,14 @@ class ManifestManager:
         prev_action = execution_order[idx - 1]
         return self.get_output_directory(prev_action)
 
-    def get_parallel_actions(self, level: int) -> List[str]:
+    def get_parallel_actions(self, level: int) -> list[str]:
         """Return all actions at a given execution level."""
         levels = self.manifest.get("levels", [])
         if level < 0 or level >= len(levels):
             return []
         return levels[level]
 
-    def get_action_index(self, action_name: str) -> Optional[int]:
+    def get_action_index(self, action_name: str) -> int | None:
         """Return the execution index for an action, or None if not found."""
         action = self.manifest.get("actions", {}).get(action_name)
         if action:
@@ -243,7 +243,7 @@ class ManifestManager:
     def mark_action_completed(
         self,
         action_name: str,
-        record_count: Optional[int] = None,
+        record_count: int | None = None,
     ) -> None:
         """Mark an action as completed.
 
@@ -260,7 +260,7 @@ class ManifestManager:
                 self._manifest["actions"][action_name]["record_count"] = record_count
             self._save_manifest()
 
-    def mark_action_skipped(self, action_name: str, reason: Optional[str] = None) -> None:
+    def mark_action_skipped(self, action_name: str, reason: str | None = None) -> None:
         """Mark an action as skipped.
 
         Raises:
@@ -306,7 +306,7 @@ class ManifestManager:
             self._manifest["error"] = error
             self._save_manifest()
 
-    def get_completed_actions(self) -> List[str]:
+    def get_completed_actions(self) -> list[str]:
         """Return all completed action names."""
         completed = []
         for action_name, action_data in self.manifest.get("actions", {}).items():
@@ -314,7 +314,7 @@ class ManifestManager:
                 completed.append(action_name)
         return completed
 
-    def get_upstream_actions(self, action_name: str) -> List[str]:
+    def get_upstream_actions(self, action_name: str) -> list[str]:
         """Return all actions upstream (lower index) of the given action."""
         current_idx = self.get_action_index(action_name)
         if current_idx is None:

@@ -7,10 +7,10 @@ import sys
 import threading
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any
 
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import CacheHitEvent, CacheMissEvent, CacheInvalidationEvent
+from agent_actions.logging.events.types import CacheHitEvent, CacheInvalidationEvent, CacheMissEvent
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,8 @@ __all__ = [
 
 # Thread-safe caches
 _LOCK = threading.RLock()
-_PATH_CACHE: Set[str] = set()
-_MODULE_CACHE: Dict[str, Any] = {}
+_PATH_CACHE: set[str] = set()
+_MODULE_CACHE: dict[str, Any] = {}
 
 
 # ==============================================================================
@@ -40,7 +40,7 @@ _MODULE_CACHE: Dict[str, Any] = {}
 # ==============================================================================
 
 
-def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -> bool:
+def ensure_path_importable(path: str | Path, *, recursive: bool = False) -> bool:
     """Ensure a path is in sys.path for imports (thread-safe, cached).
 
     Args:
@@ -81,7 +81,7 @@ def ensure_path_importable(path: Union[str, Path], *, recursive: bool = False) -
     return True
 
 
-def ensure_paths_importable(paths: List[Union[str, Path]], *, recursive: bool = False) -> int:
+def ensure_paths_importable(paths: list[str | Path], *, recursive: bool = False) -> int:
     """Ensure multiple paths are in sys.path, returning count of newly added paths."""
     added_count = 0
     for path in paths:
@@ -91,7 +91,7 @@ def ensure_paths_importable(paths: List[Union[str, Path]], *, recursive: bool = 
 
 
 @contextmanager
-def importable_path(path: Union[str, Path], *, recursive: bool = False):
+def importable_path(path: str | Path, *, recursive: bool = False):
     """Context manager for temporary sys.path modification (testing only).
 
     Does NOT use the cache, ensuring test isolation.
@@ -149,13 +149,13 @@ def clear_path_cache() -> None:
 
 def load_module_from_path(
     module_name: str,
-    module_path: Optional[Union[str, Path]] = None,
+    module_path: str | Path | None = None,
     *,
     execute: bool = True,
     fallback_import: bool = True,
     cache: bool = True,
     cache_failures: bool = False,
-) -> Optional[Any]:
+) -> Any | None:
     """Load a module from a file path or standard import (thread-safe, cached).
 
     Args:
@@ -290,11 +290,11 @@ def clear_module_cache() -> None:
 
 
 def discover_and_load_udfs(
-    user_code_path: Union[str, Path],
+    user_code_path: str | Path,
     *,
     skip_private: bool = True,
     skip_test: bool = True,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Discover and load UDFs from Python files in a directory (non-recursive).
 
     Args:
@@ -317,7 +317,7 @@ def discover_and_load_udfs(
 
     ensure_path_importable(user_code_path)
 
-    registry: Dict[str, Dict[str, Any]] = {}
+    registry: dict[str, dict[str, Any]] = {}
 
     python_files = list(user_code_path.glob("*.py"))
 
@@ -340,11 +340,11 @@ def discover_and_load_udfs(
 
 
 def discover_and_load_udfs_recursive(
-    user_code_path: Union[str, Path],
+    user_code_path: str | Path,
     *,
     skip_private: bool = True,
     skip_test: bool = True,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Discover and load UDFs from Python files recursively in a directory tree.
 
     Args:
@@ -367,7 +367,7 @@ def discover_and_load_udfs_recursive(
 
     ensure_path_importable(user_code_path)
 
-    registry: Dict[str, Dict[str, Any]] = {}
+    registry: dict[str, dict[str, Any]] = {}
 
     python_files = list(user_code_path.rglob("*.py"))
 

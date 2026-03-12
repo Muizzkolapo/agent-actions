@@ -1,10 +1,10 @@
 """Template rendering error formatter."""
 
 from difflib import SequenceMatcher
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from .base import ErrorFormatter
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class TemplateErrorFormatter(ErrorFormatter):
@@ -15,7 +15,7 @@ class TemplateErrorFormatter(ErrorFormatter):
         return "TemplateVariableError" in exc_names
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         agent_name = context.get("agent") or context.get("agent_name") or "unknown"
         missing = context.get("missing_variables", [])
@@ -25,7 +25,7 @@ class TemplateErrorFormatter(ErrorFormatter):
         namespace_context = getattr(exc, "namespace_context", {}) or {}
         storage_hints = getattr(exc, "storage_hints", {}) or {}
 
-        details_lines: List[str] = [
+        details_lines: list[str] = [
             f"Template rendering failed for agent '{agent_name}'",
             "",
         ]
@@ -61,11 +61,11 @@ class TemplateErrorFormatter(ErrorFormatter):
     def _format_variable_diagnostic(
         self,
         var: str,
-        namespace_context: Dict[str, List[str]],
-        storage_hints: Optional[Dict[str, Any]] = None,
-    ) -> List[str]:
+        namespace_context: dict[str, list[str]],
+        storage_hints: dict[str, Any] | None = None,
+    ) -> list[str]:
         """Format diagnostic information for a single missing variable."""
-        lines: List[str] = []
+        lines: list[str] = []
         storage_hints = storage_hints or {}
 
         if "." in var:
@@ -140,8 +140,8 @@ class TemplateErrorFormatter(ErrorFormatter):
         return lines
 
     def _find_similar(
-        self, target: str, candidates: List[str], threshold: float = 0.6
-    ) -> Optional[str]:
+        self, target: str, candidates: list[str], threshold: float = 0.6
+    ) -> str | None:
         """Find most similar field name using difflib."""
         best_match = None
         best_ratio = threshold
@@ -154,9 +154,9 @@ class TemplateErrorFormatter(ErrorFormatter):
 
     def _generate_hint(
         self,
-        missing: List[str],
-        namespace_context: Dict[str, List[str]],
-        storage_hints: Optional[Dict[str, Any]] = None,
+        missing: list[str],
+        namespace_context: dict[str, list[str]],
+        storage_hints: dict[str, Any] | None = None,
     ) -> str:
         """Generate actionable hint based on error type."""
         if not missing:

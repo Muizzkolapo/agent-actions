@@ -7,8 +7,9 @@ replacing the previous if/elif chain.
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Callable, Tuple
+from typing import Any
 
 from agent_actions.config.defaults import OllamaDefaults
 
@@ -21,9 +22,9 @@ logger = logging.getLogger(__name__)
 class _BatchClientRegistration:
     """Registry entry for a batch client vendor."""
 
-    factory: Callable[[Dict[str, Any]], BaseBatchClient]
-    package: Optional[str] = None
-    aliases: Tuple[str, ...] = ()
+    factory: Callable[[dict[str, Any]], BaseBatchClient]
+    package: str | None = None
+    aliases: tuple[str, ...] = ()
 
 
 def _try_import(module_path: str, class_name: str):
@@ -63,28 +64,28 @@ def _require_class(cls, available: bool, client_type: str, package: str):
 # --- Vendor factory functions ---
 
 
-def _create_openai(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_openai(config: dict[str, Any]) -> BaseBatchClient:
     from .openai.batch_client import OpenAIBatchClient
 
     api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
     return OpenAIBatchClient(api_key=api_key)
 
 
-def _create_gemini(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".gemini.batch_client", "GeminiBatchClient")
     cls = _require_class(cls, available, "gemini", "google-genai")
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
     return cls(api_key=api_key)
 
 
-def _create_ollama(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_ollama(config: dict[str, Any]) -> BaseBatchClient:
     from .ollama.batch_client import OllamaBatchClient
 
     base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", OllamaDefaults.BASE_URL)
     return OllamaBatchClient(base_url=base_url)
 
 
-def _create_anthropic(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".anthropic.batch_client", "AnthropicBatchClient")
     cls = _require_class(cls, available, "anthropic", "anthropic")
     api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
@@ -95,21 +96,21 @@ def _create_anthropic(config: Dict[str, Any]) -> BaseBatchClient:
     )
 
 
-def _create_groq(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_groq(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".groq.batch_client", "GroqBatchClient")
     cls = _require_class(cls, available, "groq", "groq")
     api_key = config.get("api_key") or os.getenv("GROQ_API_KEY")
     return cls(api_key=api_key)
 
 
-def _create_mistral(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_mistral(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".mistral.batch_client", "MistralBatchClient")
     cls = _require_class(cls, available, "mistral", "mistralai")
     api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
     return cls(api_key=api_key)
 
 
-def _create_agac(config: Dict[str, Any]) -> BaseBatchClient:
+def _create_agac(config: dict[str, Any]) -> BaseBatchClient:
     from .agac.batch_client import AgacBatchClient
 
     polls_until_complete = config.get("polls_until_complete")
@@ -118,7 +119,7 @@ def _create_agac(config: Dict[str, Any]) -> BaseBatchClient:
 
 # --- Registry ---
 
-_BATCH_CLIENT_REGISTRY: Dict[str, _BatchClientRegistration] = {
+_BATCH_CLIENT_REGISTRY: dict[str, _BatchClientRegistration] = {
     "openai": _BatchClientRegistration(factory=_create_openai),
     "gemini": _BatchClientRegistration(factory=_create_gemini, package="google-genai"),
     "ollama": _BatchClientRegistration(factory=_create_ollama),
@@ -128,7 +129,7 @@ _BATCH_CLIENT_REGISTRY: Dict[str, _BatchClientRegistration] = {
     "agac-provider": _BatchClientRegistration(factory=_create_agac, aliases=("mock",)),
 }
 
-_ALIAS_MAP: Dict[str, str] = {}
+_ALIAS_MAP: dict[str, str] = {}
 for _name, _reg in _BATCH_CLIENT_REGISTRY.items():
     for _alias in _reg.aliases:
         _ALIAS_MAP[_alias] = _name
@@ -143,7 +144,7 @@ class BatchClientFactory:
 
     @staticmethod
     def create_client(
-        client_type: str = "openai", config: Optional[Dict[str, Any]] = None
+        client_type: str = "openai", config: dict[str, Any] | None = None
     ) -> BaseBatchClient:
         """
         Create a batch client instance.

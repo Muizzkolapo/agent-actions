@@ -1,9 +1,9 @@
 """Schema structure validation for pre-flight checking."""
 
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
-from .errors import FieldLocation, StaticTypeError, StaticTypeWarning
+from .errors import FieldLocation, StaticTypeError
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +16,12 @@ class SchemaStructureValidator:
 
     def validate_schema(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         action_name: str,
         config_field: str = "schema",
-    ) -> List[StaticTypeError]:
+    ) -> list[StaticTypeError]:
         """Validate a schema definition for structural correctness."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         if not schema:
             return errors
@@ -58,12 +58,12 @@ class SchemaStructureValidator:
 
     def _validate_unified_format(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         action_name: str,
         config_field: str,
-    ) -> List[StaticTypeError]:
+    ) -> list[StaticTypeError]:
         """Validate unified schema format with 'fields' array."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         fields = schema.get("fields", [])
         if not isinstance(fields, list):
@@ -90,7 +90,7 @@ class SchemaStructureValidator:
             )
             return errors
 
-        field_ids: Set[str] = set()
+        field_ids: set[str] = set()
         for i, field in enumerate(fields):
             field_errors = self._validate_unified_field(
                 field, action_name, config_field, i, field_ids
@@ -105,10 +105,10 @@ class SchemaStructureValidator:
         action_name: str,
         config_field: str,
         index: int,
-        seen_ids: Set[str],
-    ) -> List[StaticTypeError]:
+        seen_ids: set[str],
+    ) -> list[StaticTypeError]:
         """Validate a single field in unified format."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         if not isinstance(field, dict):
             errors.append(
@@ -220,12 +220,12 @@ class SchemaStructureValidator:
 
     def _validate_json_schema_format(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         action_name: str,
         config_field: str,
-    ) -> List[StaticTypeError]:
+    ) -> list[StaticTypeError]:
         """Validate JSON Schema format."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         schema_type = schema.get("type")
         if schema_type not in self.VALID_TYPES:
@@ -303,13 +303,13 @@ class SchemaStructureValidator:
 
     def _validate_object_properties(
         self,
-        properties: Dict[str, Any],
+        properties: dict[str, Any],
         action_name: str,
         config_field: str,
-        required: List[str],
-    ) -> List[StaticTypeError]:
+        required: list[str],
+    ) -> list[StaticTypeError]:
         """Validate object properties definition."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         if not isinstance(properties, dict):
             errors.append(
@@ -390,12 +390,12 @@ class SchemaStructureValidator:
 
     def _validate_inline_shorthand(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         action_name: str,
         config_field: str,
-    ) -> List[StaticTypeError]:
+    ) -> list[StaticTypeError]:
         """Validate inline shorthand format {field_name: 'type'}."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         if not schema:
             return errors
@@ -453,12 +453,12 @@ class SchemaStructureValidator:
 
     def validate_schema_compilability(
         self,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         action_name: str,
         vendor: str,
-    ) -> List[StaticTypeError]:
+    ) -> list[StaticTypeError]:
         """Validate that schema can be compiled for the target vendor."""
-        errors: List[StaticTypeError] = []
+        errors: list[StaticTypeError] = []
 
         if not schema:
             return errors

@@ -1,28 +1,28 @@
 """Centralized field reference parsing and resolution."""
 
+from agent_actions.utils.constants import SPECIAL_NAMESPACES
+
+from .context_provider import (
+    EvaluationContext,
+    EvaluationContextProvider,
+)
+from .exceptions import (
+    DependencyValidationError,
+    FieldResolutionError,
+    InvalidReferenceError,
+    ReferenceNotFoundError,
+    SchemaFieldValidationError,
+)
+from .reference_parser import (
+    ParsedReference,
+    ReferenceFormat,
+    ReferenceParser,
+)
 from .resolver import (
     FieldReferenceResolver,
     ResolvedReference,
 )
-from .reference_parser import (
-    ReferenceParser,
-    ParsedReference,
-    ReferenceFormat,
-)
-from .context_provider import (
-    EvaluationContextProvider,
-    EvaluationContext,
-)
 from .validator import ReferenceValidator
-from agent_actions.utils.constants import SPECIAL_NAMESPACES
-from .exceptions import (
-    FieldResolutionError,
-    InvalidReferenceError,
-    ReferenceNotFoundError,
-    DependencyValidationError,
-    SchemaFieldValidationError,
-)
-
 
 __all__ = [
     # Core resolver

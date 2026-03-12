@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from agent_actions.models.action_schema import (
     ActionKind,
@@ -25,10 +25,10 @@ class WorkflowSchemaService:
     def __init__(
         self,
         workflow_config: dict[str, Any],
-        udf_registry: Optional[dict[str, Any]] = None,
-        schema_loader: Optional[Any] = None,
-        project_root: Optional[Any] = None,
-        schema_dir: Optional[Any] = None,
+        udf_registry: dict[str, Any] | None = None,
+        schema_loader: Any | None = None,
+        project_root: Any | None = None,
+        schema_dir: Any | None = None,
     ):
         self._config = workflow_config
         self.workflow_name = workflow_config.get("name", "unknown")
@@ -40,14 +40,14 @@ class WorkflowSchemaService:
             schema_dir=schema_dir,
         )
         self._schemas: dict[str, ActionSchema] = {}
-        self._validation_result: Optional[StaticValidationResult] = None
+        self._validation_result: StaticValidationResult | None = None
 
     @property
     def graph(self) -> DataFlowGraph:
         """Return the data flow graph."""
         return self._analyzer.get_graph()
 
-    def get_action_schema(self, action_name: str) -> Optional[ActionSchema]:
+    def get_action_schema(self, action_name: str) -> ActionSchema | None:
         """Return the ActionSchema for action_name, or None if it does not exist."""
         if action_name in self._schemas:
             return self._schemas[action_name]

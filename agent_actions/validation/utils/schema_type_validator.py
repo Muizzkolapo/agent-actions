@@ -2,9 +2,9 @@
 Utility for validating schema type strings.
 """
 
-import json
 import ast
-from typing import Set, Dict, Any, Optional
+import json
+from typing import Any
 
 
 class SchemaTypeValidator:
@@ -34,7 +34,7 @@ class SchemaTypeValidator:
         return True
 
     def is_valid_schema_type(
-        self, type_str: str, valid_types: Set[str], valid_array_types: Set[str]
+        self, type_str: str, valid_types: set[str], valid_array_types: set[str]
     ) -> bool:
         """
         Check if a schema type string is valid.
@@ -91,7 +91,7 @@ class SchemaTypeValidator:
         # Validate each property
         return self._validate_object_properties(properties_dict)
 
-    def _parse_properties_string(self, properties_str: str) -> Optional[Dict[str, Any]]:
+    def _parse_properties_string(self, properties_str: str) -> dict[str, Any] | None:
         """
         Parse properties string as JSON or Python literal.
 
@@ -116,7 +116,7 @@ class SchemaTypeValidator:
         except (ValueError, SyntaxError):
             return None
 
-    def _validate_object_properties(self, properties: Dict[str, Any]) -> bool:
+    def _validate_object_properties(self, properties: dict[str, Any]) -> bool:
         """
         Validate that object properties have correct structure.
 

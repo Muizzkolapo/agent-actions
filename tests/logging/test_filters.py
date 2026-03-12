@@ -1,6 +1,7 @@
 """Tests for logging filters."""
 
 import logging
+
 import pytest
 
 from agent_actions.logging.filters import RedactingFilter, _redact_sensitive_data
@@ -365,8 +366,9 @@ class TestStandaloneRedactSensitiveData:
 
     def test_no_baseclient_import(self):
         """filters.py must not import from llm providers."""
-        import agent_actions.logging.filters as mod
         import inspect
+
+        import agent_actions.logging.filters as mod
 
         source = inspect.getsource(mod)
         assert "from agent_actions.llm.providers" not in source

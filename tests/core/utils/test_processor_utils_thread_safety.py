@@ -4,12 +4,10 @@ Tests for ProcessorUtils thread safety, specifically the loop correlation ID rac
 
 import threading
 import time
-import pytest
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Set, List
-from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.field_management import FieldManager
-from agent_actions.utils.lineage import LineageBuilder
+
+import pytest
+
 from agent_actions.utils.correlation import VersionIdGenerator
 
 
@@ -35,7 +33,7 @@ class TestProcessorUtilsThreadSafety:
         version_base_name = "generate_distractors"
         num_threads = 50
         num_calls_per_thread = 10
-        correlation_ids: List[str] = []
+        correlation_ids: list[str] = []
         correlation_ids_lock = threading.Lock()
 
         def worker():
@@ -67,7 +65,7 @@ class TestProcessorUtilsThreadSafety:
         version_base_name = "process_items"
         file_context = "test_file.json"
         num_threads = 30
-        correlation_ids: List[str] = []
+        correlation_ids: list[str] = []
         correlation_ids_lock = threading.Lock()
 
         def worker():
@@ -214,7 +212,7 @@ class TestProcessorUtilsThreadSafety:
             "version_base_name": "concurrent_loop",
             "workflow_session_id": self.get_test_session_id(),
         }
-        results: List[str] = []
+        results: list[str] = []
         results_lock = threading.Lock()
 
         def worker(worker_id: int):

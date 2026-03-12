@@ -1,29 +1,31 @@
 """WHERE clause parser using pyparsing with AST construction and LRU caching."""
 
-import re
-from typing import Any, Dict, List, Optional
-from functools import lru_cache
-from dataclasses import dataclass
 import logging
+import re
+from dataclasses import dataclass
+from functools import lru_cache
+from typing import Any
 
 try:
     from pyparsing import (
-        Word,
-        Literal,
-        Regex,
-        QuotedString,
-        alphas,
-        alphanums,
-        Forward,
-        ZeroOrMore,
-        Optional as PyOptional,
         CaselessKeyword,
-        ParserElement,
-        ParseException,
-        infix_notation,
+        Forward,
+        Literal,
         OpAssoc,
-        pyparsing_common,
+        ParseException,
+        ParserElement,
+        QuotedString,
+        Regex,
         Suppress,
+        Word,
+        ZeroOrMore,
+        alphanums,
+        alphas,
+        infix_notation,
+        pyparsing_common,
+    )
+    from pyparsing import (
+        Optional as PyOptional,
     )
 except ImportError as exc:
     raise ImportError(
@@ -32,16 +34,16 @@ except ImportError as exc:
     ) from exc
 
 from .ast_nodes import (
-    FieldNode,
-    LiteralNode,
     ComparisonNode,
-    LogicalNode,
-    FunctionNode,
     ComparisonOperator,
+    FieldNode,
+    FunctionNode,
+    LiteralNode,
+    LogicalNode,
     LogicalOperator,
     WhereClauseAST,
 )
-from .operators import list_operators, get_operator_info
+from .operators import get_operator_info, list_operators
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +68,9 @@ class ParseResult:
     """Result of parsing a WHERE clause."""
 
     success: bool
-    ast: Optional[WhereClauseAST] = None
-    error: Optional[ParseError] = None
-    warnings: Optional[List[str]] = None
+    ast: WhereClauseAST | None = None
+    error: ParseError | None = None
+    warnings: list[str] | None = None
 
 
 class WhereClauseParser:
@@ -304,12 +306,12 @@ class WhereClauseParser:
             return mapping[operator_name]
         return ComparisonOperator.EQ
 
-    @lru_cache(maxsize=1000)
+    @lru_cache(maxsize=1000)  # noqa: B019
     def parse_cached(self, where_clause: str) -> ParseResult:
         """Parse a WHERE clause with LRU caching."""
         return self.parse(where_clause)
 
-    def _validate_clause_input(self, where_clause: str) -> Optional[ParseResult]:
+    def _validate_clause_input(self, where_clause: str) -> ParseResult | None:
         """Validate input clause, return error ParseResult if invalid, None if valid."""
         if not where_clause or not where_clause.strip():
             return ParseResult(
@@ -388,7 +390,7 @@ class WhereClauseParser:
         """Clear the parsing cache."""
         self.parse_cached.cache_clear()
 
-    def get_cache_info(self) -> Dict[str, Any]:
+    def get_cache_info(self) -> dict[str, Any]:
         """Get cache statistics."""
         cache_info = _get_lru_cache_info(type(self).parse_cached)
         return {

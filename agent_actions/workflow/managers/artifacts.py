@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ class ArtifactLinker:
                 logger.debug("Failed to clean up temp file %s: %s", tmp_path, cleanup_err)
             raise
 
-    def find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
+    def find_latest_node_dir(self, target_dir: Path) -> Path | None:
         """Return the most recently modified action directory in target, or None."""
         action_dirs = [p for p in target_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
         if not action_dirs:
@@ -101,14 +101,14 @@ class ArtifactLinker:
             return False
 
     @staticmethod
-    def read_manifest(agent_io_dir: Path) -> Optional[dict[str, Any]]:
+    def read_manifest(agent_io_dir: Path) -> dict[str, Any] | None:
         """Read upstream manifest from agent_io directory, or None if absent/invalid."""
         manifest_file = agent_io_dir / ArtifactLinker.MANIFEST_FILENAME
         if not manifest_file.exists():
             return None
 
         try:
-            with open(manifest_file, "r", encoding="utf-8") as f:
+            with open(manifest_file, encoding="utf-8") as f:
                 manifest = json.load(f)
 
             if not all(k in manifest for k in ("upstream_workflow", "upstream_path")):

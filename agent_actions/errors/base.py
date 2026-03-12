@@ -1,6 +1,6 @@
 """Base exception classes for agent-actions."""
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class AgentActionsError(Exception):
@@ -9,9 +9,9 @@ class AgentActionsError(Exception):
     def __init__(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         *,
-        cause: Optional[Exception] = None,
+        cause: Exception | None = None,
     ):
         super().__init__(message)
         self.context = context or {}

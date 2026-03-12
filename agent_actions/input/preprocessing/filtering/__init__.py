@@ -7,9 +7,9 @@ from agent_actions.input.preprocessing.filtering.evaluator import (
     reset_guard_evaluator,
 )
 from agent_actions.input.preprocessing.filtering.guard_filter import (
-    GuardFilter,
-    FilterResult,
     FilterItemRequest,
+    FilterResult,
+    GuardFilter,
     get_global_guard_filter,
 )
 

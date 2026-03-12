@@ -2,10 +2,10 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
-    from agent_actions.processing.types import ProcessingContext, ProcessingMode
+    from agent_actions.processing.types import ProcessingContext
     from agent_actions.storage.backend import StorageBackend
 
 
@@ -23,16 +23,16 @@ class PreparedTask:
     """Task configuration ready for execution (online) or submission (batch)."""
 
     target_id: str
-    source_guid: Optional[str]
+    source_guid: str | None
     formatted_prompt: str = ""
     llm_context: dict[str, Any] = field(default_factory=dict)
 
     passthrough_fields: dict[str, Any] = field(default_factory=dict)
     original_content: Any = None
-    source_content: Optional[Any] = None
-    source_snapshot: Optional[Any] = None
+    source_content: Any | None = None
+    source_snapshot: Any | None = None
     guard_status: GuardStatus = GuardStatus.PASSED
-    guard_behavior: Optional[str] = None
+    guard_behavior: str | None = None
     prompt_context: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -65,16 +65,16 @@ class PreparationContext:
     agent_name: str
     is_first_stage: bool = False
     is_batch_mode: bool = False
-    source_data: Optional[list[dict[str, Any]]] = None
-    agent_indices: Optional[dict[str, int]] = None
-    dependency_configs: Optional[dict[str, Any]] = None
-    workflow_metadata: Optional[dict[str, Any]] = None
-    version_context: Optional[dict[str, Any]] = None
-    file_path: Optional[str] = None
-    output_directory: Optional[str] = None
-    tools_path: Optional[str] = None
+    source_data: list[dict[str, Any]] | None = None
+    agent_indices: dict[str, int] | None = None
+    dependency_configs: dict[str, Any] | None = None
+    workflow_metadata: dict[str, Any] | None = None
+    version_context: dict[str, Any] | None = None
+    file_path: str | None = None
+    output_directory: str | None = None
+    tools_path: str | None = None
     storage_backend: Optional["StorageBackend"] = None
-    current_item: Optional[dict[str, Any]] = None
+    current_item: dict[str, Any] | None = None
     record_index: int = 0
 
     @classmethod

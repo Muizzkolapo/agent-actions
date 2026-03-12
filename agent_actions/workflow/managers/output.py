@@ -3,16 +3,18 @@
 import json
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Callable, Tuple, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
+
 from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import (
-    NODE_LEVEL_RECORD_ID,
     DISPOSITION_PASSTHROUGH,
     DISPOSITION_SKIPPED,
+    NODE_LEVEL_RECORD_ID,
 )
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.merge import merge_records_by_key
@@ -28,13 +30,13 @@ class OutputManagerConfig:
     """Configuration for AgentOutputManager."""
 
     agent_folder: Path
-    execution_order: List[str]
-    agent_configs: Dict[str, Dict[str, Any]]
-    agent_status: Dict[str, Dict[str, Any]]
+    execution_order: list[str]
+    agent_configs: dict[str, dict[str, Any]]
+    agent_status: dict[str, dict[str, Any]]
     version_correlator: Any
-    console: Optional[Console] = None
+    console: Console | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
-    data_source_config: Optional[Union[str, Dict[str, Any]]] = None
+    data_source_config: str | dict[str, Any] | None = None
 
 
 class AgentOutputManager:
@@ -61,22 +63,22 @@ class AgentOutputManager:
         self.storage_backend = config.storage_backend
         self.data_source_config = config.data_source_config
 
-    def _load_json_files(self, json_files: List[Path], agent_output: Dict[str, Any]) -> List[Any]:
+    def _load_json_files(self, json_files: list[Path], agent_output: dict[str, Any]) -> list[Any]:
         """Load data from JSON files."""
         outputs = []
         for json_file in json_files:
             try:
-                with open(json_file, "r", encoding="utf-8") as f:
+                with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, list):
                         outputs.extend(data)
                     else:
                         outputs.append(data)
-            except (OSError, IOError, ValueError, TypeError) as file_error:
+            except (OSError, ValueError, TypeError) as file_error:
                 agent_output["errors"].append(f"Failed to read {json_file.name}: {file_error}")
         return outputs
 
-    def _process_agent_output(self, output_dir: Path, prev_agent_name: str) -> Dict[str, Any]:
+    def _process_agent_output(self, output_dir: Path, prev_agent_name: str) -> dict[str, Any]:
         """Process output directory for a single agent."""
         agent_output = {
             "data": [],
@@ -121,7 +123,7 @@ class AgentOutputManager:
 
         return agent_output
 
-    def get_previous_outputs(self, current_idx: int) -> Dict[str, Any]:
+    def get_previous_outputs(self, current_idx: int) -> dict[str, Any]:
         """Return outputs from previously executed agents with metadata."""
         previous_outputs = {}
 
@@ -134,7 +136,7 @@ class AgentOutputManager:
                 previous_outputs[prev_agent_name] = agent_output["data"]
                 previous_outputs[f"{prev_agent_name}_meta"] = agent_output
 
-            except (OSError, IOError, ValueError, TypeError, KeyError) as e:
+            except (OSError, ValueError, TypeError, KeyError) as e:
                 error_msg = f"Could not load outputs for {prev_agent_name}: {e}"
                 logger.warning(
                     "Could not load output data: %s",
@@ -165,7 +167,7 @@ class AgentOutputManager:
         reduce_key = agent_config.get("reduce_key")
 
         # Collect data by relative_path from all upstream nodes
-        data_by_path: Dict[str, List[List[Dict]]] = {}
+        data_by_path: dict[str, list[list[dict]]] = {}
         target_prefix = str(self.agent_folder / "target") + os.sep
 
         for input_dir in upstream_dirs:
@@ -185,7 +187,7 @@ class AgentOutputManager:
             if len(data_sources) == 1:
                 data = data_sources[0]
             else:
-                all_records: List[Any] = []
+                all_records: list[Any] = []
                 for source_data in data_sources:
                     all_records.extend(source_data)
                 data = merge_records_by_key(all_records, reduce_key)
@@ -196,14 +198,14 @@ class AgentOutputManager:
             agent_type, NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED, reason=reason
         )
 
-    def _read_upstream_from_backend(self, action_name: str) -> Dict[str, List[Dict]]:
+    def _read_upstream_from_backend(self, action_name: str) -> dict[str, list[dict]]:
         """Read all target files for a node from storage backend."""
         try:
             target_files = self.storage_backend.list_target_files(action_name)
         except Exception as e:
             logger.warning("Failed to list target files for %s: %s", action_name, e, exc_info=True)
             return {}
-        result: Dict[str, List[Dict]] = {}
+        result: dict[str, list[dict]] = {}
         for relative_path in target_files:
             try:
                 result[relative_path] = self.storage_backend.read_target(action_name, relative_path)
@@ -213,9 +215,9 @@ class AgentOutputManager:
                 )
         return result
 
-    def _read_upstream_from_filesystem(self, input_dir: str) -> List[Tuple[str, List[Dict]]]:
+    def _read_upstream_from_filesystem(self, input_dir: str) -> list[tuple[str, list[dict]]]:
         """Read JSON files from a filesystem directory."""
-        results: List[Tuple[str, List[Dict]]] = []
+        results: list[tuple[str, list[dict]]] = []
         if not input_dir or not os.path.exists(input_dir):
             return results
         for item in os.listdir(input_dir):
@@ -225,7 +227,7 @@ class AgentOutputManager:
             if not os.path.isfile(src):
                 continue
             try:
-                with open(src, "r", encoding="utf-8") as f:
+                with open(src, encoding="utf-8") as f:
                     data = json.load(f)
                 if not isinstance(data, list):
                     data = [data]
@@ -234,14 +236,14 @@ class AgentOutputManager:
                 logger.warning("Could not read %s: %s", src, e)
         return results
 
-    def _load_outputs_from_backend(self, action_name: str) -> Tuple[List[Any], List[str]]:
+    def _load_outputs_from_backend(self, action_name: str) -> tuple[list[Any], list[str]]:
         """Load all target data for a node from storage backend."""
         try:
             target_files = self.storage_backend.list_target_files(action_name)
         except Exception as e:
             logger.warning("Failed to list target files for %s: %s", action_name, e, exc_info=True)
             return [], []
-        outputs: List[Any] = []
+        outputs: list[Any] = []
         for relative_path in target_files:
             try:
                 data = self.storage_backend.read_target(action_name, relative_path)
@@ -255,7 +257,7 @@ class AgentOutputManager:
                 )
         return outputs, list(target_files)
 
-    def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
+    def _resolve_upstream_from_manifest(self) -> list[str] | None:
         """Resolve upstream directories from manifest file, or None."""
         agent_io_dir = self.agent_folder
         manifest = ArtifactLinker.read_manifest(agent_io_dir)
@@ -269,7 +271,7 @@ class AgentOutputManager:
 
         return [str(upstream_path)]
 
-    def get_upstream_directories(self, idx: int) -> List[str]:
+    def get_upstream_directories(self, idx: int) -> list[str]:
         """Return upstream data directories for an agent, resolving dependencies."""
         current_agent = self.execution_order[idx]
         agent_config = self.agent_configs.get(current_agent, {})
@@ -343,7 +345,7 @@ class AgentOutputManager:
         prev_agent = self.execution_order[idx - 1]
         return [str(self.agent_folder / "target" / prev_agent)]
 
-    def setup_correlation_wrapper(self, idx: int) -> Optional[Callable]:
+    def setup_correlation_wrapper(self, idx: int) -> Callable | None:
         """Create a correlation-aware setup_directories wrapper if needed."""
         current_agent = self.execution_order[idx]
 

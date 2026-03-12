@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Literal, Optional, cast
+from typing import Literal, cast
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -15,7 +15,7 @@ class FileHandlerSettings:
     """File handler configuration settings."""
 
     enabled: bool = True
-    path: Optional[str] = None
+    path: str | None = None
     level: LogLevel = "DEBUG"
     max_bytes: int = 10_485_760  # 10MB
     backup_count: int = 5
@@ -27,7 +27,7 @@ class LoggingConfig:
     """Central logging configuration."""
 
     default_level: LogLevel = "INFO"
-    module_levels: Dict[str, LogLevel] = field(default_factory=dict)
+    module_levels: dict[str, LogLevel] = field(default_factory=dict)
     include_timestamps: bool = True
     include_source_location: bool = False
     file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)

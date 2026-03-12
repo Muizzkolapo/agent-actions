@@ -5,7 +5,7 @@ Mistral Batch API client implementation.
 import logging
 import os
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 
 from ..batch_base import BaseBatchClient, BatchTask
 
@@ -36,7 +36,7 @@ class MistralBatchClient(BaseBatchClient):
         "CANCELLED": "cancelled",
     }
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         """
         Initialize Mistral client with optional API key.
 
@@ -67,8 +67,8 @@ class MistralBatchClient(BaseBatchClient):
         return "mistral-large-latest"
 
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """
         Transform our BatchTask to Mistral's expected format.
 
@@ -84,7 +84,7 @@ class MistralBatchClient(BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": model_name,
             "messages": [
                 {"role": "system", "content": batch_task.prompt},
@@ -108,12 +108,12 @@ class MistralBatchClient(BaseBatchClient):
         }
 
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """Write tasks to JSONL file for Mistral."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "mistral")
 
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """Submit batch to Mistral API."""
         from agent_actions.errors import VendorAPIError
 
@@ -198,7 +198,7 @@ class MistralBatchClient(BaseBatchClient):
         return result_content
 
     # Response extraction methods - Mistral uses similar format to OpenAI
-    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from Mistral response."""
         if raw_response.get("error"):
             return str(raw_response["error"])
@@ -207,7 +207,7 @@ class MistralBatchClient(BaseBatchClient):
             return str(response_data["error"])
         return None
 
-    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+    def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
         """Extract content from Mistral response."""
         # Try response.body.choices path (batch format)
         response_data = raw_response.get("response", raw_response)
@@ -218,7 +218,7 @@ class MistralBatchClient(BaseBatchClient):
                 return choice["message"]["content"]
         return None
 
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Mistral response."""
         response_data = raw_response.get("response", raw_response)
         response_body = response_data.get("body", response_data)
@@ -229,9 +229,7 @@ class MistralBatchClient(BaseBatchClient):
             "id": response_body.get("id"),
         }
 
-    def _extract_usage_from_response(
-        self, raw_response: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any] | None:
         """Extract usage from Mistral response."""
         response_data = raw_response.get("response", raw_response)
         response_body = response_data.get("body", response_data)

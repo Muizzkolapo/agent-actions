@@ -1,12 +1,12 @@
 """Decorator for wrapping exceptions as validation errors."""
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Type
 
 from agent_actions.errors import ConfigurationError
 
 
-def as_validation_error(exc_cls: Type[ConfigurationError] = ConfigurationError) -> Callable:
+def as_validation_error(exc_cls: type[ConfigurationError] = ConfigurationError) -> Callable:
     """
     Any exception inside the wrapped function is re-raised as `exc_cls`
     **from None**, so Python prints zero traceback / file paths.

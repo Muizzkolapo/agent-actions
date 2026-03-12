@@ -179,6 +179,11 @@ line-length = 100
 
 [tool.ruff.lint]
 select = [
+    "F",    # pyflakes
+    "I",    # isort
+    "W",    # pycodestyle warnings
+    "B",    # bugbear
+    "UP",   # pyupgrade
     "LOG",  # flake8-logging rules
     "G",    # flake8-logging-format rules
 ]

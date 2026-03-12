@@ -11,10 +11,9 @@ Strategy:
 import json
 import sys
 from pathlib import Path
-from typing import List
 
 
-def pick_best_version(sources: List[str]) -> str:
+def pick_best_version(sources: list[str]) -> str:
     """
     Pick the best version from similar files.
 
@@ -113,10 +112,10 @@ def main():
         json.dump(plan, f, indent=2)
 
     print(f"📄 Final migration plan saved to: {output_file}")
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Total files to migrate: {len(plan['rules'])}")
     print(f"   Remaining conflicts: {len(plan['conflicts'])}")
-    print(f"\n✅ Ready to migrate! Run:")
+    print("\n✅ Ready to migrate! Run:")
     print(
         f"   python .claude/helpers/stage_refactorer.py agent_actions/ --json {output_file} --execute --backup"
     )

@@ -5,10 +5,9 @@ These tests verify that array schemas (JSON Schema format with type='array')
 are properly converted to the unified format and compile correctly for all vendors.
 """
 
-import pytest
 from agent_actions.output.response.schema import (
-    compile_unified_schema,
     _convert_json_schema_to_unified,
+    compile_unified_schema,
 )
 
 

@@ -26,16 +26,15 @@ Based on the agent-actions 13-stage architecture:
   └── shared/              # Shared types and exceptions
 """
 
+import argparse
+import ast
+import fnmatch
+import json
 import os
 import sys
-import ast
-import json
-import argparse
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
-from collections import defaultdict, Counter
-from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Set, Tuple, Optional
-import fnmatch
 
 
 @dataclass
@@ -44,11 +43,11 @@ class ModuleInfo:
 
     path: Path
     name: str
-    imports: List[str] = field(default_factory=list)
-    classes: List[str] = field(default_factory=list)
-    functions: List[str] = field(default_factory=list)
+    imports: list[str] = field(default_factory=list)
+    classes: list[str] = field(default_factory=list)
+    functions: list[str] = field(default_factory=list)
     lines_of_code: int = 0
-    docstring: Optional[str] = None
+    docstring: str | None = None
     has_tests: bool = False
 
 
@@ -58,8 +57,8 @@ class DirectoryInfo:
 
     path: Path
     name: str
-    modules: List[str] = field(default_factory=list)
-    subdirs: List[str] = field(default_factory=list)
+    modules: list[str] = field(default_factory=list)
+    subdirs: list[str] = field(default_factory=list)
     total_files: int = 0
     total_lines: int = 0
     has_init: bool = False
@@ -73,10 +72,10 @@ class OrganizationReport:
     total_modules: int = 0
     total_directories: int = 0
     total_lines: int = 0
-    architecture_layers: Dict[str, DirectoryInfo] = field(default_factory=dict)
-    module_dependencies: Dict[str, List[str]] = field(default_factory=dict)
-    organizational_issues: List[str] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    architecture_layers: dict[str, DirectoryInfo] = field(default_factory=dict)
+    module_dependencies: dict[str, list[str]] = field(default_factory=dict)
+    organizational_issues: list[str] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
 
 
 class CodeOrganizer:
@@ -217,12 +216,12 @@ class CodeOrganizer:
         "staging": "Staging operations",
     }
 
-    def __init__(self, root_path: str, exclude_patterns: List[str] = None):
+    def __init__(self, root_path: str, exclude_patterns: list[str] = None):
         """Initialize organizer."""
         self.root_path = Path(root_path).resolve()
         self.exclude_patterns = exclude_patterns or ["__pycache__", "*.pyc", ".git", "venv", "env"]
-        self.modules: Dict[str, ModuleInfo] = {}
-        self.directories: Dict[str, DirectoryInfo] = {}
+        self.modules: dict[str, ModuleInfo] = {}
+        self.directories: dict[str, DirectoryInfo] = {}
 
     def should_exclude(self, path: Path) -> bool:
         """Check if path should be excluded."""
@@ -232,7 +231,7 @@ class CodeOrganizer:
     def analyze_module(self, file_path: Path) -> ModuleInfo:
         """Analyze a single Python module."""
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 content = f.read()
                 tree = ast.parse(content)
         except Exception as e:
@@ -311,7 +310,7 @@ class CodeOrganizer:
         print(f"🔍 Scanning codebase: {self.root_path}")
         print("=" * 80)
 
-        for root, dirs, files in os.walk(self.root_path):
+        for root, dirs, _files in os.walk(self.root_path):
             root_path = Path(root)
 
             # Skip excluded directories
@@ -327,7 +326,7 @@ class CodeOrganizer:
 
         print(f"✅ Scanned {len(self.modules)} modules in {len(self.directories)} directories")
 
-    def identify_layers(self) -> Dict[str, DirectoryInfo]:
+    def identify_layers(self) -> dict[str, DirectoryInfo]:
         """Identify architectural layers."""
         layers = {}
 
@@ -339,7 +338,7 @@ class CodeOrganizer:
 
         return layers
 
-    def classify_module_by_stage(self, module_path: str) -> List[str]:
+    def classify_module_by_stage(self, module_path: str) -> list[str]:
         """Classify a module into one or more processing stages."""
         stages = []
         module_lower = module_path.lower()
@@ -360,7 +359,7 @@ class CodeOrganizer:
 
         return stages
 
-    def identify_processing_stages(self) -> Dict[str, List[str]]:
+    def identify_processing_stages(self) -> dict[str, list[str]]:
         """Identify modules for each processing stage."""
         stage_modules = defaultdict(list)
 
@@ -371,7 +370,7 @@ class CodeOrganizer:
 
         return dict(stage_modules)
 
-    def detect_circular_dependencies(self) -> List[str]:
+    def detect_circular_dependencies(self) -> list[str]:
         """Detect potential circular dependencies."""
         issues = []
 
@@ -402,7 +401,7 @@ class CodeOrganizer:
 
         return False
 
-    def detect_organizational_issues(self) -> List[str]:
+    def detect_organizational_issues(self) -> list[str]:
         """Detect organizational issues."""
         issues = []
 
@@ -428,7 +427,7 @@ class CodeOrganizer:
 
         return issues
 
-    def generate_recommendations(self, issues: List[str]) -> List[str]:
+    def generate_recommendations(self, issues: list[str]) -> list[str]:
         """Generate organizational recommendations."""
         recommendations = []
 
@@ -510,7 +509,7 @@ class CodeOrganizer:
         print(f"📝 Total Lines of Code: {report.total_lines:,}")
 
         # Print processing stages
-        print(f"\n🔄 PROCESSING STAGES BREAKDOWN:")
+        print("\n🔄 PROCESSING STAGES BREAKDOWN:")
         print("   (Modules classified by their role in the agent pipeline)\n")
 
         stage_modules = self.identify_processing_stages()
@@ -532,7 +531,7 @@ class CodeOrganizer:
             print()
 
         if report.architecture_layers:
-            print(f"\n🏗️  Architectural Layers:")
+            print("\n🏗️  Architectural Layers:")
             for layer_name, layer_info in sorted(report.architecture_layers.items()):
                 description = self.LAYER_PATTERNS.get(layer_name, "Unknown")
                 print(f"  • {layer_name}/ - {description}")
@@ -564,7 +563,7 @@ class CodeOrganizer:
                     print(f"    ... and {len(issues) - 5} more")
 
         if report.recommendations:
-            print(f"\n💡 Recommendations:")
+            print("\n💡 Recommendations:")
             for i, rec in enumerate(report.recommendations, 1):
                 print(f"  {i}. {rec}")
 

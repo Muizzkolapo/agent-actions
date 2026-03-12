@@ -2,12 +2,12 @@
 
 import pytest
 
+from agent_actions.errors import SchemaValidationError
 from agent_actions.validation.schema_output_validator import (
     SchemaValidationReport,
-    validate_output_against_schema,
     validate_and_raise_if_invalid,
+    validate_output_against_schema,
 )
-from agent_actions.errors import SchemaValidationError
 
 
 class TestSchemaValidationReport:

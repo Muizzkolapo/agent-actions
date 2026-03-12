@@ -1,9 +1,9 @@
 """Schema format detection utilities for compiled vs inline formats."""
 
-from typing import Any, Dict
+from typing import Any
 
 
-def is_compiled_schema(schema: Dict[str, Any]) -> bool:
+def is_compiled_schema(schema: dict[str, Any]) -> bool:
     """Check if a schema is in compiled (unified) format.
 
     Recognizes fields-based format, JSON Schema object format,

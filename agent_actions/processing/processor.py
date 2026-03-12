@@ -2,24 +2,25 @@
 
 import logging
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 from agent_actions.errors import ConfigurationError, SchemaValidationError
-from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.errors.operations import TemplateVariableError
+from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
-    TemplateRenderingFailedEvent,
-    RecordProcessingStartedEvent,
-    RecordFilteredEvent,
-    RecordTransformedEvent,
-    RecordProcessingCompleteEvent,
-    RecordEmptyOutputEvent,
-    BatchProcessingStartedEvent,
-    BatchProcessingProgressEvent,
     BatchDataProcessingCompleteEvent,
+    BatchProcessingProgressEvent,
+    BatchProcessingStartedEvent,
+    RecordEmptyOutputEvent,
+    RecordFilteredEvent,
+    RecordProcessingCompleteEvent,
+    RecordProcessingStartedEvent,
+    RecordTransformedEvent,
+    TemplateRenderingFailedEvent,
 )
+
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
 from .invocation import BatchProvider, InvocationStrategy, InvocationStrategyFactory
@@ -51,7 +52,7 @@ class RecordProcessor:
         self,
         agent_config: dict[str, Any],
         agent_name: str,
-        strategy: Optional[InvocationStrategy] = None,
+        strategy: InvocationStrategy | None = None,
         mode: ProcessingMode = ProcessingMode.ONLINE,
         provider: Optional["BatchProvider"] = None,
     ):
@@ -310,7 +311,7 @@ class RecordProcessor:
 
     def process_batch(self, items: list[Any], context: ProcessingContext) -> list[ProcessingResult]:
         """Process multiple records, capturing per-item failures without aborting the batch."""
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
 
         fire_event(
             BatchProcessingStartedEvent(
@@ -386,7 +387,7 @@ class RecordProcessor:
                 results.append(failed_result)
                 failures += 1
 
-        elapsed_time = (datetime.now(timezone.utc) - start_time).total_seconds()
+        elapsed_time = (datetime.now(UTC) - start_time).total_seconds()
         fire_event(
             BatchDataProcessingCompleteEvent(
                 agent_name=context.agent_name,
@@ -400,11 +401,11 @@ class RecordProcessor:
     @staticmethod
     def _build_tombstone_item(
         content: Any,
-        source_guid: Optional[str],
+        source_guid: str | None,
         reason: str,
-        input_record: Optional[dict[str, Any]],
+        input_record: dict[str, Any] | None,
         *,
-        extra_metadata: Optional[dict[str, Any]] = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build a tombstone item for guard-skipped, exhausted, or unprocessed records."""
         item: dict[str, Any] = {
@@ -423,7 +424,7 @@ class RecordProcessor:
         self,
         result: ProcessingResult,
         context: ProcessingContext,
-        source_guid: Optional[str],
+        source_guid: str | None,
     ) -> ProcessingResult:
         """Enrich a result and fire the completion event."""
         enriched_result = self.enrichment_pipeline.enrich(result, context)

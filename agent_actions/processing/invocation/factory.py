@@ -1,6 +1,11 @@
 """Factory for creating invocation strategies."""
 
-from typing import Any, Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_actions.processing.recovery.response_validator import ResponseValidator
 
 from agent_actions.processing.invocation.batch import BatchStrategy
 from agent_actions.processing.invocation.online import OnlineStrategy
@@ -15,7 +20,7 @@ class InvocationStrategyFactory:
     def create(
         mode: ProcessingMode,
         agent_config: dict[str, Any],
-        provider: Optional[BatchProvider] = None,
+        provider: BatchProvider | None = None,
     ) -> InvocationStrategy:
         """Create appropriate strategy based on processing mode.
 
@@ -53,12 +58,11 @@ class InvocationStrategyFactory:
         )
 
     @staticmethod
-    def _build_validator(agent_config: dict[str, Any]) -> Optional["ResponseValidator"]:
+    def _build_validator(agent_config: dict[str, Any]) -> ResponseValidator | None:
         """Compose a ResponseValidator from UDF and schema config, or return None."""
         from agent_actions.processing.helpers import _resolve_schema_mismatch_mode
         from agent_actions.processing.recovery.response_validator import (
             ComposedValidator,
-            ResponseValidator,
             SchemaValidator,
             UdfValidator,
         )

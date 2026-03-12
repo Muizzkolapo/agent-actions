@@ -1,15 +1,15 @@
 """Error formatter strategies."""
 
+from .api import APIErrorFormatter
+from .authentication import AuthenticationErrorFormatter
 from .base import ErrorFormatter
 from .configuration import ConfigurationErrorFormatter
-from .model import ModelErrorFormatter
-from .authentication import AuthenticationErrorFormatter
 from .file import FileErrorFormatter
-from .api import APIErrorFormatter
-from .yaml import YAMLSyntaxErrorFormatter
 from .function import FunctionNotFoundFormatter
-from .template import TemplateErrorFormatter
 from .generic import GenericErrorFormatter
+from .model import ModelErrorFormatter
+from .template import TemplateErrorFormatter
+from .yaml import YAMLSyntaxErrorFormatter
 
 __all__ = [
     "ErrorFormatter",

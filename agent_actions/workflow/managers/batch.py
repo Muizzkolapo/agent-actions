@@ -2,18 +2,19 @@
 
 import logging
 from pathlib import Path
-from typing import Tuple, Optional, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Optional
+
 from rich.console import Console
+
 from agent_actions.errors import ConfigurationError, ProcessingError
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.events import (
-    BatchProcessingCompleteEvent,
-    BatchResultsProcessedEvent,
     BatchErrorEvent,
     BatchPassthroughEvent,
+    BatchProcessingCompleteEvent,
+    BatchResultsProcessedEvent,
     BatchStatusEvent,
 )
-
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ class BatchLifecycleManager:
     def __init__(
         self,
         batch_service,
-        console: Optional[Console] = None,
+        console: Console | None = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
         """Initialize batch lifecycle manager.
@@ -47,8 +48,8 @@ class BatchLifecycleManager:
         self.storage_backend = storage_backend
 
     def handle_batch_agent(
-        self, agent_name: str, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
-    ) -> Tuple[Optional[str], str]:
+        self, agent_name: str, output_directory: str, agent_config: dict[str, Any] | None = None
+    ) -> tuple[str | None, str]:
         """Check batch status and process results.
 
         Returns:
@@ -98,7 +99,7 @@ class BatchLifecycleManager:
         return (None, "failed")
 
     def _process_batch_results(
-        self, output_directory: str, agent_config: Optional[Dict[str, Any]], agent_name: str
+        self, output_directory: str, agent_config: dict[str, Any] | None, agent_name: str
     ):
         """Process all completed batch job results.
 
@@ -115,7 +116,7 @@ class BatchLifecycleManager:
                     agent_name,
                 )
 
-        except ProcessingError as e:
+        except ProcessingError:
             fire_event(
                 BatchErrorEvent(
                     agent_name=agent_name,
@@ -136,7 +137,7 @@ class BatchLifecycleManager:
 
     def check_batch_submission(
         self, agent_name: str, agent_idx: int, agent_io_path: Path
-    ) -> Optional[str]:
+    ) -> str | None:
         """Return 'batch_submitted', 'passthrough', 'no_batches', or None."""
         node_output_dir = agent_io_path / "target" / agent_name
         registry_file = node_output_dir / "batch" / ".batch_registry.json"

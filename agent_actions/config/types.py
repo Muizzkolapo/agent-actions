@@ -1,17 +1,17 @@
 """Type definitions for agent configuration structures."""
 
-from typing import TypedDict, Optional, List, Dict, Any
+from typing import Any, TypedDict
 
 
 class ContextScopeDict(TypedDict, total=False):
     """Context scope configuration for field flow control."""
 
-    observe: List[str]
-    passthrough: List[str]
-    drop: List[str]
-    keep: List[str]
-    seed_data: Dict[str, Any]
-    static_data: Dict[str, Any]
+    observe: list[str]
+    passthrough: list[str]
+    drop: list[str]
+    keep: list[str]
+    seed_data: dict[str, Any]
+    static_data: dict[str, Any]
 
 
 class GuardConfigDict(TypedDict, total=False):
@@ -106,9 +106,9 @@ class AgentConfigDict(TypedDict, total=False):
     # Prompt & Schema
     prompt: str
     schema_name: str
-    schema: Dict[str, Any]
-    compiled_schema: Dict[str, Any]
-    json_output_schema: Dict[str, Any]
+    schema: dict[str, Any]
+    compiled_schema: dict[str, Any]
+    json_output_schema: dict[str, Any]
     prompt_debug: bool
 
     # Generation parameters
@@ -116,8 +116,8 @@ class AgentConfigDict(TypedDict, total=False):
     max_tokens: int
 
     # Dependencies & flow
-    dependencies: List[str]
-    chunk_config: Dict[str, Any]
+    dependencies: list[str]
+    chunk_config: dict[str, Any]
     context_scope: ContextScopeDict
 
     # Guard / skip
@@ -130,9 +130,9 @@ class AgentConfigDict(TypedDict, total=False):
     # Optional features
     ephemeral: bool
     add_dispatch: bool
-    reprompt: Dict[str, Any]
-    constraints: List[str]
-    retry: Dict[str, Any]
+    reprompt: dict[str, Any]
+    constraints: list[str]
+    retry: dict[str, Any]
     max_execution_time: int
     on_empty: str  # "warn" | "error" | "skip"
 
@@ -143,8 +143,8 @@ class AgentConfigDict(TypedDict, total=False):
     # Versioning
     is_versioned_agent: bool
     version_base_name: str
-    _version_context: Dict[str, Any]  # runtime-injected versioning metadata
-    version_consumption_config: Dict[str, Any]  # controls version iteration
+    _version_context: dict[str, Any]  # runtime-injected versioning metadata
+    version_consumption_config: dict[str, Any]  # controls version iteration
 
     # Runtime-injected by coordinator (subscript-assigned)
     idx: int
@@ -179,35 +179,35 @@ class AgentEntryDict(TypedDict, total=False):
     """
 
     agent_type: str
-    name: Optional[str]
-    model_name: Optional[str]
+    name: str | None
+    model_name: str | None
     # Model vendor/provider: "openai", "gemini", "anthropic", "groq", or "tool"
-    model_vendor: Optional[str]
-    api_key: Optional[str]
-    code_path: Optional[str]
-    dependencies: List[str]
-    prompt: Optional[str]
-    schema_name: Optional[str]
-    chunk_config: Dict[str, Any]
+    model_vendor: str | None
+    api_key: str | None
+    code_path: str | None
+    dependencies: list[str]
+    prompt: str | None
+    schema_name: str | None
+    chunk_config: dict[str, Any]
     is_operational: bool
-    conditional_clause: Optional[str]
-    where_clause: Optional[WhereClauseDict]
-    skip_if: Optional[str]
-    ephemeral: Optional[bool]
-    add_dispatch: Optional[bool]
+    conditional_clause: str | None
+    where_clause: WhereClauseDict | None
+    skip_if: str | None
+    ephemeral: bool | None
+    add_dispatch: bool | None
     # Anthropic-specific configuration options
     # API version header for Anthropic requests (e.g., "2023-06-01")
-    anthropic_version: Optional[str]
+    anthropic_version: str | None
     # Enable Anthropic's prompt caching feature for improved performance
-    enable_prompt_caching: Optional[bool]
+    enable_prompt_caching: bool | None
     # Control field flow: observe (LLM context), drop (block), passthrough (output)
-    context_scope: Optional[ContextScopeDict]
+    context_scope: ContextScopeDict | None
     # HITL config (assigned by expander for kind="hitl" agents)
-    hitl: Optional[HitlConfigDict]
+    hitl: HitlConfigDict | None
 
 
 # Alias for the list of agent entries under a pipeline name
-AgentConfigList = List[AgentEntryDict]
+AgentConfigList = list[AgentEntryDict]
 
 # Alias for the mapping of pipeline/agent name to its configuration list
-AgentConfigMap = Dict[str, AgentConfigList]
+AgentConfigMap = dict[str, AgentConfigList]

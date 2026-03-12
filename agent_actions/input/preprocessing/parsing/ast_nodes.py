@@ -1,12 +1,14 @@
 """AST nodes for WHERE clause parsing and evaluation."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 from agent_actions.utils.dict import get_nested_value
-from .operators import OPERATORS, FUNCTIONS
+
+from .operators import FUNCTIONS, OPERATORS
 
 logger = logging.getLogger(__name__)
 
@@ -106,13 +108,13 @@ class ComparisonNode(ASTNode):
     node_type: NodeType
     left: ASTNode
     operator: ComparisonOperator
-    right: Optional[ASTNode] = None  # Optional for unary operators like IS NULL
+    right: ASTNode | None = None  # Optional for unary operators like IS NULL
 
     def __init__(
         self,
         left: ASTNode,
         operator: ComparisonOperator,
-        right: Optional[ASTNode] = None,
+        right: ASTNode | None = None,
         node_type: NodeType = NodeType.COMPARISON,
     ):
         super().__init__(node_type)
@@ -128,13 +130,13 @@ class LogicalNode(ASTNode):
     node_type: NodeType
     operator: LogicalOperator
     left: ASTNode
-    right: Optional[ASTNode] = None  # Optional for unary operators like NOT
+    right: ASTNode | None = None  # Optional for unary operators like NOT
 
     def __init__(
         self,
         operator: LogicalOperator,
         left: ASTNode,
-        right: Optional[ASTNode] = None,
+        right: ASTNode | None = None,
         node_type: NodeType = NodeType.LOGICAL,
     ):
         super().__init__(node_type)
@@ -149,10 +151,10 @@ class FunctionNode(ASTNode):
 
     node_type: NodeType
     function_name: str
-    arguments: List[ASTNode]
+    arguments: list[ASTNode]
 
     def __init__(
-        self, function_name: str, arguments: List[ASTNode], node_type: NodeType = NodeType.FUNCTION
+        self, function_name: str, arguments: list[ASTNode], node_type: NodeType = NodeType.FUNCTION
     ):
         super().__init__(node_type)
         self.function_name = function_name
@@ -161,8 +163,8 @@ class FunctionNode(ASTNode):
 
 def evaluate_node(
     node: ASTNode,
-    data: Dict[str, Any],
-    functions: Optional[Dict[str, Callable[..., Any]]] = None,
+    data: dict[str, Any],
+    functions: dict[str, Callable[..., Any]] | None = None,
 ) -> Any:
     """Recursively evaluate an AST node against data."""
     if isinstance(node, FieldNode):
@@ -293,7 +295,7 @@ class WhereClauseAST:
         self.root = root
 
     def evaluate(
-        self, data: Dict[str, Any], functions: Optional[Dict[str, Callable[..., Any]]] = None
+        self, data: dict[str, Any], functions: dict[str, Callable[..., Any]] | None = None
     ) -> bool:
         """Evaluate the WHERE clause against the given data."""
         return evaluate_node(self.root, data, functions)

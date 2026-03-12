@@ -11,7 +11,6 @@ This tool applies the resolutions from the conflict resolver:
 import json
 import sys
 from pathlib import Path
-from typing import Dict, List
 
 
 def load_plans(migration_file: str, resolution_file: str) -> tuple:
@@ -23,7 +22,7 @@ def load_plans(migration_file: str, resolution_file: str) -> tuple:
     return migration, resolutions
 
 
-def apply_keep_one(migration: dict, resolutions: List[dict]) -> dict:
+def apply_keep_one(migration: dict, resolutions: list[dict]) -> dict:
     """
     Apply KEEP_ONE resolutions.
 
@@ -64,7 +63,7 @@ def apply_keep_one(migration: dict, resolutions: List[dict]) -> dict:
     return migration
 
 
-def generate_merge_guide(resolutions: List[dict]) -> str:
+def generate_merge_guide(resolutions: list[dict]) -> str:
     """Generate guide for manual merge actions."""
     merge_actions = resolutions["actions"]["MERGE"]
 
@@ -90,25 +89,25 @@ def generate_merge_guide(resolutions: List[dict]) -> str:
             src_path = Path(src)
             guide.append(f"      {j}. {src_path.parent.name}/{src_path.name}")
 
-        guide.append(f"\n   Similarity:")
+        guide.append("\n   Similarity:")
         for comp in action["comparisons"]:
             f1 = Path(comp["file1"]).parent.name
             f2 = Path(comp["file2"]).parent.name
             sim = comp["similarity"]
             guide.append(f"      • {f1} vs {f2}: {sim:.0%}")
 
-        guide.append(f"\n   💡 Next Steps:")
+        guide.append("\n   💡 Next Steps:")
         guide.append(f"      1. Compare files: diff {sources[0]} {sources[1]}")
-        guide.append(f"      2. Manually merge differences")
-        guide.append(f"      3. Keep the merged version in one location")
-        guide.append(f"      4. Delete the other version")
+        guide.append("      2. Manually merge differences")
+        guide.append("      3. Keep the merged version in one location")
+        guide.append("      4. Delete the other version")
 
     guide.append("\n" + "=" * 80)
 
     return "\n".join(guide)
 
 
-def apply_rename(migration: dict, resolutions: List[dict]) -> dict:
+def apply_rename(migration: dict, resolutions: list[dict]) -> dict:
     """
     Apply RENAME resolutions.
 
@@ -138,7 +137,6 @@ def apply_rename(migration: dict, resolutions: List[dict]) -> dict:
             # Find and update rule
             for rule in updated_rules:
                 if rule["source"] == old_source:
-                    old_dest = rule["destination"]
                     rule["destination"] = new_dest
                     renamed_count += 1
 
@@ -186,7 +184,7 @@ def main():
     # Load plans
     migration, resolutions = load_plans(migration_file, resolution_file)
 
-    print(f"\n📊 Resolution Summary:")
+    print("\n📊 Resolution Summary:")
     print(f"   KEEP_ONE: {len(resolutions['actions']['KEEP_ONE'])} conflicts")
     print(f"   MERGE: {len(resolutions['actions']['MERGE'])} conflicts")
     print(f"   RENAME: {len(resolutions['actions']['RENAME'])} conflicts")
@@ -234,8 +232,8 @@ def main():
             f"\n⚠️  NEXT STEP: Review merge_guide.txt and manually merge {len(resolutions['actions']['MERGE'])} files"
         )
     else:
-        print(f"\n✅ All conflicts resolved! Ready to execute migration:")
-        print(f"   python .claude/helpers/stage_refactorer.py agent_actions/ --execute --backup")
+        print("\n✅ All conflicts resolved! Ready to execute migration:")
+        print("   python .claude/helpers/stage_refactorer.py agent_actions/ --execute --backup")
 
 
 if __name__ == "__main__":

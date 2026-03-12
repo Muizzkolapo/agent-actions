@@ -2,9 +2,10 @@
 
 import json
 import logging
-from pathlib import Path
-from typing import Dict, Any, Optional, Literal, TYPE_CHECKING
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Literal, Optional
+
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
 if TYPE_CHECKING:
@@ -13,14 +14,14 @@ if TYPE_CHECKING:
 from agent_actions.errors import TemplateVariableError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import ContextFieldNotFoundEvent
-from agent_actions.prompt.formatter import PromptFormatter
-from agent_actions.prompt.prompt_utils import PromptUtils
-from agent_actions.prompt.context.scope import ContextScopeProcessor
 from agent_actions.prompt.context.builder import LLMContextBuilder
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 from agent_actions.prompt.context.static_loader import (
     StaticDataLoader,
     StaticDataLoadError,
 )
+from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.prompt.prompt_utils import PromptUtils
 
 logger = logging.getLogger(__name__)
 
@@ -29,19 +30,19 @@ logger = logging.getLogger(__name__)
 class PromptPreparationRequest:
     """Groups all parameters for prepare_prompt_with_context() to reduce signature complexity."""
 
-    agent_config: Dict[str, Any]
+    agent_config: dict[str, Any]
     agent_name: str
-    contents: Dict[str, Any]
+    contents: dict[str, Any]
     mode: Literal["batch", "realtime"] = "realtime"
-    agent_indices: Optional[Dict[str, int]] = None
-    dependency_configs: Optional[Dict[str, Dict]] = None
-    source_content: Optional[Any] = None
-    version_context: Optional[Dict] = None
-    workflow_metadata: Optional[Dict] = None
-    current_item: Optional[Dict] = None
-    file_path: Optional[str] = None
-    tools_path: Optional[str] = None
-    output_directory: Optional[str] = None
+    agent_indices: dict[str, int] | None = None
+    dependency_configs: dict[str, dict] | None = None
+    source_content: Any | None = None
+    version_context: dict | None = None
+    workflow_metadata: dict | None = None
+    current_item: dict | None = None
+    file_path: str | None = None
+    tools_path: str | None = None
+    output_directory: str | None = None
     storage_backend: Optional["StorageBackend"] = None
 
 
@@ -50,10 +51,10 @@ class PromptPreparationResult:
     """Result of prompt preparation with rendered prompt, LLM context, and metadata."""
 
     formatted_prompt: str
-    llm_context: Dict[str, Any]
-    passthrough_fields: Dict[str, Any]
-    metadata: Dict[str, Any]
-    prompt_context: Optional[Dict[str, Any]] = None
+    llm_context: dict[str, Any]
+    passthrough_fields: dict[str, Any]
+    metadata: dict[str, Any]
+    prompt_context: dict[str, Any] | None = None
 
 
 class PromptPreparationService:
@@ -66,20 +67,20 @@ class PromptPreparationService:
 
     @staticmethod
     def prepare_prompt_with_context(
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         agent_name: str,
-        contents: Dict[str, Any],
+        contents: dict[str, Any],
         *,
         mode: Literal["batch", "realtime"] = "realtime",
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
-        source_content: Optional[Any] = None,
-        version_context: Optional[Dict] = None,
-        workflow_metadata: Optional[Dict] = None,
-        current_item: Optional[Dict] = None,
-        file_path: Optional[str] = None,
-        tools_path: Optional[str] = None,
-        output_directory: Optional[str] = None,
+        agent_indices: dict[str, int] | None = None,
+        dependency_configs: dict[str, dict] | None = None,
+        source_content: Any | None = None,
+        version_context: dict | None = None,
+        workflow_metadata: dict | None = None,
+        current_item: dict | None = None,
+        file_path: str | None = None,
+        tools_path: str | None = None,
+        output_directory: str | None = None,
         storage_backend: Optional["StorageBackend"] = None,
     ) -> PromptPreparationResult:
         """
@@ -111,13 +112,13 @@ class PromptPreparationService:
 
     @staticmethod
     def prepare_prompt_with_field_context(
-        agent_config: Dict[str, Any],
+        agent_config: dict[str, Any],
         agent_name: str,
-        contents: Dict[str, Any],
+        contents: dict[str, Any],
         *,
         mode: Literal["batch", "realtime"] = "realtime",
-        field_context: Dict[str, Any],
-        tools_path: Optional[str] = None,
+        field_context: dict[str, Any],
+        tools_path: str | None = None,
     ) -> PromptPreparationResult:
         """Prepare prompt using pre-loaded field_context, skipping context loading."""
         logger.debug(
@@ -209,7 +210,7 @@ class PromptPreparationService:
 
         context_scope = request.agent_config.get("context_scope", {})
 
-        field_context_metadata: Dict[str, Any] = {}
+        field_context_metadata: dict[str, Any] = {}
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents=request.contents if isinstance(request.contents, dict) else {},
             agent_name=request.agent_name,
@@ -310,11 +311,11 @@ class PromptPreparationService:
     @staticmethod
     def _render_prompt_template(
         raw_prompt: str,
-        prompt_context: Dict[str, Any],
+        prompt_context: dict[str, Any],
         *,
-        agent_name: Optional[str] = None,
-        mode: Optional[str] = None,
-        field_context_metadata: Optional[Dict[str, Any]] = None,
+        agent_name: str | None = None,
+        mode: str | None = None,
+        field_context_metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Render Jinja2 template with the given context.
@@ -407,7 +408,7 @@ class PromptPreparationService:
                     )
 
             # Detect fields that exist in storage but weren't loaded (no schema)
-            storage_hints: Dict[str, Any] = {}
+            storage_hints: dict[str, Any] = {}
             if field_context_metadata and missing:
                 for var in missing:
                     if "." in var:
@@ -452,8 +453,8 @@ class PromptPreparationService:
 
     @staticmethod
     def _load_seed_data(
-        agent_config: Dict[str, Any], context_scope: Dict[str, Any], agent_name: str
-    ) -> Dict[str, Any]:
+        agent_config: dict[str, Any], context_scope: dict[str, Any], agent_name: str
+    ) -> dict[str, Any]:
         """Load seed data files if configured, returning empty dict otherwise."""
         if not context_scope or not context_scope.get("seed_data"):
             return {}
@@ -493,10 +494,10 @@ class PromptPreparationService:
     @staticmethod
     def _build_llm_context(
         mode: str,
-        contents: Dict[str, Any],
-        llm_additional_context: Dict[str, Any],
-        context_scope: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        contents: dict[str, Any],
+        llm_additional_context: dict[str, Any],
+        context_scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Build the complete LLM context by delegating to the mode-specific builder.
 
@@ -521,7 +522,7 @@ class PromptPreparationService:
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
 
     @staticmethod
-    def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:
+    def _determine_static_data_dir(workflow_config_path: str | None) -> Path:
         """
         Determine seed_data/ directory using unified PathManager.
 
@@ -584,9 +585,9 @@ class PromptPreparationService:
 
         # Not found - raise error
         raise StaticDataLoadError(
-            f"Seed data directory not found. Create 'seed_data' folder "
-            f"at workflow root (same level as agent_config/, schema/, prompt_store/) "
-            f"to store static reference data files.",
+            "Seed data directory not found. Create 'seed_data' folder "
+            "at workflow root (same level as agent_config/, schema/, prompt_store/) "
+            "to store static reference data files.",
             context={
                 "workflow_config_path": str(workflow_config_path),
                 "error_type": "missing_seed_data_directory",

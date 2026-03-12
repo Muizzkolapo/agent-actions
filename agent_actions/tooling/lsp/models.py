@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class ReferenceType(Enum):
@@ -25,8 +24,8 @@ class Location:
     file_path: Path
     line: int  # 0-indexed
     column: int = 0
-    end_line: Optional[int] = None
-    end_column: Optional[int] = None
+    end_line: int | None = None
+    end_column: int | None = None
 
     def to_lsp(self) -> dict:
         """Convert to LSP Location format."""
@@ -58,10 +57,10 @@ class ActionDefinition:
 
     name: str
     location: Location
-    prompt_ref: Optional[str] = None
-    impl_ref: Optional[str] = None
-    schema_ref: Optional[str] = None
-    dependencies: List[str] = field(default_factory=list)
+    prompt_ref: str | None = None
+    impl_ref: str | None = None
+    schema_ref: str | None = None
+    dependencies: list[str] = field(default_factory=list)
     kind: str = "llm"  # "llm" or "tool"
 
 
@@ -71,21 +70,21 @@ class ActionMetadata:
 
     name: str
     location: Location
-    prompt_ref: Optional[str] = None
-    impl_ref: Optional[str] = None
-    schema_ref: Optional[str] = None
-    dependencies: List[str] = field(default_factory=list)
-    context_observe: List[str] = field(default_factory=list)
-    context_drop: List[str] = field(default_factory=list)
-    context_passthrough: List[str] = field(default_factory=list)
-    guard_condition: Optional[str] = None
-    guard_line: Optional[int] = None
-    guard_variables: List[str] = field(default_factory=list)
-    versions_line: Optional[int] = None
-    versions_summary: Optional[str] = None
-    versions_params: List[str] = field(default_factory=list)
-    reprompt_validation: Optional[str] = None
-    reprompt_line: Optional[int] = None
+    prompt_ref: str | None = None
+    impl_ref: str | None = None
+    schema_ref: str | None = None
+    dependencies: list[str] = field(default_factory=list)
+    context_observe: list[str] = field(default_factory=list)
+    context_drop: list[str] = field(default_factory=list)
+    context_passthrough: list[str] = field(default_factory=list)
+    guard_condition: str | None = None
+    guard_line: int | None = None
+    guard_variables: list[str] = field(default_factory=list)
+    versions_line: int | None = None
+    versions_summary: str | None = None
+    versions_params: list[str] = field(default_factory=list)
+    reprompt_validation: str | None = None
+    reprompt_line: int | None = None
 
 
 @dataclass
@@ -114,7 +113,7 @@ class SchemaDefinition:
 
     name: str
     location: Location
-    fields: List[str] = field(default_factory=list)
+    fields: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -124,31 +123,31 @@ class ProjectIndex:
     root: Path
 
     # action_name → Location (within same workflow)
-    actions: Dict[str, Location] = field(default_factory=dict)
+    actions: dict[str, Location] = field(default_factory=dict)
 
     # "file.PromptName" → PromptDefinition
-    prompts: Dict[str, PromptDefinition] = field(default_factory=dict)
+    prompts: dict[str, PromptDefinition] = field(default_factory=dict)
 
     # function_name → ToolDefinition
-    tools: Dict[str, ToolDefinition] = field(default_factory=dict)
+    tools: dict[str, ToolDefinition] = field(default_factory=dict)
 
     # schema_name → definition
-    schemas: Dict[str, SchemaDefinition] = field(default_factory=dict)
+    schemas: dict[str, SchemaDefinition] = field(default_factory=dict)
 
     # workflow_name → directory_path
-    workflows: Dict[str, Path] = field(default_factory=dict)
+    workflows: dict[str, Path] = field(default_factory=dict)
 
     # Per-file action index: file_path → {action_name → ActionMetadata}
     # NOTE: This replaces the previous Location-only entries for richer metadata.
-    file_actions: Dict[Path, Dict[str, ActionMetadata]] = field(default_factory=dict)
+    file_actions: dict[Path, dict[str, ActionMetadata]] = field(default_factory=dict)
 
     # Per-file reference list: file_path → [Reference]
-    references_by_file: Dict[Path, List[Reference]] = field(default_factory=dict)
+    references_by_file: dict[Path, list[Reference]] = field(default_factory=dict)
 
     # Per-file duplicate action names: file_path → {duplicate action name}
-    duplicate_actions_by_file: Dict[Path, set[str]] = field(default_factory=dict)
+    duplicate_actions_by_file: dict[Path, set[str]] = field(default_factory=dict)
 
-    def get_action(self, name: str, current_file: Optional[Path] = None) -> Optional[Location]:
+    def get_action(self, name: str, current_file: Path | None = None) -> Location | None:
         """Get action location, preferring same-file actions."""
         # First check same file
         if current_file and current_file in self.file_actions:
@@ -159,8 +158,8 @@ class ProjectIndex:
         return self.actions.get(name)
 
     def get_action_metadata(
-        self, name: str, current_file: Optional[Path] = None
-    ) -> Optional[ActionMetadata]:
+        self, name: str, current_file: Path | None = None
+    ) -> ActionMetadata | None:
         """Get action metadata, preferring same-file actions."""
         if current_file and current_file in self.file_actions:
             if name in self.file_actions[current_file]:
@@ -171,29 +170,29 @@ class ProjectIndex:
                     return actions[name]
         return None
 
-    def get_prompt(self, ref: str) -> Optional[PromptDefinition]:
+    def get_prompt(self, ref: str) -> PromptDefinition | None:
         """Get prompt by reference (file.PromptName)."""
         return self.prompts.get(ref)
 
-    def get_tool(self, name: str) -> Optional[ToolDefinition]:
+    def get_tool(self, name: str) -> ToolDefinition | None:
         """Get tool by function name."""
         return self.tools.get(name)
 
-    def get_schema(self, name: str) -> Optional[Path]:
+    def get_schema(self, name: str) -> Path | None:
         """Get schema file path by name (legacy helper)."""
         return self.get_schema_path(name)
 
-    def get_schema_path(self, name: str) -> Optional[Path]:
+    def get_schema_path(self, name: str) -> Path | None:
         """Get schema file path by name."""
         schema = self.schemas.get(name)
         if schema:
             return schema.location.file_path
         return None
 
-    def get_schema_definition(self, name: str) -> Optional[SchemaDefinition]:
+    def get_schema_definition(self, name: str) -> SchemaDefinition | None:
         """Get schema definition by name."""
         return self.schemas.get(name)
 
-    def get_workflow(self, name: str) -> Optional[Path]:
+    def get_workflow(self, name: str) -> Path | None:
         """Get workflow directory by name."""
         return self.workflows.get(name)

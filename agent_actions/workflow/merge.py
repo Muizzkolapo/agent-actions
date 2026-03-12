@@ -5,12 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def deep_merge_record(existing: Dict[str, Any], new_record: Dict[str, Any]) -> None:
+def deep_merge_record(existing: dict[str, Any], new_record: dict[str, Any]) -> None:
     """Merge new_record into existing in place: content dicts merge, lineage deduplicates, other fields first-wins."""
     for key, value in new_record.items():
         if key == "content" and isinstance(value, dict):
@@ -26,7 +26,7 @@ def deep_merge_record(existing: Dict[str, Any], new_record: Dict[str, Any]) -> N
             existing[key] = value
 
 
-def _merge_lineage(existing: Dict[str, Any], new_lineage: List[Any]) -> None:
+def _merge_lineage(existing: dict[str, Any], new_lineage: list[Any]) -> None:
     """Merge lineage arrays with deduplication by node_id."""
     if "lineage" not in existing:
         existing["lineage"] = []
@@ -55,7 +55,7 @@ def _merge_lineage(existing: Dict[str, Any], new_lineage: List[Any]) -> None:
                 existing["lineage"].append(entry)
 
 
-def get_correlation_value(record: Dict[str, Any], key_candidates: List[str]) -> Optional[str]:
+def get_correlation_value(record: dict[str, Any], key_candidates: list[str]) -> str | None:
     """Return the first matching correlation value from top-level or content, or None."""
     for key_name in key_candidates:
         correlation_value = record.get(key_name)
@@ -68,10 +68,10 @@ def get_correlation_value(record: Dict[str, Any], key_candidates: List[str]) -> 
     return None
 
 
-def merge_records_by_key(records: List[Any], reduce_key: Optional[str] = None) -> List[Any]:
+def merge_records_by_key(records: list[Any], reduce_key: str | None = None) -> list[Any]:
     """Merge records sharing the same correlation key (reduce_key -> parent_target_id -> source_guid)."""
-    records_by_key: Dict[str, Dict] = {}
-    records_without_key: List[Any] = []
+    records_by_key: dict[str, dict] = {}
+    records_without_key: list[Any] = []
 
     key_candidates = []
     if reduce_key:
@@ -95,18 +95,18 @@ def merge_records_by_key(records: List[Any], reduce_key: Optional[str] = None) -
     return list(records_by_key.values()) + records_without_key
 
 
-def merge_json_files(file_paths: List[Path], reduce_key: Optional[str] = None) -> List[Any]:
+def merge_json_files(file_paths: list[Path], reduce_key: str | None = None) -> list[Any]:
     """Load and merge JSON records from multiple files by correlation key (MapReduce pattern)."""
-    all_records: List[Any] = []
+    all_records: list[Any] = []
     for file_path in file_paths:
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     all_records.extend(data)
                 else:
                     all_records.append(data)
-        except (json.JSONDecodeError, OSError, IOError) as e:
+        except (json.JSONDecodeError, OSError) as e:
             logger.warning(
                 "Could not read JSON file for merging: %s - %s",
                 file_path,

@@ -9,9 +9,10 @@ Total tests for Gemini:
 - Additional Gemini-specific tests
 """
 
-import pytest
 from unittest.mock import Mock, patch
-from agent_actions.llm.providers.batch_base import BatchResult
+
+import pytest
+
 from tests.integrations.providers.base_batch_client_tests import BaseBatchClientTests
 
 
@@ -182,7 +183,7 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_json_mode)
         assert isinstance(tasks, list)
         assert len(tasks) == 3
-        assert all(("key" in task for task in tasks))
+        assert all("key" in task for task in tasks)
 
     def test_prepare_tasks_json_mode_false(
         self, provider, sample_data, sample_agent_config_no_json_mode
@@ -191,7 +192,7 @@ class TestGeminiBatchClient(BaseBatchClientTests):
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
         assert isinstance(tasks, list)
         assert len(tasks) == 3
-        assert all(("key" in task for task in tasks))
+        assert all("key" in task for task in tasks)
 
     def test_submit_and_retrieve_workflow(
         self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode

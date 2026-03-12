@@ -17,7 +17,6 @@ import pytest
 
 from agent_actions.output.response.schema import compile_unified_schema
 
-
 # ---------------------------------------------------------------------------
 # Fixtures & helpers
 # ---------------------------------------------------------------------------
@@ -399,8 +398,8 @@ class TestAnthropicCallNonJson:
     def test_empty_response_raises_vendor_error(
         self, mock_anthropic_mod, mock_fire, base_agent_config
     ):
-        from agent_actions.llm.providers.anthropic.client import AnthropicClient
         from agent_actions.errors import VendorAPIError
+        from agent_actions.llm.providers.anthropic.client import AnthropicClient
 
         tool_block = MagicMock(spec=[])
         del tool_block.text

@@ -1,8 +1,10 @@
 """Consolidated guard configuration with explicit behavior control."""
 
 from enum import Enum
-from typing import Union, Dict, Any
+from typing import Any
+
 from agent_actions.errors import ConfigValidationError
+
 from .guard_parser import GuardParser, GuardType
 
 
@@ -18,7 +20,7 @@ class GuardBehavior(str, Enum):
 class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
 
-    def __init__(self, condition: str, on_false: Union[GuardBehavior, str]):
+    def __init__(self, condition: str, on_false: GuardBehavior | str):
         """Initialize guard configuration."""
         self.condition = condition
         self.on_false = GuardBehavior(on_false) if isinstance(on_false, str) else on_false
@@ -37,7 +39,7 @@ class GuardConfig:
         return self._parsed_condition.expression
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "GuardConfig":
+    def from_dict(cls, config_dict: dict[str, Any]) -> "GuardConfig":
         """Create GuardConfig from a dictionary with 'condition' and 'on_false' keys.
 
         Raises:
@@ -76,7 +78,7 @@ class GuardConfig:
         return f"GuardConfig(condition='{self.condition}', on_false={self.on_false})"
 
 
-def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
+def parse_guard_config(guard_data: str | dict[str, Any]) -> GuardConfig:
     """Parse guard configuration from string (legacy) or dict format.
 
     Raises:

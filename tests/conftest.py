@@ -1,8 +1,8 @@
 import os
-import sys
 import shutil
+import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -62,7 +62,7 @@ def sample_batch_task_no_max_tokens():
 
 
 @pytest.fixture
-def sample_data() -> List[Dict[str, Any]]:
+def sample_data() -> list[dict[str, Any]]:
     """Sample data list for testing prepare_tasks() method."""
     return [
         {"target_id": "1", "content": {"question": "Question 1"}},
@@ -72,7 +72,7 @@ def sample_data() -> List[Dict[str, Any]]:
 
 
 @pytest.fixture
-def sample_agent_config_json_mode() -> Dict[str, Any]:
+def sample_agent_config_json_mode() -> dict[str, Any]:
     """Agent config with json_mode enabled and compiled schema."""
     return {
         "model_name": "test-model",
@@ -85,7 +85,7 @@ def sample_agent_config_json_mode() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_agent_config_no_json_mode() -> Dict[str, Any]:
+def sample_agent_config_no_json_mode() -> dict[str, Any]:
     """Agent config with json_mode disabled (plain text output)."""
     return {
         "model_name": "test-model",

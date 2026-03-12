@@ -1,7 +1,7 @@
 """Shared result retrieval logic for batch services."""
 
 import logging
-from typing import Optional, Dict, Any, List
+from typing import Any
 
 from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 
@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 def retrieve_and_reconcile(
     provider: BaseBatchClient,
     batch_id: str,
-    output_directory: Optional[str],
+    output_directory: str | None,
     *,
-    context_map: Optional[Dict[str, Any]] = None,
-    record_count: Optional[int] = None,
-    file_name: Optional[str] = None,
-) -> List[BatchResult]:
+    context_map: dict[str, Any] | None = None,
+    record_count: int | None = None,
+    file_name: str | None = None,
+) -> list[BatchResult]:
     """Retrieve batch results from provider and log reconciliation."""
     from agent_actions.llm.batch.processing.reconciler import (
         BatchResultReconciler,

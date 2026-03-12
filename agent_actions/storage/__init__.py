@@ -1,12 +1,11 @@
 """Pluggable storage layer for workflow data persistence."""
 
 from pathlib import Path
-from typing import Dict, Type
 
 from agent_actions.storage.backend import StorageBackend
 from agent_actions.storage.backends.sqlite_backend import SQLiteBackend
 
-BACKENDS: Dict[str, Type[StorageBackend]] = {
+BACKENDS: dict[str, type[StorageBackend]] = {
     "sqlite": SQLiteBackend,
 }
 

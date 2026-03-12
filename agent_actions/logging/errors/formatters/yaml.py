@@ -1,11 +1,12 @@
 """YAML syntax error formatter with code snippets."""
 
-from typing import Dict, Any
 from pathlib import Path
+from typing import Any
+
 import yaml
 
-from .base import ErrorFormatter
 from ..user_error import UserError
+from .base import ErrorFormatter
 
 
 class YAMLSyntaxErrorFormatter(ErrorFormatter):
@@ -29,7 +30,7 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
         return False
 
     def format(
-        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: dict[str, Any]
     ) -> UserError:
         yaml_context = self._extract_yaml_context(context)
 
@@ -62,7 +63,7 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
             docs_url="https://docs.agent-actions.com/troubleshooting/yaml-errors",
         )
 
-    def _extract_yaml_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_yaml_context(self, context: dict[str, Any]) -> dict[str, Any]:
         """Extract and organize YAML error context from context dict."""
         file_path = (
             context.get("file_path") or context.get("config_file") or context.get("yaml_path")

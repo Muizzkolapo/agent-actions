@@ -80,7 +80,7 @@ class LoggingBridgeHandler(logging.Handler):
 # =============================================================================
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Type
+
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 
 
@@ -92,7 +92,7 @@ class LogEvent(BaseEvent):
     source_file: str = ""
     source_line: int = 0
     func_name: str = ""
-    exc_info: Optional[Tuple[Type[BaseException], BaseException, Any]] = None
+    exc_info: tuple[type[BaseException], BaseException, Any] | None = None
 
     def __post_init__(self) -> None:
         if not self.category:

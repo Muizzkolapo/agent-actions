@@ -1,25 +1,25 @@
 """Dataclasses for consistent metadata structure across processing pipelines."""
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
 class ResponseMetadata:
     """Normalized metadata extracted from LLM responses across all providers."""
 
-    model: Optional[str] = None
-    finish_reason: Optional[str] = None
-    status_code: Optional[int] = None
-    provider: Optional[str] = None
-    usage: Optional[Dict[str, int]] = None
-    latency_ms: Optional[float] = None
-    request_id: Optional[str] = None
-    raw: Dict[str, Any] = field(default_factory=dict)
+    model: str | None = None
+    finish_reason: str | None = None
+    status_code: int | None = None
+    provider: str | None = None
+    usage: dict[str, int] | None = None
+    latency_ms: float | None = None
+    request_id: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, omitting None values."""
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if self.model is not None:
             result["model"] = self.model
         if self.finish_reason is not None:
@@ -39,7 +39,7 @@ class ResponseMetadata:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ResponseMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "ResponseMetadata":
         """Create a ResponseMetadata from a dictionary."""
         return cls(
             model=data.get("model"),
@@ -57,17 +57,17 @@ class ResponseMetadata:
 class UnifiedMetadata:
     """Top-level metadata container for output records."""
 
-    response: Optional[ResponseMetadata] = None
+    response: ResponseMetadata | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary with nested response metadata."""
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         if self.response is not None:
             result["response"] = self.response.to_dict()
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "UnifiedMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "UnifiedMetadata":
         """Create a UnifiedMetadata from a dictionary."""
         response = None
         if "response" in data:

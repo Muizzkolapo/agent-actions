@@ -6,7 +6,7 @@ import logging
 # ET is used for type annotations (ET.Element) and exception handling
 # (ET.ParseError).  DefusedET handles all actual parsing.
 import xml.etree.ElementTree as ET
-from typing import Any, Dict, Optional
+from typing import Any
 
 import defusedxml.ElementTree as DefusedET
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class XmlLoader(BaseLoader[ET.Element]):
     """Loader for XML content."""
 
-    def process(self, content: Any, file_path: Optional[str] = None) -> ET.Element:
+    def process(self, content: Any, file_path: str | None = None) -> ET.Element:
         """Load and return XML root element from a file or in-memory content."""
         try:
             if file_path:
@@ -50,7 +50,7 @@ class XmlLoader(BaseLoader[ET.Element]):
             )
             raise
 
-    def process_xml_element(self, element: Any) -> Dict[str, Any]:
+    def process_xml_element(self, element: Any) -> dict[str, Any]:
         """Process an XML element into a dictionary."""
         try:
             result = {

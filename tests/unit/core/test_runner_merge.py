@@ -1,7 +1,8 @@
 """Tests for record merge behavior."""
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 from agent_actions.workflow.merge import merge_records_by_key
 from agent_actions.workflow.runner import AgentRunner

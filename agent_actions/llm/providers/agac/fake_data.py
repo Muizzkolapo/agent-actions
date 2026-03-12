@@ -9,8 +9,7 @@ import hashlib
 import json
 import logging
 import random
-import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -290,12 +289,12 @@ class FakeDataGenerator:
     PRIORITIES = ["low", "medium", "high", "critical", "urgent"]
 
     # Current generation context
-    _current_seed: Optional[int] = None
-    _current_prompt: Optional[str] = None
+    _current_seed: int | None = None
+    _current_prompt: str | None = None
     _rng: random.Random = random.Random()
 
     @classmethod
-    def set_context(cls, seed: Optional[int] = None, prompt: Optional[str] = None):
+    def set_context(cls, seed: int | None = None, prompt: str | None = None):
         """
         Set generation context for reproducibility and prompt-awareness.
 
@@ -329,10 +328,10 @@ class FakeDataGenerator:
     @classmethod
     def generate_from_schema(
         cls,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         attempt: int = 1,
-        field_name: Optional[str] = None,
-        prompt: Optional[str] = None,
+        field_name: str | None = None,
+        prompt: str | None = None,
     ) -> Any:
         """
         Generate fake data matching a JSON schema.
@@ -421,8 +420,8 @@ class FakeDataGenerator:
     def _generate_string(
         cls,
         attempt: int,
-        schema: Optional[Dict] = None,
-        field_name: Optional[str] = None,
+        schema: dict | None = None,
+        field_name: str | None = None,
     ) -> str:
         """Generate a contextually appropriate string."""
         schema = schema or {}
@@ -574,8 +573,8 @@ class FakeDataGenerator:
     def _generate_number(
         cls,
         attempt: int,
-        schema: Optional[Dict] = None,
-        field_name: Optional[str] = None,
+        schema: dict | None = None,
+        field_name: str | None = None,
     ) -> float:
         """Generate a number respecting schema constraints."""
         schema = schema or {}
@@ -614,8 +613,8 @@ class FakeDataGenerator:
     def _generate_integer(
         cls,
         attempt: int,
-        schema: Optional[Dict] = None,
-        field_name: Optional[str] = None,
+        schema: dict | None = None,
+        field_name: str | None = None,
     ) -> int:
         """Generate an integer respecting schema constraints."""
         schema = schema or {}
@@ -645,7 +644,7 @@ class FakeDataGenerator:
         return max(minimum, min(maximum, base))
 
     @classmethod
-    def _generate_boolean(cls, attempt: int, field_name: Optional[str] = None) -> bool:
+    def _generate_boolean(cls, attempt: int, field_name: str | None = None) -> bool:
         """Generate a boolean."""
         rng = cls._get_rng()
         field_lower = (field_name or "").lower()
@@ -663,10 +662,10 @@ class FakeDataGenerator:
     @classmethod
     def _generate_array(
         cls,
-        schema: Dict[str, Any],
+        schema: dict[str, Any],
         attempt: int,
-        field_name: Optional[str] = None,
-    ) -> List[Any]:
+        field_name: str | None = None,
+    ) -> list[Any]:
         """Generate an array respecting schema constraints."""
         items_schema = schema.get("items", {})
         prefix_items = schema.get("prefixItems", [])
@@ -682,13 +681,13 @@ class FakeDataGenerator:
         result = []
 
         if prefix_items:
-            for i, item_schema in enumerate(prefix_items[:size]):
+            for _i, item_schema in enumerate(prefix_items[:size]):
                 result.append(cls.generate_from_schema(item_schema, attempt))
             remaining = size - len(prefix_items)
-            for i in range(max(0, remaining)):
+            for _ in range(max(0, remaining)):
                 result.append(cls.generate_from_schema(items_schema, attempt))
         else:
-            for i in range(size):
+            for _ in range(size):
                 # Vary the seed slightly for each array item
                 cls._get_rng().randint(0, 1000)
                 result.append(cls.generate_from_schema(items_schema, attempt, field_name))
@@ -696,7 +695,7 @@ class FakeDataGenerator:
         return result
 
     @classmethod
-    def _generate_object(cls, schema: Dict[str, Any], attempt: int) -> Dict[str, Any]:
+    def _generate_object(cls, schema: dict[str, Any], attempt: int) -> dict[str, Any]:
         """Generate an object respecting schema constraints."""
         result = {}
         properties = schema.get("properties", {})
@@ -714,7 +713,7 @@ class FakeDataGenerator:
         return result
 
     @staticmethod
-    def extract_schema_from_openai_request(body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def extract_schema_from_openai_request(body: dict[str, Any]) -> dict[str, Any] | None:
         """Extract JSON schema from OpenAI-format request body."""
         if not isinstance(body, dict):
             return None
@@ -748,7 +747,7 @@ class FakeDataGenerator:
         return None
 
     @staticmethod
-    def extract_prompt_from_openai_request(body: Dict[str, Any]) -> Optional[str]:
+    def extract_prompt_from_openai_request(body: dict[str, Any]) -> str | None:
         """Extract prompt/user message from OpenAI-format request body."""
         if not isinstance(body, dict):
             return None
@@ -767,8 +766,8 @@ class FakeDataGenerator:
 
     @classmethod
     def generate_openai_response(
-        cls, custom_id: str, body: Dict[str, Any], attempt: int = 1
-    ) -> Dict[str, Any]:
+        cls, custom_id: str, body: dict[str, Any], attempt: int = 1
+    ) -> dict[str, Any]:
         """Generate a complete OpenAI API response with fake data."""
         # Extract schema and prompt from request
         schema = cls.extract_schema_from_openai_request(body)

@@ -1,7 +1,7 @@
 """Regression tests for package console-script metadata."""
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 
 def _load_pyproject() -> dict:

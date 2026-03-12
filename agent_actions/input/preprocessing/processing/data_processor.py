@@ -1,30 +1,29 @@
 """Post-processing of generated data with passthrough transformations."""
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional
 
-from agent_actions.processing.helpers import transform_with_passthrough
-from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
-from agent_actions.errors import TransformationError
-from agent_actions.config.interfaces import IDataProcessor, ProcessingMode
 from agent_actions.config.di.container import registry
+from agent_actions.config.interfaces import IDataProcessor, ProcessingMode
+from agent_actions.errors import TransformationError
+from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.processing.helpers import transform_with_passthrough
 
 
 @dataclass
 class ProcessItemRequest:
     """Request parameters for processing a single item."""
 
-    contents: Dict
-    generated_data: List[Dict]
+    contents: dict
+    generated_data: list[dict]
     source_guid: str
-    passthrough_fields: Optional[Dict] = None
+    passthrough_fields: dict | None = None
 
 
 @registry.register_processor("data_processor")
 class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     """Handles post-processing of generated data (Single Responsibility)."""
 
-    def __init__(self, agent_config: Dict):
+    def __init__(self, agent_config: dict):
         super().__init__()
         self.agent_config = agent_config
 
@@ -38,11 +37,11 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
 
     def process_item(
         self,
-        contents: Dict,
-        generated_data: List[Dict],
+        contents: dict,
+        generated_data: list[dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None,
-    ) -> List[Dict]:
+        passthrough_fields: dict | None = None,
+    ) -> list[dict]:
         """Process a generated data item with transformations."""
         try:
             return transform_with_passthrough(

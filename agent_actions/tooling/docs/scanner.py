@@ -4,12 +4,13 @@ import ast
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 import yaml
 
 from agent_actions.config.defaults import DocsDefaults
 from agent_actions.output.response.loader import SchemaLoader
+
 from .parser import extract_fields_for_docs
 
 logger = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class ProjectScanner:
         self.project_root = Path(project_root).resolve()
         self.workflows_found = []
 
-    def scan(self) -> Dict[str, Dict[str, Any]]:
+    def scan(self) -> dict[str, dict[str, Any]]:
         """Scan project directory for rendered and original workflow YAML files."""
         workflows = {}
         artefact_dir = self.project_root / "artefact"
@@ -53,7 +54,7 @@ class ProjectScanner:
     # Cap README content to prevent catalog.json bloat
     _README_MAX_BYTES = DocsDefaults.README_MAX_BYTES
 
-    def scan_readmes(self) -> Dict[str, str]:
+    def scan_readmes(self) -> dict[str, str]:
         """Scan for README.md files alongside agent_config directories.
 
         Uses last-write-wins on duplicate workflow stems, matching the
@@ -63,7 +64,7 @@ class ProjectScanner:
 
         READMEs larger than 100 KB are truncated with a trailing notice.
         """
-        readmes: Dict[str, str] = {}
+        readmes: dict[str, str] = {}
         artefact_dir = self.project_root / "artefact"
 
         for agent_config_dir in self.project_root.rglob("agent_config"):
@@ -76,7 +77,7 @@ class ProjectScanner:
 
             try:
                 content = readme_path.read_text(encoding="utf-8")
-            except (IOError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError):
                 continue
 
             encoded = content.encode("utf-8")
@@ -90,7 +91,7 @@ class ProjectScanner:
 
         return readmes
 
-    def scan_prompts(self) -> Dict[str, Any]:
+    def scan_prompts(self) -> dict[str, Any]:
         """Scan project directory for prompt files in prompt_store/."""
         prompts = {}
         prompt_store_dir = self.project_root / "prompt_store"
@@ -127,7 +128,7 @@ class ProjectScanner:
 
         return prompts
 
-    def scan_schemas(self) -> Dict[str, Any]:
+    def scan_schemas(self) -> dict[str, Any]:
         """Scan project directory for schema YAML files."""
         schemas = {}
         schema_dir = self.project_root / "schema"
@@ -160,7 +161,7 @@ class ProjectScanner:
 
         return schemas
 
-    def scan_workflow_data(self) -> Dict[str, Any]:
+    def scan_workflow_data(self) -> dict[str, Any]:
         """Scan project for SQLite target databases and export preview data."""
         workflow_data = {}
         artefact_dir = self.project_root / "artefact"
@@ -186,7 +187,7 @@ class ProjectScanner:
         return workflow_data
 
     @staticmethod
-    def _scan_sqlite_readonly(db_file: Path, workflow_name: str) -> Optional[Dict[str, Any]]:
+    def _scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | None:
         """Open a workflow SQLite DB read-only and extract stats + preview data.
 
         Uses a direct sqlite3 connection in read-only mode so that scanning
@@ -318,7 +319,7 @@ class ProjectScanner:
         finally:
             conn.close()
 
-    def scan_runs(self) -> Dict[str, Any]:
+    def scan_runs(self) -> dict[str, Any]:
         """Scan project directory for workflow run data and execution metrics."""
         import json
 
@@ -353,9 +354,9 @@ class ProjectScanner:
             latest_run = None
             if run_results_path.exists():
                 try:
-                    with open(run_results_path, "r", encoding="utf-8") as f:
+                    with open(run_results_path, encoding="utf-8") as f:
                         latest_run = json.load(f)
-                except (json.JSONDecodeError, IOError):
+                except (OSError, json.JSONDecodeError):
                     pass
 
             # Load events.json for detailed execution data
@@ -377,9 +378,9 @@ class ProjectScanner:
             manifest_data = None
             if manifest_path.exists():
                 try:
-                    with open(manifest_path, "r", encoding="utf-8") as f:
+                    with open(manifest_path, encoding="utf-8") as f:
                         manifest_data = json.load(f)
-                except (json.JSONDecodeError, IOError):
+                except (OSError, json.JSONDecodeError):
                     pass
 
             runs_data[workflow_name] = {
@@ -394,7 +395,7 @@ class ProjectScanner:
 
         return runs_data
 
-    def scan_logs(self) -> Dict[str, Any]:
+    def scan_logs(self) -> dict[str, Any]:
         """Scan project directory for global CLI and validation logs."""
         import json
 
@@ -416,7 +417,7 @@ class ProjectScanner:
         logs_data["events_path"] = str(events_path)
 
         try:
-            with open(events_path, "r", encoding="utf-8") as f:
+            with open(events_path, encoding="utf-8") as f:
                 invocations = {}
                 for line in f:
                     line = line.strip()
@@ -471,19 +472,19 @@ class ProjectScanner:
                 # Get recent invocations (last 10)
                 logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
-        except IOError:
+        except OSError:
             pass
 
         return logs_data
 
-    def _extract_action_metrics(self, events_path: Path) -> Dict[str, Any]:
+    def _extract_action_metrics(self, events_path: Path) -> dict[str, Any]:
         """Extract per-action metrics from events.json file."""
         import json
 
         action_metrics = {}
 
         try:
-            with open(events_path, "r", encoding="utf-8") as f:
+            with open(events_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -536,12 +537,12 @@ class ProjectScanner:
                             "completion_tokens", 0
                         )
 
-        except IOError:
+        except OSError:
             pass
 
         return action_metrics
 
-    def scan_tool_functions(self) -> Dict[str, Any]:
+    def scan_tool_functions(self) -> dict[str, Any]:
         """Scan project directory for @udf_tool function implementations."""
         tool_functions = {}
 
@@ -586,7 +587,7 @@ class ProjectScanner:
 
         return tool_functions
 
-    def _extract_typed_dicts(self, tree: ast.AST) -> Dict[str, List[Dict[str, str]]]:
+    def _extract_typed_dicts(self, tree: ast.AST) -> dict[str, list[dict[str, str]]]:
         """Extract TypedDict class definitions from AST."""
         typed_dicts = {}
 
@@ -633,8 +634,8 @@ class ProjectScanner:
         node: ast.FunctionDef,
         source: str,
         file_path: Path,
-        typed_dicts: Optional[Dict[str, List[Dict[str, str]]]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        typed_dicts: dict[str, list[dict[str, str]]] | None = None,
+    ) -> dict[str, Any] | None:
         """Extract details from a function AST node, including UDF metadata."""
         try:
             # Get source lines
@@ -723,7 +724,7 @@ class ProjectScanner:
     # New scan methods: vendors, errors, events, examples, loaders, processing
     # =========================================================================
 
-    def scan_vendors(self) -> Dict[str, Any]:
+    def scan_vendors(self) -> dict[str, Any]:
         """Scan for LLM vendor configurations via AST parsing."""
         vendors = {}
         vendor_file = self.project_root.parent / "agent_actions" / "llm" / "config" / "vendor.py"
@@ -816,12 +817,12 @@ class ProjectScanner:
                     "docstring": config_info.get("docstring", ""),
                 }
 
-        except (SyntaxError, UnicodeDecodeError, IOError):
+        except (OSError, SyntaxError, UnicodeDecodeError):
             pass
 
         return vendors
 
-    def scan_error_types(self) -> Dict[str, Any]:
+    def scan_error_types(self) -> dict[str, Any]:
         """Scan for error/exception class hierarchy via AST parsing."""
         error_types = {}
         errors_dir = Path(__file__).resolve().parent.parent.parent / "errors"
@@ -890,12 +891,12 @@ class ProjectScanner:
                         "error_count": len(errors_list),
                     }
 
-            except (SyntaxError, UnicodeDecodeError, IOError):
+            except (OSError, SyntaxError, UnicodeDecodeError):
                 continue
 
         return error_types
 
-    def scan_event_types(self) -> Dict[str, Any]:
+    def scan_event_types(self) -> dict[str, Any]:
         """Scan for event type definitions via AST parsing."""
         event_types = {}
         events_file = (
@@ -988,12 +989,12 @@ class ProjectScanner:
             for cat_data in event_types.values():
                 cat_data["event_count"] = len(cat_data["events"])
 
-        except (SyntaxError, UnicodeDecodeError, IOError):
+        except (OSError, SyntaxError, UnicodeDecodeError):
             pass
 
         return event_types
 
-    def scan_examples(self) -> Dict[str, Any]:
+    def scan_examples(self) -> dict[str, Any]:
         """Scan for example projects in the examples/ directory."""
         examples = {}
         examples_dir = self.project_root.parent / "examples"
@@ -1073,7 +1074,7 @@ class ProjectScanner:
 
         return examples
 
-    def scan_data_loaders(self) -> Dict[str, Any]:
+    def scan_data_loaders(self) -> dict[str, Any]:
         """Scan for data loader implementations via AST parsing."""
         loaders = {}
         loaders_dir = Path(__file__).resolve().parent.parent.parent / "input" / "loaders"
@@ -1147,12 +1148,12 @@ class ProjectScanner:
                         "line": node.lineno,
                     }
 
-            except (SyntaxError, UnicodeDecodeError, IOError):
+            except (OSError, SyntaxError, UnicodeDecodeError):
                 continue
 
         return loaders
 
-    def scan_processing_states(self) -> Dict[str, Any]:
+    def scan_processing_states(self) -> dict[str, Any]:
         """Scan for processing state/status enums and dataclasses."""
         processing_types = {}
         types_file = Path(__file__).resolve().parent.parent.parent / "processing" / "types.py"
@@ -1244,7 +1245,7 @@ class ProjectScanner:
                         "factory_methods": factory_methods,
                     }
 
-        except (SyntaxError, UnicodeDecodeError, IOError):
+        except (OSError, SyntaxError, UnicodeDecodeError):
             pass
 
         return processing_types

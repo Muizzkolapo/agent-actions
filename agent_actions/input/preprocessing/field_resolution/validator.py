@@ -1,7 +1,7 @@
 """Field reference validation against the workflow dependency graph."""
 
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
@@ -22,11 +22,11 @@ class ReferenceValidator:
 
     def validate(
         self,
-        references: List[Union[str, ParsedReference]],
-        agent_config: Dict[str, Any],
-        agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None,
-    ) -> List[str]:
+        references: list[str | ParsedReference],
+        agent_config: dict[str, Any],
+        agent_indices: dict[str, int],
+        current_agent_name: str | None = None,
+    ) -> list[str]:
         """Validate references against dependency graph. Returns list of error messages."""
         errors = []
 
@@ -78,10 +78,10 @@ class ReferenceValidator:
 
     def validate_strict(
         self,
-        references: List[Union[str, ParsedReference]],
-        agent_config: Dict[str, Any],
-        agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None,
+        references: list[str | ParsedReference],
+        agent_config: dict[str, Any],
+        agent_indices: dict[str, int],
+        current_agent_name: str | None = None,
     ) -> None:
         """Validate references and raise DependencyValidationError if invalid."""
         errors = self.validate(
@@ -101,10 +101,10 @@ class ReferenceValidator:
     def extract_and_validate(
         self,
         guard_condition: str,
-        agent_config: Dict[str, Any],
-        agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None,
-    ) -> List[str]:
+        agent_config: dict[str, Any],
+        agent_indices: dict[str, int],
+        current_agent_name: str | None = None,
+    ) -> list[str]:
         """Extract references from guard condition and validate them."""
         # Parse references from guard condition
         references = self._parser.parse_batch(guard_condition)
@@ -119,7 +119,7 @@ class ReferenceValidator:
             current_agent_name=current_agent_name,
         )
 
-    def get_referenced_actions(self, guard_condition: str) -> List[str]:
+    def get_referenced_actions(self, guard_condition: str) -> list[str]:
         """Extract unique action names referenced in a guard condition."""
         references = self._parser.parse_batch(guard_condition)
 
@@ -132,10 +132,10 @@ class ReferenceValidator:
 
     def validate_against_schemas(
         self,
-        references: List[Union[str, ParsedReference]],
-        action_schemas: Dict[str, Dict[str, Any]],
-        _current_agent_name: Optional[str] = None,
-    ) -> List[str]:
+        references: list[str | ParsedReference],
+        action_schemas: dict[str, dict[str, Any]],
+        _current_agent_name: str | None = None,
+    ) -> list[str]:
         """Validate field references against action output schemas."""
         errors = []
 
@@ -166,8 +166,8 @@ class ReferenceValidator:
         return errors
 
     def validate_with_schemas(
-        self, references: List[Union[str, ParsedReference]], validation_context: Dict[str, Any]
-    ) -> List[str]:
+        self, references: list[str | ParsedReference], validation_context: dict[str, Any]
+    ) -> list[str]:
         """Perform both dependency graph and schema field validation."""
         dep_errors = self.validate(
             references=references,

@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from jinja2 import Environment, TemplateSyntaxError, nodes
 
@@ -15,7 +15,7 @@ class FieldUsage:
 
     variable_name: str  # Full variable path: 'seed.exam_syllabus.platform_name'
     used_in_context: str  # Where it's used: 'variable', 'filter', 'test', 'block'
-    line_number: Optional[int] = None
+    line_number: int | None = None
 
 
 class PromptASTAnalyzer:
@@ -56,19 +56,19 @@ class PromptASTAnalyzer:
             # Unsupported node type (Const, Call, etc.) - return empty to skip
             return ""
 
-    def _extract_full_paths(self, template_ast: nodes.Template) -> Set[str]:
+    def _extract_full_paths(self, template_ast: nodes.Template) -> set[str]:
         """Extract full attribute paths from parsed AST, excluding declared variables."""
-        paths: Set[str] = set()
+        paths: set[str] = set()
 
         # NOTE: We use id() to track node identity. This is safe because all AST
         # nodes remain alive for the duration of this method. Do not refactor to
         # process nodes lazily or across multiple calls without changing this.
-        names_in_chains: Set[int] = set()
-        intermediate_nodes: Set[int] = set()
+        names_in_chains: set[int] = set()
+        intermediate_nodes: set[int] = set()
 
         # Track declared variable names (loop vars, set assignments)
         # These have 'store' context and should be excluded from required references
-        declared_names: Set[str] = set()
+        declared_names: set[str] = set()
         for node in template_ast.find_all(nodes.Name):
             if node.ctx == "store":
                 declared_names.add(node.name)
@@ -105,7 +105,7 @@ class PromptASTAnalyzer:
 
         return paths
 
-    def extract_variables(self, template_source: str) -> Set[str]:
+    def extract_variables(self, template_source: str) -> set[str]:
         """Extract all variable references from a Jinja2 template using AST.
 
         Raises:
@@ -131,7 +131,7 @@ class PromptASTAnalyzer:
             logger.error("Jinja2 syntax error in template: %s", e)
             raise ValueError(f"Template syntax error: {e}") from e
 
-    def extract_referenced_variables(self, template_source: str) -> Tuple[Set[str], Set[str]]:
+    def extract_referenced_variables(self, template_source: str) -> tuple[set[str], set[str]]:
         """Return (root_variables, full_paths) from a Jinja2 template.
 
         Examples:
@@ -161,7 +161,7 @@ class PromptASTAnalyzer:
         except TemplateSyntaxError as e:
             raise ValueError(f"Template syntax error: {e}") from e
 
-    def validate_template_syntax(self, template_source: str) -> Tuple[bool, Optional[str]]:
+    def validate_template_syntax(self, template_source: str) -> tuple[bool, str | None]:
         """Return (is_valid, error_message) for Jinja2 template syntax.
 
         Examples:
@@ -183,8 +183,8 @@ class PromptASTAnalyzer:
             return (False, str(e))
 
     def analyze_field_requirements(
-        self, template_source: str, available_context: Dict[str, Set[str]]
-    ) -> Dict[str, Any]:
+        self, template_source: str, available_context: dict[str, set[str]]
+    ) -> dict[str, Any]:
         """Analyze required fields and validate against available context.
 
         Examples:
@@ -226,7 +226,7 @@ class PromptASTAnalyzer:
             "is_valid": len(missing_references) == 0 and len(missing_fields) == 0,
         }
 
-    def get_detailed_field_usage(self, template_source: str) -> List[Dict[str, Any]]:
+    def get_detailed_field_usage(self, template_source: str) -> list[dict[str, Any]]:
         """Return root variable names with line numbers and context.
 
         For full attribute paths, use extract_variables() instead.
@@ -260,7 +260,7 @@ class PromptASTAnalyzer:
         return usage_list
 
 
-def scan_prompt_fields_ast(template_str: str) -> Set[str]:
+def scan_prompt_fields_ast(template_str: str) -> set[str]:
     """Extract field references from a Jinja2 template using AST.
 
     Examples:
@@ -273,8 +273,8 @@ def scan_prompt_fields_ast(template_str: str) -> Set[str]:
 
 
 def validate_prompt_fields_ast(
-    template_str: str, available_context: Dict[str, Set[str]]
-) -> Tuple[bool, List[str]]:
+    template_str: str, available_context: dict[str, set[str]]
+) -> tuple[bool, list[str]]:
     """Validate prompt fields against available context using AST parsing.
 
     Examples:

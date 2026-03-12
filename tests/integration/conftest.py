@@ -5,9 +5,9 @@ This module provides fixtures used across integration tests, including
 batch vs realtime parity testing.
 """
 
-import pytest
-from typing import Dict, Any
+from typing import Any
 
+import pytest
 
 # =============================================================================
 # Parity Test Fixtures
@@ -15,7 +15,7 @@ from typing import Dict, Any
 
 
 @pytest.fixture
-def parity_agent_config() -> Dict[str, Any]:
+def parity_agent_config() -> dict[str, Any]:
     """
     Agent configuration for batch vs realtime parity testing.
 
@@ -38,7 +38,7 @@ def parity_agent_config() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def parity_agent_config_no_context_scope() -> Dict[str, Any]:
+def parity_agent_config_no_context_scope() -> dict[str, Any]:
     """
     Agent configuration without context_scope for baseline parity testing.
     """
@@ -53,7 +53,7 @@ def parity_agent_config_no_context_scope() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def parity_contents() -> Dict[str, Any]:
+def parity_contents() -> dict[str, Any]:
     """
     Sample contents for parity testing.
 
@@ -68,7 +68,7 @@ def parity_contents() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def parity_current_item() -> Dict[str, Any]:
+def parity_current_item() -> dict[str, Any]:
     """
     Current item context for parity testing.
 
@@ -88,7 +88,7 @@ def parity_current_item() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def parity_agent_indices() -> Dict[str, int]:
+def parity_agent_indices() -> dict[str, int]:
     """Agent indices mapping for parity testing."""
     return {
         "source": 0,
@@ -98,7 +98,7 @@ def parity_agent_indices() -> Dict[str, int]:
 
 
 @pytest.fixture
-def parity_dependency_configs() -> Dict[str, Dict[str, Any]]:
+def parity_dependency_configs() -> dict[str, dict[str, Any]]:
     """Dependency configurations for parity testing."""
     return {
         "source": {

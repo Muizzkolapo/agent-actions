@@ -5,6 +5,7 @@ Provides shared fixtures and test utilities.
 """
 
 import pytest
+
 from agent_actions.utils.udf_management.registry import clear_registry
 
 
@@ -55,18 +56,18 @@ fields:
     type: string
     description: User identifier
     required: true
-    
+
   - id: email
     type: string
     description: User email
     required: true
     pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$'
-    
+
   - id: age
     type: number
     description: User age
     required: false
-    
+
   - id: tags
     type: array
     description: User tags

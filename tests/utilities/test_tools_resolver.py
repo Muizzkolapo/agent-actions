@@ -1,6 +1,5 @@
 """Tests for shared tools_resolver utility."""
 
-import pytest
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
 

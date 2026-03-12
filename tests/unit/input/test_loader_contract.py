@@ -5,9 +5,6 @@ and that XLSX FileReader output (list[dict]) is usable directly.
 """
 
 import csv
-import json
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 

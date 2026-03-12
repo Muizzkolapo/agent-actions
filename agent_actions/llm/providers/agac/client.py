@@ -9,10 +9,10 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
-from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
+from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
@@ -39,7 +39,7 @@ class AgacClient(BaseClient):
     """
 
     # Class-level tracking of attempts per ID
-    _attempt_counts: Dict[str, int] = {}
+    _attempt_counts: dict[str, int] = {}
 
     @classmethod
     def reset(cls):
@@ -57,7 +57,7 @@ class AgacClient(BaseClient):
         return cls._attempt_counts[identifier]
 
     @staticmethod
-    def get_api_key(agent_config: Dict[str, Any]) -> Optional[str]:
+    def get_api_key(agent_config: dict[str, Any]) -> str | None:
         """Override to skip API key validation for mock client."""
         return "agac-mock-key"
 
@@ -94,12 +94,12 @@ class AgacClient(BaseClient):
 
     @staticmethod
     def call_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-        schema: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+        schema: dict[str, Any] | None,
+    ) -> list[dict[str, Any]]:
         """
         Call in JSON mode with schema-based fake data generation.
 
@@ -181,11 +181,11 @@ class AgacClient(BaseClient):
 
     @staticmethod
     def call_non_json(
-        api_key: Optional[str],
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-    ) -> List[Dict[str, str]]:
+        api_key: str | None,
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+    ) -> list[dict[str, str]]:
         """
         Call in non-JSON mode with raw text response.
 
@@ -249,11 +249,11 @@ class AgacClient(BaseClient):
     @classmethod
     def invoke(
         cls,
-        agent_config: Dict[str, Any],
-        prompt_config: Dict[str, Any],
-        context_data: Dict[str, Any],
-        schema: Optional[Dict[str, Any]],
-    ) -> Union[str, Dict[str, Any]]:
+        agent_config: dict[str, Any],
+        prompt_config: dict[str, Any],
+        context_data: dict[str, Any],
+        schema: dict[str, Any] | None,
+    ) -> str | dict[str, Any]:
         """Dispatch to JSON or non-JSON methods."""
         from agent_actions.utils.constants import JSON_MODE_KEY
 

@@ -6,7 +6,7 @@ import hashlib
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from rich.console import Console
@@ -15,30 +15,26 @@ from agent_actions.config.factory import create_agent_runner
 from agent_actions.errors import get_error_detail
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.loaders.udf import discover_udfs
-from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import (
-    WorkflowStartEvent,
+    AgentCompleteEvent,
+    AgentFailedEvent,
+    AgentSkipEvent,
+    AgentStartEvent,
+    UDFDiscoveryCompleteEvent,
+    UDFDiscoveryStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
-    AgentStartEvent,
-    AgentCompleteEvent,
-    AgentSkipEvent,
-    AgentFailedEvent,
     WorkflowInitializationStartEvent,
     WorkflowServicesInitializationStartEvent,
-    UDFDiscoveryStartEvent,
-    UDFDiscoveryCompleteEvent,
+    WorkflowStartEvent,
 )
 from agent_actions.storage import get_storage_backend
+from agent_actions.utils.module_loader import ensure_path_importable
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
-from agent_actions.workflow.parallel.action_executor import (
-    ActionLevelOrchestrator,
-    LevelExecutionParams,
-)
 from agent_actions.workflow.executor import AgentExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
@@ -47,19 +43,23 @@ from agent_actions.workflow.managers.manifest import ManifestManager
 from agent_actions.workflow.managers.output import AgentOutputManager, OutputManagerConfig
 from agent_actions.workflow.managers.skip import SkipEvaluator
 from agent_actions.workflow.managers.state import AgentStateManager
-from agent_actions.workflow.parallel.dependency import (
-    WorkflowDependencyOrchestrator,
-)
 from agent_actions.workflow.models import (
-    WorkflowPaths,
-    WorkflowConfig,
-    WorkflowState,
-    RuntimeContext,
-    WorkflowMetadata,
     AgentLogParams,
     CoreServices,
+    RuntimeContext,
     SupportServices,
+    WorkflowConfig,
+    WorkflowMetadata,
+    WorkflowPaths,
     WorkflowServices,
+    WorkflowState,
+)
+from agent_actions.workflow.parallel.action_executor import (
+    ActionLevelOrchestrator,
+    LevelExecutionParams,
+)
+from agent_actions.workflow.parallel.dependency import (
+    WorkflowDependencyOrchestrator,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +85,7 @@ class AgentWorkflow:
 
         self._validate_schema_files()
 
-        self.storage_backend: Optional["StorageBackend"] = self._initialize_storage_backend()
+        self.storage_backend: StorageBackend | None = self._initialize_storage_backend()
         self.services = self._initialize_services()
         self._init_dependency_orchestrator()
         self.workflow_session_id = self._generate_workflow_session_id()
@@ -115,8 +115,8 @@ class AgentWorkflow:
     def _create_child_workflow(
         self,
         config_path: str,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
+        user_code_path: str | None,
+        default_path: str | None,
         use_tools: bool,
         run_upstream: bool,
         run_downstream: bool,
@@ -367,7 +367,7 @@ class AgentWorkflow:
         return self.metadata.agent_configs
 
     @property
-    def child_pipeline(self) -> Optional[str]:
+    def child_pipeline(self) -> str | None:
         """Return child pipeline from metadata."""
         return self.metadata.child_pipeline
 
@@ -473,7 +473,7 @@ class AgentWorkflow:
             },
         )
 
-    def _resolve_upstream_and_initialize(self) -> Optional[bool]:
+    def _resolve_upstream_and_initialize(self) -> bool | None:
         """Initialize event context and resolve upstream dependencies.
 
         Returns:

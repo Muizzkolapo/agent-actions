@@ -1,9 +1,9 @@
 """Tests for BaseClient API key validation."""
 
 import pytest
-import os
-from agent_actions.llm.providers.client_base import BaseClient
+
 from agent_actions.errors import ConfigurationError
+from agent_actions.llm.providers.client_base import BaseClient
 
 
 class TestClientBaseAPIKeyValidation:

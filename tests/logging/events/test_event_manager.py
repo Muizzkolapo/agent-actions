@@ -1,13 +1,14 @@
 """Tests for EventManager and event dispatching."""
 
 import threading
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.manager import EventManager, fire_event
-from agent_actions.logging.core.protocols import LevelFilter, CategoryFilter
+from agent_actions.logging.core.protocols import CategoryFilter, LevelFilter
 
 
 @pytest.fixture(autouse=True)

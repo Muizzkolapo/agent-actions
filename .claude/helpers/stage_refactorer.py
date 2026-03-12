@@ -11,15 +11,14 @@ Key feature: Stage 5 (LLM Invocation) has nested structure:
     └── batch/       # Batch processing
 """
 
-import os
-import sys
-import json
-import shutil
 import argparse
-from pathlib import Path
+import json
+import os
+import shutil
+import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from pathlib import Path
 
 
 @dataclass
@@ -37,10 +36,10 @@ class MigrationRule:
 class RefactoringPlan:
     """Complete refactoring plan."""
 
-    rules: List[MigrationRule] = field(default_factory=list)
-    conflicts: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
-    stats: Dict[str, int] = field(default_factory=dict)
+    rules: list[MigrationRule] = field(default_factory=list)
+    conflicts: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    stats: dict[str, int] = field(default_factory=dict)
 
 
 class StageRefactorer:
@@ -125,7 +124,7 @@ class StageRefactorer:
         self.dry_run = dry_run
         self.plan = RefactoringPlan()
 
-    def classify_file(self, file_path: Path) -> Tuple[Optional[str], Optional[str], str]:
+    def classify_file(self, file_path: Path) -> tuple[str | None, str | None, str]:
         """
         Classify file into a stage.
 
@@ -286,7 +285,7 @@ class StageRefactorer:
                 print(f"   ... and {len(rules) - 3} more")
 
         # Stats
-        print(f"\n📊 Statistics:")
+        print("\n📊 Statistics:")
         for key, value in self.plan.stats.items():
             print(f"   {key}: {value}")
 
@@ -354,7 +353,7 @@ class StageRefactorer:
                 errors += 1
                 print(f"   ❌ Error moving {rule.source}: {e}")
 
-        print(f"\n✅ Migration complete!")
+        print("\n✅ Migration complete!")
         print(f"   Moved: {moved}")
         print(f"   Errors: {errors}")
 

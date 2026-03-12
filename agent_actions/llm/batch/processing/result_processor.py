@@ -3,18 +3,18 @@ Batch Result Processor.
 """
 
 import logging
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
+from typing import Any
 
-from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
-from agent_actions.processing.enrichment import EnrichmentPipeline
-from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
-from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
-from agent_actions.llm.providers.batch_base import BatchResult
 from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
+from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.processing.batch_context_adapter import BatchContextAdapter
+from agent_actions.processing.enrichment import EnrichmentPipeline
+from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
+from agent_actions.processing.types import ProcessingResult, RecoveryMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -24,23 +24,23 @@ class BatchProcessingContext:
     """Context passed through the batch result processing pipeline."""
 
     # Input data
-    batch_results: List[BatchResult]
-    context_map: Dict[str, Any]
-    output_directory: Optional[str]
-    agent_config: Optional[Dict[str, Any]]
+    batch_results: list[BatchResult]
+    context_map: dict[str, Any]
+    output_directory: str | None
+    agent_config: dict[str, Any] | None
 
     # Extracted configuration
     json_mode: bool = True
     output_field: str = "content"
 
     # Reconciliation
-    reconciler: Optional[BatchResultReconciler] = None
+    reconciler: BatchResultReconciler | None = None
 
     # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
-    exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
+    exhausted_recovery: dict[str, RecoveryMetadata] | None = None
 
     # Accumulated output
-    processed_data: List[Dict[str, Any]] = field(default_factory=list)
+    processed_data: list[dict[str, Any]] = field(default_factory=list)
 
     # Statistics
     success_count: int = 0
@@ -56,12 +56,12 @@ class BatchResultProcessor:
 
     def process(
         self,
-        batch_results: List[BatchResult],
-        context_map: Optional[Dict[str, Any]] = None,
-        output_directory: Optional[str] = None,
-        agent_config: Optional[Dict[str, Any]] = None,
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
-    ) -> List[Dict[str, Any]]:
+        batch_results: list[BatchResult],
+        context_map: dict[str, Any] | None = None,
+        output_directory: str | None = None,
+        agent_config: dict[str, Any] | None = None,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
+    ) -> list[dict[str, Any]]:
         """Process batch results through the pipeline into workflow format."""
         ctx = self._stage_1_initialize_context(
             batch_results,
@@ -88,11 +88,11 @@ class BatchResultProcessor:
 
     def _stage_1_initialize_context(
         self,
-        batch_results: List[BatchResult],
-        context_map: Optional[Dict[str, Any]],
-        output_directory: Optional[str],
-        agent_config: Optional[Dict[str, Any]],
-        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
+        batch_results: list[BatchResult],
+        context_map: dict[str, Any] | None,
+        output_directory: str | None,
+        agent_config: dict[str, Any] | None,
+        exhausted_recovery: dict[str, RecoveryMetadata] | None = None,
     ) -> BatchProcessingContext:
         """Initialize processing context with configuration values."""
         context_map = context_map or {}
@@ -197,7 +197,7 @@ class BatchResultProcessor:
 
     def _process_successful_result(
         self, ctx: BatchProcessingContext, batch_result: BatchResult, custom_id: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build agent output from successful batch result, delegating enrichment to EnrichmentPipeline."""
         generated_obj = batch_result.content
         if not ctx.json_mode and isinstance(generated_obj, str):
@@ -256,9 +256,9 @@ class BatchResultProcessor:
         self,
         ctx: BatchProcessingContext,
         custom_id: str,
-        generated_list: List[Any],
-        original_row: Dict[str, Any],
-    ) -> List[Any]:
+        generated_list: list[Any],
+        original_row: dict[str, Any],
+    ) -> list[Any]:
         """Apply context_scope.passthrough fields to generated items."""
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
@@ -307,14 +307,14 @@ class BatchResultProcessor:
         ctx: BatchProcessingContext,
         custom_id: str,
         error_message: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         raw_content: Any = None,
-        recovery_metadata: Optional[RecoveryMetadata] = None,
-    ) -> Dict[str, Any]:
+        recovery_metadata: RecoveryMetadata | None = None,
+    ) -> dict[str, Any]:
         """Create an error item for failed batch results."""
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
-        error_item: Dict[str, Any] = {
+        error_item: dict[str, Any] = {
             "source_guid": source_guid,
             "error": error_message,
             "metadata": metadata or {},
@@ -332,9 +332,9 @@ class BatchResultProcessor:
         self,
         ctx: BatchProcessingContext,
         custom_id: str,
-        original_row: Dict[str, Any],
+        original_row: dict[str, Any],
         recovery_metadata: RecoveryMetadata,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create an exhausted retry item via ExhaustedRecordBuilder."""
         from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 

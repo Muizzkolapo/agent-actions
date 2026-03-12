@@ -1,19 +1,19 @@
 """Unit tests for InvocationStrategy pattern (Phase 3 #891)."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from agent_actions.processing import (
-    InvocationResult,
-    InvocationStrategy,
-    OnlineStrategy,
     BatchStrategy,
     BatchSubmissionResult,
+    InvocationResult,
     InvocationStrategyFactory,
+    OnlineStrategy,
     ProcessingMode,
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
-from agent_actions.processing.types import ProcessingContext, RecoveryMetadata
+from agent_actions.processing.types import ProcessingContext
 
 
 @pytest.fixture
@@ -377,13 +377,13 @@ class TestDeferredResultInProcessor:
         response=None, deferred=True) fell through to the RP002 filter
         branch, discarding queued batch tasks.
         """
+        from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
         from agent_actions.processing.processor import RecordProcessor
         from agent_actions.processing.types import (
             ProcessingContext,
             ProcessingMode,
             ProcessingStatus,
         )
-        from agent_actions.processing.prepared_task import GuardStatus, PreparedTask
 
         # Set up a PreparedTask that passed guards
         prepared = PreparedTask(

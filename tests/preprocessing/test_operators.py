@@ -8,14 +8,13 @@ and FUNCTIONS dicts, plus the list_operators/get_operator_info shims.
 import pytest
 
 from agent_actions.input.preprocessing.parsing.operators import (
-    OPERATORS,
     FUNCTIONS,
     OPERATOR_INFO,
+    OPERATORS,
     OperatorType,
-    list_operators,
     get_operator_info,
+    list_operators,
 )
-
 
 # -- Equality ------------------------------------------------------------------
 

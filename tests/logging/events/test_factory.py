@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from agent_actions.logging.config import LoggingConfig
-from agent_actions.logging.factory import LoggerFactory
 from agent_actions.logging.core.events import BaseEvent
+from agent_actions.logging.factory import LoggerFactory
 
 
 @pytest.fixture(autouse=True)

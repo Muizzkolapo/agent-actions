@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Type
+from typing import Any
 
 import portalocker
 
@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 from agent_actions.config.defaults import LockDefaults
 
 
-def _empty_runs_data(*, extended: bool = False) -> Dict[str, Any]:
+def _empty_runs_data(*, extended: bool = False) -> dict[str, Any]:
     """Create empty runs data structure, optionally with workflow_metrics fields."""
-    runs: Dict[str, Any] = {
+    runs: dict[str, Any] = {
         "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
         "executions": [],
     }
@@ -31,7 +31,7 @@ def _empty_runs_data(*, extended: bool = False) -> Dict[str, Any]:
 def retry(
     max_attempts: int = 3,
     backoff: float = 2.0,
-    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Simple retry decorator for file locking operations."""
 
@@ -61,12 +61,12 @@ class RunConfig:
     workflow_name: str
     status: str
     started_at: str
-    ended_at: Optional[str] = None
-    duration_seconds: Optional[float] = None
+    ended_at: str | None = None
+    duration_seconds: float | None = None
     actions_completed: int = 0
     actions_total: int = 0
-    error_message: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    error_message: str | None = None
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -77,16 +77,16 @@ class ActionCompleteConfig:
     action_name: str
     status: str
     duration_seconds: float
-    tokens: Optional[Dict[str, int]] = None
+    tokens: dict[str, int] | None = None
     files_processed: int = 0
-    skip_reason: Optional[str] = None
-    error: Optional[str] = None
+    skip_reason: str | None = None
+    error: str | None = None
 
 
 class RunTracker:
     """Track workflow execution runs for documentation."""
 
-    def __init__(self, artefact_dir: Optional[Path] = None):
+    def __init__(self, artefact_dir: Path | None = None):
         """Initialize run tracker."""
         self.artefact_dir = artefact_dir or Path.cwd() / "artefact"
         self.runs_file = self.artefact_dir / "runs.json"
@@ -118,16 +118,16 @@ class RunTracker:
         with open(self.runs_file, "w", encoding="utf-8") as f:
             json.dump(_empty_runs_data(), f, indent=2)
 
-    def _load_runs_data_from_file(self, f) -> Dict[str, Any]:
+    def _load_runs_data_from_file(self, f) -> dict[str, Any]:
         """Load runs data from file handle."""
         try:
             f.seek(0)
             return json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             # File is empty or corrupted, create new structure
             return _empty_runs_data()
 
-    def _create_run_record(self, runs_data: Dict[str, Any], config: RunConfig) -> str:
+    def _create_run_record(self, runs_data: dict[str, Any], config: RunConfig) -> str:
         """Create run record and add to runs_data."""
         run_count = len(runs_data["executions"]) + 1
         run_id = f"run_{config.workflow_id}_{run_count:03d}"
@@ -159,7 +159,7 @@ class RunTracker:
 
         return run_id
 
-    def _write_runs_data_to_file(self, f, runs_data: Dict[str, Any]) -> None:
+    def _write_runs_data_to_file(self, f, runs_data: dict[str, Any]) -> None:
         """Write runs data to file handle."""
         runs_data["metadata"]["generated_at"] = datetime.now().isoformat()
         runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
@@ -176,7 +176,7 @@ class RunTracker:
         except (ValueError, AttributeError):
             return 0
 
-    def update_run(self, run_id: str, updates: Optional[Dict[str, Any]] = None) -> bool:
+    def update_run(self, run_id: str, updates: dict[str, Any] | None = None) -> bool:
         """Update an existing run record with atomic file locking."""
         if updates is None:
             updates = {}
@@ -208,7 +208,7 @@ class RunTracker:
 
         return False
 
-    def _apply_run_updates(self, run: Dict[str, Any], updates: Dict[str, Any]) -> None:
+    def _apply_run_updates(self, run: dict[str, Any], updates: dict[str, Any]) -> None:
         """Apply updates to a run record."""
         if "status" in updates:
             run["status"] = updates["status"]
@@ -240,7 +240,7 @@ class RunTracker:
             try:
                 f.seek(0)
                 runs_data = json.load(f)
-            except (json.JSONDecodeError, IOError):
+            except (OSError, json.JSONDecodeError):
                 # File is empty or corrupted, create new structure
                 runs_data = _empty_runs_data(extended=True)
 
@@ -281,7 +281,7 @@ class RunTracker:
 
     @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def record_action_start(
-        self, *, run_id: str, action_name: str, action_type: str, agent_config: Dict[str, Any]
+        self, *, run_id: str, action_name: str, action_type: str, agent_config: dict[str, Any]
     ) -> None:
         """Record when an action starts executing."""
         with portalocker.Lock(
@@ -342,7 +342,7 @@ class RunTracker:
 
             return
 
-    def _update_action_entry(self, run: Dict[str, Any], config: ActionCompleteConfig) -> None:
+    def _update_action_entry(self, run: dict[str, Any], config: ActionCompleteConfig) -> None:
         """Update action entry in run data."""
         if config.action_name not in run["actions"]:
             return
@@ -367,7 +367,7 @@ class RunTracker:
         if config.error:
             action_entry["error"] = config.error
 
-    def _update_workflow_counters(self, run: Dict[str, Any], status: str) -> None:
+    def _update_workflow_counters(self, run: dict[str, Any], status: str) -> None:
         """Update workflow-level counters."""
         if status == "success":
             run["successful_actions"] = run.get("successful_actions", 0) + 1
@@ -378,7 +378,7 @@ class RunTracker:
 
     @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def finalize_workflow_run(
-        self, *, run_id: str, status: str, error_message: Optional[str] = None
+        self, *, run_id: str, status: str, error_message: str | None = None
     ) -> None:
         """Finalize workflow run when it completes or fails."""
         with portalocker.Lock(
@@ -410,7 +410,7 @@ class RunTracker:
 
             return
 
-    def _calculate_workflow_metrics(self, runs_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_workflow_metrics(self, runs_data: dict[str, Any]) -> dict[str, Any]:
         """Calculate aggregate metrics per workflow."""
         metrics = {}
 
@@ -436,7 +436,7 @@ class RunTracker:
             metrics[wf_id]["total_duration"] += run.get("duration_seconds", 0)
             metrics[wf_id]["total_tokens"] += run.get("total_tokens", 0)
 
-        for wf_id, data in metrics.items():
+        for _wf_id, data in metrics.items():
             total_runs = data["total_runs"]
             if total_runs > 0:
                 data["success_rate"] = data["successful_runs"] / total_runs

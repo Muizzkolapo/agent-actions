@@ -5,18 +5,18 @@ Covers initialization, action tracking, thread safety, and error handling.
 """
 
 import json
-import pytest
 import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import patch
+
+import pytest
 
 from agent_actions.workflow.managers.manifest import (
-    ManifestManager,
-    DuplicateActionError,
     MANIFEST_FILENAME,
     MANIFEST_SCHEMA_VERSION,
+    DuplicateActionError,
+    ManifestManager,
 )
 
 
@@ -421,7 +421,7 @@ class TestPersistence:
         manifest_manager.initialize_manifest(**sample_workflow_data)
 
         # Simulate crash during save by checking temp file cleanup
-        initial_files = set(manifest_manager.target_dir.glob("*"))
+        _initial_files = set(manifest_manager.target_dir.glob("*"))
 
         manifest_manager.mark_action_completed("extract")
 

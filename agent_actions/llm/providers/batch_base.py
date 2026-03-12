@@ -1,13 +1,18 @@
 """Base batch client interface for batch processing systems."""
 
+from __future__ import annotations
+
 import functools
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple, Type
 from dataclasses import dataclass
 from pathlib import Path
-import json
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from agent_actions.processing.types import RecoveryMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +20,7 @@ logger = logging.getLogger(__name__)
 def retry(
     max_attempts: int = 3,
     delay: float = 2.0,
-    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    exceptions: tuple[type[Exception], ...] = (Exception,),
 ):
     """Simple retry decorator for batch operations."""
 
@@ -44,8 +49,8 @@ class BatchTask:
     custom_id: str
     prompt: str
     user_content: str
-    model_config: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = None
+    model_config: dict[str, Any]
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
@@ -55,20 +60,20 @@ class BatchResult:
     custom_id: str
     content: Any
     success: bool
-    error: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    usage: Optional[Dict[str, Any]] = None
-    recovery_metadata: Optional["RecoveryMetadata"] = None  # From agent_actions.core.types
+    error: str | None = None
+    metadata: dict[str, Any] | None = None
+    usage: dict[str, Any] | None = None
+    recovery_metadata: RecoveryMetadata | None = None  # From agent_actions.core.types
 
 
 class BaseBatchClient(ABC):
     """Abstract base class for batch processing clients."""
 
-    _configured_model: Optional[str] = None
+    _configured_model: str | None = None
 
     def prepare_tasks(
-        self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+        self, data: list[dict[str, Any]], agent_config: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         """Convert agent-actions data format to provider-specific task format (Template Method)."""
         self._configured_model = agent_config.get("model_name", self._get_default_model())
 
@@ -103,13 +108,13 @@ class BaseBatchClient(ABC):
 
     @abstractmethod
     def format_task_for_provider(
-        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+        self, batch_task: BatchTask, schema: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Transform standardized BatchTask to provider-specific format."""
 
     def submit_batch(
-        self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str] = None
-    ) -> Tuple[str, str]:
+        self, tasks: list[dict[str, Any]], batch_name: str, output_directory: str | None = None
+    ) -> tuple[str, str]:
         """Submit a batch job to the provider (Template Method).
 
         Returns:
@@ -138,8 +143,8 @@ class BaseBatchClient(ABC):
         """Normalize provider-specific status to standard format."""
 
     def retrieve_results(
-        self, batch_id: str, output_directory: Optional[str] = None
-    ) -> List[BatchResult]:
+        self, batch_id: str, output_directory: str | None = None
+    ) -> list[BatchResult]:
         """Retrieve and parse results from a completed batch job (Template Method)."""
         # Fetch raw results with retry
         logger.info("Retrieving results for batch %s...", batch_id)
@@ -209,7 +214,7 @@ class BaseBatchClient(ABC):
         return self._get_attribute_or_key(raw_response, "custom_id", "unknown")
 
     @abstractmethod
-    def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
+    def _extract_error_from_response(self, raw_response: Any) -> str | None:
         """Extract error message from response, or None if no error."""
 
     @abstractmethod
@@ -217,18 +222,18 @@ class BaseBatchClient(ABC):
         """Extract main content from successful response."""
 
     @abstractmethod
-    def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
+    def _extract_metadata_from_response(self, raw_response: Any) -> dict[str, Any]:
         """Extract metadata from response (model name, finish_reason, etc.)."""
 
     @abstractmethod
-    def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(self, raw_response: Any) -> dict[str, Any] | None:
         """Extract token usage information from response."""
 
-    def get_supported_models(self) -> List[str]:
+    def get_supported_models(self) -> list[str]:
         """Get list of model names supported by this provider."""
         return []
 
-    def validate_config(self, agent_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def validate_config(self, agent_config: dict[str, Any]) -> tuple[bool, str | None]:
         """Validate agent configuration compatibility with this provider (Template Method)."""
         if not agent_config:
             return (False, "agent_config is required")
@@ -236,12 +241,12 @@ class BaseBatchClient(ABC):
         return self._validate_provider_specific_config(agent_config)
 
     def _validate_provider_specific_config(
-        self, _agent_config: Dict[str, Any]
-    ) -> Tuple[bool, Optional[str]]:
+        self, _agent_config: dict[str, Any]
+    ) -> tuple[bool, str | None]:
         """Perform provider-specific configuration validation. Override for custom checks."""
         return (True, None)
 
-    def _get_batch_directory(self, output_directory: Optional[str] = None) -> Path:
+    def _get_batch_directory(self, output_directory: str | None = None) -> Path:
         """Get or create the batch directory."""
         from agent_actions.utils.path_utils import ensure_directory_exists
 
@@ -253,7 +258,7 @@ class BaseBatchClient(ABC):
         return batch_dir
 
     def _write_jsonl_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str, provider_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str, provider_name: str
     ) -> Path:
         """Write tasks to JSONL file."""
         file_name = f"{Path(batch_name).stem}_{provider_name}_batch_input.jsonl"
@@ -264,7 +269,7 @@ class BaseBatchClient(ABC):
         logger.info("%s batch input file: %s", provider_name.title(), file_path)
         return file_path
 
-    def _read_jsonl_file(self, file_path: Path) -> List[BatchResult]:
+    def _read_jsonl_file(self, file_path: Path) -> list[BatchResult]:
         """Read JSONL file and parse to BatchResults."""
         if not file_path.exists():
             from agent_actions.errors import (
@@ -277,7 +282,7 @@ class BaseBatchClient(ABC):
                 context={"message": "Batch output file not found", "expected_path": str(file_path)},
             )
         batch_results = []
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 if line.strip():
                     try:
@@ -298,7 +303,7 @@ class BaseBatchClient(ABC):
         return batch_results
 
     def _add_optional_param(
-        self, target: Dict[str, Any], key: str, value: Any, default: Any = None
+        self, target: dict[str, Any], key: str, value: Any, default: Any = None
     ) -> None:
         """Add parameter to target dict only if value is not None."""
         if value is not None:
@@ -348,7 +353,7 @@ class BaseBatchClient(ABC):
         return default
 
     def _write_results_to_file(
-        self, batch_id: str, raw_results: bytes, output_directory: Optional[str] = None
+        self, batch_id: str, raw_results: bytes, output_directory: str | None = None
     ) -> Path:
         """
         Write raw results to JSONL file.
@@ -403,7 +408,7 @@ class BaseBatchClient(ABC):
 
     @abstractmethod
     def _prepare_batch_input_file(
-        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+        self, tasks: list[dict[str, Any]], batch_dir: Path, batch_name: str
     ) -> Path:
         """
         Prepare batch input file.
@@ -420,7 +425,7 @@ class BaseBatchClient(ABC):
         """
 
     @abstractmethod
-    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
         """
         Submit batch to provider API.
 

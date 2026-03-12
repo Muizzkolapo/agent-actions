@@ -2,7 +2,6 @@
 
 import urllib.parse
 from pathlib import Path
-from typing import List
 
 
 def uri_to_path(uri: str) -> Path:
@@ -20,7 +19,7 @@ def uri_to_path(uri: str) -> Path:
     return Path(path)
 
 
-def is_in_dependencies_context(lines: List[str], current_line: int) -> bool:
+def is_in_dependencies_context(lines: list[str], current_line: int) -> bool:
     """Check if current line is within a dependencies block."""
     current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
 
@@ -43,7 +42,7 @@ def is_in_dependencies_context(lines: List[str], current_line: int) -> bool:
     return False
 
 
-def is_in_context_scope_list(lines: List[str], current_line: int) -> bool:
+def is_in_context_scope_list(lines: list[str], current_line: int) -> bool:
     """Check if current line is within a context_scope observe/drop/passthrough list."""
     current_indent = len(lines[current_line]) - len(lines[current_line].lstrip())
     list_block_indent = None

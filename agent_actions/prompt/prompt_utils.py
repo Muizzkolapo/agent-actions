@@ -1,9 +1,10 @@
 """Module for String Processing Functions"""
 
-import re
 import json
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
+import re
+
 from agent_actions.errors import AgentActionsException, ConfigurationError
+from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 
 
 class PromptUtils:
@@ -76,7 +77,7 @@ class PromptUtils:
             function_name = match.group(1)
             replacements.append((match.start(), match.end(), function_name, full_match))
 
-        for start, end, function_name, full_match in reversed(replacements):
+        for start, end, function_name, _full_match in reversed(replacements):
             try:
                 transformed_text = StringProcessor.call_user_function(
                     function_name, tools_path, context_data_str

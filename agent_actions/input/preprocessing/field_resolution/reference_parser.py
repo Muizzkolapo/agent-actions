@@ -3,7 +3,6 @@
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional
 
 from .exceptions import InvalidReferenceError
 
@@ -21,7 +20,7 @@ class ParsedReference:
     """Structured representation of a parsed field reference."""
 
     action_name: str
-    field_path: List[str]
+    field_path: list[str]
     full_reference: str
     format_type: "ReferenceFormat"
 
@@ -56,7 +55,7 @@ class ReferenceParser:
     SELECTOR_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\b")
 
     def parse(
-        self, reference: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
+        self, reference: str, format_hint: ReferenceFormat | None = None, strict: bool = False
     ) -> ParsedReference:
         """Parse a single field reference string into structured format.
 
@@ -94,8 +93,8 @@ class ReferenceParser:
             return self._create_fallback_reference(reference)
 
     def parse_batch(
-        self, text: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
-    ) -> List[ParsedReference]:
+        self, text: str, format_hint: ReferenceFormat | None = None, strict: bool = False
+    ) -> list[ParsedReference]:
         """Extract all field references from a text string."""
         if not text:
             return []
@@ -133,7 +132,7 @@ class ReferenceParser:
 
     def _try_parse_format(
         self, reference: str, fmt: ReferenceFormat, strict: bool
-    ) -> Optional[ParsedReference]:
+    ) -> ParsedReference | None:
         """Try parsing reference with specific format."""
         try:
             if fmt == ReferenceFormat.SELECTOR:
@@ -212,7 +211,7 @@ class ReferenceParser:
             format_type=fmt,
         )
 
-    def _get_patterns_for_format(self, format_hint: Optional[ReferenceFormat]) -> List[tuple]:
+    def _get_patterns_for_format(self, format_hint: ReferenceFormat | None) -> list[tuple]:
         """Get regex patterns to use based on format hint."""
         if format_hint == ReferenceFormat.TEMPLATE:
             return [(self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE)]

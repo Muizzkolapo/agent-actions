@@ -1,18 +1,18 @@
 """Action-type processing functions extracted from ActionExpander."""
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
-from agent_actions.errors import ConfigValidationError, ConfigurationError
-from agent_actions.output.response.guard_parser import GuardParser
-from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
-from agent_actions.utils.constants import HITL_OUTPUT_SCHEMA, HITL_OUTPUT_JSON_SCHEMA
 from agent_actions.config.types import AgentEntryDict
+from agent_actions.errors import ConfigurationError, ConfigValidationError
+from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
+from agent_actions.output.response.guard_parser import GuardParser
+from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
 
 logger = logging.getLogger(__name__)
 
 
-def process_guard_config(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
+def process_guard_config(agent: AgentEntryDict, action: dict[str, Any]) -> None:
     """Process guard configuration for an agent."""
     if not action.get("guard"):
         return
@@ -47,7 +47,7 @@ def process_guard_config(agent: AgentEntryDict, action: Dict[str, Any]) -> None:
             }
 
 
-def process_tool_action(agent: AgentEntryDict, action: Dict[str, Any], run_mode: str) -> None:
+def process_tool_action(agent: AgentEntryDict, action: dict[str, Any], run_mode: str) -> None:
     """Process tool-specific action configuration."""
     action_kind = action.get("kind", "llm")
     if action_kind != "tool":
@@ -102,7 +102,7 @@ def process_tool_action(agent: AgentEntryDict, action: Dict[str, Any], run_mode:
 
 
 def process_hitl_action(
-    agent: AgentEntryDict, action: Dict[str, Any], defaults: Dict[str, Any]
+    agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
     """Process HITL-specific action configuration.
 

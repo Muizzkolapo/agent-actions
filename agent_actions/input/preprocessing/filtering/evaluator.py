@@ -3,13 +3,13 @@
 import logging
 import threading
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from agent_actions.input.preprocessing.filtering.guard_filter import (
-    get_global_guard_filter,
     FilterItemRequest,
-    GuardFilter,
     FilterResult,
+    GuardFilter,
+    get_global_guard_filter,
 )
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
@@ -21,8 +21,8 @@ class GuardResult:
     """Result of guard evaluation."""
 
     should_execute: bool
-    behavior: Optional[str] = None  # 'skip' | 'filter' | None
-    error: Optional[str] = None
+    behavior: str | None = None  # 'skip' | 'filter' | None
+    error: str | None = None
     matched: bool = True
 
     @classmethod
@@ -31,12 +31,12 @@ class GuardResult:
         return cls(should_execute=True, matched=True)
 
     @classmethod
-    def skipped(cls, error: Optional[str] = None) -> "GuardResult":
+    def skipped(cls, error: str | None = None) -> "GuardResult":
         """Guard failed with skip behavior - use passthrough."""
         return cls(should_execute=False, behavior="skip", matched=False, error=error)
 
     @classmethod
-    def filtered(cls, error: Optional[str] = None) -> "GuardResult":
+    def filtered(cls, error: str | None = None) -> "GuardResult":
         """Guard failed with filter behavior - exclude entirely."""
         return cls(should_execute=False, behavior="filter", matched=False, error=error)
 
@@ -73,15 +73,15 @@ class GuardResult:
 class GuardEvaluator:
     """Unified guard evaluation with two-phase support (early and with-context)."""
 
-    def __init__(self, guard_filter: Optional[GuardFilter] = None):
+    def __init__(self, guard_filter: GuardFilter | None = None):
         """Initialize GuardEvaluator."""
         self._filter = guard_filter or get_global_guard_filter()
 
     def evaluate_early(
         self,
         item: Any,
-        guard_config: Optional[Dict[str, Any]],
-        conditional_clause: Optional[str] = None,
+        guard_config: dict[str, Any] | None,
+        conditional_clause: str | None = None,
     ) -> GuardResult:
         """Phase 1: Evaluate guards on raw content before prompt preparation.
 
@@ -97,9 +97,9 @@ class GuardEvaluator:
     def evaluate_with_context(
         self,
         item: Any,
-        guard_config: Optional[Dict[str, Any]],
-        context: Dict[str, Any],
-        conditional_clause: Optional[str] = None,
+        guard_config: dict[str, Any] | None,
+        context: dict[str, Any],
+        conditional_clause: str | None = None,
     ) -> GuardResult:
         """Phase 2: Evaluate guards with full context (passthrough fields, source data)."""
         eval_data = self._build_evaluation_context(item, context)
@@ -114,16 +114,16 @@ class GuardEvaluator:
     def evaluate(
         self,
         item: Any,
-        guard_config: Optional[Dict[str, Any]],
-        conditional_clause: Optional[str] = None,
-    ) -> Tuple[bool, Optional[str]]:
+        guard_config: dict[str, Any] | None,
+        conditional_clause: str | None = None,
+    ) -> tuple[bool, str | None]:
         """Backward-compatible evaluation returning (should_execute, behavior) tuple."""
         result = self.evaluate_early(item, guard_config, conditional_clause)
         return (result.should_execute, result.behavior)
 
     def _evaluate_conditional_clause(
         self, context: Any, conditional_clause: str
-    ) -> Optional[GuardResult]:
+    ) -> GuardResult | None:
         """Evaluate legacy UDF conditional clause; returns None if passed, GuardResult.skipped() if failed."""
         clause = (conditional_clause or "").lower()
         if not clause:
@@ -139,7 +139,7 @@ class GuardEvaluator:
 
         return None
 
-    def _evaluate_guard(self, context: Any, guard_config: Optional[Dict[str, Any]]) -> GuardResult:
+    def _evaluate_guard(self, context: Any, guard_config: dict[str, Any] | None) -> GuardResult:
         """Evaluate guard condition against context data."""
         if not guard_config:
             return GuardResult.passed()
@@ -171,7 +171,7 @@ class GuardEvaluator:
                 return GuardResult.skipped(error=str(e))
             return GuardResult.filtered(error=str(e))
 
-    def _prepare_eval_context(self, context: Any) -> Dict[str, Any]:
+    def _prepare_eval_context(self, context: Any) -> dict[str, Any]:
         """Flatten nested content structures so guards can access both metadata and content fields."""
         if isinstance(context, dict):
             if "content" in context and isinstance(context["content"], dict):
@@ -183,7 +183,7 @@ class GuardEvaluator:
 
         return {"_raw": context}
 
-    def _build_evaluation_context(self, item: Any, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_evaluation_context(self, item: Any, context: dict[str, Any]) -> dict[str, Any]:
         """Merge item content with full context for Phase 2 evaluation."""
         eval_data = {}
 
@@ -204,7 +204,7 @@ class GuardEvaluator:
 
         return eval_data
 
-    def should_skip(self, agent_config: Dict[str, Any], context: Any) -> bool:
+    def should_skip(self, agent_config: dict[str, Any], context: Any) -> bool:
         """Check if agent should be skipped based on guard with skip behavior."""
         guard_config = agent_config.get("guard")
         if not guard_config or guard_config.get("behavior") != "skip":
@@ -213,7 +213,7 @@ class GuardEvaluator:
         result = self._evaluate_guard(context, guard_config)
         return not result.should_execute
 
-    def should_filter(self, agent_config: Dict[str, Any], context: Any) -> bool:
+    def should_filter(self, agent_config: dict[str, Any], context: Any) -> bool:
         """Check if item should be filtered based on guard with filter behavior."""
         guard_config = agent_config.get("guard")
         if not guard_config or guard_config.get("behavior") != "filter":
@@ -224,7 +224,7 @@ class GuardEvaluator:
 
 
 # Thread-safe singleton
-_GLOBAL_GUARD_EVALUATOR: Optional[GuardEvaluator] = None
+_GLOBAL_GUARD_EVALUATOR: GuardEvaluator | None = None
 _GUARD_EVALUATOR_LOCK = threading.Lock()
 
 

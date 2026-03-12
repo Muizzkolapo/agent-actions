@@ -1,10 +1,11 @@
 """Tests for ResultCollector and ExhaustedRecordBuilder."""
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
+from agent_actions.errors import AgentActionsException
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
@@ -13,7 +14,6 @@ from agent_actions.processing.types import (
     RecoveryMetadata,
     RetryMetadata,
 )
-from agent_actions.errors import AgentActionsException
 from agent_actions.utils.id_generation import IDGenerator
 
 
@@ -152,7 +152,7 @@ def test_result_collector_handles_none_data():
 
 def test_exhausted_record_builder_preserves_lineage(monkeypatch):
     monkeypatch.setattr(IDGenerator, "generate_node_id", lambda _: "action_node")
-    agent_config: Dict[str, Any] = {"agent_type": "builder_action"}
+    agent_config: dict[str, Any] = {"agent_type": "builder_action"}
     original_row = {"lineage": ["root"], "target_id": "t-7"}
 
     exhausted_item = ExhaustedRecordBuilder.build_exhausted_item(

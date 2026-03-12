@@ -5,10 +5,10 @@ import logging
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
-from agent_actions.storage.backend import StorageBackend, VALID_DISPOSITIONS
+from agent_actions.storage.backend import VALID_DISPOSITIONS, StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ class SQLiteBackend(StorageBackend):
         """Initialize SQLite backend."""
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
-        self._connection: Optional[sqlite3.Connection] = None
+        self._connection: sqlite3.Connection | None = None
         self._lock = threading.Lock()  # Serialize write operations
 
     def _validate_identifier(self, name: str, field: str) -> str:
@@ -157,7 +157,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def write_target(self, action_name: str, relative_path: str, data: List[Dict[str, Any]]) -> str:
+    def write_target(self, action_name: str, relative_path: str, data: list[dict[str, Any]]) -> str:
         """Write target data for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
@@ -198,7 +198,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def read_target(self, action_name: str, relative_path: str) -> List[Dict[str, Any]]:
+    def read_target(self, action_name: str, relative_path: str) -> list[dict[str, Any]]:
         """Read target data for a specific node.
 
         Raises:
@@ -222,7 +222,7 @@ class SQLiteBackend(StorageBackend):
     def write_source(
         self,
         relative_path: str,
-        data: List[Dict[str, Any]],
+        data: list[dict[str, Any]],
         enable_deduplication: bool = True,
     ) -> str:
         """Write source data with optional deduplication by source_guid."""
@@ -279,7 +279,7 @@ class SQLiteBackend(StorageBackend):
                 )
                 raise
 
-    def read_source(self, relative_path: str) -> List[Dict[str, Any]]:
+    def read_source(self, relative_path: str) -> list[dict[str, Any]]:
         """Read source data.
 
         Raises:
@@ -298,7 +298,7 @@ class SQLiteBackend(StorageBackend):
 
         return [json.loads(row["data"]) for row in rows]
 
-    def list_target_files(self, action_name: str) -> List[str]:
+    def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
         cursor = self.connection.cursor()
@@ -308,7 +308,7 @@ class SQLiteBackend(StorageBackend):
         )
         return [row["relative_path"] for row in cursor.fetchall()]
 
-    def list_source_files(self) -> List[str]:
+    def list_source_files(self) -> list[str]:
         """List all source file paths."""
         cursor = self.connection.cursor()
         cursor.execute("SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path")
@@ -319,8 +319,8 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         limit: int = 10,
         offset: int = 0,
-        relative_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        relative_path: str | None = None,
+    ) -> dict[str, Any]:
         """Preview target data for a node with pagination."""
         action_name = self._validate_identifier(action_name, "action_name")
         if relative_path is not None:
@@ -357,7 +357,7 @@ class SQLiteBackend(StorageBackend):
 
         total_count = sum(row["record_count"] for row in file_metadata)
 
-        paginated_records: List[Dict[str, Any]] = []
+        paginated_records: list[dict[str, Any]] = []
         skipped = 0
         collected = 0
 
@@ -404,7 +404,7 @@ class SQLiteBackend(StorageBackend):
             "offset": offset,
         }
 
-    def get_storage_stats(self) -> Dict[str, Any]:
+    def get_storage_stats(self) -> dict[str, Any]:
         """Get storage statistics (record counts, DB size, per-node breakdown)."""
         cursor = self.connection.cursor()
 
@@ -451,8 +451,8 @@ class SQLiteBackend(StorageBackend):
         action_name: str,
         record_id: str,
         disposition: str,
-        reason: Optional[str] = None,
-        relative_path: Optional[str] = None,
+        reason: str | None = None,
+        relative_path: str | None = None,
     ) -> None:
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
@@ -497,9 +497,9 @@ class SQLiteBackend(StorageBackend):
     def get_disposition(
         self,
         action_name: str,
-        record_id: Optional[str] = None,
-        disposition: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        record_id: str | None = None,
+        disposition: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Query disposition records with optional filters."""
         action_name = self._validate_identifier(action_name, "action_name")
 
@@ -526,7 +526,7 @@ class SQLiteBackend(StorageBackend):
         self,
         action_name: str,
         disposition: str,
-        record_id: Optional[str] = None,
+        record_id: str | None = None,
     ) -> bool:
         """Check whether at least one matching disposition exists."""
         action_name = self._validate_identifier(action_name, "action_name")
@@ -547,8 +547,8 @@ class SQLiteBackend(StorageBackend):
     def clear_disposition(
         self,
         action_name: str,
-        disposition: Optional[str] = None,
-        record_id: Optional[str] = None,
+        disposition: str | None = None,
+        record_id: str | None = None,
     ) -> int:
         """Delete matching disposition records. Returns count deleted."""
         action_name = self._validate_identifier(action_name, "action_name")

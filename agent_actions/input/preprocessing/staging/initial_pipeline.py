@@ -1,25 +1,22 @@
 """Initial stage pipeline: file reading, data preparation, source saving, and processing."""
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Dict, Optional, Any
 import json
 import logging
 import uuid
-import asyncio
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 from agent_actions.errors import AgentActionsException
-from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID, DISPOSITION_PASSTHROUGH
-
-from agent_actions.output.writer import FileWriter
-from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
-from agent_actions.utils.constants import CHUNK_CONFIG_KEY
-from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.output.saver import UnifiedSourceDataSaver
+from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import ProcessingContext, ProcessingMode
-
+from agent_actions.prompt.formatter import PromptFormatter
+from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
+from agent_actions.utils.constants import CHUNK_CONFIG_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +60,7 @@ class BatchProcessingContext:
     storage_backend: Any = None  # Optional StorageBackend for database persistence
 
 
-def _derive_workflow_root(primary_path: Optional[str], fallback_path: str) -> Path:
+def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
     """Derive workflow root by finding 'agent_io' in path parts."""
     target_path = Path(primary_path) if primary_path else Path(fallback_path)
     parts = target_path.parts
@@ -124,7 +121,7 @@ def _validate_staged_data(
         source_content = {"page_content": str(raw_content)[:1000]}
         first_item = {"page_content": source_content["page_content"]}
 
-    prep_result = PromptPreparationService.prepare_prompt_with_context(
+    PromptPreparationService.prepare_prompt_with_context(
         agent_config=agent_config,
         agent_name=agent_name,
         contents=source_content if isinstance(source_content, dict) else {},
@@ -208,10 +205,10 @@ def process_initial_stage(ctx: InitialStageContext):
 
 
 def _should_save_source_items(
-    new_items: List[Dict],
+    new_items: list[dict],
     file_path: str,
     base_directory: str,
-    output_directory: Optional[str] = None,
+    output_directory: str | None = None,
 ) -> bool:
     """Return True if new_items are richer (more fields) than existing source data."""
     if not new_items:
@@ -227,7 +224,7 @@ def _should_save_source_items(
         return True
 
     try:
-        with open(source_file, "r", encoding="utf-8") as f:
+        with open(source_file, encoding="utf-8") as f:
             existing_items = json.load(f)
             if not existing_items:
                 logger.debug("Existing source file is empty, proceeding with save")
@@ -251,7 +248,7 @@ def _should_save_source_items(
                 )
                 return False
 
-    except (IOError, json.JSONDecodeError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning(
             "Error reading existing source file %s: %s, proceeding with save", source_file, e
         )

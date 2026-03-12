@@ -23,7 +23,6 @@ See also: agent_actions.llm.providers.failure_injection (rate-based injection)
 
 import logging
 import os
-from typing import Set
 
 from agent_actions.errors import NetworkError
 
@@ -31,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Module-level state
 _online_call_count = 0
-_failed_batch_ids: Set[str] = set()
+_failed_batch_ids: set[str] = set()
 
 
 def reset():

@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
@@ -16,9 +16,9 @@ class PathValidator(BaseValidator):
 
     def __init__(self) -> None:
         super().__init__()
-        self.issues: List[ValidationIssue] = []
+        self.issues: list[ValidationIssue] = []
 
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+    def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate paths in the provided configuration."""
         self.clear_errors()
         self.clear_warnings()
@@ -103,9 +103,9 @@ class PathValidator(BaseValidator):
 
     def validate_paths(
         self,
-        paths: List[str],
+        paths: list[str],
         path_type: str = "file",
-        agent_name: Optional[str] = None,
+        agent_name: str | None = None,
         check_readable: bool = True,
         check_writable: bool = False,
     ) -> bool:
@@ -121,8 +121,8 @@ class PathValidator(BaseValidator):
 
     def validate_agent_paths(
         self,
-        agent_config: Dict[str, Any],
-        agent_name: Optional[str] = None,
+        agent_config: dict[str, Any],
+        agent_name: str | None = None,
     ) -> bool:
         """Validate all paths referenced in agent configuration."""
         paths_to_check = []
@@ -158,6 +158,6 @@ class PathValidator(BaseValidator):
 
         return all_valid
 
-    def get_issues(self) -> List[ValidationIssue]:
+    def get_issues(self) -> list[ValidationIssue]:
         """Get the list of validation issues found."""
         return self.issues

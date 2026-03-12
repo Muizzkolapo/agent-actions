@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -11,21 +11,21 @@ logger = logging.getLogger(__name__)
 class AgentStateManager:
     """Manages agent execution state persistence and queries."""
 
-    def __init__(self, status_file_path: Path, execution_order: List[str]):
+    def __init__(self, status_file_path: Path, execution_order: list[str]):
         """Initialize state manager."""
         self.status_file = status_file_path
         self.execution_order = execution_order
-        self.agent_status: Dict[str, Dict[str, Any]] = {}
+        self.agent_status: dict[str, dict[str, Any]] = {}
         self._load_status()
 
     def _load_status(self):
         """Load agent status from file, or initialize with defaults."""
         if self.status_file.exists():
             try:
-                with open(self.status_file, "r", encoding="utf-8") as f:
+                with open(self.status_file, encoding="utf-8") as f:
                     self.agent_status = json.load(f)
                 logger.info("Loaded status for %d agents", len(self.agent_status))
-            except (OSError, IOError, json.JSONDecodeError, ValueError) as e:
+            except (OSError, json.JSONDecodeError, ValueError) as e:
                 logger.warning("Could not load status file: %s", e)
                 self._initialize_default_status()
         else:
@@ -41,7 +41,7 @@ class AgentStateManager:
             self.status_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.status_file, "w", encoding="utf-8") as f:
                 json.dump(self.agent_status, f, indent=4)
-        except (OSError, IOError, ValueError, TypeError) as e:
+        except (OSError, ValueError, TypeError) as e:
             logger.error("Error saving status: %s", e)
 
     def update_status(self, agent_name: str, status: str, **metadata):
@@ -61,7 +61,7 @@ class AgentStateManager:
         """Return current status of an agent, defaulting to 'pending'."""
         return self.agent_status.get(agent_name, {}).get("status", "pending")
 
-    def get_status_details(self, agent_name: str) -> Dict[str, Any]:
+    def get_status_details(self, agent_name: str) -> dict[str, Any]:
         """Return full status details for an agent."""
         return self.agent_status.get(agent_name, {"status": "pending"})
 
@@ -77,15 +77,15 @@ class AgentStateManager:
         """Return True if agent has failed."""
         return self.get_status(agent_name) == "failed"
 
-    def get_pending_agents(self, agents: List[str]) -> List[str]:
+    def get_pending_agents(self, agents: list[str]) -> list[str]:
         """Return agents that are not yet completed."""
         return [agent for agent in agents if not self.is_completed(agent)]
 
-    def get_batch_submitted_agents(self, agents: List[str]) -> List[str]:
+    def get_batch_submitted_agents(self, agents: list[str]) -> list[str]:
         """Return agents with batch jobs submitted."""
         return [agent for agent in agents if self.is_batch_submitted(agent)]
 
-    def get_failed_agents(self, agents: List[str]) -> List[str]:
+    def get_failed_agents(self, agents: list[str]) -> list[str]:
         """Return agents that have failed."""
         return [agent for agent in agents if self.is_failed(agent)]
 
@@ -97,7 +97,7 @@ class AgentStateManager:
                 return agent_name
         return None
 
-    def get_summary(self) -> Dict[str, int]:
+    def get_summary(self) -> dict[str, int]:
         """Return summary counts of agent statuses."""
         summary = {}
         for details in self.agent_status.values():

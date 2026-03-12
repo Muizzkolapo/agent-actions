@@ -1,8 +1,9 @@
 """Unified LLM context builder for batch and realtime modes."""
 
-from typing import Dict, Any, Optional
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from typing import Any
+
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
+from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 
 class LLMContextBuilder:
@@ -17,10 +18,10 @@ class LLMContextBuilder:
 
     @staticmethod
     def _build_llm_context(
-        base_context: Dict[str, Any],
-        additional_context: Optional[Dict[str, Any]],
-        context_scope: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        base_context: dict[str, Any],
+        additional_context: dict[str, Any] | None,
+        context_scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Shared implementation for building LLM context.
 
@@ -100,10 +101,10 @@ class LLMContextBuilder:
 
     @staticmethod
     def build_llm_context_for_batch(
-        row_content: Dict[str, Any],
-        llm_context: Dict[str, Any],
-        context_scope: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        row_content: dict[str, Any],
+        llm_context: dict[str, Any],
+        context_scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Build LLM context for batch mode.
 
@@ -127,10 +128,10 @@ class LLMContextBuilder:
 
     @staticmethod
     def build_llm_context_for_realtime(
-        processed_context: Dict[str, Any],
-        llm_additional_context: Optional[Dict[str, Any]],
-        context_scope: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        processed_context: dict[str, Any],
+        llm_additional_context: dict[str, Any] | None,
+        context_scope: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Build LLM context for realtime mode.
 

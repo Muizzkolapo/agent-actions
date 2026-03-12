@@ -2,20 +2,23 @@
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Any, Optional
+from typing import Any
+
 from rich.console import Console
+
 from agent_actions.config.types import AgentConfigDict
+from agent_actions.errors import get_error_detail
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     AgentSkipEvent,
-    BatchSubmittedEvent,
     BatchCompleteEvent,
+    BatchSubmittedEvent,
 )
-from agent_actions.errors import get_error_detail
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
 
 logger = logging.getLogger(__name__)
@@ -44,9 +47,9 @@ class ExecutionMetrics:
     """Metrics from agent execution."""
 
     duration: float = 0.0
-    tokens: Optional[Dict[str, int]] = None
-    model_vendor: Optional[str] = None
-    model_name: Optional[str] = None
+    tokens: dict[str, int] | None = None
+    model_vendor: str | None = None
+    model_name: str | None = None
     files_processed: int = 0
 
 
@@ -66,9 +69,9 @@ class AgentExecutionResult:
     """Result of agent execution."""
 
     success: bool
-    output_folder: Optional[str] = None
+    output_folder: str | None = None
     status: str = "completed"  # 'completed', 'batch_submitted', 'failed'
-    error: Optional[Exception] = None
+    error: Exception | None = None
     metrics: ExecutionMetrics = None
 
     def __post_init__(self):
@@ -82,17 +85,17 @@ class AgentExecutionResult:
         return self.metrics.duration
 
     @property
-    def tokens(self) -> Optional[Dict[str, int]]:
+    def tokens(self) -> dict[str, int] | None:
         """Return tokens from metrics."""
         return self.metrics.tokens
 
     @property
-    def model_vendor(self) -> Optional[str]:
+    def model_vendor(self) -> str | None:
         """Return model_vendor from metrics."""
         return self.metrics.model_vendor
 
     @property
-    def model_name(self) -> Optional[str]:
+    def model_name(self) -> str | None:
         """Return model_name from metrics."""
         return self.metrics.model_name
 
@@ -111,7 +114,7 @@ class AgentExecutionResult:
 class AgentExecutor:
     """Executes individual agents with full lifecycle management."""
 
-    def __init__(self, deps: ExecutorDependencies, *, console: Optional[Console] = None):
+    def __init__(self, deps: ExecutorDependencies, *, console: Console | None = None):
         """Initialize agent executor."""
         self.deps = deps
         self.console = console or Console()
@@ -220,7 +223,7 @@ class AgentExecutor:
         params: AgentRunParams,
         output_folder: str,
         duration: float,
-        batch_status: Optional[str],
+        batch_status: str | None,
     ) -> AgentExecutionResult:
         """Handle successful agent run result."""
         if batch_status == "batch_submitted":
@@ -299,9 +302,7 @@ class AgentExecutor:
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
         )
 
-    def _cleanup_correlation(
-        self, params: AgentRunParams, original_setup: Optional[Callable]
-    ) -> None:
+    def _cleanup_correlation(self, params: AgentRunParams, original_setup: Callable | None) -> None:
         """Restore original setup_directories after correlation setup."""
         if original_setup:
             try:
@@ -579,7 +580,7 @@ class AgentExecutor:
     def __repr__(self):
         return f"AgentExecutor(deps={self.deps})"
 
-    def _setup_correlation(self, agent_idx: int) -> Optional[callable]:
+    def _setup_correlation(self, agent_idx: int) -> Callable | None:
         """Setup loop correlation if needed, return original setup function."""
         correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(agent_idx)
 
@@ -590,7 +591,7 @@ class AgentExecutor:
 
         return None
 
-    def _check_batch_submission(self, agent_name: str, agent_idx: int) -> Optional[str]:
+    def _check_batch_submission(self, agent_name: str, agent_idx: int) -> str | None:
         """Check if batch jobs were submitted."""
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))

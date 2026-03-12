@@ -7,7 +7,7 @@ and question density against baseline corpus statistics.
 
 import math
 import re
-from typing import Any, Dict, List, TypedDict
+from typing import Any, TypedDict
 
 from agent_actions import udf_tool
 
@@ -16,7 +16,7 @@ class ScorePfdEmbeddingInput(TypedDict, total=False):
     """Input schema for score_pfd_embedding."""
 
     prompt_text: str
-    legitimate_corpus_stats: Dict[str, Any]
+    legitimate_corpus_stats: dict[str, Any]
 
 
 class ScorePfdEmbeddingOutput(TypedDict, total=False):
@@ -27,14 +27,14 @@ class ScorePfdEmbeddingOutput(TypedDict, total=False):
     structural_anomaly: float
     question_density: float
     pfd_composite: float
-    anomaly_flags: List[str]
+    anomaly_flags: list[str]
 
 
 def _character_entropy(text: str) -> float:
     """Compute Shannon entropy over character frequencies."""
     if not text:
         return 0.0
-    freq: Dict[str, int] = {}
+    freq: dict[str, int] = {}
     for ch in text:
         freq[ch] = freq.get(ch, 0) + 1
     length = len(text)
@@ -46,7 +46,7 @@ def _character_entropy(text: str) -> float:
     return round(entropy, 4)
 
 
-def _instruction_density(text: str, imperative_verbs: List[str]) -> float:
+def _instruction_density(text: str, imperative_verbs: list[str]) -> float:
     """Compute ratio of imperative verbs to total tokens."""
     tokens = re.findall(r"\b\w+\b", text.lower())
     if not tokens:
@@ -56,7 +56,7 @@ def _instruction_density(text: str, imperative_verbs: List[str]) -> float:
     return round(imperative_count / len(tokens), 4)
 
 
-def _structural_anomaly(text: str, baseline_stats: Dict[str, Any]) -> float:
+def _structural_anomaly(text: str, baseline_stats: dict[str, Any]) -> float:
     """Compute structural anomaly based on special chars and line length."""
     if not text:
         return 0.0
@@ -110,13 +110,36 @@ def score_pfd_embedding(data: dict) -> dict:
     corpus_stats = content.get("legitimate_corpus_stats", {})
 
     # All imperative verbs (including suspicious ones)
-    all_imperatives = corpus_stats.get("imperative_verbs", [
-        "ignore", "forget", "disregard", "override", "pretend", "act",
-        "explain", "describe", "summarize", "help", "write", "generate",
-    ])
-    benign_imperatives = set(corpus_stats.get("benign_imperative_verbs", [
-        "explain", "describe", "summarize", "help", "write", "generate",
-    ]))
+    all_imperatives = corpus_stats.get(
+        "imperative_verbs",
+        [
+            "ignore",
+            "forget",
+            "disregard",
+            "override",
+            "pretend",
+            "act",
+            "explain",
+            "describe",
+            "summarize",
+            "help",
+            "write",
+            "generate",
+        ],
+    )
+    benign_imperatives = set(
+        corpus_stats.get(
+            "benign_imperative_verbs",
+            [
+                "explain",
+                "describe",
+                "summarize",
+                "help",
+                "write",
+                "generate",
+            ],
+        )
+    )
 
     structural_baseline = corpus_stats.get("structural_metrics", {})
 
@@ -151,10 +174,7 @@ def score_pfd_embedding(data: dict) -> dict:
 
     # Composite PFD score: weighted combination
     pfd_composite = (
-        0.25 * entropy_score
-        + 0.35 * instr_score
-        + 0.25 * struct_anomaly
-        + 0.15 * q_density
+        0.25 * entropy_score + 0.35 * instr_score + 0.25 * struct_anomaly + 0.15 * q_density
     )
     pfd_composite = round(min(pfd_composite, 1.0), 4)
 

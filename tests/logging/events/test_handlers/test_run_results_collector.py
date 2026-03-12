@@ -1,23 +1,22 @@
 """Tests for RunResultsCollector handler."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from agent_actions.logging.core.events import BaseEvent
-from agent_actions.logging.events.types import (
-    WorkflowStartEvent,
-    WorkflowCompleteEvent,
-    WorkflowFailedEvent,
-    AgentStartEvent,
-    AgentCompleteEvent,
-    AgentSkipEvent,
-    AgentFailedEvent,
-)
 from agent_actions.logging.events.handlers.run_results import (
     RunResultsCollector,
-    AgentResult,
+)
+from agent_actions.logging.events.types import (
+    AgentCompleteEvent,
+    AgentFailedEvent,
+    AgentSkipEvent,
+    AgentStartEvent,
+    WorkflowCompleteEvent,
+    WorkflowFailedEvent,
+    WorkflowStartEvent,
 )
 
 
@@ -65,7 +64,7 @@ class TestWorkflowEventHandling:
             agent_count=5,
             execution_mode="parallel",
         )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
 
         collector.handle(event)
 
@@ -87,7 +86,7 @@ class TestWorkflowEventHandling:
             elapsed_time=120.5,
             agents_completed=1,
         )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 2, 0, tzinfo=timezone.utc)
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 2, 0, tzinfo=UTC)
 
         collector.handle(event)
 
@@ -159,7 +158,7 @@ class TestAgentEventHandling:
             agent_index=0,
             total_agents=3,
         )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
 
         collector.handle(event)
 
@@ -382,14 +381,14 @@ class TestAgentSkipHandling:
             total_agents=2,
             skip_reason="already completed",
         )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
         collector.handle(event)
 
         assert "cached_agent" in collector._results
         result = collector._results["cached_agent"]
         assert result.status == "skipped"
         assert result.skip_reason == "already completed"
-        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
 
     def test_skip_counted_in_summary(self, collector):
         """Test that skipped agents appear in summary."""
@@ -412,7 +411,7 @@ class TestAgentStartEventHandling:
             agent_index=2,
             total_agents=5,
         )
-        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        event.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
 
         collector.handle(event)
 
@@ -420,22 +419,22 @@ class TestAgentStartEventHandling:
         result = collector._results["my_agent"]
         assert result.status == "running"
         assert result.agent_index == 2
-        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
 
     def test_start_then_complete_preserves_started_at(self, collector):
         """started_at from AgentStartEvent survives AgentCompleteEvent."""
         start = AgentStartEvent(agent_name="a", agent_index=1, total_agents=3)
-        start.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        start.meta.timestamp = datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
         collector.handle(start)
 
         complete = AgentCompleteEvent(agent_name="a", agent_index=1, execution_time=5.0)
-        complete.meta.timestamp = datetime(2024, 1, 15, 10, 0, 5, tzinfo=timezone.utc)
+        complete.meta.timestamp = datetime(2024, 1, 15, 10, 0, 5, tzinfo=UTC)
         collector.handle(complete)
 
         result = collector._results["a"]
         assert result.status == "success"
-        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
-        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 5, tzinfo=timezone.utc)
+        assert result.started_at == datetime(2024, 1, 15, 10, 0, 0, tzinfo=UTC)
+        assert result.completed_at == datetime(2024, 1, 15, 10, 0, 5, tzinfo=UTC)
 
 
 class TestAgentIndexUpdatedOnExistingEntry:

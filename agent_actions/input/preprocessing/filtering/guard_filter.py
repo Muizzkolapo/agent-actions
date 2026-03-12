@@ -3,17 +3,19 @@
 import atexit
 import logging
 import time
-from typing import Any, Dict, Optional
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass
 from functools import lru_cache
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from typing import Any
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.types import (
-    GuardEvaluationTimeoutEvent,
     GuardEvaluationErrorEvent,
+    GuardEvaluationTimeoutEvent,
 )
-from ..parsing.parser import WhereClauseParser, ParseResult
+
+from ..parsing.parser import ParseResult, WhereClauseParser
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ class FilterResult:
 
     success: bool
     matched: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     execution_time: float = 0.0
     cache_hit: bool = False
 
@@ -51,10 +53,10 @@ class FilterMetrics:
 class FilterItemRequest:
     """Request parameters for filtering a single item."""
 
-    data: Dict[str, Any]
+    data: dict[str, Any]
     condition: str
-    timeout: Optional[int] = None
-    functions: Optional[Dict[str, Any]] = None
+    timeout: int | None = None
+    functions: dict[str, Any] | None = None
 
 
 class GuardFilter:
@@ -129,13 +131,13 @@ class GuardFilter:
         """Parse guard condition with caching."""
         return self._cached_parse(condition)
 
-    @lru_cache(maxsize=1000)
+    @lru_cache(maxsize=1000)  # noqa: B019
     def _cached_parse(self, condition: str) -> ParseResult:
         """Internal cached parse method."""
         return self.parser.parse(condition)
 
     def _evaluate_guard_condition(
-        self, data: Dict[str, Any], condition: str, functions: Optional[Dict[str, Any]]
+        self, data: dict[str, Any], condition: str, functions: dict[str, Any] | None
     ) -> bool:
         """Evaluate a guard condition against data."""
         parse_result = self._parse_condition_cached(condition)
@@ -169,7 +171,7 @@ class GuardFilter:
             self.metrics.total_execution_time / self.metrics.total_evaluations
         )
 
-    def get_cache_info(self) -> Dict[str, Any]:
+    def get_cache_info(self) -> dict[str, Any]:
         """Get cache statistics."""
         parser_cache = self.parser.get_cache_info()
         filter_cache = _get_lru_cache_info(type(self)._cached_parse)

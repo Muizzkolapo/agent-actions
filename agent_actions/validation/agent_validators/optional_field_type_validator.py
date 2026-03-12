@@ -1,10 +1,10 @@
 """Validator for optional field types in agent configuration."""
 
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
-    AgentEntryValidationResult,
-)
 from agent_actions.utils.constants import JSON_MODE_KEY
+from agent_actions.validation.agent_validators.base_agent_validator import (
+    AgentEntryValidationResult,
+    BaseAgentEntryValidator,
+)
 
 
 class OptionalFieldTypeValidator(BaseAgentEntryValidator):

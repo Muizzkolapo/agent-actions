@@ -7,10 +7,8 @@ import pytest
 
 from agent_actions.logging.core.events import BaseEvent, EventLevel
 from agent_actions.logging.core.handlers.bridge import (
-    LoggingBridgeHandler,
     LogEvent,
-    DebugEvent,
-    SystemEvent,
+    LoggingBridgeHandler,
 )
 from agent_actions.logging.core.manager import EventManager
 

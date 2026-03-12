@@ -5,14 +5,13 @@ Find Import Errors - Systematically identify all import errors in test files.
 Runs pytest collection on each test file and extracts the specific import errors.
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple
-import re
 
 
-def collect_test_file(test_file: Path) -> Tuple[bool, str]:
+def collect_test_file(test_file: Path) -> tuple[bool, str]:
     """
     Try to collect a single test file.
 
@@ -66,7 +65,7 @@ def extract_missing_module(error_output: str) -> str:
     return ""
 
 
-def find_all_import_errors() -> Dict[str, List[str]]:
+def find_all_import_errors() -> dict[str, list[str]]:
     """
     Find all import errors in test files.
 
@@ -98,7 +97,7 @@ def find_all_import_errors() -> Dict[str, List[str]]:
                 print(f"❌ {rel_path}")
                 print(f"   Missing: {missing_module}\n")
 
-    print(f"\n📊 Summary:")
+    print("\n📊 Summary:")
     print(f"   Total test files: {len(test_files)}")
     print(f"   Files with import errors: {failed_count}")
     print(f"   Unique missing modules: {len(errors_by_module)}")
@@ -106,7 +105,7 @@ def find_all_import_errors() -> Dict[str, List[str]]:
     return errors_by_module
 
 
-def print_grouped_errors(errors_by_module: Dict[str, List[str]]):
+def print_grouped_errors(errors_by_module: dict[str, list[str]]):
     """Print errors grouped by missing module."""
 
     print("\n" + "=" * 80)

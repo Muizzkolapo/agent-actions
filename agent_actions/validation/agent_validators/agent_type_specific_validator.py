@@ -1,14 +1,15 @@
 """Validator for agent type and type-specific configuration requirements."""
 
 from pathlib import Path
+
+from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 from agent_actions.validation.agent_validators.base_agent_validator import (
-    BaseAgentEntryValidator,
     AgentEntryValidationResult,
+    BaseAgentEntryValidator,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,
 )
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES
 
 
 class AgentTypeSpecificValidator(BaseAgentEntryValidator):
