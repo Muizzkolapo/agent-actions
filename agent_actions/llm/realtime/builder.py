@@ -6,6 +6,7 @@ with support for multiple LLM vendors.
 """
 
 import json
+from pathlib import Path
 from typing import Any
 
 from agent_actions.output.response.schema import prepare_schema_unified
@@ -96,8 +97,13 @@ def create_dynamic_agent(
             prompt_config = f"{prompt_config}\n\n{context_msg}"
 
     # Prepare schema with dispatch support
+    _pr = agent_config.get("_project_root")
     schema, schema_results = prepare_schema_unified(
-        agent_config, model_vendor, tools_path=tools_path, context_data=context_data
+        agent_config,
+        model_vendor,
+        tools_path=tools_path,
+        context_data=context_data,
+        project_root=Path(_pr) if _pr else None,
     )
 
     if schema_results:

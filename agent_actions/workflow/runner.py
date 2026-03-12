@@ -91,22 +91,23 @@ class AgentRunner:
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
+        self.project_root: Path | None = None  # Set by AgentWorkflow._initialize_services
         self.strategies: dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
             "terminal": StandardStrategy(processor_factory),
         }
 
-    def get_agent_folder(self, agent_name: str) -> str:
+    def get_agent_folder(self, agent_name: str, project_root: Path | None = None) -> str:
         """Return the agent folder path.
 
         Raises:
             FileSystemError: If the agent folder is not found.
         """
-        current_dir: Path = Path.cwd()
+        search_dir: Path = project_root or self.project_root or Path.cwd()
         folder_name = self.workflow_name if self.workflow_name else agent_name
         agent_folder: str | None = FileHandler.find_specific_folder(
-            str(current_dir), folder_name, "agent_io"
+            str(search_dir), folder_name, "agent_io"
         )
         if agent_folder is None:
             raise FileSystemError(
@@ -114,7 +115,7 @@ class AgentRunner:
                 context={
                     "agent_name": agent_name,
                     "workflow_name": folder_name,
-                    "current_dir": str(current_dir),
+                    "search_root": str(search_dir),
                     "operation": "get_agent_folder",
                 },
             )

@@ -23,6 +23,7 @@ def find_config_file(
     filename: str,
     *,
     check_alternatives: bool = False,
+    project_root: Path | None = None,
 ) -> Path:
     """Find a workflow configuration file.
 
@@ -34,11 +35,12 @@ def find_config_file(
         return full_path
 
     if check_alternatives:
+        base = project_root or Path.cwd()
         parent_dir = config_dir.parent
         alternatives_checked = [
             parent_dir / filename,
-            Path.cwd() / filename,
-            Path.cwd() / "config" / filename,
+            base / filename,
+            base / "config" / filename,
         ]
         existing_alternatives = [str(p) for p in alternatives_checked if p.exists()]
         raise FileLoadError(
@@ -112,9 +114,11 @@ class ProjectPathsFactory:
         self.path_manager = path_manager or PathManager()
 
     @staticmethod
-    def get_agent_paths(agent_name: str) -> tuple[Path, Path]:
+    def get_agent_paths(agent_name: str, project_root: Path | None = None) -> tuple[Path, Path]:
         try:
-            agent_config_dir_str, io_dir_str = FileHandler.get_agent_paths(agent_name)
+            agent_config_dir_str, io_dir_str = FileHandler.get_agent_paths(
+                agent_name, project_root=project_root
+            )
 
             if agent_config_dir_str is None:
                 raise ValidationError(
@@ -156,22 +160,27 @@ class ProjectPathsFactory:
 
     @classmethod
     def create_project_paths(
-        cls, agent_name: str, filename: str, *, auto_create: bool = True
+        cls,
+        agent_name: str,
+        filename: str,
+        *,
+        auto_create: bool = True,
+        project_root: Path | None = None,
     ) -> ProjectPaths:
         """Create project paths. Set auto_create=False for read-only commands."""
         logger.debug("Creating project paths for agent: %s", agent_name)
-        factory = cls()
+        factory = cls(path_manager=PathManager(project_root=project_root) if project_root else None)
         try:
-            project_root = factory.path_manager.get_project_root()
+            resolved_root = factory.path_manager.get_project_root()
             prompt_dir = factory.path_manager.get_standard_path(PathType.PROMPT_STORE)
             schema_dir = factory.path_manager.get_standard_path(PathType.SCHEMA)
             template_dir = factory.path_manager.get_standard_path(PathType.TEMPLATES)
             rendered_workflows_dir = factory.path_manager.get_standard_path(
                 PathType.RENDERED_WORKFLOWS
             )
-            agent_config_dir, io_dir = cls.get_agent_paths(agent_name)
-            current_dir = resolve_absolute_path(project_root)
-            default_config_path = project_root / "agent_actions.yml"
+            agent_config_dir, io_dir = cls.get_agent_paths(agent_name, project_root=resolved_root)
+            current_dir = resolve_absolute_path(resolved_root)
+            default_config_path = resolved_root / "agent_actions.yml"
             paths = ProjectPaths(
                 current_dir=current_dir,
                 prompt_dir=prompt_dir,

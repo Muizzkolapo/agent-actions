@@ -4,6 +4,7 @@ Schema compilation and transformation utilities for multi-vendor support.
 
 import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
@@ -381,12 +382,15 @@ def _load_inline_schema(
     return base_schema, schema_name
 
 
-def _load_named_schema(agent_config: dict[str, Any]) -> tuple[dict[str, Any] | None, str]:
+def _load_named_schema(
+    agent_config: dict[str, Any], project_root: Path | None = None
+) -> tuple[dict[str, Any] | None, str]:
     """
     Load schema by name from schema store.
 
     Args:
         agent_config: Agent configuration with schema_name
+        project_root: Optional project root for schema directory resolution
 
     Returns:
         Tuple of (schema dict or None, schema name)
@@ -394,7 +398,7 @@ def _load_named_schema(agent_config: dict[str, Any]) -> tuple[dict[str, Any] | N
     schema_name = agent_config.get(SCHEMA_NAME_KEY)
     if not schema_name:
         return None, ""
-    return SchemaLoader.load_schema(schema_name), schema_name
+    return SchemaLoader.load_schema(schema_name, project_root=project_root), schema_name
 
 
 def _unwrap_nested_schema(base_schema: dict[str, Any]) -> dict[str, Any]:
@@ -464,6 +468,7 @@ def prepare_schema_unified(
     vendor: str,
     tools_path: str | None = None,
     context_data: dict | str | None = None,
+    project_root: Path | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """
     Unified schema preparation for both online and batch modes.
@@ -502,7 +507,7 @@ def prepare_schema_unified(
             inline_schema, tools_path, context_data_str, agent_config, captured_results
         )
     else:
-        base_schema, schema_name = _load_named_schema(agent_config)
+        base_schema, schema_name = _load_named_schema(agent_config, project_root=project_root)
         if base_schema is None:
             return None, captured_results
 

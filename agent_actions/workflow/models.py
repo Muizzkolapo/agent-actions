@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -26,6 +27,7 @@ class WorkflowConfig:
     run_upstream: bool = False
     run_downstream: bool = False
     manager: Any = None  # ConfigManager instance
+    project_root: Path | None = None
 
 
 @dataclass

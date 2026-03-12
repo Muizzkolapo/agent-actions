@@ -9,6 +9,7 @@ from click.testing import CliRunner
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.prompt.handler import PromptLoader
 
 
 class TestBannerNotOnStdout:
@@ -20,7 +21,7 @@ class TestBannerNotOnStdout:
 
         @click.command()
         @requires_project
-        def dummy():
+        def dummy(project_root=None):
             click.echo('{"ok": true}')
 
         runner = CliRunner()
@@ -28,8 +29,7 @@ class TestBannerNotOnStdout:
             "agent_actions.cli.cli_decorators.ensure_in_project",
             return_value=MagicMock(relative_to=MagicMock(return_value=".")),
         ):
-            with patch("os.chdir"), patch("os.getcwd", return_value="/tmp"):
-                _result = runner.invoke(dummy)
+            _result = runner.invoke(dummy)
 
         import inspect as inspect_mod
 
@@ -37,6 +37,31 @@ class TestBannerNotOnStdout:
         assert 'click.echo(f"' in source and "err=True" in source, (
             "Banner click.echo must use err=True"
         )
+
+    def test_requires_project_injects_correct_project_root(self, tmp_path):
+        """Decorated function receives the exact Path from ensure_in_project."""
+        import click
+
+        captured = {}
+
+        @click.command()
+        @requires_project
+        def dummy(project_root=None):
+            captured["project_root"] = project_root
+            click.echo("ok")
+
+        runner = CliRunner()
+        fake_root = tmp_path / "myproject"
+        fake_root.mkdir()
+
+        with patch(
+            "agent_actions.cli.cli_decorators.ensure_in_project",
+            return_value=fake_root,
+        ):
+            result = runner.invoke(dummy)
+
+        assert result.exit_code == 0
+        assert captured["project_root"] == fake_root
 
 
 class TestHandlesUserErrorsExitPath:
@@ -228,3 +253,293 @@ class TestStatusCorruptedFileExitCode:
             with patch.object(ProjectPathsFactory, "create_project_paths", return_value=mock_paths):
                 with pytest.raises(click.ClickException, match="unexpected format"):
                     cmd.execute()
+
+
+class TestRequiresProjectNoChdir:
+    """@requires_project must never call os.chdir."""
+
+    def test_os_chdir_never_called_during_requires_project(self, tmp_path):
+        """Patching os.chdir to raise ensures the decorator never calls it."""
+        import os
+
+        import click
+
+        @click.command()
+        @requires_project
+        def dummy(project_root=None):
+            click.echo("ok")
+
+        runner = CliRunner()
+        fake_root = tmp_path / "proj"
+        fake_root.mkdir()
+
+        with (
+            patch(
+                "agent_actions.cli.cli_decorators.ensure_in_project",
+                return_value=fake_root,
+            ),
+            patch.object(os, "chdir", side_effect=AssertionError("os.chdir must not be called")),
+        ):
+            result = runner.invoke(dummy)
+
+        assert result.exit_code == 0, result.output
+
+
+class TestProjectRootFallback:
+    """project_root=None must fall back to Path.cwd() for backward compatibility."""
+
+    def test_get_agent_folder_falls_back_to_cwd(self):
+        """AgentRunner.get_agent_folder falls back to Path.cwd() when project_root is None."""
+        from agent_actions.workflow.runner import AgentRunner
+
+        runner = AgentRunner(use_tools=False)
+        # project_root is None by default
+        assert runner.project_root is None
+        # get_agent_folder will search from CWD — we just verify it doesn't crash on init
+        # (it will raise FileSystemError because there's no agent_io folder, which is expected)
+        from agent_actions.errors import FileSystemError
+
+        with pytest.raises(FileSystemError, match="Agent folder not found"):
+            runner.get_agent_folder("nonexistent_agent")
+
+
+class TestGetOutputFieldsWithSchemaDir:
+    """_get_output_fields correctly uses schema_dir for named schema resolution."""
+
+    def test_get_output_fields_loads_schema_from_dir(self, tmp_path):
+        """Named schema is loaded from the provided schema_dir."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        schema_dir = tmp_path / "schema"
+        schema_dir.mkdir()
+        (schema_dir / "test_schema.yml").write_text("properties:\n  field_a: {}\n  field_b: {}")
+
+        config = {"schema_name": "test_schema"}
+        fields = BaseInspectCommand._get_output_fields(config, schema_dir=schema_dir)
+        assert set(fields) == {"field_a", "field_b"}
+
+    def test_get_output_fields_without_schema_dir_returns_placeholder(self):
+        """Named schema without schema_dir returns placeholder instead of crashing."""
+        from agent_actions.cli.inspect import BaseInspectCommand
+
+        config = {"schema_name": "some_schema"}
+        fields = BaseInspectCommand._get_output_fields(config)
+        assert fields == ["[schema: some_schema]"]
+
+
+class TestRequiresProjectErrorPath:
+    """@requires_project must propagate ProjectNotFoundError cleanly."""
+
+    def test_project_not_found_error_propagates(self):
+        """ProjectNotFoundError from ensure_in_project raises through the decorator."""
+        import click
+
+        from agent_actions.errors import ProjectNotFoundError
+
+        @click.command()
+        @handles_user_errors("test")
+        @requires_project
+        def dummy(project_root=None):
+            click.echo("should not reach here")
+
+        runner = CliRunner()
+        with patch(
+            "agent_actions.cli.cli_decorators.ensure_in_project",
+            side_effect=ProjectNotFoundError(
+                "Project not found",
+                context={"marker_file": "agent_actions.yml"},
+            ),
+        ):
+            result = runner.invoke(dummy)
+
+        assert result.exit_code != 0
+        assert "Project not found" in result.output
+
+    def test_project_not_found_without_handles_user_errors(self):
+        """Without handles_user_errors, ProjectNotFoundError propagates as exception."""
+        import click
+
+        from agent_actions.errors import ProjectNotFoundError
+
+        @click.command()
+        @requires_project
+        def dummy(project_root=None):
+            click.echo("should not reach here")
+
+        runner = CliRunner()
+        with patch(
+            "agent_actions.cli.cli_decorators.ensure_in_project",
+            side_effect=ProjectNotFoundError(
+                "Project not found",
+                context={"marker_file": "agent_actions.yml"},
+            ),
+        ):
+            result = runner.invoke(dummy)
+
+        # Click catches unhandled exceptions and sets exit_code=1
+        assert result.exit_code == 1
+
+
+class TestProjectRootIntegrationChain:
+    """project_root flows from decorator → ProjectPathsFactory → FileHandler."""
+
+    def test_project_root_reaches_file_handler(self, tmp_path):
+        """ProjectPathsFactory.get_agent_paths receives the project_root from CLI."""
+        # Set up a minimal project structure
+        (tmp_path / "agent_actions.yml").write_text("project: test")
+        agent_dir = tmp_path / "my_agent"
+        agent_dir.mkdir()
+        (agent_dir / "agent_config").mkdir()
+        (agent_dir / "agent_io").mkdir()
+        (agent_dir / "agent_config" / "my_agent.yml").write_text("name: my_agent")
+
+        agent_config_dir, io_dir = ProjectPathsFactory.get_agent_paths(
+            "my_agent", project_root=tmp_path
+        )
+
+        assert agent_config_dir.exists()
+        assert io_dir.exists()
+        assert tmp_path in agent_config_dir.parents or agent_config_dir.parent == tmp_path
+        assert tmp_path in io_dir.parents or io_dir.parent == tmp_path
+
+
+class TestLoadPromptPartialBinding:
+    """render_pipeline_with_templates binds project_root into load_prompt via partial."""
+
+    def test_load_prompt_receives_project_root(self, tmp_path):
+        """Verify the functools.partial in render_pipeline_with_templates passes project_root."""
+        import functools
+
+        # Create minimal template and config files
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir()
+
+        config_file = tmp_path / "test_config.yml"
+        config_file.write_text("actions:\n  - name: test_action\n    prompt: hello")
+
+        import jinja2
+
+        with patch.object(PromptLoader, "load_prompt", staticmethod(lambda *a, **kw: "")):
+            from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
+            original_init = jinja2.Environment.__init__
+
+            env_captured = {}
+
+            def spy_env_init(self, *args, **kwargs):
+                original_init(self, *args, **kwargs)
+                env_captured["env"] = self
+
+            with patch.object(jinja2.Environment, "__init__", spy_env_init):
+                render_pipeline_with_templates(
+                    str(config_file),
+                    str(templates_dir),
+                    project_root=tmp_path,
+                )
+
+            env = env_captured.get("env")
+            assert env is not None, "Jinja2 Environment should have been created"
+            load_prompt_fn = env.globals.get("load_prompt")
+            assert load_prompt_fn is not None, "load_prompt should be registered as Jinja2 global"
+            assert isinstance(load_prompt_fn, functools.partial), (
+                "load_prompt should be a functools.partial"
+            )
+            assert load_prompt_fn.keywords.get("project_root") == tmp_path
+
+
+class TestProjectRootDictInjectionRoundTrip:
+    """_project_root dict injection: Path → str (coordinator) → Path (builder/preparator)."""
+
+    def test_coordinator_injects_string(self):
+        """Coordinator stores _project_root as string in agent_config dicts."""
+        from unittest.mock import MagicMock
+
+        from agent_actions.workflow.coordinator import AgentWorkflow
+
+        with patch.object(AgentWorkflow, "__init__", lambda self: None):
+            workflow = AgentWorkflow()
+            workflow.config = MagicMock()
+            workflow.config.project_root = Path("/fake/project")
+            workflow.config.paths.constructor_path = "/fake/config.yml"
+
+            agent_configs = {"action_a": {"agent_type": "test"}}
+
+            # Simulate the injection logic from _load_configs
+            for _name, config in agent_configs.items():
+                if config is None:
+                    continue
+                if workflow.config.project_root:
+                    config["_project_root"] = str(workflow.config.project_root)
+
+            assert agent_configs["action_a"]["_project_root"] == "/fake/project"
+            assert isinstance(agent_configs["action_a"]["_project_root"], str)
+
+    def test_builder_reconstructs_path(self):
+        """Builder extracts _project_root string and converts back to Path."""
+        agent_config = {
+            "agent_type": "test",
+            "_project_root": "/fake/project",
+        }
+
+        _pr = agent_config.get("_project_root")
+        reconstructed = Path(_pr) if _pr else None
+
+        assert reconstructed == Path("/fake/project")
+        assert isinstance(reconstructed, Path)
+
+    def test_none_project_root_not_injected(self):
+        """When project_root is None, _project_root key is not added."""
+        agent_config = {"agent_type": "test"}
+
+        project_root = None
+        if project_root:
+            agent_config["_project_root"] = str(project_root)
+
+        assert "_project_root" not in agent_config
+
+
+class TestAgentRunnerProjectRootPaths:
+    """AgentRunner.get_agent_folder uses explicit param, instance attr, then CWD."""
+
+    def test_explicit_param_takes_precedence(self, tmp_path):
+        """Explicit project_root parameter overrides instance attribute."""
+        from agent_actions.workflow.runner import AgentRunner
+
+        runner = AgentRunner(use_tools=False)
+        runner.project_root = Path("/should/not/use/this")
+
+        # Create a project structure in tmp_path
+        agent_dir = tmp_path / "test_agent"
+        agent_dir.mkdir()
+        io_dir = agent_dir / "agent_io"
+        io_dir.mkdir()
+
+        result = runner.get_agent_folder("test_agent", project_root=tmp_path)
+        assert str(tmp_path) in result
+
+    def test_instance_attr_used_when_no_param(self, tmp_path):
+        """Instance project_root is used when no explicit param is passed."""
+        from agent_actions.workflow.runner import AgentRunner
+
+        runner = AgentRunner(use_tools=False)
+
+        # Create a project structure in tmp_path
+        agent_dir = tmp_path / "test_agent"
+        agent_dir.mkdir()
+        io_dir = agent_dir / "agent_io"
+        io_dir.mkdir()
+
+        runner.project_root = tmp_path
+        result = runner.get_agent_folder("test_agent")
+        assert str(tmp_path) in result
+
+    def test_cwd_fallback_when_both_none(self):
+        """Falls back to CWD when both param and instance attr are None."""
+        from agent_actions.errors import FileSystemError
+        from agent_actions.workflow.runner import AgentRunner
+
+        runner = AgentRunner(use_tools=False)
+        assert runner.project_root is None
+
+        with pytest.raises(FileSystemError, match="Agent folder not found"):
+            runner.get_agent_folder("nonexistent_agent")

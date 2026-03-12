@@ -27,9 +27,10 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
-    def __init__(self, constructor_path: str, default_path: str):
+    def __init__(self, constructor_path: str, default_path: str, project_root: Path | None = None):
         self.constructor_path = constructor_path
         self.default_path = default_path
+        self.project_root = project_root
         self.user_config: dict[str, Any] | None = None
         self.default_config: dict[str, Any] | None = None
         self.agent_name: str | None = None
@@ -37,7 +38,7 @@ class ConfigManager:
         self.execution_order: list[str] = []
         self.child_pipeline: str | None = None
         self.tool_path: str | None = None
-        self.template_dir = str(Path.cwd() / "templates")
+        self.template_dir = str((project_root or Path.cwd()) / "templates")
         self.environment_config: EnvironmentConfig | None = None
         self.workflow_config: WorkflowConfig | None = None
         self.pipeline_config: PipelineConfig | None = None
@@ -57,7 +58,9 @@ class ConfigManager:
         """
         fire_event(ConfigLoadStartEvent(config_file=str(config_path)))
         try:
-            config_data = render_pipeline_with_templates(config_path, self.template_dir)
+            config_data = render_pipeline_with_templates(
+                config_path, self.template_dir, project_root=self.project_root
+            )
             loaded = yaml.safe_load(config_data)
             fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
             return loaded
@@ -101,7 +104,7 @@ class ConfigManager:
         # Also check project config (agent_actions.yml) as fallback
         project_tool_path = None
         try:
-            path_manager = PathManager()
+            path_manager = PathManager(project_root=self.project_root)
             project_root = path_manager.get_project_root()
             project_config = load_project_config(project_root)
             project_tool_path = project_config.get("tool_path")
@@ -167,7 +170,7 @@ class ConfigManager:
     def get_user_agents(self):
         if "name" in self.user_config and "actions" in self.user_config:
             try:
-                path_manager = PathManager()
+                path_manager = PathManager(project_root=self.project_root)
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
                 project_defaults = project_config.get("default_agent_config", {})

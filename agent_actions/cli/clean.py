@@ -1,5 +1,7 @@
 """Clean command for the Agent Actions CLI."""
 
+from pathlib import Path
+
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
@@ -31,6 +33,8 @@ from agent_actions.validation.clean_validator import CleanCommandArgs
 )
 @handles_user_errors("clean")
 @requires_project
-def clean_cli(agent: str, force: bool, remove_all: bool) -> None:
+def clean_cli(agent: str, force: bool, remove_all: bool, project_root: Path | None = None) -> None:
     args = CleanCommandArgs(agent=agent, force=force, all=remove_all)
-    Cleaner(agent=args.agent, force=args.force, remove_all=args.all).run()
+    Cleaner(
+        agent=args.agent, force=args.force, remove_all=args.all, project_root=project_root
+    ).run()

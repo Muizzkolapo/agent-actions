@@ -208,7 +208,11 @@ class LoggerFactory:
 
     @classmethod
     def _get_project_root(cls) -> Path | None:
-        """Find the project root directory."""
+        """Find the project root directory.
+
+        Best-effort fallback: uses Path.cwd() as search start.
+        Primary callers should prefer passing explicit output_dir to initialize().
+        """
         current = Path.cwd()
         for parent in [current] + list(current.parents):
             if (parent / "agent_actions.yml").exists():

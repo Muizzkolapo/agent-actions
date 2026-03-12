@@ -17,16 +17,16 @@
 |------|------|-------------|---------|
 | `cli_decorators.py` | Module | CLI decorators for agent-actions commands. | `cli`, `shared` |
 | `handles_user_errors` | Function | Decorator that standardizes error handling for CLI commands. | - |
-| `requires_project` | Function | Decorator for CLI commands that require being in a project. | - |
+| `requires_project` | Function | Decorator for CLI commands that require being in a project. Injects `project_root: Path` kwarg instead of calling `os.chdir`. | - |
 | `compile.py` | Module | Render command for the Agent Actions CLI. | `cli`, `errors`, `prompt_generation`, `validation` |
 | `RenderCommand` | Class | Implementation of the render command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the render command. | - |
 | `render` | Function | Render Jinja2 templates in agent configuration files. | - |
 | `docs.py` | Module | Documentation commands for agent-actions CLI. | `cli`, `docs` |
 | `docs` | Function | Generate and serve workflow documentation. | - |
-| `generate` | Function | Generate documentation data files. | - |
-| `serve` | Function | Start HTTP server to view documentation. | - |
-| `run_tests` | Function | Run Playwright tests to verify documentation site. | - |
+| `generate` | Function | Generate documentation data files. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
+| `serve` | Function | Start HTTP server to view documentation. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
+| `run_tests` | Function | Run Playwright tests to verify documentation site. Accepts `project_root: Path \| None` (injected by `@requires_project`). | - |
 | `dev` | Function | Start development environment. | - |
 | `init.py` | Module | Initialize command for the Agent Actions CLI. | `cli`, `configuration`, `errors`, `validation` |
 | `InitCommand` | Class | Implementation of the init command. | - |
@@ -53,12 +53,12 @@
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
 | `project_paths_factory.py` | Module | Project paths factory service. | `errors`, `file_io`, `state_management`, `utilities`, `validation` |
-| `find_config_file` | Function | Find a workflow configuration file with optional alternative-location lookup. | - |
+| `find_config_file` | Function | Find a workflow configuration file with optional alternative-location lookup. Accepts `project_root: Path \| None`. | - |
 | `ProjectPaths` | Class | Container for project directory paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert paths to a dictionary of strings. | - |
 | `ProjectPathsFactory` | Class | Factory for creating project paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_paths` | Method | Get the agent paths using the FileHandler. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_project_paths` | Method | Create project paths for the given agent. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_project_paths` | Method | Create project paths for the given agent. Accepts `project_root: Path \| None`. | - |
 | `project_root.py` | Module | Project root detection utilities. | `errors` |
 | `find_project_root` | Function | Find the project root by walking up directories to locate agent_actions.yml. | - |
 | `ensure_in_project` | Function | Ensure the current working directory is within an agent-actions project. | - |

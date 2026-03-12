@@ -33,9 +33,9 @@ class PreviewCommand:
         self.workflow_name = Path(workflow).stem
         self.console = Console()
 
-    def execute(self) -> None:
+    def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
-            self.workflow_name, self.workflow, auto_create=False
+            self.workflow_name, self.workflow, auto_create=False, project_root=project_root
         )
 
         target_dir = paths.io_dir / "target"
@@ -236,6 +236,7 @@ def preview(
     offset: int,
     format_type: str,
     stats: bool,
+    project_root: Path | None = None,
 ) -> None:
     """
     Preview data stored in the SQLite storage backend.
@@ -265,4 +266,4 @@ def preview(
         format_type=format_type,
         stats_only=stats,
     )
-    command.execute()
+    command.execute(project_root=project_root)

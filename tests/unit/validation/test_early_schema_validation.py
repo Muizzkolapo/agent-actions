@@ -20,6 +20,8 @@ def _create_mock_workflow(constructor_path, agent_configs):
         workflow = AgentWorkflow()
         workflow.config = MagicMock()
         workflow.config.paths.constructor_path = constructor_path
+        workflow.config.manager.project_root = None
+        workflow.config.project_root = None
         workflow.metadata = MagicMock()
         workflow.metadata.agent_configs = agent_configs
         workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
@@ -75,17 +77,17 @@ class TestWorkflowSchemaValidation:
         )
         workflow._validate_schema_files()
 
-    def test_validate_schema_files_passes_when_schema_exists(self, tmp_path, monkeypatch):
+    def test_validate_schema_files_passes_when_schema_exists(self, tmp_path):
         """Verify validation passes when schema file exists."""
         schema_dir = tmp_path / "schema"
         schema_dir.mkdir()
         (schema_dir / "my_schema.yml").write_text("name: my_schema")
-        monkeypatch.chdir(tmp_path)
 
         workflow = _create_mock_workflow(
             str(tmp_path / "config.yml"),
             {"test_action": {"schema_name": "my_schema"}},
         )
+        workflow.config.manager.project_root = tmp_path
         workflow._validate_schema_files()
 
 

@@ -33,24 +33,27 @@ class AgentManager:
         return None
 
     @staticmethod
-    def agent_exists(agent_name: str) -> bool:
+    def agent_exists(agent_name: str, project_root: Path | None = None) -> bool:
         """
         Check if an agent exists.
 
         Args:
             agent_name: Name of the agent to check.
+            project_root: Optional project root to use instead of discovering from CWD.
 
         Returns:
             True if the agent exists, False otherwise.
         """
         try:
-            agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
+            agent_config_dir, _, _ = AgentManager.get_agent_paths(
+                agent_name, project_root=project_root
+            )
             return Path(agent_config_dir).exists()
         except AgentNotFoundError:
             return False
 
     @staticmethod
-    def get_agent_paths(agent_name: str) -> tuple[str, str, str]:
+    def get_agent_paths(agent_name: str, project_root: Path | None = None) -> tuple[str, str, str]:
         """
         Construct and return key paths related to the agent.
         Searches for agent_actions.yml file to determine the project root,
@@ -58,6 +61,7 @@ class AgentManager:
 
         Args:
             agent_name: Name of the agent to find paths for
+            project_root: Optional project root to use instead of discovering from CWD
 
         Returns:
             Tuple of (agent_config_dir, io_dir, logs_dir)
@@ -65,7 +69,8 @@ class AgentManager:
         Raises:
             AgentNotFoundError: If agent_actions.yml or agent configuration cannot be found
         """
-        project_root = AgentManager.find_project_root(Path.cwd())
+        if project_root is None:
+            project_root = AgentManager.find_project_root(Path.cwd())
         if not project_root:
             raise AgentNotFoundError(
                 "Could not find agent_actions.yml in current or parent directories",

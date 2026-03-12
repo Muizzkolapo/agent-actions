@@ -31,13 +31,13 @@ class FileHandler:
         return None
 
     @staticmethod
-    def get_agent_paths(agent_name):
+    def get_agent_paths(agent_name, project_root: Path | None = None):
         """Return (agent_config_dir, io_dir) for the given agent name."""
-        current_dir = Path.cwd()
+        search_dir = project_root or Path.cwd()
         agent_config_dir = FileHandler.find_specific_folder(
-            str(current_dir), agent_name, "agent_config"
+            str(search_dir), agent_name, "agent_config"
         )
-        io_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, "agent_io")
+        io_dir = FileHandler.find_specific_folder(str(search_dir), agent_name, "agent_io")
         return agent_config_dir, io_dir
 
     @staticmethod

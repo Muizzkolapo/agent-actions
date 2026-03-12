@@ -23,6 +23,7 @@ class Cleaner:
     agent: str
     force: bool = False
     remove_all: bool = False
+    project_root: Path | None = None
     agent_manager: type[AgentManager] = AgentManager
 
     def run(self) -> None:
@@ -39,7 +40,9 @@ class Cleaner:
 
     def _run(self) -> None:
         logger.debug("Cleaning directories for agent %s", self.agent)
-        _, io_dir_str, _ = self.agent_manager.get_agent_paths(self.agent)
+        _, io_dir_str, _ = self.agent_manager.get_agent_paths(
+            self.agent, project_root=self.project_root
+        )
         io_dir = Path(io_dir_str)
         directories = []
         for sub in ("source", "target"):

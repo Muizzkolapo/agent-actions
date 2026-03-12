@@ -57,8 +57,12 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
         """Suppress default logging for cleaner output."""
 
 
-def serve_docs(port: int = 8000, artefact_path: str | None = None) -> bool:
+def serve_docs(
+    port: int = 8000, artefact_path: str | None = None, project_root: Path | None = None
+) -> bool:
     """Start HTTP server to serve documentation."""
+    base = project_root or Path.cwd()
+
     # Find docs_site directory (in package)
     docs_site_dir = Path(__file__).parent / "docs_site"
 
@@ -71,11 +75,11 @@ def serve_docs(port: int = 8000, artefact_path: str | None = None) -> bool:
     if artefact_path:
         artefact_dir = Path(artefact_path)
         if not artefact_dir.is_absolute():
-            artefact_dir = (Path.cwd() / artefact_dir).resolve()
+            artefact_dir = (base / artefact_dir).resolve()
         else:
             artefact_dir = artefact_dir.resolve()
     else:
-        artefact_dir = Path.cwd() / "artefact"
+        artefact_dir = base / "artefact"
 
     if not artefact_dir.exists():
         logger.error("artefact directory not found at %s", artefact_dir)

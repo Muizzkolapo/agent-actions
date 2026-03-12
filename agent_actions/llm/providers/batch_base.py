@@ -246,14 +246,16 @@ class BaseBatchClient(ABC):
         """Perform provider-specific configuration validation. Override for custom checks."""
         return (True, None)
 
-    def _get_batch_directory(self, output_directory: str | None = None) -> Path:
+    def _get_batch_directory(
+        self, output_directory: str | None = None, project_root: Path | None = None
+    ) -> Path:
         """Get or create the batch directory."""
         from agent_actions.utils.path_utils import ensure_directory_exists
 
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
         else:
-            batch_dir = Path.cwd() / "batch"
+            batch_dir = (project_root or Path.cwd()) / "batch"
         ensure_directory_exists(batch_dir)
         return batch_dir
 

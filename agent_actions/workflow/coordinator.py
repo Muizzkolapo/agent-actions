@@ -80,7 +80,11 @@ class AgentWorkflow:
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
 
         if config.manager is None:
-            config.manager = ConfigManager(config.paths.constructor_path, config.paths.default_path)
+            config.manager = ConfigManager(
+                config.paths.constructor_path,
+                config.paths.default_path,
+                project_root=config.project_root,
+            )
         self._load_configs()
 
         self._validate_schema_files()
@@ -132,6 +136,7 @@ class AgentWorkflow:
                 use_tools=use_tools,
                 run_upstream=run_upstream,
                 run_downstream=run_downstream,
+                project_root=self.config.project_root,
             )
         )
 
@@ -153,6 +158,7 @@ class AgentWorkflow:
         agent_runner.agent_indices = self.agent_indices
         agent_runner.agent_configs = self.agent_configs
         agent_runner.workflow_name = self.agent_name
+        agent_runner.project_root = self.config.project_root
 
         workflow_defaults = self.config.manager.user_config.get("defaults") or {}
         agent_runner.data_source_config = workflow_defaults.get("data_source")
@@ -166,7 +172,9 @@ class AgentWorkflow:
             action_name=self.agent_name,
         )
 
-        agent_folder = Path(agent_runner.get_agent_folder(self.agent_name))
+        agent_folder = Path(
+            agent_runner.get_agent_folder(self.agent_name, project_root=self.config.project_root)
+        )
         self._agent_folder = agent_folder
         status_file = agent_folder / ".agent_status.json"
 
@@ -265,6 +273,8 @@ class AgentWorkflow:
                 agent_config["idx"] = agent_indices[agent_name]
             # Add workflow config path for static data loading
             agent_config["workflow_config_path"] = self.config.paths.constructor_path
+            if self.config.project_root:
+                agent_config["_project_root"] = str(self.config.project_root)
 
         # Create metadata object
         self.metadata = WorkflowMetadata(
@@ -281,8 +291,11 @@ class AgentWorkflow:
         Raises:
             ConfigValidationError: If any referenced schema files are missing.
         """
-        # Use same schema directory as SchemaLoader (cwd/schema)
-        schema_dir = Path.cwd() / "schema"
+        manager = self.config.manager
+        project_root = (
+            (manager.project_root if manager else None) or self.config.project_root or Path.cwd()
+        )
+        schema_dir = project_root / "schema"
 
         # Collect all missing schemas with their action names
         missing_schemas = []
@@ -388,7 +401,13 @@ class AgentWorkflow:
 
     def _discover_udfs_from_path(self, path: str) -> int:
         """Discover UDFs from a specific path."""
-        abs_path = Path(path).absolute()
+        p = Path(path)
+        if p.is_absolute():
+            abs_path = p
+        elif self.config.project_root:
+            abs_path = (self.config.project_root / p).resolve()
+        else:
+            abs_path = p.absolute()
 
         if abs_path.exists() and abs_path.is_dir():
             # Fire UDF discovery start event

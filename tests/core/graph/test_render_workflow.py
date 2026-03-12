@@ -26,21 +26,11 @@ class TestFailedRenderCache:
         self.temp_dir = tempfile.mkdtemp()
         self.templates_folder = Path(self.temp_dir) / "templates"
         self.templates_folder.mkdir()
-        self.original_cwd = Path.cwd()
-        import os
-
-        os.chdir(self.temp_dir)
+        self.project_root = Path(self.temp_dir)
 
     def teardown_method(self):
         """Clean up test fixtures."""
-        import os
-
-        os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir)
-        # Clean up test cache directory
-        cache_dir = Path(".agent-actions")
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir)
 
     def test_failed_render_saved_to_cache(self):
         """Test that failed YAML renders are saved to cache."""
@@ -48,11 +38,13 @@ class TestFailedRenderCache:
         yaml_file.write_text(
             "\nname: broken\nactions:\n  - name: test\n    : invalid_yaml_syntax_here\n"
         )
-        cache_dir = Path(".agent-actions/cache/rendered_workflows")
+        cache_dir = self.project_root / ".agent-actions" / "cache" / "rendered_workflows"
         expected_cache_file = cache_dir / "broken_workflow_failed.yml"
         with pytest.raises(ConfigurationError):
             render_pipeline_with_templates(
-                yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
+                yaml_path=str(yaml_file),
+                templates_folder=str(self.templates_folder),
+                project_root=self.project_root,
             )
         assert expected_cache_file.exists()
         cached_content = expected_cache_file.read_text()
@@ -64,7 +56,9 @@ class TestFailedRenderCache:
         yaml_file.write_text("\nname: broken\nactions:\n  - invalid: [unclosed bracket\n")
         with pytest.raises(ConfigurationError) as exc_info:
             render_pipeline_with_templates(
-                yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
+                yaml_path=str(yaml_file),
+                templates_folder=str(self.templates_folder),
+                project_root=self.project_root,
             )
         error_message = str(exc_info.value)
         assert ".agent-actions/cache/rendered_workflows" in error_message
@@ -76,7 +70,9 @@ class TestFailedRenderCache:
         yaml_file.write_text("\nactions:\n  - : broken\n")
         with pytest.raises(ConfigurationError) as exc_info:
             render_pipeline_with_templates(
-                yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
+                yaml_path=str(yaml_file),
+                templates_folder=str(self.templates_folder),
+                project_root=self.project_root,
             )
         error_message = str(exc_info.value)
         assert "agac render" in error_message
@@ -84,14 +80,16 @@ class TestFailedRenderCache:
 
     def test_cache_directory_created_automatically(self):
         """Test that cache directory is created if it doesn't exist."""
-        cache_dir = Path(".agent-actions/cache/rendered_workflows")
+        cache_dir = self.project_root / ".agent-actions" / "cache" / "rendered_workflows"
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
         yaml_file = Path(self.temp_dir) / "workflow.yml"
         yaml_file.write_text("invalid: [yaml")
         with pytest.raises(ConfigurationError):
             render_pipeline_with_templates(
-                yaml_path=str(yaml_file), templates_folder=str(self.templates_folder)
+                yaml_path=str(yaml_file),
+                templates_folder=str(self.templates_folder),
+                project_root=self.project_root,
             )
         assert cache_dir.exists()
         assert cache_dir.is_dir()

@@ -1,7 +1,6 @@
 """Render command for the Agent Actions CLI."""
 
 import logging
-import os
 from pathlib import Path
 
 import click
@@ -16,11 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 class RenderCommand:
-    def __init__(self, args: RenderCommandArgs):
+    def __init__(self, args: RenderCommandArgs, project_root: Path | None = None):
         self.args = args
-        self.template_dir = (
-            Path(args.template_dir) if args.template_dir else Path(os.getcwd()) / "templates"
-        )
+        self._project_root = project_root
+        if args.template_dir:
+            td = Path(args.template_dir)
+            # Resolve relative paths against project_root, not CWD
+            self.template_dir = td if td.is_absolute() else (project_root or Path.cwd()) / td
+        else:
+            self.template_dir = (project_root or Path.cwd()) / "templates"
 
     def _render_template(self, agent_config_file: Path) -> str:
         try:
@@ -33,7 +36,7 @@ class RenderCommand:
                 },
             )
             rendered_template = render_pipeline_with_templates(
-                str(agent_config_file), str(self.template_dir)
+                str(agent_config_file), str(self.template_dir), project_root=self._project_root
             )
             logger.info(
                 "Template rendering completed successfully",
@@ -58,7 +61,9 @@ class RenderCommand:
 
     def execute(self) -> None:
         logger.info("Starting template rendering for agent: %s", self.args.agent_name)
-        paths = ProjectPathsFactory.create_project_paths(self.args.agent_name, self.args.agent_name)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.args.agent_name, self.args.agent_name, project_root=self._project_root
+        )
         agent_config_file = paths.agent_config_dir / f"{self.args.agent_name}.yml"
         rendered_template = self._render_template(agent_config_file)
         click.echo(rendered_template)
@@ -67,10 +72,12 @@ class RenderCommand:
         )
 
 
-def _execute_render(agent_name: str, template_dir: str | None = None) -> None:
+def _execute_render(
+    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+) -> None:
     """Shared implementation for render/compile commands."""
     args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
-    command = RenderCommand(args)
+    command = RenderCommand(args, project_root=project_root)
     command.execute()
 
 
@@ -81,7 +88,9 @@ def _execute_render(agent_name: str, template_dir: str | None = None) -> None:
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
 @handles_user_errors("render")
 @requires_project
-def render(agent_name: str, template_dir: str | None = None) -> None:
+def render(
+    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+) -> None:
     """
     Compile and render workflow configuration.
 
@@ -105,7 +114,7 @@ def render(agent_name: str, template_dir: str | None = None) -> None:
         # Render with custom templates directory
         agac render -a my_workflow -t custom_templates
     """
-    _execute_render(agent_name, template_dir)
+    _execute_render(agent_name, template_dir, project_root=project_root)
 
 
 @click.command()
@@ -113,7 +122,9 @@ def render(agent_name: str, template_dir: str | None = None) -> None:
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
 @handles_user_errors("compile")
 @requires_project
-def compile(agent_name: str, template_dir: str | None = None) -> None:
+def compile(
+    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+) -> None:
     """
     Alias for 'render' - compile workflow configuration.
 
@@ -122,4 +133,4 @@ def compile(agent_name: str, template_dir: str | None = None) -> None:
     Examples:
         agac compile -a my_workflow
     """
-    _execute_render(agent_name, template_dir)
+    _execute_render(agent_name, template_dir, project_root=project_root)

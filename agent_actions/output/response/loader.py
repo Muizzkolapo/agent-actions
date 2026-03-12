@@ -31,7 +31,7 @@ class SchemaLoader:
     """Loads, validates, and constructs schemas from YAML files or inline definitions."""
 
     @staticmethod
-    def return_schema(agent_name: str) -> set:
+    def return_schema(agent_name: str, project_root: Path | None = None) -> set:
         """Return the set of schema names used by an agent.
 
         Extracts schema names from the compiled (render-first) output for validation.
@@ -39,7 +39,7 @@ class SchemaLoader:
         Raises:
             SchemaValidationError: If agent config cannot be found, rendered, or parsed
         """
-        agent_config_dir, _ = FileHandler.get_agent_paths(agent_name)
+        agent_config_dir, _ = FileHandler.get_agent_paths(agent_name, project_root=project_root)
         if not agent_config_dir:
             raise SchemaValidationError(
                 f"Agent config directory not found for '{agent_name}'",
@@ -60,10 +60,10 @@ class SchemaLoader:
             )
 
         try:
-            current_dir = Path.cwd()
-            template_dir = current_dir / "templates"
+            base = project_root or Path.cwd()
+            template_dir = base / "templates"
             rendered_templates = render_pipeline_with_templates(
-                agent_config_file, str(template_dir)
+                agent_config_file, str(template_dir), project_root=project_root
             )
             data = yaml.safe_load(rendered_templates)
         except (ConfigurationError, TemplateRenderingError, yaml.YAMLError) as e:
@@ -93,10 +93,12 @@ class SchemaLoader:
         return dynamic_schema_names
 
     @staticmethod
-    def load_schema(schema_name: str, schema_dir: Path | None = None) -> dict:
-        """Load raw schema YAML by name, searching schema_dir (default: cwd/schema)."""
+    def load_schema(
+        schema_name: str, schema_dir: Path | None = None, project_root: Path | None = None
+    ) -> dict:
+        """Load raw schema YAML by name, searching schema_dir (default: project_root/schema)."""
         if schema_dir is None:
-            schema_dir = Path.cwd() / "schema"
+            schema_dir = (project_root or Path.cwd()) / "schema"
 
         schema_file = schema_dir / f"{schema_name}.yml"
 
@@ -148,20 +150,22 @@ class SchemaLoader:
     def validate_schemas_exist(
         agent_name: str,
         directory: str | None = None,
+        project_root: Path | None = None,
     ) -> None:
         """Validate that all schema files referenced by an agent exist.
 
         Args:
             directory: Deprecated, kept for backward compatibility.
+            project_root: Optional project root for schema directory resolution.
 
         Raises:
             ConfigValidationError: If one or more schema files are missing
         """
-        schema_names = SchemaLoader.return_schema(agent_name)
+        schema_names = SchemaLoader.return_schema(agent_name, project_root=project_root)
         missing_files = []
         for schema_name in schema_names:
             try:
-                if not SchemaLoader.load_schema(schema_name):
+                if not SchemaLoader.load_schema(schema_name, project_root=project_root):
                     missing_files.append(f"{schema_name}.yml")
             except FileNotFoundError:
                 missing_files.append(f"{schema_name}.yml")

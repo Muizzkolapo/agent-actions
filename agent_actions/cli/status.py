@@ -18,9 +18,9 @@ class StatusCommand:
         self.agent_name = Path(args.agent).stem
         self.console = Console()
 
-    def execute(self) -> None:
+    def execute(self, project_root: Path | None = None) -> None:
         paths = ProjectPathsFactory.create_project_paths(
-            self.agent_name, self.args.agent, auto_create=False
+            self.agent_name, self.args.agent, auto_create=False, project_root=project_root
         )
         status_file = paths.io_dir / ".agent_status.json"
         if not status_file.exists():
@@ -58,8 +58,8 @@ class StatusCommand:
 )
 @handles_user_errors("status")
 @requires_project
-def status(agent: str) -> None:
+def status(agent: str, project_root: Path | None = None) -> None:
     """Display the status of an agent workflow."""
     args = StatusCommandArgs(agent=agent)
     command = StatusCommand(args)
-    command.execute()
+    command.execute(project_root=project_root)

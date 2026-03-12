@@ -34,15 +34,17 @@ class BaseInspectCommand:
         self.console = Console()
         self.paths: ProjectPaths | None = None  # Will be set by _load_workflow
 
-    def _load_workflow(self) -> AgentWorkflow:
+    def _load_workflow(self, project_root: Path | None = None) -> AgentWorkflow:
         paths = ProjectPathsFactory.create_project_paths(
-            self.agent_name, self.agent, auto_create=False
+            self.agent_name, self.agent, auto_create=False, project_root=project_root
         )
         self.paths = paths
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir)
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir, project_root=project_root
+        )
 
         workflow = AgentWorkflow(
             WorkflowConfig(
@@ -52,6 +54,7 @@ class BaseInspectCommand:
                     default_path=str(paths.default_config_path),
                 ),
                 use_tools=False,
+                project_root=project_root,
             )
         )
         return workflow
@@ -123,31 +126,31 @@ class BaseInspectCommand:
 
         schema_name = action_config.get("schema_name")
         if schema_name:
-            if schema_dir is None:
-                schema_dir = Path.cwd() / "schema"
-
-            schema_file = schema_dir / f"{schema_name}.yml"
-            if schema_file.exists():
-                try:
-                    with open(schema_file, encoding="utf-8") as f:
-                        schema_data = yaml.safe_load(f)
-                    if schema_data:
-                        if "properties" in schema_data:
-                            return list(schema_data["properties"].keys())
-                        if isinstance(schema_data, dict):
-                            keywords = {
-                                "type",
-                                "description",
-                                "required",
-                                "$schema",
-                                "title",
-                                "additionalProperties",
-                            }
-                            fields = [k for k in schema_data.keys() if k not in keywords]
-                            if fields:
-                                return fields
-                except Exception as e:
-                    logger.debug("Failed to read schema '%s': %s", schema_name, e, exc_info=True)
+            if schema_dir is not None:
+                schema_file = schema_dir / f"{schema_name}.yml"
+                if schema_file.exists():
+                    try:
+                        with open(schema_file, encoding="utf-8") as f:
+                            schema_data = yaml.safe_load(f)
+                        if schema_data:
+                            if "properties" in schema_data:
+                                return list(schema_data["properties"].keys())
+                            if isinstance(schema_data, dict):
+                                keywords = {
+                                    "type",
+                                    "description",
+                                    "required",
+                                    "$schema",
+                                    "title",
+                                    "additionalProperties",
+                                }
+                                fields = [k for k in schema_data.keys() if k not in keywords]
+                                if fields:
+                                    return fields
+                    except Exception as e:
+                        logger.debug(
+                            "Failed to read schema '%s': %s", schema_name, e, exc_info=True
+                        )
             return [f"[schema: {schema_name}]"]
 
         return []
@@ -181,11 +184,11 @@ class DependenciesCommand(BaseInspectCommand):
         super().__init__(agent, user_code, json_output)
         self.action_filter = action_filter
 
-    def execute(self) -> None:
+    def execute(self, project_root: Path | None = None) -> None:
         if not self.json_output:
             self.console.print(f"[cyan]Dependency Analysis: {self.agent_name}[/cyan]\n")
 
-        workflow = self._load_workflow()
+        workflow = self._load_workflow(project_root=project_root)
         dependency_info = self._analyze_dependencies(workflow)
 
         if self.action_filter:
@@ -244,7 +247,11 @@ class DependenciesCommand(BaseInspectCommand):
 @handles_user_errors("inspect dependencies")
 @requires_project
 def dependencies(
-    agent: str, user_code: str | None, json_output: bool, action_filter: str | None
+    agent: str,
+    user_code: str | None,
+    json_output: bool,
+    action_filter: str | None,
+    project_root: Path | None = None,
 ) -> None:
     """
     Analyze workflow dependencies and auto-inferred context.
@@ -258,14 +265,14 @@ def dependencies(
     """
     DependenciesCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_filter=action_filter
-    ).execute()
+    ).execute(project_root=project_root)
 
 
 class GraphCommand(BaseInspectCommand):
     """Show workflow structure as a visual dependency graph."""
 
-    def execute(self) -> None:
-        workflow = self._load_workflow()
+    def execute(self, project_root: Path | None = None) -> None:
+        workflow = self._load_workflow(project_root=project_root)
         dependency_info = self._analyze_dependencies(workflow)
         execution_order = workflow.execution_order or list(workflow.agent_configs.keys())
 
@@ -288,7 +295,10 @@ class GraphCommand(BaseInspectCommand):
                     "type": self._get_action_type(info["input_sources"], info["context_sources"]),
                     "input_sources": info["input_sources"],
                     "context_sources": info["context_sources"],
-                    "output_fields": self._get_output_fields(workflow.agent_configs.get(name, {})),
+                    "output_fields": self._get_output_fields(
+                        workflow.agent_configs.get(name, {}),
+                        self.paths.schema_dir if self.paths else None,
+                    ),
                 }
                 for name, info in dependency_info.items()
             },
@@ -330,7 +340,8 @@ class GraphCommand(BaseInspectCommand):
             for src in info["context_sources"]:
                 node.add(f"[yellow]◇ {src}[/yellow] [dim](context)[/dim]")
 
-            output_fields = self._get_output_fields(action_config)
+            schema_dir = self.paths.schema_dir if self.paths else None
+            output_fields = self._get_output_fields(action_config, schema_dir)
             if output_fields:
                 outputs_str = ", ".join(output_fields)
                 node.add(f"[magenta]→ {outputs_str}[/magenta]")
@@ -345,7 +356,9 @@ class GraphCommand(BaseInspectCommand):
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @handles_user_errors("inspect graph")
 @requires_project
-def graph(agent: str, user_code: str | None, json_output: bool) -> None:
+def graph(
+    agent: str, user_code: str | None, json_output: bool, project_root: Path | None = None
+) -> None:
     """
     Show workflow structure as a dependency graph.
 
@@ -356,7 +369,9 @@ def graph(agent: str, user_code: str | None, json_output: bool) -> None:
         agac inspect graph -a my_workflow
         agac inspect graph -a my_workflow --json
     """
-    GraphCommand(agent=agent, user_code=user_code, json_output=json_output).execute()
+    GraphCommand(agent=agent, user_code=user_code, json_output=json_output).execute(
+        project_root=project_root
+    )
 
 
 class ActionCommand(BaseInspectCommand):
@@ -372,8 +387,8 @@ class ActionCommand(BaseInspectCommand):
         super().__init__(agent, user_code, json_output)
         self.action_name = action_name
 
-    def execute(self) -> None:
-        workflow = self._load_workflow()
+    def execute(self, project_root: Path | None = None) -> None:
+        workflow = self._load_workflow(project_root=project_root)
 
         if self.action_name not in workflow.agent_configs:
             available = ", ".join(workflow.agent_configs.keys())
@@ -400,7 +415,9 @@ class ActionCommand(BaseInspectCommand):
             "input_sources": info["input_sources"],
             "context_sources": info["context_sources"],
             "context_scope": info["context_scope"],
-            "output_fields": self._get_output_fields(action_config),
+            "output_fields": self._get_output_fields(
+                action_config, self.paths.schema_dir if self.paths else None
+            ),
         }
         click.echo(json_lib.dumps(output, indent=2))
 
@@ -454,7 +471,9 @@ class ActionCommand(BaseInspectCommand):
                     pas.add(f"• {f}")
             self.console.print(scope_tree)
 
-        output_fields = self._get_output_fields(action_config)
+        output_fields = self._get_output_fields(
+            action_config, self.paths.schema_dir if self.paths else None
+        )
         if output_fields:
             self.console.print()
             out_tree = Tree("[bold]Output Fields (from schema)[/bold]")
@@ -473,7 +492,13 @@ class ActionCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect action")
 @requires_project
-def action(agent: str, user_code: str | None, json_output: bool, action_name: str) -> None:
+def action(
+    agent: str,
+    user_code: str | None,
+    json_output: bool,
+    action_name: str,
+    project_root: Path | None = None,
+) -> None:
     """
     Show details for a specific action.
 
@@ -485,7 +510,7 @@ def action(agent: str, user_code: str | None, json_output: bool, action_name: st
     """
     ActionCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
-    ).execute()
+    ).execute(project_root=project_root)
 
 
 class ContextCommand(BaseInspectCommand):
@@ -501,8 +526,8 @@ class ContextCommand(BaseInspectCommand):
         super().__init__(agent, user_code, json_output)
         self.target_action_name = action_name
 
-    def execute(self) -> None:
-        workflow = self._load_workflow()
+    def execute(self, project_root: Path | None = None) -> None:
+        workflow = self._load_workflow(project_root=project_root)
 
         if self.target_action_name not in workflow.agent_configs:
             available = ", ".join(workflow.agent_configs.keys())
@@ -637,7 +662,13 @@ class ContextCommand(BaseInspectCommand):
 @click.argument("action_name")
 @handles_user_errors("inspect context")
 @requires_project
-def context(agent: str, user_code: str | None, json_output: bool, action_name: str) -> None:
+def context(
+    agent: str,
+    user_code: str | None,
+    json_output: bool,
+    action_name: str,
+    project_root: Path | None = None,
+) -> None:
     """
     Show context debug information for a specific action.
 
@@ -650,4 +681,4 @@ def context(agent: str, user_code: str | None, json_output: bool, action_name: s
     """
     ContextCommand(
         agent=agent, user_code=user_code, json_output=json_output, action_name=action_name
-    ).execute()
+    ).execute(project_root=project_root)

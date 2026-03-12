@@ -26,7 +26,7 @@ class TestAgentExists:
         )
 
         assert AgentManager.agent_exists("my_agent") is True
-        mock_get_paths.assert_called_once_with("my_agent")
+        mock_get_paths.assert_called_once_with("my_agent", project_root=None)
 
     @patch.object(AgentManager, "get_agent_paths")
     def test_returns_false_when_get_agent_paths_raises(self, mock_get_paths):

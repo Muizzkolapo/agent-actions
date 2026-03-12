@@ -17,8 +17,8 @@ and service wiring used by CLI commands and runtime agents.
 |------|------|-------------|---------|
 | `data_generator.py` | Module | `DataGenerator` that composes prompts with context for workflows. | `cli`, `workflow`, `llm` |
 | `formatter.py` | Module | Template helpers for prompt formatting and escaping. | `prompt_generation` |
-| `handler.py` | Module | `PromptLoader` and prompt builder utilities. | `logging`, `cli` |
+| `handler.py` | Module | `PromptLoader` and prompt builder utilities. `PromptLoader.load_prompt` accepts `project_root: Path \| None`. | `logging`, `cli` |
 | `prompt_utils.py` | Module | Misc utilities (token counting, template expansion). | `prompt_generation`, `logging` |
-| `render_workflow.py` | Module | Renders workflows into final YAML via templates. | `cli`, `prompt_generation` |
+| `render_workflow.py` | Module | Renders workflows into final YAML via templates. `render_pipeline_with_templates` accepts `project_root: Path \| None`. | `cli`, `prompt_generation` |
 | `renderer.py` | Module | `JinjaTemplateRenderer` for Jinja rendering, `ConfigRenderingService` for config loading, `ConfigRenderer` static facade for backwards compatibility. | `cli`, `validation` |
 | `service.py` | Module | `PromptService` used by CLI/tests for retrieving prompt definitions. | `logging`, `prompt_generation` |

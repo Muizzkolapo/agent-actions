@@ -48,18 +48,28 @@ class RunCommand:
         else:
             workflow.run()
 
-    def execute(self) -> None:
+    def execute(self, project_root: Path | None = None) -> None:
         click.echo(f"Starting agent run for: {self.args.agent}")
         click.echo("Setting up project paths...")
-        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
+        paths = ProjectPathsFactory.create_project_paths(
+            self.agent_name, self.args.agent, project_root=project_root
+        )
         PromptValidator().validate(paths.prompt_dir)
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(
-            self.agent_name, paths.agent_config_dir, filename, check_alternatives=True
+            self.agent_name,
+            paths.agent_config_dir,
+            filename,
+            check_alternatives=True,
+            project_root=project_root,
         )
         click.echo("Rendering and loading configuration...")
         ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+            self.agent_name,
+            full_path,
+            paths.template_dir,
+            paths.rendered_workflows_dir,
+            project_root=project_root,
         )
         click.echo("Initializing agent workflow...")
         workflow = AgentWorkflow(
@@ -72,10 +82,11 @@ class RunCommand:
                 use_tools=self.args.use_tools,
                 run_upstream=self.args.upstream,
                 run_downstream=self.args.downstream,
+                project_root=project_root,
             )
         )
 
-        tracker = RunTracker()
+        tracker = RunTracker(project_root=project_root)
         run_id = tracker.start_workflow_run(
             workflow_id=self.agent_name,
             workflow_name=self.agent_name,
@@ -179,6 +190,7 @@ def run(
     concurrency_limit: int = 5,
     upstream: bool = False,
     downstream: bool = False,
+    project_root: Path | None = None,
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -203,4 +215,4 @@ def run(
         downstream=downstream,
     )
     command = RunCommand(args)
-    command.execute()
+    command.execute(project_root=project_root)

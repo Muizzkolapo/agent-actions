@@ -86,9 +86,9 @@ class ActionCompleteConfig:
 class RunTracker:
     """Track workflow execution runs for documentation."""
 
-    def __init__(self, artefact_dir: Path | None = None):
+    def __init__(self, artefact_dir: Path | None = None, project_root: Path | None = None):
         """Initialize run tracker."""
-        self.artefact_dir = artefact_dir or Path.cwd() / "artefact"
+        self.artefact_dir = artefact_dir or (project_root or Path.cwd()) / "artefact"
         self.runs_file = self.artefact_dir / "runs.json"
 
     def record_run(self, *, config: RunConfig) -> str:

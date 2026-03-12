@@ -18,6 +18,6 @@ metadata.
 |------|------|-------------|---------|
 | `builder.py` | Module | Constructs the realtime workflow builder that wires agents, guards, and prompts. | `workflow`, `preprocessing` |
 | `cleaner.py` | Module | Removes temporary directories during `agac clean`. | `cli`, `file_io` |
-| `config.py` | Module | Realtime-specific configuration options/defaults with kind-to-vendor normalization. | `validation`, `llm` |
-| `handlers.py` | Module | Response/stream handlers for processing realtime outputs and streaming events. | `logging`, `output` |
+| `config.py` | Module | Realtime-specific configuration options/defaults with kind-to-vendor normalization. `ConfigManager.__init__` accepts `project_root: Path \| None`. | `validation`, `llm` |
+| `handlers.py` | Module | Response/stream handlers for processing realtime outputs and streaming events. `AgentManager.get_agent_paths` accepts `project_root: Path \| None`. | `logging`, `output` |
 | `output.py` | Module | Emits realtime outputs, handling side outputs, metadata, and retry loops. | `output`, `processing` |

@@ -27,7 +27,13 @@ class TemplateRenderer(ABC):
     """Abstract interface for template rendering."""
 
     @abstractmethod
-    def render(self, config_path: str, template_dir: str, output_path: str | None = None) -> str:
+    def render(
+        self,
+        config_path: str,
+        template_dir: str,
+        output_path: str | None = None,
+        project_root: Path | None = None,
+    ) -> str:
         """
         Render a template with the given configuration.
 
@@ -35,6 +41,7 @@ class TemplateRenderer(ABC):
             config_path: Path to the configuration file.
             template_dir: Path to the template directory.
             output_path: Optional path to save the rendered output.
+            project_root: Optional project root for resolving relative paths.
 
         Returns:
             Rendered template as a string.
@@ -52,6 +59,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
         config_path: str,
         template_dir: str,
         output_path: str | None = None,
+        project_root: Path | None = None,
     ) -> str:
         """
         Render a template with the given configuration using Jinja.
@@ -61,6 +69,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
             template_dir: Path to the template directory (as string).
             output_path: Optional path to save the rendered output
                 (as string, can be a directory path).
+            project_root: Optional project root for resolving relative paths.
 
         Returns:
             Rendered template as a string.
@@ -128,7 +137,9 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 final_error_message = error_prefix + formatted_errors
                 raise ValueError(final_error_message)
             logger.info("All path validations passed. Proceeding to render template.")
-            rendered_template = render_pipeline_with_templates(config_path, template_dir)
+            rendered_template = render_pipeline_with_templates(
+                config_path, template_dir, project_root=project_root
+            )
             if output_file_to_write:
                 with open(output_file_to_write, "w", encoding="utf-8") as f:
                     f.write(rendered_template)
@@ -292,9 +303,11 @@ class ConfigRenderingService:
                     },
                 )
 
-    def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
+    def _validate_agent_config_block(
+        self, config: AgentConfigMap, agent_name: str, project_root: Path | None = None
+    ) -> None:
         """Validate the config - handle both old and new formats."""
-        project_root_path = AgentManager.find_project_root(start_path=Path.cwd())
+        project_root_path = project_root or AgentManager.find_project_root(start_path=Path.cwd())
 
         is_new_format = "actions" in config and "name" in config
         if is_new_format:
@@ -311,6 +324,7 @@ class ConfigRenderingService:
         config_path: str | Path,
         template_dir: str | Path,
         output_dir: str | Path | None = None,
+        project_root: Path | None = None,
     ) -> AgentConfigMap:
         """
         Render templates and load configuration data.
@@ -320,6 +334,7 @@ class ConfigRenderingService:
             config_path: Path to the agent configuration file.
             template_dir: Path to the template directory.
             output_dir: Path to the output directory.
+            project_root: Optional project root for resolving relative paths.
 
         Returns:
             Parsed configuration data as a dictionary.
@@ -354,7 +369,7 @@ class ConfigRenderingService:
                 context={"file_path": str(cfg_path), "operation": "render_and_load_config"},
             )
         rendered_template = self.template_renderer.render(
-            config_path_str, template_dir_str, output_dir_str
+            config_path_str, template_dir_str, output_dir_str, project_root=project_root
         )
         config = self._safe_load_yaml(rendered_template, cfg_path)
         try:
@@ -370,7 +385,7 @@ class ConfigRenderingService:
                 },
                 cause=e,
             ) from e
-        self._validate_agent_config_block(config, agent_name)
+        self._validate_agent_config_block(config, agent_name, project_root=project_root)
         logger.debug(
             "Successfully completed render and load config",
             extra={"operation": "render and load config", "agent_name": agent_name},
@@ -388,6 +403,7 @@ class ConfigRenderer:
         config_path: Path,
         template_dir: Path,
         output_dir: Path | None = None,
+        project_root: Path | None = None,
     ) -> AgentConfigMap:
         """
         Static method for backwards compatibility.
@@ -397,9 +413,12 @@ class ConfigRenderer:
             config_path: Path to the agent configuration file.
             template_dir: Path to the template directory.
             output_dir: Path to the output directory. None to skip file write.
+            project_root: Optional project root for resolving relative paths.
 
         Returns:
             Parsed configuration data as a dictionary.
         """
         service = ConfigRenderingService()
-        return service.render_and_load_config(agent_name, config_path, template_dir, output_dir)
+        return service.render_and_load_config(
+            agent_name, config_path, template_dir, output_dir, project_root=project_root
+        )

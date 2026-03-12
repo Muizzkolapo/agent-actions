@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from agent_actions.cli.cli_decorators import handles_user_errors
+from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.tooling.docs.generator import generate_docs
 from agent_actions.tooling.docs.server import serve_docs
 
@@ -23,7 +23,8 @@ def docs():
     help="Output directory for generated files (default: artefact)",
 )
 @handles_user_errors("docs generate")
-def generate(output: str):
+@requires_project
+def generate(output: str, project_root: Path | None = None):
     """
     Generate documentation data files.
 
@@ -35,7 +36,7 @@ def generate(output: str):
         agac docs generate
         agac docs generate --output ./custom-artefact
     """
-    project_path = Path.cwd()
+    project_path = project_root or Path.cwd()
 
     output_dir = Path(output)
     if not output_dir.is_absolute():
@@ -56,7 +57,8 @@ def generate(output: str):
     "--artefact", "-a", default=None, help="Path to artefact directory (default: ./artefact)"
 )
 @handles_user_errors("docs serve")
-def serve(port: int, artefact: str):
+@requires_project
+def serve(port: int, artefact: str, project_root: Path | None = None):
     """
     Start HTTP server to view documentation.
 
@@ -69,7 +71,7 @@ def serve(port: int, artefact: str):
         agac docs serve --port 3000
         agac docs serve --artefact ./my-docs
     """
-    success = serve_docs(port, artefact_path=artefact)
+    success = serve_docs(port, artefact_path=artefact, project_root=project_root)
     if not success:
         raise click.Abort()
 
@@ -87,7 +89,8 @@ def serve(port: int, artefact: str):
     "--port", "-p", default=8890, help="Port where docs server is running (default: 8890)"
 )
 @handles_user_errors("docs test")
-def run_tests(test_suite: str, port: int):
+@requires_project
+def run_tests(test_suite: str, port: int, project_root: Path | None = None):
     """
     Run Playwright tests to verify documentation site.
 
@@ -107,7 +110,7 @@ def run_tests(test_suite: str, port: int):
         click.echo("   Install from: https://nodejs.org/")
         raise click.Abort() from exc
 
-    project_root = Path.cwd()
+    project_root = project_root or Path.cwd()
     test_dir = project_root
 
     test_files = {

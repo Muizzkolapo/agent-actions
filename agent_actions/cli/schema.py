@@ -32,17 +32,19 @@ class SchemaCommand:
         self.console = Console()
         self.renderer = SchemaRenderer(self.console)
 
-    def execute(self) -> None:
+    def execute(self, project_root: Path | None = None) -> None:
         if not self.json_output:
             self.console.print(f"[cyan]Analyzing workflow: {self.agent}[/cyan]\n")
 
         paths = ProjectPathsFactory.create_project_paths(
-            self.agent_name, self.agent, auto_create=False
+            self.agent_name, self.agent, auto_create=False, project_root=project_root
         )
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir)
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir, project_root=project_root
+        )
 
         workflow = AgentWorkflow(
             WorkflowConfig(
@@ -52,6 +54,7 @@ class SchemaCommand:
                     default_path=str(paths.default_config_path),
                 ),
                 use_tools=False,
+                project_root=project_root,
             )
         )
 
@@ -152,6 +155,7 @@ def schema(
     user_code: str | None,
     json_output: bool,
     verbose: bool,
+    project_root: Path | None = None,
 ) -> None:
     """
     Display input and output schemas for all actions in a workflow.
@@ -165,4 +169,4 @@ def schema(
         agac schema -a my_workflow -u ./user_code --verbose
     """
     command = SchemaCommand(agent, user_code, json_output, verbose)
-    command.execute()
+    command.execute(project_root=project_root)

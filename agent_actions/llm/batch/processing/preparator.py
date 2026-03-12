@@ -248,7 +248,12 @@ class BatchTaskPreparator:
         if not vendor:
             vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
-        schema, _captured_results = prepare_schema_unified(agent_config, vendor)
+        from pathlib import Path
+
+        _pr = agent_config.get("_project_root")
+        schema, _captured_results = prepare_schema_unified(
+            agent_config, vendor, project_root=Path(_pr) if _pr else None
+        )
         return schema
 
     def _add_tools_to_path(self, tools_path: str | None) -> None:

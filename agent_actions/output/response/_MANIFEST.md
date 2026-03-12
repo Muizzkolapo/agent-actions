@@ -19,5 +19,5 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | `expander_merge.py` | Module | Config merge/init: directive merging, context_scope, chunk config, optional fields. | `config` |
 | `expander_guard_validation.py` | Module | Guard reference validation: schema registry, upstream reference checks. | `validation`, `guards` |
 | `guard_parser.py` | Module | Parses guard metadata from response payloads. | `preprocessing` |
-| `loader.py` | Module | `SchemaLoader` that reads and validates schema files from YAML. | `file_io`, `validation` |
+| `loader.py` | Module | `SchemaLoader` that reads and validates schema files from YAML. `return_schema` and `load_schema` accept `project_root: Path \| None`. | `file_io`, `validation` |
 | `schema.py` | Module | Schema utilities used by the CLI and docs to describe workflow outputs. | `validation`, `schema_loader` |

@@ -1,7 +1,6 @@
 """CLI decorators for agent-actions commands."""
 
 import functools
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -41,7 +40,7 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
 
 
 def requires_project(func):
-    """Find project root, chdir into it, and restore CWD after the command."""
+    """Find project root and inject it as a ``project_root`` keyword argument."""
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
@@ -56,12 +55,6 @@ def requires_project(func):
 
         click.echo(f"📁 Project root: {display_path}", err=True)
 
-        original_cwd = os.getcwd()
-        os.chdir(project_root)
-
-        try:
-            return func(*args, **kwargs)
-        finally:
-            os.chdir(original_cwd)
+        return func(*args, project_root=project_root, **kwargs)
 
     return wrapper

@@ -1,5 +1,6 @@
 """Render and compile workflow templates into self-contained YAML."""
 
+import functools
 import logging
 import textwrap
 from pathlib import Path
@@ -52,18 +53,19 @@ def _load_template_globals(env, templates_folder):
             ) from e
 
 
-def _save_failed_render(rendered_yaml_content, workflow_name):
+def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path | None = None):
     """
     Save failed render output to cache for debugging.
 
     Args:
         rendered_yaml_content: The rendered YAML that failed to parse
         workflow_name: Name of the workflow for the cache filename
+        project_root: Optional project root directory
 
     Returns:
         Error message string or empty string if save fails
     """
-    cache_dir = Path.cwd() / ".agent-actions" / "cache" / "rendered_workflows"
+    cache_dir = (project_root or Path.cwd()) / ".agent-actions" / "cache" / "rendered_workflows"
     cache_dir.mkdir(parents=True, exist_ok=True)
     failed_render_path = cache_dir / f"{workflow_name}_failed.yml"
     try:
@@ -77,7 +79,7 @@ def _save_failed_render(rendered_yaml_content, workflow_name):
         return ""
 
 
-def _resolve_prompt_fields(item):
+def _resolve_prompt_fields(item, project_root: Path | None = None):
     """
     Recursively resolve prompt fields starting with '$'.
 
@@ -86,6 +88,7 @@ def _resolve_prompt_fields(item):
 
     Args:
         item: Dictionary, list, or other value to process
+        project_root: Optional project root for prompt file search
     """
     if isinstance(item, dict):
         for key, value in item.items():
@@ -95,7 +98,7 @@ def _resolve_prompt_fields(item):
                     prompt_key = parts[0][1:]
                     extra = parts[1] if len(parts) > 1 else ""
                     try:
-                        resolved = PromptLoader.load_prompt(prompt_key)
+                        resolved = PromptLoader.load_prompt(prompt_key, project_root=project_root)
                         item[key] = resolved + (" " + extra if extra else "")
                     except ValueError:
                         logger.warning(
@@ -104,10 +107,10 @@ def _resolve_prompt_fields(item):
                         )
                         item[key] = value
             elif isinstance(value, (dict, list)):
-                _resolve_prompt_fields(value)
+                _resolve_prompt_fields(value, project_root=project_root)
     elif isinstance(item, list):
         for sub_item in item:
-            _resolve_prompt_fields(sub_item)
+            _resolve_prompt_fields(sub_item, project_root=project_root)
 
 
 # =============================================================================
@@ -115,13 +118,16 @@ def _resolve_prompt_fields(item):
 # =============================================================================
 
 
-def _load_named_schema(schema_name: str, schema_dir: Path | None = None) -> dict[str, Any]:
+def _load_named_schema(
+    schema_name: str, schema_dir: Path | None = None, project_root: Path | None = None
+) -> dict[str, Any]:
     """
     Load a named schema from the schema/ directory.
 
     Args:
         schema_name: Name of the schema (without .yml extension)
-        schema_dir: Optional schema directory. Defaults to cwd/schema.
+        schema_dir: Optional schema directory. Defaults to project_root/schema.
+        project_root: Optional project root for deriving schema_dir.
 
     Returns:
         Schema data as dictionary
@@ -130,7 +136,7 @@ def _load_named_schema(schema_name: str, schema_dir: Path | None = None) -> dict
         ConfigurationError: If schema file not found
     """
     if schema_dir is None:
-        schema_dir = Path.cwd() / "schema"
+        schema_dir = (project_root or Path.cwd()) / "schema"
 
     schema_file = schema_dir / f"{schema_name}.yml"
 
@@ -239,6 +245,7 @@ def _compile_action_schemas(
     schema_dir: Path | None = None,
     strict: bool = False,
     errors: list[str] | None = None,
+    project_root: Path | None = None,
 ) -> dict[str, Any]:
     """
     Compile schemas for a single action, inlining named schemas and expanding inline ones.
@@ -254,6 +261,7 @@ def _compile_action_schemas(
         schema_dir: Optional schema directory
         strict: If True, collect errors instead of logging warnings
         errors: List to collect error messages (used with strict mode)
+        project_root: Optional project root for deriving schema_dir
 
     Returns:
         Action with compiled schema (modified in place and returned)
@@ -264,7 +272,7 @@ def _compile_action_schemas(
     schema_name = action.get("schema_name")
     if schema_name and isinstance(schema_name, str):
         try:
-            loaded_schema = _load_named_schema(schema_name, schema_dir)
+            loaded_schema = _load_named_schema(schema_name, schema_dir, project_root=project_root)
             action["schema"] = loaded_schema
             del action["schema_name"]
             logger.debug("Inlined named schema '%s' for action '%s'", schema_name, action_name)
@@ -279,7 +287,7 @@ def _compile_action_schemas(
     schema_value = action.get("schema")
     if schema_value and isinstance(schema_value, str):
         try:
-            loaded_schema = _load_named_schema(schema_value, schema_dir)
+            loaded_schema = _load_named_schema(schema_value, schema_dir, project_root=project_root)
             action["schema"] = loaded_schema
             logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
         except ConfigurationError as e:
@@ -302,6 +310,7 @@ def _compile_workflow_schemas(
     data: dict[str, Any],
     schema_dir: Path | None = None,
     strict: bool = False,
+    project_root: Path | None = None,
 ) -> None:
     """
     Compile all schemas in a workflow configuration.
@@ -312,6 +321,7 @@ def _compile_workflow_schemas(
         data: Workflow configuration dict (modified in place)
         schema_dir: Optional schema directory
         strict: If True, raise ConfigurationError on any schema load failure
+        project_root: Optional project root for deriving schema_dir
 
     Raises:
         ConfigurationError: If strict=True and any schema fails to load
@@ -321,12 +331,16 @@ def _compile_workflow_schemas(
     # Compile schemas in actions list
     actions = data.get("actions", [])
     for action in actions:
-        _compile_action_schemas(action, schema_dir, strict=strict, errors=errors)
+        _compile_action_schemas(
+            action, schema_dir, strict=strict, errors=errors, project_root=project_root
+        )
 
     # Compile schemas in defaults if present
     defaults = data.get("defaults", {})
     if defaults:
-        _compile_action_schemas(defaults, schema_dir, strict=strict, errors=errors)
+        _compile_action_schemas(
+            defaults, schema_dir, strict=strict, errors=errors, project_root=project_root
+        )
 
     # Raise aggregated errors in strict mode (after all schemas processed)
     if strict and errors:
@@ -477,12 +491,13 @@ def _expand_workflow_versions(data: dict[str, Any]) -> None:
     data["actions"] = expanded_actions
 
 
-def _load_yaml_content(yaml_path):
+def _load_yaml_content(yaml_path, project_root: Path | None = None):
     """
     Load YAML content from file, resolving prompt references if needed.
 
     Args:
         yaml_path: Path to YAML file
+        project_root: Optional project root for prompt file search
 
     Returns:
         YAML content as string
@@ -502,7 +517,7 @@ def _load_yaml_content(yaml_path):
 
     if content.strip().startswith("$"):
         try:
-            content = PromptLoader.load_prompt(content.strip()[1:])
+            content = PromptLoader.load_prompt(content.strip()[1:], project_root=project_root)
         except ValueError as e:
             raise ConfigurationError(
                 "Failed to load prompt",
@@ -519,6 +534,7 @@ def render_pipeline_with_templates(
     schema_dir: Path | None = None,
     compile_schemas: bool = True,
     strict: bool = False,
+    project_root: Path | None = None,
 ) -> str:
     """
     Render and compile a YAML pipeline configuration.
@@ -533,10 +549,11 @@ def render_pipeline_with_templates(
     Args:
         yaml_path: Path to YAML configuration file
         templates_folder: Path to folder containing Jinja2 templates
-        schema_dir: Optional schema directory. Defaults to cwd/schema.
+        schema_dir: Optional schema directory. Defaults to project_root/schema.
         compile_schemas: Whether to compile/inline schemas (default: True)
         strict: If True, raise errors on schema load failures instead of warnings.
                 Use strict=True in CI/CD or production to catch missing schemas early.
+        project_root: Optional project root for resolving relative paths.
 
     Returns:
         Fully compiled YAML content as string, ready for execution
@@ -547,11 +564,13 @@ def render_pipeline_with_templates(
                            and any schema fails to load
     """
     env = Environment(loader=FileSystemLoader(str(templates_folder)))
-    env.globals["load_prompt"] = PromptLoader.load_prompt
+    env.globals["load_prompt"] = functools.partial(
+        PromptLoader.load_prompt, project_root=project_root
+    )
     env.filters["dedent"] = textwrap.dedent
     _load_template_globals(env, str(templates_folder))
 
-    yaml_content = _load_yaml_content(yaml_path)
+    yaml_content = _load_yaml_content(yaml_path, project_root=project_root)
 
     # Step 1: Jinja2 template rendering
     try:
@@ -570,7 +589,9 @@ def render_pipeline_with_templates(
         data = yaml.safe_load(rendered_yaml_content)
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
-        saved_file_msg = _save_failed_render(rendered_yaml_content, Path(yaml_path).stem)
+        saved_file_msg = _save_failed_render(
+            rendered_yaml_content, Path(yaml_path).stem, project_root=project_root
+        )
         raise ConfigurationError(
             f"Error parsing YAML after template rendering{saved_file_msg}",
             context={
@@ -585,7 +606,7 @@ def render_pipeline_with_templates(
         ) from e
 
     # Step 3: Resolve prompt references
-    _resolve_prompt_fields(data)
+    _resolve_prompt_fields(data, project_root=project_root)
 
     # Step 4: Expand versioned actions
     if data:
@@ -593,6 +614,6 @@ def render_pipeline_with_templates(
 
     # Step 5: Compile schemas (inline named schemas, expand inline dicts)
     if compile_schemas and data:
-        _compile_workflow_schemas(data, schema_dir, strict=strict)
+        _compile_workflow_schemas(data, schema_dir, strict=strict, project_root=project_root)
 
     return yaml.dump(data, sort_keys=False)

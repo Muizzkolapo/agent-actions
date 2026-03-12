@@ -1,5 +1,7 @@
 """CLI commands for batch processing operations."""
 
+from pathlib import Path
+
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
@@ -19,13 +21,14 @@ def batch():
 )
 @handles_user_errors("batch status")
 @requires_project
-def status(batch_id: str = None):
+def status(batch_id: str = None, project_root: Path | None = None):
     """Checks the status of a running batch job."""
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
     service = BatchService()
-    batch_status = service.check_status(args.batch_id)
+    output_dir = str(project_root) if project_root else None
+    batch_status = service.check_status(args.batch_id, output_directory=output_dir)
     click.echo(f"Batch job status: {batch_status}")
 
 
@@ -36,7 +39,7 @@ def status(batch_id: str = None):
 )
 @handles_user_errors("batch retrieve")
 @requires_project
-def retrieve(batch_id: str = None):
+def retrieve(batch_id: str = None, project_root: Path | None = None):
     """Retrieves the results of a completed batch job.
 
     Results are saved to the workflow's configured output directory to maintain
@@ -46,8 +49,5 @@ def retrieve(batch_id: str = None):
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
     service = BatchService()
-    # @requires_project changes CWD to project root before this runs.
-    # The batch registry lives at {project_root}/batch/.batch_registry.json,
-    # so "." correctly resolves to the project root where the registry lives.
-    result = service.retrieve_results(args.batch_id, ".")
+    result = service.retrieve_results(args.batch_id, str(project_root or Path.cwd()))
     click.echo(result)

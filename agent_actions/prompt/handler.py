@@ -60,7 +60,7 @@ class PromptLoader:
                 raise ValueError(f"Unclosed prompt block for '{name}' in {filename}.")
 
     @staticmethod
-    def load_prompt(prompt_name: str) -> str:
+    def load_prompt(prompt_name: str, project_root: Path | None = None) -> str:
         """
         Load a prompt by name ('filename.prompt_key') from .md files in the project tree.
 
@@ -73,12 +73,13 @@ class PromptLoader:
         prompt_file_name, prompt_key = prompt_name.split(".", 1)
         target_filename = f"{prompt_file_name}.md"
 
-        prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
+        search_root = project_root or Path.cwd()
+        prompt_file_str = FileHandler.find_file_in_directory(str(search_root), target_filename)
 
         if not prompt_file_str:
             raise ValueError(
                 f"Prompt file '{target_filename}' not found. "
-                f"Searched recursively from {Path.cwd()}. "
+                f"Searched recursively from {search_root}. "
                 f"Ensure the .md file exists anywhere in your project tree."
             )
 
