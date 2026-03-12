@@ -3,7 +3,7 @@
 import logging
 import signal
 import sys
-from typing import Optional, Sequence, List
+from typing import Optional, Sequence
 
 import click
 
@@ -91,7 +91,7 @@ class CLI:
         print(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
         sys.exit(130)
 
-    def _configure_logging(self, argv: List[str]) -> None:
+    def _configure_logging(self, argv: Sequence[str]) -> None:
         debug_mode = "--debug" in argv
         verbose_mode = "--verbose" in argv or "-v" in argv
         quiet_mode = "--quiet" in argv or "-q" in argv
@@ -102,7 +102,7 @@ class CLI:
         elif verbose_mode:
             config.default_level = "INFO"
         elif quiet_mode:
-            config.default_level = "WARN"
+            config.default_level = "WARNING"
 
         LoggerFactory.initialize(
             config=config,

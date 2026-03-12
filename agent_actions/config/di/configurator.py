@@ -41,8 +41,8 @@ class DIConfigurator:
         from agent_actions.input.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt.data_generator import DataGenerator
 
-        container.register_transient(IDataProcessor, DataProcessor)
-        container.register_transient(IGenerator, DataGenerator)
+        container.register_transient(IDataProcessor, DataProcessor)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
+        container.register_transient(IGenerator, DataGenerator)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
 
     @staticmethod
     def _register_utilities(container: DependencyContainer):
@@ -82,8 +82,8 @@ class DIConfigurator:
             m.create_agent_with_data.return_value = ([], True)
             return m
 
-        container.register_factory(IDataProcessor, processor_factory)
-        container.register_factory(IGenerator, generator_factory)
+        container.register_factory(IDataProcessor, processor_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
+        container.register_factory(IGenerator, generator_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
         from agent_actions.llm.batch.service import BatchService
         from agent_actions.config.paths import PathManager
 

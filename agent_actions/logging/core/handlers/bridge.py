@@ -15,7 +15,7 @@ class LoggingBridgeHandler(logging.Handler):
     def __init__(self, level: int = logging.DEBUG) -> None:
         """Initialize the bridge handler."""
         super().__init__(level)
-        self._event_manager = None
+        self._event_manager: Any | None = None
 
     def emit(self, record: logging.LogRecord) -> None:
         """Convert a log record to an event and fire it."""
@@ -37,6 +37,11 @@ class LoggingBridgeHandler(logging.Handler):
 
             category = self._extract_category(record.name)
 
+            # Normalize exc_info: filter out the (None, None, None) tuple form
+            exc_info_normalized: tuple[type[BaseException], BaseException, Any] | None = None
+            if record.exc_info is not None and record.exc_info[0] is not None:
+                exc_info_normalized = (record.exc_info[0], record.exc_info[1], record.exc_info[2])  # type: ignore[assignment]
+
             event = LogEvent(
                 level=event_level,
                 category=category,
@@ -45,7 +50,7 @@ class LoggingBridgeHandler(logging.Handler):
                 source_file=record.pathname,
                 source_line=record.lineno,
                 func_name=record.funcName,
-                exc_info=record.exc_info,
+                exc_info=exc_info_normalized,
             )
 
             if hasattr(record, "operation"):
@@ -128,8 +133,6 @@ class SystemEvent(BaseEvent):
     detail: str = ""
 
     def __post_init__(self) -> None:
-        if not self.level:
-            self.level = EventLevel.INFO
         self.category = "system"
 
     @property

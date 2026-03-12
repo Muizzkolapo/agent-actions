@@ -18,7 +18,7 @@ from agent_actions.logging.events.types import (
     RecordEmptyOutputEvent,
     BatchProcessingStartedEvent,
     BatchProcessingProgressEvent,
-    BatchProcessingCompleteEvent,
+    BatchDataProcessingCompleteEvent,
 )
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
@@ -388,7 +388,7 @@ class RecordProcessor:
 
         elapsed_time = (datetime.now(timezone.utc) - start_time).total_seconds()
         fire_event(
-            BatchProcessingCompleteEvent(
+            BatchDataProcessingCompleteEvent(
                 agent_name=context.agent_name,
                 total_records=len(items),
                 elapsed_time=elapsed_time,

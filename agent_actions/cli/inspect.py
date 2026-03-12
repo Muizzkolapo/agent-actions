@@ -12,7 +12,11 @@ from rich.table import Table
 from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
+from agent_actions.cli.project_paths_factory import (
+    ProjectPaths,
+    ProjectPathsFactory,
+    find_config_file,
+)
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt.renderer import ConfigRenderer
 
@@ -28,23 +32,24 @@ class BaseInspectCommand:
         self.user_code = user_code
         self.json_output = json_output
         self.console = Console()
-        self.paths = None  # Will be set by _load_workflow
+        self.paths: Optional[ProjectPaths] = None  # Will be set by _load_workflow
 
     def _load_workflow(self) -> AgentWorkflow:
-        self.paths = ProjectPathsFactory.create_project_paths(
+        paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.agent, auto_create=False
         )
+        self.paths = paths
         filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(self.agent_name, self.paths.agent_config_dir, filename)
+        full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(self.agent_name, full_path, self.paths.template_dir)
+        ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir)
 
         workflow = AgentWorkflow(
             WorkflowConfig(
                 paths=WorkflowPaths(
                     constructor_path=str(full_path),
                     user_code_path=str(self.user_code) if self.user_code else None,
-                    default_path=str(self.paths.default_config_path),
+                    default_path=str(paths.default_config_path),
                 ),
                 use_tools=False,
             )

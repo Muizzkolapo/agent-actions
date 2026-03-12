@@ -2372,8 +2372,8 @@ class BatchProcessingProgressEvent(BaseEvent):
 
 
 @dataclass
-class BatchProcessingCompleteEvent(BaseEvent):
-    """Fired when batch processing completes."""
+class BatchDataProcessingCompleteEvent(BaseEvent):
+    """Fired when batch data processing completes."""
 
     agent_name: str = ""
     total_records: int = 0

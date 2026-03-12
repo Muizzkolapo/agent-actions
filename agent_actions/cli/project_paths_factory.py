@@ -3,7 +3,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from agent_actions.errors import (
     DirectoryError,
@@ -109,7 +109,7 @@ class ProjectPathsFactory:
     REQUIRED_DIRECTORIES = ["agent_config_dir", "schema_dir"]
     AUTO_CREATE_DIRECTORIES = ["prompt_dir", "rendered_workflows_dir", "io_dir", "template_dir"]
 
-    def __init__(self, path_manager: PathManager = None):
+    def __init__(self, path_manager: Optional[PathManager] = None):
         self.path_manager = path_manager or PathManager()
 
     @staticmethod
@@ -188,14 +188,14 @@ class ProjectPathsFactory:
                 path = getattr(paths, dir_name)
                 if dir_name == "schema_dir":
                     factory.path_manager.validate_standard_path(PathType.SCHEMA, path)
-                path_validator.validate(path, dir_name)
+                path_validator.validate(path)
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
                 if auto_create:
                     factory.path_manager.ensure_path_exists(path)
                 if path.exists():
-                    path_validator.validate(path, dir_name)
-            path_validator.validate(paths.default_config_path, "Default config")
+                    path_validator.validate(path)
+            path_validator.validate(paths.default_config_path)
             logger.debug("All project paths created successfully")
             return paths
         except Exception as e:

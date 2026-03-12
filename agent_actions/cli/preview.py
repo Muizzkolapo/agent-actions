@@ -154,7 +154,7 @@ class PreviewCommand:
         if not records:
             return
 
-        all_keys = set()
+        all_keys: set[str] = set()
         for record in records:
             if isinstance(record, dict):
                 if "content" in record and isinstance(record["content"], dict):

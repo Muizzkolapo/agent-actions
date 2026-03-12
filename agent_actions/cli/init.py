@@ -214,7 +214,10 @@ def init(
         agac init my_project --output-dir /path/to/dir
     """
     args = InitCommandArgs(
-        project_name=project_name, output_dir=output_dir, template=template, force=force
+        project_name=project_name,
+        output_dir=Path(output_dir) if output_dir else None,
+        template=template,
+        force=force,
     )
     command = InitCommand(args)
     command.execute()

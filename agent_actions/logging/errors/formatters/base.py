@@ -31,4 +31,4 @@ class ErrorFormatter(ABC):
         if "cohere" in message_lower:
             return "cohere"
 
-        return context.get("provider", "API")
+        return str(context.get("provider", "API"))

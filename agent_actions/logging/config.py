@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Dict, Literal, Optional, cast
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
@@ -85,10 +85,12 @@ class LoggingConfig:
         if file_level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
             file_level = "DEBUG"
 
-        file_settings = FileHandlerSettings(enabled=file_enabled, path=file_path, level=file_level)
+        file_settings = FileHandlerSettings(
+            enabled=file_enabled, path=file_path, level=cast(LogLevel, file_level)
+        )
 
         return cls(
-            default_level=level,
+            default_level=cast(LogLevel, level),
             include_source_location=include_source,
             file_handler=file_settings,
         )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -63,10 +62,7 @@ class AgentActionsFormatter:
         if not self.show_timestamp:
             return ""
         ts = event.meta.timestamp
-        if isinstance(ts, datetime):
-            time_str = ts.strftime("%H:%M:%S")
-        else:
-            time_str = datetime.now().strftime("%H:%M:%S")
+        time_str = ts.strftime("%H:%M:%S")
         return f"[dim]{time_str}[/dim] | " if self.use_color else f"{time_str} | "
 
     def _status(self, status: str) -> str:

@@ -31,7 +31,7 @@ def get_storage_backend(
 
     workflow_dir = Path(workflow_path)
     db_path = workflow_dir / "agent_io" / "target" / f"{workflow_name}.db"
-    backend = backend_class(str(db_path), workflow_name)
+    backend = backend_class(str(db_path), workflow_name)  # type: ignore[call-arg]  # subclass __init__ accepts positional args
 
     return backend
 

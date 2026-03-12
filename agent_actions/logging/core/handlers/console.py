@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
@@ -75,10 +74,7 @@ class ConsoleEventHandler:
 
         if self.show_timestamp:
             ts = event.meta.timestamp
-            if isinstance(ts, datetime):
-                time_str = ts.strftime("%H:%M:%S")
-            else:
-                time_str = datetime.now().strftime("%H:%M:%S")
+            time_str = ts.strftime("%H:%M:%S")
             parts.append(f"[dim]{time_str}[/dim]" if self._use_rich else time_str)
 
         level_indicators = {

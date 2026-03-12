@@ -115,7 +115,7 @@ from agent_actions.logging.events.types import (
     # Batch Processing events (data processing)
     BatchProcessingStartedEvent,
     BatchProcessingProgressEvent,
-    BatchProcessingCompleteEvent,
+    BatchDataProcessingCompleteEvent,
     # Result Collection events
     ResultCollectionStartedEvent,
     ResultCollectedEvent,
@@ -247,7 +247,7 @@ __all__ = [
     # Batch Processing (data processing)
     "BatchProcessingStartedEvent",
     "BatchProcessingProgressEvent",
-    "BatchProcessingCompleteEvent",
+    "BatchDataProcessingCompleteEvent",
     # Result Collection
     "ResultCollectionStartedEvent",
     "ResultCollectedEvent",

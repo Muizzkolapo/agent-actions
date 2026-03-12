@@ -216,7 +216,8 @@ class SQLiteBackend(StorageBackend):
         if row is None:
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
 
-        return json.loads(row["data"])
+        result: list[dict[str, Any]] = json.loads(row["data"])
+        return result
 
     def write_source(
         self,

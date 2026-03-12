@@ -120,12 +120,12 @@ class DependencyContainer:
                     if interface not in self._instances:
                         instance = self._create_instance(descriptor.implementation)
                         self._instances[interface] = instance
-                    return self._instances[interface]
-            return self._create_instance(descriptor.implementation)
+                    return self._instances[interface]  # type: ignore[no-any-return]  # DI container stores Any; caller ensures T via interface key
+            return self._create_instance(descriptor.implementation)  # type: ignore[no-any-return]  # descriptor.implementation typed as Type, not Type[T]
         if interface in self._instances:
-            return self._instances[interface]
+            return self._instances[interface]  # type: ignore[no-any-return]  # DI container stores Any; caller ensures T via interface key
         if interface in self._factories:
-            return self._factories[interface]()
+            return self._factories[interface]()  # type: ignore[no-any-return]  # DI factory returns Any; caller ensures T via interface key
 
         raise DependencyError(
             f"DependencyContainer: Service {interface.__name__} not found",

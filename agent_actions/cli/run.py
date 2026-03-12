@@ -4,7 +4,7 @@ import asyncio
 import logging
 import traceback
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional, cast
 
 import click
 
@@ -195,9 +195,9 @@ def run(
     """
     args = RunCommandArgs(
         agent=agent,
-        user_code=user_code,
+        user_code=Path(user_code) if user_code else None,
         use_tools=use_tools,
-        execution_mode=execution_mode,
+        execution_mode=cast(Literal["auto", "parallel", "sequential"], execution_mode),
         concurrency_limit=concurrency_limit,
         upstream=upstream,
         downstream=downstream,

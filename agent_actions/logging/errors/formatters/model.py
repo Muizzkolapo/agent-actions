@@ -47,7 +47,7 @@ class ModelErrorFormatter(ErrorFormatter):
         if match:
             return match.group(1)
 
-        return context.get("model", "unknown")
+        return str(context.get("model", "unknown"))
 
     def _guess_provider_from_model(self, model: str) -> str:
         """Guess provider from model name."""

@@ -117,7 +117,7 @@ def parse_action_name(dirname: str) -> tuple[int, str]:
 
 def analyze_workflow(target_dir: Path) -> None:
     """Analyze field flow across all nodes."""
-    nodes = []
+    nodes: list[dict[str, Any]] = []
 
     for node_dir in target_dir.iterdir():
         if not node_dir.is_dir():
@@ -141,7 +141,7 @@ def analyze_workflow(target_dir: Path) -> None:
     print("FIELD FLOW ANALYSIS")
     print("=" * 70)
 
-    prev_fields = set()
+    prev_fields: set[str] = set()
 
     for i, node in enumerate(nodes):
         curr_fields = set(node["fields"].keys())

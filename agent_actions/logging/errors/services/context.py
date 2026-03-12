@@ -14,7 +14,7 @@ class ErrorContextService:
         merged_context = {}
 
         chain = []
-        current = exc
+        current: Optional[Exception] = exc
         visited = set()
 
         while current and id(current) not in visited:
