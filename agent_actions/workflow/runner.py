@@ -155,7 +155,10 @@ class AgentRunner:
             DependencyError: If any input source directory is not found.
         """
         from agent_actions.errors import DependencyError
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_inference import (
+            _is_parallel_branches,
+            _resolve_input_sources_for_fan_in,
+        )
 
         target_dir = agent_folder / "target"
 
@@ -170,7 +173,7 @@ class AgentRunner:
         # become input sources.
         if len(dependencies) > 1:
             has_reduce_key = agent_config.get("reduce_key") is not None
-            is_parallel = ContextScopeProcessor._is_parallel_branches(dependencies)
+            is_parallel = _is_parallel_branches(dependencies)
 
             if has_reduce_key:
                 # Aggregation pattern with reduce_key - merge all dependencies
@@ -181,13 +184,11 @@ class AgentRunner:
                     f"Merging all {len(dependencies)} dependencies: {dependencies}"
                 )
             elif not is_parallel:
-                # Fan-in pattern - use shared helper from ContextScopeProcessor
+                # Fan-in pattern - use shared helper
                 primary_dep = agent_config.get("primary_dependency")
                 try:
-                    input_deps, non_primary = (
-                        ContextScopeProcessor._resolve_input_sources_for_fan_in(
-                            dependencies, primary_dep
-                        )
+                    input_deps, non_primary = _resolve_input_sources_for_fan_in(
+                        dependencies, primary_dep
                     )
                 except ValueError as e:
                     raise DependencyError(

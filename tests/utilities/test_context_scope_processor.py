@@ -1,9 +1,18 @@
-"""Tests for ContextScopeProcessor utility class."""
+"""Tests for context scope processing functions."""
 
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_application import (
+    apply_context_scope,
+    format_llm_context,
+    merge_passthrough_fields,
+)
+from agent_actions.prompt.context.scope_namespace import (
+    _extract_allowed_fields_per_dependency,
+    _filter_and_store_fields,
+)
+from agent_actions.prompt.context.scope_parsing import extract_field_value
 
 
 class TestContextScopeProcessor:
@@ -30,7 +39,7 @@ class TestContextScopeProcessor:
         }
 
         # Execute
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -73,7 +82,7 @@ class TestContextScopeProcessor:
         }
 
         # Execute
-        result = ContextScopeProcessor.format_llm_context(llm_context)
+        result = format_llm_context(llm_context)
 
         # Validate
         assert result.startswith("Additional context:")
@@ -87,7 +96,7 @@ class TestContextScopeProcessor:
         context_scope = {}
         static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope, static_data=static_data
         )
 
@@ -101,7 +110,7 @@ class TestContextScopeProcessor:
         context_scope = {"drop": ["seed.exam_syllabus"]}
         static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
 
-        _, llm_context, _ = ContextScopeProcessor.apply_context_scope(
+        _, llm_context, _ = apply_context_scope(
             field_context, context_scope, static_data=static_data
         )
 
@@ -126,9 +135,7 @@ class TestContextScopeProcessor:
         passthrough_fields = {"document_id": "doc-123", "original_filename": "report.pdf"}
 
         # Execute
-        result = ContextScopeProcessor.merge_passthrough_fields(
-            structured_response, passthrough_fields
-        )
+        result = merge_passthrough_fields(structured_response, passthrough_fields)
 
         # Validate - passthrough fields merged into content
         assert result[0]["content"]["classification"] == "positive"
@@ -144,9 +151,7 @@ class TestContextScopeProcessor:
         # Test with flat response (no 'content' key)
         flat_response = [{"classification": "positive", "confidence": 0.95}]
 
-        flat_result = ContextScopeProcessor.merge_passthrough_fields(
-            flat_response, passthrough_fields
-        )
+        flat_result = merge_passthrough_fields(flat_response, passthrough_fields)
 
         # Validate - passthrough fields merged directly
         assert flat_result[0]["classification"] == "positive"
@@ -155,7 +160,7 @@ class TestContextScopeProcessor:
         assert flat_result[0]["original_filename"] == "report.pdf"
 
         # Test with empty passthrough returns response unchanged
-        unchanged = ContextScopeProcessor.merge_passthrough_fields(structured_response, {})
+        unchanged = merge_passthrough_fields(structured_response, {})
         assert unchanged == structured_response
 
     def test_apply_context_scope_observe_wildcard(self):
@@ -166,7 +171,7 @@ class TestContextScopeProcessor:
         }
         context_scope = {"observe": ["action_a.*"]}
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -193,7 +198,7 @@ class TestContextScopeProcessor:
         }
         context_scope = {"passthrough": ["action_a.*"]}
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -218,7 +223,7 @@ class TestContextScopeProcessor:
             "passthrough": ["action_b.field3"],  # Specific field for action_b
         }
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -237,7 +242,7 @@ class TestContextScopeProcessor:
         }
         context_scope = {"observe": ["nonexistent_action.*"]}
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -258,9 +263,7 @@ class TestDependencyDeclarationEnforcement:
         }
 
         with pytest.raises(ConfigurationError) as exc:
-            ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope, "test_action"
-            )
+            _extract_allowed_fields_per_dependency(dependencies, context_scope, "test_action")
 
         assert "dep_C" in str(exc.value)
         assert "not referenced in context_scope" in str(exc.value)
@@ -270,9 +273,7 @@ class TestDependencyDeclarationEnforcement:
         dependencies = ["dep_A", "dep_B"]
         context_scope = {"observe": ["dep_A.*", "dep_B.*"]}
 
-        result = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-            dependencies, context_scope, "test_action"
-        )
+        result = _extract_allowed_fields_per_dependency(dependencies, context_scope, "test_action")
 
         assert result["dep_A"] is None  # Wildcard
         assert result["dep_B"] is None  # Wildcard
@@ -285,9 +286,7 @@ class TestDependencyDeclarationEnforcement:
             "passthrough": ["dep_B.field3"],
         }
 
-        result = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-            dependencies, context_scope, "test_action"
-        )
+        result = _extract_allowed_fields_per_dependency(dependencies, context_scope, "test_action")
 
         assert set(result["dep_A"]) == {"field1", "field2"}
         assert result["dep_B"] == ["field3"]
@@ -298,9 +297,7 @@ class TestDependencyDeclarationEnforcement:
         context_scope = None
 
         with pytest.raises(ConfigurationError) as exc:
-            ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope, "test_action"
-            )
+            _extract_allowed_fields_per_dependency(dependencies, context_scope, "test_action")
 
         assert "no context_scope defined" in str(exc.value)
 
@@ -313,7 +310,7 @@ class TestNestedDictFieldResolution:
         field_context = {
             "action_a": {"target_word_counts": {"correct_answer_words": 8, "distractor_words": 5}}
         }
-        result = ContextScopeProcessor.extract_field_value(
+        result = extract_field_value(
             field_context, "action_a", "target_word_counts.correct_answer_words"
         )
         assert result == 8
@@ -321,9 +318,7 @@ class TestNestedDictFieldResolution:
     def test_extract_field_value_flat_key_unchanged(self):
         """Flat key lookup still works as before (backward compat)."""
         field_context = {"action_a": {"simple_field": "hello"}}
-        result = ContextScopeProcessor.extract_field_value(
-            field_context, "action_a", "simple_field"
-        )
+        result = extract_field_value(field_context, "action_a", "simple_field")
         assert result == "hello"
 
     def test_extract_field_value_literal_dotted_key_priority(self):
@@ -334,14 +329,14 @@ class TestNestedDictFieldResolution:
                 "a": {"b": "nested_value"},
             }
         }
-        result = ContextScopeProcessor.extract_field_value(field_context, "action_a", "a.b")
+        result = extract_field_value(field_context, "action_a", "a.b")
         assert result == "literal_value"
 
     def test_filter_and_store_fields_nested_path(self):
         """Nested path in allowed_fields loads the root key."""
         field_context = {}
         data = {"target_word_counts": {"correct_answer_words": 8}, "other": "val"}
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "action_a",
             data,
@@ -358,7 +353,7 @@ class TestNestedDictFieldResolution:
         """Flat key filtering still works as before."""
         field_context = {}
         data = {"field1": "val1", "field2": "val2"}
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "action_a",
             data,
@@ -374,7 +369,7 @@ class TestNestedDictFieldResolution:
         field_context = {}
         data = {"target_word_counts": {"correct_answer_words": 8}}
         with caplog.at_level(logging.WARNING):
-            ContextScopeProcessor._filter_and_store_fields(
+            _filter_and_store_fields(
                 field_context,
                 "action_a",
                 data,
@@ -392,7 +387,7 @@ class TestNestedDictFieldResolution:
             "counts": {"a": 1, "b": 2, "c": 3},
             "other": "excluded",
         }
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "action_a",
             data,
@@ -415,7 +410,7 @@ class TestNestedDictFieldResolution:
             "observe": ["suggest_distractor_counts.target_word_counts.correct_answer_words"]
         }
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -435,7 +430,7 @@ class TestNestedDictFieldResolution:
         }
         context_scope = {"passthrough": ["action_a.nested.deep_value"]}
 
-        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+        prompt_context, llm_context, passthrough_fields = apply_context_scope(
             field_context, context_scope
         )
 
@@ -446,7 +441,7 @@ class TestNestedDictFieldResolution:
         """Only declared nested fields should appear — siblings must not leak."""
         field_context = {}
         data = {"user": {"name": "Alice", "ssn": "secret", "email": "a@b.com"}}
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "action_a",
             data,
@@ -460,7 +455,7 @@ class TestNestedDictFieldResolution:
         """A nested field with an explicit None value must be preserved, not dropped."""
         field_context = {}
         data = {"user": {"name": None, "ssn": "secret"}}
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "action_a",
             data,
@@ -480,7 +475,7 @@ class TestFilterAndStoreFieldsMetadataCollector:
         collector = {}
         data = {"question_type": "MCQ", "answer_text": "42", "score": 0.9}
 
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "classify",
             data,
@@ -502,7 +497,7 @@ class TestFilterAndStoreFieldsMetadataCollector:
         collector = {}
         data = {"question_type": "MCQ", "answer_text": "42"}
 
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "classify",
             data,
@@ -523,7 +518,7 @@ class TestFilterAndStoreFieldsMetadataCollector:
         data = {"question_type": "MCQ", "answer_text": "42"}
 
         # Should not raise or change behavior
-        ContextScopeProcessor._filter_and_store_fields(
+        _filter_and_store_fields(
             field_context,
             "classify",
             data,

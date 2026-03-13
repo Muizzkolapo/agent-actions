@@ -15,7 +15,7 @@ from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.service import BatchService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import ContextFieldSkippedEvent
+from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.helpers import run_dynamic_agent
 from agent_actions.processing.processor import RecordProcessor
@@ -26,7 +26,8 @@ from agent_actions.processing.types import (
     ProcessingResult,
     ProcessingStatus,
 )
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
+from agent_actions.prompt.context.scope_parsing import parse_field_reference
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 from agent_actions.utils.safe_format import safe_format_error
@@ -451,7 +452,7 @@ class ProcessingPipeline:
             # For FILE mode, use the input data as source for parent lookup
             # (not source_data which points to original source folder)
             context.source_data = data
-            filtered = ContextScopeProcessor.apply_observe_for_file_mode(
+            filtered = apply_observe_for_file_mode(
                 data=data,
                 agent_config=self.config.agent_config,
                 agent_name=self.config.agent_name,
@@ -487,13 +488,12 @@ class ProcessingPipeline:
         If no observe is configured, returns data as-is.
 
         .. deprecated::
-            Use ``ContextScopeProcessor.apply_observe_for_file_mode`` instead.
+            Use ``apply_observe_for_file_mode`` instead.
             This method strips namespaces and performs bare-key lookup only,
             which silently fails for cross-namespace references.
         """
         warnings.warn(
-            "_apply_observe_filter is deprecated. "
-            "Use ContextScopeProcessor.apply_observe_for_file_mode instead.",
+            "_apply_observe_filter is deprecated. Use apply_observe_for_file_mode instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -506,7 +506,7 @@ class ProcessingPipeline:
         valid_pairs = []  # [(original_ref, bare_field_name), ...]
         for ref in observe_refs:
             try:
-                _, field_name = ContextScopeProcessor.parse_field_reference(ref)
+                _, field_name = parse_field_reference(ref)
                 valid_pairs.append((ref, field_name))
             except ValueError as e:
                 fire_event(

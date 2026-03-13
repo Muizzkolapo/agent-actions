@@ -82,11 +82,9 @@ def create_dynamic_agent(
 
     # Append additional_context if provided (context_scope.observe fields)
     if additional_context:
-        from agent_actions.prompt.context.scope import (
-            ContextScopeProcessor,
-        )
+        from agent_actions.prompt.context.scope_application import format_llm_context
 
-        context_msg = ContextScopeProcessor.format_llm_context(additional_context)
+        context_msg = format_llm_context(additional_context)
         if context_msg:
             prompt_config = f"{prompt_config}\n\n{context_msg}"
 

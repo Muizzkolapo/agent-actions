@@ -1,4 +1,4 @@
-"""Tests for ContextScopeProcessor.apply_observe_for_file_mode and helpers.
+"""Tests for file-mode observe filtering helpers.
 
 Covers cross-namespace resolution, collision handling, graceful degradation,
 and backward compatibility with the old _apply_observe_filter behaviour.
@@ -6,7 +6,11 @@ and backward compatibility with the old _apply_observe_filter behaviour.
 
 from unittest.mock import patch
 
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_file_mode import (
+    _load_file_mode_cross_namespace_data,
+    _resolve_observe_refs,
+    apply_observe_for_file_mode,
+)
 
 # -----------------------------------------------------------------------
 # _resolve_observe_refs
@@ -18,7 +22,7 @@ class TestResolveObserveRefs:
 
     def test_simple_refs(self):
         refs = ["upstream.question", "upstream.answer"]
-        result = ContextScopeProcessor._resolve_observe_refs(refs)
+        result = _resolve_observe_refs(refs)
         assert result == [
             ("upstream", "question", "question"),
             ("upstream", "answer", "answer"),
@@ -26,7 +30,7 @@ class TestResolveObserveRefs:
 
     def test_collision_uses_qualified_keys(self):
         refs = ["dep_a.title", "dep_b.title", "dep_a.body"]
-        result = ContextScopeProcessor._resolve_observe_refs(refs)
+        result = _resolve_observe_refs(refs)
         assert result == [
             ("dep_a", "title", "dep_a.title"),
             ("dep_b", "title", "dep_b.title"),
@@ -35,23 +39,23 @@ class TestResolveObserveRefs:
 
     def test_wildcard_preserved(self):
         refs = ["upstream.*"]
-        result = ContextScopeProcessor._resolve_observe_refs(refs)
+        result = _resolve_observe_refs(refs)
         assert result == [("upstream", "*", "*")]
 
     def test_invalid_ref_skipped(self):
         refs = ["upstream.question", "bad_ref_no_dot", "upstream.answer"]
-        result = ContextScopeProcessor._resolve_observe_refs(refs)
+        result = _resolve_observe_refs(refs)
         assert len(result) == 2
         assert result[0] == ("upstream", "question", "question")
         assert result[1] == ("upstream", "answer", "answer")
 
     def test_empty_refs(self):
-        assert ContextScopeProcessor._resolve_observe_refs([]) == []
+        assert _resolve_observe_refs([]) == []
 
     def test_cross_namespace_no_collision(self):
         """Refs from different namespaces with unique bare keys stay bare."""
         refs = ["upstream.question", "source.url"]
-        result = ContextScopeProcessor._resolve_observe_refs(refs)
+        result = _resolve_observe_refs(refs)
         assert result == [
             ("upstream", "question", "question"),
             ("source", "url", "url"),
@@ -69,7 +73,7 @@ class TestLoadFileModeCrossNamespaceData:
     def test_source_namespace_from_source_record(self):
         """source.* refs should be loaded from source_record."""
         source_record = {"content": {"url": "https://example.com", "title": "Example"}}
-        result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+        result = _load_file_mode_cross_namespace_data(
             needed_ns={"source"},
             record={"source_guid": "sg-1", "content": {"question": "Q?"}},
             agent_name="test",
@@ -80,7 +84,7 @@ class TestLoadFileModeCrossNamespaceData:
 
     def test_source_namespace_missing_source_record(self):
         """source refs with no source_record should warn but not crash."""
-        result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+        result = _load_file_mode_cross_namespace_data(
             needed_ns={"source"},
             record={"content": {"q": 1}},
             agent_name="test",
@@ -91,7 +95,7 @@ class TestLoadFileModeCrossNamespaceData:
 
     def test_input_source_refs_not_loaded(self):
         """Caller excludes input sources from needed_ns; helper gets empty set."""
-        result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+        result = _load_file_mode_cross_namespace_data(
             needed_ns=set(),
             record={"content": {"question": "Q?"}},
             agent_name="test",
@@ -105,12 +109,11 @@ class TestLoadFileModeCrossNamespaceData:
             "lineage": ["classify_node"],
             "content": {"question": "Q?"},
         }
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"category": "science", "confidence": 0.9},
         ) as mock_load:
-            result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+            result = _load_file_mode_cross_namespace_data(
                 needed_ns={"classify"},
                 record=record,
                 agent_name="test",
@@ -122,7 +125,7 @@ class TestLoadFileModeCrossNamespaceData:
 
     def test_context_dep_not_in_agent_indices_warns(self):
         """Namespace not in agent_indices should be skipped with warning."""
-        result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+        result = _load_file_mode_cross_namespace_data(
             needed_ns={"unknown_action"},
             record={"source_guid": "sg-1", "content": {}},
             agent_name="test",
@@ -133,7 +136,7 @@ class TestLoadFileModeCrossNamespaceData:
 
     def test_empty_needed_ns(self):
         """Empty needed_ns should return empty dict immediately."""
-        result = ContextScopeProcessor._load_file_mode_cross_namespace_data(
+        result = _load_file_mode_cross_namespace_data(
             needed_ns=set(),
             record={"content": {"q": 1}},
             agent_name="test",
@@ -163,7 +166,7 @@ class TestApplyObserveForFileMode:
             "dependencies": "upstream",
             "context_scope": {"observe": ["upstream.question", "source.url"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="review",
@@ -187,12 +190,11 @@ class TestApplyObserveForFileMode:
             "context_scope": {"observe": ["dep_a.title", "dep_b.title", "dep_a.body"]},
         }
 
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"title": "Title from B", "score": 42},
         ):
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="merge_action",
@@ -222,12 +224,11 @@ class TestApplyObserveForFileMode:
             },
         }
 
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"category": "science"},
         ):
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="review",
@@ -246,9 +247,7 @@ class TestApplyObserveForFileMode:
         config = {
             "context_scope": {"observe": ["upstream.question", "upstream.answer"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
-            data=data, agent_config=config, agent_name="test"
-        )
+        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
         assert len(result) == 2
         assert list(result[0].keys()) == ["question", "answer"]
         assert result[0] == {"question": "Q1", "answer": "A1"}
@@ -269,7 +268,7 @@ class TestApplyObserveForFileMode:
             },
         }
         # No agent_indices for nonexistent → graceful skip
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="review",
@@ -301,12 +300,11 @@ class TestApplyObserveForFileMode:
         }
         # dep_b has no historical data (load returns None) — its field should
         # be omitted, NOT filled from the primary record's 'score'.
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value=None,
         ):
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="merge",
@@ -339,12 +337,11 @@ class TestApplyObserveForFileMode:
             "context_scope": {"observe": ["upstream.question", "upstream.answer"]},
         }
 
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"question": "STALE Q", "answer": "STALE A"},
         ) as mock_load:
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="review",
@@ -369,7 +366,7 @@ class TestApplyObserveForFileMode:
         config = {
             "context_scope": {"observe": ["upstream.question", "source.url"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="review",
@@ -379,17 +376,13 @@ class TestApplyObserveForFileMode:
 
     def test_no_observe_returns_data_as_is(self):
         data = [{"content": {"a": 1}}]
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
-            data=data, agent_config={}, agent_name="test"
-        )
+        result = apply_observe_for_file_mode(data=data, agent_config={}, agent_name="test")
         assert result is data
 
     def test_wildcard_returns_data_as_is(self):
         data = [{"content": {"a": 1, "b": 2}}]
         config = {"context_scope": {"observe": ["upstream.*"]}}
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
-            data=data, agent_config=config, agent_name="test"
-        )
+        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
         assert result is data
 
     def test_non_dict_records_do_not_crash_heuristic(self):
@@ -401,9 +394,7 @@ class TestApplyObserveForFileMode:
         data = ["just a string", "another string"]
         config = {"context_scope": {"observe": ["upstream.question"]}}
         # No dependencies → triggers heuristic fallback path.
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
-            data=data, agent_config=config, agent_name="test"
-        )
+        result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
         # Non-dict items pass through unmodified.
         assert result == ["just a string", "another string"]
 
@@ -413,7 +404,7 @@ class TestApplyObserveForFileMode:
             {"source_guid": "sg-1", "content": {"question": "Q?", "secret": "hidden"}},
         ]
         config = {"context_scope": {"observe": ["upstream.question"]}}
-        filtered = ContextScopeProcessor.apply_observe_for_file_mode(
+        filtered = apply_observe_for_file_mode(
             data=original, agent_config=config, agent_name="test"
         )
         # Filtered should not contain secret
@@ -429,7 +420,7 @@ class TestApplyObserveForFileMode:
             "dependencies": "upstream",
             "context_scope": {"observe": ["upstream.question", "source.url"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="test",
@@ -451,7 +442,7 @@ class TestApplyObserveForFileMode:
             "dependencies": "upstream",
             "context_scope": {"observe": ["upstream.question", "source.url"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="review",
@@ -474,10 +465,11 @@ class TestApplyObserveForFileMode:
         def fake_load(*, action_name, source_guid, **kw):
             return {"category": f"cat-{source_guid}"}
 
-        with patch.object(
-            ContextScopeProcessor, "_load_historical_node", side_effect=fake_load
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
+            side_effect=fake_load,
         ) as mock_load:
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="review",
@@ -508,12 +500,11 @@ class TestApplyObserveForFileMode:
             "dependencies": "upstream",
             "context_scope": {"observe": ["upstream.q", "classify.category"]},
         }
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"category": "science"},
         ) as mock_load:
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="review",
@@ -537,7 +528,7 @@ class TestApplyObserveForFileMode:
             "dependencies": "upstream",
             "context_scope": {"observe": ["upstream.q", "source.url"]},
         }
-        result = ContextScopeProcessor.apply_observe_for_file_mode(
+        result = apply_observe_for_file_mode(
             data=data,
             agent_config=config,
             agent_name="review",
@@ -561,12 +552,11 @@ class TestApplyObserveForFileMode:
                 "observe": ["dep_a.question", "dep_b.score"],
             },
         }
-        with patch.object(
-            ContextScopeProcessor,
-            "_load_historical_node",
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
             return_value={"score": 42, "extra": "ignored"},
         ) as mock_load:
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="merge",
@@ -605,8 +595,11 @@ class TestApplyObserveForFileMode:
             label = "label-A" if parent_target_id == "parent-a" else "label-B"
             return {"label": label}
 
-        with patch.object(ContextScopeProcessor, "_load_historical_node", side_effect=fake_load):
-            result = ContextScopeProcessor.apply_observe_for_file_mode(
+        with patch(
+            "agent_actions.prompt.context.scope_file_mode._load_historical_node",
+            side_effect=fake_load,
+        ):
+            result = apply_observe_for_file_mode(
                 data=data,
                 agent_config=config,
                 agent_name="review",

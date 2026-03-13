@@ -6,7 +6,7 @@ works correctly when historical node data comes from split records that share
 the same source_guid and node_id but have different lineages.
 
 Tests the full integration:
-    ContextScopeProcessor.build_field_context_with_history()
+    build_field_context_with_history()
         -> HistoricalNodeDataLoader.load_historical_node_data()
             -> _find_record_by_identifiers() with lineage matching
 """
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
 
 @pytest.fixture
@@ -170,7 +170,7 @@ class TestContextScopeSplitRecordsEdgeCases:
         )
 
         # Should not crash
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents={},
             agent_name="downstream",
             agent_config=agent_config,
@@ -217,7 +217,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents={},
             agent_name="downstream",
             agent_config=agent_config,

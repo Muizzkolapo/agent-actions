@@ -9,7 +9,7 @@ from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
 from agent_actions.errors.processing import EmptyOutputError
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import (
+from agent_actions.logging.events.data_pipeline_events import (
     BatchDataProcessingCompleteEvent,
     BatchProcessingProgressEvent,
     BatchProcessingStartedEvent,
@@ -18,8 +18,8 @@ from agent_actions.logging.events.types import (
     RecordProcessingCompleteEvent,
     RecordProcessingStartedEvent,
     RecordTransformedEvent,
-    TemplateRenderingFailedEvent,
 )
+from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder

@@ -30,7 +30,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
-from agent_actions.logging.events.types import LLMJSONParseErrorEvent
+from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)

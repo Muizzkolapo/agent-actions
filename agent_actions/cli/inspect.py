@@ -60,7 +60,7 @@ class BaseInspectCommand:
         return workflow
 
     def _analyze_dependencies(self, workflow: AgentWorkflow) -> dict[str, Any]:
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_inference import infer_dependencies
 
         workflow_actions = list(workflow.agent_configs.keys())
         result = {}
@@ -75,7 +75,7 @@ class BaseInspectCommand:
                 explicit_deps = []
 
             try:
-                input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                input_sources, context_sources = infer_dependencies(
                     action_config, workflow_actions, action_name
                 )
             except Exception as e:

@@ -123,12 +123,10 @@ class WorkflowParser:
             action_name = action_data.get("name", "unnamed")
 
             # Use auto-inferred dependencies for complete graph
-            from agent_actions.prompt.context.scope import (
-                ContextScopeProcessor,
-            )
+            from agent_actions.prompt.context.scope_inference import infer_dependencies
 
             try:
-                input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                input_sources, context_sources = infer_dependencies(
                     action_data, action_names, action_name
                 )
                 all_dependencies = input_sources + context_sources

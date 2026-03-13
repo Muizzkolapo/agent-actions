@@ -4,7 +4,7 @@ import warnings
 from unittest.mock import patch
 
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_file_mode import apply_observe_for_file_mode
 from agent_actions.workflow.pipeline import PipelineConfig, ProcessingPipeline
 
 
@@ -310,7 +310,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     ]
 
     # Apply the filter as _process_by_strategy would (using new namespace-aware method)
-    filtered = ContextScopeProcessor.apply_observe_for_file_mode(
+    filtered = apply_observe_for_file_mode(
         data=original_data,
         agent_config=pipeline.config.agent_config,
         agent_name="review_data",
@@ -474,13 +474,13 @@ def test_apply_observe_filter_emits_deprecation_warning():
     assert "apply_observe_for_file_mode" in str(dep_warnings[0].message)
 
 
-# --- Tests for the new ContextScopeProcessor.apply_observe_for_file_mode ---
+# --- Tests for apply_observe_for_file_mode ---
 
 
 def test_new_observe_no_observe_returns_data_as_is():
     """Without observe config, apply_observe_for_file_mode returns data unchanged."""
     data = [{"content": {"a": 1, "b": 2}}]
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
+    result = apply_observe_for_file_mode(
         data=data, agent_config={"kind": "hitl"}, agent_name="test"
     )
     assert result is data
@@ -490,9 +490,7 @@ def test_new_observe_handles_flat_records():
     """Records without content wrapper should be filtered directly."""
     data = [{"question": "Q1", "answer": "A1", "extra": "drop"}]
     config = {"context_scope": {"observe": ["upstream.answer", "upstream.question"]}}
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
-        data=data, agent_config=config, agent_name="test"
-    )
+    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
     assert list(result[0].keys()) == ["answer", "question"]
     assert result[0]["answer"] == "A1"
 
@@ -504,9 +502,7 @@ def test_new_observe_wildcard_returns_data_as_is():
         {"content": {"question": "Q2", "answer": "A2", "extra": "also keep"}},
     ]
     config = {"context_scope": {"observe": ["upstream.*"]}}
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
-        data=data, agent_config=config, agent_name="test"
-    )
+    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
     assert result is data
 
 
@@ -526,9 +522,7 @@ def test_new_observe_collision_uses_qualified_keys():
             "observe": ["dep_a.title", "dep_b.title", "dep_a.body"],
         },
     }
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
-        data=data, agent_config=config, agent_name="test"
-    )
+    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
     assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
     assert result[0]["dep_a.title"] == "My Title"
     assert result[0]["dep_b.title"] == "My Title"  # same value — see docstring
@@ -539,9 +533,7 @@ def test_new_observe_no_collision_stays_bare():
     """When all refs have unique bare keys, output keys remain bare."""
     data = [{"content": {"question": "Q1", "answer": "A1"}}]
     config = {"context_scope": {"observe": ["upstream.question", "upstream.answer"]}}
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
-        data=data, agent_config=config, agent_name="test"
-    )
+    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
     assert list(result[0].keys()) == ["question", "answer"]
 
 
@@ -553,9 +545,7 @@ def test_new_observe_invalid_ref_does_not_misalign_pairs():
             "observe": ["dep_a.title", "bad_ref_no_dot", "dep_b.title", "dep_a.body"],
         },
     }
-    result = ContextScopeProcessor.apply_observe_for_file_mode(
-        data=data, agent_config=config, agent_name="test"
-    )
+    result = apply_observe_for_file_mode(data=data, agent_config=config, agent_name="test")
     assert list(result[0].keys()) == ["dep_a.title", "dep_b.title", "body"]
     assert result[0]["dep_a.title"] == "T"
     assert result[0]["dep_b.title"] == "T"

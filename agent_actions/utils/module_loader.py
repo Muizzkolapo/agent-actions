@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import CacheHitEvent, CacheInvalidationEvent, CacheMissEvent
+from agent_actions.logging.events.cache_events import (
+    CacheHitEvent,
+    CacheInvalidationEvent,
+    CacheMissEvent,
+)
 
 logger = logging.getLogger(__name__)
 

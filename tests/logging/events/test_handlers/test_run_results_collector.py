@@ -9,7 +9,7 @@ from agent_actions.logging.core.events import BaseEvent
 from agent_actions.logging.events.handlers.run_results import (
     RunResultsCollector,
 )
-from agent_actions.logging.events.types import (
+from agent_actions.logging.events.workflow_events import (
     AgentCompleteEvent,
     AgentFailedEvent,
     AgentSkipEvent,
@@ -336,7 +336,7 @@ class TestGetSummary:
         collector.handle(AgentSkipEvent(agent_name="skip1", agent_index=1, skip_reason="done"))
         collector.handle(AgentFailedEvent(agent_name="fail1", agent_index=2, error_message="boom"))
         # Simulate a running agent (created by RecordEmptyOutputEvent before completion)
-        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+        from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
         collector.handle(RecordEmptyOutputEvent(agent_name="still_running", record_index=0))
 
@@ -442,7 +442,7 @@ class TestAgentIndexUpdatedOnExistingEntry:
 
     def test_empty_output_then_complete_updates_index(self, collector):
         """RecordEmptyOutputEvent creates entry with index=0; AgentCompleteEvent fixes it."""
-        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+        from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
         collector.handle(RecordEmptyOutputEvent(agent_name="agent_x", record_index=0))
         assert collector._results["agent_x"].agent_index == 0
@@ -452,7 +452,7 @@ class TestAgentIndexUpdatedOnExistingEntry:
 
     def test_empty_output_then_skip_updates_index(self, collector):
         """RecordEmptyOutputEvent creates entry with index=0; AgentSkipEvent fixes it."""
-        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+        from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
         collector.handle(RecordEmptyOutputEvent(agent_name="agent_y", record_index=0))
         collector.handle(AgentSkipEvent(agent_name="agent_y", agent_index=2, skip_reason="cached"))
@@ -460,7 +460,7 @@ class TestAgentIndexUpdatedOnExistingEntry:
 
     def test_empty_output_then_failed_updates_index(self, collector):
         """RecordEmptyOutputEvent creates entry with index=0; AgentFailedEvent fixes it."""
-        from agent_actions.logging.events.types import RecordEmptyOutputEvent
+        from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
         collector.handle(RecordEmptyOutputEvent(agent_name="agent_z", record_index=0))
         collector.handle(

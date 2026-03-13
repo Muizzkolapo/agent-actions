@@ -135,7 +135,7 @@ class TestVersionContextInFieldContext:
 
     def test_version_namespace_structure(self):
         """Verify the version namespace has the correct structure for Jinja2."""
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
         version_context = {
             "i": 2,
@@ -146,7 +146,7 @@ class TestVersionContextInFieldContext:
             "classifier_id": 2,
         }
 
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},
@@ -163,7 +163,7 @@ class TestVersionContextInFieldContext:
 
     def test_top_level_variables_for_jinja2(self):
         """Verify {{ i }} and {{ idx }} work at top level (not just {{ version.i }})."""
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
         version_context = {
             "i": 1,
@@ -173,7 +173,7 @@ class TestVersionContextInFieldContext:
             "last": False,
         }
 
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},

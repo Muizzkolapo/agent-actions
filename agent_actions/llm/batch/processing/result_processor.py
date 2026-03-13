@@ -263,13 +263,9 @@ class BatchResultProcessor:
         stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
-            from agent_actions.prompt.context.scope import (
-                ContextScopeProcessor,
-            )
+            from agent_actions.prompt.context.scope_application import merge_passthrough_fields
 
-            generated_list = ContextScopeProcessor.merge_passthrough_fields(
-                generated_list, stored_passthrough
-            )
+            generated_list = merge_passthrough_fields(generated_list, stored_passthrough)
 
         elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
             passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
@@ -277,11 +273,9 @@ class BatchResultProcessor:
 
             for field_ref in passthrough_refs:
                 try:
-                    from agent_actions.prompt.context.scope import (
-                        ContextScopeProcessor,
-                    )
+                    from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
-                    _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                    _, field_name = parse_field_reference(field_ref)
                     passthrough_fields.append(field_name)
                 except ValueError:
                     # If parsing fails, use the whole string as field name

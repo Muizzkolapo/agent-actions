@@ -21,7 +21,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.errors import DependencyError
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_inference import (
+    _get_version_branches,
+    _is_parallel_branches,
+    _resolve_input_sources_for_fan_in,
+)
 from agent_actions.workflow.runner import AgentRunner
 
 
@@ -58,7 +62,7 @@ class TestIsParallelBranches:
         ],
     )
     def test_parallel_detection(self, deps, expected):
-        assert ContextScopeProcessor._is_parallel_branches(deps) is expected
+        assert _is_parallel_branches(deps) is expected
 
 
 class TestGetVersionBranches:
@@ -67,14 +71,14 @@ class TestGetVersionBranches:
     def test_finds_matching_version_branches(self):
         """Finds all version branches matching a base name."""
         deps = ["research_1", "research_2", "summarize", "validate"]
-        result = ContextScopeProcessor._get_version_branches("research", deps)
+        result = _get_version_branches("research", deps)
         assert result == ["research_1", "research_2"]
 
     def test_does_not_match_different_base_names(self):
         """Does not match deps with different base names even if suffix is numeric."""
         deps = ["classify_text_1", "classify_image_1"]
         # Looking for 'classify' versions - neither matches because base names differ
-        result = ContextScopeProcessor._get_version_branches("classify", deps)
+        result = _get_version_branches("classify", deps)
         assert result == []
 
 
@@ -88,9 +92,7 @@ class TestResolveInputSourcesForFanIn:
     def test_base_name_primary_expands_to_all_versions(self):
         """Base name as primary_dependency expands to all matching versions."""
         deps = ["research_1", "research_2", "summarize"]
-        input_sources, context_sources = ContextScopeProcessor._resolve_input_sources_for_fan_in(
-            deps, "research"
-        )
+        input_sources, context_sources = _resolve_input_sources_for_fan_in(deps, "research")
         assert set(input_sources) == {"research_1", "research_2"}
         assert context_sources == ["summarize"]
 
@@ -98,7 +100,7 @@ class TestResolveInputSourcesForFanIn:
         """Invalid primary_dependency raises ValueError."""
         deps = ["action_a", "action_b"]
         with pytest.raises(ValueError) as exc_info:
-            ContextScopeProcessor._resolve_input_sources_for_fan_in(deps, "nonexistent")
+            _resolve_input_sources_for_fan_in(deps, "nonexistent")
         assert "nonexistent" in str(exc_info.value)
         assert "not found" in str(exc_info.value)
 

@@ -10,7 +10,7 @@ from functools import lru_cache
 from typing import Any
 
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import (
+from agent_actions.logging.events.validation_events import (
     GuardEvaluationErrorEvent,
     GuardEvaluationTimeoutEvent,
 )

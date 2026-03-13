@@ -12,7 +12,10 @@ import yaml
 
 from agent_actions.errors import ProcessingError, get_error_detail
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import DataLoadingErrorEvent, DataParsingErrorEvent
+from agent_actions.logging.events.validation_events import (
+    DataLoadingErrorEvent,
+    DataParsingErrorEvent,
+)
 
 T = TypeVar("T", bound=ProcessingError)
 

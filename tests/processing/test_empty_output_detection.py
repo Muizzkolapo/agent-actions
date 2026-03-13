@@ -6,8 +6,8 @@ import pytest
 
 from agent_actions.config.schema import ActionConfig
 from agent_actions.errors import EmptyOutputError
+from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 from agent_actions.logging.events.handlers.run_results import AgentResult, RunResultsCollector
-from agent_actions.logging.events.types import RecordEmptyOutputEvent
 from agent_actions.processing.processor import _is_empty_output
 
 # =============================================================================
@@ -375,7 +375,7 @@ class TestAgentResultEmptyOutputTracking:
         assert collector.accepts(event) is True
 
     def test_collector_increments_empty_output_count(self):
-        from agent_actions.logging.events.types import AgentCompleteEvent
+        from agent_actions.logging.events.workflow_events import AgentCompleteEvent
 
         collector = RunResultsCollector(workflow_name="test")
 
@@ -405,7 +405,7 @@ class TestAgentResultEmptyOutputTracking:
 
     def test_collector_empty_output_count_survives_completion(self):
         """Empty output count set before complete should persist after AgentCompleteEvent."""
-        from agent_actions.logging.events.types import AgentCompleteEvent
+        from agent_actions.logging.events.workflow_events import AgentCompleteEvent
 
         collector = RunResultsCollector(workflow_name="test")
 

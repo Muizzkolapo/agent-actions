@@ -8,7 +8,9 @@ action configuration and context_scope declarations.
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_builder import build_field_context_with_history
+from agent_actions.prompt.context.scope_inference import infer_dependencies
+from agent_actions.prompt.context.scope_parsing import extract_action_names_from_context_scope
 
 
 class TestExtractActionNamesFromContextScope:
@@ -24,7 +26,7 @@ class TestExtractActionNamesFromContextScope:
             ]
         }
 
-        result = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        result = extract_action_names_from_context_scope(context_scope)
 
         assert result == {"add_answer_text", "suggest_distractor_counts", "write_scenario_question"}
 
@@ -32,7 +34,7 @@ class TestExtractActionNamesFromContextScope:
         """Test extraction from passthrough fields."""
         context_scope = {"passthrough": ["action_A.field1", "action_B.field2"]}
 
-        result = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        result = extract_action_names_from_context_scope(context_scope)
 
         assert result == {"action_A", "action_B"}
 
@@ -43,7 +45,7 @@ class TestExtractActionNamesFromContextScope:
             "passthrough": ["action_B.field1", "action_C.field2"],
         }
 
-        result = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        result = extract_action_names_from_context_scope(context_scope)
 
         assert result == {"action_A", "action_B", "action_C"}
 
@@ -51,14 +53,14 @@ class TestExtractActionNamesFromContextScope:
         """Test that same action referenced multiple times is deduplicated."""
         context_scope = {"observe": ["action_A.field1", "action_A.field2", "action_A.*"]}
 
-        result = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        result = extract_action_names_from_context_scope(context_scope)
 
         assert result == {"action_A"}
 
     def test_empty_context_scope_returns_empty_set(self):
         """Test with empty context_scope."""
-        assert ContextScopeProcessor.extract_action_names_from_context_scope({}) == set()
-        assert ContextScopeProcessor.extract_action_names_from_context_scope(None) == set()
+        assert extract_action_names_from_context_scope({}) == set()
+        assert extract_action_names_from_context_scope(None) == set()
 
     def test_ignores_invalid_references(self):
         """Test that invalid field references are skipped."""
@@ -71,7 +73,7 @@ class TestExtractActionNamesFromContextScope:
             ]
         }
 
-        result = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        result = extract_action_names_from_context_scope(context_scope)
 
         assert result == {"valid_action", "also_valid"}
 
@@ -99,7 +101,7 @@ class TestInferDependencies:
             "write_scenario_question",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "test_action"
         )
 
@@ -114,7 +116,7 @@ class TestInferDependencies:
         }
         workflow_actions = ["validate_1", "validate_2", "validate_3", "aggregate"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "aggregate"
         )
 
@@ -129,9 +131,7 @@ class TestInferDependencies:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test"
-        )
+        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]
@@ -141,7 +141,7 @@ class TestInferDependencies:
         action_config = {"dependencies": None, "context_scope": {"observe": ["action_A.*"]}}
         workflow_actions = ["action_A", "test_action"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "test_action"
         )
 
@@ -153,9 +153,7 @@ class TestInferDependencies:
         action_config = {"dependencies": [], "context_scope": {"observe": ["action_A.*"]}}
         workflow_actions = ["action_A"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test"
-        )
+        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
 
         assert input_sources == []
         assert context_sources == ["action_A"]
@@ -165,9 +163,7 @@ class TestInferDependencies:
         action_config = {"dependencies": "action_A"}
         workflow_actions = ["action_A"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test"
-        )
+        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
 
         assert input_sources == ["action_A"]
         assert context_sources == []  # Nothing in context_scope to infer
@@ -186,7 +182,7 @@ class TestInferDependencies:
         workflow_actions = ["action_A"]  # nonexistent_action not here
 
         with pytest.raises(ConfigurationError) as exc_info:
-            ContextScopeProcessor.infer_dependencies(action_config, workflow_actions, "test_action")
+            infer_dependencies(action_config, workflow_actions, "test_action")
 
         assert "nonexistent_action" in str(exc_info.value)
         assert "not found in workflow" in str(exc_info.value)
@@ -200,7 +196,7 @@ class TestInferDependencies:
         workflow_actions = ["action_A", "action_B"]
 
         with pytest.raises(ConfigurationError) as exc_info:
-            ContextScopeProcessor.infer_dependencies(action_config, workflow_actions, "test_action")
+            infer_dependencies(action_config, workflow_actions, "test_action")
 
         assert "nonexistent_input" in str(exc_info.value)
 
@@ -232,7 +228,7 @@ class TestInferDependencies:
             "generate_distractor_1",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "generate_distractor_1"
         )
 
@@ -263,7 +259,7 @@ class TestInferDependencies:
             "write_scenario_question",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "write_scenario_question"
         )
 
@@ -281,7 +277,7 @@ class TestBuildFieldContextRequiresAgentIndices:
         agent_config = {"dependencies": ["action_A"], "context_scope": {"observe": ["action_A.*"]}}
 
         with pytest.raises(ConfigurationError) as exc_info:
-            ContextScopeProcessor.build_field_context_with_history(
+            build_field_context_with_history(
                 contents={},
                 agent_name="test_action",
                 agent_config=agent_config,
@@ -299,7 +295,7 @@ class TestBuildFieldContextRequiresAgentIndices:
         }
 
         # Should not raise - no dependencies means agent_indices not required
-        result = ContextScopeProcessor.build_field_context_with_history(
+        result = build_field_context_with_history(
             contents={},
             agent_name="test_action",
             agent_config=agent_config,
@@ -324,7 +320,7 @@ class TestLoopBaseNameExpansion:
             "flatten_questions",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "flatten_questions"
         )
 
@@ -351,7 +347,7 @@ class TestLoopBaseNameExpansion:
             "flatten_questions",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "flatten_questions"
         )
 
@@ -377,7 +373,7 @@ class TestLoopBaseNameExpansion:
             "flatten_questions",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "flatten_questions"
         )
 
@@ -408,7 +404,7 @@ class TestLoopBaseNameExpansion:
             "consumer",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "consumer"
         )
 
@@ -432,9 +428,7 @@ class TestInferDependenciesEdgeCases:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test"
-        )
+        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]
@@ -450,9 +444,7 @@ class TestInferDependenciesEdgeCases:
         }
         workflow_actions = ["action_A", "action_B"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
-            action_config, workflow_actions, "test"
-        )
+        input_sources, context_sources = infer_dependencies(action_config, workflow_actions, "test")
 
         assert input_sources == ["action_A"]
         assert context_sources == ["action_B"]  # Only one entry, not duplicated
@@ -477,7 +469,7 @@ class TestInferDependenciesFourPatterns:
         }
         workflow_actions = ["extract_data", "validate_data"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "validate_data"
         )
 
@@ -492,7 +484,7 @@ class TestInferDependenciesFourPatterns:
         }
         workflow_actions = ["classify_1", "classify_2", "classify_3", "synthesize"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "synthesize"
         )
 
@@ -519,7 +511,7 @@ class TestInferDependenciesFourPatterns:
             "generate_report",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "generate_report"
         )
 
@@ -547,7 +539,7 @@ class TestInferDependenciesFourPatterns:
             "generate_report",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "generate_report"
         )
 
@@ -575,7 +567,7 @@ class TestInferDependenciesFourPatterns:
             "aggregate_validations",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "aggregate_validations"
         )
 
@@ -608,7 +600,7 @@ class TestInferDependenciesFourPatterns:
             "final_report",
         ]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "final_report"
         )
 
@@ -625,7 +617,7 @@ class TestInferDependenciesFourPatterns:
         }
         workflow_actions = ["research_1", "research_2", "summarize", "final_report"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "final_report"
         )
 
@@ -641,7 +633,7 @@ class TestInferDependenciesFourPatterns:
         }
         workflow_actions = ["classify_text_1", "classify_image_1", "combine"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "combine"
         )
 
@@ -658,7 +650,7 @@ class TestInferDependenciesFourPatterns:
         }
         workflow_actions = ["classify_1", "classify_2", "classify_3", "aggregate"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "aggregate"
         )
 

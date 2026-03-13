@@ -8,7 +8,12 @@ where merged outputs have prefixed field names like "extract_raw_qa_1_questions"
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_inference import infer_dependencies
+from agent_actions.prompt.context.scope_namespace import _extract_allowed_fields_per_dependency
+from agent_actions.prompt.context.scope_parsing import (
+    extract_action_names_from_context_scope,
+    parse_field_reference,
+)
 
 
 class TestFieldPrefixPatternParsing:
@@ -17,21 +22,21 @@ class TestFieldPrefixPatternParsing:
     def test_parse_field_prefix_pattern(self):
         """Test that field prefix patterns are parsed correctly."""
         # Field prefix pattern for loop consumption
-        action_name, field_name = ContextScopeProcessor.parse_field_reference("extract_raw_qa_")
+        action_name, field_name = parse_field_reference("extract_raw_qa_")
 
         assert action_name == "extract_raw_qa"
         assert field_name == "_"  # Special marker for field prefix pattern
 
     def test_parse_regular_field_reference(self):
         """Test that regular field references still work."""
-        action_name, field_name = ContextScopeProcessor.parse_field_reference("action_A.field1")
+        action_name, field_name = parse_field_reference("action_A.field1")
 
         assert action_name == "action_A"
         assert field_name == "field1"
 
     def test_parse_wildcard_reference(self):
         """Test parsing wildcard references."""
-        action_name, field_name = ContextScopeProcessor.parse_field_reference("action_A.*")
+        action_name, field_name = parse_field_reference("action_A.*")
 
         assert action_name == "action_A"
         assert field_name == "*"
@@ -39,7 +44,7 @@ class TestFieldPrefixPatternParsing:
     def test_invalid_field_prefix_pattern_empty_base(self):
         """Test that empty base name in field prefix pattern raises error."""
         with pytest.raises(ValueError, match="Base name cannot be empty"):
-            ContextScopeProcessor.parse_field_reference("_")
+            parse_field_reference("_")
 
 
 class TestFieldPrefixPatternValidation:
@@ -56,7 +61,7 @@ class TestFieldPrefixPatternValidation:
         }
 
         # Should not raise - field prefix pattern covers all loop iterations
-        allowed_fields = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+        allowed_fields = _extract_allowed_fields_per_dependency(
             dependencies, context_scope, action_name="flatten_questions"
         )
 
@@ -75,7 +80,7 @@ class TestFieldPrefixPatternValidation:
         with pytest.raises(
             ConfigurationError, match="Dependency 'extract_raw_qa_1' declared but not referenced"
         ):
-            ContextScopeProcessor._extract_allowed_fields_per_dependency(
+            _extract_allowed_fields_per_dependency(
                 dependencies, context_scope, action_name="test_action"
             )
 
@@ -87,7 +92,7 @@ class TestFieldPrefixPatternValidation:
             "observe": ["extract_raw_qa_"]  # Field prefix pattern = wildcard
         }
 
-        allowed_fields = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+        allowed_fields = _extract_allowed_fields_per_dependency(
             dependencies, context_scope, action_name="test_action"
         )
 
@@ -101,7 +106,7 @@ class TestFieldPrefixPatternValidation:
             "observe": ["loop_", "regular_action.field1"]  # Mixed patterns
         }
 
-        allowed_fields = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+        allowed_fields = _extract_allowed_fields_per_dependency(
             dependencies, context_scope, action_name="consumer"
         )
 
@@ -118,7 +123,7 @@ class TestFieldPrefixPatternValidation:
             "passthrough": ["other_action.*"],
         }
 
-        action_names = ContextScopeProcessor.extract_action_names_from_context_scope(context_scope)
+        action_names = extract_action_names_from_context_scope(context_scope)
 
         # All action names should be extracted, including from field prefix pattern
         assert action_names == {"extract_raw_qa", "regular_action", "other_action"}
@@ -138,7 +143,7 @@ class TestFieldPrefixPatternInInferDependencies:
         }
         workflow_actions = ["extract_raw_qa_1", "extract_raw_qa_2", "flatten_questions"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "flatten_questions"
         )
 
@@ -157,7 +162,7 @@ class TestFieldPrefixPatternInInferDependencies:
         # Normalized form (what normalizer produces from "validate_answer_from_source.*")
         context_scope = {"observe": ["validate_answer_from_source_"]}
 
-        allowed = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+        allowed = _extract_allowed_fields_per_dependency(
             dependencies, context_scope, action_name="aggregate_validation_votes"
         )
 
@@ -175,7 +180,7 @@ class TestFieldPrefixPatternInInferDependencies:
         }
         workflow_actions = ["loop_1", "loop_2", "context_action", "consumer"]
 
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "consumer"
         )
 

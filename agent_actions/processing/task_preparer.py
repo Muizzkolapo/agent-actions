@@ -172,9 +172,9 @@ class TaskPreparer:
         current_item: dict | None = None,
     ) -> dict[str, Any]:
         """Load full context (source, upstream, version, workflow) for guard and prompt."""
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents=content if isinstance(content, dict) else {},
             agent_name=context.agent_name,
             agent_config=context.agent_config,

@@ -1,134 +1,140 @@
 """Agent-actions specific event types."""
 
-from agent_actions.logging.events.formatters import AgentActionsFormatter
-from agent_actions.logging.events.types import (
-    AgentCachedEvent,
-    AgentCompleteEvent,
-    AgentFailedEvent,
-    AgentSkipEvent,
-    # Agent events
-    AgentStartEvent,
-    ApplicationInitializationStartEvent,
+# Batch events
+from agent_actions.logging.events.batch_events import (
     BatchCompleteEvent,
-    BatchDataProcessingCompleteEvent,
     BatchErrorEvent,
     BatchPartialFailureEvent,
     BatchPassthroughEvent,
     BatchProcessingCompleteEvent,
-    BatchProcessingProgressEvent,
-    # Batch Processing events (data processing)
-    BatchProcessingStartedEvent,
     BatchProgressEvent,
     BatchResultProcessingFailedEvent,
     BatchResultsProcessedEvent,
     BatchStatusCheckFailedEvent,
     BatchStatusEvent,
     BatchSubmissionFailedEvent,
-    # Batch events
     BatchSubmittedEvent,
-    # Cache events
+)
+
+# Cache events
+from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
     CacheInvalidationEvent,
     CacheLoadEvent,
     CacheMissEvent,
     CacheStatsEvent,
     CacheUpdateEvent,
+)
+
+# Data pipeline events
+from agent_actions.logging.events.data_pipeline_events import (
+    BatchDataProcessingCompleteEvent,
+    BatchProcessingProgressEvent,
+    BatchProcessingStartedEvent,
+    DataNormalizationStartedEvent,
+    DataNormalizedEvent,
+    DataValidationFailedEvent,
+    DataValidationPassedEvent,
+    DataValidationStartedEvent,
+    EnricherExecutedEvent,
+    EnrichmentPipelineCompleteEvent,
+    EnrichmentPipelineStartedEvent,
+    ExhaustedRecordEvent,
+    RecordEmptyOutputEvent,
+    RecordFilteredEvent,
+    RecordProcessingCompleteEvent,
+    RecordProcessingStartedEvent,
+    RecordTransformedEvent,
+    ResultCollectedEvent,
+    ResultCollectionCompleteEvent,
+    ResultCollectionStartedEvent,
+)
+from agent_actions.logging.events.formatters import AgentActionsFormatter
+
+# Initialization events
+from agent_actions.logging.events.initialization_events import (
+    ApplicationInitializationStartEvent,
     CLIArgumentParsingEvent,
     CLIInitCompleteEvent,
-    # Initialization events (CLI, System, Project)
     CLIInitStartEvent,
     ConfigLoadCompleteEvent,
     ConfigLoadEvent,
-    # Configuration events
     ConfigLoadStartEvent,
     ConfigValidationEvent,
-    ContextDependencyInferredEvent,
-    ContextFieldNotFoundEvent,
-    ContextFieldSkippedEvent,
-    # Context introspection events
-    ContextNamespaceLoadedEvent,
-    ContextScopeAppliedEvent,
-    DataLoadingErrorEvent,
-    DataNormalizationStartedEvent,
-    DataNormalizedEvent,
-    # Data events
-    DataParsingErrorEvent,
-    DataValidationErrorEvent,
-    DataValidationFailedEvent,
-    DataValidationPassedEvent,
-    # Data validation events
-    DataValidationStartedEvent,
     DIContainerInitializationEvent,
-    EnricherExecutedEvent,
-    EnrichmentPipelineCompleteEvent,
-    # Data transformation events
-    EnrichmentPipelineStartedEvent,
     EnvironmentLoadCompleteEvent,
-    # Environment events
     EnvironmentLoadStartEvent,
     EnvironmentVariableDetectedEvent,
-    # Event categories
-    EventCategories,
-    ExhaustedRecordEvent,
-    FileWriteCompleteEvent,
-    FileWriteStartedEvent,
-    GuardEvaluationErrorEvent,
-    # Guard events
-    GuardEvaluationTimeoutEvent,
-    LLMConnectionErrorEvent,
-    LLMErrorEvent,
-    LLMJSONParseErrorEvent,
-    # LLM events
-    LLMRequestEvent,
-    LLMResponseEvent,
-    LLMServerErrorEvent,
     ProcessorRegistrationEvent,
     ProjectDirectoryCreatedEvent,
     ProjectInitializationStartEvent,
     ProjectInitializedEvent,
     ProjectValidationEvent,
-    RateLimitEvent,
-    RecordEmptyOutputEvent,
-    RecordFilteredEvent,
-    RecordProcessingCompleteEvent,
-    # Record Processing Pipeline events
-    RecordProcessingStartedEvent,
-    RecordTransformedEvent,
-    RecoveryErrorEvent,
-    RepromptValidationFailedEvent,
-    ResultCollectedEvent,
-    ResultCollectionCompleteEvent,
-    # Result Collection events
-    ResultCollectionStartedEvent,
-    # Recovery events
-    RetryExhaustedEvent,
+    StartupValidationCompleteEvent,
+    StartupValidationStartEvent,
+    UDFDiscoveredEvent,
+    UDFDiscoveryCompleteEvent,
+    UDFDiscoveryStartEvent,
+    WorkflowInitializationStartEvent,
+    WorkflowServicesInitializationStartEvent,
+)
+
+# I/O events
+from agent_actions.logging.events.io_events import (
+    ContextDependencyInferredEvent,
+    ContextFieldNotFoundEvent,
+    ContextFieldSkippedEvent,
+    ContextNamespaceLoadedEvent,
+    ContextScopeAppliedEvent,
+    FileWriteCompleteEvent,
+    FileWriteStartedEvent,
     SchemaConstructionCompleteEvent,
-    # Schema operation events
     SchemaConstructionStartedEvent,
     SchemaLoadedEvent,
     SchemaLoadingStartedEvent,
     SourceDataSavedEvent,
-    # File I/O events
     SourceDataSavingEvent,
-    StartupValidationCompleteEvent,
-    StartupValidationStartEvent,
-    # Template events
+)
+
+# LLM events
+from agent_actions.logging.events.llm_events import (
+    LLMConnectionErrorEvent,
+    LLMErrorEvent,
+    LLMJSONParseErrorEvent,
+    LLMRequestEvent,
+    LLMResponseEvent,
+    LLMServerErrorEvent,
+    RateLimitEvent,
     TemplateRenderingFailedEvent,
     TemplateSyntaxErrorEvent,
-    UDFDiscoveredEvent,
-    UDFDiscoveryCompleteEvent,
-    # Plugin/UDF events
-    UDFDiscoveryStartEvent,
+)
+from agent_actions.logging.events.types import EventCategories
+
+# Validation events
+from agent_actions.logging.events.validation_events import (
+    DataLoadingErrorEvent,
+    DataParsingErrorEvent,
+    DataValidationErrorEvent,
+    GuardEvaluationErrorEvent,
+    GuardEvaluationTimeoutEvent,
+    RecoveryErrorEvent,
+    RepromptValidationFailedEvent,
+    RetryExhaustedEvent,
     ValidationCompleteEvent,
     ValidationErrorEvent,
-    # Validation events
     ValidationStartEvent,
     ValidationWarningEvent,
+)
+
+# Workflow events
+from agent_actions.logging.events.workflow_events import (
+    AgentCachedEvent,
+    AgentCompleteEvent,
+    AgentFailedEvent,
+    AgentSkipEvent,
+    AgentStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
-    WorkflowInitializationStartEvent,
-    WorkflowServicesInitializationStartEvent,
-    # Workflow events
     WorkflowStartEvent,
 )
 

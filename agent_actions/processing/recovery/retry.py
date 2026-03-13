@@ -7,7 +7,7 @@ from typing import Any
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import RetryExhaustedEvent
+from agent_actions.logging.events.validation_events import RetryExhaustedEvent
 
 logger = logging.getLogger(__name__)
 

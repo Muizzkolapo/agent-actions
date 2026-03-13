@@ -8,7 +8,8 @@ differently from regular workflow actions.
 import pytest
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_inference import infer_dependencies
+from agent_actions.prompt.context.scope_namespace import _enrich_source_namespace
 
 
 class TestSpecialNamespaceValidationBypass:
@@ -28,7 +29,7 @@ class TestSpecialNamespaceValidationBypass:
         workflow_actions = ["other_action"]  # 'source' not in workflow
 
         # Should NOT raise ConfigurationError
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "test_action"
         )
 
@@ -48,7 +49,7 @@ class TestSpecialNamespaceValidationBypass:
         workflow_actions = ["other_action"]  # 'workflow' not in workflow
 
         # Should NOT raise ConfigurationError
-        input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+        input_sources, context_sources = infer_dependencies(
             action_config, workflow_actions, "test_action"
         )
 
@@ -68,7 +69,7 @@ class TestSpecialNamespaceValidationBypass:
 
         # Should raise ConfigurationError for unknown action
         with pytest.raises(ConfigurationError) as exc_info:
-            ContextScopeProcessor.infer_dependencies(action_config, workflow_actions, "test_action")
+            infer_dependencies(action_config, workflow_actions, "test_action")
 
         assert "unknown_action" in str(exc_info.value)
         assert "not found in workflow" in str(exc_info.value)
@@ -82,7 +83,7 @@ class TestEnrichSourceNamespace:
         base_namespace = {"existing": "value"}
         current_item = None
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result == {"existing": "value"}
 
@@ -91,7 +92,7 @@ class TestEnrichSourceNamespace:
         base_namespace = {"existing": "value"}
         current_item = {}
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result == {"existing": "value"}
 
@@ -103,7 +104,7 @@ class TestEnrichSourceNamespace:
             "source_guid": "guid-123",
         }
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result["source_guid"] == "guid-123"  # Original preserved
         assert result["page_content"] == "Full text here"  # Added from current
@@ -114,7 +115,7 @@ class TestEnrichSourceNamespace:
         base_namespace = {"page_content": "Original content", "source_guid": "guid-123"}
         current_item = {"content": {"page_content": "Different content", "extra": "value"}}
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result["page_content"] == "Original content"  # NOT overwritten
         assert result["extra"] == "value"  # Added
@@ -125,7 +126,7 @@ class TestEnrichSourceNamespace:
         base_namespace = {}
         current_item = {"page_content": "Text", "title": "Title", "id": "123"}
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result["page_content"] == "Text"
         assert result["title"] == "Title"
@@ -136,6 +137,6 @@ class TestEnrichSourceNamespace:
         base_namespace = None
         current_item = {"content": {"field": "value"}}
 
-        result = ContextScopeProcessor._enrich_source_namespace(base_namespace, current_item)
+        result = _enrich_source_namespace(base_namespace, current_item)
 
         assert result == {"field": "value"}

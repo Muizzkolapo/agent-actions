@@ -11,7 +11,7 @@ from pathlib import Path
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import (
+from agent_actions.logging.events.cache_events import (
     CacheHitEvent,
     CacheInvalidationEvent,
     CacheLoadEvent,

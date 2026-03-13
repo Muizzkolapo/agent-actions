@@ -13,9 +13,10 @@ if TYPE_CHECKING:
 
 from agent_actions.errors import TemplateVariableError
 from agent_actions.logging import fire_event
-from agent_actions.logging.events.types import ContextFieldNotFoundEvent
+from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
 from agent_actions.prompt.context.builder import LLMContextBuilder
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_application import apply_context_scope
+from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 from agent_actions.prompt.context.static_loader import (
     StaticDataLoader,
     StaticDataLoadError,
@@ -133,13 +134,11 @@ class PromptPreparationService:
         )
 
         if context_scope:
-            prompt_context, llm_additional_context, passthrough_fields = (
-                ContextScopeProcessor.apply_context_scope(
-                    field_context,
-                    context_scope,
-                    static_data=static_data,
-                    action_name=agent_name,
-                )
+            prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
+                field_context,
+                context_scope,
+                static_data=static_data,
+                action_name=agent_name,
             )
         else:
             prompt_context = field_context
@@ -211,7 +210,7 @@ class PromptPreparationService:
         context_scope = request.agent_config.get("context_scope", {})
 
         field_context_metadata: dict[str, Any] = {}
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents=request.contents if isinstance(request.contents, dict) else {},
             agent_name=request.agent_name,
             agent_config=request.agent_config,
@@ -234,13 +233,11 @@ class PromptPreparationService:
         )
 
         if context_scope:
-            prompt_context, llm_additional_context, passthrough_fields = (
-                ContextScopeProcessor.apply_context_scope(
-                    field_context,
-                    context_scope,
-                    static_data=static_data,
-                    action_name=request.agent_name,
-                )
+            prompt_context, llm_additional_context, passthrough_fields = apply_context_scope(
+                field_context,
+                context_scope,
+                static_data=static_data,
+                action_name=request.agent_name,
             )
             logger.debug(
                 "Applied context_scope: observe=%d, passthrough=%d, static_data=%d",

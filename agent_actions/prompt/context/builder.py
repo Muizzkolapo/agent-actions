@@ -3,7 +3,7 @@
 from typing import Any
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
 
 class LLMContextBuilder:
@@ -70,7 +70,7 @@ class LLMContextBuilder:
             # Parse and categorize drop field references
             for field_ref in context_scope.get("drop", []):
                 try:
-                    action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                    action_name, field_name = parse_field_reference(field_ref)
                     if action_name == "seed":
                         seed_drop_fields.append(field_name)
                     else:

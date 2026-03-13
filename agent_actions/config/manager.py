@@ -273,7 +273,7 @@ class ConfigManager:
         """
         from agent_actions.input.context.normalizer import normalize_all_agent_configs
         from agent_actions.output.response.config_schema import AgentConfig
-        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.prompt.context.scope_inference import infer_dependencies
         from agent_actions.utils.path_utils import topological_sort
         from agent_actions.validation.config_validator import ConfigValidator
 
@@ -289,7 +289,7 @@ class ConfigManager:
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
                 try:
-                    input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                    input_sources, context_sources = infer_dependencies(
                         config.model_dump(), workflow_actions, agent_type
                     )
                     all_deps: list[Any] = input_sources + context_sources

@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent_actions.prompt.context.scope import ContextScopeProcessor
+from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ class EvaluationContextProvider:
             current_content = {}
 
         context_scope = config.agent_config.get("context_scope")
-        field_context = ContextScopeProcessor.build_field_context_with_history(
+        field_context = build_field_context_with_history(
             contents=current_content,
             agent_name=config.agent_name,
             agent_config=config.agent_config,

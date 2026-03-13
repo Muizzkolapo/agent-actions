@@ -348,16 +348,14 @@ class WorkflowStaticAnalyzer:
         input_requirements = self.reference_extractor.extract_from_agent(action_config)
 
         # Use auto-inferred dependency model
-        from agent_actions.prompt.context.scope import (
-            ContextScopeProcessor,
-        )
+        from agent_actions.prompt.context.scope_inference import infer_dependencies
 
         workflow_actions = [
             a.get("name") for a in self.workflow_config.get("actions", []) if a.get("name")
         ]
 
         try:
-            input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+            input_sources, context_sources = infer_dependencies(
                 action_config, workflow_actions, name
             )
             # All dependencies (both input and context) for graph building
