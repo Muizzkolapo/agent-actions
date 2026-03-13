@@ -194,6 +194,19 @@ agac list-udfs -u ./tools
 agac validate-udfs -a my_workflow -u ./tools
 ```
 
+## Import Rules
+
+Tool files are loaded in isolation using `importlib.util.spec_from_file_location`. The tools directory is **not** added to `sys.path`, so tools cannot import sibling modules with bare `import` statements.
+
+What works:
+- **Installed packages** — any dependency in your project's virtual environment (e.g., `import pandas`, `from agent_actions import udf_tool`)
+- **Standard library** — `import json`, `import pathlib`, etc.
+
+What does not work:
+- **Sibling imports** — `import other_tool` or `from . import utils` where `other_tool` and `utils` are files in the same tools directory
+
+If you need shared logic across multiple tool files, extract it into an installable package and add it to your project dependencies.
+
 ## Best Practices
 
 ### Handle Missing Fields

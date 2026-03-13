@@ -1,5 +1,4 @@
-"""
-Agent builder module for dynamic LLM agent invocation.
+"""Agent builder module for dynamic LLM agent invocation.
 
 This module provides the main entry point for creating and executing dynamic agents
 with support for multiple LLM vendors.
@@ -11,7 +10,6 @@ from typing import Any
 
 from agent_actions.output.response.schema import prepare_schema_unified
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
-from agent_actions.utils.module_loader import ensure_path_importable
 
 from .services import (
     ClientInvocationService,
@@ -31,25 +29,24 @@ def create_dynamic_agent(
     additional_context: dict | None = None,
     original_context: str | dict | None = None,
 ) -> list[Any]:
-    """
-    Build and execute a prompt against the selected vendor.
+    """Build and execute a prompt against the selected vendor.
 
     Args:
-        agent_config: Agent configuration with model/prompt settings
-        udf: User defined function (agent_name)
+        agent_config: Agent configuration with model/prompt settings.
+        udf: User defined function (agent_name).
         context_data_str: Context data for LLM (may be transformed with
-                         context_scope.drop applied)
-        formatted_prompt: Pre-formatted prompt (optional, from DataGenerator)
-        tools_path: Path to tool functions (optional)
-        tool_args: Tool arguments (optional)
-        source_content: Source content for tool handler (optional)
+            context_scope.drop applied).
+        formatted_prompt: Pre-formatted prompt (optional, from DataGenerator).
+        tools_path: Path to tool functions (optional).
+        tool_args: Tool arguments (optional).
+        source_content: Source content for tool handler (optional).
         additional_context: Additional context from context_scope.observe (optional).
-                           Formatted and appended to prompt before LLM invocation.
+            Formatted and appended to prompt before LLM invocation.
         original_context: Original untransformed context for guards/debug (optional).
-                         Tools and LLMs use the same transformed context_data_str.
+            Tools and LLMs use the same transformed context_data_str.
 
     Returns:
-        List of response items from the LLM
+        List of response items from the LLM.
     """
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
@@ -69,13 +66,10 @@ def create_dynamic_agent(
     # Dispatch already handled by PromptPreparationService
     prompt_config = formatted_prompt
 
-    # Setup tools_path for sys.path (still needed for function imports)
     if not tools_path:
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
-    if tools_path:
-        ensure_path_importable(tools_path)
 
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     is_tool = model_vendor == "tool"

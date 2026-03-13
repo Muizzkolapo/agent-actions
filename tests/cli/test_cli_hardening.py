@@ -498,6 +498,35 @@ class TestProjectRootDictInjectionRoundTrip:
         assert "_project_root" not in agent_config
 
 
+class TestNoSysPathMutation:
+    """Production code must never mutate sys.path."""
+
+    @pytest.mark.parametrize(
+        "pattern",
+        [
+            r"sys\.path\.insert",
+            r"sys\.path\.append",
+            r"sys\.path\.extend",
+            r"sys\.path\s*\[.*\]\s*=",
+            r"sys\.path\s*\+=",
+        ],
+        ids=["insert", "append", "extend", "subscript_assign", "iadd"],
+    )
+    def test_no_sys_path_mutation_in_production_code(self, pattern):
+        """Assert zero sys.path mutation vectors in production code."""
+        import subprocess
+
+        result = subprocess.run(
+            ["grep", "-rn", "-E", pattern, "agent_actions/", "--include=*.py"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parents[2],  # repo root
+        )
+        assert result.stdout == "", (
+            f"Found sys.path mutation ({pattern}) in production code:\n{result.stdout}"
+        )
+
+
 class TestAgentRunnerProjectRootPaths:
     """AgentRunner.get_agent_folder uses explicit param, instance attr, then CWD."""
 

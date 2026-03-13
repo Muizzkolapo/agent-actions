@@ -144,8 +144,8 @@ class TestDiscoverUDFs:
         assert "bad.py" in error.context["file"]
         assert "error" in error.context
 
-    def test_discover_udfs_adds_to_sys_path(self, temp_user_code_dir):
-        """Test that user_code_path is added to sys.path."""
+    def test_discover_udfs_does_not_mutate_sys_path(self, temp_user_code_dir):
+        """Verify discover_udfs does not add user_code_path to sys.path."""
         import sys
 
         user_code_str = str(temp_user_code_dir.absolute())
@@ -154,7 +154,7 @@ class TestDiscoverUDFs:
         udf_file = temp_user_code_dir / "test.py"
         udf_file.write_text(UDF_TEMPLATE.format(func_name="test_func", return_value="test"))
         discover_udfs(temp_user_code_dir)
-        assert user_code_str in sys.path
+        assert user_code_str not in sys.path
 
     def test_discover_udfs_duplicate_error(self, temp_user_code_dir):
         """Test that DuplicateFunctionError is propagated."""

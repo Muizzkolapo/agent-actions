@@ -12,7 +12,7 @@ from agent_actions.llm.providers.batch_base import BaseBatchClient, BatchResult
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import BatchProgressEvent
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
-from agent_actions.utils.module_loader import ensure_path_importable, load_module_from_path
+from agent_actions.utils.module_loader import load_module_from_path
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -338,8 +338,6 @@ class BatchRetryService:
         validation_module = reprompt_config.get("validation_module", "reprompt_validations")
 
         if validation_path:
-            ensure_path_importable(validation_path)
-            logger.debug("Ensured validation_path is importable for reprompt: %s", validation_path)
             _import_validation_module(validation_module, validation_path)
         else:
             logger.debug(
@@ -720,7 +718,6 @@ class BatchRetryService:
         validation_module = reprompt_config.get("validation_module", "reprompt_validations")
 
         if validation_path:
-            ensure_path_importable(validation_path)
             _import_validation_module(validation_module, validation_path)
         else:
             _import_validation_module(validation_module, None)

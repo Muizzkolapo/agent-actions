@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import DuplicateFunctionError, UDFLoadError
-from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 
@@ -34,8 +33,6 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             error="User code path is not a directory",
             context=error_context,
         )
-
-    ensure_path_importable(user_code_path)
 
     python_files = list(user_code_path.rglob("*.py"))
     python_files = [

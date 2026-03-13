@@ -17,7 +17,6 @@ from agent_actions.processing.task_preparer import TaskPreparer, get_task_prepar
 from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
-from agent_actions.utils.module_loader import ensure_path_importable
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
 logger = logging.getLogger(__name__)
@@ -159,11 +158,10 @@ class BatchTaskPreparator:
         context_map_builder: dict[str, Any],
         stats: BatchTaskPreparationStats,
     ) -> dict[str, Any] | None:
-        """
-        Process a single data item using TaskPreparer.
+        """Process a single data item using TaskPreparer.
 
-        Returns prepared task if item should be included, None otherwise.
-        Updates context_map_builder and stats as side effects.
+        Return prepared task if item should be included, None otherwise.
+        Update context_map_builder and stats as side effects.
         """
         # 1. Generate target_id if missing
         custom_id = row.get("target_id")
@@ -257,9 +255,7 @@ class BatchTaskPreparator:
         return schema
 
     def _add_tools_to_path(self, tools_path: str | None) -> None:
-        """Add tools path to sys.path if not already present."""
-        if tools_path:
-            ensure_path_importable(tools_path)
+        """Do nothing (tools are loaded via spec_from_file_location, not sys.path)."""
 
     def _build_preparation_context(
         self,

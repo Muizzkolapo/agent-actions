@@ -7,7 +7,7 @@ import re
 import tiktoken
 
 from agent_actions.errors import AgentActionsException, ConfigurationError
-from agent_actions.utils.module_loader import ensure_path_importable
+from agent_actions.utils.module_loader import load_module_from_directory
 
 # Optional dependencies
 try:
@@ -48,9 +48,9 @@ class StringProcessor:
                 function_name = full_function_name
 
             if tools_path:
-                ensure_path_importable(tools_path, recursive=True)
-
-            module = importlib.import_module(module_name)
+                module = load_module_from_directory(module_name, tools_path)
+            else:
+                module = importlib.import_module(module_name)
             function = getattr(module, function_name)
 
             if context_data_str:
@@ -87,7 +87,7 @@ class Tokenizer:
 
     @staticmethod
     def num_tokens_from_string(string: str, encoding_name: str) -> int:
-        """Returns the number of tokens in a text string."""
+        """Return the number of tokens in a text string."""
         try:
             encoding = tiktoken.get_encoding(encoding_name)
             num_tokens = len(encoding.encode(string))
@@ -245,8 +245,9 @@ class Tokenizer:
         try:
             tools_path = os.environ.get("TOOLS_PATH", "tools")
             if tools_path:
-                ensure_path_importable(tools_path)
-            module = importlib.import_module(split_method)
+                module = load_module_from_directory(split_method, tools_path)
+            else:
+                module = importlib.import_module(split_method)
             function = getattr(module, split_method)
             return function(text, chunk_size, overlap, tokenizer_model)
         except ImportError as e:

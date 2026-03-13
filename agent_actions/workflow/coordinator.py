@@ -31,7 +31,6 @@ from agent_actions.logging.events import (
     WorkflowStartEvent,
 )
 from agent_actions.storage import get_storage_backend
-from agent_actions.utils.module_loader import ensure_path_importable
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -412,9 +411,6 @@ class AgentWorkflow:
         if abs_path.exists() and abs_path.is_dir():
             # Fire UDF discovery start event
             fire_event(UDFDiscoveryStartEvent(search_path=str(abs_path)))
-
-            # Use centralized path management (thread-safe, cached)
-            ensure_path_importable(abs_path)
 
             self.console.print(f"[cyan]🔍 Discovering Tools in {abs_path}...[/cyan]")
 

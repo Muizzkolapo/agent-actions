@@ -5,7 +5,6 @@ import importlib.util
 import logging
 import sys
 import threading
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -14,137 +13,16 @@ from agent_actions.logging.events.types import CacheHitEvent, CacheInvalidationE
 
 logger = logging.getLogger(__name__)
 
-# Public API
 __all__ = [
-    # Low-level API
-    "ensure_path_importable",
-    "ensure_paths_importable",
-    "importable_path",
-    "clear_path_cache",
-    # Mid-level API
     "load_module_from_path",
+    "load_module_from_directory",
     "clear_module_cache",
-    # High-level API
     "discover_and_load_udfs",
     "discover_and_load_udfs_recursive",
 ]
 
-# Thread-safe caches
 _LOCK = threading.RLock()
-_PATH_CACHE: set[str] = set()
 _MODULE_CACHE: dict[str, Any] = {}
-
-
-# ==============================================================================
-# Low-Level API: Path Management
-# ==============================================================================
-
-
-def ensure_path_importable(path: str | Path, *, recursive: bool = False) -> bool:
-    """Ensure a path is in sys.path for imports (thread-safe, cached).
-
-    Args:
-        path: Directory path to add to sys.path.
-        recursive: If True, also add all subdirectories (for nested packages).
-            The lock is NOT held during traversal.
-
-    Returns:
-        True if path was added to cache, False if already cached.
-
-    Note:
-        Uses absolute() instead of resolve() to preserve symlinks.
-    """
-    path_str = str(Path(path).absolute())
-
-    with _LOCK:
-        if path_str in _PATH_CACHE:
-            fire_event(CacheHitEvent(cache_type="module_path", key=path_str))
-            return False
-
-        fire_event(
-            CacheMissEvent(cache_type="module_path", key=path_str, reason="path not in cache")
-        )
-
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-            logger.debug("Added to sys.path: %s", path_str)
-
-        _PATH_CACHE.add(path_str)
-
-    if recursive:
-        path_obj = Path(path)
-        if path_obj.is_dir():
-            for subdir in path_obj.rglob("*"):
-                if subdir.is_dir() and not subdir.name.startswith("_"):
-                    ensure_path_importable(subdir, recursive=False)
-
-    return True
-
-
-def ensure_paths_importable(paths: list[str | Path], *, recursive: bool = False) -> int:
-    """Ensure multiple paths are in sys.path, returning count of newly added paths."""
-    added_count = 0
-    for path in paths:
-        if ensure_path_importable(path, recursive=recursive):
-            added_count += 1
-    return added_count
-
-
-@contextmanager
-def importable_path(path: str | Path, *, recursive: bool = False):
-    """Context manager for temporary sys.path modification (testing only).
-
-    Does NOT use the cache, ensuring test isolation.
-    In production, prefer ensure_path_importable().
-
-    Yields:
-        The resolved path string.
-    """
-    path_str = str(Path(path).absolute())
-    paths_to_remove = []
-
-    try:
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-            paths_to_remove.append(path_str)
-
-        if recursive:
-            path_obj = Path(path)
-            if path_obj.is_dir():
-                for subdir in path_obj.rglob("*"):
-                    if subdir.is_dir() and not subdir.name.startswith("_"):
-                        subdir_str = str(subdir.absolute())
-                        if subdir_str not in sys.path:
-                            sys.path.insert(0, subdir_str)
-                            paths_to_remove.append(subdir_str)
-
-        yield path_str
-
-    finally:
-        for p in paths_to_remove:
-            try:
-                sys.path.remove(p)
-            except ValueError:
-                pass  # Already removed
-
-
-def clear_path_cache() -> None:
-    """Clear the path cache (testing only). Does not modify sys.path itself."""
-    with _LOCK:
-        entries_removed = len(_PATH_CACHE)
-        _PATH_CACHE.clear()
-        logger.debug("Cleared path cache")
-
-        fire_event(
-            CacheInvalidationEvent(
-                cache_type="module_path", entries_removed=entries_removed, reason="manual clear"
-            )
-        )
-
-
-# ==============================================================================
-# Mid-Level API: Module Loading
-# ==============================================================================
 
 
 def load_module_from_path(
@@ -168,10 +46,6 @@ def load_module_from_path(
 
     Returns:
         The loaded module object, or None if loading failed.
-
-    Note:
-        Modules are registered in sys.modules BEFORE execution so that
-        decorator side effects (e.g., @udf_tool) work correctly.
     """
     cache_key = f"{module_name}:{module_path}" if module_path else module_name
 
@@ -270,6 +144,61 @@ def load_module_from_path(
         return module
 
 
+def _resolve_module_file(module_name: str, search_dir: str | Path) -> Path | None:
+    """Resolve a dotted module name to a .py file within search_dir."""
+    if not module_name:
+        return None
+    search_dir = Path(search_dir)
+    relative = Path(*module_name.split("."))
+
+    candidate = search_dir / relative.with_suffix(".py")
+    if candidate.is_file():
+        return candidate
+
+    candidate = search_dir / relative / "__init__.py"
+    if candidate.is_file():
+        return candidate
+
+    return None
+
+
+def load_module_from_directory(
+    module_name: str,
+    search_dir: str | Path,
+    *,
+    execute: bool = True,
+    cache: bool = True,
+    fallback_import: bool = True,
+) -> Any | None:
+    """Load a module by name from a directory without mutating sys.path.
+
+    Resolve the module name to a file path within search_dir via
+    ``_resolve_module_file``, then delegate to ``load_module_from_path``.
+    Fall back to standard import if the file is not found and
+    *fallback_import* is True (the default).
+    """
+    module_file = _resolve_module_file(module_name, search_dir)
+    if module_file:
+        return load_module_from_path(
+            module_name,
+            module_file,
+            execute=execute,
+            fallback_import=False,
+            cache=cache,
+        )
+    if fallback_import:
+        logger.debug(
+            "Module %s not found in %s, falling back to standard import", module_name, search_dir
+        )
+    return load_module_from_path(
+        module_name,
+        None,
+        execute=execute,
+        fallback_import=fallback_import,
+        cache=cache,
+    )
+
+
 def clear_module_cache() -> None:
     """Clear the module cache (testing only). Does not modify sys.modules itself."""
     with _LOCK:
@@ -282,11 +211,6 @@ def clear_module_cache() -> None:
                 cache_type="module", entries_removed=entries_removed, reason="manual clear"
             )
         )
-
-
-# ==============================================================================
-# High-Level API: UDF Discovery
-# ==============================================================================
 
 
 def discover_and_load_udfs(
@@ -314,8 +238,6 @@ def discover_and_load_udfs(
     if not user_code_path.is_dir():
         logger.warning("User code path is not a directory: %s", user_code_path)
         return {}
-
-    ensure_path_importable(user_code_path)
 
     registry: dict[str, dict[str, Any]] = {}
 
@@ -365,8 +287,6 @@ def discover_and_load_udfs_recursive(
         logger.warning("User code path is not a directory: %s", user_code_path)
         return {}
 
-    ensure_path_importable(user_code_path)
-
     registry: dict[str, dict[str, Any]] = {}
 
     python_files = list(user_code_path.rglob("*.py"))
@@ -383,8 +303,6 @@ def discover_and_load_udfs_recursive(
 
         if skip_test and (py_file.name.startswith("test_") or py_file.name.endswith("_test.py")):
             continue
-
-        ensure_path_importable(py_file.parent)
 
         module_parts = list(rel_path.parts[:-1]) + [rel_path.stem]
         module_name = ".".join(module_parts)
