@@ -1,8 +1,10 @@
 """Module for Configuration Validation Functions."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import ValidationError
@@ -12,16 +14,13 @@ from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
-from agent_actions.input.context.normalizer import normalize_all_agent_configs
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
-from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
-from agent_actions.output.response.expander import ActionExpander
-from agent_actions.prompt.render_workflow import render_pipeline_with_templates
-from agent_actions.utils.path_utils import topological_sort
-from agent_actions.validation.config_validator import ConfigValidator
-from agent_actions.workflow.models import WorkflowConfig
-from agent_actions.workflow.pipeline import PipelineConfig
+
+if TYPE_CHECKING:
+    from agent_actions.output.response.config_schema import AgentConfig
+    from agent_actions.workflow.models import WorkflowConfig
+    from agent_actions.workflow.pipeline import PipelineConfig
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +55,8 @@ class ConfigManager:
         Raises:
             ConfigurationError: On rendering, YAML parsing, or unexpected errors.
         """
+        from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+
         fire_event(ConfigLoadStartEvent(config_file=str(config_path)))
         try:
             config_data = render_pipeline_with_templates(
@@ -168,6 +169,8 @@ class ConfigManager:
         self.child_pipeline = None
 
     def get_user_agents(self):
+        from agent_actions.output.response.expander import ActionExpander
+
         if "name" in self.user_config and "actions" in self.user_config:
             try:
                 path_manager = PathManager(project_root=self.project_root)
@@ -227,6 +230,8 @@ class ConfigManager:
             return user_agents
 
     def merge_agent_configs(self, user_agents: list[dict[str, Any]]) -> None:
+        from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
+
         default_model = DefaultAgentConfig.model_validate(
             self.default_config.get("default_agent_config", {}) if self.default_config else {}
         )
@@ -261,15 +266,16 @@ class ConfigManager:
             self.agent_configs[agent_type] = merged_agent_config
 
     def determine_execution_order(self) -> None:
-        """
-        Determines the execution order of agents based on their dependencies,
-        considering only is_operational agents.
+        """Determine execution order of agents based on their dependencies.
 
         Uses auto-inferred dependencies from context_scope to build the execution graph.
+        Only considers is_operational agents.
         """
-        from agent_actions.prompt.context.scope import (
-            ContextScopeProcessor,
-        )
+        from agent_actions.input.context.normalizer import normalize_all_agent_configs
+        from agent_actions.output.response.config_schema import AgentConfig
+        from agent_actions.prompt.context.scope import ContextScopeProcessor
+        from agent_actions.utils.path_utils import topological_sort
+        from agent_actions.validation.config_validator import ConfigValidator
 
         instance_config = ConfigValidator()
         agent_configs_dict = {
@@ -373,8 +379,10 @@ class ConfigManager:
 
     def create_workflow_config(self, workflow_data: dict[str, Any]) -> WorkflowConfig:
         """Create a typed workflow configuration from dictionary data."""
+        from agent_actions.workflow.models import WorkflowConfig as _WorkflowConfig
+
         try:
-            self.workflow_config = WorkflowConfig.model_validate(workflow_data)
+            self.workflow_config = _WorkflowConfig.model_validate(workflow_data)
             return self.workflow_config
         except ValidationError as e:
             raise ConfigurationError(
@@ -388,8 +396,10 @@ class ConfigManager:
 
     def create_pipeline_config(self, pipeline_data: dict[str, Any]) -> PipelineConfig:
         """Create a typed pipeline configuration from dictionary data."""
+        from agent_actions.workflow.pipeline import PipelineConfig as _PipelineConfig
+
         try:
-            self.pipeline_config = PipelineConfig.model_validate(pipeline_data)
+            self.pipeline_config = _PipelineConfig.model_validate(pipeline_data)
             return self.pipeline_config
         except ValidationError as e:
             raise ConfigurationError(
@@ -403,6 +413,8 @@ class ConfigManager:
 
     def validate_all_configs(self) -> None:
         """Validate all loaded configurations."""
+        from agent_actions.output.response.config_schema import AgentConfig
+
         if not self.environment_config:
             self.load_environment_config()
         for agent_type, config in self.agent_configs.items():

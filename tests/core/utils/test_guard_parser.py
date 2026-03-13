@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.errors import ValidationError  # New modular pattern!
-from agent_actions.output.response.guard_parser import (
+from agent_actions.guards import (
     GuardParser,
     GuardType,
     parse_guard,

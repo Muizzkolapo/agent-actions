@@ -1,11 +1,14 @@
 """Convenience functions for common path operations."""
 
+from __future__ import annotations
+
 import logging
 from collections import deque
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
-from agent_actions.config.paths import PathManager
+if TYPE_CHECKING:
+    from agent_actions.config.paths import PathManager
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -14,6 +17,8 @@ _global_path_manager: PathManager | None = None
 
 def get_path_manager() -> PathManager:
     """Get the global PathManager singleton."""
+    from agent_actions.config.paths import PathManager
+
     global _global_path_manager
     if _global_path_manager is None:
         _global_path_manager = PathManager()

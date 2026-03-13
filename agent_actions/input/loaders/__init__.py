@@ -2,15 +2,21 @@
 
 from agent_actions.config.di.container import registry as _registry
 
-# Re-export from new locations
-from agent_actions.llm.batch.infrastructure.batch_data_loader import BatchDataLoader
-
 from .base import BaseLoader, retry
 from .json import JsonLoader
 from .source_data import SourceDataLoader
 from .tabular import TabularLoader
 from .text import TextLoader
 from .xml import XmlLoader
+
+
+def __getattr__(name: str):
+    if name == "BatchDataLoader":
+        from agent_actions.llm.batch.infrastructure.batch_data_loader import BatchDataLoader
+
+        return BatchDataLoader
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "BatchDataLoader",

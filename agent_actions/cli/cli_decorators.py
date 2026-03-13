@@ -7,7 +7,7 @@ from typing import Any
 
 import click
 
-from agent_actions.cli.project_root import ensure_in_project
+from agent_actions.utils.project_root import ensure_in_project
 
 
 def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:

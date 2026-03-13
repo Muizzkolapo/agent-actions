@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from agent_actions.cli.project_root import find_project_root
+from agent_actions.utils.project_root import find_project_root
 
 
 def get_bundled_skills_path() -> Path:

@@ -14,7 +14,6 @@ from agent_actions.errors import (
     ValidationError,
     get_error_detail,
 )
-from agent_actions.logging.errors import format_user_error
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=AgentActionsException)
@@ -26,6 +25,8 @@ class ErrorHandler:
     @staticmethod
     def format_for_user(error: Exception, context: dict[str, Any] | None = None) -> str:
         """Format an error into a user-friendly message."""
+        from agent_actions.logging.errors import format_user_error
+
         return format_user_error(error, context)
 
     @staticmethod

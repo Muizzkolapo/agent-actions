@@ -13,9 +13,9 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_actions.cli.project_root import find_project_root
 from agent_actions.config.defaults import ApiDefaults
 from agent_actions.errors import ConfigurationError, FileSystemError
+from agent_actions.utils.project_root import find_project_root
 
 
 class DataSourceType(str, Enum):

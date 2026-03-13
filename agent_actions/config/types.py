@@ -1,6 +1,23 @@
 """Type definitions for agent configuration structures."""
 
+from enum import Enum
 from typing import Any, TypedDict
+
+
+class Granularity(str, Enum):
+    """Granularity levels for action execution."""
+
+    RECORD = "record"
+    FILE = "file"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
 
 
 class ContextScopeDict(TypedDict, total=False):

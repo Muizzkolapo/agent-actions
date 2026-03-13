@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from agent_actions.config.schema import Granularity
+from agent_actions.config.types import Granularity
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 

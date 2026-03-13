@@ -30,7 +30,8 @@ orchestration, prompts, and processing to concrete implementations.
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
-| `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) for config structures. | `config`, `workflow`, `processing` |
+| `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) and `Granularity` enum for config structures. | `config`, `workflow`, `processing` |
+| `project_paths.py` | Module | `ProjectPathsFactory` and `ProjectPaths` for project directory resolution. Moved from `cli/`. | `paths`, `validation`, `output` |
 
 ## Flows
 

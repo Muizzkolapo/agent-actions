@@ -9,7 +9,6 @@ from typing import Any
 
 from agent_actions.errors import ConfigValidationError, SchemaValidationError
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.prompt.prompt_utils import PromptUtils
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -272,6 +271,8 @@ def _inject_functions_into_schema(
     if isinstance(schema, str):
         # Only process strings containing dispatch_task
         if "dispatch_task(" in schema:
+            from agent_actions.prompt.prompt_utils import PromptUtils
+
             return PromptUtils.process_dispatch_in_text(
                 schema,
                 tools_path=tools_path,
@@ -329,6 +330,8 @@ def _resolve_dispatch_in_schema(
         return schema
 
     try:
+        from agent_actions.prompt.prompt_utils import PromptUtils
+
         return PromptUtils.process_dispatch_in_text(
             schema,
             tools_path=tools_path,

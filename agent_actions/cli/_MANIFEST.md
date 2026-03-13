@@ -52,14 +52,14 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the CLI application with the provided arguments. | - |
 | `main_entrypoint` | Function | Main entry point for the CLI application. | - |
 | `main` | Function | Entry point for the CLI tool when run from the command line. | - |
-| `project_paths_factory.py` | Module | Project paths factory service. | `errors`, `file_io`, `state_management`, `utilities`, `validation` |
+| `project_paths_factory.py` | Shim | Re-export shim → `config.project_paths`. | `config` |
 | `find_config_file` | Function | Find a workflow configuration file with optional alternative-location lookup. Accepts `project_root: Path \| None`. | - |
 | `ProjectPaths` | Class | Container for project directory paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert paths to a dictionary of strings. | - |
 | `ProjectPathsFactory` | Class | Factory for creating project paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_paths` | Method | Get the agent paths using the FileHandler. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_project_paths` | Method | Create project paths for the given agent. Accepts `project_root: Path \| None`. | - |
-| `project_root.py` | Module | Project root detection utilities. | `errors` |
+| `project_root.py` | Shim | Re-export shim → `utils.project_root`. | `utils` |
 | `find_project_root` | Function | Find the project root by walking up directories to locate agent_actions.yml. | - |
 | `ensure_in_project` | Function | Ensure the current working directory is within an agent-actions project. | - |
 | `run.py` | Module | Run command for the Agent Actions CLI. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |

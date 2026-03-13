@@ -5,8 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from agent_actions.output.response.consolidated_guard import parse_guard_config
-from agent_actions.output.response.guard_parser import GuardParser
+from agent_actions.config.types import Granularity  # re-export for backward compat
+from agent_actions.guards import GuardParser, parse_guard_config
 
 
 class ActionKind(str, Enum):
@@ -15,22 +15,6 @@ class ActionKind(str, Enum):
     LLM = "llm"
     TOOL = "tool"
     HITL = "hitl"
-
-    @classmethod
-    def _missing_(cls, value):
-        if isinstance(value, str):
-            lower = value.lower()
-            for member in cls:
-                if member.value == lower:
-                    return member
-        return None
-
-
-class Granularity(str, Enum):
-    """Granularity levels for action execution."""
-
-    RECORD = "record"
-    FILE = "file"
 
     @classmethod
     def _missing_(cls, value):

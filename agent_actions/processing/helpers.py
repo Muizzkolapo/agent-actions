@@ -6,8 +6,6 @@ import logging
 from typing import Any
 
 from agent_actions.errors import SchemaValidationError
-from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
-from agent_actions.llm.realtime import builder as agent_builder
 from agent_actions.utils.constants import ON_SCHEMA_MISMATCH_KEY, SCHEMA_KEY, STRICT_SCHEMA_KEY
 from agent_actions.utils.transformation import PassthroughTransformer
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
@@ -17,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 def evaluate_guard_condition(agent_config: dict[str, Any], context: Any) -> tuple[bool, str | None]:
     """Evaluate guard conditions, returning (should_execute, skip_behavior)."""
+    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+
     evaluator = get_guard_evaluator()
     return evaluator.evaluate(
         item=context,
@@ -51,6 +51,8 @@ def run_dynamic_agent(
             return (context, False)
         if _should_filter_guard(agent_config, context):
             return (None, False)
+
+    from agent_actions.llm.realtime import builder as agent_builder
 
     if isinstance(context, dict) and "content" in context and isinstance(context["content"], dict):
         processed_context = context["content"]
@@ -190,12 +192,16 @@ def _should_skip_legacy_conditional(agent_config: dict[str, Any], context: Any) 
 
 def _should_skip_guard(agent_config: dict[str, Any], context: Any) -> bool:
     """Return True if guard evaluates to skip behavior."""
+    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+
     evaluator = get_guard_evaluator()
     return evaluator.should_skip(agent_config, context)
 
 
 def _should_filter_guard(agent_config: dict[str, Any], context: Any) -> bool:
     """Return True if guard evaluates to filter behavior."""
+    from agent_actions.input.preprocessing.filtering.evaluator import get_guard_evaluator
+
     evaluator = get_guard_evaluator()
     return evaluator.should_filter(agent_config, context)
 

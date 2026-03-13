@@ -133,9 +133,9 @@ class TestReadOnlyCommandsNoMutation:
         """auto_create=False skips ensure_path_exists calls."""
         with (
             patch.object(ProjectPathsFactory, "get_agent_paths") as mock_paths,
-            patch("agent_actions.cli.project_paths_factory.PathManager") as mock_pm_cls,
-            patch("agent_actions.cli.project_paths_factory.PathValidator") as mock_pv_cls,
-            patch("agent_actions.cli.project_paths_factory.resolve_absolute_path") as mock_resolve,
+            patch("agent_actions.config.project_paths.PathManager") as mock_pm_cls,
+            patch("agent_actions.validation.path_validator.PathValidator") as mock_pv_cls,
+            patch("agent_actions.config.project_paths.resolve_absolute_path") as mock_resolve,
         ):
             mock_pm = mock_pm_cls.return_value
             mock_pm.get_project_root.return_value = MagicMock()
@@ -572,3 +572,30 @@ class TestAgentRunnerProjectRootPaths:
 
         with pytest.raises(FileSystemError, match="Agent folder not found"):
             runner.get_agent_folder("nonexistent_agent")
+
+
+class TestNoCircularImportAtLoadTime:
+    """Leaf packages must import independently without triggering cycles."""
+
+    @pytest.mark.parametrize(
+        "pkg",
+        [
+            "agent_actions.errors",
+            "agent_actions.models",
+            "agent_actions.guards",
+            "agent_actions.utils",
+            "agent_actions.logging",
+            "agent_actions.config",
+        ],
+    )
+    def test_leaf_package_imports_cleanly(self, pkg):
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [sys.executable, "-c", f"import {pkg}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode == 0, f"Failed to import {pkg}: {result.stderr}"

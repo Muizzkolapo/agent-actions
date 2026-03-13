@@ -1,7 +1,6 @@
 """Passthrough strategies that extract fields from context_scope.passthrough config."""
 
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
-from agent_actions.prompt.context.scope import ContextScopeProcessor
 
 from .base import IPassthroughTransformStrategy
 
@@ -70,6 +69,8 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
     @staticmethod
     def extract_context_scope_fields(agent_config: dict) -> list[str]:
         """Extract field names from context_scope.passthrough."""
+        from agent_actions.prompt.context.scope import ContextScopeProcessor
+
         context_scope = agent_config.get("context_scope", {})
 
         if context_scope and context_scope.get("passthrough"):

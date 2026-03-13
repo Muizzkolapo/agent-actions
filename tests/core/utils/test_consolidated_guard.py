@@ -6,7 +6,7 @@ Following TDD approach - these tests define the expected API and behavior.
 import pytest
 
 from agent_actions.errors import ConfigValidationError, ValidationError
-from agent_actions.output.response.consolidated_guard import (
+from agent_actions.guards import (
     GuardBehavior,
     GuardConfig,
     parse_guard_config,

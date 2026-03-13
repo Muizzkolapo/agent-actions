@@ -5,8 +5,7 @@ from typing import Any
 
 from agent_actions.config.types import AgentEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
-from agent_actions.output.response.consolidated_guard import GuardBehavior, parse_guard_config
-from agent_actions.output.response.guard_parser import GuardParser
+from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
 
 logger = logging.getLogger(__name__)

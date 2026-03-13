@@ -6,7 +6,7 @@ from typing import Any
 import click
 from rich.console import Console
 
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import (
     DuplicateFunctionError,
     FunctionNotFoundError,
