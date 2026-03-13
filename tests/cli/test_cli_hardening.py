@@ -8,7 +8,7 @@ import pytest
 from click.testing import CliRunner
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.prompt.handler import PromptLoader
 
 

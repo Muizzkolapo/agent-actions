@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import (
+from agent_actions.config.project_paths import (
     ProjectPaths,
     ProjectPathsFactory,
     find_config_file,

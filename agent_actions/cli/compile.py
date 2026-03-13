@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.validation.render_validator import RenderCommandArgs

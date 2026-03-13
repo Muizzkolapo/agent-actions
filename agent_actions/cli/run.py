@@ -9,7 +9,7 @@ from typing import Literal, cast
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
+from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
 from agent_actions.logging import LoggerFactory
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.tooling.docs.run_tracker import RunTracker

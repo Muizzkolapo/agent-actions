@@ -8,8 +8,8 @@ import click
 from rich.console import Console
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory, find_config_file
 from agent_actions.cli.renderers import SchemaRenderer
+from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.workflow import WorkflowSchemaService
