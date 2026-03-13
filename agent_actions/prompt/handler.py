@@ -5,7 +5,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
-from agent_actions.output.file_handler import FileHandler
+from agent_actions.utils.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 

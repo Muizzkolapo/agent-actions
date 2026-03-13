@@ -12,7 +12,7 @@ from agent_actions.errors import (
     FileLoadError,
     ValidationError,
 )
-from agent_actions.output.file_handler import FileHandler
+from agent_actions.utils.file_handler import FileHandler
 from agent_actions.utils.path_utils import resolve_absolute_path
 
 logger = logging.getLogger(__name__)

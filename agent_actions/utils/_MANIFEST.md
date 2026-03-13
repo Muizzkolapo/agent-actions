@@ -31,4 +31,5 @@ pathways.
 | `tools_resolver.py` | Module | Normalizes the various `tools`/`tool_path` syntaxes in agent configs. | `configuration`, `validation` |
 | `error_handler.py` | Module | Error handling utilities for configuration and validation errors. | `errors`, `logging` |
 | `error_wrap.py` | Module | Decorator for wrapping validation errors with additional context. | `errors`, `validation` |
+| `file_handler.py` | Module | `FileHandler` static utility for recursive file/folder discovery (stdlib only: logging, os, pathlib). Moved from `output/`. | `file_io` |
 | `project_root.py` | Module | Project root detection utilities (`find_project_root`, `ensure_in_project`). Moved from `cli/`. | `errors` |

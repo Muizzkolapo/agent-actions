@@ -21,8 +21,8 @@ from agent_actions.logging.events import (
     SchemaLoadedEvent,
     SchemaLoadingStartedEvent,
 )
-from agent_actions.output.file_handler import FileHandler
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
+from agent_actions.utils.file_handler import FileHandler
 
 logger = LoggerFactory.get_logger(__name__)
 

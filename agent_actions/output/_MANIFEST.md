@@ -15,7 +15,7 @@ serving schema/guard metadata to downstream tooling.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `file_handler.py` | Module | Helpers for writing output files and ensuring directories exist. | `file_io`, `logging` |
+| `file_handler.py` | Module | Backward-compatibility shim — re-exports `FileHandler` from `utils.file_handler`. | `utils.file_handler` |
 | `saver.py` | Module | Persistent saver for workflow outputs and guard results. | `workflow`, `logging` |
 | `writer.py` | Module | FileWriter for staging/target/source outputs with optional storage backend and relative-path preservation. | `output.response`, `logging` |
 

@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
-from agent_actions.output.file_handler import FileHandler
+from agent_actions.utils.file_handler import FileHandler
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 from agent_actions.workflow.strategies import (
