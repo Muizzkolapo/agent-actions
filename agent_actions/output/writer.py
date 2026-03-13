@@ -8,7 +8,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     FileWriteCompleteEvent,
@@ -76,7 +76,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """Write data to staging file in appropriate format.
 
         Raises:
-            AgentActionsException: If file type is unsupported
+            AgentActionsError: If file type is unsupported
         """
 
         def do_write() -> int:
@@ -92,7 +92,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     writer = csv.writer(file)
                     writer.writerows(data)
                 else:
-                    raise AgentActionsException(
+                    raise AgentActionsError(
                         f"Unsupported file type for staging: {self.file_type} "
                         f"for file {self.file_path}"
                     )

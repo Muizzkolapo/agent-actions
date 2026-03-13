@@ -5,7 +5,7 @@ import csv
 import logging
 from typing import Any
 
-from agent_actions.errors import AgentActionsException, ValidationError
+from agent_actions.errors import AgentActionsError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,7 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                 "file_path": file_path,
                 "loader_type": "tabular",
             }
-            raise AgentActionsException("Invalid CSV data", context=error_context, cause=e) from e
+            raise AgentActionsError("Invalid CSV data", context=error_context, cause=e) from e
         except OSError as e:
             self.handle_processing_error(e, f"reading tabular file {file_path}")
             error_context = {
@@ -55,7 +55,7 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                 "file_path": file_path,
                 "loader_type": "tabular",
             }
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "Could not read tabular file", context=error_context, cause=e
             ) from e
         except Exception as e:
@@ -65,7 +65,7 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
                 "file_path": file_path,
                 "loader_type": "tabular",
             }
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "Failed to process tabular data", context=error_context, cause=e
             ) from e
 

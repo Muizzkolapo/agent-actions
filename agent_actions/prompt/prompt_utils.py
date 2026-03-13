@@ -3,7 +3,7 @@
 import json
 import re
 
-from agent_actions.errors import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsError
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 
 
@@ -62,11 +62,11 @@ class PromptUtils:
                         # result must remain a str.
                         return None
                     return transformed_text
-                except (AgentActionsException, ConfigurationError):
+                except AgentActionsError:
                     # Let known exceptions pass through without wrapping
                     raise
                 except Exception as e:
-                    raise AgentActionsException(
+                    raise AgentActionsError(
                         f"An unexpected error occurred in function '{function_name}': {str(e)}"
                     ) from e
 
@@ -87,11 +87,11 @@ class PromptUtils:
                 if transformed_text is None:
                     transformed_text = "Error: No valid return from function."
                 text = text[:start] + str(transformed_text) + text[end:]
-            except (AgentActionsException, ConfigurationError):
+            except AgentActionsError:
                 # Let known exceptions pass through without wrapping
                 raise
             except Exception as e:
-                raise AgentActionsException(
+                raise AgentActionsError(
                     f"An unexpected error occurred in function '{function_name}': {str(e)}"
                 ) from e
         return text

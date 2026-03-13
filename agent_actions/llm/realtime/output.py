@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.output.writer import FileWriter
 
 if TYPE_CHECKING:
@@ -65,7 +65,7 @@ class OutputHandler:
             )
             file_writer.write_target(data)
         except OSError as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "IOError saving main output",
                 context={
                     "output_file_path": str(output_file_path),
@@ -75,7 +75,7 @@ class OutputHandler:
                 cause=e,
             ) from e
         except Exception as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "Error saving main output",
                 context={
                     "output_file_path": str(output_file_path),

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.llm.providers.tools.client import ToolClient
 from agent_actions.processing.types import ProcessingContext, ProcessingStatus
 from agent_actions.utils.udf_management.registry import FileUDFResult
@@ -90,7 +90,7 @@ def test_file_mode_error_surfaces():
         "agent_actions.workflow.pipeline.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
-        with pytest.raises(AgentActionsException, match="connection refused"):
+        with pytest.raises(AgentActionsError, match="connection refused"):
             pipeline._process_file_mode_tool(input_data, input_data, context)
 
 
@@ -104,7 +104,7 @@ def test_file_mode_error_includes_context():
         "agent_actions.workflow.pipeline.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
-        with pytest.raises(AgentActionsException) as exc_info:
+        with pytest.raises(AgentActionsError) as exc_info:
             pipeline._process_file_mode_tool(input_data, input_data, context)
 
     assert exc_info.value.context["agent_name"] == "my_file_tool"

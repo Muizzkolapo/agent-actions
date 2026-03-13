@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
@@ -420,7 +420,7 @@ def _prepare_batch_data(ctx: DataPreparationContext):
 
     else:
         supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
-        raise AgentActionsException(
+        raise AgentActionsError(
             "Unsupported file type in staging loader",
             context={
                 "file_type": ctx.file_type,
@@ -510,7 +510,7 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
 
     else:
         supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
-        raise AgentActionsException(
+        raise AgentActionsError(
             "Unsupported file type in staging loader",
             context={
                 "file_type": ctx.file_type,
@@ -539,7 +539,7 @@ def _write_passthrough_result(
 ):
     """Write passthrough result and record disposition."""
     if storage_backend is None or action_name is None:
-        raise AgentActionsException(
+        raise AgentActionsError(
             "Storage backend is required for passthrough writes.",
             context={
                 "file_path": str(output_file_path),
@@ -633,7 +633,7 @@ def _process_realtime_mode_with_record_processor(
     )
 
     if ctx.storage_backend is None:
-        raise AgentActionsException(
+        raise AgentActionsError(
             "Storage backend is required for realtime initial-stage writes.",
             context={
                 "file_path": str(output_file_path),

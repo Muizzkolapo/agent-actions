@@ -4,7 +4,7 @@ import collections
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     ExhaustedRecordEvent,
@@ -75,7 +75,7 @@ class ResultCollector:
         """Flatten ProcessingResult entries into output records.
 
         Raises:
-            AgentActionsException: If on_exhausted=raise and records exhausted retries.
+            AgentActionsError: If on_exhausted=raise and records exhausted retries.
         """
         fire_event(
             ResultCollectionStartedEvent(
@@ -295,7 +295,7 @@ class ResultCollector:
                     )
 
         first = exhausted_results[0]
-        raise AgentActionsException(
+        raise AgentActionsError(
             f"Retry exhausted for record {first.source_guid} after "
             f"{_get_retry_attempts(first)} attempts (on_exhausted=raise)",
             context={

@@ -15,7 +15,7 @@ in agent config, then passed to execute_user_defined_function().
 import pytest
 
 from agent_actions.config.schema import Granularity
-from agent_actions.errors import AgentActionsException, SchemaValidationError
+from agent_actions.errors import AgentActionsError, SchemaValidationError
 from agent_actions.utils.udf_management.registry import clear_registry, udf_tool
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
 
@@ -256,7 +256,7 @@ class TestErrorHandling:
         def failing_function(data):
             raise ValueError("Something went wrong")
 
-        with pytest.raises(AgentActionsException) as exc_info:
+        with pytest.raises(AgentActionsError) as exc_info:
             execute_user_defined_function("failing_function", {"text": "test"})
 
         error_msg = str(exc_info.value)

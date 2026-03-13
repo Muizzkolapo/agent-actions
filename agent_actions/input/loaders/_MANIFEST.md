@@ -16,7 +16,7 @@ processing.
 | `file_reader.py` | Module | Convenience reader for PDFs, DOCX, HTML, Excel, XML, Markdown, and other user-facing file types with rich error handling. | `processors`, `logging` |
 | `json.py` | Module | `JsonLoader` that parses JSON strings or files via `process(content, file_path)`, returning parsed dicts/lists with structured error reporting. | `errors`, `json` |
 | `source_data.py` | Module | `SourceDataLoader` that loads/saves source data via storage backend (`read_source`/`write_source`), requiring a `StorageBackend` at init. | `config.interfaces`, `errors`, `storage.backend` |
-| `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsException`. | `errors`, `logging` |
+| `tabular.py` | Module | `TabularLoader` for CSV/TSV content; reads via `csv.DictReader` and wraps parsing errors in `AgentActionsError`. | `errors`, `logging` |
 | `text.py` | Module | `TextLoader` for plain text/markdown/HTML content with the same fallback/validation pattern as other loaders. | `errors` |
 | `udf.py` | Module | Discovers user-defined functions (UDFs) under `user_code` by importing discovered modules and validating `impl` references. | `utils.module_loader`, `utils.udf_management`, `errors` |
 | `xml.py` | Module | `XmlLoader` that parses XML text into `ElementTree` roots, exposes helper for turning elements to dicts, and surfaces parse metadata. | `errors`, `xml` |

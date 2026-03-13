@@ -6,7 +6,7 @@ import re
 
 import tiktoken
 
-from agent_actions.errors import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.utils.module_loader import load_module_from_directory
 
 # Optional dependencies
@@ -75,7 +75,7 @@ class StringProcessor:
                 cause=e,
             ) from e
         except ValueError as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"Error executing user function '{function_name}'",
                 context={"function_name": function_name, "operation": "call_user_function"},
                 cause=e,
@@ -100,7 +100,7 @@ class Tokenizer:
             ) from e
         except KeyError as e:
             string_preview = string[:100] if len(string) > 100 else string
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "Tokenization error",
                 context={
                     "string_preview": string_preview,
@@ -151,7 +151,7 @@ class Tokenizer:
             )
         except KeyError as e:
             text_preview = text[:100] if len(text) > 100 else text
-            raise AgentActionsException(
+            raise AgentActionsError(
                 "Text splitting error",
                 context={
                     "text_preview": text_preview,
@@ -171,7 +171,7 @@ class Tokenizer:
         try:
             tokens = encoding.encode(text)
         except ValueError as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"Error encoding text with tiktoken model '{tokenizer_model}'",
                 context={"tokenizer_model": tokenizer_model, "operation": "_split_with_tiktoken"},
                 cause=e,
@@ -267,7 +267,7 @@ class Tokenizer:
                 cause=e,
             ) from e
         except Exception as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"Error executing custom split_method '{split_method}'",
                 context={"split_method": split_method, "operation": "_split_with_custom_method"},
                 cause=e,

@@ -74,13 +74,9 @@ from agent_actions.errors.validation import (
     ValidationError,
 )
 
-# Backward compatibility aliases
-AgentActionsException = AgentActionsError  # Deprecated: use AgentActionsError directly
-
 __all__ = [
     # Base
     "AgentActionsError",
-    "AgentActionsException",  # Alias for backward compatibility
     "get_error_detail",
     # Common
     "InvalidParameterError",

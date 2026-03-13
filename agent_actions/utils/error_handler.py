@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, TypeVar
 
 from agent_actions.errors import (
-    AgentActionsException,
+    AgentActionsError,
     AgentExecutionError,
     ConfigurationError,
     FileLoadError,
@@ -16,7 +16,7 @@ from agent_actions.errors import (
 )
 
 logger = logging.getLogger(__name__)
-T = TypeVar("T", bound=AgentActionsException)
+T = TypeVar("T", bound=AgentActionsError)
 
 
 class ErrorHandler:
@@ -36,14 +36,14 @@ class ErrorHandler:
         error_type: type[T] | None = None,
         context: dict[str, Any] | None = None,
     ) -> None:
-        """Log and re-raise as *error_type* (or AgentActionsException)."""
+        """Log and re-raise as *error_type* (or AgentActionsError)."""
         error_details = {"error": get_error_detail(error), **(context or {})}
         # DEBUG only; the top-level handler (main.py) logs at ERROR
         logger.debug("%s: %s", message, get_error_detail(error), extra=error_details)
         if error_type:
             raise error_type(f"{message}: {get_error_detail(error)}", context=context, cause=error)
 
-        raise AgentActionsException(
+        raise AgentActionsError(
             f"{message}: {get_error_detail(error)}", context=context, cause=error
         )
 

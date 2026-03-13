@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import AgentConfigDict
-from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError
+from agent_actions.errors import AgentActionsError, ConfigurationError, DependencyError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.service import BatchService
 from agent_actions.llm.realtime.output import OutputHandler
@@ -299,8 +299,8 @@ class ProcessingPipeline:
             self._process_by_strategy(data, file_path, base_directory, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             return str(Path(output_directory) / relative_path)
-        except (AgentActionsException, ConfigurationError, ValueError) as e:
-            raise AgentActionsException(
+        except (AgentActionsError, ValueError) as e:
+            raise AgentActionsError(
                 f"Error generating target: {safe_format_error(e)}",
                 context={
                     "file_path": str(file_path),
@@ -311,7 +311,7 @@ class ProcessingPipeline:
                 cause=e,
             ) from e
         except (OSError, TypeError, KeyError) as e:
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"Unexpected error generating target: {safe_format_error(e)}",
                 context={
                     "file_path": str(file_path),
@@ -655,7 +655,7 @@ class ProcessingPipeline:
             # instead of returning FAILED silently. Workflows relying on partial-failure
             # tolerance should use try/except or error handling at the caller level.
             logger.error("FILE mode tool '%s' failed: %s", context.agent_name, e)
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"FILE mode tool '{context.agent_name}' failed: {e}",
                 context={
                     "agent_name": context.agent_name,
@@ -726,7 +726,7 @@ class ProcessingPipeline:
                 reviewed = sum(
                     1 for r in (decision_payload.get("record_reviews") or []) if r is not None
                 )
-                raise AgentActionsException(
+                raise AgentActionsError(
                     f"HITL review timed out ({reviewed}/{len(data)} records reviewed). "
                     "Partial reviews saved. Re-run workflow to resume.",
                     context={
@@ -813,7 +813,7 @@ class ProcessingPipeline:
 
             result = self.record_processor.enrichment_pipeline.enrich(result, context)
             return [result]
-        except AgentActionsException:
+        except AgentActionsError:
             raise
         except Exception as e:
             logger.error("Error in FILE mode HITL processing: %s", e)

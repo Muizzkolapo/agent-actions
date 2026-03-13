@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsError, ConfigurationError
 from agent_actions.utils.safe_format import safe_format_error
 
 
@@ -80,7 +80,7 @@ def execute_user_defined_function(
 
     Raises:
         SchemaValidationError: If output validation fails.
-        AgentActionsException: If execution fails.
+        AgentActionsError: If execution fails.
     """
     from agent_actions.utils.udf_management.registry import get_udf_metadata
 
@@ -91,7 +91,7 @@ def execute_user_defined_function(
     try:
         result = udf(input_data, **kwargs)
     except Exception as e:
-        raise AgentActionsException(
+        raise AgentActionsError(
             f"Error executing UDF '{udf_name}': {safe_format_error(e)}",
             context={
                 "function": udf_name,

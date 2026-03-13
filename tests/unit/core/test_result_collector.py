@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 from agent_actions.processing.result_collector import ResultCollector
 from agent_actions.processing.types import (
@@ -196,7 +196,7 @@ def test_exhausted_record_builder_build_empty_content():
 
 
 def test_result_collector_on_exhausted_raise():
-    """Test that on_exhausted=raise throws AgentActionsException."""
+    """Test that on_exhausted=raise throws AgentActionsError."""
     agent_config = {
         "agent_type": "test_action",
         "retry": {"on_exhausted": "raise"},
@@ -208,7 +208,7 @@ def test_result_collector_on_exhausted_raise():
         input_record={"target_id": "t-1"},
     )
 
-    with pytest.raises(AgentActionsException) as exc_info:
+    with pytest.raises(AgentActionsError) as exc_info:
         ResultCollector.collect_results(
             [exhausted],
             agent_config,
@@ -235,7 +235,7 @@ def test_result_collector_on_exhausted_raise_writes_disposition_before_raising()
 
     mock_backend = MagicMock()
 
-    with pytest.raises(AgentActionsException):
+    with pytest.raises(AgentActionsError):
         ResultCollector.collect_results(
             [exhausted],
             agent_config,

@@ -10,7 +10,7 @@ import PyPDF2
 from bs4 import BeautifulSoup
 from docx import Document
 
-from agent_actions.errors import AgentActionsException
+from agent_actions.errors import AgentActionsError
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 
 
@@ -56,7 +56,7 @@ class FileReader(ProcessorErrorHandlerMixin):
                 "file_type": self.file_type,
                 "operation": "read",
             }
-            raise AgentActionsException(
+            raise AgentActionsError(
                 f"Unsupported file type: {self.file_type}", context=error_context
             )
 
@@ -79,7 +79,7 @@ class FileReader(ProcessorErrorHandlerMixin):
                     "status": data.get("status"),
                     "operation": "read_json",
                 }
-                raise AgentActionsException(error_msg, context=error_context)
+                raise AgentActionsError(error_msg, context=error_context)
             return data
 
     def _read_text(self):
