@@ -202,7 +202,7 @@ class PreviewCommand:
         self.console.print(syntax)
 
     def _show_raw(self, records: list) -> None:
-        print(json.dumps(records, ensure_ascii=False))
+        click.echo(json.dumps(records, ensure_ascii=False))
 
 
 @click.command()

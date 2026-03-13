@@ -88,7 +88,7 @@ class CLI:
     def _handle_termination(self, signum: int, _frame) -> None:
         signal_name = signal.Signals(signum).name
         self.logger.info("Received termination signal: %s", signal_name)
-        print(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
+        click.echo(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
         sys.exit(130)
 
     def _configure_logging(self, argv: Sequence[str]) -> None:
@@ -113,7 +113,7 @@ class CLI:
         self.logger = LoggerFactory.get_logger("cli")
 
     def _show_version_and_exit(self) -> int:
-        print(f"Agent Actions CLI v{__version__}")
+        click.echo(f"Agent Actions CLI v{__version__}")
         return 0
 
     def execute(self, argv: Sequence[str] | None = None) -> int:
@@ -138,10 +138,10 @@ class CLI:
             return 130
         except click.UsageError as e:
             self.logger.error("Usage error: %s", str(e))
-            print(f"Error: {str(e)}", file=sys.stderr)
+            click.echo(f"Error: {str(e)}", err=True)
             return 2
         except click.ClickException as e:
-            print(f"Error: {e.format_message()}", file=sys.stderr)
+            click.echo(f"Error: {e.format_message()}", err=True)
             return e.exit_code if hasattr(e, "exit_code") else 1
         except ProjectNotFoundError as e:
             self.logger.info("Not in project directory")
@@ -159,7 +159,7 @@ class CLI:
                 f"Current directory: {search_path}\n\n"
                 f"Solutions:\n  1. {solution_1}\n  2. {solution_2}"
             )
-            print(click.style("Error: ", fg="red", bold=True) + error_msg, file=sys.stderr)
+            click.echo(click.style("Error: ", fg="red", bold=True) + error_msg, err=True)
             return 1
         except Exception as e:
             context = {
@@ -168,7 +168,7 @@ class CLI:
             }
 
             error_message = format_user_error(e, context)
-            print(f"Error: {error_message}", file=sys.stderr)
+            click.echo(f"Error: {error_message}", err=True)
 
             if "--debug" in (argv or []):
                 self.logger.exception("CLI execution failed", extra={"error": str(e)})

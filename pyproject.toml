@@ -186,10 +186,15 @@ select = [
     "UP",   # pyupgrade
     "LOG",  # flake8-logging rules
     "G",    # flake8-logging-format rules
+    "T20",  # flake8-print (bans bare print())
 ]
 ignore = [
     "G004",  # Allow f-strings in logging (project standard)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["LOG", "G"]
+"tests/*" = ["LOG", "G", "T201"]
+"agent_actions/skills/agent-actions-workflow/scripts/*" = ["T201"]
+"agent_actions/logging/core/handlers/*" = ["T201"]
+".claude/*" = ["T201"]
+"examples/*" = ["T201"]
