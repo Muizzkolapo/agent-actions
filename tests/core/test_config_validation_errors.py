@@ -95,9 +95,7 @@ class TestSchemaPreValidationErrors:
 
     def _make_manager(self, actions, defaults=None):
         """Create a ConfigManager with a new-format workflow config."""
-        # Import order avoids circular import between coordinator and ConfigManager.
-        import agent_actions.workflow.coordinator  # noqa: F401
-        from agent_actions.llm.realtime.config import ConfigManager
+        from agent_actions.config.manager import ConfigManager
 
         mgr = ConfigManager("test_workflow.yml", "")
         mgr.user_config = {

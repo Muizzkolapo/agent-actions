@@ -418,27 +418,11 @@ class TestFindAgentNameEmptyConfig:
     """
 
     def _get_find_agent_name(self):
-        """Get the find_agent_name function, working around circular import."""
-        import importlib
-        import sys
+        """Get the find_agent_name function."""
+        from agent_actions.config.manager import ConfigManager
 
-        # The circular import is: config -> workflow.models -> workflow.__init__
-        # -> workflow.coordinator -> config. We mock the coordinator import.
-        sentinel = object()
-        old = sys.modules.get("agent_actions.workflow.coordinator", sentinel)
-        sys.modules["agent_actions.workflow.coordinator"] = MagicMock()
-        try:
-            if "agent_actions.llm.realtime.config" in sys.modules:
-                importlib.reload(sys.modules["agent_actions.llm.realtime.config"])
-            from agent_actions.llm.realtime.config import ConfigManager
-
-            mgr = ConfigManager.__new__(ConfigManager)
-            return mgr.find_agent_name
-        finally:
-            if old is sentinel:
-                sys.modules.pop("agent_actions.workflow.coordinator", None)
-            else:
-                sys.modules["agent_actions.workflow.coordinator"] = old
+        mgr = ConfigManager.__new__(ConfigManager)
+        return mgr.find_agent_name
 
     def test_raises_on_empty_config(self):
         from agent_actions.errors import ConfigurationError

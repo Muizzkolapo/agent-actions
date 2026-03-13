@@ -30,10 +30,7 @@ def test_expand_actions_to_agents_allows_hitl_without_llm_required_fields():
 
 def test_get_all_agent_configs_forces_kind_vendor_mapping():
     """kind=tool/hitl should override inherited/default model_vendor values."""
-    # Import order avoids circular import between workflow.coordinator and ConfigManager.
-    # Trigger coordinator import first to avoid circular import with ConfigManager.
-    import agent_actions.workflow.coordinator  # noqa: F401
-    from agent_actions.llm.realtime.config import ConfigManager
+    from agent_actions.config.manager import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -63,10 +60,8 @@ def test_get_all_agent_configs_forces_kind_vendor_mapping():
 
 def test_get_all_agent_configs_raises_on_none_model_vendor():
     """LLM actions with model_vendor=None should raise ConfigurationError."""
-    # Trigger coordinator import first to avoid circular import with ConfigManager.
-    import agent_actions.workflow.coordinator  # noqa: F401
+    from agent_actions.config.manager import ConfigManager
     from agent_actions.errors import ConfigurationError
-    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -86,9 +81,7 @@ def test_get_all_agent_configs_raises_on_none_model_vendor():
 
 def test_get_all_agent_configs_allows_none_vendor_for_tool_and_hitl():
     """tool/hitl actions should not raise even when model_vendor is None."""
-    # Trigger coordinator import first to avoid circular import with ConfigManager.
-    import agent_actions.workflow.coordinator  # noqa: F401
-    from agent_actions.llm.realtime.config import ConfigManager
+    from agent_actions.config.manager import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -107,10 +100,8 @@ def test_get_all_agent_configs_allows_none_vendor_for_tool_and_hitl():
 
 def test_get_all_agent_configs_raises_on_empty_string_model_vendor():
     """LLM actions with model_vendor='' should also raise ConfigurationError."""
-    # Trigger coordinator import first to avoid circular import with ConfigManager.
-    import agent_actions.workflow.coordinator  # noqa: F401
+    from agent_actions.config.manager import ConfigManager
     from agent_actions.errors import ConfigurationError
-    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {
@@ -130,10 +121,8 @@ def test_get_all_agent_configs_raises_on_empty_string_model_vendor():
 
 def test_get_all_agent_configs_raises_when_kind_is_none():
     """Actions with kind=None (absent/unset) should still validate model_vendor."""
-    # Trigger coordinator import first to avoid circular import with ConfigManager.
-    import agent_actions.workflow.coordinator  # noqa: F401
+    from agent_actions.config.manager import ConfigManager
     from agent_actions.errors import ConfigurationError
-    from agent_actions.llm.realtime.config import ConfigManager
 
     manager = ConfigManager(constructor_path="unused.yml", default_path="")
     manager.agent_configs = {

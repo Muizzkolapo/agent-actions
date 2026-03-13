@@ -14,7 +14,6 @@ from agent_actions.llm.batch.core.batch_models import (
 )
 from agent_actions.processing.prepared_task import GuardStatus, PreparationContext
 from agent_actions.processing.task_preparer import TaskPreparer, get_task_preparer
-from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.utils.id_generation import IDGenerator
 from agent_actions.utils.tools_resolver import resolve_tools_path
@@ -84,6 +83,8 @@ class BatchTaskPreparator:
 
         # Validate configuration
         self._validate_config(agent_config, provider)
+
+        from agent_actions.prompt.formatter import PromptFormatter
 
         PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 

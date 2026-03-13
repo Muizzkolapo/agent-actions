@@ -6,7 +6,6 @@ import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.llm.batch.service import BatchService
-from agent_actions.validation.batch_validator import BatchCommandArgs
 
 
 @click.group()
@@ -23,6 +22,8 @@ def batch():
 @requires_project
 def status(batch_id: str = None, project_root: Path | None = None):
     """Checks the status of a running batch job."""
+    from agent_actions.validation.batch_validator import BatchCommandArgs
+
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
@@ -45,6 +46,8 @@ def retrieve(batch_id: str = None, project_root: Path | None = None):
     Results are saved to the workflow's configured output directory to maintain
     consistency with the batch registry.
     """
+    from agent_actions.validation.batch_validator import BatchCommandArgs
+
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")

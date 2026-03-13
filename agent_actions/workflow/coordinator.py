@@ -12,10 +12,10 @@ from uuid import uuid4
 from rich.console import Console
 
 from agent_actions.config.factory import create_agent_runner
+from agent_actions.config.manager import ConfigManager
 from agent_actions.errors import get_error_detail
 from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.loaders.udf import discover_udfs
-from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import (
     AgentCompleteEvent,

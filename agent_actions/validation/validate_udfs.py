@@ -6,6 +6,7 @@ from typing import Any
 import click
 from rich.console import Console
 
+from agent_actions.config.manager import ConfigManager
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import (
     DuplicateFunctionError,
@@ -16,7 +17,6 @@ from agent_actions.input.loaders.udf import (
     discover_udfs,
     validate_udf_references,
 )
-from agent_actions.llm.realtime.config import ConfigManager
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.errors import format_user_error
 from agent_actions.logging.events import ValidationCompleteEvent, ValidationStartEvent
