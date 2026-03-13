@@ -165,16 +165,6 @@ class GuardParser:
                 },
             )
 
-    @classmethod
-    def is_udf_guard(cls, guard: str) -> bool:
-        """Check if a guard expression is a UDF."""
-        return bool(guard and guard.strip().startswith(cls.UDF_PREFIX))
-
-    @classmethod
-    def is_sql_guard(cls, guard: str) -> bool:
-        """Check if a guard expression is SQL-like."""
-        return bool(guard and (not guard.strip().startswith(cls.UDF_PREFIX)))
-
 
 def parse_guard(guard: str) -> GuardExpression:
     """Convenience function to parse guard expressions."""
