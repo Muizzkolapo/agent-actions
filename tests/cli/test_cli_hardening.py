@@ -464,7 +464,7 @@ class TestProjectRootDictInjectionRoundTrip:
 
             agent_configs = {"action_a": {"agent_type": "test"}}
 
-            # Simulate the injection logic from _load_configs
+            # Simulate the injection logic from config_pipeline.load_workflow_configs
             for _name, config in agent_configs.items():
                 if config is None:
                     continue

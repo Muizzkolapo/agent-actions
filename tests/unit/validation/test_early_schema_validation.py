@@ -5,27 +5,21 @@ Tests for issue #790: Schema validation should fail during config validation,
 not at runtime.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.workflow.config_pipeline import validate_schema_files
 
 
-def _create_mock_workflow(constructor_path, agent_configs):
-    """Create a mock AgentWorkflow with given agent_configs."""
-    from agent_actions.workflow.coordinator import AgentWorkflow
-
-    with patch.object(AgentWorkflow, "__init__", lambda self: None):
-        workflow = AgentWorkflow()
-        workflow.config = MagicMock()
-        workflow.config.paths.constructor_path = constructor_path
-        workflow.config.manager.project_root = None
-        workflow.config.project_root = None
-        workflow.metadata = MagicMock()
-        workflow.metadata.agent_configs = agent_configs
-        workflow.__class__.agent_configs = property(lambda self: self.metadata.agent_configs)
-        return workflow
+def _create_mock_config_and_agents(constructor_path, agent_configs):
+    """Create a mock WorkflowConfig and agent_configs dict for validate_schema_files."""
+    config = MagicMock()
+    config.paths.constructor_path = constructor_path
+    config.manager.project_root = None
+    config.project_root = None
+    return config, agent_configs
 
 
 class TestSchemaValidationLogic:
@@ -59,23 +53,23 @@ class TestWorkflowSchemaValidation:
     """Test schema validation in AgentWorkflow context."""
 
     def test_validate_schema_files_raises_on_missing(self):
-        """Verify _validate_schema_files raises ConfigValidationError for missing schemas."""
-        workflow = _create_mock_workflow(
+        """Verify validate_schema_files raises ConfigValidationError for missing schemas."""
+        config, agents = _create_mock_config_and_agents(
             "/fake/agent_workflow/test/agent_config/test.yml",
             {"test_action": {"schema_name": "nonexistent_schema"}},
         )
         with pytest.raises(ConfigValidationError) as exc_info:
-            workflow._validate_schema_files()
+            validate_schema_files(agents, config)
         assert "nonexistent_schema" in str(exc_info.value)
         assert "test_action" in str(exc_info.value)
 
     def test_validate_schema_files_passes_when_no_schemas(self):
         """Verify validation passes when no schema_name fields are present."""
-        workflow = _create_mock_workflow(
+        config, agents = _create_mock_config_and_agents(
             "/fake/agent_workflow/test/agent_config/test.yml",
             {"test_action": {"agent_type": "test"}},
         )
-        workflow._validate_schema_files()
+        validate_schema_files(agents, config)
 
     def test_validate_schema_files_passes_when_schema_exists(self, tmp_path):
         """Verify validation passes when schema file exists."""
@@ -83,12 +77,12 @@ class TestWorkflowSchemaValidation:
         schema_dir.mkdir()
         (schema_dir / "my_schema.yml").write_text("name: my_schema")
 
-        workflow = _create_mock_workflow(
+        config, agents = _create_mock_config_and_agents(
             str(tmp_path / "config.yml"),
             {"test_action": {"schema_name": "my_schema"}},
         )
-        workflow.config.manager.project_root = tmp_path
-        workflow._validate_schema_files()
+        config.manager.project_root = tmp_path
+        validate_schema_files(agents, config)
 
 
 class TestErrorMessage:
@@ -96,7 +90,7 @@ class TestErrorMessage:
 
     def test_error_message_includes_action_and_schema(self):
         """Verify error message is clear and actionable."""
-        workflow = _create_mock_workflow(
+        config, agents = _create_mock_config_and_agents(
             "/fake/project/agent_workflow/wf/agent_config/wf.yml",
             {
                 "extract_data": {"schema_name": "missing_schema_1"},
@@ -104,7 +98,7 @@ class TestErrorMessage:
             },
         )
         with pytest.raises(ConfigValidationError) as exc_info:
-            workflow._validate_schema_files()
+            validate_schema_files(agents, config)
 
         error_msg = str(exc_info.value)
         assert "missing_schema_1" in error_msg

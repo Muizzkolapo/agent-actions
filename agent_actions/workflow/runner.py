@@ -91,7 +91,7 @@ class AgentRunner:
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
-        self.project_root: Path | None = None  # Set by AgentWorkflow._initialize_services
+        self.project_root: Path | None = None  # Set by service_init.initialize_services
         self.strategies: dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
