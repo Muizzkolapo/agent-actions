@@ -14,12 +14,12 @@ class ConfigValidationError(ConfigurationError):
 
     def __init__(
         self,
-        message: str = None,
-        reason: str = None,
+        message: str | None = None,
+        reason: str | None = None,
         *,
-        config_key: str = None,
-        context: dict = None,
-        cause: Exception = None,
+        config_key: str | None = None,
+        context: dict | None = None,
+        cause: Exception | None = None,
     ):
         ctx = dict(context) if context else {}
         if reason is not None:
@@ -30,7 +30,7 @@ class ConfigValidationError(ConfigurationError):
             msg = f"Configuration validation failed for '{config_key}'"
             ctx["config_key"] = config_key
         else:
-            msg = message
+            msg = message or ""
         super().__init__(msg, context=ctx, cause=cause)
 
 
@@ -39,15 +39,15 @@ class DuplicateFunctionError(ConfigurationError):
 
     def __init__(
         self,
-        message: str = None,
+        message: str | None = None,
         *,
-        function_name: str = None,
-        existing_location: str = None,
-        existing_file: str = None,
-        new_location: str = None,
-        new_file: str = None,
-        context: dict = None,
-        cause: Exception = None,
+        function_name: str | None = None,
+        existing_location: str | None = None,
+        existing_file: str | None = None,
+        new_location: str | None = None,
+        new_file: str | None = None,
+        context: dict | None = None,
+        cause: Exception | None = None,
     ):
         if function_name:
             msg = f"Duplicate UDF function name detected: '{function_name}'"
@@ -72,7 +72,7 @@ class DuplicateFunctionError(ConfigurationError):
             )
             super().__init__(msg, context=ctx, cause=cause)
         else:
-            super().__init__(message, context=context, cause=cause)
+            super().__init__(message or "", context=context, cause=cause)
 
 
 class FunctionNotFoundError(ConfigurationError):
@@ -86,13 +86,13 @@ class UDFLoadError(ConfigurationError):
 
     def __init__(
         self,
-        message: str = None,
+        message: str | None = None,
         *,
-        module: str = None,
-        file: str = None,
-        error: str = None,
-        context: dict = None,
-        cause: Exception = None,
+        module: str | None = None,
+        file: str | None = None,
+        error: str | None = None,
+        context: dict | None = None,
+        cause: Exception | None = None,
     ):
         if module and error:
             msg = f"Failed to load UDF module '{module}': {error}"
@@ -102,7 +102,7 @@ class UDFLoadError(ConfigurationError):
             ctx.update({"module": module, "file": file, "error": error})
             super().__init__(msg, context=ctx, cause=cause)
         else:
-            super().__init__(message, context=context, cause=cause)
+            super().__init__(message or "", context=context, cause=cause)
 
 
 class AgentNotFoundError(ConfigurationError):

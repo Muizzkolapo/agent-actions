@@ -276,7 +276,7 @@ class ReferenceExtractor:
 
         for ref in references:
             if not isinstance(ref, str):
-                continue
+                continue  # type: ignore[unreachable]
 
             if "." in ref:
                 original_ref = ref

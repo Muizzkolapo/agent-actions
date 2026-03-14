@@ -37,9 +37,9 @@ def safe_format_error(exc: Any) -> str:
 def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
     """Walk exception chain to find root cause, handling circular references safely."""
     if not isinstance(exc, Exception):
-        return exc
+        return exc  # type: ignore[unreachable]
 
-    visited: set[id] = set()
+    visited: set[int] = set()
     current = exc
     depth = 0
 
@@ -69,20 +69,20 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
         if next_exc is None:
             break
 
-        current = next_exc
+        current = next_exc  # type: ignore[assignment]
         depth += 1
 
-    return current
+    return current  # type: ignore[return-value]
 
 
 def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
     """Get the full exception chain as a list, from outermost to root cause."""
     if not isinstance(exc, Exception):
-        return [exc]
+        return [exc]  # type: ignore[unreachable]
 
     chain = []
-    visited: set[id] = set()
-    current = exc
+    visited: set[int] = set()
+    current: BaseException | None = exc
     depth = 0
 
     while depth < max_depth and current is not None:
@@ -111,7 +111,7 @@ def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
 def safe_get_exception_message(exc: Exception) -> str:
     """Safely extract just the message portion of an exception."""
     if not isinstance(exc, Exception):
-        return safe_format_error(exc)
+        return safe_format_error(exc)  # type: ignore[unreachable]
 
     try:
         if hasattr(exc, "args") and exc.args:

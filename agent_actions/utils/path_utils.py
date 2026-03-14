@@ -144,7 +144,7 @@ def topological_sort(dependencies: dict[T, list[T]]) -> list[T]:
         WorkflowError: If a cyclic dependency is detected.
     """
     if not isinstance(dependencies, dict):
-        from agent_actions.errors import DataValidationError
+        from agent_actions.errors import DataValidationError  # type: ignore[unreachable]
 
         message = (
             f"Invalid type for dependencies: expected dictionary, got {type(dependencies).__name__}"

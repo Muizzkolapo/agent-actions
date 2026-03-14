@@ -1,5 +1,7 @@
 """Operational errors for agent execution and template rendering."""
 
+from typing import Any
+
 from agent_actions.errors.base import AgentActionsError
 
 
@@ -32,10 +34,10 @@ class TemplateVariableError(TemplateRenderingError):
         agent_name: str,
         mode: str,
         cause: Exception,
-        namespace_context: dict = None,
-        template_line: int = None,
-        field_context_metadata: dict = None,
-        storage_hints: dict = None,
+        namespace_context: dict | None = None,
+        template_line: int | None = None,
+        field_context_metadata: dict | None = None,
+        storage_hints: dict | None = None,
     ):
         """
         Initialize TemplateVariableError.
@@ -61,7 +63,7 @@ class TemplateVariableError(TemplateRenderingError):
         self.field_context_metadata = field_context_metadata or {}
         self.storage_hints = storage_hints or {}
 
-        ctx = {
+        ctx: dict[str, Any] = {
             "missing_variables": missing_variables,
             "available_variables": available_variables,
             "agent_name": agent_name,

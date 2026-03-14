@@ -217,7 +217,7 @@ class MetadataExtractor:
         if agent_config:
             model_vendor = agent_config.get("model_vendor", "")
             if model_vendor:
-                lower_vendor = model_vendor.lower()
+                lower_vendor: str = model_vendor.lower()
                 return cls.PROVIDER_ALIASES.get(lower_vendor, lower_vendor)
 
         return None

@@ -35,7 +35,7 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         result = []
         for item in data:
             if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
-                merged = {**item, "content": {**item["content"], **passthrough_fields}}
+                merged = {**item, "content": {**item["content"], **(passthrough_fields or {})}}
                 result.append(merged)
             else:
                 result.append(item)
@@ -72,7 +72,7 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
         merged = []
         for item in data:
             if isinstance(item, dict):
-                merged_item = {**item, **passthrough_fields}
+                merged_item = {**item, **(passthrough_fields or {})}
                 merged.append(merged_item)
             else:
                 merged.append(item)

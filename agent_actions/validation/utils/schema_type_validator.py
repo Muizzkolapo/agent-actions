@@ -86,7 +86,7 @@ class SchemaTypeValidator:
 
         # Validate it's a dictionary
         if not isinstance(properties_dict, dict):
-            return False
+            return False  # type: ignore[unreachable]
 
         # Validate each property
         return self._validate_object_properties(properties_dict)
@@ -105,14 +105,14 @@ class SchemaTypeValidator:
         """
         # Try JSON parsing first
         try:
-            return json.loads(properties_str)
+            return json.loads(properties_str)  # type: ignore[no-any-return]
         except (ValueError, json.JSONDecodeError) as e:
             # Fall through to try Python literal eval
             _ = e  # Suppress unused variable warning
 
         # Fallback to Python literal eval
         try:
-            return ast.literal_eval(properties_str)
+            return ast.literal_eval(properties_str)  # type: ignore[no-any-return]
         except (ValueError, SyntaxError):
             return None
 
@@ -136,7 +136,7 @@ class SchemaTypeValidator:
         for prop_name, prop_type in properties.items():
             # Check property name is string
             if not isinstance(prop_name, str):
-                return False
+                return False  # type: ignore[unreachable]
 
             # Check property type is string
             if not isinstance(prop_type, str):

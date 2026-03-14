@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-import jsonschema
+import jsonschema  # type: ignore[import-untyped]
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -176,7 +176,7 @@ class SchemaValidator(BaseValidator):
     def _is_valid_json_schema_structure(schema_data: dict[str, Any]) -> bool:
         """Return True if the dict appears to be a JSON Schema document."""
         if not isinstance(schema_data, dict):
-            return False
+            return False  # type: ignore[unreachable]
         schema_keywords = {
             "type",
             "properties",

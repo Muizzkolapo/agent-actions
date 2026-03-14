@@ -27,7 +27,7 @@ class SchemaStructureValidator:
             return errors
 
         if not isinstance(schema, dict):
-            errors.append(
+            errors.append(  # type: ignore[unreachable]
                 StaticTypeError(
                     message=f"Schema must be a dictionary, got {type(schema).__name__}",
                     location=FieldLocation(agent_name=action_name, config_field=config_field),
@@ -312,7 +312,7 @@ class SchemaStructureValidator:
         errors: list[StaticTypeError] = []
 
         if not isinstance(properties, dict):
-            errors.append(
+            errors.append(  # type: ignore[unreachable]
                 StaticTypeError(
                     message="'properties' must be a dictionary",
                     location=FieldLocation(

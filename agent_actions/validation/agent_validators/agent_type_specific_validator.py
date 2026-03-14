@@ -17,7 +17,7 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
 
     def validate(self, context) -> AgentEntryValidationResult:
         """Validate agent type and type-specific requirements."""
-        errors = []
+        errors: list[str] = []
 
         self._validate_name_field(context, errors)
         self._validate_agent_type_field(context, errors)

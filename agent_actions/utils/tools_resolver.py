@@ -1,7 +1,7 @@
 """Resolve tools_path from agent configuration (legacy, simple, and OpenAI formats)."""
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -18,7 +18,7 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
     if tool_path:
         if isinstance(tool_path, list) and len(tool_path) > 0:
             logger.debug("Resolved tools_path from tool_path list: %s", tool_path[0])
-            return tool_path[0]
+            return cast(str, tool_path[0])
         if isinstance(tool_path, str):
             logger.debug("Resolved tools_path from tool_path string: %s", tool_path)
             return tool_path
@@ -44,7 +44,7 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                                 logger.debug(
                                     "Resolved tools_path from OpenAI tool config: %s", module_path
                                 )
-                                return module_path
+                                return cast(str, module_path)
                     except (
                         yaml.YAMLError,
                         FileNotFoundError,

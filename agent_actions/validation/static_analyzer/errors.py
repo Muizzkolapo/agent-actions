@@ -151,7 +151,7 @@ class StaticValidationResult:
                 lines.append("")
                 lines.append(f"Action: '{agent}'")
                 lines.append("-" * 60)
-                for issue in agent_issues:
+                for issue in agent_issues:  # type: ignore[assignment]
                     icon = "X" if issue.severity == ErrorSeverity.ERROR else "!"
                     lines.append(f"  [{icon}] {issue.format_message()}")
                     lines.append("")

@@ -128,17 +128,17 @@ class ConfigValidator(BaseValidator):
     def _parse_properties_dict(self, properties_part: str) -> dict[str, Any] | None:
         """Parse properties part of array[object:...] type."""
         try:
-            return json.loads(properties_part)
+            return json.loads(properties_part)  # type: ignore[no-any-return]
         except (ValueError, json.JSONDecodeError):
             try:
-                return ast.literal_eval(properties_part)
+                return ast.literal_eval(properties_part)  # type: ignore[no-any-return]
             except (ValueError, SyntaxError):
                 return None
 
     def _validate_property_type(self, prop_type: str) -> bool:
         """Validate a single property type."""
         if not isinstance(prop_type, str):
-            return False
+            return False  # type: ignore[unreachable]
         cleaned_type = prop_type.replace("\\", "")
         base_type = cleaned_type[:-1] if cleaned_type.endswith("!") else cleaned_type
         valid_prop_types = {"string", "number", "integer", "boolean", "object"}
@@ -198,11 +198,11 @@ class ConfigValidator(BaseValidator):
         available_agents = {name.lower() for name in full_config_data}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
-                continue
+                continue  # type: ignore[unreachable]
             deps = set()
             for entry in entries:
                 if isinstance(entry, dict):
-                    deps.update(self._extract_dependencies_from_entry(entry))
+                    deps.update(self._extract_dependencies_from_entry(entry))  # type: ignore[arg-type]
             missing = deps - available_agents
             if missing:
                 self.add_error(
@@ -295,11 +295,11 @@ class ConfigValidator(BaseValidator):
         graph: dict[str, list[str]] = {}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
-                continue
+                continue  # type: ignore[unreachable]
             deps = set()
             for entry in entries:
                 if isinstance(entry, dict):
-                    deps.update(self._extract_dependencies_from_entry(entry))
+                    deps.update(self._extract_dependencies_from_entry(entry))  # type: ignore[arg-type]
             graph[agent_name.lower()] = list(deps)
         visited: set[str] = set()
         stack: list[str] = []

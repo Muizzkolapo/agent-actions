@@ -68,11 +68,12 @@ def load_module_from_path(
 
         if module_path:
             try:
-                module_path_obj = Path(module_path)
+                initial_path = Path(module_path)
+                module_path_obj: Path | None = initial_path
 
-                if module_path_obj.is_dir():
-                    init_file = module_path_obj / "__init__.py"
-                    module_file = module_path_obj / f"{module_name}.py"
+                if initial_path.is_dir():
+                    init_file = initial_path / "__init__.py"
+                    module_file = initial_path / f"{module_name}.py"
 
                     if init_file.exists():
                         module_path_obj = init_file

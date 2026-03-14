@@ -244,7 +244,7 @@ def _check_field_types(
         # returns True.  Reject booleans for integer/number checks.
         if isinstance(value, bool) and expected_type in ("integer", "number"):
             type_errors[field_name] = (expected_type, "bool")
-        elif not isinstance(value, expected_python_type):
+        elif not isinstance(value, expected_python_type):  # type: ignore[arg-type]
             actual_type = type(value).__name__
             type_errors[field_name] = (expected_type, actual_type)
 

@@ -61,6 +61,8 @@ class ValidateUDFsCommand:
         config_manager = ConfigManager(str(config_path), str(paths.default_config_path))
         config_manager.load_configs()
         config = config_manager.user_config
+        if config is None:
+            config = {}
         try:
             validate_udf_references(config)
             impl_refs = self._count_impl_references(config)

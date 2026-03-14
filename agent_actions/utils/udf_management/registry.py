@@ -4,7 +4,7 @@ import inspect
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from agent_actions.config.types import Granularity
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
@@ -69,7 +69,7 @@ def udf_tool(
                 # This happens when tools_path subdirectories are added to sys.path
                 if existing["file"] == new_file:
                     # Same file, different import path - return existing function
-                    return existing["function"]
+                    return cast(Callable, existing["function"])
                 raise DuplicateFunctionError(
                     function_name=f.__name__,
                     existing_location=f"{existing['module']}.{existing['name']}",
@@ -111,7 +111,7 @@ def get_udf(func_name: str) -> Callable:
                 f"Function '{func_name}' not found",
                 context={"function_name": func_name, "available_functions": available},
             )
-        return UDF_REGISTRY[func_name_lower]["function"]
+        return cast(Callable, UDF_REGISTRY[func_name_lower]["function"])
 
 
 def get_udf_metadata(func_name: str) -> dict[str, Any]:

@@ -135,7 +135,7 @@ class VendorCompatibilityValidator(BaseValidator):
 
         capabilities = VENDOR_CAPABILITIES[vendor]
 
-        missing_fields = self._check_required_fields(agent_config, capabilities["required_fields"])
+        missing_fields = self._check_required_fields(agent_config, capabilities["required_fields"])  # type: ignore[arg-type]
         if missing_fields:
             self.add_error(f"Missing required fields for {vendor}: {', '.join(missing_fields)}")
             self.issues.append(

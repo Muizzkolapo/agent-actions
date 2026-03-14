@@ -10,7 +10,7 @@ def is_compiled_schema(schema: dict[str, Any]) -> bool:
     and JSON Schema array format.
     """
     if not isinstance(schema, dict):
-        return False
+        return False  # type: ignore[unreachable]
 
     if "fields" in schema and isinstance(schema.get("fields"), list):
         return True

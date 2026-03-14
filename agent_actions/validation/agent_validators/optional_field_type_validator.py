@@ -12,7 +12,7 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
 
     def validate(self, context) -> AgentEntryValidationResult:
         """Validate optional field types."""
-        errors = []
+        errors: list[str] = []
 
         self._validate_description_field(context, errors)
         self._validate_version_field(context, errors)

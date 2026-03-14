@@ -32,7 +32,7 @@ class LineageBuilder:
     def filter_node_lineage(lineage: list[Any]) -> list[str]:
         """Filter lineage to only include valid node IDs."""
         if not isinstance(lineage, list):
-            return []
+            return []  # type: ignore[unreachable]
         return [nid for nid in lineage if isinstance(nid, str) and _is_valid_node_id(nid)]
 
     @staticmethod
@@ -94,7 +94,7 @@ class LineageBuilder:
         return obj
 
     @staticmethod
-    def add_unified_lineage(obj: dict, node_id: str, parent_item: dict = None) -> dict:
+    def add_unified_lineage(obj: dict, node_id: str, parent_item: dict | None = None) -> dict:
         """Add lineage, node_id, and ancestry chain to *obj* from an optional parent."""
         obj = obj.copy()
         obj["node_id"] = node_id
@@ -111,7 +111,7 @@ class LineageBuilder:
 
     @staticmethod
     def create_conditional_response(
-        source_guid: str, content: Any, node_id: str, item: dict = None
+        source_guid: str, content: Any, node_id: str, item: dict | None = None
     ) -> dict:
         """Create a standard response with lineage and ancestry for conditional scenarios."""
         lineage = LineageBuilder.build_lineage(item, node_id) if item else [node_id]

@@ -66,7 +66,7 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
             },
             cause=e,
         ) from e
-    return function
+    return function  # type: ignore[no-any-return]
 
 
 def execute_user_defined_function(
@@ -134,7 +134,7 @@ def _validate_against_schema(
     Raises:
         SchemaValidationError: On validation failure with path details.
     """
-    import jsonschema
+    import jsonschema  # type: ignore[import-untyped]
     from jsonschema import ValidationError as JsonSchemaValidationError
 
     from agent_actions.errors import SchemaValidationError

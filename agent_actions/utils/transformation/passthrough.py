@@ -58,7 +58,7 @@ class PassthroughTransformer:
             Transformed data list with passthrough fields merged.
         """
         if not isinstance(data, list):
-            data = [data] if data is not None else []
+            data = [data] if data is not None else []  # type: ignore[unreachable]
 
         already_structured = self._is_already_structured(data)
 
@@ -69,6 +69,9 @@ class PassthroughTransformer:
                     data, context_data, source_guid, agent_config, passthrough_fields
                 )
                 break
+
+        if output is None:
+            output = []
 
         return [
             self.field_manager.ensure_required_fields(

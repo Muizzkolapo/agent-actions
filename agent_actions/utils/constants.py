@@ -49,7 +49,7 @@ DANGEROUS_PATTERNS_UDF = DANGEROUS_PATTERNS | {"__"}
 
 
 def contains_dangerous_pattern(
-    expression: str, patterns: frozenset = DANGEROUS_PATTERNS
+    expression: str, patterns: frozenset[str] = DANGEROUS_PATTERNS
 ) -> str | None:
     """Check if expression contains a dangerous pattern as a whole word.
 

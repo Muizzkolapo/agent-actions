@@ -64,6 +64,7 @@ class ErrorHandler:
     ) -> None:
         """Re-raise as FileLoadError or FileSystemError."""
 
+        error_type: type[FileSystemError]
         if isinstance(error, FileNotFoundError):
             error_type = FileLoadError
         elif isinstance(error, OSError):
