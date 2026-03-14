@@ -184,7 +184,7 @@ def extract_field_value(field_context: dict, action_name: str, field_name: str):
     from agent_actions.utils.dict import get_nested_value
 
     if not isinstance(field_context, dict):
-        return None
+        return None  # type: ignore[unreachable]
 
     if action_name not in field_context:
         return None
@@ -208,7 +208,7 @@ def extract_field_value(field_context: dict, action_name: str, field_name: str):
 def extract_action_fields(field_context: dict, action_name: str) -> dict | None:
     """Return all fields for an action if present and dict-like, otherwise None."""
     if not isinstance(field_context, dict):
-        return None
+        return None  # type: ignore[unreachable]
 
     action_data = field_context.get(action_name)
     if not isinstance(action_data, dict):

@@ -189,7 +189,7 @@ class PromptPreparationService:
     def _prepare_prompt_internal(request: PromptPreparationRequest) -> PromptPreparationResult:
         """Orchestrate the complete prompt preparation pipeline from template to final output."""
         if request.agent_config is None:
-            from agent_actions.errors.preflight import ContextStructureError
+            from agent_actions.errors.preflight import ContextStructureError  # type: ignore[unreachable]  # noqa: I001
 
             raise ContextStructureError(
                 "agent_config is required and cannot be None",
@@ -280,7 +280,7 @@ class PromptPreparationService:
             )
             logger.debug("Injected function outputs for dispatch_task()")
 
-        metadata = {
+        metadata: dict[str, Any] = {
             "mode": request.mode,
             "field_context_keys": list(field_context.keys()),
             "observe_fields": list(llm_additional_context.keys()),
@@ -343,14 +343,14 @@ class PromptPreparationService:
                 missing_variables=[],
                 available_variables=list(prompt_context.keys()),
                 template_line=e.lineno,
-                agent_name=agent_name,
-                mode=mode,
+                agent_name=agent_name or "",
+                mode=mode or "",
                 cause=e,
             ) from e
         except Exception as e:
             logger.debug("Error rendering prompt template: %s", e)
 
-            namespace_context = {}
+            namespace_context: dict[str, list[str]] = {}
             available_refs = []
 
             def _collect_refs_with_namespace(prefix: str, value: Any) -> None:
@@ -388,7 +388,7 @@ class PromptPreparationService:
                     available = namespace_context.get(ns, [])
                     fire_event(
                         ContextFieldNotFoundEvent(
-                            action_name=agent_name,
+                            action_name=agent_name or "",
                             field_ref=var,
                             namespace=ns,
                             available_fields=available,
@@ -397,7 +397,7 @@ class PromptPreparationService:
                 else:
                     fire_event(
                         ContextFieldNotFoundEvent(
-                            action_name=agent_name,
+                            action_name=agent_name or "",
                             field_ref=var,
                             namespace="",
                             available_fields=list(namespace_context.keys()),
@@ -440,8 +440,8 @@ class PromptPreparationService:
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
-                agent_name=agent_name,
-                mode=mode,
+                agent_name=agent_name or "",
+                mode=mode or "",
                 cause=e,
                 namespace_context=namespace_context,
                 field_context_metadata=field_context_metadata if field_context_metadata else None,

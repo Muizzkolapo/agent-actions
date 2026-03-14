@@ -238,7 +238,7 @@ class ConfigRenderingService:
         """Validate a single entry using Pydantic model."""
         try:
             entry_model = AgentConfig.model_validate(entry)
-            return entry_model.model_dump(exclude_unset=True)
+            return cast(AgentEntryDict, entry_model.model_dump(exclude_unset=True))
         except ValidationError as e:
             raise ConfigValidationError(
                 config_key=config_key,
@@ -252,7 +252,7 @@ class ConfigRenderingService:
         actions = config.get("actions", [])
         validated_entries = []
         for action in actions:
-            agent_entry = self._build_agent_entry_from_action(action)
+            agent_entry = self._build_agent_entry_from_action(cast(dict[str, Any], action))
             validated = self._validate_entry_with_pydantic(
                 agent_entry, agent_name, "action_configuration"
             )
@@ -274,7 +274,9 @@ class ConfigRenderingService:
 
         validated_entries = []
         for entry in agent_entries_list:
-            validated = self._validate_entry_with_pydantic(entry, agent_name, "agent_configuration")
+            validated = self._validate_entry_with_pydantic(
+                cast(dict[str, Any], entry), agent_name, "agent_configuration"
+            )
             validated_entries.append(validated)
         config[agent_name] = validated_entries
         return validated_entries
@@ -308,6 +310,8 @@ class ConfigRenderingService:
     ) -> None:
         """Validate the config - handle both old and new formats."""
         project_root_path = project_root or AgentManager.find_project_root(start_path=Path.cwd())
+        if project_root_path is None:
+            project_root_path = Path.cwd()
 
         is_new_format = "actions" in config and "name" in config
         if is_new_format:
@@ -374,7 +378,9 @@ class ConfigRenderingService:
         config = self._safe_load_yaml(rendered_template, cfg_path)
         try:
             schema_validate_instance = SchemaValidator()
-            schema_validate_instance.validate(agent_name, Path(template_dir))
+            schema_validate_instance.validate(
+                {"agent_name": agent_name, "template_dir": str(template_dir)}
+            )
         except Exception as e:
             raise ConfigurationError(
                 "Schema validation failed",
@@ -419,6 +425,7 @@ class ConfigRenderer:
             Parsed configuration data as a dictionary.
         """
         service = ConfigRenderingService()
-        return service.render_and_load_config(
+        result = service.render_and_load_config(
             agent_name, config_path, template_dir, output_dir, project_root=project_root
         )
+        return cast(AgentConfigMap, result)

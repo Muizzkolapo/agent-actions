@@ -299,7 +299,7 @@ def apply_observe_for_file_mode(
     filtered: list[dict] = []
     for item in data:
         if not isinstance(item, dict):
-            filtered.append(item)
+            filtered.append(item)  # type: ignore[unreachable]
             continue
 
         content = item.get("content", item) if isinstance(item.get("content"), dict) else item

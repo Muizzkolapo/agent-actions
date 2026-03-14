@@ -186,28 +186,15 @@ def merge_passthrough_fields(llm_response: list[dict], passthrough_fields: dict)
         return llm_response
 
     # Handle list of items
-    if isinstance(llm_response, list):
-        result = []
-        for item in llm_response:
-            if isinstance(item, dict):
-                item_copy = dict(item)
-                if "content" in item_copy and isinstance(item_copy["content"], dict):
-                    item_copy["content"] = {**item_copy["content"], **passthrough_fields}
-                else:
-                    item_copy.update(passthrough_fields)
-                result.append(item_copy)
+    result = []
+    for item in llm_response:
+        if isinstance(item, dict):
+            item_copy = dict(item)
+            if "content" in item_copy and isinstance(item_copy["content"], dict):
+                item_copy["content"] = {**item_copy["content"], **passthrough_fields}
             else:
-                result.append(item)
-        return result
-
-    # Handle single dict
-    if isinstance(llm_response, dict):
-        result = dict(llm_response)
-        if "content" in result and isinstance(result["content"], dict):
-            result["content"] = {**result["content"], **passthrough_fields}
+                item_copy.update(passthrough_fields)
+            result.append(item_copy)
         else:
-            result.update(passthrough_fields)
-        return result
-
-    # Other types (shouldn't happen, but be defensive)
-    return llm_response
+            result.append(item)  # type: ignore[unreachable]
+    return result

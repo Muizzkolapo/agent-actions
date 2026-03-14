@@ -122,7 +122,7 @@ class LLMContextBuilder:
         """
         # Validate base context type before delegation
         if not isinstance(row_content, dict):
-            return {}
+            return {}  # type: ignore[unreachable]
 
         return LLMContextBuilder._build_llm_context(row_content, llm_context, context_scope)
 
@@ -150,7 +150,7 @@ class LLMContextBuilder:
         """
         # Preserve passthrough behavior for non-dict inputs
         if not isinstance(processed_context, dict):
-            return processed_context
+            return processed_context  # type: ignore[unreachable]
 
         return LLMContextBuilder._build_llm_context(
             processed_context,

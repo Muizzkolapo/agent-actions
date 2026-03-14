@@ -205,7 +205,7 @@ def infer_dependencies(
     # Versioned primary handling: If primary_dependency is a base name (e.g., "research")
     # that matches version branches (research_1, research_2), ALL matching branches
     # become input sources.
-    fan_in_context_sources = []
+    fan_in_context_sources: list[str] = []
     has_reduce_key = action_config.get("reduce_key") is not None
     is_parallel = _is_parallel_branches(all_deps)
 
@@ -345,8 +345,8 @@ def infer_dependencies(
 
     # 5. Validate all referenced actions exist in workflow
     # Skip validation for field prefix patterns (ending with _) and special namespaces
-    all_deps = set(input_sources_expanded) | set(context_sources_expanded)
-    for dep_action in all_deps:
+    all_referenced = set(input_sources_expanded) | set(context_sources_expanded)
+    for dep_action in all_referenced:
         # Skip validation for loop field prefix patterns
         if dep_action.endswith("_"):
             continue

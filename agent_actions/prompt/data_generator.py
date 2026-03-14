@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-from agent_actions.config.types import AgentEntryDict
+from agent_actions.config.types import AgentConfigDict, AgentEntryDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -44,7 +44,7 @@ class DataGenerator(IGenerator):
         self.storage_backend = storage_backend
 
         self._record_processor = RecordProcessor(
-            agent_config=self.agent_config,
+            agent_config=cast(dict[str, Any], self.agent_config),
             agent_name=self.agent_name,
         )
 
@@ -76,11 +76,11 @@ class DataGenerator(IGenerator):
         """
         try:
             context = ProcessingContext(
-                agent_config=self.agent_config,
+                agent_config=cast(AgentConfigDict, self.agent_config),
                 agent_name=self.agent_name,
                 mode=CoreProcessingMode.ONLINE,
                 is_first_stage=False,  # This is subsequent-stage processing
-                source_data=source_content,
+                source_data=source_content if isinstance(source_content, list) else [],
                 file_path=file_path,
                 version_context=version_context,
                 workflow_metadata=workflow_metadata,
@@ -104,7 +104,7 @@ class DataGenerator(IGenerator):
             result = self._record_processor.process(item, context)
 
             if result.status == ProcessingStatus.FILTERED:
-                return (None, False, {})
+                return ([], False, {})
             elif result.status == ProcessingStatus.SKIPPED:
                 return (contents, False, result.passthrough_fields)
             elif result.status == ProcessingStatus.EXHAUSTED:
@@ -113,7 +113,7 @@ class DataGenerator(IGenerator):
                     self.agent_name,
                     result.error,
                 )
-                return (None, False, result.passthrough_fields)
+                return ([], False, result.passthrough_fields)
             elif result.status == ProcessingStatus.UNPROCESSED:
                 return (result.data, False, result.passthrough_fields)
             elif result.status == ProcessingStatus.FAILED:

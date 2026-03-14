@@ -153,7 +153,18 @@ def _load_named_schema(
         )
 
     with open(schema_file, encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ConfigurationError(
+            f"Schema file '{schema_name}.yml' must contain a YAML mapping, got {type(raw).__name__}",
+            context={
+                "schema_name": schema_name,
+                "schema_dir": str(schema_dir),
+                "expected_path": str(schema_file),
+                "operation": "load_named_schema",
+            },
+        )
+    return raw
 
 
 def _expand_inline_schema(schema_dict: dict[str, str]) -> dict[str, Any]:

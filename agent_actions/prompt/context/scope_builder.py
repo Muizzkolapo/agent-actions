@@ -134,6 +134,12 @@ def build_field_context_with_history(
         bool(file_path),
     )
     if batch_mode_enabled:
+        # Narrowed by batch_mode_enabled — all are truthy
+        assert agent_config is not None
+        assert agent_indices is not None
+        assert current_item is not None
+        assert file_path is not None
+
         # BATCH MODE - Use auto-inferred context dependencies
         workflow_actions = list(agent_indices.keys())
 
@@ -221,7 +227,7 @@ def build_field_context_with_history(
                             historical_data = _load_historical_node(
                                 action_name=version_source,
                                 lineage=lineage,
-                                source_guid=source_guid,
+                                source_guid=source_guid or "",
                                 file_path=file_path,
                                 agent_indices=agent_indices,
                                 parent_target_id=current_item.get("parent_target_id"),
@@ -342,7 +348,7 @@ def build_field_context_with_history(
                     historical_data = _load_historical_node(
                         action_name=dep_name,
                         lineage=lineage,
-                        source_guid=source_guid,
+                        source_guid=source_guid or "",
                         file_path=file_path,
                         agent_indices=agent_indices,
                         parent_target_id=current_item.get("parent_target_id"),

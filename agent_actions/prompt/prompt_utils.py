@@ -2,6 +2,7 @@
 
 import json
 import re
+from typing import Any
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
@@ -18,8 +19,8 @@ class PromptUtils:
         text: str,
         tools_path: str,
         context_data_str: str,
-        agent_config: dict = None,
-        captured_results: dict = None,
+        agent_config: dict | None = None,
+        captured_results: dict | None = None,
         preserve_type_on_exact_match: bool = False,
     ):
         """
@@ -115,7 +116,7 @@ class PromptUtils:
             tuple: (The prompt_config with dispatch_task() calls replaced by function outputs,
                     captured_results)
         """
-        captured_results = {}
+        captured_results: dict[str, Any] = {}
 
         if isinstance(prompt_config, list):
             processed_prompt = [
