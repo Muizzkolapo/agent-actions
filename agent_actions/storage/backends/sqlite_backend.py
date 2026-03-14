@@ -3,6 +3,7 @@
 import json
 import logging
 import sqlite3
+import string
 import threading
 from pathlib import Path
 from typing import Any
@@ -76,9 +77,9 @@ class SQLiteBackend(StorageBackend):
         VALUES (?, ?, ?, CURRENT_TIMESTAMP)
     """
 
-    _VALID_IDENTIFIER_CHARS = set(
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-./"
-    )
+    # Allowlist for identifiers (action names, relative paths).
+    # Restrictive as defense-in-depth; all SQL is parameterized.
+    _VALID_IDENTIFIER_CHARS = set(string.ascii_letters + string.digits + "_-./ ")
 
     def __init__(self, db_path: str, workflow_name: str):
         """Initialize SQLite backend."""
@@ -93,7 +94,7 @@ class SQLiteBackend(StorageBackend):
         Raises:
             ValueError: If identifier contains invalid characters.
         """
-        if not name:
+        if not name or not name.strip():
             raise ValueError(f"Empty {field} not allowed")
         name = name.replace("\\", "/")
         if ".." in name.split("/"):

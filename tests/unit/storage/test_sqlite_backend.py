@@ -351,3 +351,33 @@ class TestValidation:
         """Test that paths with dots (but not ..) are still valid."""
         backend.write_target("node_1", "file.v2.json", [{"id": 1}])
         assert backend.read_target("node_1", "file.v2.json") == [{"id": 1}]
+
+    def test_relative_path_with_spaces_allowed(self, backend):
+        """Test that filenames with spaces are accepted."""
+        backend.write_target("node_1", "my file.json", [{"id": 1}])
+        assert backend.read_target("node_1", "my file.json") == [{"id": 1}]
+
+    def test_whitespace_only_path_rejected(self, backend):
+        """Test that whitespace-only relative_path is rejected."""
+        with pytest.raises(ValueError, match="Empty"):
+            backend.write_target("node_1", "   ", [{}])
+
+    def test_whitespace_only_action_name_rejected(self, backend):
+        """Test that whitespace-only action_name is rejected."""
+        with pytest.raises(ValueError, match="Empty"):
+            backend.write_target(" ", "file.json", [{}])
+
+    def test_leading_trailing_spaces_in_path_allowed(self, backend):
+        """Test that leading/trailing spaces in paths are accepted."""
+        backend.write_target("node_1", " file.json ", [{"id": 1}])
+        assert backend.read_target("node_1", " file.json ") == [{"id": 1}]
+
+    def test_space_in_action_name_allowed(self, backend):
+        """Test that spaces in action_name are accepted."""
+        backend.write_target("node 1", "file.json", [{"id": 1}])
+        assert backend.read_target("node 1", "file.json") == [{"id": 1}]
+
+    def test_invalid_character_rejected(self, backend):
+        """Test that characters outside the allowlist are rejected."""
+        with pytest.raises(ValueError, match="Invalid characters"):
+            backend.write_target("node_1", "file;name.json", [{}])
