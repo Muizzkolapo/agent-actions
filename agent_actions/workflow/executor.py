@@ -148,13 +148,14 @@ class AgentExecutor:
                     ),
                 )
             except Exception as e:
-                logger.warning("Failed to verify output for %s: %s", agent_name, e)
-                return (
-                    True,
-                    AgentExecutionResult(
-                        success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
-                    ),
+                logger.warning(
+                    "Failed to verify output for %s, resetting to pending: %s",
+                    agent_name,
+                    e,
+                    exc_info=True,
                 )
+                self.deps.state_manager.update_status(agent_name, "pending")
+                return (False, None)
         return (
             True,
             AgentExecutionResult(

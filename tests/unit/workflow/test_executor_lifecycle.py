@@ -86,6 +86,33 @@ class TestExecuteAgentSync:
         assert result.success is True
         mock_deps.state_manager.update_status.assert_any_call("agent_a", "pending")
 
+    def test_storage_error_during_verify_reruns_agent(self, executor, mock_deps):
+        """Storage error during verification should reset to pending and re-run the agent.
+
+        Flow: get_status returns "completed" → _verify_completion_status hits OSError
+        → resets to "pending" and returns (False, None) → execution falls through to
+        skip evaluation → _execute_agent_run.
+        """
+        mock_deps.state_manager.get_status.return_value = "completed"
+        storage = MagicMock()
+        storage.list_target_files.side_effect = OSError("SQLite lock")
+        mock_deps.agent_runner.storage_backend = storage
+
+        mock_deps.skip_evaluator.should_skip_agent.return_value = False
+        mock_deps.agent_runner.run_agent.return_value = "/output"
+        mock_deps.output_manager.setup_correlation_wrapper.return_value = None
+        mock_deps.batch_manager.check_batch_submission.return_value = None
+
+        with patch("agent_actions.workflow.executor.get_last_usage", return_value=None):
+            result = executor.execute_agent_sync(
+                "agent_a", agent_idx=0, agent_config={}, is_last_agent=False
+            )
+
+        assert result.success is True
+        mock_deps.state_manager.update_status.assert_any_call("agent_a", "pending")
+        mock_deps.skip_evaluator.should_skip_agent.assert_called_once()
+        mock_deps.agent_runner.run_agent.assert_called_once()
+
     def test_batch_submitted_dispatches(self, executor, mock_deps):
         """Batch_submitted status should dispatch to batch check handler."""
         mock_deps.state_manager.get_status.return_value = "batch_submitted"
@@ -394,16 +421,26 @@ class TestVerifyCompletionStatus:
         assert result is None
         mock_deps.state_manager.update_status.assert_called_with("agent_a", "pending")
 
-    def test_storage_error_graceful(self, executor, mock_deps):
-        """Storage error during verification should be handled gracefully."""
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            OSError("storage down"),
+            ValueError("Invalid action_name"),
+            RuntimeError("backend not initialized"),
+        ],
+        ids=["OSError", "ValueError", "RuntimeError"],
+    )
+    def test_storage_error_resets_to_pending(self, executor, mock_deps, exc):
+        """Any exception during verification should reset to pending and re-run."""
         storage = MagicMock()
-        storage.list_target_files.side_effect = OSError("storage down")
+        storage.list_target_files.side_effect = exc
         mock_deps.agent_runner.storage_backend = storage
 
         should_skip, result = executor._verify_completion_status("agent_a")
 
-        assert should_skip is True
-        assert result.success is True
+        assert should_skip is False
+        assert result is None
+        mock_deps.state_manager.update_status.assert_called_with("agent_a", "pending")
 
     def test_no_backend_returns_skip(self, executor, mock_deps):
         """No storage backend should skip (trust the status)."""
