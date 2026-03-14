@@ -1,74 +1,54 @@
 """
-Thread-safe token usage tracking for LLM providers.
+Async-safe token usage tracking for LLM providers.
+
+Uses ``contextvars`` so each asyncio task (and each OS thread) gets its own
+isolated copy of the usage counter.  ``threading.local`` only isolates by
+thread — all asyncio tasks sharing an event-loop thread would see each
+other's writes.
 """
 
-import threading
+from contextvars import ContextVar
 
-# Thread-local storage for token usage
-_thread_local = threading.local()
+# Context-local storage for token usage.
+# Each asyncio task inherits a *copy* of the parent context, so concurrent
+# tasks never overwrite each other's values.
+_last_usage: ContextVar[dict[str, int] | None] = ContextVar("_last_usage", default=None)
 
 
 def set_last_usage(usage: dict[str, int] | None) -> None:
     """
-    Store token usage in thread-local storage.
+    Store token usage in the current context.
 
     This function is called by LLM providers after receiving API responses
-    to store usage metadata. The data is thread-local, so parallel executions
-    don't interfere with each other.
+    to store usage metadata. The data is context-local, so parallel
+    executions (threads *and* asyncio tasks) don't interfere with each
+    other.
 
     Args:
         usage: Dict with token count keys, or None to clear
                Expected keys: 'input_tokens', 'output_tokens', 'total_tokens'
-
-    Example:
-        # OpenAI provider
-        if response.usage:
-            usage_data = {
-                'input_tokens': response.usage.prompt_tokens,
-                'output_tokens': response.usage.completion_tokens,
-                'total_tokens': response.usage.total_tokens
-            }
-            set_last_usage(usage_data)
     """
-    _thread_local.last_usage = usage
+    _last_usage.set(usage)
 
 
 def get_last_usage() -> dict[str, int] | None:
     """
-    Retrieve token usage from thread-local storage.
+    Retrieve token usage from the current context.
 
     This function is called by AgentExecutor after provider invocation
     to retrieve token usage for tracking purposes. Returns None for
-    providers that don't track usage (Gemini, Ollama, Groq, etc.).
+    providers that don't track usage.
 
     Returns:
         Usage dict with token counts, or None if not set
-
-    Example:
-        # AgentExecutor
-        tokens = get_last_usage()
-        if tokens:
-            self.run_tracker.record_action_complete(
-                run_id, action_name, 'success',
-                tokens=tokens
-            )
     """
-    return getattr(_thread_local, "last_usage", None)
+    return _last_usage.get()
 
 
 def clear_usage() -> None:
     """
-    Clear usage data from thread-local storage.
+    Clear usage data from the current context.
 
     Primarily useful for testing to ensure clean state between tests.
-    Not typically needed in production code as each action naturally
-    overwrites the previous usage.
-
-    Example:
-        # In test setup
-        clear_usage()
-        # Run test
-        # Verify results
     """
-    if hasattr(_thread_local, "last_usage"):
-        delattr(_thread_local, "last_usage")
+    _last_usage.set(None)
