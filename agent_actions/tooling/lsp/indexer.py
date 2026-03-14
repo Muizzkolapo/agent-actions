@@ -45,6 +45,27 @@ def find_project_root(start_path: Path) -> Path | None:
     return start if start.is_dir() else start.parent
 
 
+def find_all_project_roots(workspace_folders: list[Path]) -> list[Path]:
+    """Discover all agent_actions.yml project roots across workspace folders."""
+    roots: set[Path] = set()
+    for folder in workspace_folders:
+        folder = folder.resolve()
+        # Walk upward
+        current = folder
+        while current != current.parent:
+            if (current / "agent_actions.yml").exists():
+                roots.add(current)
+                break
+            current = current.parent
+        # Glob downward up to 3 levels
+        start = folder if folder.is_dir() else folder.parent
+        for depth in range(1, 4):
+            pattern = "/".join(["*"] * depth) + "/agent_actions.yml"
+            for match in start.glob(pattern):
+                roots.add(match.parent.resolve())
+    return sorted(roots)
+
+
 def build_index(project_root: Path) -> ProjectIndex:
     """Build complete project index."""
     index = ProjectIndex(root=project_root)

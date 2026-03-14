@@ -8,7 +8,7 @@ from pygls.lsp.server import LanguageServer
 
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
 
-from .indexer import build_index, find_project_root
+from .indexer import build_index, find_all_project_roots, find_project_root
 from .models import Location, ProjectIndex, ReferenceType
 from .resolver import get_reference_at_position, resolve_reference
 from .utils import is_in_dependencies_context, uri_to_path
@@ -40,12 +40,33 @@ class AgentActionsLanguageServer(LanguageServer):
 
     def __init__(self):
         super().__init__("agent-actions-lsp", "v0.1.0")
-        self.index: ProjectIndex | None = None
-        self.project_root: Path | None = None
+        self.project_indexes: dict[Path, ProjectIndex] = {}
+        self.index: ProjectIndex | None = None  # backward compat alias (first project)
+        self.project_root: Path | None = None  # backward compat alias (first project)
 
 
 # Create server instance
 server = AgentActionsLanguageServer()
+
+
+def _index_for_file(file_path: Path) -> ProjectIndex | None:
+    """Route a file to its correct project index (deepest matching root wins).
+
+    Returns None when the file does not belong to any indexed project,
+    preventing silent cross-project leakage.
+    """
+    best_root = None
+    best_depth = -1
+    resolved = file_path.resolve()
+    for root in server.project_indexes:
+        try:
+            resolved.relative_to(root)
+            if len(root.parts) > best_depth:
+                best_root = root
+                best_depth = len(root.parts)
+        except ValueError:
+            continue
+    return server.project_indexes[best_root] if best_root else None
 
 
 @server.feature(lsp.INITIALIZE)
@@ -54,14 +75,26 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
     logger.info("Initializing Agent Actions LSP...")
 
     if params.workspace_folders:
-        for folder in params.workspace_folders:
-            folder_path = uri_to_path(folder.uri)
-            root = find_project_root(folder_path)
+        folder_paths = [uri_to_path(f.uri) for f in params.workspace_folders]
+        roots = find_all_project_roots(folder_paths)
+
+        for root in roots:
+            idx = build_index(root)
+            server.project_indexes[root] = idx
+            logger.info(f"Indexed project at {root}")
+
+        # Backward-compat: first project or single-folder fallback
+        if server.project_indexes:
+            first_root = next(iter(server.project_indexes))
+            server.project_root = first_root
+            server.index = server.project_indexes[first_root]
+        elif folder_paths:
+            root = find_project_root(folder_paths[0])
             if root:
                 server.project_root = root
                 server.index = build_index(root)
+                server.project_indexes[root] = server.index
                 logger.info(f"Indexed project at {root}")
-                break
 
     return lsp.InitializeResult(
         capabilities=lsp.ServerCapabilities(
@@ -98,7 +131,9 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
 @server.feature(lsp.TEXT_DOCUMENT_DEFINITION)
 def goto_definition(params: lsp.DefinitionParams) -> lsp.Location | None:
     """Handle go to definition request."""
-    if not server.index:
+    current_file = uri_to_path(params.text_document.uri)
+    index = _index_for_file(current_file)
+    if not index:
         return None
 
     doc = server.workspace.get_text_document(params.text_document.uri)
@@ -114,8 +149,7 @@ def goto_definition(params: lsp.DefinitionParams) -> lsp.Location | None:
     if not reference:
         return None
 
-    current_file = uri_to_path(params.text_document.uri)
-    location = resolve_reference(reference, server.index, current_file)
+    location = resolve_reference(reference, index, current_file)
 
     if not location:
         return None
@@ -135,7 +169,9 @@ def goto_definition(params: lsp.DefinitionParams) -> lsp.Location | None:
 @server.feature(lsp.TEXT_DOCUMENT_HOVER)
 def hover(params: lsp.HoverParams) -> lsp.Hover | None:
     """Handle hover request."""
-    if not server.index:
+    current_file = uri_to_path(params.text_document.uri)
+    index = _index_for_file(current_file)
+    if not index:
         return None
 
     doc = server.workspace.get_text_document(params.text_document.uri)
@@ -151,7 +187,7 @@ def hover(params: lsp.HoverParams) -> lsp.Hover | None:
     if not reference:
         return None
 
-    content = _build_hover_content(reference, server.index)
+    content = _build_hover_content(reference, index)
     if not content:
         return None
 
@@ -198,7 +234,9 @@ def _build_hover_content(reference, index: ProjectIndex) -> str | None:
 @server.feature(lsp.TEXT_DOCUMENT_COMPLETION)
 def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
     """Handle completion request."""
-    if not server.index:
+    current_file = uri_to_path(params.text_document.uri)
+    index = _index_for_file(current_file)
+    if not index:
         return lsp.CompletionList(is_incomplete=False, items=[])
 
     doc = server.workspace.get_text_document(params.text_document.uri)
@@ -216,7 +254,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Prompt completions (after $)
     if "$" in line_before_cursor and "prompt" in line.lower():
-        for name, prompt in server.index.prompts.items():
+        for name, prompt in index.prompts.items():
             items.append(
                 lsp.CompletionItem(
                     label=name,
@@ -228,7 +266,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Tool completions (after impl:)
     elif "impl:" in line_before_cursor:
-        for name, tool in server.index.tools.items():
+        for name, tool in index.tools.items():
             items.append(
                 lsp.CompletionItem(
                     label=name,
@@ -240,7 +278,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Schema completions (after schema:)
     elif "schema:" in line_before_cursor:
-        for name in server.index.schemas:
+        for name in index.schemas:
             items.append(
                 lsp.CompletionItem(
                     label=name,
@@ -251,7 +289,7 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Action completions (in dependencies)
     elif is_in_dependencies_context(lines, params.position.line):
-        for name in server.index.actions:
+        for name in index.actions:
             items.append(
                 lsp.CompletionItem(
                     label=name,
@@ -262,13 +300,11 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 
     # Context scope completions
     elif _is_in_context_scope_block(lines, params.position.line):
-        current_file = uri_to_path(params.text_document.uri)
-        items.extend(_build_context_scope_completions(current_file))
+        items.extend(_build_context_scope_completions(current_file, index))
 
     # Guard/reprompt completions
     elif "condition:" in line_before_cursor or "validation:" in line_before_cursor:
-        current_file = uri_to_path(params.text_document.uri)
-        items.extend(_build_guard_completions(current_file))
+        items.extend(_build_guard_completions(current_file, index))
 
     # Versions block completions
     elif _is_in_versions_block(lines, params.position.line):
@@ -287,18 +323,19 @@ def completions(params: lsp.CompletionParams) -> lsp.CompletionList:
 @server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
 def document_symbols(params: lsp.DocumentSymbolParams) -> list[lsp.DocumentSymbol]:
     """Handle document symbols request (outline view)."""
-    if not server.index:
+    file_path = uri_to_path(params.text_document.uri)
+    index = _index_for_file(file_path)
+    if not index:
         return []
 
     doc = server.workspace.get_text_document(params.text_document.uri)
     if not doc:
         return []
 
-    file_path = uri_to_path(params.text_document.uri)
     symbols = []
 
-    if file_path in server.index.file_actions:
-        for name, action_meta in server.index.file_actions[file_path].items():
+    if file_path in index.file_actions:
+        for name, action_meta in index.file_actions[file_path].items():
             location = action_meta.location
             symbols.append(
                 lsp.DocumentSymbol(
@@ -367,12 +404,33 @@ def _get_prompt_symbols(content: str, file_path: Path) -> list[lsp.DocumentSymbo
 
 @server.feature(lsp.TEXT_DOCUMENT_DID_SAVE)
 def did_save(params: lsp.DidSaveTextDocumentParams):
-    """Handle file save - reindex the file."""
-    if not server.project_root:
-        return
+    """Handle file save - reindex affected project(s)."""
+    file_path = uri_to_path(params.text_document.uri)
 
-    server.index = build_index(server.project_root)
-    logger.info("Reindexed project after save")
+    # New agent_actions.yml → register as new project if not tracked
+    if file_path.name == "agent_actions.yml":
+        new_root = file_path.parent.resolve()
+        if new_root not in server.project_indexes:
+            idx = build_index(new_root)
+            server.project_indexes[new_root] = idx
+            if not server.project_root:
+                server.project_root = new_root
+                server.index = idx
+            logger.info(f"Registered new project at {new_root}")
+        else:
+            server.project_indexes[new_root] = build_index(new_root)
+            if server.project_root == new_root:
+                server.index = server.project_indexes[new_root]
+            logger.info(f"Reindexed project at {new_root}")
+    else:
+        idx = _index_for_file(file_path)
+        if idx:
+            root = idx.root
+            server.project_indexes[root] = build_index(root)
+            if server.project_root == root:
+                server.index = server.project_indexes[root]
+            logger.info(f"Reindexed project at {root} after save")
+
     _publish_diagnostics(params.text_document.uri)
 
 
@@ -385,11 +443,12 @@ def did_open(params: lsp.DidOpenTextDocumentParams):
 @server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT)
 def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.DocumentHighlight]:
     """Highlight references under cursor."""
-    if not server.index:
+    file_path = uri_to_path(params.text_document.uri)
+    index = _index_for_file(file_path)
+    if not index:
         return []
 
-    file_path = uri_to_path(params.text_document.uri)
-    references = server.index.references_by_file.get(file_path, [])
+    references = index.references_by_file.get(file_path, [])
     target = _find_reference_at_position(
         references, params.position.line, params.position.character
     )
@@ -418,11 +477,12 @@ def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.Document
 @server.feature(lsp.TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL)
 def semantic_tokens(params: lsp.SemanticTokensParams) -> lsp.SemanticTokens:
     """Provide semantic tokens for references in workflow files."""
-    if not server.index:
+    file_path = uri_to_path(params.text_document.uri)
+    index = _index_for_file(file_path)
+    if not index:
         return lsp.SemanticTokens(data=[])
 
-    file_path = uri_to_path(params.text_document.uri)
-    references = server.index.references_by_file.get(file_path, [])
+    references = index.references_by_file.get(file_path, [])
     tokens = _build_semantic_tokens(references)
     return lsp.SemanticTokens(data=tokens)
 
@@ -430,11 +490,12 @@ def semantic_tokens(params: lsp.SemanticTokensParams) -> lsp.SemanticTokens:
 @server.feature(lsp.TEXT_DOCUMENT_CODE_LENS)
 def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
     """Provide code lenses for guard and versions blocks."""
-    if not server.index:
+    file_path = uri_to_path(params.text_document.uri)
+    index = _index_for_file(file_path)
+    if not index:
         return []
 
-    file_path = uri_to_path(params.text_document.uri)
-    actions = server.index.file_actions.get(file_path, {})
+    actions = index.file_actions.get(file_path, {})
     lenses: list[lsp.CodeLens] = []
 
     for action in actions.values():
@@ -473,7 +534,9 @@ def code_lens(params: lsp.CodeLensParams) -> list[lsp.CodeLens]:
 @server.feature(lsp.TEXT_DOCUMENT_SIGNATURE_HELP)
 def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
     """Provide signature help for guard/reprompt conditions."""
-    if not server.index:
+    current_file = uri_to_path(params.text_document.uri)
+    index = _index_for_file(current_file)
+    if not index:
         return None
 
     doc = server.workspace.get_text_document(params.text_document.uri)
@@ -488,8 +551,7 @@ def signature_help(params: lsp.SignatureHelpParams) -> lsp.SignatureHelp | None:
     if "condition:" not in line and "validation:" not in line:
         return None
 
-    current_file = uri_to_path(params.text_document.uri)
-    variables = _collect_available_guard_variables(current_file)
+    variables = _collect_available_guard_variables(current_file, index)
     if not variables:
         return None
 
@@ -545,15 +607,16 @@ def _find_reference_at_position(references, line: int, character: int):
 
 def _publish_diagnostics(uri: str) -> None:
     """Publish diagnostics for a file."""
-    if not server.index:
+    file_path = uri_to_path(uri)
+    index = _index_for_file(file_path)
+    if not index:
         return
 
     doc = server.workspace.get_text_document(uri)
     if not doc:
         return
 
-    file_path = uri_to_path(uri)
-    diagnostics = _collect_diagnostics(file_path, server.index)
+    diagnostics = _collect_diagnostics(file_path, index)
     server.text_document_publish_diagnostics(
         lsp.PublishDiagnosticsParams(uri=uri, diagnostics=diagnostics)
     )
@@ -634,7 +697,7 @@ def _collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagn
 
     for action in actions.values():
         if action.guard_condition and action.guard_variables:
-            available = _collect_available_guard_variables(file_path)
+            available = _collect_available_guard_variables(file_path, index)
             for variable in action.guard_variables:
                 if variable not in available:
                     diagnostics.append(
@@ -733,15 +796,15 @@ def _is_in_versions_block(lines: list[str], line_number: int) -> bool:
     return False
 
 
-def _build_context_scope_completions(file_path: Path) -> list[lsp.CompletionItem]:
+def _build_context_scope_completions(
+    file_path: Path, index: ProjectIndex
+) -> list[lsp.CompletionItem]:
     """Build completions for context_scope observe/drop blocks."""
-    if not server.index:
-        return []
     items = []
-    actions = server.index.file_actions.get(file_path, {})
+    actions = index.file_actions.get(file_path, {})
     for action in actions.values():
         if action.schema_ref:
-            schema = server.index.get_schema_definition(action.schema_ref)
+            schema = index.get_schema_definition(action.schema_ref)
             if schema and schema.fields:
                 for field in schema.fields:
                     items.append(
@@ -761,9 +824,9 @@ def _build_context_scope_completions(file_path: Path) -> list[lsp.CompletionItem
     return items
 
 
-def _build_guard_completions(file_path: Path) -> list[lsp.CompletionItem]:
+def _build_guard_completions(file_path: Path, index: ProjectIndex) -> list[lsp.CompletionItem]:
     """Build completions for guard/reprompt conditions."""
-    variables = _collect_available_guard_variables(file_path)
+    variables = _collect_available_guard_variables(file_path, index)
     return [
         lsp.CompletionItem(
             label=variable,
@@ -774,12 +837,9 @@ def _build_guard_completions(file_path: Path) -> list[lsp.CompletionItem]:
     ]
 
 
-def _collect_available_guard_variables(file_path: Path) -> set[str]:
+def _collect_available_guard_variables(file_path: Path, index: ProjectIndex) -> set[str]:
     """Collect variables available for guard/reprompt conditions."""
-    if not server.index:
-        return set()
-
-    actions = server.index.file_actions.get(file_path, {})
+    actions = index.file_actions.get(file_path, {})
     variables: set[str] = set()
     for action in actions.values():
         for observed in action.context_observe:
@@ -793,7 +853,7 @@ def _collect_available_guard_variables(file_path: Path) -> set[str]:
                 _, field = passthrough.split(".", 1)
                 variables.add(field)
         if action.schema_ref:
-            schema = server.index.get_schema_definition(action.schema_ref)
+            schema = index.get_schema_definition(action.schema_ref)
             if schema:
                 for field in schema.fields:
                     variables.add(f"{action.name}.{field}")
