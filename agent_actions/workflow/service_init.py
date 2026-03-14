@@ -41,7 +41,13 @@ def initialize_storage_backend(
     """Initialize the SQLite storage backend for the workflow."""
     try:
         config_path = Path(config.paths.constructor_path)
-        # Assumes: .../workflows/WORKFLOW/agent_config/current.yml
+        # Expects: .../workflows/WORKFLOW/agent_config/current.yml
+        # parents[1] navigates to the WORKFLOW directory.
+        if len(config_path.parents) < 2:
+            raise ValueError(
+                f"Config path too shallow to derive workflow directory: {config_path} "
+                f"(expected .../WORKFLOW/agent_config/file.yml)"
+            )
         workflow_dir = config_path.parents[1]
 
         backend = get_storage_backend(

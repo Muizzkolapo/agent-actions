@@ -130,7 +130,13 @@ class AgentWorkflow:
     def _get_workflows_root(self) -> Path:
         """Get the root directory containing all workflows."""
         current_config_path = Path(self.config.paths.constructor_path)
-        # Assumes: .../workflows/CURRENT/agent_config/current.yml
+        # Expects: .../workflows/CURRENT/agent_config/current.yml
+        # parents[2] navigates to the workflows root.
+        if len(current_config_path.parents) < 3:
+            raise ValueError(
+                f"Config path too shallow to derive workflows root: {current_config_path} "
+                f"(expected .../workflows/WORKFLOW/agent_config/file.yml)"
+            )
         return current_config_path.parents[2]
 
     # ── Session management ──────────────────────────────────────────────
