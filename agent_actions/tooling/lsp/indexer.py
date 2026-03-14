@@ -4,6 +4,7 @@ import ast
 import logging
 import re
 from pathlib import Path
+from typing import Any
 
 from ruamel.yaml import YAML
 
@@ -593,7 +594,7 @@ def _extract_schema_fields(schema_file: Path) -> list[str]:
     return fields
 
 
-def _collect_schema_fields(data: dict, fields: list[str], prefix: str = "") -> None:
+def _collect_schema_fields(data: Any, fields: list[str], prefix: str = "") -> None:
     """Collect schema fields from properties or field lists."""
     if not isinstance(data, dict):
         return

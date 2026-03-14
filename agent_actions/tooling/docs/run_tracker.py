@@ -46,6 +46,8 @@ def retry(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         time.sleep(backoff * (attempt + 1))
+            if last_exception is None:
+                raise RuntimeError("retry exhausted without capturing an exception")
             raise last_exception
 
         return wrapper
@@ -122,7 +124,8 @@ class RunTracker:
         """Load runs data from file handle."""
         try:
             f.seek(0)
-            return json.load(f)
+            result: dict[str, Any] = json.load(f)
+            return result
         except (OSError, json.JSONDecodeError):
             # File is empty or corrupted, create new structure
             return _empty_runs_data()
@@ -136,7 +139,7 @@ class RunTracker:
         if calc_duration is None and config.started_at and config.ended_at:
             calc_duration = self._calculate_duration(config.started_at, config.ended_at)
 
-        run_record = {
+        run_record: dict[str, Any] = {
             "id": run_id,
             "workflow_id": config.workflow_id,
             "workflow_name": config.workflow_name,
@@ -250,7 +253,7 @@ class RunTracker:
             run_count = len(runs_data["executions"]) + 1
             run_id = f"run_{workflow_id}_{run_count:03d}"
 
-            run_record = {
+            run_record: dict[str, Any] = {
                 "id": run_id,
                 "workflow_id": workflow_id,
                 "workflow_name": workflow_name,
@@ -412,7 +415,7 @@ class RunTracker:
 
     def _calculate_workflow_metrics(self, runs_data: dict[str, Any]) -> dict[str, Any]:
         """Calculate aggregate metrics per workflow."""
-        metrics = {}
+        metrics: dict[str, dict[str, Any]] = {}
 
         for run in runs_data["executions"]:
             wf_id = run["workflow_id"]

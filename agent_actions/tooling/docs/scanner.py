@@ -21,7 +21,7 @@ class ProjectScanner:
 
     def __init__(self, project_root: str):
         self.project_root = Path(project_root).resolve()
-        self.workflows_found = []
+        self.workflows_found: list[str] = []
 
     def scan(self) -> dict[str, dict[str, Any]]:
         """Scan project directory for rendered and original workflow YAML files."""
@@ -93,7 +93,7 @@ class ProjectScanner:
 
     def scan_prompts(self) -> dict[str, Any]:
         """Scan project directory for prompt files in prompt_store/."""
-        prompts = {}
+        prompts: dict[str, Any] = {}
         prompt_store_dir = self.project_root / "prompt_store"
 
         if not prompt_store_dir.exists():
@@ -130,7 +130,7 @@ class ProjectScanner:
 
     def scan_schemas(self) -> dict[str, Any]:
         """Scan project directory for schema YAML files."""
-        schemas = {}
+        schemas: dict[str, Any] = {}
         schema_dir = self.project_root / "schema"
 
         if not schema_dir.exists():
@@ -399,7 +399,7 @@ class ProjectScanner:
         """Scan project directory for global CLI and validation logs."""
         import json
 
-        logs_data = {
+        logs_data: dict[str, Any] = {
             "events_path": None,
             "recent_invocations": [],
             "validation_errors": [],
@@ -481,7 +481,7 @@ class ProjectScanner:
         """Extract per-action metrics from events.json file."""
         import json
 
-        action_metrics = {}
+        action_metrics: dict[str, Any] = {}
 
         try:
             with open(events_path, encoding="utf-8") as f:
@@ -587,7 +587,7 @@ class ProjectScanner:
 
         return tool_functions
 
-    def _extract_typed_dicts(self, tree: ast.AST) -> dict[str, list[dict[str, str]]]:
+    def _extract_typed_dicts(self, tree: ast.AST) -> dict[str, list[dict[str, Any]]]:
         """Extract TypedDict class definitions from AST."""
         typed_dicts = {}
 
@@ -634,7 +634,7 @@ class ProjectScanner:
         node: ast.FunctionDef,
         source: str,
         file_path: Path,
-        typed_dicts: dict[str, list[dict[str, str]]] | None = None,
+        typed_dicts: dict[str, list[dict[str, Any]]] | None = None,
     ) -> dict[str, Any] | None:
         """Extract details from a function AST node, including UDF metadata."""
         try:
@@ -726,7 +726,7 @@ class ProjectScanner:
 
     def scan_vendors(self) -> dict[str, Any]:
         """Scan for LLM vendor configurations via AST parsing."""
-        vendors = {}
+        vendors: dict[str, Any] = {}
         vendor_file = self.project_root.parent / "agent_actions" / "llm" / "config" / "vendor.py"
 
         # Also check if we're inside agent_actions already
@@ -743,8 +743,8 @@ class ProjectScanner:
             tree = ast.parse(source)
 
             # Extract VendorType enum values and config classes
-            enum_values = {}
-            config_classes = {}
+            enum_values: dict[str, Any] = {}
+            config_classes: dict[str, Any] = {}
 
             for node in ast.walk(tree):
                 if not isinstance(node, ast.ClassDef):
@@ -824,7 +824,7 @@ class ProjectScanner:
 
     def scan_error_types(self) -> dict[str, Any]:
         """Scan for error/exception class hierarchy via AST parsing."""
-        error_types = {}
+        error_types: dict[str, Any] = {}
         errors_dir = Path(__file__).resolve().parent.parent.parent / "errors"
 
         if not errors_dir.exists():
@@ -898,7 +898,7 @@ class ProjectScanner:
 
     def scan_event_types(self) -> dict[str, Any]:
         """Scan for event type definitions via AST parsing."""
-        event_types = {}
+        event_types: dict[str, Any] = {}
         events_file = (
             Path(__file__).resolve().parent.parent.parent / "logging" / "events" / "types.py"
         )
@@ -952,7 +952,7 @@ class ProjectScanner:
                             if isinstance(stmt, ast.Return) and isinstance(
                                 stmt.value, ast.Constant
                             ):
-                                event_code = stmt.value.value
+                                event_code = str(stmt.value.value)
 
                 # Determine category from __post_init__ body
                 category = "unknown"
@@ -968,7 +968,7 @@ class ProjectScanner:
                                 # EventCategories.WORKFLOW → "workflow"
                                 if isinstance(stmt.value, ast.Attribute):
                                     cat_key = stmt.value.attr
-                                    category = categories_map.get(cat_key, cat_key.lower())
+                                    category = str(categories_map.get(cat_key, cat_key.lower()))
 
                 event_info = {
                     "name": node.name,
@@ -996,7 +996,7 @@ class ProjectScanner:
 
     def scan_examples(self) -> dict[str, Any]:
         """Scan for example projects in the examples/ directory."""
-        examples = {}
+        examples: dict[str, Any] = {}
         examples_dir = self.project_root.parent / "examples"
 
         if not examples_dir.exists():
@@ -1076,7 +1076,7 @@ class ProjectScanner:
 
     def scan_data_loaders(self) -> dict[str, Any]:
         """Scan for data loader implementations via AST parsing."""
-        loaders = {}
+        loaders: dict[str, Any] = {}
         loaders_dir = Path(__file__).resolve().parent.parent.parent / "input" / "loaders"
 
         if not loaders_dir.exists():
@@ -1155,7 +1155,7 @@ class ProjectScanner:
 
     def scan_processing_states(self) -> dict[str, Any]:
         """Scan for processing state/status enums and dataclasses."""
-        processing_types = {}
+        processing_types: dict[str, Any] = {}
         types_file = Path(__file__).resolve().parent.parent.parent / "processing" / "types.py"
 
         if not types_file.exists():

@@ -89,12 +89,12 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
             server.project_root = first_root
             server.index = server.project_indexes[first_root]
         elif folder_paths:
-            root = find_project_root(folder_paths[0])
-            if root:
-                server.project_root = root
-                server.index = build_index(root)
-                server.project_indexes[root] = server.index
-                logger.info(f"Indexed project at {root}")
+            fallback_root = find_project_root(folder_paths[0])
+            if fallback_root:
+                server.project_root = fallback_root
+                server.index = build_index(fallback_root)
+                server.project_indexes[fallback_root] = server.index
+                logger.info(f"Indexed project at {fallback_root}")
 
     return lsp.InitializeResult(
         capabilities=lsp.ServerCapabilities(
@@ -423,9 +423,9 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
                 server.index = server.project_indexes[new_root]
             logger.info(f"Reindexed project at {new_root}")
     else:
-        idx = _index_for_file(file_path)
-        if idx:
-            root = idx.root
+        file_idx = _index_for_file(file_path)
+        if file_idx:
+            root = file_idx.root
             server.project_indexes[root] = build_index(root)
             if server.project_root == root:
                 server.index = server.project_indexes[root]
