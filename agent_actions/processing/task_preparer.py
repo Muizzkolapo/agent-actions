@@ -3,7 +3,7 @@
 import logging
 import threading
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from agent_actions.processing.prepared_task import (
     GuardStatus,
@@ -107,6 +107,7 @@ class TaskPreparer:
         if context.is_first_stage:
             from agent_actions.utils.id_generation import IDGenerator
 
+            source_guid: str | None
             if self._id_generator:
                 source_guid = self._id_generator(item)
             else:
@@ -224,7 +225,7 @@ class TaskPreparer:
         """Render prompt template using pre-loaded field context."""
         from agent_actions.prompt.service import PromptPreparationService
 
-        mode = "batch" if context.is_batch_mode else "realtime"
+        mode: Literal["batch", "realtime"] = "batch" if context.is_batch_mode else "realtime"
 
         return PromptPreparationService.prepare_prompt_with_field_context(
             agent_config=context.agent_config,

@@ -1,7 +1,8 @@
 """Adapter to bridge batch processing state into the enrichment pipeline."""
 
-from typing import Any
+from typing import Any, cast
 
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.processing.types import (
     ProcessingContext,
     ProcessingMode,
@@ -22,7 +23,7 @@ class BatchContextAdapter:
     ) -> ProcessingContext:
         """Build a ProcessingContext from batch-side state."""
         return ProcessingContext(
-            agent_config=agent_config,
+            agent_config=cast(AgentConfigDict, agent_config),
             agent_name=agent_config.get("agent_type", "unknown_action"),
             mode=ProcessingMode.BATCH,
             is_first_stage=False,

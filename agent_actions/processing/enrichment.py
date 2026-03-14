@@ -3,6 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Any, cast
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -94,7 +95,7 @@ class MetadataEnricher(Enricher):
 
             metadata = MetadataExtractor.extract_from_response(
                 response=result.raw_response,
-                agent_config=context.agent_config,
+                agent_config=cast(dict[str, Any], context.agent_config),
             )
             metadata_dict = metadata.to_dict()
 
@@ -120,7 +121,7 @@ class VersionIdEnricher(Enricher):
 
         for i, item in enumerate(result.data):
             result.data[i] = VersionIdGenerator.add_version_correlation_id(
-                item, context.agent_config, record_index=context.record_index
+                item, cast(dict[str, Any], context.agent_config), record_index=context.record_index
             )
 
         return result
@@ -160,7 +161,7 @@ class RequiredFieldsEnricher(Enricher):
         fm = FieldManager()
         for i, item in enumerate(result.data):
             result.data[i] = fm.ensure_required_fields(
-                item, result.source_guid, context.action_name
+                item, result.source_guid or "", context.action_name
             )
 
         return result

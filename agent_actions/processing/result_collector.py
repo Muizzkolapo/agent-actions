@@ -150,7 +150,7 @@ class ResultCollector:
                     ExhaustedRecordEvent(
                         agent_name=agent_name,
                         record_index=idx,
-                        source_guid=result.source_guid,
+                        source_guid=result.source_guid or "",
                         reason=f"exhausted_after_{attempts}_attempts",
                     )
                 )

@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import BatchProvider, InvocationStrategy
 from agent_actions.processing.prepared_task import PreparedTask
@@ -34,7 +35,7 @@ class BatchStrategy(InvocationStrategy):
 
     def __init__(self, provider: BatchProvider):
         self._provider = provider
-        self._agent_config: dict[str, Any] | None = None
+        self._agent_config: AgentConfigDict | dict[str, Any] | None = None
         self._queued: list[PreparedTask] = []
         self._context_map: dict[str, Any] = {}
 
@@ -113,7 +114,9 @@ class BatchStrategy(InvocationStrategy):
         task_count = len(batch_tasks)
         context_snapshot = self._context_map.copy()
         try:
-            formatted_tasks = self._provider.prepare_tasks(batch_tasks, self._agent_config)
+            if self._agent_config is None:
+                raise RuntimeError("BatchStrategy._agent_config is None at flush time")
+            formatted_tasks = self._provider.prepare_tasks(batch_tasks, dict(self._agent_config))
             resolved_name = batch_name or f"batch-{task_count}-tasks"
             batch_id, _status = self._provider.submit_batch(
                 formatted_tasks, resolved_name, output_directory

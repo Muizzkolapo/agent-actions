@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.processing.invocation.result import InvocationResult
 from agent_actions.processing.invocation.strategy import InvocationStrategy
@@ -87,9 +87,10 @@ class OnlineStrategy(InvocationStrategy):
         """Execute a single LLM call, returning (response, executed)."""
         from agent_actions.processing.helpers import run_dynamic_agent
 
-        tools_path = context.agent_config.get("tools", {}).get("path")
+        agent_config = cast(dict[str, Any], context.agent_config)
+        tools_path = agent_config.get("tools", {}).get("path")
         return run_dynamic_agent(
-            context.agent_config,
+            agent_config,
             context.agent_name,
             task.original_content,
             prompt,

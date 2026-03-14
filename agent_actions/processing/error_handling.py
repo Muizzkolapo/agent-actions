@@ -11,13 +11,14 @@ from xml.etree import ElementTree as ET
 import yaml
 
 from agent_actions.errors import ProcessingError, get_error_detail
+from agent_actions.errors.base import AgentActionsError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.validation_events import (
     DataLoadingErrorEvent,
     DataParsingErrorEvent,
 )
 
-T = TypeVar("T", bound=ProcessingError)
+T = TypeVar("T", bound=AgentActionsError)
 
 
 _PARSE_ERROR_MAP = {
@@ -148,6 +149,7 @@ class ProcessorErrorHandlerMixin:
         """
         from agent_actions.errors import FileLoadError, FileWriteError
 
+        error_type: type[AgentActionsError] | None
         if operation.lower() in ["read", "load", "open"]:
             error_type = FileLoadError
         elif operation.lower() in ["write", "save", "create"]:

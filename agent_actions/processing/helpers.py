@@ -84,7 +84,7 @@ def _resolve_schema_mismatch_mode(agent_config: dict[str, Any]) -> str:
     """Resolve on_schema_mismatch to 'warn', 'reprompt', or 'reject'."""
     explicit = agent_config.get(ON_SCHEMA_MISMATCH_KEY)
     if explicit in ("warn", "reprompt", "reject"):
-        return explicit
+        return str(explicit)
 
     if explicit is not None:
         logger.warning(

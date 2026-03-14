@@ -3,7 +3,7 @@
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from agent_actions.errors import ConfigurationError, SchemaValidationError
 from agent_actions.errors.operations import TemplateVariableError
@@ -123,7 +123,7 @@ class RecordProcessor:
             RecordProcessingStartedEvent(
                 agent_name=context.agent_name,
                 record_index=context.record_index,
-                source_guid=source_guid,
+                source_guid=source_guid or "",
             )
         )
 
@@ -148,7 +148,7 @@ class RecordProcessor:
                 RecordFilteredEvent(
                     agent_name=context.agent_name,
                     record_index=context.record_index,
-                    source_guid=source_guid,
+                    source_guid=source_guid or "",
                     filter_reason="guard_filter",
                 )
             )
@@ -163,7 +163,7 @@ class RecordProcessor:
                 RecordFilteredEvent(
                     agent_name=context.agent_name,
                     record_index=context.record_index,
-                    source_guid=source_guid,
+                    source_guid=source_guid or "",
                     filter_reason=f"guard_{prepared.guard_behavior}",
                 )
             )
@@ -191,7 +191,7 @@ class RecordProcessor:
 
         if invocation_result.deferred:
             return ProcessingResult.deferred(
-                task_id=invocation_result.task_id,
+                task_id=invocation_result.task_id or "",
                 source_guid=source_guid,
                 passthrough_fields=passthrough_fields,
                 source_snapshot=source_snapshot,
@@ -201,7 +201,9 @@ class RecordProcessor:
         if not executed:
             if response is None:
                 if recovery_metadata and recovery_metadata.retry:
-                    empty_content = ExhaustedRecordBuilder.build_empty_content(context.agent_config)
+                    empty_content = ExhaustedRecordBuilder.build_empty_content(
+                        cast(dict[str, Any], context.agent_config)
+                    )
                     tombstone = self._build_tombstone_item(
                         empty_content,
                         source_guid,
@@ -222,7 +224,7 @@ class RecordProcessor:
                     RecordFilteredEvent(
                         agent_name=context.agent_name,
                         record_index=context.record_index,
-                        source_guid=source_guid,
+                        source_guid=source_guid or "",
                         filter_reason="llm_layer_guard_filter",
                     )
                 )
@@ -236,7 +238,7 @@ class RecordProcessor:
                     RecordFilteredEvent(
                         agent_name=context.agent_name,
                         record_index=context.record_index,
-                        source_guid=source_guid,
+                        source_guid=source_guid or "",
                         filter_reason="llm_layer_guard_skip",
                     )
                 )
@@ -263,7 +265,7 @@ class RecordProcessor:
                 RecordEmptyOutputEvent(
                     agent_name=context.agent_name,
                     record_index=context.record_index,
-                    source_guid=source_guid,
+                    source_guid=source_guid or "",
                     input_field_count=input_field_count,
                     output=response,
                     on_empty=on_empty,
@@ -282,7 +284,7 @@ class RecordProcessor:
                 )
 
         transformed = self._transform_response(
-            response, content, source_guid, passthrough_fields, context
+            response, content, source_guid or "", passthrough_fields, context
         )
 
         input_size = 1 if not isinstance(response, list) else len(response)
@@ -291,7 +293,7 @@ class RecordProcessor:
             RecordTransformedEvent(
                 agent_name=context.agent_name,
                 record_index=context.record_index,
-                source_guid=source_guid,
+                source_guid=source_guid or "",
                 input_size=input_size,
                 output_size=output_size,
             )
@@ -432,7 +434,7 @@ class RecordProcessor:
             RecordProcessingCompleteEvent(
                 agent_name=context.agent_name,
                 record_index=context.record_index,
-                source_guid=source_guid,
+                source_guid=source_guid or "",
                 status=enriched_result.status.value,
             )
         )
@@ -455,7 +457,7 @@ class RecordProcessor:
             response,
             content,
             source_guid,
-            context.agent_config,
+            cast(dict[str, Any], context.agent_config),
             action_name=context.action_name,
             passthrough_fields=passthrough_fields,
         )

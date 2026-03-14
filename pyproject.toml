@@ -160,7 +160,6 @@ module = [
     "agent_actions.workflow.*",
     "agent_actions.output.*",
     "agent_actions.prompt.*",
-    "agent_actions.processing.*",
 ]
 ignore_errors = true
 

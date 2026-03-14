@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 if TYPE_CHECKING:
     from agent_actions.processing.types import ProcessingContext
@@ -84,7 +84,7 @@ class PreparationContext:
         from agent_actions.utils.tools_resolver import resolve_tools_path
 
         return cls(
-            agent_config=context.agent_config,
+            agent_config=cast(dict[str, Any], context.agent_config),
             agent_name=context.agent_name,
             is_first_stage=context.is_first_stage,
             is_batch_mode=context.mode == ProcessingMode.BATCH,
@@ -95,7 +95,7 @@ class PreparationContext:
             version_context=context.version_context,
             file_path=context.file_path,
             output_directory=context.output_directory,
-            tools_path=resolve_tools_path(context.agent_config),
+            tools_path=resolve_tools_path(cast(dict[str, Any], context.agent_config)),
             storage_backend=context.storage_backend,
             current_item=context.current_item,
             record_index=context.record_index,
