@@ -79,6 +79,10 @@ class PathManager:
         """Initialize PathManager with optional configuration and project root."""
         self.config = config or PathConfig()
         self._project_root = Path(project_root).resolve() if project_root else None
+        # CWD snapshot when _project_root was last resolved from CWD.
+        # None means the root was explicitly provided (pinned) and should
+        # not be invalidated by CWD changes.
+        self._cached_cwd: Path | None = None
         self._path_cache: dict[str, Path] = {}
 
     def get_project_root(self, start_path: Path | None = None) -> Path:
@@ -87,12 +91,19 @@ class PathManager:
         Raises:
             ProjectRootNotFoundError: If project root cannot be found.
         """
-        # When start_path is None (CWD), return cached root if available.
+        # When start_path is None (CWD), return cached root if available
+        # and CWD hasn't changed since the root was resolved.
         # When start_path is explicit, always re-resolve (skip reading cache)
         # but still store the result for follow-on calls like get_standard_path().
         read_cache = start_path is None and self.config.cache_paths
         if self._project_root and read_cache:
-            return self._project_root
+            # _cached_cwd is None when root was explicitly provided (pinned);
+            # otherwise invalidate if the working directory has moved.
+            if self._cached_cwd is not None and self._cached_cwd != Path.cwd().resolve():
+                self._project_root = None
+                self._path_cache.clear()
+            else:
+                return self._project_root
 
         search_path = Path(start_path or Path.cwd()).resolve()
 
@@ -102,6 +113,7 @@ class PathManager:
             if marker_path.exists():
                 if self.config.cache_paths:
                     self._project_root = current
+                    self._cached_cwd = search_path if start_path is None else None
                 return current
 
             # Fallback: check for 'agent_actions' (package root) or 'agent_config' directory
@@ -114,6 +126,7 @@ class PathManager:
                 )
                 if self.config.cache_paths:
                     self._project_root = current
+                    self._cached_cwd = search_path if start_path is None else None
                 return current
 
             current = current.parent
@@ -131,14 +144,15 @@ class PathManager:
         **template_vars,
     ) -> Path:
         """Get a standard path based on type and parameters."""
+        # Resolve project root first — this may clear _path_cache if CWD changed.
+        project_root = self.get_project_root()
+
         cache_key = (
             f"{path_type.value}:{agent_name}:{action_name}:{hash(frozenset(template_vars.items()))}"
         )
 
         if cache_key in self._path_cache and self.config.cache_paths:
             return self._path_cache[cache_key]
-
-        project_root = self.get_project_root()
 
         if path_type == PathType.PROJECT_ROOT:
             path = project_root
@@ -319,3 +333,4 @@ class PathManager:
         """Clear the internal path cache."""
         self._path_cache.clear()
         self._project_root = None
+        self._cached_cwd = None
