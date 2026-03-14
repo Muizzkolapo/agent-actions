@@ -42,7 +42,7 @@ agac run -a my_workflow
 
 ```bash
 agac init my-project && cd my-project    # scaffold a project
-agac validate                            # catch errors before LLM calls
+agac validate-udfs                       # check tool references
 agac run                                 # execute the workflow
 ```
 
@@ -78,7 +78,7 @@ Switch providers by changing `model_vendor` — no code changes needed.
 
 ## Key capabilities
 
-**Pre-flight validation** — `agac validate` catches schema errors, circular deps, template issues, missing UDFs, and credential problems before a single token is spent.
+**Pre-flight validation** — `agac run` automatically validates schemas, dependencies, templates, and credentials before any LLM call. Use `agac validate-udfs` to check tool references independently.
 
 **Batch processing** — Route thousands of records through provider batch APIs for bulk enrichment, classification, and extraction.
 

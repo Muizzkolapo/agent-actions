@@ -351,7 +351,7 @@ ConfigurationError: Invalid value for 'granularity': 'invalid'
 ```
 
 :::tip
-Run `agac validate -a my_workflow` to catch configuration errors before executing your agentic workflow. This is especially useful after refactoring defaults.
+Run `agac run -a my_workflow` to validate and execute your workflow — configuration errors are caught automatically before any LLM calls.
 :::
 
 ## See Also
