@@ -46,7 +46,7 @@ def find_project_root(start_path: Path | None = None) -> Path:
     Raises:
         ProjectRootNotFoundError: If project root cannot be found.
     """
-    pm = PathManager()
+    pm = get_path_manager()
     return pm.get_project_root(start_path)
 
 
