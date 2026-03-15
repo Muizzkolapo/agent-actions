@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import AgentConfigDict
@@ -80,16 +80,19 @@ class InitialStrategy(AgentStrategy):
 
     def execute(self, params: StrategyExecutionParams) -> str:
         """Execute the initial agent strategy and return path to the generated output file."""
-        return process_initial_stage(
-            InitialStageContext(
-                agent_config=params.agent_config,
-                agent_name=params.agent_name,
-                file_path=params.file_path,
-                base_directory=params.base_directory,
-                output_directory=params.output_directory,
-                idx=params.idx,
-                storage_backend=params.storage_backend,
-            )
+        return cast(
+            str,
+            process_initial_stage(
+                InitialStageContext(
+                    agent_config=cast(dict[str, Any], params.agent_config),
+                    agent_name=params.agent_name,
+                    file_path=params.file_path,
+                    base_directory=params.base_directory,
+                    output_directory=params.output_directory,
+                    idx=params.idx,
+                    storage_backend=params.storage_backend,
+                )
+            ),
         )
 
 

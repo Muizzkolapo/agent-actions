@@ -7,7 +7,7 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class ArtifactLinker:
                 logger.warning("Manifest missing required fields: %s", manifest_file)
                 return None
 
-            return manifest
+            return cast(dict[str, Any], manifest)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning("Failed to read manifest %s: %s", manifest_file, e)
             return None

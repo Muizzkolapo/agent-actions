@@ -6,7 +6,7 @@ import warnings
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import AgentConfigDict
@@ -118,9 +118,9 @@ class ProcessingPipeline:
             )
 
         self.config = config
-        self.model_vendor = (config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
-        self.action_kind = (config.agent_config.get("kind") or "").lower()
-        self.granularity = (config.agent_config.get("granularity") or "").lower()
+        self.model_vendor = str(config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+        self.action_kind = str(config.agent_config.get("kind") or "").lower()
+        self.granularity = str(config.agent_config.get("granularity") or "").lower()
         # Detect synchronous action types via kind OR model_vendor so that
         # batch-mode bypass works regardless of which field the user sets.
         self.is_tool_action = self.action_kind == "tool" or self.model_vendor == "tool"
@@ -137,7 +137,7 @@ class ProcessingPipeline:
 
         # Initialize RecordProcessor directly
         self.record_processor = RecordProcessor(
-            agent_config=config.agent_config,
+            agent_config=cast(dict[str, Any], config.agent_config),
             agent_name=config.agent_name,
         )
         # Initialize OutputHandler with optional storage backend
@@ -379,17 +379,17 @@ class ProcessingPipeline:
 
             source_loader = SourceDataLoader(
                 agent_name=self.config.agent_name,
-                storage_backend=self.config.storage_backend,
+                storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
             )
 
             # Load the source data using the explicit source_relative_path
-            loaded_source = source_loader.load_source_data(self.config.source_relative_path)
+            loaded_source = source_loader.load_source_data(self.config.source_relative_path or "")
 
             if isinstance(loaded_source, list):
                 source_data = loaded_source
             else:
                 # Should be a list, but handle single dict if returned
-                source_data = [loaded_source] if loaded_source else []
+                source_data = [loaded_source] if loaded_source else []  # type: ignore[unreachable]
 
             logger.info("Loaded source data via SourceDataLoader for %s", file_path)
 
@@ -454,7 +454,7 @@ class ProcessingPipeline:
             context.source_data = data
             filtered = apply_observe_for_file_mode(
                 data=data,
-                agent_config=self.config.agent_config,
+                agent_config=cast(dict[str, Any], self.config.agent_config),
                 agent_name=self.config.agent_name,
                 agent_indices=agent_indices,
                 file_path=file_path,
@@ -472,7 +472,7 @@ class ProcessingPipeline:
         # Collect success results
         output = ResultCollector.collect_results(
             results,
-            self.config.agent_config,
+            cast(dict[str, Any], self.config.agent_config),
             self.config.agent_name,
             is_first_stage=False,
             storage_backend=self.config.storage_backend,
@@ -544,7 +544,7 @@ class ProcessingPipeline:
         filtered = []
         for item in data:
             if not isinstance(item, dict):
-                filtered.append(item)
+                filtered.append(item)  # type: ignore[unreachable]
                 continue
             content = item.get("content", item) if isinstance(item.get("content"), dict) else item
             ordered = {ok: content[bk] for ok, bk in key_pairs if bk in content}
@@ -585,7 +585,7 @@ class ProcessingPipeline:
             # Invoke tool once with full array
             # For tools, formatted_prompt is not used, so we pass empty string
             raw_response, executed = run_dynamic_agent(
-                agent_config=context.agent_config,
+                agent_config=cast(dict[str, Any], context.agent_config),
                 agent_name=context.agent_name,
                 context=data,  # Full array of records
                 formatted_prompt="",  # Not used for tools
@@ -700,7 +700,7 @@ class ProcessingPipeline:
                 agent_name=context.agent_name,
                 context=data,
                 formatted_prompt="",
-                tools_path=hitl_agent_config.get("tools_path"),
+                tools_path=cast(str | None, hitl_agent_config.get("tools_path")),
             )
 
             # Unwrap single-item list from invocation service
@@ -777,7 +777,7 @@ class ProcessingPipeline:
                             if not base_content and raw_content is not None:
                                 base_content = {"value": raw_content}
                     else:
-                        base_content = {"value": item}
+                        base_content = {"value": item}  # type: ignore[unreachable]
 
                     merged_content = dict(base_content)
                     merged_content.update(decision_common)

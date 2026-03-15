@@ -154,4 +154,4 @@ class WorkflowEventLogger:
         self.services.core.state_manager.mark_running_as_failed()
 
         # CLI decorator checks this attribute to prevent duplicate output
-        error._already_displayed = True
+        error._already_displayed = True  # type: ignore[attr-defined]

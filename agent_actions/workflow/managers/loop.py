@@ -40,14 +40,14 @@ class VersionOutputCorrelator:
     ):
         self.agent_folder = agent_folder
         self.storage_backend = storage_backend
-        self.correlations_cache = {}
+        self.correlations_cache: dict[str, Any] = {}
 
     def detect_explicit_version_consumption(
         self, execution_order: list[str], agent_configs: dict[str, Any]
     ) -> dict[str, dict[str, Any]]:
         """Return map of agent names to their version consumption configurations."""
         version_consumption_map = {}
-        version_groups = {}
+        version_groups: dict[str, list[str]] = {}
         for agent_name in execution_order:
             if "_" in agent_name and agent_name.count("_") >= 1:
                 parts = agent_name.rsplit("_", 1)
@@ -129,7 +129,7 @@ class VersionOutputCorrelator:
                             record["_source_file"] = relative_path
                         outputs.extend(data)
                     else:
-                        data["_source_file"] = relative_path
+                        data["_source_file"] = relative_path  # type: ignore[unreachable]
                         outputs.append(data)
                     filenames.add(relative_path)
                 except Exception as e:
@@ -272,9 +272,9 @@ class VersionOutputCorrelator:
         self, output_dir: Path
     ) -> tuple[list[dict[str, Any]], set]:
         """Load all JSON outputs with filenames."""
-        outputs = []
+        outputs: list[dict[str, Any]] = []
         filenames = set()
-        corrupted_files = []
+        corrupted_files: list[str] = []
 
         for json_file in output_dir.glob("*.json"):
             before_count = len(outputs)
@@ -310,7 +310,7 @@ class VersionOutputCorrelator:
         self, version_outputs: dict[str, list[dict[str, Any]]]
     ) -> defaultdict:
         """Build correlation groups from version outputs."""
-        correlation_groups = defaultdict(dict)
+        correlation_groups: defaultdict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         for version_agent, outputs in version_outputs.items():
             for record in outputs:
                 record_copy = {k: v for k, v in record.items() if k != "_source_file"}

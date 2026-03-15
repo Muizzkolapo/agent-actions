@@ -250,7 +250,7 @@ class AgentOutputManager:
                 if isinstance(data, list):
                     outputs.extend(data)
                 else:
-                    outputs.append(data)
+                    outputs.append(data)  # type: ignore[unreachable]
             except Exception as e:
                 logger.warning(
                     "Failed to read backend target %s/%s: %s", action_name, relative_path, e

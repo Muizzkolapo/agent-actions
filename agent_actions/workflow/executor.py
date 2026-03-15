@@ -3,10 +3,10 @@
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from rich.console import Console
 
@@ -72,11 +72,12 @@ class AgentExecutionResult:
     output_folder: str | None = None
     status: str = "completed"  # 'completed', 'batch_submitted', 'failed'
     error: Exception | None = None
-    metrics: ExecutionMetrics = None
+    metrics: ExecutionMetrics = field(default_factory=ExecutionMetrics)
 
-    def __post_init__(self):
-        if self.metrics is None:
-            self.metrics = ExecutionMetrics()
+    def __post_init__(self) -> None:
+        # Defensive: coerce None back to default if a caller passes metrics=None
+        if self.metrics is None:  # type: ignore[comparison-overlap]  # defensive
+            object.__setattr__(self, "metrics", ExecutionMetrics())  # type: ignore[unreachable]
 
     # Backward compatibility properties
     @property
@@ -124,7 +125,9 @@ class AgentExecutor:
             return False
         return self.deps == other.deps
 
-    def _verify_completion_status(self, agent_name: str) -> tuple:
+    def _verify_completion_status(
+        self, agent_name: str
+    ) -> tuple[bool, AgentExecutionResult | None]:
         """Verify a completed agent has actual output in storage.
 
         Returns:
@@ -339,6 +342,7 @@ class AgentExecutor:
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(agent_name)
             if should_skip:
+                assert result is not None
                 return result
 
         if current_status == "batch_submitted":
@@ -379,6 +383,7 @@ class AgentExecutor:
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(agent_name)
             if should_skip:
+                assert result is not None
                 return result
 
         if current_status == "batch_submitted":
@@ -588,7 +593,7 @@ class AgentExecutor:
         if correlation_wrapper:
             original = self.deps.agent_runner.setup_directories
             self.deps.agent_runner.setup_directories = correlation_wrapper
-            return original
+            return cast(Callable, original)
 
         return None
 
@@ -596,4 +601,7 @@ class AgentExecutor:
         """Check if batch jobs were submitted."""
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        return self.deps.batch_manager.check_batch_submission(agent_name, agent_idx, agent_io_path)
+        return cast(
+            str | None,
+            self.deps.batch_manager.check_batch_submission(agent_name, agent_idx, agent_io_path),
+        )

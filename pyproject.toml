@@ -157,7 +157,6 @@ ignore_missing_imports = true
 module = [
     "agent_actions.llm.*",
     "agent_actions.input.*",
-    "agent_actions.workflow.*",
     "agent_actions.output.*",
 ]
 ignore_errors = true

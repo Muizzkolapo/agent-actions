@@ -59,7 +59,8 @@ class AgentStateManager:
 
     def get_status(self, agent_name: str) -> str:
         """Return current status of an agent, defaulting to 'pending'."""
-        return self.agent_status.get(agent_name, {}).get("status", "pending")
+        status: str = self.agent_status.get(agent_name, {}).get("status", "pending")
+        return status
 
     def get_status_details(self, agent_name: str) -> dict[str, Any]:
         """Return full status details for an agent."""
@@ -99,7 +100,7 @@ class AgentStateManager:
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of agent statuses."""
-        summary = {}
+        summary: dict[str, int] = {}
         for details in self.agent_status.values():
             status = details.get("status", "unknown")
             summary[status] = summary.get(status, 0) + 1

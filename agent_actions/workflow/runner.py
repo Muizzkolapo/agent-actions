@@ -6,12 +6,13 @@ import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
 from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.config.types import AgentConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.utils.file_handler import FileHandler
@@ -88,6 +89,8 @@ class AgentRunner:
         self.processor_factory = processor_factory
         self.storage_backend = storage_backend
         self.agent_configs: dict[str, dict] | None = None
+        self.execution_order: list[str] = []  # Set by service_init.initialize_services
+        self.agent_indices: dict[str, int] = {}  # Set by service_init.initialize_services
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
@@ -320,7 +323,7 @@ class AgentRunner:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
         params.strategy.execute(
             StrategyExecutionParams(
-                agent_config=params.agent_config,
+                agent_config=cast("AgentConfigDict", params.agent_config),
                 agent_name=params.agent_name,
                 file_path=str(params.locations.item),
                 base_directory=str(params.locations.input_directory),

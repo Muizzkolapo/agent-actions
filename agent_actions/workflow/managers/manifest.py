@@ -9,7 +9,7 @@ import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class ManifestManager:
                     schema_version,
                 )
 
-            return manifest
+            return cast(dict[str, Any], manifest)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning("Failed to load manifest from %s: %s", self.manifest_path, e)
             return {}
@@ -169,7 +169,7 @@ class ManifestManager:
         action = self.manifest.get("actions", {}).get(action_name)
         if not action:
             raise KeyError(f"Action '{action_name}' not found in manifest")
-        return self.target_dir / action["output_dir"]
+        return self.target_dir / cast(str, action["output_dir"])
 
     def get_dependency_directories(self, action_name: str) -> list[Path]:
         """Return output directories for all dependencies of an action."""
@@ -207,13 +207,13 @@ class ManifestManager:
         levels = self.manifest.get("levels", [])
         if level < 0 or level >= len(levels):
             return []
-        return levels[level]
+        return cast(list[str], levels[level])
 
     def get_action_index(self, action_name: str) -> int | None:
         """Return the execution index for an action, or None if not found."""
         action = self.manifest.get("actions", {}).get(action_name)
         if action:
-            return action.get("index")
+            return cast(int | None, action.get("index"))
         return None
 
     def is_action_completed(self, action_name: str) -> bool:
@@ -236,6 +236,7 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as started")
 
+            assert self._manifest is not None
             self._manifest["actions"][action_name]["status"] = "running"
             self._manifest["actions"][action_name]["started_at"] = datetime.now().isoformat()
             self._save_manifest()
@@ -254,6 +255,7 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as completed")
 
+            assert self._manifest is not None
             self._manifest["actions"][action_name]["status"] = "completed"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if record_count is not None:
@@ -270,6 +272,7 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as skipped")
 
+            assert self._manifest is not None
             self._manifest["actions"][action_name]["status"] = "skipped"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if reason:
@@ -286,6 +289,7 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as failed")
 
+            assert self._manifest is not None
             self._manifest["actions"][action_name]["status"] = "failed"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             self._manifest["actions"][action_name]["error"] = error
@@ -294,6 +298,7 @@ class ManifestManager:
     def mark_workflow_completed(self) -> None:
         """Mark the entire workflow as completed."""
         with self._lock:
+            assert self._manifest is not None
             self._manifest["status"] = "completed"
             self._manifest["completed_at"] = datetime.now().isoformat()
             self._save_manifest()
@@ -301,6 +306,7 @@ class ManifestManager:
     def mark_workflow_failed(self, error: str) -> None:
         """Mark the entire workflow as failed."""
         with self._lock:
+            assert self._manifest is not None
             self._manifest["status"] = "failed"
             self._manifest["completed_at"] = datetime.now().isoformat()
             self._manifest["error"] = error

@@ -99,7 +99,7 @@ class ActionLevelOrchestrator:
                 self.agent_configs[agent]["dependencies"] = expanded_deps
 
         levels = []
-        assigned = set()
+        assigned: set[str] = set()
 
         while len(assigned) < len(self.execution_order):
             # Find agents whose dependencies are all satisfied
@@ -216,7 +216,7 @@ class ActionLevelOrchestrator:
 
         errors = []
         for agent, result in zip(params.pending_agents, results, strict=True):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 errors.append((agent, result))
             elif not result.success:
                 errors.append((agent, result.error))
@@ -226,7 +226,7 @@ class ActionLevelOrchestrator:
             error_msg = (
                 f"Multiple agents failed in parallel action {params.level_idx}:\n{error_details}"
             )
-            raise WorkflowError("parallel_execution_failures", error_msg)
+            raise WorkflowError(error_msg, context={"level_idx": params.level_idx})
 
     def _fire_agent_result_event(self, agent_name: str, idx: int, total: int, result):
         """Fire agent complete or failed event for an execution result."""
@@ -271,7 +271,7 @@ class ActionLevelOrchestrator:
                     f"{', '.join(failed_agents)} failed while "
                     "batch jobs were submitted"
                 )
-                raise WorkflowError("batch_submission_partial_failure", error_msg)
+                raise WorkflowError(error_msg, context={"level_idx": level_idx})
 
             # Batch jobs submitted, need to wait
             duration = (datetime.now() - start_time).total_seconds()

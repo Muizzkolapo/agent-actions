@@ -118,7 +118,7 @@ class AgentWorkflow:
                 paths=WorkflowPaths(
                     constructor_path=config_path,
                     user_code_path=user_code_path,
-                    default_path=default_path,
+                    default_path=default_path or "",
                 ),
                 use_tools=use_tools,
                 run_upstream=run_upstream,

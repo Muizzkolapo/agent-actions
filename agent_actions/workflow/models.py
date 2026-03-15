@@ -35,7 +35,7 @@ class WorkflowState:
     """Runtime state for workflow execution."""
 
     previous_agent_type: str | None = None
-    ephemeral_directories: list = None
+    ephemeral_directories: list[dict[str, Any]] | None = None
     failed: bool = False
 
     def __post_init__(self):
@@ -57,9 +57,9 @@ class WorkflowMetadata:
     """Workflow configuration metadata."""
 
     agent_name: str
-    execution_order: list
-    agent_indices: dict
-    agent_configs: dict
+    execution_order: list[str]
+    agent_indices: dict[str, int]
+    agent_configs: dict[str, dict[str, Any]]
     child_pipeline: str | None = None
 
 
