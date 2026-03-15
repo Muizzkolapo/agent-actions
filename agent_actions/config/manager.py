@@ -107,9 +107,8 @@ class ConfigManager:
             project_root = path_manager.get_project_root()
             project_config = load_project_config(project_root)
             project_tool_path = project_config.get("tool_path")
-        except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError):
-            # Silently ignore if project config can't be loaded
-            pass
+        except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError) as e:
+            logger.debug("Could not resolve tool_path from project config: %s", e)
 
         # Priority: workflow config > default config > project config
         if user_tool_path is not None:
@@ -293,7 +292,13 @@ class ConfigManager:
                         config.model_dump(), workflow_actions, agent_type
                     )
                     all_deps: list[Any] = input_sources + context_sources
-                except Exception:
+                except Exception as e:
+                    logger.warning(
+                        "Dependency inference failed for %s, using explicit deps: %s",
+                        agent_type,
+                        e,
+                        exc_info=True,
+                    )
                     all_deps = list(config.dependencies)
 
                 dependencies = [

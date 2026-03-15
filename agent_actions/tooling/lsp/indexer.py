@@ -583,7 +583,8 @@ def _extract_schema_fields(schema_file: Path) -> list[str]:
     try:
         yaml = YAML(typ="safe")
         data = yaml.load(schema_file.read_text())
-    except Exception:
+    except Exception as e:
+        logger.debug("Could not extract schema fields from %s: %s", schema_file, e)
         return []
 
     if not isinstance(data, dict):

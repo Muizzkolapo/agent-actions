@@ -472,8 +472,8 @@ class ProjectScanner:
                 # Get recent invocations (last 10)
                 logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("Could not read events log from %s: %s", events_path, e)
 
         return logs_data
 
@@ -537,8 +537,8 @@ class ProjectScanner:
                             "completion_tokens", 0
                         )
 
-        except OSError:
-            pass
+        except OSError as e:
+            logger.debug("Could not read action metrics from %s: %s", events_path, e)
 
         return action_metrics
 
@@ -817,8 +817,8 @@ class ProjectScanner:
                     "docstring": config_info.get("docstring", ""),
                 }
 
-        except (OSError, SyntaxError, UnicodeDecodeError):
-            pass
+        except (OSError, SyntaxError, UnicodeDecodeError) as e:
+            logger.debug("Could not scan vendors from %s: %s", vendor_file, e)
 
         return vendors
 
@@ -891,7 +891,8 @@ class ProjectScanner:
                         "error_count": len(errors_list),
                     }
 
-            except (OSError, SyntaxError, UnicodeDecodeError):
+            except (OSError, SyntaxError, UnicodeDecodeError) as e:
+                logger.debug("Could not scan error types from %s: %s", py_file, e)
                 continue
 
         return error_types
@@ -989,8 +990,8 @@ class ProjectScanner:
             for cat_data in event_types.values():
                 cat_data["event_count"] = len(cat_data["events"])
 
-        except (OSError, SyntaxError, UnicodeDecodeError):
-            pass
+        except (OSError, SyntaxError, UnicodeDecodeError) as e:
+            logger.debug("Could not scan event types from %s: %s", events_file, e)
 
         return event_types
 
@@ -1148,7 +1149,8 @@ class ProjectScanner:
                         "line": node.lineno,
                     }
 
-            except (OSError, SyntaxError, UnicodeDecodeError):
+            except (OSError, SyntaxError, UnicodeDecodeError) as e:
+                logger.debug("Could not scan data loaders from %s: %s", py_file, e)
                 continue
 
         return loaders
@@ -1245,7 +1247,7 @@ class ProjectScanner:
                         "factory_methods": factory_methods,
                     }
 
-        except (OSError, SyntaxError, UnicodeDecodeError):
-            pass
+        except (OSError, SyntaxError, UnicodeDecodeError) as e:
+            logger.debug("Could not scan processing states from %s: %s", types_file, e)
 
         return processing_types

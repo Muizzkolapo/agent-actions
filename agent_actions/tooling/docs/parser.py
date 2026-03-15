@@ -130,7 +130,12 @@ class WorkflowParser:
                     action_data, action_names, action_name
                 )
                 all_dependencies = input_sources + context_sources
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "Dependency inference failed for action %s, using explicit deps: %s",
+                    action_name,
+                    e,
+                )
                 # Fallback to explicit dependencies
                 all_dependencies = action_data.get("dependencies", [])
 
