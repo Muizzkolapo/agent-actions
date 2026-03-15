@@ -11,6 +11,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterResult,
     GuardFilter,
     get_global_guard_filter,
+    reset_global_guard_filter,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "FilterResult",
     "FilterItemRequest",
     "get_global_guard_filter",
+    "reset_global_guard_filter",
 ]

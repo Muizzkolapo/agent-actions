@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import deque
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
@@ -13,16 +14,30 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
 _global_path_manager: PathManager | None = None
+_path_manager_lock = threading.Lock()
 
 
 def get_path_manager() -> PathManager:
-    """Get the global PathManager singleton."""
+    """Get the global PathManager singleton (thread-safe)."""
     from agent_actions.config.paths import PathManager
 
     global _global_path_manager
     if _global_path_manager is None:
-        _global_path_manager = PathManager()
+        with _path_manager_lock:
+            if _global_path_manager is None:
+                _global_path_manager = PathManager()
     return _global_path_manager
+
+
+def reset_path_manager() -> None:
+    """Reset the global PathManager instance (for testing).
+
+    Must be called from a single thread (e.g. a serial test fixture),
+    not concurrently with ``get_path_manager()``.
+    """
+    global _global_path_manager
+    with _path_manager_lock:
+        _global_path_manager = None
 
 
 def ensure_directory_exists(path: str | Path, is_file: bool = False) -> Path:

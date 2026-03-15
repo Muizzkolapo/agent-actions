@@ -2,6 +2,7 @@
 
 import atexit
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -202,14 +203,33 @@ class GuardFilter:
         self.executor.shutdown(wait=True)
 
 
-# Global singleton
-_GLOBAL_GUARD_FILTER = None
+# Thread-safe singleton
+_GLOBAL_GUARD_FILTER: GuardFilter | None = None
+_GUARD_FILTER_LOCK = threading.Lock()
 
 
 def get_global_guard_filter() -> GuardFilter:
-    """Get the global guard filter instance."""
+    """Get the global guard filter instance (thread-safe)."""
     global _GLOBAL_GUARD_FILTER
     if _GLOBAL_GUARD_FILTER is None:
-        _GLOBAL_GUARD_FILTER = GuardFilter()
-        atexit.register(_GLOBAL_GUARD_FILTER.shutdown)
+        with _GUARD_FILTER_LOCK:
+            if _GLOBAL_GUARD_FILTER is None:
+                _GLOBAL_GUARD_FILTER = GuardFilter()
+                atexit.register(_GLOBAL_GUARD_FILTER.shutdown)
     return _GLOBAL_GUARD_FILTER
+
+
+def reset_global_guard_filter() -> None:
+    """Reset the global guard filter instance (for testing).
+
+    Shuts down the existing instance's ThreadPoolExecutor and unregisters
+    its atexit handler before clearing.  Must be called from a single
+    thread (e.g. a serial test fixture), not concurrently with
+    ``get_global_guard_filter()``.
+    """
+    global _GLOBAL_GUARD_FILTER
+    with _GUARD_FILTER_LOCK:
+        if _GLOBAL_GUARD_FILTER is not None:
+            atexit.unregister(_GLOBAL_GUARD_FILTER.shutdown)
+            _GLOBAL_GUARD_FILTER.shutdown()
+            _GLOBAL_GUARD_FILTER = None
