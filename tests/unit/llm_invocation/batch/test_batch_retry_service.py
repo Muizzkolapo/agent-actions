@@ -6,8 +6,8 @@ Covers:
 - retrieve_results_with_retry returns exhausted_recovery for still-missing records
 - _resubmit_missing_records returns [] on failure (no crash)
 - Non-blocking async methods: submit_retry_batch, process_retry_results,
-  validate_results, submit_reprompt_batch, process_reprompt_results,
   serialize/deserialize_results
+- validate_and_reprompt passed flag reflects post-reprompt validation state
 """
 
 from unittest.mock import MagicMock, patch
