@@ -42,6 +42,14 @@ class FakeStatusCodeError(Exception):
         super().__init__(f"HTTP {status_code}")
 
 
+class FakeCodeOnlyError(Exception):
+    """Mimics google-genai errors that use .code instead of .status_code."""
+
+    def __init__(self, code):
+        self.code = code
+        super().__init__(f"HTTP {code}")
+
+
 TYPE_BASED_MAPPING = VendorErrorMapping(
     vendor_name="test_vendor",
     rate_limit_types=(FakeRateLimitError,),
@@ -132,3 +140,27 @@ class TestWrapVendorErrorStatusCodeBased:
         e = ConnectionError("refused")
         result = wrap_vendor_error(e, "command-r", STATUS_CODE_MAPPING)
         assert isinstance(result, NetworkError)
+
+
+class TestWrapVendorErrorCodeAttribute:
+    """Tests for .code attribute fallback (google-genai style)."""
+
+    CODE_ONLY_MAPPING = VendorErrorMapping(
+        vendor_name="gemini",
+        status_code_error_types=(FakeCodeOnlyError,),
+    )
+
+    @pytest.mark.parametrize(
+        "code,expected_type",
+        [
+            pytest.param(429, RateLimitError, id="429_rate_limit"),
+            pytest.param(500, NetworkError, id="500_network"),
+            pytest.param(503, NetworkError, id="503_network"),
+            pytest.param(400, VendorAPIError, id="400_api_error"),
+        ],
+    )
+    @patch("agent_actions.llm.providers.error_wrapper.fire_event")
+    def test_code_attribute_classification(self, mock_fire, code, expected_type):
+        e = FakeCodeOnlyError(code)
+        result = wrap_vendor_error(e, "gemini-pro", self.CODE_ONLY_MAPPING)
+        assert isinstance(result, expected_type)

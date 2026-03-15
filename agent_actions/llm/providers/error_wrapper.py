@@ -45,17 +45,17 @@ class VendorErrorMapping:
     """Maps vendor SDK exception types to unified error categories.
 
     Supports two classification strategies:
-    1. **Type-based** (OpenAI, Anthropic, Groq, Gemini): specific exception classes
+    1. **Type-based** (OpenAI, Anthropic, Groq): specific exception classes
        for rate-limit, connection, timeout, server-error, and base API error.
-    2. **Status-code-based** (Cohere, Mistral, Ollama-HTTP): a single SDK error
-       type with a `.status_code` attribute inspected at runtime.
+    2. **Status-code-based** (Cohere, Gemini, Mistral, Ollama-HTTP): a single SDK error
+       type with a `.status_code` or `.code` attribute inspected at runtime.
 
     Attributes:
         vendor_name: Human-readable vendor name for error messages and events.
         rate_limit_types: Exception types indicating rate limiting.
         network_error_types: Exception types indicating connection/timeout/server errors.
         base_api_error_type: Catch-all vendor API error base type.
-        status_code_error_types: Exception types that carry a `.status_code` attribute.
+        status_code_error_types: Exception types that carry a `.status_code` or `.code` attribute.
         extra_network_types: Additional Python-builtin or httpx types treated as network errors.
         supports_retry_after: Whether retry-after header extraction should be attempted.
     """
@@ -123,6 +123,9 @@ def wrap_vendor_error(
     # --- Status-code-based classification (Cohere, Mistral, Ollama HTTP) ---
     if mapping.status_code_error_types and isinstance(e, mapping.status_code_error_types):
         status_code = getattr(e, "status_code", None)
+        # google-genai uses .code instead of .status_code
+        if status_code is None:
+            status_code = getattr(e, "code", None)
         # Some SDKs put status_code on e.response
         if status_code is None and hasattr(e, "response"):
             status_code = getattr(e.response, "status_code", None)
@@ -138,7 +141,7 @@ def wrap_vendor_error(
             )
             return RateLimitError(f"{vendor} rate limit: {e}", context=context, cause=e)
 
-        if status_code in (502, 503, 504):
+        if status_code in (500, 502, 503, 504):
             fire_event(
                 LLMErrorEvent(
                     provider=vendor,

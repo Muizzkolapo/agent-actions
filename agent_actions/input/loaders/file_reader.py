@@ -6,7 +6,7 @@ from pathlib import Path
 
 import defusedxml.ElementTree as DefusedET  # type: ignore[import-untyped]
 import pandas as pd
-import PyPDF2
+import pypdf
 from bs4 import BeautifulSoup
 from docx import Document
 
@@ -93,7 +93,7 @@ class FileReader(ProcessorErrorHandlerMixin):
 
     def _read_pdf(self):
         with open(self.file_path, "rb") as file:
-            reader = PyPDF2.PdfReader(file)
+            reader = pypdf.PdfReader(file)
             # Use join() instead of += for O(n) instead of O(n²)
             return "".join(page.extract_text() or "" for page in reader.pages)
 

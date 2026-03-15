@@ -44,13 +44,11 @@ def agent_config_with_output_field():
 
 
 def _make_gemini_mocks(text):
-    """Set up Gemini mocks and return (mock_genai_patcher, mock_fire_patcher, client_class)."""
+    """Set up Gemini mock response for google-genai SDK."""
     mock_response = MagicMock()
     mock_response.text = text
     mock_response.usage_metadata = None
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value = mock_response
-    return mock_model
+    return mock_response
 
 
 def _make_openai_style_mocks(text, prompt_tokens=10, completion_tokens=5, total_tokens=15):
@@ -103,14 +101,16 @@ def _make_anthropic_mocks(text, input_tokens=10, output_tokens=20):
 
 
 def _setup_gemini(text):
-    mock_model = _make_gemini_mocks(text)
+    mock_response = _make_gemini_mocks(text)
     patches = {
         "fire": "agent_actions.llm.providers.gemini.client.fire_event",
-        "mod": "agent_actions.llm.providers.gemini.client.genai",
+        "mod": "agent_actions.llm.providers.gemini.client._build_client",
     }
 
     def configure(mock_mod, mock_fire):
-        mock_mod.GenerativeModel.return_value = mock_model
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_mod.return_value = mock_client
 
     from agent_actions.llm.providers.gemini.client import GeminiClient
 
@@ -239,27 +239,27 @@ class TestCallNonJsonReturnContract:
 
 class TestGeminiCallNonJson:
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_no_json_directives_in_non_json_mode(self, mock_genai, mock_fire, base_agent_config):
-        """Non-JSON mode must NOT pass JSON-forcing config to GenerativeModel."""
+    @patch("agent_actions.llm.providers.gemini.client._build_client")
+    def test_no_json_directives_in_non_json_mode(
+        self, mock_build_client, mock_fire, base_agent_config
+    ):
+        """Non-JSON mode must NOT pass JSON-forcing config to generate_content."""
         from agent_actions.llm.providers.gemini.client import GeminiClient
 
         mock_response = MagicMock()
         mock_response.text = "plain text"
         mock_response.usage_metadata = None
 
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_build_client.return_value = mock_client
 
         GeminiClient.call_non_json("key", base_agent_config, "prompt", "data")
 
-        call_args, call_kwargs = mock_genai.GenerativeModel.call_args
-        assert call_args == ("test-model",)
-        assert "system_instruction" not in call_kwargs
-        gen_config = call_kwargs.get("generation_config")
-        if gen_config is not None:
-            assert "response_mime_type" not in gen_config
+        call_kwargs = mock_client.models.generate_content.call_args[1]
+        assert call_kwargs["model"] == "test-model"
+        # Empty gen_params produces config=None (no JSON forcing)
+        assert call_kwargs.get("config") is None
 
 
 # ---------------------------------------------------------------------------
@@ -863,11 +863,11 @@ class TestAnthropicStopForwarding:
 
 
 class TestGeminiTopPStopForwarding:
-    """Gemini maps stop → stop_sequences in generation_config."""
+    """Gemini maps stop → stop_sequences in GenerateContentConfig."""
 
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_non_json_forwards_top_p_and_stop(self, mock_genai, mock_fire):
+    @patch("agent_actions.llm.providers.gemini.client._build_client")
+    def test_non_json_forwards_top_p_and_stop(self, mock_build_client, mock_fire):
         from agent_actions.llm.providers.gemini.client import GeminiClient
 
         config = {"model_name": "gemini-pro", "top_p": 0.85, "stop": "DONE"}
@@ -876,16 +876,16 @@ class TestGeminiTopPStopForwarding:
         mock_response.text = "output"
         mock_response.usage_metadata = None
 
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_build_client.return_value = mock_client
 
         GeminiClient.call_non_json("key", config, "prompt", "data")
 
-        call_kwargs = mock_genai.GenerativeModel.call_args[1]
-        gen_config = call_kwargs["generation_config"]
-        assert gen_config["top_p"] == 0.85
-        assert gen_config["stop_sequences"] == ["DONE"]
+        call_kwargs = mock_client.models.generate_content.call_args[1]
+        gen_config = call_kwargs["config"]
+        assert gen_config.top_p == 0.85
+        assert gen_config.stop_sequences == ["DONE"]
 
 
 class TestCohereTopPStopForwarding:
@@ -1012,17 +1012,17 @@ class TestCallJsonDictWrapping:
         assert result == [{"name": "Alice"}]
 
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_gemini_dict_wrapped_in_list(self, mock_genai, mock_fire):
+    @patch("agent_actions.llm.providers.gemini.client._build_client")
+    def test_gemini_dict_wrapped_in_list(self, mock_build_client, mock_fire):
         from agent_actions.llm.providers.gemini.client import GeminiClient
 
         mock_response = MagicMock()
         mock_response.text = '{"name": "Alice"}'
         mock_response.usage_metadata = None
 
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_build_client.return_value = mock_client
 
         result = GeminiClient.call_json("key", {"model_name": "gemini-pro"}, "prompt", "data", None)
         assert isinstance(result, list)
@@ -1113,23 +1113,24 @@ class TestOllamaSetLastUsage:
 
 class TestGeminiCallJsonNormalization:
     @patch("agent_actions.llm.providers.gemini.client.fire_event")
-    @patch("agent_actions.llm.providers.gemini.client.genai")
-    def test_no_system_instruction_in_json_mode(self, mock_genai, mock_fire):
-        """call_json should not pass redundant system_instruction alongside response_mime_type."""
+    @patch("agent_actions.llm.providers.gemini.client._build_client")
+    def test_json_mode_uses_response_mime_type(self, mock_build_client, mock_fire):
+        """call_json should set response_mime_type in GenerateContentConfig."""
         from agent_actions.llm.providers.gemini.client import GeminiClient
 
         mock_response = MagicMock()
         mock_response.text = '{"name": "Alice"}'
         mock_response.usage_metadata = None
 
-        mock_model = MagicMock()
-        mock_model.generate_content.return_value = mock_response
-        mock_genai.GenerativeModel.return_value = mock_model
+        mock_client = MagicMock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_build_client.return_value = mock_client
 
         GeminiClient.call_json("key", {"model_name": "gemini-pro"}, "prompt", "data", None)
 
-        _call_args, call_kwargs = mock_genai.GenerativeModel.call_args
-        assert "system_instruction" not in call_kwargs
+        call_kwargs = mock_client.models.generate_content.call_args[1]
+        config = call_kwargs["config"]
+        assert config.response_mime_type == "application/json"
 
 
 # ---------------------------------------------------------------------------

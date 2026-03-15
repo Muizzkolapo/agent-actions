@@ -14,8 +14,9 @@ from datetime import datetime
 from textwrap import dedent
 from typing import Any, ClassVar
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
@@ -40,13 +41,8 @@ logger = logging.getLogger(__name__)
 
 _ERROR_MAPPING = VendorErrorMapping(
     vendor_name="gemini",
-    rate_limit_types=(google_exceptions.ResourceExhausted,),
-    network_error_types=(
-        google_exceptions.ServiceUnavailable,
-        google_exceptions.DeadlineExceeded,
-        google_exceptions.InternalServerError,
-    ),
-    base_api_error_type=google_exceptions.GoogleAPICallError,
+    status_code_error_types=(genai_errors.ClientError, genai_errors.ServerError),
+    base_api_error_type=genai_errors.APIError,
     supports_retry_after=False,
 )
 
@@ -54,6 +50,11 @@ _ERROR_MAPPING = VendorErrorMapping(
 def _wrap_gemini_error(e: Exception, model_name: str, request_id: str = "") -> Exception:
     """Wrap Google Gemini SDK errors into unified agent-actions error types."""
     return wrap_vendor_error(e, model_name, _ERROR_MAPPING, request_id)
+
+
+def _build_client(api_key: str) -> genai.Client:
+    """Build a google-genai Client instance."""
+    return genai.Client(api_key=api_key)
 
 
 class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
@@ -86,26 +87,25 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            genai.configure(api_key=api_key)
-            generation_config = {
-                "response_mime_type": "application/json",
-                **extract_generation_params(
-                    agent_config,
-                    key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
-                    stop_as_list=True,
-                ),
-            }
-            llm = genai.GenerativeModel(
-                model_name,
-                generation_config=generation_config,  # type: ignore[arg-type]
+            client = _build_client(api_key)
+            gen_params = extract_generation_params(
+                agent_config,
+                key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
+                stop_as_list=True,
+            )
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                **gen_params,
             )
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
             prompt_dedent = dedent(prompt)
-            response_temp = llm.generate_content(prompt_dedent)
+            response_temp = client.models.generate_content(
+                model=model_name, contents=prompt_dedent, config=config
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
-        except google_exceptions.GoogleAPICallError as e:
+        except genai_errors.APIError as e:
             raise _wrap_gemini_error(e, model_name, request_id) from e
         except Exception as e:
             fire_event(
@@ -177,23 +177,22 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            genai.configure(api_key=api_key)
-            generation_config = extract_generation_params(
+            client = _build_client(api_key)
+            gen_params = extract_generation_params(
                 agent_config,
                 key_map={"max_tokens": "max_output_tokens", "stop": "stop_sequences"},
                 stop_as_list=True,
             )
-            llm = genai.GenerativeModel(
-                model_name,
-                generation_config=generation_config if generation_config else None,  # type: ignore[arg-type]
-            )
+            config = types.GenerateContentConfig(**gen_params) if gen_params else None
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
             prompt_dedent = dedent(prompt)
-            response_temp = llm.generate_content(prompt_dedent)
+            response_temp = client.models.generate_content(
+                model=model_name, contents=prompt_dedent, config=config
+            )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
-        except google_exceptions.GoogleAPICallError as e:
+        except genai_errors.APIError as e:
             raise _wrap_gemini_error(e, model_name, request_id) from e
         except Exception as e:
             fire_event(
