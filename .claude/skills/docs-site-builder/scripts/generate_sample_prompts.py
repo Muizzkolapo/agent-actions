@@ -10,7 +10,7 @@ from pathlib import Path
 # Add agent_actions to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from agent_actions.docs.scanner import ProjectScanner
+from agent_actions.tooling.docs.scanner import scan_prompts, scan_schemas
 
 
 def main():
@@ -21,9 +21,9 @@ def main():
         print(f"❌ Path not found: {qanalabs_path}")
         return
 
-    scanner = ProjectScanner(qanalabs_path)
-    prompts = scanner.scan_prompts()
-    schemas = scanner.scan_schemas()
+    project_root = Path(qanalabs_path).resolve()
+    prompts = scan_prompts(project_root)
+    schemas = scan_schemas(project_root)
 
     print(f"Found {len(prompts)} prompts")
     print(f"Found {len(schemas)} schemas")

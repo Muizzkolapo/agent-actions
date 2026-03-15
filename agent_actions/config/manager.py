@@ -34,7 +34,7 @@ class ConfigManager:
         self.agent_configs: dict[str, AgentConfig] = {}
         self.execution_order: list[str] = []
         self.child_pipeline: str | None = None
-        self.tool_path: str | None = None
+        self.tool_path: list[str] | None = None
         self.template_dir = str((project_root or Path.cwd()) / "templates")
         self.environment_config: EnvironmentConfig | None = None
         self.workflow_config: Any = None
@@ -111,12 +111,13 @@ class ConfigManager:
             logger.debug("Could not resolve tool_path from project config: %s", e)
 
         # Priority: workflow config > default config > project config
-        if user_tool_path is not None:
-            self.tool_path = user_tool_path
-        elif default_tool_path is not None:
-            self.tool_path = default_tool_path
+        # Normalize to list[str] so downstream iteration is always safe.
+        raw = user_tool_path or default_tool_path or project_tool_path
+        if raw is not None:
+            self.tool_path = [raw] if isinstance(raw, str) else list(raw)
         else:
-            self.tool_path = project_tool_path
+            self.tool_path = ["tools"]
+            logger.warning("No tool_path configured; defaulting to 'tools/'")
 
     def find_agent_name(self, config: dict[str, Any]) -> str:
         """

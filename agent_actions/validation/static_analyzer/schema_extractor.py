@@ -4,8 +4,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.path_config import load_project_config
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.tooling.docs.scanner import ProjectScanner
+from agent_actions.tooling.docs.scanner import scan_tool_functions
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
@@ -29,10 +30,18 @@ class SchemaExtractor:
         self._tool_schemas: dict[str, Any] | None = None
 
     def _get_tool_schemas(self) -> dict[str, Any]:
-        """Lazy-load tool schemas from Python files using ProjectScanner."""
+        """Lazy-load tool schemas from Python files."""
         if self._tool_schemas is None:
-            scanner = ProjectScanner(str(self.project_root))
-            self._tool_schemas = scanner.scan_tool_functions()
+            tool_paths: list[str] | None = None
+            try:
+                raw = load_project_config(self.project_root).get("tool_path")
+                if isinstance(raw, list):
+                    tool_paths = [str(p) for p in raw]
+                elif isinstance(raw, str):
+                    tool_paths = [raw]
+            except (OSError, KeyError, TypeError, AttributeError):
+                pass
+            self._tool_schemas = scan_tool_functions(self.project_root, tool_paths)
         return self._tool_schemas
 
     def _convert_fields_to_json_schema(self, fields: list[dict[str, str]]) -> dict[str, Any]:

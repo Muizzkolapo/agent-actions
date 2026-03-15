@@ -67,13 +67,29 @@ def find_all_project_roots(workspace_folders: list[Path]) -> list[Path]:
     return sorted(roots)
 
 
+def _resolve_tool_paths(project_root: Path) -> list[str]:
+    """Resolve tool_path from project config, defaulting to ["tools"]."""
+    try:
+        from agent_actions.config.path_config import load_project_config
+
+        raw = load_project_config(project_root).get("tool_path")
+        if isinstance(raw, list):
+            return [str(p) for p in raw]
+        if isinstance(raw, str):
+            return [raw]
+    except (OSError, KeyError, TypeError, AttributeError) as e:
+        logger.debug("Could not resolve tool_path from project config: %s", e)
+    return ["tools"]
+
+
 def build_index(project_root: Path) -> ProjectIndex:
     """Build complete project index."""
     index = ProjectIndex(root=project_root)
 
     _index_workflows(index, project_root)
     _index_prompts(index, project_root)
-    _index_tools(index, project_root)
+    tool_paths = _resolve_tool_paths(project_root)
+    _index_tools(index, project_root, tool_paths)
     _index_schemas(index, project_root)
 
     logger.info(
@@ -492,18 +508,14 @@ def _index_prompts(index: ProjectIndex, project_root: Path) -> None:
                 )
 
 
-def _index_tools(index: ProjectIndex, project_root: Path) -> None:
+def _index_tools(index: ProjectIndex, project_root: Path, tool_paths: list[str]) -> None:
     """Index all UDF tool functions."""
-    tools_dir = project_root / "tools"
-    if not tools_dir.exists():
-        # Try qanalabs/tools structure
-        tools_dir = project_root / "qanalabs" / "tools"
-
-    if not tools_dir.exists():
-        return
-
-    for py_file in tools_dir.rglob("*.py"):
-        _index_python_file(index, py_file)
+    for rel_path in tool_paths:
+        tools_dir = project_root / rel_path
+        if not tools_dir.exists():
+            continue
+        for py_file in tools_dir.rglob("*.py"):
+            _index_python_file(index, py_file)
 
 
 def _index_python_file(index: ProjectIndex, py_file: Path) -> None:

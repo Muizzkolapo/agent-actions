@@ -7,14 +7,16 @@ from pathlib import Path
 from typing import Any
 
 import click
+import yaml
 
 logger = logging.getLogger(__name__)
 
+from agent_actions.config.path_config import load_project_config
 from agent_actions.output.response.loader import SchemaLoader
 
+from . import scanner
 from .parser import WorkflowParser, extract_fields_for_docs
 from .run_tracker import _empty_runs_data
-from .scanner import ProjectScanner
 
 
 class CatalogGenerator:
@@ -291,53 +293,42 @@ class CatalogGenerator:
 
 def generate_docs(project_path: str, output_dir: Path) -> bool:
     """Generate documentation catalog from project workflows and write to output_dir."""
+    project_root = Path(project_path).resolve()
+
     # Step 1: Scan project
-    scanner = ProjectScanner(project_path)
-    workflows_data = scanner.scan()
+    workflows_data = scanner.scan_workflows(project_root)
 
     if not workflows_data:
         logger.warning("No workflows found in %s", project_path)
         click.echo("No workflows found in project!")
         return False
 
-    # Step 1b: Scan prompts
-    prompts_data = scanner.scan_prompts()
+    # Resolve tool_path from project config
+    tool_paths: list[str] | None = None
+    try:
+        project_config = load_project_config(project_root)
+        raw = project_config.get("tool_path")
+        if isinstance(raw, list):
+            tool_paths = [str(p) for p in raw]
+        elif isinstance(raw, str):
+            tool_paths = [raw]
+    except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError) as e:
+        logger.debug("Could not resolve tool_path from project config: %s", e)
 
-    # Step 1c: Scan schemas
-    schemas_data = scanner.scan_schemas()
-
-    # Step 1d: Scan tool functions
-    tool_functions_data = scanner.scan_tool_functions()
-
-    # Step 1e: Scan runs data (events, metrics)
-    runs_data = scanner.scan_runs()
-
-    # Step 1f: Scan global logs
-    logs_data = scanner.scan_logs()
-
-    # Step 1g: Scan vendors
-    vendors_data = scanner.scan_vendors()
-
-    # Step 1h: Scan error types
+    # Step 1b–1n: Scan all project artifacts
+    prompts_data = scanner.scan_prompts(project_root)
+    schemas_data = scanner.scan_schemas(project_root)
+    tool_functions_data = scanner.scan_tool_functions(project_root, tool_paths)
+    runs_data = scanner.scan_runs(project_root)
+    logs_data = scanner.scan_logs(project_root)
+    vendors_data = scanner.scan_vendors(project_root)
     error_types_data = scanner.scan_error_types()
-
-    # Step 1i: Scan event types
     event_types_data = scanner.scan_event_types()
-
-    # Step 1j: Scan examples
-    examples_data = scanner.scan_examples()
-
-    # Step 1k: Scan data loaders
+    examples_data = scanner.scan_examples(project_root)
     data_loaders_data = scanner.scan_data_loaders()
-
-    # Step 1l: Scan processing states
     processing_states_data = scanner.scan_processing_states()
-
-    # Step 1m: Scan workflow output data (SQLite target DBs)
-    workflow_data = scanner.scan_workflow_data()
-
-    # Step 1n: Scan workflow READMEs
-    readmes_data = scanner.scan_readmes()
+    workflow_data = scanner.scan_workflow_data(project_root)
+    readmes_data = scanner.scan_readmes(project_root)
 
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)

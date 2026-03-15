@@ -1,10 +1,11 @@
-"""Tests for ProjectScanner.scan_readmes()."""
+"""Tests for scanner.scan_readmes()."""
 
 from pathlib import Path
 
 import pytest
 
-from agent_actions.tooling.docs.scanner import ProjectScanner
+from agent_actions.config.defaults import DocsDefaults
+from agent_actions.tooling.docs.scanner import scan_readmes
 
 
 @pytest.fixture
@@ -27,16 +28,14 @@ def project_tree(tmp_path: Path) -> Path:
 
 
 def test_scan_readmes_finds_readme(project_tree: Path):
-    scanner = ProjectScanner(str(project_tree))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(project_tree)
 
     assert "my_workflow" in readmes
     assert readmes["my_workflow"] == "# My Workflow\nDoes things."
 
 
 def test_scan_readmes_skips_workflow_without_readme(project_tree: Path):
-    scanner = ProjectScanner(str(project_tree))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(project_tree)
 
     assert "no_readme" not in readmes
 
@@ -48,14 +47,13 @@ def test_scan_readmes_skips_artefact_directory(project_tree: Path):
     (artefact_config / "hidden.yml").write_text("name: hidden")
     (artefact_config.parent / "README.md").write_text("Should not appear")
 
-    scanner = ProjectScanner(str(project_tree))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(project_tree)
 
     assert "hidden" not in readmes
 
 
 def test_scan_readmes_last_write_wins(tmp_path: Path):
-    """Duplicate stems use last-write-wins, matching scan() collision policy."""
+    """Duplicate stems use last-write-wins, matching scan_workflows() collision policy."""
     dir_a = tmp_path / "a" / "agent_config"
     dir_a.mkdir(parents=True)
     (dir_a / "dup.yml").write_text("name: dup")
@@ -66,8 +64,7 @@ def test_scan_readmes_last_write_wins(tmp_path: Path):
     (dir_b / "dup.yml").write_text("name: dup")
     (dir_b.parent / "README.md").write_text("README B")
 
-    scanner = ProjectScanner(str(tmp_path))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(tmp_path)
 
     assert "dup" in readmes
     # Last-write-wins: rglob order is non-deterministic, but exactly one wins
@@ -82,16 +79,14 @@ def test_scan_readmes_multiple_yml_in_same_config(tmp_path: Path):
     (wf_dir / "beta.yml").write_text("name: beta")
     (wf_dir.parent / "README.md").write_text("# Multi")
 
-    scanner = ProjectScanner(str(tmp_path))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(tmp_path)
 
     assert readmes.get("alpha") == "# Multi"
     assert readmes.get("beta") == "# Multi"
 
 
 def test_scan_readmes_empty_project(tmp_path: Path):
-    scanner = ProjectScanner(str(tmp_path))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(tmp_path)
 
     assert readmes == {}
 
@@ -106,8 +101,7 @@ def test_scan_readmes_truncates_large_readme(tmp_path: Path):
     large_content = "x" * (200 * 1024)
     (wf_dir.parent / "README.md").write_text(large_content)
 
-    scanner = ProjectScanner(str(tmp_path))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(tmp_path)
 
     assert "big" in readmes
     assert len(readmes["big"].encode("utf-8")) < len(large_content.encode("utf-8"))
@@ -116,7 +110,7 @@ def test_scan_readmes_truncates_large_readme(tmp_path: Path):
 
 def test_scan_readmes_truncates_multibyte_by_bytes(tmp_path: Path):
     """Multibyte UTF-8 content is truncated by bytes, not characters."""
-    max_bytes = ProjectScanner._README_MAX_BYTES
+    max_bytes = DocsDefaults.README_MAX_BYTES
 
     wf_dir = tmp_path / "cjk" / "agent_config"
     wf_dir.mkdir(parents=True)
@@ -127,8 +121,7 @@ def test_scan_readmes_truncates_multibyte_by_bytes(tmp_path: Path):
     large_content = cjk_char * (max_bytes // 3 + max_bytes)
     (wf_dir.parent / "README.md").write_text(large_content)
 
-    scanner = ProjectScanner(str(tmp_path))
-    readmes = scanner.scan_readmes()
+    readmes = scan_readmes(tmp_path)
 
     result = readmes["cjk"]
     # The truncated body (before the marker) must fit within the byte cap
