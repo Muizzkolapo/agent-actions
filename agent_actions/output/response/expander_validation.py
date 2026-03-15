@@ -1,6 +1,7 @@
 """Validation functions extracted from ActionExpander."""
 
-from agent_actions.config.types import AgentEntryDict
+from typing import Any
+
 from agent_actions.errors import ConfigValidationError
 from agent_actions.llm.config.vendor import VendorType
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
@@ -56,7 +57,7 @@ def validate_action_name(action_name: str | None) -> None:
         )
 
 
-def validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
+def validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
     """
     Validate that required configuration fields are present after hierarchy resolution.
 

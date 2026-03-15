@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-from agent_actions.config.types import AgentEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
@@ -11,7 +10,7 @@ from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_S
 logger = logging.getLogger(__name__)
 
 
-def process_guard_config(agent: AgentEntryDict, action: dict[str, Any]) -> None:
+def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
     """Process guard configuration for an agent."""
     if not action.get("guard"):
         return
@@ -46,7 +45,7 @@ def process_guard_config(agent: AgentEntryDict, action: dict[str, Any]) -> None:
             }
 
 
-def process_tool_action(agent: AgentEntryDict, action: dict[str, Any], run_mode: str) -> None:
+def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: str) -> None:
     """Process tool-specific action configuration."""
     action_kind = action.get("kind", "llm")
     if action_kind != "tool":
@@ -101,7 +100,7 @@ def process_tool_action(agent: AgentEntryDict, action: dict[str, Any], run_mode:
 
 
 def process_hitl_action(
-    agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
+    agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
     """Process HITL-specific action configuration.
 

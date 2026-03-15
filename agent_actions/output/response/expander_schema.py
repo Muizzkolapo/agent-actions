@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-from agent_actions.config.types import AgentEntryDict
 from agent_actions.errors import SchemaValidationError
 from agent_actions.output.response.schema import compile_unified_schema
 from agent_actions.utils.schema_utils import is_compiled_schema
@@ -11,7 +10,7 @@ from agent_actions.utils.schema_utils import is_compiled_schema
 logger = logging.getLogger(__name__)
 
 
-def process_schema_config(agent: AgentEntryDict, action: dict[str, Any], template_replacer) -> None:
+def process_schema_config(agent: dict[str, Any], action: dict[str, Any], template_replacer) -> None:
     """
     Process schema configuration for an agent.
 
@@ -34,7 +33,7 @@ def process_schema_config(agent: AgentEntryDict, action: dict[str, Any], templat
                 agent["schema"] = schema_value
 
 
-def compile_output_schema(agent: AgentEntryDict, action: dict[str, Any]) -> None:
+def compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None:
     """Compile YAML schema: to json_output_schema for any action type.
 
     Skips if json_output_schema is already set (e.g. from HITL
@@ -91,7 +90,11 @@ def compile_output_schema(agent: AgentEntryDict, action: dict[str, Any]) -> None
         # Use 'openai' format as canonical JSON Schema
         compiled = compile_unified_schema(unified_schema, "openai")
         agent["output_schema"] = unified_schema
-        agent["json_output_schema"] = compiled.get("schema", compiled)
+        # isinstance guard: compile_unified_schema returns list for Anthropic target,
+        # but we always pass "openai" here so compiled is always dict. Guard satisfies mypy.
+        agent["json_output_schema"] = (
+            compiled.get("schema", compiled) if isinstance(compiled, dict) else compiled
+        )
     except (ValueError, KeyError, TypeError) as e:
         raise SchemaValidationError(
             f"Failed to compile output schema for action '{agent_name}'",

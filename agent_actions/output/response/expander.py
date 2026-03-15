@@ -15,8 +15,6 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
-from agent_actions.config.types import AgentConfigList, AgentConfigMap, AgentEntryDict
-
 from .config_fields import inherit_simple_fields
 from .expander_action_types import (
     process_guard_config,
@@ -71,7 +69,7 @@ class ActionExpander:
         return validate_action_name(action_name)
 
     @staticmethod
-    def _validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
+    def _validate_required_fields(agent: dict[str, Any], action_name: str) -> None:
         return validate_required_fields(agent, action_name)
 
     @staticmethod
@@ -86,39 +84,39 @@ class ActionExpander:
 
     @staticmethod
     def _process_schema_config(
-        agent: AgentEntryDict, action: dict[str, Any], template_replacer
+        agent: dict[str, Any], action: dict[str, Any], template_replacer
     ) -> None:
         return process_schema_config(agent, action, template_replacer)
 
     @staticmethod
-    def _process_guard_config(agent: AgentEntryDict, action: dict[str, Any]) -> None:
+    def _process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
         return process_guard_config(agent, action)
 
     @staticmethod
-    def _process_tool_action(agent: AgentEntryDict, action: dict[str, Any], run_mode: str) -> None:
+    def _process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: str) -> None:
         return process_tool_action(agent, action, run_mode)
 
     @staticmethod
-    def _compile_output_schema(agent: AgentEntryDict, action: dict[str, Any]) -> None:
+    def _compile_output_schema(agent: dict[str, Any], action: dict[str, Any]) -> None:
         return compile_output_schema(agent, action)
 
     @staticmethod
     def _process_chunk_config(
-        agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
+        agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
     ) -> None:
         return process_chunk_config(agent, action, defaults)
 
     @staticmethod
-    def _initialize_optional_fields(agent: AgentEntryDict) -> None:
+    def _initialize_optional_fields(agent: dict[str, Any]) -> None:
         return initialize_optional_fields(agent)
 
     @staticmethod
-    def _build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
+    def _build_schema_registry(agents: list[dict[str, Any]]) -> dict[str, Any]:
         return build_schema_registry(agents)
 
     @staticmethod
     def _validate_agent_guards(
-        agent: AgentEntryDict,
+        agent: dict[str, Any],
         validator,
         agent_indices: dict[str, int],
         action_schemas: dict[str, Any],
@@ -169,7 +167,7 @@ class ActionExpander:
         action: dict[str, Any],
         version_config: dict[str, Any],
         defaults: dict[str, Any],
-    ) -> AgentConfigList:
+    ) -> list[dict[str, Any]]:
         """
         Expand a versioned action into multiple agent configurations.
 
@@ -181,7 +179,7 @@ class ActionExpander:
         Returns:
             List of expanded agent configurations
         """
-        agents: AgentConfigList = []
+        agents: list[dict[str, Any]] = []
         param_name = version_config.get("param", "i")
         version_range = version_config.get("range", [1, 1])
 
@@ -195,7 +193,7 @@ class ActionExpander:
         total_versions = len(range_values_list)
 
         for idx, i in enumerate(range_values_list):
-            agent: AgentEntryDict = {}
+            agent: dict[str, Any] = {}
 
             # Create template replacer with captured version variables
             template_replacer = ActionExpander._create_template_replacer(
@@ -236,9 +234,9 @@ class ActionExpander:
     def _create_agent_from_action(
         action: dict[str, Any],
         defaults: dict[str, Any],
-        agent: AgentEntryDict,
+        agent: dict[str, Any],
         template_replacer,
-    ) -> AgentEntryDict:
+    ) -> dict[str, Any]:
         """
         Create an agent configuration from an action.
 
@@ -339,7 +337,7 @@ class ActionExpander:
         return agent
 
     @staticmethod
-    def expand_actions_to_agents(action_config: dict[str, Any]) -> AgentConfigMap:
+    def expand_actions_to_agents(action_config: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
 
@@ -359,7 +357,7 @@ class ActionExpander:
         # We no longer process 'plan' for dependencies.
         # Dependencies must be explicitly defined in the action config.
 
-        agents: AgentConfigList = []
+        agents: list[dict[str, Any]] = []
         for action in actions:
             validate_action_name(action.get("name"))
 
@@ -376,7 +374,7 @@ class ActionExpander:
                 agents.extend(version_agents)
             else:
                 # Either non-versioned action OR pre-expanded versioned action
-                agent: AgentEntryDict = {}
+                agent: dict[str, Any] = {}
                 agent["agent_type"] = action.get("name", "unknown")
                 agent["name"] = action.get("name")
 
@@ -403,7 +401,7 @@ class ActionExpander:
         return {workflow_name: agents}
 
     @staticmethod
-    def validate_guard_references(agents: AgentConfigList, strict: bool = True) -> list[str]:
+    def validate_guard_references(agents: list[dict[str, Any]], strict: bool = True) -> list[str]:
         return validate_guard_references(agents, strict)
 
 

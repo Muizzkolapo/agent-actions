@@ -2,12 +2,11 @@
 
 from typing import Any
 
-from agent_actions.config.types import AgentConfigList, AgentEntryDict
 from agent_actions.errors import ConfigValidationError
 from agent_actions.input.preprocessing.field_resolution import ReferenceParser, ReferenceValidator
 
 
-def build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
+def build_schema_registry(agents: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Build schema registry from agent configs.
 
@@ -17,7 +16,7 @@ def build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
     Returns:
         Dictionary mapping agent names to their JSON output schemas
     """
-    action_schemas = {}
+    action_schemas: dict[str, Any] = {}
     for agent in agents:
         agent_name = agent.get("agent_type") or agent.get("name", "unknown")
 
@@ -29,7 +28,7 @@ def build_schema_registry(agents: AgentConfigList) -> dict[str, Any]:
 
 
 def validate_agent_guards(
-    agent: AgentEntryDict,
+    agent: dict[str, Any],
     validator: ReferenceValidator,
     agent_indices: dict[str, int],
     action_schemas: dict[str, Any],
@@ -58,11 +57,13 @@ def validate_agent_guards(
             references = parser.parse_batch(clause)
 
             guard_errors = validator.validate_with_schemas(
-                references=references,
-                agent_config=agent,
-                agent_indices=agent_indices,
-                action_schemas=action_schemas,
-                current_agent_name=agent_name,
+                references=list(references),
+                validation_context={
+                    "agent_config": agent,
+                    "agent_indices": agent_indices,
+                    "action_schemas": action_schemas,
+                    "current_agent_name": agent_name,
+                },
             )
             errors.extend(guard_errors)
 
@@ -73,18 +74,20 @@ def validate_agent_guards(
         references = parser.parse_batch(conditional_clause)
 
         guard_errors = validator.validate_with_schemas(
-            references=references,
-            agent_config=agent,
-            agent_indices=agent_indices,
-            action_schemas=action_schemas,
-            current_agent_name=agent_name,
+            references=list(references),
+            validation_context={
+                "agent_config": agent,
+                "agent_indices": agent_indices,
+                "action_schemas": action_schemas,
+                "current_agent_name": agent_name,
+            },
         )
         errors.extend(guard_errors)
 
     return errors
 
 
-def validate_guard_references(agents: AgentConfigList, strict: bool = True) -> list[str]:
+def validate_guard_references(agents: list[dict[str, Any]], strict: bool = True) -> list[str]:
     """
     Validate that guard conditions only reference valid upstream actions.
 
@@ -118,9 +121,9 @@ def validate_guard_references(agents: AgentConfigList, strict: bool = True) -> l
     validator = ReferenceValidator(strict_dependencies=True)
 
     # Build agent_indices from the list
-    agent_indices = {}
+    agent_indices: dict[str, int] = {}
     for idx, agent in enumerate(agents):
-        agent_name = agent.get("agent_type") or agent.get("name", f"unknown_{idx}")
+        agent_name: str = agent.get("agent_type") or agent.get("name") or f"unknown_{idx}"
         agent_indices[agent_name] = idx
 
     # Build schema registry from agent configs

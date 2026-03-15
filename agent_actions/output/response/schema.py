@@ -139,7 +139,9 @@ def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]
     return (target_field, prop)
 
 
-def compile_unified_schema(unified: dict[str, Any], target_system: str) -> dict[str, Any]:
+def compile_unified_schema(
+    unified: dict[str, Any], target_system: str
+) -> dict[str, Any] | list[dict[str, Any]]:
     """
     Convert a unified YAML/JSON definition into the schema dialect required by
     OpenAI, Anthropic, Gemini, **or Ollama** (new).
@@ -171,6 +173,7 @@ def compile_unified_schema(unified: dict[str, Any], target_system: str) -> dict[
         if field.get("required", False):
             required.append(key)
     target = target_system.lower()
+    compiled: dict[str, Any] | list[dict[str, Any]]
     if target in ("openai", "groq", "mistral", "agac-provider"):
         # OpenAI-compatible format — Groq, Mistral, and agac-provider use the same shape
         compiled = {
@@ -275,8 +278,8 @@ def _inject_functions_into_schema(
 
             return PromptUtils.process_dispatch_in_text(
                 schema,
-                tools_path=tools_path,
-                context_data_str=context_data_str,
+                tools_path=tools_path or "",
+                context_data_str=context_data_str or "",
                 agent_config=agent_config,
                 captured_results=captured_results,
                 preserve_type_on_exact_match=True,
@@ -334,7 +337,7 @@ def _resolve_dispatch_in_schema(
 
         return PromptUtils.process_dispatch_in_text(
             schema,
-            tools_path=tools_path,
+            tools_path=tools_path or "",
             context_data_str=context_data_str,
             agent_config=agent_config,
             captured_results=captured_results,
@@ -418,7 +421,7 @@ def _unwrap_nested_schema(base_schema: dict[str, Any]) -> dict[str, Any]:
         Unwrapped schema dict
     """
     if not isinstance(base_schema, dict):
-        return base_schema
+        return base_schema  # type: ignore[unreachable]
 
     if SCHEMA_KEY not in base_schema:
         return base_schema
@@ -442,7 +445,7 @@ def _compile_schema_for_vendor(
     base_schema: dict[str, Any],
     vendor: str,
     schema_name: str,
-) -> dict[str, Any] | None:
+) -> dict[str, Any] | list[dict[str, Any]] | None:
     """
     Compile schema for specific vendor with error handling.
 
@@ -472,7 +475,7 @@ def prepare_schema_unified(
     tools_path: str | None = None,
     context_data: dict | str | None = None,
     project_root: Path | None = None,
-) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+) -> tuple[dict[str, Any] | list[dict[str, Any]] | None, dict[str, Any]]:
     """
     Unified schema preparation for both online and batch modes.
 
@@ -510,9 +513,10 @@ def prepare_schema_unified(
             inline_schema, tools_path, context_data_str, agent_config, captured_results
         )
     else:
-        base_schema, schema_name = _load_named_schema(agent_config, project_root=project_root)
-        if base_schema is None:
+        loaded_schema, schema_name = _load_named_schema(agent_config, project_root=project_root)
+        if loaded_schema is None:
             return None, captured_results
+        base_schema = loaded_schema
 
     # Inject dispatch_task functions into schema fields
     if tools_path:

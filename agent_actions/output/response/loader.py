@@ -144,7 +144,7 @@ class SchemaLoader:
             )
         )
 
-        return schema_data
+        return schema_data  # type: ignore[no-any-return]
 
     @staticmethod
     def validate_schemas_exist(

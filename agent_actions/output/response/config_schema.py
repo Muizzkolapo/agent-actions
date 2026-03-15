@@ -66,6 +66,8 @@ class WhereClauseConfig(BaseModel):
                     ),
                 },
             )
+        if v is None:
+            return v
         clause_lower = v.lower()
         matched = contains_dangerous_pattern(clause_lower, DANGEROUS_PATTERNS)
         if matched:

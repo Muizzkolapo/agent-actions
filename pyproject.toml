@@ -156,7 +156,6 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
     "agent_actions.llm.*",
-    "agent_actions.output.*",
 ]
 ignore_errors = true
 

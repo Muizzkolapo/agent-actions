@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from agent_actions.config.types import AgentEntryDict
-
 
 def merge_directive_value(existing: Any, new_value: Any) -> Any:
     """Merge two directive values based on their types."""
@@ -40,7 +38,7 @@ def deep_merge_context_scope(
 
 
 def process_chunk_config(
-    agent: AgentEntryDict, action: dict[str, Any], defaults: dict[str, Any]
+    agent: dict[str, Any], action: dict[str, Any], defaults: dict[str, Any]
 ) -> None:
     """Process chunk configuration for an agent."""
     chunk_config = action.get("chunk_config", defaults.get("chunk_config", {}))
@@ -58,7 +56,7 @@ def process_chunk_config(
             )
 
 
-def initialize_optional_fields(agent: AgentEntryDict) -> None:
+def initialize_optional_fields(agent: dict[str, Any]) -> None:
     """Initialize optional fields in agent configuration."""
     agent.setdefault("skip_if", None)
     agent.setdefault("add_dispatch", None)
