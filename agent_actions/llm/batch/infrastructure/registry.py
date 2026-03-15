@@ -50,6 +50,7 @@ class BatchRegistryManager:
         """
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
             self._cache[file_name] = entry
             self._persist_registry(self._cache)
             logger.info("Saved batch job %s for file %s", entry.batch_id, file_name)
@@ -60,6 +61,7 @@ class BatchRegistryManager:
         """Remove a batch job entry. Returns True if removed, False if not found."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
             if file_name not in self._cache:
                 return False
             del self._cache[file_name]
@@ -71,6 +73,7 @@ class BatchRegistryManager:
         """Retrieve batch job entry by file name."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
             entry = self._cache.get(file_name)
 
             if entry is not None:
@@ -88,6 +91,7 @@ class BatchRegistryManager:
         """Retrieve batch job entry by batch ID."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
             for entry in self._cache.values():
                 if entry.batch_id == batch_id:
                     fire_event(
@@ -108,6 +112,7 @@ class BatchRegistryManager:
         """Update status for a batch job. Returns False if batch_id not found."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
 
             for file_name, entry in self._cache.items():
                 if entry.batch_id == batch_id:
@@ -124,12 +129,14 @@ class BatchRegistryManager:
         """Get all batch jobs in registry."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
             return self._cache.copy()  # Return copy to prevent external mutation
 
     def get_registry_stats(self) -> BatchRegistryStats:
         """Get aggregated statistics for all batches."""
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
 
             stats = BatchRegistryStats(
                 total_jobs=len(self._cache), completed=0, failed=0, in_progress=0, cancelled=0
@@ -160,6 +167,7 @@ class BatchRegistryManager:
         """
         with self._lock:
             self._ensure_cache_loaded()
+            assert self._cache is not None
 
             if not self._cache:
                 return True  # No jobs = all complete
@@ -187,6 +195,7 @@ class BatchRegistryManager:
                     all_terminal = False
 
             if cache_modified:
+                assert self._cache is not None
                 self._persist_registry(self._cache)
 
             return all_terminal

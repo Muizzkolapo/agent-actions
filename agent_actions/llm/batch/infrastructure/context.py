@@ -63,7 +63,7 @@ class BatchContextManager:
 
             logger.debug("Loaded context map from %s (%d entries)", context_path, len(context_map))
 
-            return context_map
+            return context_map  # type: ignore[no-any-return]
 
         except json.JSONDecodeError as e:
             raise ProcessingError(

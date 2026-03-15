@@ -102,7 +102,7 @@ class BatchService:
         # Job manager (special case - still used directly for status queries)
         self._job_manager = job_manager or BatchJobManager(client_resolver=self._client_resolver)
 
-    def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager:
+    def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager | None:
         """Get or create registry manager for output directory."""
         if self._registry_manager is None and output_directory:
             self._registry_manager = self._registry_manager_factory(output_directory)
@@ -193,13 +193,15 @@ class BatchService:
             workflow_metadata=workflow_metadata,
         )
 
-    def check_status(self, batch_id: str, output_directory: str = None) -> BatchStatus:
+    def check_status(self, batch_id: str, output_directory: str | None = None) -> BatchStatus:
         """Check the status of a batch job (delegates to submission service)."""
-        return self._get_submission_service().check_status(batch_id, output_directory)
+        return self._get_submission_service().check_status(batch_id, output_directory)  # type: ignore[no-any-return]
 
-    def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None) -> Path:
+    def retrieve_results(
+        self, batch_id: str, output_dir: str, file_path: str | None = None
+    ) -> Path:
         """Retrieve and save results from a completed batch job (delegates to retrieval service)."""
-        return self._get_retrieval_service().retrieve_results(batch_id, output_dir, file_path)
+        return self._get_retrieval_service().retrieve_results(batch_id, output_dir, file_path)  # type: ignore[no-any-return]
 
     def process_batch_results(
         self,
@@ -210,7 +212,7 @@ class BatchService:
         agent_config: dict[str, Any] | None = None,
     ) -> str:
         """Process batch results to workflow output (delegates to processing service)."""
-        return self._get_processing_service().process_batch_results(
+        return self._get_processing_service().process_batch_results(  # type: ignore[no-any-return]
             batch_id, output_directory, base_directory, file_path, agent_config
         )
 
@@ -221,7 +223,7 @@ class BatchService:
         action_name: str | None = None,
     ) -> list[str]:
         """Process all completed batch jobs (delegates to processing service)."""
-        return self._get_processing_service().process_all_batch_results(
+        return self._get_processing_service().process_all_batch_results(  # type: ignore[no-any-return]
             output_directory, agent_config, action_name=action_name
         )
 

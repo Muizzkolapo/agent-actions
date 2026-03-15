@@ -83,15 +83,15 @@ class OllamaClient(BaseClient):
             return None
 
         # If schema is a tuple (shouldn't happen but handle it)
-        if isinstance(schema, tuple):
-            logger.warning("Schema is a tuple, extracting first element: %s", schema)
+        if isinstance(schema, tuple):  # type: ignore[unreachable]
+            logger.warning("Schema is a tuple, extracting first element: %s", schema)  # type: ignore[unreachable]
             schema = schema[0] if schema else None
             if not schema:
                 return None
 
         # Ensure schema is a dict
         if not isinstance(schema, dict):
-            logger.warning("Schema is not a dict (type=%s), returning None", type(schema))
+            logger.warning("Schema is not a dict (type=%s), returning None", type(schema))  # type: ignore[unreachable]
             return None
 
         # If schema has nested "schema" key (OpenAI format), extract it
@@ -105,7 +105,7 @@ class OllamaClient(BaseClient):
         return schema
 
     @staticmethod
-    def call_json(
+    def call_json(  # type: ignore[override]
         _api_key: str | None,
         agent_config: dict[str, Any],
         prompt_config: str,
@@ -240,7 +240,7 @@ class OllamaClient(BaseClient):
         return [{"response": content}]
 
     @staticmethod
-    def call_non_json(
+    def call_non_json(  # type: ignore[override]
         _api_key: str | None,
         agent_config: dict[str, Any],
         prompt_config: str,

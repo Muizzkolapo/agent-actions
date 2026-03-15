@@ -28,7 +28,7 @@ class BatchDataLoader(IDataLoader):
                 if path.suffix == ".jsonl":
                     return [json.loads(line) for line in f if line.strip()]
                 if path.suffix == ".json":
-                    return json.load(f)
+                    return json.load(f)  # type: ignore[no-any-return]
                 raise ValueError(
                     f"Unsupported file type: {path.suffix}. Please use .json or .jsonl."
                 )

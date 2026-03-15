@@ -128,6 +128,7 @@ class BatchResultProcessor:
 
     def _stage_3_4_process_results(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """Process all batch results, handling both successes and errors."""
+        assert ctx.reconciler is not None
         for batch_result in ctx.batch_results:
             custom_id = str(batch_result.custom_id)
 
@@ -199,6 +200,7 @@ class BatchResultProcessor:
         self, ctx: BatchProcessingContext, batch_result: BatchResult, custom_id: str
     ) -> list[dict[str, Any]]:
         """Build agent output from successful batch result, delegating enrichment to EnrichmentPipeline."""
+        assert ctx.reconciler is not None
         generated_obj = batch_result.content
         if not ctx.json_mode and isinstance(generated_obj, str):
             generated_obj = {ctx.output_field: generated_obj}
@@ -267,7 +269,7 @@ class BatchResultProcessor:
 
             generated_list = merge_passthrough_fields(generated_list, stored_passthrough)
 
-        elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
+        elif ctx.agent_config and ctx.agent_config.get("context_scope", {}).get("passthrough"):
             passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
             passthrough_fields = []
 
@@ -306,6 +308,7 @@ class BatchResultProcessor:
         recovery_metadata: RecoveryMetadata | None = None,
     ) -> dict[str, Any]:
         """Create an error item for failed batch results."""
+        assert ctx.reconciler is not None
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
         error_item: dict[str, Any] = {
@@ -330,6 +333,7 @@ class BatchResultProcessor:
         recovery_metadata: RecoveryMetadata,
     ) -> dict[str, Any]:
         """Create an exhausted retry item via ExhaustedRecordBuilder."""
+        assert ctx.reconciler is not None
         from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
 
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
@@ -339,6 +343,7 @@ class BatchResultProcessor:
             original_row=original_row,
             recovery_metadata=recovery_metadata,
             agent_config=ctx.agent_config or {},
+            action_name=ctx.agent_config.get("action_name", "") if ctx.agent_config else "",
         )
 
     def _stage_6_merge_passthroughs(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
@@ -352,6 +357,7 @@ class BatchResultProcessor:
         - Skipped records (guard/conditional): Passthrough with original content
         - Exhausted retry records: Empty schema content + _recovery metadata
         """
+        assert ctx.reconciler is not None
         reconciliation = ctx.reconciler.reconcile()
 
         if reconciliation.passthrough_records:
@@ -364,6 +370,7 @@ class BatchResultProcessor:
                 )
 
                 if is_exhausted:
+                    assert ctx.exhausted_recovery is not None
                     on_exhausted = "return_last"  # default
                     if ctx.agent_config:
                         retry_config = ctx.agent_config.get("retry", {})
@@ -371,12 +378,14 @@ class BatchResultProcessor:
 
                     if on_exhausted == "raise":
                         recovery_meta = ctx.exhausted_recovery[custom_id]
+                        assert recovery_meta.retry is not None
                         raise RuntimeError(
                             f"Retry exhausted for record {custom_id} after "
                             f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
                         )
 
                     recovery_meta = ctx.exhausted_recovery[custom_id]
+                    assert recovery_meta.retry is not None
                     empty_content = ExhaustedRecordBuilder.build_empty_content(
                         ctx.agent_config or {}
                     )

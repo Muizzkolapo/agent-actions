@@ -181,7 +181,7 @@ class VendorRegistry(BaseModel):
 
     def get_default_vendor_config(self) -> VendorConfig | None:
         """Get the default vendor configuration."""
-        return self.vendors.get(self.default_vendor)
+        return self.vendors.get(self.default_vendor)  # type: ignore[arg-type]
 
     def register_vendor(self, name: str, config: VendorConfig):
         """Register a new vendor configuration."""

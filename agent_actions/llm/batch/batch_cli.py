@@ -20,7 +20,7 @@ def batch():
 )
 @handles_user_errors("batch status")
 @requires_project
-def status(batch_id: str = None, project_root: Path | None = None):
+def status(batch_id: str | None = None, project_root: Path | None = None):
     """Checks the status of a running batch job."""
     from agent_actions.validation.batch_validator import BatchCommandArgs
 
@@ -40,7 +40,7 @@ def status(batch_id: str = None, project_root: Path | None = None):
 )
 @handles_user_errors("batch retrieve")
 @requires_project
-def retrieve(batch_id: str = None, project_root: Path | None = None):
+def retrieve(batch_id: str | None = None, project_root: Path | None = None):
     """Retrieves the results of a completed batch job.
 
     Results are saved to the workflow's configured output directory to maintain

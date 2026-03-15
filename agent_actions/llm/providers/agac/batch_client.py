@@ -199,7 +199,7 @@ class AgacBatchClient(BaseBatchClient):
             Current attempt number (1-indexed)
         """
         if not hasattr(self, "_custom_id_attempts"):
-            self._custom_id_attempts = {}
+            self._custom_id_attempts: dict[str, int] = {}
 
         if custom_id not in self._custom_id_attempts:
             self._custom_id_attempts[custom_id] = 1
@@ -233,8 +233,8 @@ class AgacBatchClient(BaseBatchClient):
         state = MockBatchState(
             batch_id=batch_id,
             status="in_progress",
-            polls_until_complete=self.polls_until_complete,
-            complete_after_seconds=self.complete_after_seconds,
+            polls_until_complete=self.polls_until_complete,  # type: ignore[arg-type]
+            complete_after_seconds=self.complete_after_seconds,  # type: ignore[arg-type]
         )
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
@@ -283,7 +283,7 @@ class AgacBatchClient(BaseBatchClient):
         if isinstance(raw_response, dict):
             response = raw_response.get("response", {})
             body = response.get("body", {})
-            return body.get("usage")
+            return body.get("usage")  # type: ignore[no-any-return]
         return None
 
     # ========== Test utilities ==========

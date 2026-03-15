@@ -35,7 +35,7 @@ def retry(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         time.sleep(delay * (attempt + 1))
-            raise last_exception
+            raise last_exception  # type: ignore[misc]
 
         return wrapper
 
@@ -211,7 +211,7 @@ class BaseBatchClient(ABC):
 
     def _extract_custom_id(self, raw_response: Any) -> str:
         """Extract custom_id from response, defaulting to 'unknown'."""
-        return self._get_attribute_or_key(raw_response, "custom_id", "unknown")
+        return self._get_attribute_or_key(raw_response, "custom_id", "unknown")  # type: ignore[no-any-return]
 
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> str | None:
@@ -326,7 +326,7 @@ class BaseBatchClient(ABC):
             Parsed JSON object, or original string if parsing fails
         """
         if not isinstance(content_str, str):
-            return content_str
+            return content_str  # type: ignore[unreachable]
 
         try:
             return json.loads(content_str)

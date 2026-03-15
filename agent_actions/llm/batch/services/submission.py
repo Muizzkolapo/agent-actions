@@ -116,7 +116,7 @@ class BatchSubmissionService:
         try:
             manager = self._registry_manager_factory(output_directory) if output_directory else None
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
-            return provider.check_status(batch_id)
+            return provider.check_status(batch_id)  # type: ignore[return-value]
         except Exception as e:
             vendor = (
                 getattr(provider, "vendor_type", "unknown") if provider is not None else "unknown"
@@ -128,7 +128,9 @@ class BatchSubmissionService:
                     error=str(e),
                 )
             )
-            raise ExternalServiceError(vendor, f"Failed to check batch status: {e}", cause=e) from e
+            raise ExternalServiceError(
+                f"Failed to check batch status: {e}", context={"vendor": vendor}, cause=e
+            ) from e
 
     def submit_batch_job(
         self,
@@ -181,7 +183,8 @@ class BatchSubmissionService:
         if not tasks:
             return self._handle_empty_tasks(agent_config, context_map, data, output_directory)
 
-        self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
+        if output_directory:
+            self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
 
         return self._submit_to_provider(agent_config, batch_name, tasks, output_directory)
 
@@ -207,7 +210,11 @@ class BatchSubmissionService:
         behavior = where_config.get("behavior", "filter")
 
         if behavior == "filter":
-            passthrough = {"type": "tombstone", "data": [], "output_directory": output_directory}
+            passthrough: dict[str, Any] = {
+                "type": "tombstone",
+                "data": [],
+                "output_directory": output_directory,
+            }
         elif behavior == "skip":
             passthrough = BatchPassthroughBuilder(output_directory).from_context(
                 context_map, reason="where_clause_not_matched"
@@ -293,5 +300,5 @@ class BatchSubmissionService:
                 )
             )
             raise ExternalServiceError(
-                provider_type, f"Failed to submit batch job: {e}", cause=e
+                f"Failed to submit batch job: {e}", context={"vendor": provider_type}, cause=e
             ) from e

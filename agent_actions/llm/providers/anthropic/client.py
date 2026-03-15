@@ -97,7 +97,7 @@ class AnthropicClient(BaseClient):
             (block.input for block in response.content if hasattr(block, "input")), None
         )
         if response_content is not None:
-            return response_content
+            return response_content  # type: ignore[no-any-return]
 
         text_content = next(
             (block.text for block in response.content if hasattr(block, "text")),

@@ -99,7 +99,7 @@ class ClientInvocationService:
 
         # Tool client has different parameters
         if model_vendor == "tool":
-            return client.invoke(
+            return client.invoke(  # type: ignore[no-any-return]
                 agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
 
@@ -121,4 +121,4 @@ class ClientInvocationService:
         if model_vendor in SINGLE_RESPONSE_CLIENTS:
             result = [result]
 
-        return result
+        return result  # type: ignore[no-any-return]

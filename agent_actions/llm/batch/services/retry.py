@@ -460,7 +460,7 @@ class BatchRetryService:
                     dependency_configs=dependency_configs or {},
                     storage_backend=self._storage_backend,
                 )
-                result = preparator.prepare_tasks(
+                prepared = preparator.prepare_tasks(
                     agent_config=agent_config or {},
                     data=reprompt_records,
                     provider=provider,
@@ -469,7 +469,7 @@ class BatchRetryService:
                 )
 
                 batch_id, status = provider.submit_batch(
-                    tasks=result.tasks,
+                    tasks=prepared.tasks,
                     batch_name=reprompt_batch_name,
                     output_directory=output_directory,
                 )
@@ -477,11 +477,11 @@ class BatchRetryService:
                 logger.info(
                     "Submitted reprompt batch %s with %d records",
                     batch_id,
-                    len(result.tasks),
+                    len(prepared.tasks),
                 )
 
                 final_status = wait_for_batch_completion(
-                    provider, batch_id, total_items=len(result.tasks)
+                    provider, batch_id, total_items=len(prepared.tasks)
                 )
 
                 if final_status != BatchStatus.COMPLETED:
@@ -1067,15 +1067,15 @@ def wait_for_batch_completion(
                 )
             )
             last_progress_time = current_time
-            last_progress_pct = current_pct
+            last_progress_pct = current_pct  # type: ignore[assignment]
 
         if status in (BatchStatus.COMPLETED, BatchStatus.FAILED, BatchStatus.CANCELLED):
-            return status
+            return status  # type: ignore[return-value]
         logger.debug("Retry batch %s status: %s, waiting...", batch_id, status)
         time.sleep(poll_interval)
 
     logger.warning("Retry batch %s timed out after %d seconds", batch_id, timeout_seconds)
-    return provider.check_status(batch_id)
+    return provider.check_status(batch_id)  # type: ignore[return-value]
 
 
 def _import_validation_module(validation_module: str, validation_path: str | None) -> None:

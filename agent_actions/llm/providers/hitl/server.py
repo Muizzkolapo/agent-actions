@@ -51,10 +51,10 @@ class HitlServer:
         self.record_reviews: list[dict[str, Any] | None] = [None] * self.record_count
         self._data_fingerprint = self._compute_data_fingerprint(context_data)
         self.state_file = state_file
-        self.response = None
+        self.response: dict[str, Any] | None = None
         self.response_event = threading.Event()
         self.shutdown_requested = False
-        self._server = None
+        self._server: Any = None
         self._lock = threading.Lock()
         self._active_port = port  # Updated when an available port is found
         self._session_token = secrets.token_urlsafe(32)
@@ -557,6 +557,7 @@ class HitlServer:
             self._make_terminal_response("timeout")
 
         self._shutdown_server()
+        assert self.response is not None
         return self.response
 
     def _run_server(self, port: int):

@@ -152,13 +152,6 @@ module = [
 ]
 ignore_missing_imports = true
 
-# Modules under gradual type adoption — burn down and remove overrides
-[[tool.mypy.overrides]]
-module = [
-    "agent_actions.llm.*",
-]
-ignore_errors = true
-
 # Vendor modules - ignore complex API typing for now
 [[tool.mypy.overrides]]
 module = "agent_actions.vendors.*"

@@ -81,12 +81,12 @@ class BatchResultReconciler:
 
     def get_record_by_id(self, custom_id: str) -> dict[str, Any]:
         """Get original record data by custom_id, or empty dict if not found."""
-        return self.context_map.get(str(custom_id), {})
+        return self.context_map.get(str(custom_id), {})  # type: ignore[no-any-return]
 
-    def get_source_guid(self, custom_id: str, fallback: str = None) -> str:
+    def get_source_guid(self, custom_id: str, fallback: str | None = None) -> str:
         """Get source_guid for a custom_id, falling back to custom_id itself."""
         original_row = self.get_record_by_id(custom_id)
-        return original_row.get("source_guid", fallback or custom_id)
+        return original_row.get("source_guid", fallback or custom_id)  # type: ignore[no-any-return]
 
     def get_record_index(self, custom_id: str) -> int:
         """Get the index of a custom_id in context_map order, or -1 if not found."""

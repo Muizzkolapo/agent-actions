@@ -87,7 +87,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             }
             llm = genai.GenerativeModel(
                 model_name,
-                generation_config=generation_config,
+                generation_config=generation_config,  # type: ignore[arg-type]
             )
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
@@ -175,7 +175,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
             )
             llm = genai.GenerativeModel(
                 model_name,
-                generation_config=generation_config if generation_config else None,
+                generation_config=generation_config if generation_config else None,  # type: ignore[arg-type]
             )
             context_data_str = StringProcessor.process_as_string(context_data)
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "

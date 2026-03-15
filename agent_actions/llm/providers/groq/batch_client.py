@@ -129,7 +129,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
             # Create batch job (24h default, can be up to 7 days)
             batch_job = self.client.batches.create(
-                input_file_id=batch_file.id,
+                input_file_id=batch_file.id,  # type: ignore[arg-type]
                 endpoint="/v1/chat/completions",
                 completion_window="24h",
             )
@@ -183,7 +183,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 },
             )
 
-        result_content = self.client.files.content(result_file_id).content
+        result_content = self.client.files.content(result_file_id).content  # type: ignore[attr-defined]
         if not result_content:
             raise VendorAPIError(
                 vendor="groq",
@@ -194,7 +194,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 },
             )
 
-        return result_content
+        return result_content  # type: ignore[no-any-return]
 
     def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract metadata from Groq response with Groq-specific fields."""

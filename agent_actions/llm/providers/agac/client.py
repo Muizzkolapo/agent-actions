@@ -253,7 +253,7 @@ class AgacClient(BaseClient):
         prompt_config: dict[str, Any],
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
-    ) -> str | dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         """Dispatch to JSON or non-JSON methods."""
         from agent_actions.utils.constants import JSON_MODE_KEY
 

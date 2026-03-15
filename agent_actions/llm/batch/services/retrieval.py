@@ -103,7 +103,7 @@ class BatchRetrievalService:
                 getattr(provider, "vendor_type", "unknown") if provider is not None else "unknown"
             )
             raise ExternalServiceError(
-                vendor, f"Failed to retrieve batch results: {e}", cause=e
+                f"Failed to retrieve batch results: {e}", context={"vendor": vendor}, cause=e
             ) from e
 
     def _write_results_to_jsonl(self, result_file: Path, batch_results: list[BatchResult]) -> None:

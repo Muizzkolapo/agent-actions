@@ -65,7 +65,7 @@ class JSONResponseMixin:
                     "response_length": len(response_content),
                 },
             )
-            return response_data
+            return response_data  # type: ignore[no-any-return]
         except json.JSONDecodeError as e:
             logger.warning(
                 "%s returned invalid JSON, returning error dict for repair",
@@ -172,4 +172,4 @@ class OpenAICompatibleResponseMixin:
         """Extract usage from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
-        return response_body.get("usage")
+        return response_body.get("usage")  # type: ignore[no-any-return]

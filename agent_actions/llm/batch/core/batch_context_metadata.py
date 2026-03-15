@@ -56,12 +56,12 @@ class BatchContextMetadata:
     @staticmethod
     def get_passthrough_fields(record: dict[str, Any]) -> dict[str, Any]:
         """Get passthrough fields from a record, or empty dict if unset."""
-        return record.get(ContextMetaKeys.PASSTHROUGH_FIELDS, {})
+        return record.get(ContextMetaKeys.PASSTHROUGH_FIELDS, {})  # type: ignore[no-any-return]
 
     @staticmethod
     def pop_passthrough_fields(record: dict[str, Any]) -> dict[str, Any]:
         """Remove and return passthrough fields from a record."""
-        return record.pop(ContextMetaKeys.PASSTHROUGH_FIELDS, {})
+        return record.pop(ContextMetaKeys.PASSTHROUGH_FIELDS, {})  # type: ignore[no-any-return]
 
     # =========================================================================
     # Utility Methods

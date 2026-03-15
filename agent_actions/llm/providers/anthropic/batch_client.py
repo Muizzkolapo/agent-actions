@@ -197,16 +197,16 @@ class AnthropicBatchClient(BaseBatchClient):
         for content_block in content_list:
             # Check object with type='text'
             if hasattr(content_block, "type") and content_block.type == "text":
-                return self._get_attribute_or_key(content_block, "text")
+                return self._get_attribute_or_key(content_block, "text")  # type: ignore[no-any-return]
 
             # Check dict with type='text'
             if isinstance(content_block, dict) and content_block.get("type") == "text":
-                return content_block.get("text", "")
+                return content_block.get("text", "")  # type: ignore[no-any-return]
 
             # Check for text attribute/key directly
             text = self._get_attribute_or_key(content_block, "text")
             if text:
-                return text
+                return text  # type: ignore[no-any-return]
 
         return None
 
@@ -261,8 +261,8 @@ class AnthropicBatchClient(BaseBatchClient):
         usage = self._get_attribute_or_key(message, "usage")
 
         if usage and hasattr(usage, "model_dump"):
-            return usage.model_dump()
-        return usage
+            return usage.model_dump()  # type: ignore[no-any-return]
+        return usage  # type: ignore[no-any-return]
 
     def _get_default_model(self) -> str:
         """Return Anthropic's default model."""
@@ -370,12 +370,12 @@ class AnthropicBatchClient(BaseBatchClient):
                 elif hasattr(entry, "__dict__"):
                     raw_entries.append(entry.__dict__)
                 else:
-                    raw_entries.append(entry)
+                    raw_entries.append(entry)  # type: ignore[arg-type]
             if output_directory and raw_entries:
                 batch_dir = self._get_batch_directory(output_directory)
                 raw_results_file = batch_dir / f"{batch_id}_anthropic_raw_results.jsonl"
                 with open(raw_results_file, "w", encoding="utf-8") as f:
-                    for entry in raw_entries:
+                    for entry in raw_entries:  # type: ignore[assignment]
                         f.write(json.dumps(entry) + "\n")
             return batch_results
         except self.anthropic.APIError as e:
@@ -428,8 +428,8 @@ class AnthropicBatchClient(BaseBatchClient):
         actual_schema = None
         tool_name = "json_response"
         schema_description = "Provide a structured JSON response"
-        if isinstance(schema, list) and len(schema) > 0:
-            schema_obj = schema[0]
+        if isinstance(schema, list) and len(schema) > 0:  # type: ignore[unreachable]
+            schema_obj = schema[0]  # type: ignore[unreachable]
             if isinstance(schema_obj, dict):
                 actual_schema = schema_obj.get("input_schema", {})
                 tool_name = (

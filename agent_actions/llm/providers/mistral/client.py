@@ -105,9 +105,11 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         latency_ms = duration * 1000
 
         # Extract token usage
-        prompt_tokens = chat_response.usage.prompt_tokens if chat_response.usage else 0
-        completion_tokens = chat_response.usage.completion_tokens if chat_response.usage else 0
-        total_tokens = chat_response.usage.total_tokens if chat_response.usage else 0
+        prompt_tokens = (chat_response.usage.prompt_tokens if chat_response.usage else 0) or 0
+        completion_tokens = (
+            chat_response.usage.completion_tokens if chat_response.usage else 0
+        ) or 0
+        total_tokens = (chat_response.usage.total_tokens if chat_response.usage else 0) or 0
 
         if chat_response.usage:
             set_last_usage(
@@ -134,7 +136,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         response_content = chat_response.choices[0].message.content
 
         result = MistralClient.parse_json_response(
-            response_content=response_content,
+            response_content=response_content,  # type: ignore[arg-type]
             vendor_name="Mistral",
             operation="call_json",
             model_name=model_name,
@@ -206,9 +208,11 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         latency_ms = duration * 1000
 
         # Extract token usage
-        prompt_tokens = chat_response.usage.prompt_tokens if chat_response.usage else 0
-        completion_tokens = chat_response.usage.completion_tokens if chat_response.usage else 0
-        total_tokens = chat_response.usage.total_tokens if chat_response.usage else 0
+        prompt_tokens = (chat_response.usage.prompt_tokens if chat_response.usage else 0) or 0
+        completion_tokens = (
+            chat_response.usage.completion_tokens if chat_response.usage else 0
+        ) or 0
+        total_tokens = (chat_response.usage.total_tokens if chat_response.usage else 0) or 0
 
         if chat_response.usage:
             set_last_usage(

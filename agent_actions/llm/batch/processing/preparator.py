@@ -253,7 +253,7 @@ class BatchTaskPreparator:
         schema, _captured_results = prepare_schema_unified(
             agent_config, vendor, project_root=Path(_pr) if _pr else None
         )
-        return schema
+        return schema  # type: ignore[return-value]
 
     def _add_tools_to_path(self, tools_path: str | None) -> None:
         """Do nothing (tools are loaded via spec_from_file_location, not sys.path)."""

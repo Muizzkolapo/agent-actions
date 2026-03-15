@@ -110,7 +110,7 @@ def create_dynamic_agent(
             if isinstance(context_data, str)
             else json.dumps(context_data, ensure_ascii=False)
         ),
-        schema,
+        schema,  # type: ignore[arg-type]
     )
 
     granularity = (agent_config.get("granularity") or "record").lower()
@@ -121,7 +121,7 @@ def create_dynamic_agent(
         agent_config,
         prompt_config,
         context_data,
-        schema,
+        schema,  # type: ignore[arg-type]
         granularity,
         formatted_prompt,
         tool_args,

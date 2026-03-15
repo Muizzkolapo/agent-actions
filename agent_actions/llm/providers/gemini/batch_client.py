@@ -16,8 +16,8 @@ try:
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
-    genai = None
-    types = None
+    genai = None  # type: ignore[assignment]
+    types = None  # type: ignore[assignment]
 from ..batch_base import BaseBatchClient, BatchTask
 
 
@@ -73,7 +73,7 @@ class GeminiBatchClient(BaseBatchClient):
             generation_config["temperature"] = batch_task.model_config["temperature"]
         if "max_tokens" in batch_task.model_config:
             generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
-        request = {"contents": [{"parts": [{"text": combined_text}]}]}
+        request: dict[str, Any] = {"contents": [{"parts": [{"text": combined_text}]}]}
         if generation_config:
             request["generation_config"] = generation_config
         if schema:
@@ -83,7 +83,7 @@ class GeminiBatchClient(BaseBatchClient):
 
     def _extract_custom_id(self, raw_response: dict[str, Any]) -> str:
         """Extract custom_id from Gemini response (uses 'key' instead)."""
-        return raw_response.get("key", "unknown")
+        return raw_response.get("key", "unknown")  # type: ignore[no-any-return]
 
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from Gemini response."""
@@ -160,13 +160,15 @@ class GeminiBatchClient(BaseBatchClient):
             logger.info("Uploaded file: %s", uploaded_file.name)
             model_name = self._configured_model or self._get_default_model()
             batch_job = self.client.batches.create(
-                model=model_name, src=uploaded_file.name, config={"display_name": batch_name}
+                model=model_name,
+                src=uploaded_file.name,  # type: ignore[arg-type]
+                config={"display_name": batch_name},  # type: ignore[arg-type]
             )
             logger.info("Gemini batch job created with ID: %s", batch_job.name)
             status = (
-                batch_job.state.name if hasattr(batch_job.state, "name") else str(batch_job.state)
+                batch_job.state.name if hasattr(batch_job.state, "name") else str(batch_job.state)  # type: ignore[union-attr]
             )
-            return (batch_job.name, status)
+            return (batch_job.name, status)  # type: ignore[return-value]
         except Exception as e:
             from agent_actions.errors import VendorAPIError
 
@@ -180,7 +182,7 @@ class GeminiBatchClient(BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
-        return batch_job.state.name
+        return batch_job.state.name  # type: ignore[union-attr]
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Gemini status to standard format."""
@@ -200,15 +202,15 @@ class GeminiBatchClient(BaseBatchClient):
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Fetch raw results from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
-        if batch_job.state.name != "JOB_STATE_SUCCEEDED":
+        if batch_job.state.name != "JOB_STATE_SUCCEEDED":  # type: ignore[union-attr]
             from agent_actions.errors import ValidationError
 
             raise ValidationError(
                 "Batch job is not completed",
-                context={"batch_id": batch_id, "status": batch_job.state.name, "vendor": "gemini"},
+                context={"batch_id": batch_id, "status": batch_job.state.name, "vendor": "gemini"},  # type: ignore[union-attr]
             )
 
-        result_file_name = batch_job.dest.file_name
+        result_file_name = batch_job.dest.file_name  # type: ignore[union-attr]
         if not result_file_name:
             from agent_actions.errors import ValidationError
 

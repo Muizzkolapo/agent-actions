@@ -186,7 +186,7 @@ class BatchClientResolver:
         if registry_manager:
             entry = registry_manager.get_batch_job_by_id(batch_id)
             if entry:
-                return entry.provider
+                return entry.provider  # type: ignore[no-any-return]
 
         if output_directory:
             client_type = self._lookup_client_from_file(batch_id, output_directory)
@@ -206,7 +206,7 @@ class BatchClientResolver:
 
             for entry in registry.values():
                 if entry.get("batch_id") == batch_id:
-                    return entry.get("provider")
+                    return entry.get("provider")  # type: ignore[no-any-return]
         except (json.JSONDecodeError, OSError, KeyError):
             logger.debug("Failed to read batch registry file %s", registry_file, exc_info=True)
 

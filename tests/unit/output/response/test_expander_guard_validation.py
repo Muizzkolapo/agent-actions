@@ -13,6 +13,7 @@ from agent_actions.output.response.expander_guard_validation import (
     validate_agent_guards,
     validate_guard_references,
 )
+from agent_actions.output.response.config_schema import WhereClauseConfig
 from agent_actions.errors import ConfigValidationError
 from agent_actions.input.preprocessing.field_resolution import ReferenceValidator
 
@@ -79,9 +80,7 @@ class TestValidateAgentGuards:
             }
         }
 
-    def test_valid_guard_reference_no_errors(
-        self, validator, agent_indices, action_schemas
-    ):
+    def test_valid_guard_reference_no_errors(self, validator, agent_indices, action_schemas):
         """Agent with a guard referencing a valid upstream action produces no errors."""
         agent = {
             "agent_type": "classify",
@@ -91,9 +90,7 @@ class TestValidateAgentGuards:
         errors = validate_agent_guards(agent, validator, agent_indices, action_schemas)
         assert errors == []
 
-    def test_invalid_guard_reference_returns_errors(
-        self, validator, agent_indices, action_schemas
-    ):
+    def test_invalid_guard_reference_returns_errors(self, validator, agent_indices, action_schemas):
         """Agent referencing a non-existent upstream action produces errors."""
         agent = {
             "agent_type": "classify",
@@ -101,6 +98,7 @@ class TestValidateAgentGuards:
         }
         errors = validate_agent_guards(agent, validator, agent_indices, action_schemas)
         assert len(errors) > 0
+        assert any("nonexistent" in e for e in errors)
 
     def test_no_guard_returns_empty(self, validator, agent_indices, action_schemas):
         """Agent without a guard clause produces no errors."""
@@ -108,9 +106,7 @@ class TestValidateAgentGuards:
         errors = validate_agent_guards(agent, validator, agent_indices, action_schemas)
         assert errors == []
 
-    def test_conditional_clause_validated(
-        self, validator, agent_indices, action_schemas
-    ):
+    def test_conditional_clause_validated(self, validator, agent_indices, action_schemas):
         """UDF conditional_clause references are also validated."""
         agent = {
             "agent_type": "classify",
@@ -120,9 +116,7 @@ class TestValidateAgentGuards:
         errors = validate_agent_guards(agent, validator, agent_indices, action_schemas)
         assert errors == []
 
-    def test_conditional_clause_invalid_reference(
-        self, validator, agent_indices, action_schemas
-    ):
+    def test_conditional_clause_invalid_reference(self, validator, agent_indices, action_schemas):
         """Invalid reference in conditional_clause produces errors."""
         agent = {
             "agent_type": "classify",
@@ -130,6 +124,7 @@ class TestValidateAgentGuards:
         }
         errors = validate_agent_guards(agent, validator, agent_indices, action_schemas)
         assert len(errors) > 0
+        assert any("missing_action" in e for e in errors)
 
 
 # =============================================================================
@@ -182,6 +177,7 @@ class TestValidateGuardReferences:
         ]
         errors = validate_guard_references(agents, strict=False)
         assert len(errors) > 0
+        assert any("nonexistent" in e for e in errors)
 
     def test_no_guards_no_errors(self):
         """Workflow with no guard clauses validates cleanly."""
@@ -196,3 +192,34 @@ class TestValidateGuardReferences:
         """Empty agent list validates cleanly."""
         errors = validate_guard_references([], strict=False)
         assert errors == []
+
+    def test_empty_agent_name_uses_indexed_fallback(self):
+        """Agents with empty string names get distinct unknown_N keys in validate_guard_references."""
+        agents = [
+            {
+                "name": "",
+                "json_output_schema": {"type": "object", "properties": {"x": {"type": "integer"}}},
+            },
+            {
+                "name": "",
+                "dependencies": ["unknown_0"],
+                "guard": {"clause": "unknown_0.x > 0", "scope": "item"},
+            },
+        ]
+        # validate_guard_references uses `or f"unknown_{idx}"` for empty names
+        errors = validate_guard_references(agents, strict=False)
+        assert errors == []
+
+
+# =============================================================================
+# WhereClauseConfig.validate_clause — None guard coverage
+# =============================================================================
+
+
+class TestWhereClauseConfigNoneGuard:
+    """Defensive None guard in validate_clause returns None without AttributeError."""
+
+    def test_none_clause_returns_none(self):
+        """Calling the validator directly with None returns None (defensive guard)."""
+        result = WhereClauseConfig.validate_clause(None)
+        assert result is None

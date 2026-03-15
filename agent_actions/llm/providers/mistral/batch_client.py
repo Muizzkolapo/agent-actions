@@ -195,7 +195,7 @@ class MistralBatchClient(BaseBatchClient):
         # Ensure we return bytes
         if isinstance(result_content, str):
             return result_content.encode("utf-8")
-        return result_content
+        return result_content  # type: ignore[return-value]
 
     # Response extraction methods - Mistral uses similar format to OpenAI
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
@@ -233,4 +233,4 @@ class MistralBatchClient(BaseBatchClient):
         """Extract usage from Mistral response."""
         response_data = raw_response.get("response", raw_response)
         response_body = response_data.get("body", response_data)
-        return response_body.get("usage")
+        return response_body.get("usage")  # type: ignore[no-any-return]

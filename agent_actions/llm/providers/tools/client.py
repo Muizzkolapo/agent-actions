@@ -49,7 +49,7 @@ class ToolClient:
         if isinstance(data, dict):
             return strip(data)
 
-        return data
+        return data  # type: ignore[unreachable]
 
     @staticmethod
     def invoke(
@@ -80,7 +80,7 @@ class ToolClient:
         udf_kwargs = tool_args if tool_args is not None else {}
         response = execute_user_defined_function(
             model_name,
-            clean_context,
+            clean_context,  # type: ignore[arg-type]
             json_output_schema=agent_config.get("json_output_schema"),
             **udf_kwargs,
         )

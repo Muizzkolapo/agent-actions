@@ -150,7 +150,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     options["num_predict"] = max_tokens
 
                 # Handle JSON mode with structured outputs
-                format_param = None
+                format_param: str | dict[str, Any] | None = None
                 response_format = body.get("response_format")
                 if response_format and isinstance(response_format, dict):
                     if response_format.get("type") == "json_schema":
@@ -162,7 +162,10 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
                 # Call Ollama
                 ollama_response = self.client.chat(
-                    model=model, messages=messages, options=options, format=format_param
+                    model=model,
+                    messages=messages,
+                    options=options,
+                    format=format_param,  # type: ignore[arg-type]
                 )
 
                 # Failure injection AFTER successful call - simulates "result lost/missing"
@@ -174,7 +177,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                     continue
 
                 # Transform to OpenAI format
-                openai_response = self._transform_ollama_response(ollama_response, custom_id, model)
+                openai_response = self._transform_ollama_response(ollama_response, custom_id, model)  # type: ignore[arg-type]
 
                 results.append(openai_response)
                 completed += 1

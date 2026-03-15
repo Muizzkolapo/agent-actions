@@ -121,9 +121,9 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         total_tokens = 0
         if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
             tokens = response.usage.tokens
-            prompt_tokens = tokens.input_tokens
-            completion_tokens = tokens.output_tokens
-            total_tokens = tokens.input_tokens + tokens.output_tokens
+            prompt_tokens = tokens.input_tokens or 0  # type: ignore[union-attr, assignment]
+            completion_tokens = tokens.output_tokens or 0  # type: ignore[union-attr, assignment]
+            total_tokens = prompt_tokens + completion_tokens
             set_last_usage(
                 {
                     "input_tokens": prompt_tokens,
@@ -151,7 +151,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "Cohere JSON response contained no content",
                 vendor="cohere",
             )
-        intermediate_json = response.message.content[0].text
+        intermediate_json = response.message.content[0].text  # type: ignore[union-attr]
 
         result = CohereClient.parse_json_response(
             response_content=intermediate_json,
@@ -232,9 +232,9 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         total_tokens = 0
         if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
             tokens = response.usage.tokens
-            prompt_tokens = tokens.input_tokens
-            completion_tokens = tokens.output_tokens
-            total_tokens = tokens.input_tokens + tokens.output_tokens
+            prompt_tokens = tokens.input_tokens or 0  # type: ignore[union-attr, assignment]
+            completion_tokens = tokens.output_tokens or 0  # type: ignore[union-attr, assignment]
+            total_tokens = prompt_tokens + completion_tokens
             set_last_usage(
                 {
                     "input_tokens": prompt_tokens,
@@ -262,7 +262,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "Cohere non-JSON response contained no content",
                 vendor="cohere",
             )
-        response_message = response.message.content[0].text
+        response_message = response.message.content[0].text  # type: ignore[union-attr]
 
         logger.debug(
             "Cohere non-JSON response retrieved successfully",

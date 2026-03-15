@@ -322,7 +322,7 @@ class FakeDataGenerator:
     def _get_rng(cls) -> random.Random:
         """Get the current random number generator."""
         if cls._rng is None:
-            cls._rng = random.Random()
+            cls._rng = random.Random()  # type: ignore[unreachable]
         return cls._rng
 
     @classmethod
@@ -349,7 +349,7 @@ class FakeDataGenerator:
             cls.set_context(prompt=prompt)
 
         if not isinstance(schema, dict):
-            return cls._generate_string(attempt, field_name=field_name)
+            return cls._generate_string(attempt, field_name=field_name)  # type: ignore[unreachable]
 
         if "$ref" in schema:
             return cls._generate_string(attempt, field_name=field_name)
@@ -641,7 +641,7 @@ class FakeDataGenerator:
 
         # Default: varies by attempt with randomness
         base = 10 * attempt + rng.randint(-5, 15)
-        return max(minimum, min(maximum, base))
+        return max(minimum, min(maximum, base))  # type: ignore[no-any-return]
 
     @classmethod
     def _generate_boolean(cls, attempt: int, field_name: str | None = None) -> bool:
@@ -716,7 +716,7 @@ class FakeDataGenerator:
     def extract_schema_from_openai_request(body: dict[str, Any]) -> dict[str, Any] | None:
         """Extract JSON schema from OpenAI-format request body."""
         if not isinstance(body, dict):
-            return None
+            return None  # type: ignore[unreachable]
 
         # Check response_format.json_schema.schema
         response_format = body.get("response_format", {})
@@ -725,10 +725,10 @@ class FakeDataGenerator:
             if isinstance(json_schema, dict):
                 schema = json_schema.get("schema")
                 if schema:
-                    return schema
+                    return schema  # type: ignore[no-any-return]
             schema = response_format.get("schema")
             if schema:
-                return schema
+                return schema  # type: ignore[no-any-return]
 
         # Check tools[0].function.parameters
         tools = body.get("tools", [])
@@ -739,10 +739,10 @@ class FakeDataGenerator:
                     if isinstance(function, dict):
                         parameters = function.get("parameters")
                         if parameters:
-                            return parameters
+                            return parameters  # type: ignore[no-any-return]
 
         if "schema" in body:
-            return body["schema"]
+            return body["schema"]  # type: ignore[no-any-return]
 
         return None
 
@@ -750,7 +750,7 @@ class FakeDataGenerator:
     def extract_prompt_from_openai_request(body: dict[str, Any]) -> str | None:
         """Extract prompt/user message from OpenAI-format request body."""
         if not isinstance(body, dict):
-            return None
+            return None  # type: ignore[unreachable]
 
         messages = body.get("messages", [])
         if messages and isinstance(messages, list):

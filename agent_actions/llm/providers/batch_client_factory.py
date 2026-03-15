@@ -75,7 +75,7 @@ def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".gemini.batch_client", "GeminiBatchClient")
     cls = _require_class(cls, available, "gemini", "google-genai")
     api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
-    return cls(api_key=api_key)
+    return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
 def _create_ollama(config: dict[str, Any]) -> BaseBatchClient:
@@ -89,7 +89,7 @@ def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".anthropic.batch_client", "AnthropicBatchClient")
     cls = _require_class(cls, available, "anthropic", "anthropic")
     api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
-    return cls(
+    return cls(  # type: ignore[no-any-return]
         api_key=api_key,
         version=config.get("anthropic_version"),
         enable_prompt_caching=config.get("enable_prompt_caching", False),
@@ -100,14 +100,14 @@ def _create_groq(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".groq.batch_client", "GroqBatchClient")
     cls = _require_class(cls, available, "groq", "groq")
     api_key = config.get("api_key") or os.getenv("GROQ_API_KEY")
-    return cls(api_key=api_key)
+    return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
 def _create_mistral(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".mistral.batch_client", "MistralBatchClient")
     cls = _require_class(cls, available, "mistral", "mistralai")
     api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
-    return cls(api_key=api_key)
+    return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
 def _create_agac(config: dict[str, Any]) -> BaseBatchClient:
