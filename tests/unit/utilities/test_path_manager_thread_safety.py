@@ -9,6 +9,7 @@ from agent_actions.utils.path_utils import (
     _path_manager_lock,
     get_path_manager,
     reset_path_manager,
+    set_path_manager,
 )
 
 
@@ -61,3 +62,33 @@ class TestGetPathManagerThreadSafety:
     def test_lock_is_module_level(self):
         """The lock used for double-checked locking is a module-level Lock."""
         assert isinstance(_path_manager_lock, type(threading.Lock()))
+
+
+class TestSetPathManager:
+    """Tests for explicit DI via set_path_manager()."""
+
+    def test_set_then_get_returns_same_instance(self):
+        from agent_actions.config.paths import PathManager
+
+        pm = PathManager()
+        set_path_manager(pm)
+        assert get_path_manager() is pm
+
+    def test_set_overwrites_lazy_init(self):
+        """set_path_manager replaces a previously lazy-initialized instance."""
+        from agent_actions.config.paths import PathManager
+
+        lazy = get_path_manager()
+        explicit = PathManager()
+        set_path_manager(explicit)
+        assert get_path_manager() is explicit
+        assert get_path_manager() is not lazy
+
+    def test_set_overwrites_previous_set(self):
+        from agent_actions.config.paths import PathManager
+
+        first = PathManager()
+        second = PathManager()
+        set_path_manager(first)
+        set_path_manager(second)
+        assert get_path_manager() is second

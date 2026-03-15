@@ -122,3 +122,31 @@ All tasks below are done and merged.
 #### 20. Fix path-depth assumption IndexError on shallow paths (#1100)
 - **Source:** Audit PR #1088
 - **Fix:** Added bounds checks before `.parents[1]` in `service_init.py` and `.parents[2]` in `coordinator.py`. Shallow paths raise clear `ValueError` with expected format hint.
+
+---
+
+## Phase 3 — P1 Safety / Type System
+
+#### 21. Remove remaining mypy `ignore_errors` overrides (#1101–#1108)
+- **Source:** Audit PRs #1078, #1081, #1084, #1085, #1087, #1089, #1090
+- **Fix:** Incrementally removed `ignore_errors` overrides across all 8 packages, fixing type errors as they surfaced.
+
+#### 22. Add thread-safety locks to singleton initialization (#1109)
+- **Source:** Audit PR #1084
+- **Fix:** Added `threading.Lock` guards to singleton initialization in `guard_filter` and `get_path_manager()`.
+
+#### 23. Narrow silent exception swallowing in config/docs scanning (#1110)
+- **Source:** Audit PRs #1078, #1087
+- **Fix:** Bound `as e` and added `logger.debug()`/`logger.warning()` to 12 silent `except: pass` blocks across 4 files.
+
+#### 24. Fix provider-validation drift (#1111)
+- **Source:** Audit PRs #1082, #1083, #1090
+- **Fix:** Synced preflight vendor validator allowlist with runtime client registry. Added `cohere` and `hitl` providers. Added parity test.
+
+---
+
+## Phase 4 — P2 Architecture / Structural Debt
+
+#### 26. Migrate deprecated dependencies: google-generativeai → google-genai, PyPDF2 → pypdf (#1112)
+- **Source:** Audit PRs #1078, #1084, #1085
+- **Fix:** Rewrote realtime Gemini client from module-level `genai.configure()` + `GenerativeModel` to client-based `genai.Client().models.generate_content()` API. Switched error mapping to status-code-based. Replaced `PyPDF2` with `pypdf` (drop-in). Removed deprecated packages from `pyproject.toml`.

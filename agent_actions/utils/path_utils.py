@@ -29,6 +29,21 @@ def get_path_manager() -> PathManager:
     return _global_path_manager
 
 
+def set_path_manager(pm: PathManager) -> None:
+    """Install a specific PathManager as the global instance.
+
+    Use this to inject a PathManager scoped to a known project root
+    instead of relying on lazy CWD-based detection.
+
+    Must be called before any concurrent ``get_path_manager()`` calls
+    for the new value to be reliably visible (the fast-path read at
+    line 25 is outside the lock).
+    """
+    global _global_path_manager
+    with _path_manager_lock:
+        _global_path_manager = pm
+
+
 def reset_path_manager() -> None:
     """Reset the global PathManager instance (for testing).
 

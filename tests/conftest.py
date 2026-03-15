@@ -104,3 +104,16 @@ def cleanup_temp_files():
     for temp_dir in temp_dirs:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_singletons():
+    """Prevent singleton state from leaking between tests."""
+    from agent_actions.logging.factory import LoggerFactory
+    from agent_actions.utils.path_utils import reset_path_manager
+
+    reset_path_manager()
+    LoggerFactory.reset()
+    yield
+    reset_path_manager()
+    LoggerFactory.reset()  # cascades to EventManager.reset()

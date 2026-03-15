@@ -50,6 +50,13 @@ class RunCommand:
 
     def execute(self, project_root: Path | None = None) -> None:
         click.echo(f"Starting agent run for: {self.args.agent}")
+
+        if project_root is not None:
+            from agent_actions.config.paths import PathManager
+            from agent_actions.utils.path_utils import set_path_manager
+
+            set_path_manager(PathManager(project_root=project_root))
+
         click.echo("Setting up project paths...")
         paths = ProjectPathsFactory.create_project_paths(
             self.agent_name, self.args.agent, project_root=project_root
