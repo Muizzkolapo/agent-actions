@@ -97,7 +97,7 @@ class ConfigValidator:
     @staticmethod
     def _validate_field_rules(field_rules: dict[str, Any]) -> list[str]:
         """Return error messages for invalid field-specific rules."""
-        errors = []
+        errors: list[str] = []
         if not field_rules:
             return errors
 

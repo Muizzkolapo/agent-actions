@@ -8,10 +8,10 @@ class DataTransformer:
     """Utility class for data transformations."""
 
     @staticmethod
-    def ensure_list(data):
+    def ensure_list(data: Any) -> list[Any]:
         """Ensure that the input data is returned as a list."""
         if data is None:
-            result = []
+            result: list[Any] = []
         elif isinstance(data, list):
             result = data
         elif isinstance(data, (str, dict, int, float, bool)):
@@ -28,7 +28,7 @@ class DataTransformer:
     def remove_schema_objects(data: dict[str, Any], keys_to_remove: list[str]) -> dict[str, Any]:
         """Return a new dictionary with specified keys removed."""
         if not isinstance(data, dict):
-            return data
+            return data  # type: ignore[unreachable]
         if not keys_to_remove:
             return data
 

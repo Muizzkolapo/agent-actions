@@ -117,7 +117,7 @@ class HistoricalNodeDataLoader:
         )
 
         if record:
-            content = record.get("content", {})
+            content: dict[str, Any] = record.get("content", {})
             content_keys = list(content.keys()) if isinstance(content, dict) else []
             logger.debug(
                 "[HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
@@ -259,7 +259,7 @@ class HistoricalNodeDataLoader:
     def _find_record_by_identifiers(
         data: list[dict],
         source_guid: str,
-        _node_id: str,
+        _node_id: str | None,
         caller_lineage: list[str] | None = None,
         parent_target_id: str | None = None,
         root_target_id: str | None = None,
@@ -272,7 +272,7 @@ class HistoricalNodeDataLoader:
         For parallel siblings (node not in lineage), ancestry fields are used instead.
         """
         if not isinstance(data, list):
-            logger.debug("Data is not a list, type=%s", type(data))
+            logger.debug("Data is not a list, type=%s", type(data))  # type: ignore[unreachable]
             return None
 
         logger.debug(
@@ -290,7 +290,7 @@ class HistoricalNodeDataLoader:
 
         for record in data:
             if not isinstance(record, dict):
-                continue
+                continue  # type: ignore[unreachable]
 
             if record.get("source_guid") != source_guid:
                 continue

@@ -101,7 +101,7 @@ class SkipStrategy(FallbackStrategy):
         self, chunk_list: list[str], field_name: str, maximum_chunks_allowed: int
     ) -> tuple[list[str], str]:
         """Skip field with excessive chunks by returning empty list."""
-        empty_chunk_list = []
+        empty_chunk_list: list[str] = []
         operation_message = f"skipped_excessive_chunk_count_for_{field_name}"
         return empty_chunk_list, operation_message
 

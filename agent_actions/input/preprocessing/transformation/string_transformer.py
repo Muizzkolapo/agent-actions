@@ -11,7 +11,7 @@ from agent_actions.utils.module_loader import load_module_from_directory
 
 # Optional dependencies
 try:
-    import spacy  # type: ignore[reportMissingImports]
+    import spacy  # type: ignore[import-not-found,import-untyped]
 
     HAS_SPACY = True
 except ImportError:
@@ -221,7 +221,7 @@ class Tokenizer:
         doc = nlp(text)
         sentences = [sent.text for sent in doc.sents]
         chunks = []
-        current_chunk = []
+        current_chunk: list[str] = []
         current_length = 0
         for sentence in sentences:
             sentence_tokens = len(encoding.encode(sentence))
@@ -249,7 +249,8 @@ class Tokenizer:
             else:
                 module = importlib.import_module(split_method)
             function = getattr(module, split_method)
-            return function(text, chunk_size, overlap, tokenizer_model)
+            result: list[str] = function(text, chunk_size, overlap, tokenizer_model)
+            return result
         except ImportError as e:
             raise ConfigurationError(
                 f"Could not import custom split_method module '{split_method}'",

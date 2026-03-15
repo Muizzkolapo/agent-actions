@@ -4,7 +4,7 @@ import csv
 import json
 from pathlib import Path
 
-import defusedxml.ElementTree as DefusedET
+import defusedxml.ElementTree as DefusedET  # type: ignore[import-untyped]
 import pandas as pd
 import PyPDF2
 from bs4 import BeautifulSoup

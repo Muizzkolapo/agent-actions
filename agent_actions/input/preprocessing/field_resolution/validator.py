@@ -113,7 +113,7 @@ class ReferenceValidator:
             return []
 
         return self.validate(
-            references=references,
+            references=list(references),
             agent_config=agent_config,
             agent_indices=agent_indices,
             current_agent_name=current_agent_name,
@@ -160,7 +160,7 @@ class ReferenceValidator:
                 field_path=ref.field_path, json_schema=schema, action_name=action_name
             )
 
-            if not validation_result.exists:
+            if not validation_result.exists and validation_result.error:
                 errors.append(validation_result.error)
 
         return errors

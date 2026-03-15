@@ -8,7 +8,7 @@ import logging
 import xml.etree.ElementTree as ET
 from typing import Any
 
-import defusedxml.ElementTree as DefusedET
+import defusedxml.ElementTree as DefusedET  # type: ignore[import-untyped]
 
 from agent_actions.errors import FileLoadError, ValidationError
 from agent_actions.input.loaders.base import BaseLoader
@@ -30,10 +30,10 @@ class XmlLoader(BaseLoader[ET.Element]):
                 error = ValueError("Either file_path or content must be provided")
                 self.handle_validation_error(error, "XML input", file_path=file_path)
                 raise error
-            root = DefusedET.fromstring(content_str)
+            root: ET.Element = DefusedET.fromstring(content_str)
             return root
         except ET.ParseError as e:
-            position_info = {}
+            position_info: dict[str, Any] = {}
             if hasattr(e, "position"):
                 position_info["line_number"] = e.position[0]
                 position_info["column_number"] = e.position[1]

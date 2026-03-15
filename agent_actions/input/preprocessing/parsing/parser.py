@@ -34,6 +34,7 @@ except ImportError as exc:
     ) from exc
 
 from .ast_nodes import (
+    ASTNode,
     ComparisonNode,
     ComparisonOperator,
     FieldNode,
@@ -167,6 +168,7 @@ class WhereClauseParser:
 
     def _create_operator_literal(self, symbol: str, name: str):
         """Create a pyparsing literal for a single operator."""
+        op_literal: ParserElement
         if " " in symbol:
             words = symbol.split()
             op_literal = CaselessKeyword(words[0])
@@ -208,7 +210,7 @@ class WhereClauseParser:
             raise ParseException("Invalid function call")
 
         func_name = tokens[0]
-        args = []
+        args: list[ASTNode] = []
 
         for token in tokens[1:]:
             if isinstance(token, (FieldNode, LiteralNode, FunctionNode)):
@@ -334,6 +336,7 @@ class WhereClauseParser:
 
     def _parse_and_build_ast(self, where_clause: str) -> ParseResult:
         """Parse clause and build AST, returning ParseResult."""
+        assert self._grammar is not None
         parsed = self._grammar.parseString(where_clause, parseAll=True)
 
         if not parsed:

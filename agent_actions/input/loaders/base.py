@@ -33,6 +33,8 @@ def retry(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         time.sleep(delay * (attempt + 1))
+            if last_exception is None:
+                raise RuntimeError("retry exhausted with no exception captured")
             raise last_exception
 
         return wrapper
@@ -47,7 +49,7 @@ T = TypeVar("T")
 class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     """Abstract base class for all content loaders with async support."""
 
-    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
+    def __init__(self, agent_config: AgentEntryDict | dict[str, Any], agent_name: str):
         """Initialize with agent configuration and name."""
         self.agent_config = agent_config
         self.agent_name = agent_name
@@ -70,7 +72,8 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
                 return f.read()
 
         try:
-            return _load_file()
+            result: str = _load_file()
+            return result
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise

@@ -145,7 +145,7 @@ class ReferenceParser:
             if strict:
                 raise
             return None
-        return None
+        return None  # type: ignore[unreachable]
 
     def _parse_selector_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """Parse selector format: action.field or action.nested.path."""

@@ -22,7 +22,7 @@ class TabularLoader(BaseLoader[list[dict[str, Any]]]):
             elif content:
                 content_str = content
             else:
-                error_context = {
+                error_context: dict[str, Any] = {
                     "agent_name": self.agent_name,
                     "loader_type": "tabular",
                     "failed_fields": ["file_path", "content"],

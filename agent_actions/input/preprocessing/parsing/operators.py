@@ -32,7 +32,8 @@ def _safe_compare(op):
 
     def wrapper(left: Any, right: Any = None) -> bool:
         try:
-            return op(left, right)
+            result: bool = op(left, right)
+            return result
         except TypeError:
             return False
 

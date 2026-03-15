@@ -5,7 +5,7 @@ import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.errors import AgentActionsError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
@@ -18,6 +18,9 @@ from agent_actions.prompt.formatter import PromptFormatter
 from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RECORD_ID
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY
 
+if TYPE_CHECKING:
+    from agent_actions.config.types import AgentConfigDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,7 +28,7 @@ logger = logging.getLogger(__name__)
 class InitialStageContext:
     """Context for initial stage pipeline processing."""
 
-    agent_config: dict
+    agent_config: dict[str, Any]
     agent_name: str
     file_path: str
     base_directory: str
@@ -40,7 +43,7 @@ class DataPreparationContext:
 
     content: str
     file_type: str
-    agent_config: dict
+    agent_config: dict[str, Any]
     file_path: str
     agent_name: str
     idx: int = 0
@@ -50,9 +53,9 @@ class DataPreparationContext:
 class BatchProcessingContext:
     """Context for batch mode processing."""
 
-    agent_config: dict
+    agent_config: dict[str, Any]
     agent_name: str
-    data_chunk: list
+    data_chunk: list[dict[str, Any]]
     file_path: str
     base_directory: str
     output_directory: str
@@ -71,8 +74,12 @@ def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
 
 
 def _save_source_items_helper(
-    source_items, file_path, base_directory, output_directory=None, storage_backend=None
-):
+    source_items: list[dict[str, Any]],
+    file_path: str,
+    base_directory: str,
+    output_directory: str | None = None,
+    storage_backend: Any = None,
+) -> None:
     """Save source items using UnifiedSourceDataSaver."""
     relative_path = Path(file_path).relative_to(base_directory)
     workflow_root = _derive_workflow_root(output_directory, base_directory)
@@ -88,13 +95,13 @@ def _save_source_items_helper(
 
 
 def _validate_staged_data(
-    raw_content: any,
+    raw_content: Any,
     file_type: str,
-    agent_config: dict,
+    agent_config: dict[str, Any],
     agent_name: str,
     mode: str,
     file_path: str,
-):
+) -> None:
     """Validate input context against prompt template requirements before LLM execution."""
     from agent_actions.prompt.service import (
         PromptPreparationService,
@@ -256,8 +263,13 @@ def _should_save_source_items(
 
 
 def _save_source_data(
-    src_text, data_chunk, file_path, base_directory, output_directory=None, storage_backend=None
-):
+    src_text: Any,
+    data_chunk: Any,
+    file_path: str,
+    base_directory: str,
+    output_directory: str | None = None,
+    storage_backend: Any = None,
+) -> None:
     """UNIFIED source saving logic for both batch and realtime modes."""
     if src_text:
         source_items = src_text if isinstance(src_text, list) else [src_text]
@@ -277,7 +289,9 @@ def _save_source_data(
         )
 
 
-def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):
+def _prepare_text_chunks_batch(
+    content: str, agent_config: dict[str, Any], batch_id: str, node_id: str
+) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
     chunk_size = chunk_config.get("chunk_size", 1000)
@@ -310,7 +324,9 @@ def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):
     return result
 
 
-def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
+def _prepare_json_batch(
+    content: str, batch_id: str, node_id: str, file_path: str, agent_name: str
+) -> list[dict[str, Any]]:
     """Prepare JSON content for batch mode."""
     try:
         parsed = json.loads(content)
@@ -351,7 +367,9 @@ def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
     return [{"content": parsed, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
-def _add_batch_metadata(rows, batch_id, node_id):
+def _add_batch_metadata(
+    rows: list[dict[str, Any]], batch_id: str, node_id: str
+) -> list[dict[str, Any]]:
     """Add batch metadata to rows of data."""
     result = []
     for idx, row in enumerate(rows):
@@ -382,6 +400,9 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
+    data_chunk: list[dict[str, Any]]
+    src_text: list[dict[str, Any]]
+
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         data_chunk = _prepare_text_chunks_batch(
             ctx.content, ctx.agent_config, local_batch_id, node_id
@@ -401,20 +422,24 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     elif ctx.file_type == ".xlsx":
-        if not isinstance(ctx.content, list):
+        if not isinstance(ctx.content, list):  # type: ignore[unreachable]
             logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
-        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
+        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]  # type: ignore[unreachable,list-item]
         data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         src_text = []
 
     elif ctx.file_type == ".xml":
         # XML: let XmlLoader read the file itself (FileReader returns (tree, root) tuple, not str)
-        rows = xml_loader.process(content=None, file_path=ctx.file_path)
-        if isinstance(rows, list):
-            data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
+        xml_result: Any = xml_loader.process(content=None, file_path=ctx.file_path)
+        if isinstance(xml_result, list):
+            data_chunk = _add_batch_metadata(xml_result, local_batch_id, node_id)
         else:
             data_chunk = [
-                {"content": rows, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}
+                {
+                    "content": xml_result,
+                    "batch_id": local_batch_id,
+                    "batch_uuid": f"{local_batch_id}_0",
+                }
             ]
         src_text = []
 
@@ -451,6 +476,9 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     json_loader = JsonLoader(ctx.agent_config, ctx.agent_name)
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
+
+    data_chunk: Any
+    src_text: Any
 
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
@@ -501,7 +529,7 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
         src_text = data_chunk
 
     elif ctx.file_type == ".xlsx":
-        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]
+        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]  # type: ignore[unreachable]
         src_text = data_chunk
 
     elif ctx.file_type == ".xml":
@@ -523,12 +551,13 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     return data_chunk, src_text
 
 
-def _get_batch_id_from_chunk(data_chunk):
+def _get_batch_id_from_chunk(data_chunk: list[dict[str, Any]]) -> str:
     """Get batch ID from data chunk or generate new one."""
     if data_chunk:
         default_batch_id = f"batch_{uuid.uuid4().hex}"
         try:
-            return data_chunk[0].get("batch_id", default_batch_id)
+            batch_id: str = data_chunk[0].get("batch_id", default_batch_id)
+            return batch_id
         except (AttributeError, TypeError):
             return default_batch_id
     return f"batch_{uuid.uuid4().hex}"
@@ -612,7 +641,7 @@ def _process_realtime_mode_with_record_processor(
     processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
 
     processing_context = ProcessingContext(
-        agent_config=ctx.agent_config,
+        agent_config=cast("AgentConfigDict", ctx.agent_config),
         agent_name=ctx.agent_name,
         mode=ProcessingMode.ONLINE,
         is_first_stage=True,

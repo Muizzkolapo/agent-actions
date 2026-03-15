@@ -298,7 +298,8 @@ class WhereClauseAST:
         self, data: dict[str, Any], functions: dict[str, Callable[..., Any]] | None = None
     ) -> bool:
         """Evaluate the WHERE clause against the given data."""
-        return evaluate_node(self.root, data, functions)
+        result: bool = evaluate_node(self.root, data, functions)
+        return result
 
     def __str__(self) -> str:
         return format_node(self.root)

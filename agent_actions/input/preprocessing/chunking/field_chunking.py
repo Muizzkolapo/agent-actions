@@ -108,7 +108,7 @@ class FieldAnalyzer:
         if self.config.chunk_fields and field_name not in self.config.chunk_fields:
             return False
         field_rule = self.config.field_rules.get(field_name, {})
-        threshold = field_rule.get("chunk_threshold", self.config.chunk_threshold)
+        threshold: int = field_rule.get("chunk_threshold", self.config.chunk_threshold)
         return token_count > threshold
 
     def detect_text_fields(self, record: dict[str, Any]) -> list[str]:
@@ -314,7 +314,7 @@ class FieldChunker:
 
         return all_chunks
 
-    def chunk_field(self, field_value: str, field_name: str = None) -> list[str]:
+    def chunk_field(self, field_value: str, field_name: str | None = None) -> list[str]:
         """Chunk a specific field value using field-specific or global rules."""
         if not field_value:
             return [""]
