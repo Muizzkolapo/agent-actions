@@ -28,7 +28,7 @@ def test_file_mode_hitl_applies_file_decision_to_each_input_record():
         {"source_guid": "sg-2", "content": {"id": 2, "question": "Q2"}},
     ]
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "approved",
@@ -72,7 +72,7 @@ def test_file_mode_hitl_applies_per_record_decisions_when_provided():
         {"source_guid": "sg-2", "content": {"id": 2}},
     ]
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "rejected",
@@ -114,7 +114,7 @@ def test_file_mode_hitl_preserves_existing_status_field():
 
     input_data = [{"source_guid": "sg-1", "content": {"id": 1, "status": "pending"}}]
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "approved",
@@ -152,7 +152,7 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
     )
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "approved",
@@ -195,7 +195,7 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
         },
     ]
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "approved",
@@ -243,7 +243,7 @@ def test_file_mode_hitl_preserves_target_id():
         },
     ]
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(
             {
                 "hitl_status": "approved",
@@ -333,7 +333,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
         )
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         side_effect=mock_run_dynamic_agent,
     ):
         results = pipeline._process_file_mode_hitl(filtered, original_data, context)

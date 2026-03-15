@@ -23,6 +23,7 @@ Agent Actions.
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. | `workflow`, `processing` |
 | `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, AgentWorkflow). | `typing`, `workflow` |
 | `pipeline.py` | Module | Builds execution pipelines for run modes (batch/realtime) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
+| `pipeline_file_mode.py` | Module | FILE-granularity tool and HITL processing handlers extracted from `ProcessingPipeline`. | `processing`, `workflow` |
 | `runner.py` | Module | High-level runner (BatchRunner/RealtimeRunner) entrypoints. `AgentRunner.get_agent_folder` accepts `project_root: Path \| None`. | `llm`, `workflow` |
 | `schema_service.py` | Module | `WorkflowSchemaService` that exposes input/output schema mapping. | `schema`, `output` |
 | `service_init.py` | Module | Service assembly and storage backend initialization extracted from coordinator. | `config`, `workflow` |

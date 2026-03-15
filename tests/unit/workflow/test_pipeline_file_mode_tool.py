@@ -47,7 +47,7 @@ def test_file_udf_result_unwrapped():
     ]
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=(udf_result, True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -67,7 +67,7 @@ def test_file_tool_plain_list_still_works():
     input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         return_value=([{"score": 0.9}], True),
     ):
         results = pipeline._process_file_mode_tool(input_data, input_data, context)
@@ -87,7 +87,7 @@ def test_file_mode_error_surfaces():
     input_data = [{"source_guid": "sg-1", "content": {"id": 1}}]
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         side_effect=RuntimeError("connection refused"),
     ):
         with pytest.raises(AgentActionsError, match="connection refused"):
@@ -101,7 +101,7 @@ def test_file_mode_error_includes_context():
     input_data = [{"content": {"a": 1}}, {"content": {"b": 2}}]
 
     with patch(
-        "agent_actions.workflow.pipeline.run_dynamic_agent",
+        "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
         side_effect=ValueError("bad data"),
     ):
         with pytest.raises(AgentActionsError) as exc_info:
