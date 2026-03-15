@@ -77,7 +77,8 @@ class ProjectScanner:
 
             try:
                 content = readme_path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as e:
+                logger.debug("Failed to read README %s: %s", readme_path, e)
                 continue
 
             encoded = content.encode("utf-8")
@@ -356,8 +357,8 @@ class ProjectScanner:
                 try:
                     with open(run_results_path, encoding="utf-8") as f:
                         latest_run = json.load(f)
-                except (OSError, json.JSONDecodeError):
-                    pass
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.debug("Failed to load run_results %s: %s", run_results_path, e)
 
             # Load events.json for detailed execution data
             events_path = target_dir / "events.json"
@@ -380,8 +381,8 @@ class ProjectScanner:
                 try:
                     with open(manifest_path, encoding="utf-8") as f:
                         manifest_data = json.load(f)
-                except (OSError, json.JSONDecodeError):
-                    pass
+                except (OSError, json.JSONDecodeError) as e:
+                    logger.debug("Failed to load manifest %s: %s", manifest_path, e)
 
             runs_data[workflow_name] = {
                 "workflow_name": workflow_name,
@@ -581,8 +582,8 @@ class ProjectScanner:
                             if func_data:
                                 tool_functions[func_name] = func_data
 
-                except (SyntaxError, UnicodeDecodeError):
-                    # Skip files that can't be parsed
+                except (SyntaxError, UnicodeDecodeError) as e:
+                    logger.debug("Failed to parse tool file %s: %s", py_file, e)
                     continue
 
         return tool_functions
@@ -717,7 +718,8 @@ class ProjectScanner:
 
             return result
 
-        except (SyntaxError, AttributeError, TypeError, IndexError, ValueError):
+        except (SyntaxError, AttributeError, TypeError, IndexError, ValueError) as e:
+            logger.debug("Failed to extract function details: %s", e)
             return None
 
     # =========================================================================

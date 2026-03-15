@@ -123,7 +123,7 @@ def _index_workflow_file(index: ProjectIndex, yaml_file: Path, yaml: YAML) -> No
         _index_workflow_lines(index, yaml_file, lines, action_data_map)
 
     except Exception as e:
-        logger.warning(f"Error indexing {yaml_file}: {e}")
+        logger.warning("Error indexing %s: %s", yaml_file, e)
 
 
 def _build_action_data_map(actions: list) -> dict:
@@ -555,7 +555,7 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
             )
 
     except Exception as e:
-        logger.warning(f"Error indexing {py_file}: {e}")
+        logger.warning("Error indexing %s: %s", py_file, e)
 
 
 def _index_schemas(index: ProjectIndex, project_root: Path) -> None:

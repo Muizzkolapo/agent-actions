@@ -11,7 +11,7 @@ consistent retry handling across all providers.
 import uuid
 from datetime import datetime
 from textwrap import dedent
-from typing import Any
+from typing import Any, ClassVar
 
 import anthropic
 
@@ -49,6 +49,15 @@ def _wrap_anthropic_error(e: Exception, model_name: str, request_id: str = "") -
 
 class AnthropicClient(BaseClient):
     """Anthropic Claude API client for JSON and non-JSON LLM invocations."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": ["api_key", "temperature", "max_tokens", "anthropic_version"],
+    }
 
     @staticmethod
     def _build_api_args(

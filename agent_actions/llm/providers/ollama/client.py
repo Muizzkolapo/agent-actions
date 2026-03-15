@@ -13,7 +13,7 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 from ollama import Client, ResponseError
@@ -56,6 +56,15 @@ class OllamaClient(BaseClient):
 
     Supports structured outputs via Ollama's `format` parameter.
     """
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": False,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": ["base_url", "temperature", "max_tokens"],
+    }
 
     @staticmethod
     def _prep_messages(prompt_config: str, context_data: str) -> list[dict[str, str]]:

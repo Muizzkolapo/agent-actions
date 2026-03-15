@@ -1,83 +1,56 @@
 """Vendor compatibility validator for pre-flight validation."""
 
+import importlib
 from typing import Any
 
+from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
     ValidationIssue,
 )
 
-# Vendor-specific feature support
-VENDOR_CAPABILITIES = {
-    "openai": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": True,
-        "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens"],
-    },
-    "anthropic": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": True,
-        "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens", "anthropic_version"],
-    },
-    "gemini": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": True,
-        "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens"],
-    },
-    "groq": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": False,
-        "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens"],
-    },
-    "mistral": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": False,
-        "required_fields": ["model_name"],
-        "optional_fields": ["api_key", "temperature", "max_tokens"],
-    },
-    "ollama": {
-        "supports_json_mode": True,
-        "supports_batch": False,
-        "supports_tools": True,
-        "supports_vision": True,
-        "required_fields": ["model_name"],
-        "optional_fields": ["base_url", "temperature", "max_tokens"],
-    },
-    "tool": {
-        "supports_json_mode": True,  # N/A for tools, but set True to avoid false positives
-        "supports_batch": True,  # Tools run in any mode
-        "supports_tools": False,  # Tools don't call other tools
-        "supports_vision": False,  # Tools don't process images directly
-        "required_fields": [],
-        "optional_fields": ["tool_name"],
-    },
-    "agac-provider": {
-        "supports_json_mode": True,
-        "supports_batch": True,
-        "supports_tools": True,
-        "supports_vision": True,
-        "required_fields": ["model_name"],
-        "optional_fields": [],
-    },
-}
+# Single source of truth: runtime CLIENT_REGISTRY defines valid vendors.
+VALID_VENDORS = set(CLIENT_REGISTRY.keys())
 
-# Valid vendor names
-VALID_VENDORS = set(VENDOR_CAPABILITIES.keys())
+
+def _resolve_capabilities(vendor: str) -> dict[str, Any] | None:
+    """Resolve CAPABILITIES from the client class for *vendor*.
+
+    Handles lazy string entries in CLIENT_REGISTRY (e.g. gemini) by importing
+    them on demand, avoiding eager SDK imports at module level.
+
+    Returns ``None`` if the resolved class has no ``CAPABILITIES`` attribute.
+    """
+    entry = CLIENT_REGISTRY.get(vendor)
+    if entry is None:
+        return None
+    if isinstance(entry, str):
+        module_path, class_name = entry.split(":", 1)
+        cls = getattr(importlib.import_module(module_path), class_name)
+    else:
+        cls = entry
+    caps = getattr(cls, "CAPABILITIES", None)
+    if not caps:
+        return None
+    return caps  # type: ignore[no-any-return]
+
+
+def get_vendor_capabilities_map() -> dict[str, dict[str, Any]]:
+    """Build the full vendor→capabilities mapping on demand.
+
+    Provided for external consumers that need the complete dict.
+    """
+    result: dict[str, dict[str, Any]] = {}
+    for vendor in CLIENT_REGISTRY:
+        caps = _resolve_capabilities(vendor)
+        if caps is not None:
+            result[vendor] = caps
+    return result
+
+
+# Convenience alias — resolves all vendors eagerly when accessed.
+VENDOR_CAPABILITIES = get_vendor_capabilities_map()
 
 
 class VendorCompatibilityValidator(BaseValidator):
@@ -133,7 +106,10 @@ class VendorCompatibilityValidator(BaseValidator):
             )
             return False
 
-        capabilities = VENDOR_CAPABILITIES[vendor]
+        capabilities = _resolve_capabilities(vendor)
+        if capabilities is None:
+            # Client class has no CAPABILITIES — skip deeper checks.
+            return True
 
         missing_fields = self._check_required_fields(agent_config, capabilities["required_fields"])  # type: ignore[arg-type]
         if missing_fields:
@@ -213,7 +189,7 @@ class VendorCompatibilityValidator(BaseValidator):
 
     def get_vendor_capabilities(self, vendor: str) -> dict[str, Any] | None:
         """Get capabilities for a specific vendor."""
-        return VENDOR_CAPABILITIES.get(vendor.lower())
+        return _resolve_capabilities(vendor)
 
     def get_issues(self) -> list[ValidationIssue]:
         """Get the list of validation issues found."""

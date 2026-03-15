@@ -9,7 +9,7 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from agent_actions.llm.providers.agac.fake_data import FakeDataGenerator
 from agent_actions.llm.providers.client_base import BaseClient
@@ -37,6 +37,15 @@ class AgacClient(BaseClient):
     - Attempt 2: Medium responses (8 words) - may still fail
     - Attempt 3+: Full responses (25 words) - should pass validation
     """
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": [],
+    }
 
     # Class-level tracking of attempts per ID
     _attempt_counts: dict[str, int] = {}

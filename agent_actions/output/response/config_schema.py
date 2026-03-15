@@ -168,7 +168,10 @@ class AgentConfig(BaseModel):
     model_name: str | None = None
     model_vendor: str | None = Field(
         default=None,
-        description=("Model vendor/provider: 'openai', 'gemini', 'anthropic', 'groq', or 'tool'"),
+        description=(
+            "Model vendor/provider: 'openai', 'anthropic', 'gemini', 'groq', "
+            "'mistral', 'cohere', 'ollama', 'tool', 'hitl', or 'agac-provider'"
+        ),
     )
     api_key: str | None = None
     code_path: str | None = None

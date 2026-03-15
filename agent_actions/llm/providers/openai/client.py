@@ -12,7 +12,7 @@ import json
 import uuid
 from datetime import datetime
 from textwrap import dedent
-from typing import Any
+from typing import Any, ClassVar
 
 import openai
 from openai import OpenAI
@@ -52,6 +52,15 @@ def _wrap_openai_error(e: Exception, model_name: str, request_id: str = "") -> E
 
 class OpenAIClient(BaseClient):
     """OpenAI API client for JSON and non-JSON LLM invocations."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": ["api_key", "temperature", "max_tokens"],
+    }
 
     @staticmethod
     def call_json(

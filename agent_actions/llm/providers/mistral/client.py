@@ -12,6 +12,7 @@ import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
+from typing import Any, ClassVar
 
 from mistralai import Mistral
 from mistralai import models as mistral_models
@@ -52,6 +53,15 @@ def _wrap_mistral_error(e: Exception, model_name: str, request_id: str = "") -> 
 
 class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Mistral AI API client for JSON and non-JSON LLM invocations."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": False,
+        "required_fields": ["model_name"],
+        "optional_fields": ["api_key", "temperature", "max_tokens"],
+    }
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):

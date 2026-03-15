@@ -6,7 +6,7 @@ functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 """
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 from agent_actions.utils.constants import MODEL_NAME_KEY
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
@@ -14,6 +14,15 @@ from agent_actions.utils.udf_management.tooling import execute_user_defined_func
 
 class ToolClient:
     """Client for executing user-defined functions as LLM clients."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": False,
+        "supports_vision": False,
+        "required_fields": [],
+        "optional_fields": ["tool_name"],
+    }
 
     @staticmethod
     def _strip_internal_fields(data: str | dict | list) -> str | dict | list:

@@ -12,6 +12,7 @@ import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
+from typing import Any, ClassVar
 
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
@@ -57,6 +58,15 @@ def _wrap_gemini_error(e: Exception, model_name: str, request_id: str = "") -> E
 
 class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Google Gemini API client for JSON and non-JSON LLM invocations."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": ["api_key", "temperature", "max_tokens"],
+    }
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):

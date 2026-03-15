@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.hitl.server import HitlServer
@@ -13,6 +13,15 @@ logger = logging.getLogger(__name__)
 
 class HitlClient:
     """Client for Human-in-the-Loop approval workflow."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": False,
+        "supports_vision": False,
+        "required_fields": [],
+        "optional_fields": [],
+    }
 
     @staticmethod
     def invoke(

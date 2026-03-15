@@ -12,6 +12,7 @@ import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
+from typing import Any, ClassVar
 
 import cohere
 from cohere.core import api_error as cohere_errors
@@ -52,6 +53,15 @@ def _wrap_cohere_error(e: Exception, model_name: str, request_id: str = "") -> E
 
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
     """Cohere API client for JSON and non-JSON LLM invocations."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {
+        "supports_json_mode": True,
+        "supports_batch": False,
+        "supports_tools": True,
+        "supports_vision": False,
+        "required_fields": ["model_name"],
+        "optional_fields": ["api_key", "temperature", "max_tokens"],
+    }
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):

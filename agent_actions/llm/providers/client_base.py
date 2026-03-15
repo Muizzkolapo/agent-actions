@@ -8,13 +8,15 @@ data redaction, and invocation dispatch to JSON or non-JSON modes.
 import os
 import re
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 from agent_actions.utils.constants import API_KEY_KEY, JSON_MODE_KEY
 
 
 class BaseClient(ABC):
     """Common functionality shared by LLM clients."""
+
+    CAPABILITIES: ClassVar[dict[str, Any]] = {}  # Subclasses must override
 
     @staticmethod
     def redact_sensitive_data(
