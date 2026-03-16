@@ -80,6 +80,7 @@ class TestHandlesUserErrorsExitPath:
         runner = CliRunner()
         result = runner.invoke(failing)
         assert result.exit_code == 1
+        assert "boom" not in result.output
 
 
 class TestHandlesUserErrorsExceptionRouting:

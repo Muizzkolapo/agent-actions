@@ -1,7 +1,9 @@
 """Custom exceptions for field resolution operations."""
 
+from agent_actions.errors.processing import ProcessingError
 
-class FieldResolutionError(Exception):
+
+class FieldResolutionError(ProcessingError):
     """Base exception for all field resolution errors."""
 
 

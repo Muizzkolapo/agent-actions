@@ -92,6 +92,7 @@ def test_explicit_prime_survives_cwd_change(tmp_path, monkeypatch):
 
     other = tmp_path / "other"
     other.mkdir()
+    (other / "agent_actions.yml").write_text("name: other")
 
     pm = PathManager(config=PathConfig())
 
@@ -99,7 +100,7 @@ def test_explicit_prime_survives_cwd_change(tmp_path, monkeypatch):
     root = pm.get_project_root(start_path=project)
     assert root == project
 
-    # CWD change should NOT invalidate the explicitly-primed root
+    # CWD change to a competing valid project should NOT invalidate the pinned root
     monkeypatch.chdir(other)
     root_after = pm.get_project_root()
     assert root_after == project
@@ -113,6 +114,7 @@ def test_init_project_root_survives_cwd_change(tmp_path, monkeypatch):
 
     other = tmp_path / "other"
     other.mkdir()
+    (other / "agent_actions.yml").write_text("name: other")
 
     pm = PathManager(config=PathConfig(), project_root=project)
 
@@ -145,3 +147,54 @@ def test_cwd_change_also_clears_path_cache(tmp_path, monkeypatch):
     path_b = pm.get_standard_path(PathType.SCHEMA)
     assert proj_b in path_b.parents or path_b == proj_b / "schema"
     assert path_a != path_b
+
+
+def test_cwd_subdir_change_within_same_project_resolves_same_root(tmp_path, monkeypatch):
+    """Moving CWD between subdirs of the same project resolves the same root."""
+    project = tmp_path / "my_project"
+    project.mkdir()
+    (project / "agent_actions.yml").write_text("name: test")
+
+    subdir_a = project / "subdir_a"
+    subdir_a.mkdir()
+    subdir_b = project / "subdir_b"
+    subdir_b.mkdir()
+
+    pm = PathManager(config=PathConfig())
+
+    monkeypatch.chdir(subdir_a)
+    root_a = pm.get_project_root()
+    assert root_a == project
+
+    # Move CWD to a different subdir of the same project — root should still be the same
+    monkeypatch.chdir(subdir_b)
+    root_b = pm.get_project_root()
+    assert root_b == project
+
+
+def test_clear_cache_forces_re_resolution(tmp_path, monkeypatch):
+    """clear_cache() empties all cache fields; next call re-resolves."""
+    project = tmp_path / "my_project"
+    project.mkdir()
+    (project / "agent_actions.yml").write_text("name: test")
+
+    pm = PathManager(config=PathConfig())
+    monkeypatch.chdir(project)
+
+    # Populate cache
+    root = pm.get_project_root()
+    assert root == project
+    assert pm._project_root is not None
+    assert pm._cached_cwd is not None
+
+    # Clear cache — all fields should be empty
+    pm.clear_cache()
+    assert pm._project_root is None
+    assert pm._path_cache == {}
+    assert pm._cached_cwd is None
+
+    # Re-resolve — cache should be repopulated
+    root_again = pm.get_project_root()
+    assert root_again == project
+    assert pm._project_root == project
+    assert pm._cached_cwd is not None

@@ -11,10 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
+from agent_actions.errors import ConfigurationError
+
 logger = logging.getLogger(__name__)
 
 
-class DuplicateActionError(ValueError):
+class DuplicateActionError(ConfigurationError):
     """Raised when duplicate action names are detected in workflow configuration."""
 
     pass

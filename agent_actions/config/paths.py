@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from agent_actions.errors.filesystem import FileSystemError
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ class PathConfig:
     cache_paths: bool = True
 
 
-class PathManagerError(Exception):
+class PathManagerError(FileSystemError):
     """Base exception for PathManager errors."""
 
 

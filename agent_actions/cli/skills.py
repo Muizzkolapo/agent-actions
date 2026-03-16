@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.utils.project_root import find_project_root
 
 
@@ -19,7 +20,7 @@ def get_target_path(tool: str, project_root: Path) -> Path:
         return project_root / ".claude" / "skills"
     if tool == "codex":
         return project_root / ".codex" / "skills"
-    raise ValueError(f"Unknown tool: {tool}")
+    raise ConfigurationError(f"Unknown tool: {tool}")
 
 
 @click.group(name="skills")
