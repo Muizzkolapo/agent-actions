@@ -20,16 +20,10 @@ class BatchSourceHandler:
     ) -> None:
         """Save task source data using unified source saver."""
         from agent_actions.output.saver import UnifiedSourceDataSaver
+        from agent_actions.utils.path_utils import derive_workflow_root
 
         relative_path = Path(file_path).relative_to(base_directory)
-
-        base_path = Path(base_directory)
-        parts = base_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            workflow_root = base_path.parent.parent.parent
+        workflow_root = derive_workflow_root(base_directory)
 
         saver = UnifiedSourceDataSaver(
             base_directory=str(workflow_root),

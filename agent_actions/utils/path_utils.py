@@ -162,6 +162,30 @@ def create_agent_directory_structure(agent_name: str) -> dict[str, Path]:
     return created_paths
 
 
+def derive_workflow_root(target_path: str | Path) -> Path:
+    """Find workflow root from a path expected to be inside a workflow.
+
+    Strategy:
+    1. Fast path — find 'agent_io' in path parts and truncate there.
+    2. Walk up looking for a directory containing 'agent_config/' (workflow root marker).
+    3. Fallback — return target_path itself with a warning (never blindly chain .parent).
+    """
+    path = Path(target_path)
+    parts = path.parts
+    if "agent_io" in parts:
+        idx = parts.index("agent_io")
+        if idx > 0:
+            return Path(*parts[:idx])
+    # Walk up looking for agent_config/ sibling
+    current = path.resolve()
+    while current != current.parent:
+        if (current / "agent_config").is_dir():
+            return current
+        current = current.parent
+    logger.warning("Could not determine workflow root from path: %s", target_path)
+    return path if path.is_dir() else path.parent
+
+
 DEFAULT_MARKER_FILE = "agent_actions.yml"
 COMMON_EXTENSIONS = [".json", ".yml", ".yaml", ".txt", ".py"]
 

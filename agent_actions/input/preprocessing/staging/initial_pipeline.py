@@ -65,12 +65,10 @@ class BatchProcessingContext:
 
 def _derive_workflow_root(primary_path: str | None, fallback_path: str) -> Path:
     """Derive workflow root by finding 'agent_io' in path parts."""
+    from agent_actions.utils.path_utils import derive_workflow_root
+
     target_path = Path(primary_path) if primary_path else Path(fallback_path)
-    parts = target_path.parts
-    if "agent_io" in parts:
-        agent_io_idx = parts.index("agent_io")
-        return Path(*parts[:agent_io_idx])
-    return target_path.parent.parent.parent
+    return derive_workflow_root(target_path)
 
 
 def _save_source_items_helper(

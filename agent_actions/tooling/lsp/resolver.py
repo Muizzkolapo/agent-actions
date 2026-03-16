@@ -169,11 +169,16 @@ def resolve_reference(
         if seed_path.exists():
             return Location(file_path=seed_path, line=0, column=0)
 
-        # Also check workflow-specific seed_data
+        # Also check workflow-specific seed_data (only when inside agent_config/ tree)
         if current_file:
-            workflow_seed = current_file.parent.parent / "seed_data" / reference.value
-            if workflow_seed.exists():
-                return Location(file_path=workflow_seed, line=0, column=0)
+            ancestor = current_file.parent
+            while ancestor != ancestor.parent:
+                if ancestor.name == "agent_config":
+                    workflow_seed = ancestor.parent / "seed_data" / reference.value
+                    if workflow_seed.exists():
+                        return Location(file_path=workflow_seed, line=0, column=0)
+                    break
+                ancestor = ancestor.parent
 
     elif reference.type == ReferenceType.CONTEXT_FIELD:
         action_name = reference.value.split(".", 1)[0]
