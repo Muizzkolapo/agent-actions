@@ -183,6 +183,10 @@ All tasks below are done and merged.
 - **Source:** PR #1100 review — broader finding
 - **Fix:** Extracted shared `derive_workflow_root()` into `utils/path_utils.py` with 3-tier safe strategy (agent_io fast-path → agent_config walk-up → safe fallback with warning). Updated `initial_pipeline.py` and `batch_source_handler.py` to delegate. Added `agent_config` ancestor walk-up guard in `resolver.py` (supports nested subdirs like `agent_config/versions/`). 13 regression tests.
 
+#### 37. Add test for source_guid=None through RecordProcessor.process() pipeline
+- **Source:** PR #1103 review
+- **Fix:** Added 3 regression tests in `tests/processing/test_source_guid_none_coercion.py` covering the `source_guid=None` → `or ""` coercion path: (1) all events (`RecordProcessingStartedEvent`, `RecordTransformedEvent`, `RecordProcessingCompleteEvent`) receive `source_guid=""`, (2) `_transform_response` receives `""` as the source_guid argument, (3) `ProcessingResult.source_guid` stays `None` (not coerced).
+
 #### 31. Type `run_mode` as `RunMode` enum (#1127)
 - **Source:** Audit PR #1078
 - **Fix:** Added `RunMode(str, Enum)` in `config/types.py` with case-insensitive `_missing_()` (matching existing `Granularity` pattern). Updated all Pydantic model fields (`schema.py`, `config_schema.py`), defaults (`config_fields.py`, `manager.py`, `renderer.py`), comparisons (`expander_action_types.py`, `initial_pipeline.py`, `pipeline.py`, `vendor_compatibility_validator.py`), and boundary coercion sites. Unified vocabulary: replaced all `"realtime"` references with `"online"` across source and tests (`prompt/service.py`, `prompt/context/builder.py`, `processing/task_preparer.py`, `output/response/loader.py`). Renamed functions: `build_llm_context_for_realtime` → `build_llm_context_for_online`, `_prepare_realtime_data` → `_prepare_online_data`, `_process_realtime_mode_with_record_processor` → `_process_online_mode_with_record_processor`. Added 9 regression tests for enum coercion.
