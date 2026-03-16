@@ -11,11 +11,11 @@ from yaml import YAMLError
 
 from agent_actions.config.types import AgentConfigMap, AgentEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
-from agent_actions.llm.realtime.handlers import AgentManager
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.error_handler import ErrorHandler
 from agent_actions.utils.error_wrap import as_validation_error
+from agent_actions.utils.project_root import find_project_root
 from agent_actions.validation.config_validator import ConfigValidator
 from agent_actions.validation.path_validator import PathValidator
 from agent_actions.validation.schema_validator import SchemaValidator
@@ -309,7 +309,7 @@ class ConfigRenderingService:
         self, config: AgentConfigMap, agent_name: str, project_root: Path | None = None
     ) -> None:
         """Validate the config - handle both old and new formats."""
-        project_root_path = project_root or AgentManager.find_project_root(start_path=Path.cwd())
+        project_root_path = project_root or find_project_root()
         if project_root_path is None:
             project_root_path = Path.cwd()
 

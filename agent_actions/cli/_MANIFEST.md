@@ -59,9 +59,6 @@
 | `ProjectPathsFactory` | Class | Factory for creating project paths. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_paths` | Method | Get the agent paths using the FileHandler. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_project_paths` | Method | Create project paths for the given agent. Accepts `project_root: Path \| None`. | - |
-| `project_root.py` | Shim | Re-export shim → `utils.project_root`. | `utils` |
-| `find_project_root` | Function | Find the project root by walking up directories to locate agent_actions.yml. | - |
-| `ensure_in_project` | Function | Ensure the current working directory is within an agent-actions project. | - |
 | `run.py` | Module | Run command for the Agent Actions CLI. | `cli`, `docs`, `errors`, `orchestration`, `prompt_generation`, `validation` |
 | `RunCommand` | Class | Implementation of the run command. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute_validation_only` | Method | Execute pre-flight validation only, without running the workflow. | - |

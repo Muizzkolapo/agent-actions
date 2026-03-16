@@ -8,6 +8,8 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
+
 from .models import (
     ActionMetadata,
     Location,
@@ -25,21 +27,20 @@ logger = logging.getLogger(__name__)
 def find_project_root(start_path: Path) -> Path | None:
     """Find project root by looking for agent_actions.yml.
 
-    Searches upward first, then searches subdirectories if not found.
+    Searches upward first (via canonical util), then searches subdirectories
+    if not found.
     """
-    current = start_path.resolve()
+    # Delegate upward walk to canonical implementation
+    result = _find_project_root_canonical(str(start_path))
+    if result is not None:
+        return result
 
-    while current != current.parent:
-        if (current / "agent_actions.yml").exists():
-            return current
-        current = current.parent
-
+    # LSP-specific: glob downward up to 3 levels
     start = start_path.resolve() if start_path.is_dir() else start_path.parent
     for depth in range(1, 4):
         pattern = "/".join(["*"] * depth) + "/agent_actions.yml"
         matches = list(start.glob(pattern))
         if matches:
-            # Return the first match's parent directory
             return matches[0].parent
 
     # Fallback: use start path as project root (LSP will work with whatever it finds)
@@ -51,14 +52,11 @@ def find_all_project_roots(workspace_folders: list[Path]) -> list[Path]:
     roots: set[Path] = set()
     for folder in workspace_folders:
         folder = folder.resolve()
-        # Walk upward
-        current = folder
-        while current != current.parent:
-            if (current / "agent_actions.yml").exists():
-                roots.add(current)
-                break
-            current = current.parent
-        # Glob downward up to 3 levels
+        # Delegate upward walk to canonical implementation
+        upward_root = _find_project_root_canonical(str(folder))
+        if upward_root is not None:
+            roots.add(upward_root)
+        # LSP-specific: glob downward up to 3 levels
         start = folder if folder.is_dir() else folder.parent
         for depth in range(1, 4):
             pattern = "/".join(["*"] * depth) + "/agent_actions.yml"

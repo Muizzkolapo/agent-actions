@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 from agent_actions.errors import AgentNotFoundError
+from agent_actions.utils.project_root import find_project_root
 
 logger = logging.getLogger(__name__)
 
@@ -12,25 +13,6 @@ class AgentManager:
     """
     A class for managing agent directories and configurations.
     """
-
-    @staticmethod
-    def find_project_root(start_path: Path, marker_file: str = "agent_actions.yml") -> Path | None:
-        """
-        Find the project root directory by searching for a marker file.
-
-        Args:
-            start_path: Path to start searching from
-            marker_file: Name of the file that marks the project root (default: 'agent_actions.yml')
-
-        Returns:
-            Path to project root if found, None otherwise
-        """
-        current = Path(start_path).resolve()
-        while current != current.parent:
-            if (current / marker_file).exists():
-                return current
-            current = current.parent
-        return None
 
     @staticmethod
     def agent_exists(agent_name: str, project_root: Path | None = None) -> bool:
@@ -70,7 +52,7 @@ class AgentManager:
             AgentNotFoundError: If agent_actions.yml or agent configuration cannot be found
         """
         if project_root is None:
-            project_root = AgentManager.find_project_root(Path.cwd())
+            project_root = find_project_root()
         if not project_root:
             raise AgentNotFoundError(
                 "Could not find agent_actions.yml in current or parent directories",
