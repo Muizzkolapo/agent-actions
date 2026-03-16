@@ -127,9 +127,9 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         completion_tokens = 0
         total_tokens = 0
         if hasattr(response_temp, "usage_metadata") and response_temp.usage_metadata:
-            prompt_tokens = response_temp.usage_metadata.prompt_token_count
-            completion_tokens = response_temp.usage_metadata.candidates_token_count
-            total_tokens = response_temp.usage_metadata.total_token_count
+            prompt_tokens = response_temp.usage_metadata.prompt_token_count or 0
+            completion_tokens = response_temp.usage_metadata.candidates_token_count or 0
+            total_tokens = response_temp.usage_metadata.total_token_count or 0
             set_last_usage(
                 {
                     "input_tokens": prompt_tokens,
@@ -228,9 +228,9 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         completion_tokens = 0
         total_tokens = 0
         if hasattr(response_temp, "usage_metadata") and response_temp.usage_metadata:
-            prompt_tokens = response_temp.usage_metadata.prompt_token_count
-            completion_tokens = response_temp.usage_metadata.candidates_token_count
-            total_tokens = response_temp.usage_metadata.total_token_count
+            prompt_tokens = response_temp.usage_metadata.prompt_token_count or 0
+            completion_tokens = response_temp.usage_metadata.candidates_token_count or 0
+            total_tokens = response_temp.usage_metadata.total_token_count or 0
             set_last_usage(
                 {
                     "input_tokens": prompt_tokens,

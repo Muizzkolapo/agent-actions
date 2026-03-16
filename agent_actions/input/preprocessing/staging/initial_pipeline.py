@@ -232,11 +232,23 @@ def _should_save_source_items(
     try:
         with open(source_file, encoding="utf-8") as f:
             existing_items = json.load(f)
+            if not isinstance(existing_items, list):
+                logger.debug(
+                    "Existing source file is not a list (type=%s), proceeding with save",
+                    type(existing_items).__name__,
+                )
+                return True
             if not existing_items:
                 logger.debug("Existing source file is empty, proceeding with save")
                 return True
+            if not isinstance(existing_items[0], dict):
+                logger.debug(
+                    "Existing source items are not dicts (type=%s), proceeding with save",
+                    type(existing_items[0]).__name__,
+                )
+                return True
 
-            existing_fields = set(existing_items[0].keys()) if existing_items else set()
+            existing_fields = set(existing_items[0].keys())
             new_fields = set(new_items[0].keys()) if new_items else set()
 
             if len(new_fields) > len(existing_fields):

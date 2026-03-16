@@ -238,7 +238,11 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as started")
 
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["actions"][action_name]["status"] = "running"
             self._manifest["actions"][action_name]["started_at"] = datetime.now().isoformat()
             self._save_manifest()
@@ -257,7 +261,11 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as completed")
 
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["actions"][action_name]["status"] = "completed"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if record_count is not None:
@@ -274,7 +282,11 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as skipped")
 
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["actions"][action_name]["status"] = "skipped"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             if reason:
@@ -291,7 +303,11 @@ class ManifestManager:
             if action_name not in self.manifest.get("actions", {}):
                 raise KeyError(f"Cannot mark unknown action '{action_name}' as failed")
 
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["actions"][action_name]["status"] = "failed"
             self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
             self._manifest["actions"][action_name]["error"] = error
@@ -300,7 +316,11 @@ class ManifestManager:
     def mark_workflow_completed(self) -> None:
         """Mark the entire workflow as completed."""
         with self._lock:
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["status"] = "completed"
             self._manifest["completed_at"] = datetime.now().isoformat()
             self._save_manifest()
@@ -308,7 +328,11 @@ class ManifestManager:
     def mark_workflow_failed(self, error: str) -> None:
         """Mark the entire workflow as failed."""
         with self._lock:
-            assert self._manifest is not None
+            if self._manifest is None:
+                raise RuntimeError(
+                    "ManifestManager._manifest is None; "
+                    "initialize_manifest() or load_manifest() must be called first"
+                )
             self._manifest["status"] = "failed"
             self._manifest["completed_at"] = datetime.now().isoformat()
             self._manifest["error"] = error

@@ -144,12 +144,20 @@ class GuardFilter:
         parse_result = self._parse_condition_cached(condition)
 
         if not parse_result.success:
-            assert parse_result.error is not None
+            if parse_result.error is None:
+                raise RuntimeError(
+                    "ParseResult indicates failure but error is None; "
+                    "expected a ParseError with details"
+                )
             error_msg = parse_result.error.message
             logger.warning("Failed to parse guard condition: %s", error_msg)
             raise ValueError(f"Parse error: {error_msg}")
 
-        assert parse_result.ast is not None
+        if parse_result.ast is None:
+            raise RuntimeError(
+                "ParseResult indicates success but ast is None; "
+                "expected a WhereClauseAST node"
+            )
         return parse_result.ast.evaluate(data, functions)
 
     def _update_metrics(self, success: bool, execution_time: float, cache_hit: bool):

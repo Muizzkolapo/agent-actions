@@ -140,7 +140,10 @@ class ConfigManager:
         return str(next(iter(config)))
 
     def validate_agent_name(self) -> None:
-        assert self.user_config is not None, "load_configs() must be called first"
+        if self.user_config is None:
+            raise RuntimeError(
+                "user_config is None: load_configs() must be called before validate_agent_name()"
+            )
         self.agent_name = self.find_agent_name(self.user_config)
         config_filename = Path(self.constructor_path).stem
         if self.agent_name != config_filename:
@@ -154,7 +157,10 @@ class ConfigManager:
             )
 
     def check_child_pipeline(self) -> None:
-        assert self.user_config is not None, "load_configs() must be called first"
+        if self.user_config is None:
+            raise RuntimeError(
+                "user_config is None: load_configs() must be called before check_child_pipeline()"
+            )
         if "name" in self.user_config and "actions" in self.user_config:
             actions = self.user_config.get("actions", [])
             for action in actions:
@@ -162,7 +168,11 @@ class ConfigManager:
                     self.child_pipeline = action["child"][0]
                     return
         else:
-            assert self.agent_name is not None
+            if self.agent_name is None:
+                raise RuntimeError(
+                    "agent_name is None: validate_agent_name() must be called "
+                    "before check_child_pipeline()"
+                )
             agent_list = self.user_config.get(self.agent_name, [])
             for item in agent_list:
                 if isinstance(item, dict) and "child" in item:
@@ -173,7 +183,10 @@ class ConfigManager:
     def get_user_agents(self) -> list[dict[str, Any]]:
         from agent_actions.output.response.expander import ActionExpander
 
-        assert self.user_config is not None, "load_configs() must be called first"
+        if self.user_config is None:
+            raise RuntimeError(
+                "user_config is None: load_configs() must be called before get_user_agents()"
+            )
         if "name" in self.user_config and "actions" in self.user_config:
             try:
                 path_manager = PathManager(project_root=self.project_root)
@@ -220,7 +233,11 @@ class ConfigManager:
             workflow_name = self.user_config.get("name", "workflow")
             return agent_config_map.get(workflow_name, [])  # type: ignore[return-value]
         else:
-            assert self.agent_name is not None
+            if self.agent_name is None:
+                raise RuntimeError(
+                    "agent_name is None: validate_agent_name() must be called "
+                    "before get_user_agents()"
+                )
             agents_section = self.user_config[self.agent_name]
             if "agents" in agents_section:
                 return agents_section["agents"]  # type: ignore[no-any-return]

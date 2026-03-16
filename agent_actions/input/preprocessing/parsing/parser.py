@@ -336,7 +336,11 @@ class WhereClauseParser:
 
     def _parse_and_build_ast(self, where_clause: str) -> ParseResult:
         """Parse clause and build AST, returning ParseResult."""
-        assert self._grammar is not None
+        if self._grammar is None:
+            raise RuntimeError(
+                "WhereClauseParser._grammar is None; "
+                "_build_grammar() must complete before parsing"
+            )
         parsed = self._grammar.parseString(where_clause, parseAll=True)
 
         if not parsed:

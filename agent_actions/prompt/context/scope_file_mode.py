@@ -234,7 +234,7 @@ def apply_observe_for_file_mode(
             input_source_names = set(input_sources)
             has_reliable_ns = bool(input_source_names)
         except Exception:
-            logger.debug(
+            logger.warning(
                 "[FILE OBSERVE] infer_dependencies failed for '%s'; "
                 "falling back to raw dependencies.",
                 agent_name,
