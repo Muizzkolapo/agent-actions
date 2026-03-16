@@ -147,6 +147,22 @@ All tasks below are done and merged.
 
 ## Phase 4 — P2 Architecture / Structural Debt
 
+#### 25. Refactor global singleton state to scoped instances — Phase 1 (#1113)
+- **Source:** Audit PRs #1078, #1081, #1084, #1085, #1087, #1095
+- **Fix:** Added `set_path_manager()` DI setter, CLI wiring in `RunCommand.execute()`, global autouse fixture resetting all three singletons. Follow-up phases: EventManager/LoggerFactory scoped DI.
+
 #### 26. Migrate deprecated dependencies: google-generativeai → google-genai, PyPDF2 → pypdf (#1112)
 - **Source:** Audit PRs #1078, #1084, #1085
 - **Fix:** Rewrote realtime Gemini client from module-level `genai.configure()` + `GenerativeModel` to client-based `genai.Client().models.generate_content()` API. Switched error mapping to status-code-based. Replaced `PyPDF2` with `pypdf` (drop-in). Removed deprecated packages from `pyproject.toml`.
+
+#### 27. Improve test coverage for remaining low-coverage modules (#1114–#1116)
+- **Source:** Audit PRs #1078, #1087
+- **Fix:** Added focused unit/integration tests for `artifacts.py` (98%), `validate_udfs.py` (95%), `dependency.py` (100%), `runner.py` (99%).
+
+#### 28. Decompose remaining large modules (#1118–#1122)
+- **Source:** Audit PRs #1078, #1081, #1087
+- **Fix:** Decomposed 5 large modules: `scanner.py` → scanner/ package (#1118), `retry.py` → retry.py + retry_legacy.py (#1119), `processing.py` → processing.py + processing_recovery.py (#1120), `pipeline.py` → pipeline.py + pipeline_file_mode.py (#1121), `runner.py` → runner.py + runner_file_processing.py (#1122). All modules now under ~500 LOC.
+
+#### 29. Reduce remaining hub coupling (investigated — no changes needed)
+- **Source:** Audit PRs #1087, #1095
+- **Fix:** Investigated all 4 flagged hubs (`utils/constants.py` 41 importers, `storage/backend.py` 33, `processing/types.py` 34, `config/types.py` 15). All are appropriately designed — leaf modules defining symbols in-place, textbook interface hubs, or cohesive type families. No problematic re-exports or flat-coupling patterns found. Only minor finding: `config/schema.py` re-exports `Granularity` for backward compat (1 real consumer + 3 doc examples) — harmless.
