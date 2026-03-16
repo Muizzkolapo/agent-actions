@@ -209,13 +209,6 @@ class DependenciesCommand(BaseInspectCommand):
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(self, dependency_info: dict[str, Any], execution_order: list) -> None:
-        deprecated = [n for n, i in dependency_info.items() if i["has_primary_dependency"]]
-        if deprecated:
-            self.console.print("[yellow]⚠ Deprecated 'primary_dependency' in:[/yellow]")
-            for name in deprecated:
-                self.console.print(f"  • {name}")
-            self.console.print("[dim]Use 'dependencies' instead[/dim]\n")
-
         table = Table(title="Dependency Model", show_lines=True)
         table.add_column("Action", style="bold")
         table.add_column("Input Sources", style="green")
@@ -481,8 +474,6 @@ class ActionCommand(BaseInspectCommand):
                 out_tree.add(f"[magenta]• {f}[/magenta]")
             self.console.print(out_tree)
 
-        if info["has_primary_dependency"]:
-            self.console.print("\n[yellow]⚠ Uses deprecated 'primary_dependency'[/yellow]")
 
 
 @inspect.command(name="action")
