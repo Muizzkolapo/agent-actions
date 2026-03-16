@@ -490,7 +490,7 @@ class TestProcessDirectoryFiles:
 
 
 class TestWarnNoFilesFound:
-    @patch("agent_actions.workflow.runner.logger")
+    @patch("agent_actions.workflow.runner_file_processing.logger")
     def test_logs_when_no_content(self, mock_logger, runner, tmp_path):
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
@@ -506,7 +506,7 @@ class TestWarnNoFilesFound:
         mock_logger.warning.assert_called_once()
         assert "No files found" in mock_logger.warning.call_args[0][0]
 
-    @patch("agent_actions.workflow.runner.logger")
+    @patch("agent_actions.workflow.runner_file_processing.logger")
     def test_no_warn_when_content_exists(self, mock_logger, runner, tmp_path):
         d = tmp_path / "data"
         _make_file(d / "f.json")
@@ -546,7 +546,7 @@ class TestProcessMergedFiles:
         assert count == 1
         strategy.execute.assert_called_once()
 
-    @patch("agent_actions.workflow.runner.merge_json_files")
+    @patch("agent_actions.workflow.runner_file_processing.merge_json_files")
     def test_multiple_files_merges(self, mock_merge, runner, tmp_path):
         strategy = _make_strategy()
         dir1 = tmp_path / "d1"
@@ -569,7 +569,7 @@ class TestProcessMergedFiles:
         mock_merge.assert_called_once()
         strategy.execute.assert_called_once()
 
-    @patch("agent_actions.workflow.runner.merge_json_files")
+    @patch("agent_actions.workflow.runner_file_processing.merge_json_files")
     def test_restores_original_content_after_merge(self, mock_merge, runner, tmp_path):
         strategy = _make_strategy()
         dir1 = tmp_path / "d1"
@@ -644,7 +644,7 @@ class TestProcessFromStorageBackend:
         assert processed == 1
         strategy.execute.assert_called_once()
 
-    @patch("agent_actions.workflow.runner.merge_records_by_key")
+    @patch("agent_actions.workflow.runner_file_processing.merge_records_by_key")
     def test_multiple_sources_merges(self, mock_merge, runner_with_backend, tmp_path):
         backend = runner_with_backend.storage_backend
         backend.list_target_files.side_effect = [["data.json"], ["data.json"]]
@@ -806,7 +806,7 @@ class TestProcessFiles:
         runner_with_backend.process_files(params)
         strategy.execute.assert_called_once()
 
-    @patch("agent_actions.workflow.runner.merge_json_files")
+    @patch("agent_actions.workflow.runner_file_processing.merge_json_files")
     def test_multi_upstream_same_name_merges(self, mock_merge, runner, tmp_path):
         """Multiple upstream dirs with same dep name → _process_merged_files."""
         strategy = _make_strategy()
@@ -865,7 +865,7 @@ class TestProcessFiles:
         runner.process_files(params)
         assert strategy.execute.call_count == 2
 
-    @patch("agent_actions.workflow.runner.logger")
+    @patch("agent_actions.workflow.runner_file_processing.logger")
     def test_no_files_warns(self, mock_logger, runner, tmp_path):
         """No files found → calls _warn_no_files_found."""
         strategy = _make_strategy()
