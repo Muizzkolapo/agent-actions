@@ -71,8 +71,8 @@ Write a YAML file describing your actions, their dependencies, and which LLM to 
 |----------|-----------|----------|-----------|
 | OpenAI | Yes | Groq | Yes |
 | Anthropic | Yes | Mistral | Yes |
-| Google Gemini | Yes | Cohere | Realtime |
-| Ollama (local) | Realtime | | |
+| Google Gemini | Yes | Cohere | Online only |
+| Ollama (local) | Online only | | |
 
 Switch providers by changing `model_vendor` — no code changes needed.
 

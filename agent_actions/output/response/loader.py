@@ -1,4 +1,4 @@
-"""Schema loading utilities for batch and realtime modes."""
+"""Schema loading utilities for batch and online modes."""
 
 from __future__ import annotations
 

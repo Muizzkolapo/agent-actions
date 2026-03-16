@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from agent_actions.config.types import Granularity  # re-export for backward compat
+from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
 
 
@@ -203,7 +203,7 @@ class ActionConfig(BaseModel):
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
     api_key: str | None = Field(default=None, description="API key")
     base_url: str | None = Field(default=None, description="Base URL for vendors like Ollama")
-    run_mode: str | None = Field(default=None, description="Execution run mode")
+    run_mode: RunMode | None = Field(default=None, description="Execution run mode")
     is_operational: bool | None = Field(default=None, description="Whether action is enabled")
     json_mode: bool | None = Field(default=None, description="JSON mode setting")
     prompt_debug: bool | None = Field(default=None, description="Debug output for prompts")
@@ -305,7 +305,7 @@ class DefaultsConfig(BaseModel):
     model_name: str | None = Field(default=None, description="Default model name")
     json_mode: bool | None = Field(default=None, description="Default JSON mode setting")
     granularity: Granularity | None = Field(default=None, description="Default granularity")
-    run_mode: str | None = Field(default=None, description="Default run mode")
+    run_mode: RunMode | None = Field(default=None, description="Default run mode")
     drops: list[str] | None = Field(
         default=None, description="Default fields to exclude from LLM prompt and output"
     )

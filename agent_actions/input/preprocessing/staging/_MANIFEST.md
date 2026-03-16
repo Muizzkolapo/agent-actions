@@ -15,7 +15,7 @@
 
 ## Design Notes
 
-### CSV/XML double I/O in `_prepare_batch_data` / `_prepare_realtime_data`
+### CSV/XML double I/O in `_prepare_batch_data` / `_prepare_online_data`
 
 FileReader reads every input file first and populates `ctx.content`, but CSV and XML loaders
 re-read the file directly via `file_path` because FileReader returns pre-parsed types they

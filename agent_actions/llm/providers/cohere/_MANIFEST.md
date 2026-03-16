@@ -2,7 +2,7 @@
 
 ## Overview
 
-Cohere client adapter for both batch and realtime calls.
+Cohere client adapter for both batch and online calls.
 
 ## Modules
 

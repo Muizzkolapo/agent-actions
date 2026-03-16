@@ -2,7 +2,7 @@
 
 ## Overview
 
-Provider adapters expose batch/realtime clients, failure injection helpers, and
+Provider adapters expose batch/online clients, failure injection helpers, and
 shared utilities (mixins, usage tracking) for each supported LLM vendor.
 
 ## Modules

@@ -20,6 +20,22 @@ class Granularity(str, Enum):
         return None
 
 
+class RunMode(str, Enum):
+    """Execution run modes for agent processing."""
+
+    ONLINE = "online"
+    BATCH = "batch"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lower = value.lower()
+            for member in cls:
+                if member.value == lower:
+                    return member
+        return None
+
+
 class ContextScopeDict(TypedDict, total=False):
     """Context scope configuration for field flow control."""
 
@@ -114,7 +130,7 @@ class AgentConfigDict(TypedDict, total=False):
     base_url: str
 
     # Execution
-    run_mode: str  # "online" | "batch"
+    run_mode: RunMode  # RunMode.ONLINE | RunMode.BATCH
     granularity: str  # "record" | "file"
     is_operational: bool
     json_mode: bool

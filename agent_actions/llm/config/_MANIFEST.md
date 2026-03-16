@@ -2,7 +2,7 @@
 
 ## Overview
 
-Vendor configuration helpers used by both batch and realtime connectors.
+Vendor configuration helpers used by both batch and online connectors.
 
 ## Modules
 

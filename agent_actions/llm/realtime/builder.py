@@ -54,7 +54,7 @@ def create_dynamic_agent(
     # - Field reference replacement ({action.field}, {static.field})
     # - Context scope transformations (observe/drop/passthrough)
     # - Few-shot sample injection
-    # - Consistent behavior across batch and realtime modes
+    # - Consistent behavior across batch and online modes
     if formatted_prompt is None:
         raise ValueError(
             "formatted_prompt is required. "

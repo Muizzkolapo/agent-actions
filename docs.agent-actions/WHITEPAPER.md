@@ -920,7 +920,7 @@ prompt_store/
 - Single config flag switches to batch mode: `run_mode: batch`
 - Framework handles JSONL preparation, upload, polling, download
 - Retry chains track failed records across batch attempts
-- Same workflow works for both realtime and batch
+- Same workflow works for both online and batch
 
 ```yaml
 defaults:

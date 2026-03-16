@@ -2,7 +2,7 @@
 Shared fixtures for integration tests.
 
 This module provides fixtures used across integration tests, including
-batch vs realtime parity testing.
+batch vs online parity testing.
 """
 
 from typing import Any
@@ -17,7 +17,7 @@ import pytest
 @pytest.fixture
 def parity_agent_config() -> dict[str, Any]:
     """
-    Agent configuration for batch vs realtime parity testing.
+    Agent configuration for batch vs online parity testing.
 
     Includes context_scope with observe/drop/passthrough to exercise
     all context transformation paths.
@@ -72,7 +72,7 @@ def parity_current_item() -> dict[str, Any]:
     """
     Current item context for parity testing.
 
-    Mimics a typical batch/realtime item with source_guid and lineage.
+    Mimics a typical batch/online item with source_guid and lineage.
     """
     return {
         "source_guid": "test-guid-001",

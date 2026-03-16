@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
@@ -64,7 +65,7 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
     agent["model_vendor"] = "tool"
     agent["model_name"] = action.get("impl", action.get("name"))
 
-    if run_mode == "batch" and action.get("run_mode") == "batch":
+    if run_mode == RunMode.BATCH and action.get("run_mode") == RunMode.BATCH:
         action_name = action.get("name", "unknown")
         raise ConfigurationError(
             "Tool actions do not support batch processing. "
@@ -77,8 +78,8 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
                 "operation": "expand_actions_to_agents",
             },
         )
-    if run_mode == "batch":
-        agent["run_mode"] = "online"
+    if run_mode == RunMode.BATCH:
+        agent["run_mode"] = RunMode.ONLINE
 
     # Tool actions MUST declare an output schema.
     # Ordering: runs BEFORE compile_output_schema (which populates

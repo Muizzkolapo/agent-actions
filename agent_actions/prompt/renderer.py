@@ -9,7 +9,7 @@ import yaml
 from pydantic import ValidationError
 from yaml import YAMLError
 
-from agent_actions.config.types import AgentConfigMap, AgentEntryDict
+from agent_actions.config.types import AgentConfigMap, AgentEntryDict, RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -214,7 +214,7 @@ class ConfigRenderingService:
             "is_operational": True,
             "dependencies": [],
             "granularity": action.get("granularity", "record"),
-            "run_mode": "online",
+            "run_mode": RunMode.ONLINE,
             "json_mode": action.get("json_mode", True),
         }
 

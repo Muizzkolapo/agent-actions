@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import AgentActionsError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.saver import UnifiedSourceDataSaver
@@ -130,7 +131,7 @@ def _validate_staged_data(
         agent_config=agent_config,
         agent_name=agent_name,
         contents=source_content if isinstance(source_content, dict) else {},
-        mode="batch" if mode == "batch" else "realtime",
+        mode=RunMode.BATCH if mode == RunMode.BATCH else RunMode.ONLINE,
         source_content=source_content,
         current_item=first_item,
         file_path=file_path,
@@ -164,7 +165,7 @@ def process_initial_stage(ctx: InitialStageContext):
         file_type=file_type,
         agent_config=ctx.agent_config,
         agent_name=ctx.agent_name,
-        mode=run_mode or "online",
+        mode=run_mode or RunMode.ONLINE,
         file_path=ctx.file_path,
     )
 
@@ -177,10 +178,10 @@ def process_initial_stage(ctx: InitialStageContext):
         idx=ctx.idx,
     )
 
-    if run_mode == "batch":
+    if run_mode == RunMode.BATCH:
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
-        data_chunk, src_text = _prepare_realtime_data(prep_ctx)
+        data_chunk, src_text = _prepare_online_data(prep_ctx)
 
     _save_source_data(
         src_text,
@@ -191,7 +192,7 @@ def process_initial_stage(ctx: InitialStageContext):
         storage_backend=ctx.storage_backend,
     )
 
-    if run_mode == "batch":
+    if run_mode == RunMode.BATCH:
         batch_ctx = BatchProcessingContext(
             agent_config=ctx.agent_config,
             agent_name=ctx.agent_name,
@@ -204,7 +205,7 @@ def process_initial_stage(ctx: InitialStageContext):
         )
         return _process_batch_mode(batch_ctx)
 
-    return _process_realtime_mode_with_record_processor(
+    return _process_online_mode_with_record_processor(
         data_chunk, ctx, ctx.file_path, ctx.base_directory, ctx.output_directory
     )
 
@@ -268,7 +269,7 @@ def _save_source_data(
     output_directory: str | None = None,
     storage_backend: Any = None,
 ) -> None:
-    """UNIFIED source saving logic for both batch and realtime modes."""
+    """UNIFIED source saving logic for both batch and online modes."""
     if src_text:
         source_items = src_text if isinstance(src_text, list) else [src_text]
     else:
@@ -465,8 +466,8 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     return data_chunk, src_text
 
 
-def _prepare_realtime_data(ctx: DataPreparationContext):
-    """Prepare data for realtime mode processing using direct loaders."""
+def _prepare_online_data(ctx: DataPreparationContext):
+    """Prepare data for online mode processing using direct loaders."""
     from agent_actions.input.loaders.json import JsonLoader
     from agent_actions.input.loaders.tabular import TabularLoader
     from agent_actions.input.loaders.xml import XmlLoader
@@ -629,10 +630,10 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     return str(output_file_path)
 
 
-def _process_realtime_mode_with_record_processor(
+def _process_online_mode_with_record_processor(
     data_chunk, ctx: InitialStageContext, file_path, base_directory, output_directory
 ):
-    """Process data in realtime mode using RecordProcessor."""
+    """Process data in online mode using RecordProcessor."""
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
 
@@ -661,7 +662,7 @@ def _process_realtime_mode_with_record_processor(
 
     if ctx.storage_backend is None:
         raise AgentActionsError(
-            "Storage backend is required for realtime initial-stage writes.",
+            "Storage backend is required for online initial-stage writes.",
             context={
                 "file_path": str(output_file_path),
                 "agent_name": ctx.agent_name,

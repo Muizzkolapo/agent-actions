@@ -358,14 +358,14 @@ class TestGuardEvaluatedOnce:
 
 
 class TestModeSelection:
-    """Tests for batch/realtime mode selection based on is_batch_mode flag."""
+    """Tests for batch/online mode selection based on is_batch_mode flag."""
 
     @patch(
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
     )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
-    def test_online_mode_uses_realtime(self, mock_load_ctx, mock_prepare):
-        """Test that online processing (is_batch_mode=False) uses realtime mode."""
+    def test_online_mode_uses_online(self, mock_load_ctx, mock_prepare):
+        """Test that online processing (is_batch_mode=False) uses online mode."""
         mock_load_ctx.return_value = {"content": "test"}
 
         mock_result = MagicMock()
@@ -381,16 +381,16 @@ class TestModeSelection:
             agent_name="test",
             is_first_stage=True,
             is_batch_mode=False,
-            version_context=None,  # No loop context, but should still be realtime
+            version_context=None,  # No loop context, but should still be online
         )
 
         preparer = TaskPreparer()
         preparer.prepare({"content": "test"}, context)
 
-        # Verify realtime mode was used
+        # Verify online mode was used
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
-        assert call_kwargs["mode"] == "realtime"
+        assert call_kwargs["mode"] == "online"
 
     @patch(
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
@@ -427,8 +427,8 @@ class TestModeSelection:
         "agent_actions.prompt.service.PromptPreparationService.prepare_prompt_with_field_context"
     )
     @patch("agent_actions.processing.task_preparer.TaskPreparer._load_full_context")
-    def test_online_with_loop_uses_realtime(self, mock_load_ctx, mock_prepare):
-        """Test that online processing with loop context also uses realtime mode."""
+    def test_online_with_loop_uses_online(self, mock_load_ctx, mock_prepare):
+        """Test that online processing with loop context also uses online mode."""
         mock_load_ctx.return_value = {"content": "test"}
 
         mock_result = MagicMock()
@@ -450,10 +450,10 @@ class TestModeSelection:
         preparer = TaskPreparer()
         preparer.prepare({"content": "test"}, context)
 
-        # Verify realtime mode was used
+        # Verify online mode was used
         mock_prepare.assert_called_once()
         call_kwargs = mock_prepare.call_args[1]
-        assert call_kwargs["mode"] == "realtime"
+        assert call_kwargs["mode"] == "online"
 
 
 class TestGuardBeforePromptRendering:

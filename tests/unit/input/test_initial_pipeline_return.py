@@ -1,6 +1,6 @@
 """Tests for initial pipeline return contract (P1 #1).
 
-Both _process_batch_mode() and _process_realtime_mode_with_record_processor()
+Both _process_batch_mode() and _process_online_mode_with_record_processor()
 must return a string path to the output file.
 """
 
@@ -13,7 +13,7 @@ from agent_actions.input.preprocessing.staging.initial_pipeline import (
     BatchProcessingContext,
     InitialStageContext,
     _process_batch_mode,
-    _process_realtime_mode_with_record_processor,
+    _process_online_mode_with_record_processor,
 )
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
 
@@ -78,7 +78,7 @@ class TestBatchModeReturnsPath:
         assert result.endswith(".json")
 
 
-class TestRealtimeModeReturnsPath:
+class TestOnlineModeReturnsPath:
     def test_returns_string_path(self, tmp_dirs):
         base, output, input_file = tmp_dirs
         storage = MagicMock()
@@ -104,7 +104,7 @@ class TestRealtimeModeReturnsPath:
             MockProc.return_value.process_batch.return_value = [{"result": "ok"}]
             MockCollector.collect_results.return_value = [{"result": "ok"}]
 
-            result = _process_realtime_mode_with_record_processor(
+            result = _process_online_mode_with_record_processor(
                 data_chunk, ctx, str(input_file), str(base), str(output)
             )
 

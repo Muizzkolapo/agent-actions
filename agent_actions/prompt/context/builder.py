@@ -1,4 +1,4 @@
-"""Unified LLM context builder for batch and realtime modes."""
+"""Unified LLM context builder for batch and online modes."""
 
 from typing import Any
 
@@ -8,11 +8,11 @@ from agent_actions.prompt.context.scope_parsing import parse_field_reference
 
 class LLMContextBuilder:
     """
-    Unified builder for LLM context across batch and realtime modes.
+    Unified builder for LLM context across batch and online modes.
 
     This class provides a shared implementation for building LLM context,
     ensuring consistent merge and drop behavior regardless of processing mode.
-    Both batch and realtime methods delegate to _build_llm_context to prevent
+    Both batch and online methods delegate to _build_llm_context to prevent
     behavioral drift and reduce code duplication.
     """
 
@@ -26,14 +26,14 @@ class LLMContextBuilder:
         Shared implementation for building LLM context.
 
         This method centralizes the merge and drop logic used by both batch
-        and realtime modes. It performs the following operations in order:
+        and online modes. It performs the following operations in order:
         1. Creates a shallow copy of base_context to avoid mutating the original
         2. Merges additional_context fields (from context_scope.observe)
         3. Applies context_scope.drop rules to remove specified fields
 
         Args:
             base_context: Base context dict (row_content in batch, processed_context
-                         in realtime). Must be a dict; caller should validate.
+                         in online). Must be a dict; caller should validate.
             additional_context: Fields to merge from context_scope.observe. Can be
                                None or empty dict if no additional fields.
             context_scope: Optional context scope configuration containing 'drop'
@@ -127,19 +127,19 @@ class LLMContextBuilder:
         return LLMContextBuilder._build_llm_context(row_content, llm_context, context_scope)
 
     @staticmethod
-    def build_llm_context_for_realtime(
+    def build_llm_context_for_online(
         processed_context: dict[str, Any],
         llm_additional_context: dict[str, Any] | None,
         context_scope: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Build LLM context for realtime mode.
+        Build LLM context for online mode.
 
         Delegates to the shared _build_llm_context implementation for consistent
         merge/drop behavior across modes.
 
         Args:
-            processed_context: Processed context dict from realtime flow. If not
+            processed_context: Processed context dict from online flow. If not
                               a dict, returns unchanged (passthrough behavior).
             llm_additional_context: Additional context from context_scope.observe.
             context_scope: Optional context scope with 'drop' rules.

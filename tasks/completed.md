@@ -166,3 +166,23 @@ All tasks below are done and merged.
 #### 29. Reduce remaining hub coupling (investigated — no changes needed)
 - **Source:** Audit PRs #1087, #1095
 - **Fix:** Investigated all 4 flagged hubs (`utils/constants.py` 41 importers, `storage/backend.py` 33, `processing/types.py` 34, `config/types.py` 15). All are appropriately designed — leaf modules defining symbols in-place, textbook interface hubs, or cohesive type families. No problematic re-exports or flat-coupling patterns found. Only minor finding: `config/schema.py` re-exports `Granularity` for backward compat (1 real consumer + 3 doc examples) — harmless.
+
+#### 30. Consolidate duplicated root discovery logic (#1124)
+- **Source:** Audit PR #1092
+- **Fix:** Consolidated to a single authoritative `find_project_root` in `utils/project_root.py`. Updated all call sites.
+
+---
+
+## Phase 5 — P3 Polish
+
+#### 14. LSP indexer: support multi-project workspaces (already implemented — no code changes)
+- **Source:** task11 (todo.md)
+- **Fix:** Investigation confirmed multi-project workspace support is already fully implemented. `find_all_project_roots()` discovers all projects, `server.project_indexes: dict[Path, ProjectIndex]` stores per-project indexes, `_index_for_file()` routes files with deepest-match-wins semantics, and `did_save()` handles dynamic project registration. 8 tests verify: two-project discovery, nested projects, deepest-wins routing, disjoint routing, outside-project returns None, per-project rebuild, new project registration, and same-action cross-project resolution. Original todo description was stale.
+
+#### 35. Guard remaining unguarded `.parent` chains on user-provided paths (#1125)
+- **Source:** PR #1100 review — broader finding
+- **Fix:** Extracted shared `derive_workflow_root()` into `utils/path_utils.py` with 3-tier safe strategy (agent_io fast-path → agent_config walk-up → safe fallback with warning). Updated `initial_pipeline.py` and `batch_source_handler.py` to delegate. Added `agent_config` ancestor walk-up guard in `resolver.py` (supports nested subdirs like `agent_config/versions/`). 13 regression tests.
+
+#### 31. Type `run_mode` as `RunMode` enum (#1127)
+- **Source:** Audit PR #1078
+- **Fix:** Added `RunMode(str, Enum)` in `config/types.py` with case-insensitive `_missing_()` (matching existing `Granularity` pattern). Updated all Pydantic model fields (`schema.py`, `config_schema.py`), defaults (`config_fields.py`, `manager.py`, `renderer.py`), comparisons (`expander_action_types.py`, `initial_pipeline.py`, `pipeline.py`, `vendor_compatibility_validator.py`), and boundary coercion sites. Unified vocabulary: replaced all `"realtime"` references with `"online"` across source and tests (`prompt/service.py`, `prompt/context/builder.py`, `processing/task_preparer.py`, `output/response/loader.py`). Renamed functions: `build_llm_context_for_realtime` → `build_llm_context_for_online`, `_prepare_realtime_data` → `_prepare_online_data`, `_process_realtime_mode_with_record_processor` → `_process_online_mode_with_record_processor`. Added 9 regression tests for enum coercion.

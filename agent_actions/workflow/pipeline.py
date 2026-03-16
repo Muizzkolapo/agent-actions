@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.config.types import AgentConfigDict
+from agent_actions.config.types import AgentConfigDict, RunMode
 from agent_actions.errors import AgentActionsError, ConfigurationError, DependencyError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.service import BatchService
@@ -240,7 +240,7 @@ class ProcessingPipeline:
             HITL_VENDOR,
         ] or params.agent_config.get("kind") in ["tool", "hitl"]
 
-        if params.agent_config.get("run_mode") == "batch" and not is_synchronous:
+        if params.agent_config.get("run_mode") == RunMode.BATCH and not is_synchronous:
             return ProcessingPipeline._handle_batch_generation(
                 BatchPipelineParams(
                     pipeline_agent_config=params.agent_config,
@@ -403,7 +403,7 @@ class ProcessingPipeline:
 
         # Batch mode check (tools and HITL run synchronously, not in batch)
         run_mode = self.config.agent_config.get("run_mode")
-        if run_mode == "batch" and not (self.is_tool_action or self.is_hitl_action):
+        if run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action):
             self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 

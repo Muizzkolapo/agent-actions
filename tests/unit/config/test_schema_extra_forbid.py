@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
+from agent_actions.config.types import RunMode
 
 
 class TestActionConfigForbidsUnknownKeys:
@@ -185,6 +186,31 @@ class TestActionConfigForbidsUnknownKeys:
         config = ActionConfig.model_validate(data)
         assert config.granularity.value == "record"
 
+    def test_run_mode_mixed_case_accepted(self):
+        """RunMode: BATCH (uppercase) must be accepted."""
+        data = {"name": "a", "intent": "i", "run_mode": "BATCH"}
+        config = ActionConfig.model_validate(data)
+        assert config.run_mode == RunMode.BATCH
+        assert config.run_mode.value == "batch"
+
+    def test_run_mode_none_accepted(self):
+        """RunMode: None must be accepted (optional field)."""
+        data = {"name": "a", "intent": "i"}
+        config = ActionConfig.model_validate(data)
+        assert config.run_mode is None
+
+    def test_run_mode_invalid_rejected(self):
+        """RunMode: invalid value must be rejected."""
+        data = {"name": "a", "intent": "i", "run_mode": "invalid"}
+        with pytest.raises(ValidationError, match="run_mode"):
+            ActionConfig.model_validate(data)
+
+    def test_run_mode_realtime_rejected(self):
+        """RunMode: 'realtime' is not a valid mode and must be rejected."""
+        data = {"name": "a", "intent": "i", "run_mode": "realtime"}
+        with pytest.raises(ValidationError, match="run_mode"):
+            ActionConfig.model_validate(data)
+
     def test_kind_mixed_case_accepted(self):
         """kind: LLM (mixed-case) must be accepted."""
         data = {"name": "a", "intent": "i", "kind": "LLM"}
@@ -311,6 +337,11 @@ class TestDefaultsConfigValidation:
         """Granularity: Record (mixed-case) must be accepted in defaults."""
         config = DefaultsConfig.model_validate({"granularity": "Record"})
         assert config.granularity.value == "record"
+
+    def test_run_mode_mixed_case_accepted(self):
+        """RunMode: Batch (mixed-case) must be accepted in defaults."""
+        config = DefaultsConfig.model_validate({"run_mode": "Batch"})
+        assert config.run_mode == RunMode.BATCH
 
     def test_temperature_rejects_non_numeric(self):
         with pytest.raises(ValidationError, match="temperature"):

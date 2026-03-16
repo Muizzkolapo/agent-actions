@@ -1,5 +1,6 @@
 """Validator for vendor compatibility across batch and online modes."""
 
+from agent_actions.config.types import RunMode
 from agent_actions.validation.agent_validators.base_agent_validator import (
     AgentEntryValidationResult,
     BaseAgentEntryValidator,
@@ -19,9 +20,10 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
         errors = []
         warnings = []
 
-        run_mode = str(normalized_entry.get("run_mode", "online")).lower()
+        raw_run_mode = normalized_entry.get("run_mode", RunMode.ONLINE)
+        run_mode = RunMode(raw_run_mode) if isinstance(raw_run_mode, str) else raw_run_mode
 
-        if run_mode == "batch":
+        if run_mode == RunMode.BATCH:
             model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
 
             if model_vendor:
@@ -29,7 +31,7 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
                     vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
                     errors.append(
                         f"{desc} 'tool' vendor does not support batch processing. "
-                        f"Tool vendors require realtime/online mode for "
+                        f"Tool vendors require online mode for "
                         f"interactive execution. Use one of: {vendors_str} for "
                         f"batch mode, or set run_mode='online' for tool vendor."
                     )

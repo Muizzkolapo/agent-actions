@@ -2,7 +2,7 @@
 
 ## Overview
 
-Adapter for OpenAI APIs that differentiates tool/batch/realtime clients across the
+Adapter for OpenAI APIs that differentiates tool/batch/online clients across the
 project.
 
 ## Modules
@@ -10,4 +10,4 @@ project.
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `batch_client.py` | Module | Batch client for uploading and monitoring OpenAI jobs. | `llm.batch`, `llm.providers` |
-| `client.py` | Module | Realtime OpenAI client supporting tool calls and streaming. | `llm.realtime`, `llm.providers` |
+| `client.py` | Module | Online OpenAI client supporting tool calls and streaming. | `llm.realtime`, `llm.providers` |

@@ -1,16 +1,17 @@
-"""Unified prompt preparation service for batch and realtime modes."""
+"""Unified prompt preparation service for batch and online modes."""
 
 import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
 
+from agent_actions.config.types import RunMode
 from agent_actions.errors import TemplateVariableError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.io_events import ContextFieldNotFoundEvent
@@ -34,7 +35,7 @@ class PromptPreparationRequest:
     agent_config: dict[str, Any]
     agent_name: str
     contents: dict[str, Any]
-    mode: Literal["batch", "realtime"] = "realtime"
+    mode: RunMode = RunMode.ONLINE
     agent_indices: dict[str, int] | None = None
     dependency_configs: dict[str, dict] | None = None
     source_content: Any | None = None
@@ -59,12 +60,12 @@ class PromptPreparationResult:
 
 
 class PromptPreparationService:
-    """Single point of truth for prompt preparation across batch and realtime modes."""
+    """Single point of truth for prompt preparation across batch and online modes."""
 
     @staticmethod
     def is_valid_mode(mode: str) -> bool:
-        """Return True if mode is 'batch' or 'realtime'."""
-        return mode in ("batch", "realtime")
+        """Return True if mode is a valid RunMode value."""
+        return mode in (RunMode.BATCH, RunMode.ONLINE)
 
     @staticmethod
     def prepare_prompt_with_context(
@@ -72,7 +73,7 @@ class PromptPreparationService:
         agent_name: str,
         contents: dict[str, Any],
         *,
-        mode: Literal["batch", "realtime"] = "realtime",
+        mode: RunMode = RunMode.ONLINE,
         agent_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         source_content: Any | None = None,
@@ -85,10 +86,10 @@ class PromptPreparationService:
         storage_backend: Optional["StorageBackend"] = None,
     ) -> PromptPreparationResult:
         """
-        Unified entry point for prompt preparation (batch AND realtime).
+        Unified entry point for prompt preparation (batch AND online).
 
         ARCHITECTURE INVARIANT: Single source of truth for context building.
-        Both batch and realtime MUST use this method to ensure context parity.
+        Both batch and online MUST use this method to ensure context parity.
         Do not add mode-specific context building logic here or in callers.
 
         See: https://github.com/Muizzkolapo/agent-actions/issues/640
@@ -117,7 +118,7 @@ class PromptPreparationService:
         agent_name: str,
         contents: dict[str, Any],
         *,
-        mode: Literal["batch", "realtime"] = "realtime",
+        mode: RunMode = RunMode.ONLINE,
         field_context: dict[str, Any],
         tools_path: str | None = None,
     ) -> PromptPreparationResult:
@@ -499,24 +500,24 @@ class PromptPreparationService:
         Build the complete LLM context by delegating to the mode-specific builder.
 
         Raises:
-            ValueError: If mode is not 'batch' or 'realtime'.
+            ValueError: If mode is not RunMode.BATCH or RunMode.ONLINE.
         """
         safe_contents = contents if isinstance(contents, dict) else {}
 
-        if mode == "batch":
+        if mode == RunMode.BATCH:
             return LLMContextBuilder.build_llm_context_for_batch(
                 row_content=safe_contents,
                 llm_context=llm_additional_context,
                 context_scope=context_scope,
             )
-        if mode == "realtime":
-            result = LLMContextBuilder.build_llm_context_for_realtime(
+        if mode == RunMode.ONLINE:
+            result = LLMContextBuilder.build_llm_context_for_online(
                 processed_context=safe_contents,
                 llm_additional_context=llm_additional_context,
                 context_scope=context_scope,
             )
             return result if isinstance(result, dict) else {}
-        raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
+        raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'online'.")
 
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: str | None) -> Path:

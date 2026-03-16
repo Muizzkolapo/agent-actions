@@ -5,6 +5,8 @@ Centralized config field definitions for ActionExpander.
 import copy
 from typing import Any
 
+from agent_actions.config.types import RunMode
+
 # Simple config fields that follow standard inheritance pattern
 # Format: 'field_name': default_value
 #
@@ -21,7 +23,7 @@ SIMPLE_CONFIG_FIELDS = {
     # Action type
     "kind": "llm",  # Default: 'llm' (LLM action). Use 'tool' for UDF actions.
     # Execution settings
-    "run_mode": "online",  # Default: online mode
+    "run_mode": RunMode.ONLINE,  # Default: online mode
     "granularity": "record",  # Default: record-level processing. Use 'file' for batch processing (tool only).
     "is_operational": True,  # Default: enabled
     # LLM configuration
@@ -85,9 +87,9 @@ def inherit_simple_fields(
     for field, default_value in SIMPLE_CONFIG_FIELDS.items():
         # Standard inheritance: action > defaults > hardcoded default
         value = action.get(field, defaults.get(field, default_value))
-        # Normalize run_mode to lowercase for case-insensitive comparison
-        if field == "run_mode" and isinstance(value, str):
-            value = value.lower()
+        # Coerce raw YAML strings to RunMode (fires _missing_() for case-insensitive match)
+        if field == "run_mode" and isinstance(value, str) and not isinstance(value, RunMode):
+            value = RunMode(value)
         # Deep-copy mutable values to prevent cross-agent state leakage
         if isinstance(value, (list, dict)):
             value = copy.deepcopy(value)

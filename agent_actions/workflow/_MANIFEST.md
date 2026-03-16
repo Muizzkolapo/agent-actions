@@ -22,7 +22,7 @@ Agent Actions.
 | `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. | `workflow`, `processing` |
 | `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, AgentWorkflow). | `typing`, `workflow` |
-| `pipeline.py` | Module | Builds execution pipelines for run modes (batch/realtime) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
+| `pipeline.py` | Module | Builds execution pipelines for run modes (batch/online) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
 | `pipeline_file_mode.py` | Module | FILE-granularity tool and HITL processing handlers extracted from `ProcessingPipeline`. | `processing`, `workflow` |
 | `runner.py` | Module | `AgentRunner` class: init, folder lookup, dependency resolution, orchestration. Delegates file-processing to `runner_file_processing`. | `llm`, `workflow` |
 | `runner_file_processing.py` | Module | File walking, merging, and storage-backend processing extracted from `runner.py`. Standalone functions that take a `runner` param for instance dispatch. | `workflow`, `processing` |

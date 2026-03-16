@@ -3,7 +3,7 @@
 ## Overview
 
 Infrastructure modules resolve context, job management, and file handling for
-batch services that orchestrate runs outside realtime mode.
+batch services that orchestrate runs outside online mode.
 
 ## Modules
 

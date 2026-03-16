@@ -1,10 +1,17 @@
-"""Tests for config_fields mutable-default and deep-copy safety."""
+"""Tests for config_fields mutable-default, deep-copy safety, and RunMode coercion."""
 
+from agent_actions.config.types import RunMode
 from agent_actions.output.response.config_fields import (
     SIMPLE_CONFIG_FIELDS,
     inherit_simple_fields,
 )
 from agent_actions.output.response.expander import ActionExpander
+from agent_actions.validation.agent_validators.vendor_compatibility_validator import (
+    VendorCompatibilityValidator,
+)
+from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
+    AgentEntryValidationContext,
+)
 
 
 class TestMutableDefaults:
@@ -60,6 +67,66 @@ class TestMutableDefaults:
         assert agent["json_mode"] is False
 
 
+class TestRunModeCoercion:
+    """Verify run_mode is coerced to RunMode enum from raw YAML strings."""
+
+    def test_uppercase_run_mode_coerced_to_enum(self):
+        """Raw YAML string 'BATCH' (uppercase) must be coerced to RunMode.BATCH."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {"run_mode": "BATCH"}, {})
+        assert agent["run_mode"] == RunMode.BATCH
+        assert isinstance(agent["run_mode"], RunMode)
+
+    def test_mixed_case_run_mode_coerced(self):
+        """Raw YAML string 'Batch' (mixed-case) must be coerced to RunMode.BATCH."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {"run_mode": "Batch"}, {})
+        assert agent["run_mode"] == RunMode.BATCH
+
+    def test_lowercase_run_mode_coerced(self):
+        """Raw YAML string 'batch' (lowercase) must be coerced to RunMode.BATCH."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {"run_mode": "batch"}, {})
+        assert agent["run_mode"] == RunMode.BATCH
+        assert isinstance(agent["run_mode"], RunMode)
+
+    def test_default_run_mode_is_online_enum(self):
+        """Default run_mode from SIMPLE_CONFIG_FIELDS must be RunMode.ONLINE."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {}, {})
+        assert agent["run_mode"] == RunMode.ONLINE
+        assert isinstance(agent["run_mode"], RunMode)
+
+    def test_run_mode_from_defaults_coerced(self):
+        """run_mode from defaults dict (uppercase) must be coerced."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {}, {"run_mode": "BATCH"})
+        assert agent["run_mode"] == RunMode.BATCH
+
+    def test_run_mode_already_enum_unchanged(self):
+        """RunMode enum value passed through action dict must not be re-constructed."""
+        agent: dict = {}
+        inherit_simple_fields(agent, {"run_mode": RunMode.BATCH}, {})
+        assert agent["run_mode"] is RunMode.BATCH
+
+class TestRunModeEnumContract:
+    """Verify RunMode enum construction contract."""
+
+    def test_invalid_value_raises_value_error(self):
+        """RunMode('invalid') must raise ValueError."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            RunMode("invalid")
+
+    def test_realtime_rejected(self):
+        """RunMode('realtime') must raise ValueError — not a valid mode."""
+        import pytest
+
+        with pytest.raises(ValueError):
+            RunMode("realtime")
+
+
 class TestIsOperationalFromConfig:
     """Verify is_operational is respected from action/defaults config."""
 
@@ -106,3 +173,39 @@ class TestIsOperationalFromConfig:
 
         result = ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x)
         assert result["is_operational"] is False
+
+
+class TestVendorCompatibilityValidatorRunModeCoercion:
+    """Verify VendorCompatibilityValidator coerces raw run_mode strings to RunMode."""
+
+    def test_uppercase_batch_triggers_batch_validation(self):
+        """Uppercase 'BATCH' run_mode must be coerced and trigger batch vendor checks."""
+        context = AgentEntryValidationContext(
+            entry={"run_mode": "BATCH", "model_vendor": "openai"},
+            agent_name_context="test_agent",
+        )
+        validator = VendorCompatibilityValidator()
+        result = validator.validate(context)
+        assert not result.errors
+
+    def test_uppercase_batch_with_invalid_vendor_warns(self):
+        """Uppercase 'BATCH' with unsupported vendor must produce warning."""
+        context = AgentEntryValidationContext(
+            entry={"run_mode": "BATCH", "model_vendor": "unknown_vendor"},
+            agent_name_context="test_agent",
+        )
+        validator = VendorCompatibilityValidator()
+        result = validator.validate(context)
+        assert len(result.warnings) == 1
+        assert "unknown_vendor" in result.warnings[0]
+
+    def test_online_mode_skips_batch_validation(self):
+        """Online mode (any case) must not trigger batch vendor checks."""
+        context = AgentEntryValidationContext(
+            entry={"run_mode": "ONLINE", "model_vendor": "unknown_vendor"},
+            agent_name_context="test_agent",
+        )
+        validator = VendorCompatibilityValidator()
+        result = validator.validate(context)
+        assert not result.errors
+        assert not result.warnings

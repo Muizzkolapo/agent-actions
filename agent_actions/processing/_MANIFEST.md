@@ -2,7 +2,7 @@
 
 ## Overview
 
-Shared processing utilities used by batch/realtime runners: enrichment, error handling,
+Shared processing utilities used by batch/online runners: enrichment, error handling,
 lineage helpers, recovery flows, and transformation pipelines.
 
 ## Sub-Modules

@@ -158,20 +158,20 @@ class TestPublicMethodDelegation:
 
         assert batch_result == direct_result
 
-    def test_realtime_delegates_correctly(self):
-        """build_llm_context_for_realtime should produce same result as _build_llm_context."""
+    def test_online_delegates_correctly(self):
+        """build_llm_context_for_online should produce same result as _build_llm_context."""
         base = {"key": "value"}
         additional = {"extra": "data"}
         context_scope = {"drop": ["source.key"]}
 
-        realtime_result = LLMContextBuilder.build_llm_context_for_realtime(
+        online_result = LLMContextBuilder.build_llm_context_for_online(
             base, additional, context_scope
         )
         direct_result = LLMContextBuilder._build_llm_context(base, additional, context_scope)
 
-        assert realtime_result == direct_result
+        assert online_result == direct_result
 
-    def test_realtime_passthrough_for_non_dict(self):
-        """Realtime mode should pass through non-dict input unchanged."""
-        result = LLMContextBuilder.build_llm_context_for_realtime("not a dict", {}, None)
+    def test_online_passthrough_for_non_dict(self):
+        """Online mode should pass through non-dict input unchanged."""
+        result = LLMContextBuilder.build_llm_context_for_online("not a dict", {}, None)
         assert result == "not a dict"

@@ -1,7 +1,7 @@
 """
-Batch vs Realtime context parity tests.
+Batch vs Online context parity tests.
 
-These tests ensure that batch and realtime modes produce identical context
+These tests ensure that batch and online modes produce identical context
 for the same input, preventing divergence bugs where templates work in one
 mode but fail in another.
 
@@ -22,7 +22,7 @@ from agent_actions.prompt.service import (
 
 
 class TestPromptPreparationParity:
-    """Verify batch and realtime produce identical prompt context."""
+    """Verify batch and online produce identical prompt context."""
 
     def test_same_formatted_prompt_for_same_input(
         self,
@@ -48,19 +48,19 @@ class TestPromptPreparationParity:
             "current_item": parity_current_item,
         }
 
-        # Act: Call with mode="batch" and mode="realtime"
+        # Act: Call with mode="batch" and mode="online"
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: formatted_prompt must be identical
-        assert batch_result.formatted_prompt == realtime_result.formatted_prompt, (
+        assert batch_result.formatted_prompt == online_result.formatted_prompt, (
             f"Formatted prompts diverged!\n"
             f"Batch: {batch_result.formatted_prompt}\n"
-            f"Realtime: {realtime_result.formatted_prompt}"
+            f"Online: {online_result.formatted_prompt}"
         )
 
     def test_same_prompt_context_for_same_input(
@@ -91,15 +91,15 @@ class TestPromptPreparationParity:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: prompt_context must be identical
-        assert batch_result.prompt_context == realtime_result.prompt_context, (
+        assert batch_result.prompt_context == online_result.prompt_context, (
             f"Prompt contexts diverged!\n"
             f"Batch keys: {set(batch_result.prompt_context.keys()) if batch_result.prompt_context else 'None'}\n"
-            f"Realtime keys: {set(realtime_result.prompt_context.keys()) if realtime_result.prompt_context else 'None'}"
+            f"Online keys: {set(online_result.prompt_context.keys()) if online_result.prompt_context else 'None'}"
         )
 
     def test_same_passthrough_fields(
@@ -129,15 +129,15 @@ class TestPromptPreparationParity:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: passthrough_fields must be identical
-        assert batch_result.passthrough_fields == realtime_result.passthrough_fields, (
+        assert batch_result.passthrough_fields == online_result.passthrough_fields, (
             f"Passthrough fields diverged!\n"
             f"Batch: {batch_result.passthrough_fields}\n"
-            f"Realtime: {realtime_result.passthrough_fields}"
+            f"Online: {online_result.passthrough_fields}"
         )
 
     def test_metadata_records_correct_mode(
@@ -166,13 +166,13 @@ class TestPromptPreparationParity:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: mode is recorded in metadata
         assert batch_result.metadata.get("mode") == "batch"
-        assert realtime_result.metadata.get("mode") == "realtime"
+        assert online_result.metadata.get("mode") == "online"
 
 
 class TestPromptPreparationParityWithContextScope:
@@ -248,24 +248,24 @@ class TestPromptPreparationParityWithContextScope:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: formatted_prompt must be identical
-        assert batch_result.formatted_prompt == realtime_result.formatted_prompt, (
+        assert batch_result.formatted_prompt == online_result.formatted_prompt, (
             f"Formatted prompts diverged with {description}!\n"
             f"Batch: {batch_result.formatted_prompt}\n"
-            f"Realtime: {realtime_result.formatted_prompt}"
+            f"Online: {online_result.formatted_prompt}"
         )
 
         # Assert: prompt_context must be identical
-        assert batch_result.prompt_context == realtime_result.prompt_context, (
+        assert batch_result.prompt_context == online_result.prompt_context, (
             f"Prompt contexts diverged with {description}!"
         )
 
         # Assert: passthrough_fields must be identical
-        assert batch_result.passthrough_fields == realtime_result.passthrough_fields, (
+        assert batch_result.passthrough_fields == online_result.passthrough_fields, (
             f"Passthrough fields diverged with {description}!"
         )
 
@@ -290,7 +290,7 @@ class TestLLMContextDifferences:
         """
         Document that llm_context may differ slightly between modes.
 
-        Batch uses dict.pop() for drops, realtime uses DataTransformer.
+        Batch uses dict.pop() for drops, online uses DataTransformer.
         Both should produce semantically equivalent results (dropped fields
         are absent), but implementation details may cause minor differences.
         """
@@ -307,26 +307,26 @@ class TestLLMContextDifferences:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Document: llm_context exists in both
         assert batch_result.llm_context is not None
-        assert realtime_result.llm_context is not None
+        assert online_result.llm_context is not None
 
         # Both should have dropped 'internal_id' (from context_scope.drop)
         # The field should be absent from llm_context in both modes
         batch_has_internal_id = "internal_id" in batch_result.llm_context
-        realtime_has_internal_id = "internal_id" in realtime_result.llm_context
+        online_has_internal_id = "internal_id" in online_result.llm_context
 
         # Assert: Both modes should have dropped the field
         assert not batch_has_internal_id, "Batch should have dropped 'internal_id'"
-        assert not realtime_has_internal_id, "Realtime should have dropped 'internal_id'"
+        assert not online_has_internal_id, "Online should have dropped 'internal_id'"
 
         # Both should have observed 'metadata' (from context_scope.observe)
         assert "metadata" in batch_result.llm_context, "Batch should have observed 'metadata'"
-        assert "metadata" in realtime_result.llm_context, "Realtime should have observed 'metadata'"
+        assert "metadata" in online_result.llm_context, "Online should have observed 'metadata'"
 
 
 class TestEdgeCases:
@@ -352,12 +352,12 @@ class TestEdgeCases:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
         # Assert: Both should handle empty contents without error
-        assert batch_result.formatted_prompt == realtime_result.formatted_prompt
+        assert batch_result.formatted_prompt == online_result.formatted_prompt
 
     def test_none_optional_params_parity(
         self,
@@ -375,11 +375,11 @@ class TestEdgeCases:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
-        assert batch_result.formatted_prompt == realtime_result.formatted_prompt
+        assert batch_result.formatted_prompt == online_result.formatted_prompt
 
     def test_no_context_scope_parity(
         self,
@@ -412,10 +412,10 @@ class TestEdgeCases:
         batch_result = PromptPreparationService.prepare_prompt_with_context(
             mode="batch", **common_args
         )
-        realtime_result = PromptPreparationService.prepare_prompt_with_context(
-            mode="realtime", **common_args
+        online_result = PromptPreparationService.prepare_prompt_with_context(
+            mode="online", **common_args
         )
 
-        assert batch_result.formatted_prompt == realtime_result.formatted_prompt
-        assert batch_result.prompt_context == realtime_result.prompt_context
-        assert batch_result.passthrough_fields == realtime_result.passthrough_fields
+        assert batch_result.formatted_prompt == online_result.formatted_prompt
+        assert batch_result.prompt_context == online_result.prompt_context
+        assert batch_result.passthrough_fields == online_result.passthrough_fields

@@ -13,6 +13,7 @@ from agent_actions.config.environment import EnvironmentConfig
 from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
+from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
@@ -362,7 +363,7 @@ class ConfigManager:
             optional_string_defaults = {
                 "conditional_clause": "",
                 "granularity": "record",
-                "run_mode": "online",
+                "run_mode": RunMode.ONLINE,
                 "prompt": "",
                 "schema_name": "",
                 "code_path": "",

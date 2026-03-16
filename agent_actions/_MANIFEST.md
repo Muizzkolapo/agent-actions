@@ -9,7 +9,7 @@
 | [errors](errors/_MANIFEST.md) | Centralized error exports for agent-actions. |
 | [guards](guards/_MANIFEST.md) | Guard expression parsing and configuration. |
 | [input](input/_MANIFEST.md) | Data ingestion utilities (context loaders, preprocessors, and transformers). |
-| [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/realtime execution. |
+| [llm](llm/_MANIFEST.md) | LLM runtime connectors for batch/online execution. |
 | [logging](logging/_MANIFEST.md) | Agent Actions logging infrastructure. |
 | [models](models/_MANIFEST.md) | Unified data models for agent-actions. |
 | [output](output/_MANIFEST.md) | Output serialization, schema loading, and response helpers. |
