@@ -187,6 +187,10 @@ All tasks below are done and merged.
 - **Source:** PR #1103 review
 - **Fix:** Added 3 regression tests in `tests/processing/test_source_guid_none_coercion.py` covering the `source_guid=None` → `or ""` coercion path: (1) all events (`RecordProcessingStartedEvent`, `RecordTransformedEvent`, `RecordProcessingCompleteEvent`) receive `source_guid=""`, (2) `_transform_response` receives `""` as the source_guid argument, (3) `ProcessingResult.source_guid` stays `None` (not coerced).
 
+#### 38. Add test coverage for llm/ package bugfixes from #1108
+- **Source:** PR #1108 review — finding #4
+- **Fix:** Added 9 regression tests in `tests/unit/llm_invocation/test_pr1108_bugfix_regressions.py` covering: (1) `_create_exhausted_item()` action_name propagation — 3 tests (config present, missing, None), (2) `_submit_to_provider()` error path — 2 tests (ExternalServiceError structure, failure event), (3) Cohere/Mistral nullable token extraction — 4 tests (None tokens default to 0, valid tokens pass through, None usage object).
+
 #### 31. Type `run_mode` as `RunMode` enum (#1127)
 - **Source:** Audit PR #1078
 - **Fix:** Added `RunMode(str, Enum)` in `config/types.py` with case-insensitive `_missing_()` (matching existing `Granularity` pattern). Updated all Pydantic model fields (`schema.py`, `config_schema.py`), defaults (`config_fields.py`, `manager.py`, `renderer.py`), comparisons (`expander_action_types.py`, `initial_pipeline.py`, `pipeline.py`, `vendor_compatibility_validator.py`), and boundary coercion sites. Unified vocabulary: replaced all `"realtime"` references with `"online"` across source and tests (`prompt/service.py`, `prompt/context/builder.py`, `processing/task_preparer.py`, `output/response/loader.py`). Renamed functions: `build_llm_context_for_realtime` → `build_llm_context_for_online`, `_prepare_realtime_data` → `_prepare_online_data`, `_process_realtime_mode_with_record_processor` → `_process_online_mode_with_record_processor`. Added 9 regression tests for enum coercion.
