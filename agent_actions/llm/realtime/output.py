@@ -51,6 +51,7 @@ class OutputHandler:
             base_directory: Base directory for calculating relative paths
             output_directory: Directory where the output file will be saved
         """
+        output_file_path: Path | None = None
         try:
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
@@ -68,7 +69,7 @@ class OutputHandler:
             raise AgentActionsError(
                 "IOError saving main output",
                 context={
-                    "output_file_path": str(output_file_path),
+                    "output_file_path": str(output_file_path) if output_file_path else "unknown",
                     "file_path": file_path,
                     "operation": "save_main_output",
                 },
@@ -78,7 +79,7 @@ class OutputHandler:
             raise AgentActionsError(
                 "Error saving main output",
                 context={
-                    "output_file_path": str(output_file_path),
+                    "output_file_path": str(output_file_path) if output_file_path else "unknown",
                     "file_path": file_path,
                     "operation": "save_main_output",
                 },
