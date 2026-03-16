@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 
+from agent_actions.errors.base import AgentActionsError
 from agent_actions.utils.project_root import ensure_in_project
 
 
@@ -20,10 +21,10 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                 return func(*args, **kwargs)
             except click.ClickException:
                 raise
-            except Exception as e:
+            except AgentActionsError as e:
+                # Expected application errors — prettify for CLI
                 if getattr(e, "_already_displayed", False):
                     raise click.exceptions.Exit(1) from None
-
                 from agent_actions.logging.errors import format_user_error
 
                 context = {
@@ -33,6 +34,11 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                 }
                 error_message = format_user_error(e, context)
                 raise click.ClickException(error_message) from None
+            except Exception as e:
+                # Unexpected errors (bugs) — preserve traceback for debugging
+                if getattr(e, "_already_displayed", False):
+                    raise click.exceptions.Exit(1) from None
+                raise
 
         return wrapper
 

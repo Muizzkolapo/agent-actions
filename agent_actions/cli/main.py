@@ -162,6 +162,9 @@ class CLI:
             click.echo(click.style("Error: ", fg="red", bold=True) + error_msg, err=True)
             return 1
         except Exception as e:
+            # Safety net: @handles_user_errors only catches AgentActionsError.
+            # This catch-all ensures other exceptions are still formatted
+            # nicely for users (raw tracebacks only shown with --debug).
             context = {
                 "command": argv[0] if argv else "agent-actions",
                 "operation": "cli_execution",

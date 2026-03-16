@@ -82,6 +82,76 @@ class TestHandlesUserErrorsExitPath:
         assert result.exit_code == 1
 
 
+class TestHandlesUserErrorsExceptionRouting:
+    """Unexpected errors propagate with traceback; expected errors are prettified."""
+
+    def test_unexpected_error_preserves_traceback(self):
+        """A RuntimeError (not AgentActionsError) without _already_displayed propagates raw."""
+        import click
+
+        @click.command()
+        @handles_user_errors("test")
+        def failing():
+            raise RuntimeError("unexpected bug")
+
+        runner = CliRunner()
+        result = runner.invoke(failing)
+        # Click catches unhandled exceptions: exit_code 1, exception preserved
+        assert result.exit_code == 1
+        assert result.exception is not None
+        assert isinstance(result.exception, RuntimeError)
+        assert str(result.exception) == "unexpected bug"
+
+    def test_expected_error_prettified(self):
+        """An AgentActionsError is caught and wrapped in ClickException."""
+        import click
+
+        from agent_actions.errors.base import AgentActionsError
+
+        @click.command()
+        @handles_user_errors("test")
+        def failing():
+            raise AgentActionsError("config is invalid")
+
+        runner = CliRunner()
+        result = runner.invoke(failing)
+        assert result.exit_code == 1
+        # ClickException formats as "Error: <message>" in output
+        assert "config is invalid" in result.output
+
+    def test_click_exception_passes_through(self):
+        """A ClickException raised inside the wrapped function passes through unmodified."""
+        import click
+
+        @click.command()
+        @handles_user_errors("test")
+        def failing():
+            raise click.ClickException("already formatted")
+
+        runner = CliRunner()
+        result = runner.invoke(failing)
+        assert result.exit_code == 1
+        assert "already formatted" in result.output
+
+    def test_agent_actions_error_already_displayed_exits_silently(self):
+        """AgentActionsError with _already_displayed exits without re-formatting."""
+        import click
+
+        from agent_actions.errors.base import AgentActionsError
+
+        @click.command()
+        @handles_user_errors("test")
+        def failing():
+            exc = AgentActionsError("already shown")
+            exc._already_displayed = True
+            raise exc
+
+        runner = CliRunner()
+        result = runner.invoke(failing)
+        assert result.exit_code == 1
+        assert "already shown" not in result.output
+
+
 class TestInspectNotFoundExitCode:
     """Inspect 'not found' paths must produce exit code 1, not 0."""
 
