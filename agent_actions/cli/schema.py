@@ -10,6 +10,7 @@ from rich.console import Console
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
+from agent_actions.errors import DependencyError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.renderer import ConfigRenderer
 from agent_actions.workflow import WorkflowSchemaService
@@ -65,13 +66,16 @@ class SchemaCommand:
             ],
         }
 
-        udf_registry: dict[str, Any] = {}
         try:
             from agent_actions.utils.udf_management.registry import UDF_REGISTRY
 
-            udf_registry = UDF_REGISTRY
-        except ImportError:
-            pass
+            udf_registry: dict[str, Any] = UDF_REGISTRY
+        except ImportError as e:
+            raise DependencyError(
+                f"Failed to import UDF registry: {e}. "
+                "Ensure agent_actions.utils.udf_management.registry is accessible "
+                "and any user code provided via --user-code has no syntax errors."
+            ) from e
 
         schema_loader = SchemaLoader()
 
