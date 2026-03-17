@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.logging.events.batch_events import BatchCompleteEvent, BatchSubmittedEvent
 from agent_actions.workflow.executor import (
     AgentExecutionResult,
     AgentExecutor,
@@ -143,7 +144,7 @@ class TestExecuteAgentSync:
         assert result.status == "batch_submitted"
         mock_deps.state_manager.update_status.assert_any_call("agent_a", "batch_submitted")
         event = mock_fire.call_args[0][0]
-        assert event.__class__.__name__ == "BatchSubmittedEvent"
+        assert isinstance(event, BatchSubmittedEvent)
 
     def test_batch_failed_returns_failed(self, executor, mock_deps):
         """Batch failure should mark failed and fire BatchCompleteEvent with failed=1."""
@@ -162,7 +163,7 @@ class TestExecuteAgentSync:
         assert result.status == "failed"
         mock_deps.state_manager.update_status.assert_any_call("agent_a", "failed")
         event = mock_fire.call_args[0][0]
-        assert event.__class__.__name__ == "BatchCompleteEvent"
+        assert isinstance(event, BatchCompleteEvent)
         assert event.failed == 1
         assert event.completed == 0
 

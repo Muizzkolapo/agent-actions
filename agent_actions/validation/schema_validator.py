@@ -173,10 +173,10 @@ class SchemaValidator(BaseValidator):
         logger.debug("Successfully processed schema file: %s", file_path.name)
 
     @staticmethod
-    def _is_valid_json_schema_structure(schema_data: dict[str, Any]) -> bool:
+    def _is_valid_json_schema_structure(schema_data: Any) -> bool:
         """Return True if the dict appears to be a JSON Schema document."""
         if not isinstance(schema_data, dict):
-            return False  # type: ignore[unreachable]
+            return False
         schema_keywords = {
             "type",
             "properties",

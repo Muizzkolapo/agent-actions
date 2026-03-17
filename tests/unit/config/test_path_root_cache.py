@@ -18,7 +18,7 @@ def test_explicit_start_path_caches_for_follow_on_calls(tmp_path):
     assert root == project
 
     # Follow-on call without start_path should use the cached root
-    assert pm._project_root == project
+    assert pm.get_project_root() == project
 
 
 def test_explicit_start_path_re_resolves_different_project(tmp_path):
@@ -70,18 +70,21 @@ def test_cwd_unchanged_returns_cached_root(tmp_path, monkeypatch):
     """When CWD hasn't changed, cached root should be returned (no re-resolve)."""
     project = tmp_path / "my_project"
     project.mkdir()
-    (project / "agent_actions.yml").write_text("name: test")
+    marker = project / "agent_actions.yml"
+    marker.write_text("name: test")
 
     pm = PathManager(config=PathConfig())
     monkeypatch.chdir(project)
 
     root1 = pm.get_project_root()
-    root2 = pm.get_project_root()
+    assert root1 == project
 
-    assert root1 == root2 == project
-    # Verify cache is populated
-    assert pm._project_root == project
-    assert pm._cached_cwd is not None
+    # Second call should return the same result from cache.
+    # Verify caching by confirming that even if the marker file is removed,
+    # the cached result is still returned (proving no re-resolution occurred).
+    marker.unlink()
+    root2 = pm.get_project_root()
+    assert root2 == project
 
 
 def test_explicit_prime_survives_cwd_change(tmp_path, monkeypatch):
@@ -174,27 +177,25 @@ def test_cwd_subdir_change_within_same_project_resolves_same_root(tmp_path, monk
 
 def test_clear_cache_forces_re_resolution(tmp_path, monkeypatch):
     """clear_cache() empties all cache fields; next call re-resolves."""
-    project = tmp_path / "my_project"
-    project.mkdir()
-    (project / "agent_actions.yml").write_text("name: test")
+    proj_a = tmp_path / "project_a"
+    proj_a.mkdir()
+    (proj_a / "agent_actions.yml").write_text("name: a")
+
+    proj_b = tmp_path / "project_b"
+    proj_b.mkdir()
+    (proj_b / "agent_actions.yml").write_text("name: b")
 
     pm = PathManager(config=PathConfig())
-    monkeypatch.chdir(project)
 
-    # Populate cache
-    root = pm.get_project_root()
-    assert root == project
-    assert pm._project_root is not None
-    assert pm._cached_cwd is not None
+    # Pin to proj_a via explicit start_path — this survives CWD changes
+    root = pm.get_project_root(start_path=proj_a)
+    assert root == proj_a
 
-    # Clear cache — all fields should be empty
+    # Without clear_cache, the pin holds even after CWD change
+    monkeypatch.chdir(proj_b)
+    assert pm.get_project_root() == proj_a  # still pinned
+
+    # clear_cache forgets the pin — now CWD-based resolution finds proj_b
     pm.clear_cache()
-    assert pm._project_root is None
-    assert pm._path_cache == {}
-    assert pm._cached_cwd is None
-
-    # Re-resolve — cache should be repopulated
-    root_again = pm.get_project_root()
-    assert root_again == project
-    assert pm._project_root == project
-    assert pm._cached_cwd is not None
+    root_b = pm.get_project_root()
+    assert root_b == proj_b

@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from agent_actions.config.types import AgentConfigMap
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
@@ -135,10 +134,10 @@ class ConfigValidator(BaseValidator):
             except (ValueError, SyntaxError):
                 return None
 
-    def _validate_property_type(self, prop_type: str) -> bool:
+    def _validate_property_type(self, prop_type: Any) -> bool:
         """Validate a single property type."""
         if not isinstance(prop_type, str):
-            return False  # type: ignore[unreachable]
+            return False
         cleaned_type = prop_type.replace("\\", "")
         base_type = cleaned_type[:-1] if cleaned_type.endswith("!") else cleaned_type
         valid_prop_types = {"string", "number", "integer", "boolean", "object"}
@@ -193,12 +192,14 @@ class ConfigValidator(BaseValidator):
             deps.update(dep.lower() for dep in entry_ci["dependencies"] if isinstance(dep, str))
         return deps
 
-    def _validate_config_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
+    def _validate_config_dependencies_logic(
+        self, full_config_data: dict[str, Any]
+    ) -> None:
         """Validate dependencies in configuration."""
         available_agents = {name.lower() for name in full_config_data}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
-                continue  # type: ignore[unreachable]
+                continue
             deps = set()
             for entry in entries:
                 if isinstance(entry, dict):
@@ -290,12 +291,12 @@ class ConfigValidator(BaseValidator):
                 agent_name, cfg, all_agents, active_agents, agent_cfgs_map
             )
 
-    def _check_circular_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
+    def _check_circular_dependencies_logic(self, full_config_data: dict[str, Any]) -> None:
         """Check for circular dependencies in agent configuration."""
         graph: dict[str, list[str]] = {}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
-                continue  # type: ignore[unreachable]
+                continue
             deps = set()
             for entry in entries:
                 if isinstance(entry, dict):

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.logging.events.batch_events import BatchCompleteEvent, BatchSubmittedEvent
 from agent_actions.workflow.executor import AgentExecutor, ExecutorDependencies
 
 
@@ -45,7 +46,7 @@ class TestHandleBatchCheckEventFiring:
         # Verify BatchCompleteEvent was fired
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.__class__.__name__ == "BatchCompleteEvent"
+        assert isinstance(event, BatchCompleteEvent)
         assert event.agent_name == "test_agent"
         assert event.batch_id == "batch_123"
         assert event.completed == 1
@@ -69,7 +70,7 @@ class TestHandleBatchCheckEventFiring:
         # Verify BatchSubmittedEvent was fired
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.__class__.__name__ == "BatchSubmittedEvent"
+        assert isinstance(event, BatchSubmittedEvent)
         assert event.agent_name == "test_agent"
         assert event.batch_id == "batch_456"
 
@@ -91,7 +92,7 @@ class TestHandleBatchCheckEventFiring:
         # Verify BatchCompleteEvent was fired with failure
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.__class__.__name__ == "BatchCompleteEvent"
+        assert isinstance(event, BatchCompleteEvent)
         assert event.agent_name == "test_agent"
         assert event.completed == 0
         assert event.failed == 1

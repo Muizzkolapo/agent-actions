@@ -42,7 +42,7 @@ class InitialStageContext:
 class DataPreparationContext:
     """Context for data preparation."""
 
-    content: str
+    content: Any  # str for text formats; list[dict] for .xlsx/.csv at runtime
     file_type: str
     agent_config: dict[str, Any]
     file_path: str
@@ -433,9 +433,9 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         src_text = []
 
     elif ctx.file_type == ".xlsx":
-        if not isinstance(ctx.content, list):  # type: ignore[unreachable]
+        if not isinstance(ctx.content, list):
             logger.debug("XLSX content is %s, expected list[dict]; wrapping", type(ctx.content))
-        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]  # type: ignore[unreachable,list-item]
+        rows = ctx.content if isinstance(ctx.content, list) else [ctx.content]
         data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         src_text = []
 
@@ -540,7 +540,7 @@ def _prepare_online_data(ctx: DataPreparationContext):
         src_text = data_chunk
 
     elif ctx.file_type == ".xlsx":
-        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]  # type: ignore[unreachable]
+        data_chunk = ctx.content if isinstance(ctx.content, list) else [ctx.content]
         src_text = data_chunk
 
     elif ctx.file_type == ".xml":

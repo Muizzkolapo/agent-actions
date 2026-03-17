@@ -8,15 +8,14 @@ Regression coverage for the validate_with_schemas call signature fix (#1107).
 
 import pytest
 
+from agent_actions.errors import ConfigValidationError
+from agent_actions.input.preprocessing.field_resolution import ReferenceValidator
+from agent_actions.output.response.config_schema import WhereClauseConfig
 from agent_actions.output.response.expander_guard_validation import (
     build_schema_registry,
     validate_agent_guards,
     validate_guard_references,
 )
-from agent_actions.output.response.config_schema import WhereClauseConfig
-from agent_actions.errors import ConfigValidationError
-from agent_actions.input.preprocessing.field_resolution import ReferenceValidator
-
 
 # =============================================================================
 # build_schema_registry

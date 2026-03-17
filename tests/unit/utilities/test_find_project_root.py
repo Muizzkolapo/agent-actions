@@ -1,7 +1,5 @@
 """Regression tests for find_project_root in path_utils and project_root."""
 
-from pathlib import Path
-
 import pytest
 
 from agent_actions.config.paths import PathConfig, PathManager, ProjectRootNotFoundError
