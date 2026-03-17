@@ -5,8 +5,7 @@ sidebar_position: 1
 ---
 
 <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
-  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="48" height="48" className="only-dark" />
-  <img src="/img/logo-mark-light.svg" alt="Agent Actions" width="48" height="48" className="only-light" />
+  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="48" height="48" />
 </div>
 
 # Guides
