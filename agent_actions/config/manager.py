@@ -193,14 +193,13 @@ class ConfigManager:
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
                 project_defaults = project_config.get("default_agent_config", {})
-            except FileNotFoundError:
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load project defaults, using empty defaults: {e}",
+                    exc_info=True,
+                    extra={"operation": "load_project_defaults"},
+                )
                 project_defaults = {}
-            except (yaml.YAMLError, OSError) as e:
-                raise ConfigurationError(
-                    "Failed to load project defaults",
-                    context={"operation": "load_project_defaults"},
-                    cause=e,
-                ) from e
             workflow_defaults = self.user_config.get("defaults", {})
             merged_defaults = {**project_defaults, **workflow_defaults}
             config_with_merged_defaults = {**self.user_config, "defaults": merged_defaults}
@@ -389,12 +388,6 @@ class ConfigManager:
             }
             for field, default_value in optional_string_defaults.items():
                 if field in config_dict and config_dict[field] is None:
-                    if default_value != "":
-                        logger.debug(
-                            "Config coercion: '%s' defaulting to '%s'",
-                            field,
-                            default_value,
-                        )
                     config_dict[field] = default_value
 
             # Normalize kind to model_vendor for tool and hitl actions.
