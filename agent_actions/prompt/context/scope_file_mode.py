@@ -162,7 +162,7 @@ def _load_file_mode_cross_namespace_data(
                         agent_name,
                         source_guid,
                     )
-            except Exception:
+            except (OSError, KeyError, TypeError, ValueError, AttributeError):
                 logger.warning(
                     "[FILE OBSERVE] Failed to load historical data for namespace '%s'. "
                     "action='%s'. Skipping.",
