@@ -113,6 +113,9 @@ def validate_output_against_schema(
     """Validate LLM response against expected schema."""
     schema_name = schema.get("name", "unknown")
 
+    # Check for malformed 'properties' before extracting fields
+    schema_structure_errors = _check_properties_type(schema)
+
     expected_fields, required_fields, field_types = _extract_schema_fields(schema)
     actual_fields = _extract_output_fields(llm_output)
 
@@ -125,8 +128,10 @@ def validate_output_against_schema(
     is_compliant = len(missing_required) == 0 and len(type_errors) == 0
     if strict_mode and extra_fields:
         is_compliant = False
+    if schema_structure_errors:
+        is_compliant = False
 
-    validation_errors = []
+    validation_errors: list[str] = schema_structure_errors
     if missing_required:
         validation_errors.append(f"Missing required fields: {', '.join(missing_required)}")
     if type_errors:
@@ -153,6 +158,24 @@ def validate_output_against_schema(
     )
 
 
+def _check_properties_type(schema: dict[str, Any]) -> list[str]:
+    """Return structural errors for malformed 'properties' values in a schema."""
+    errors: list[str] = []
+    if "properties" in schema and not isinstance(schema["properties"], dict):
+        actual = type(schema["properties"]).__name__
+        errors.append(f"Schema 'properties' must be a dict, got {actual}")
+    # Check nested schema wrapper
+    if "schema" in schema and isinstance(schema["schema"], dict):
+        errors.extend(_check_properties_type(schema["schema"]))
+    # Check array items
+    if schema.get("type") == "array" and isinstance(schema.get("items"), dict):
+        items = schema["items"]
+        if "properties" in items and not isinstance(items["properties"], dict):
+            actual = type(items["properties"]).__name__
+            errors.append(f"Schema items 'properties' must be a dict, got {actual}")
+    return errors
+
+
 def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], dict[str, str]]:
     """Return (all_fields, required_fields, field_types) from a schema."""
     all_fields: set[str] = set()
@@ -173,11 +196,17 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
     # Handle JSON Schema format with 'properties'
     elif "properties" in schema:
         properties = schema.get("properties", {})
-        all_fields = set(properties.keys())
-        required_fields = set(schema.get("required", []))
-        for prop_name, prop_def in properties.items():
-            if isinstance(prop_def, dict) and "type" in prop_def:
-                field_types[prop_name] = prop_def["type"]
+        if not isinstance(properties, dict):
+            logger.warning(
+                "Schema 'properties' must be a dict, got %s; treating as empty",
+                type(properties).__name__,
+            )
+        else:
+            all_fields = set(properties.keys())
+            required_fields = set(schema.get("required", []))
+            for prop_name, prop_def in properties.items():
+                if isinstance(prop_def, dict) and "type" in prop_def:
+                    field_types[prop_name] = prop_def["type"]
 
     # Handle nested schema format (e.g., OpenAI compiled)
     elif "schema" in schema and isinstance(schema["schema"], dict):
@@ -189,11 +218,17 @@ def _extract_schema_fields(schema: dict[str, Any]) -> tuple[set[str], set[str], 
         items = schema.get("items", {})
         if items.get("type") == "object" and "properties" in items:
             properties = items.get("properties", {})
-            all_fields = set(properties.keys())
-            required_fields = set(items.get("required", []))
-            for prop_name, prop_def in properties.items():
-                if isinstance(prop_def, dict) and "type" in prop_def:
-                    field_types[prop_name] = prop_def["type"]
+            if not isinstance(properties, dict):
+                logger.warning(
+                    "Schema items 'properties' must be a dict, got %s; treating as empty",
+                    type(properties).__name__,
+                )
+            else:
+                all_fields = set(properties.keys())
+                required_fields = set(items.get("required", []))
+                for prop_name, prop_def in properties.items():
+                    if isinstance(prop_def, dict) and "type" in prop_def:
+                        field_types[prop_name] = prop_def["type"]
 
     return all_fields, required_fields, field_types
 

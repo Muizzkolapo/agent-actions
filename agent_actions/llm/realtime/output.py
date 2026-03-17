@@ -1,6 +1,5 @@
 """Module for handling output data saving operations."""
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -91,16 +90,3 @@ class OutputHandler:
         directory = Path(file_path).parent
         directory.mkdir(parents=True, exist_ok=True)
 
-    def _load_existing_content(self, file_path):
-        """Load existing content from file if it exists."""
-        if Path(file_path).exists():
-            with open(file_path, encoding="utf-8") as file:
-                try:
-                    existing_content = json.load(file)
-                except json.JSONDecodeError:
-                    existing_content = []
-        else:
-            existing_content = []
-        if not isinstance(existing_content, list):
-            existing_content = [existing_content]
-        return existing_content
