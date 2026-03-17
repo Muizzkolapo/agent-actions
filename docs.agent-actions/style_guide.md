@@ -1,6 +1,6 @@
 # Documentation Style Guide
 
-This guide defines the tone, structure, and writing patterns for Agent Actions documentation. It draws from Anthropic's engineering writing style and the Model Context Protocol (MCP) documentation.
+This guide defines the tone, structure, and writing patterns for Agent Actions documentation.
 
 ## Core Principles
 
@@ -468,13 +468,3 @@ If you find yourself writing these, rewrite:
 - "Basically..." → Remove and be specific
 - "As mentioned above..." → Restate briefly or link
 
----
-
-## References
-
-This style guide draws from:
-
-- [Anthropic Engineering Blog](https://www.anthropic.com/engineering) - Approachable technical writing
-- [Anthropic Research](https://www.anthropic.com/research) - Narrative structure, analogies, acknowledging limitations
-- [Model Context Protocol Docs](https://modelcontextprotocol.io) - Structured documentation with examples
-- [Docusaurus Documentation](https://docusaurus.io/docs) - Markdown patterns and admonitions

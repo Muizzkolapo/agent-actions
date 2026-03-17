@@ -35,7 +35,5 @@ yarn-error.log*
 *.tmp
 *.temp
 
-# Lock files (keep package-lock.json or yarn.lock, not both)
-# Uncomment the one you don't use:
-# package-lock.json
-# yarn.lock
+# Lock files (using package-lock.json)
+yarn.lock

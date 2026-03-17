@@ -25,7 +25,7 @@ import {
 } from "@/lib/dag-transformer"
 import type { Action } from "@/lib/mock-data"
 
-// ─── DAG Node (dbt-style, expandable to show fields) ────────────────────────
+// ─── DAG Node (expandable to show fields) ────────────────────────
 
 function ExpandableDAGNode({ data, isConnectable, isLlm, selected }: { data: DAGNodeData; isConnectable: boolean; isLlm: boolean; selected: boolean }) {
   const [expanded, setExpanded] = useState(false)
