@@ -1,5 +1,5 @@
 """
-Tests for _resolve_dependency_directories() in AgentRunner.
+Tests for _resolve_dependency_directories() in ActionRunner.
 
 Tests the 4 dependency patterns:
 1. Single - One dependency, output becomes input
@@ -26,7 +26,7 @@ from agent_actions.prompt.context.scope_inference import (
     _is_parallel_branches,
     _resolve_input_sources_for_fan_in,
 )
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.workflow.runner import ActionRunner
 
 
 class TestIsParallelBranches:
@@ -110,9 +110,9 @@ class TestDependencyPatterns:
 
     @pytest.fixture
     def agent_runner(self):
-        """Create AgentRunner instance."""
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.agent_indices = {}
+        """Create ActionRunner instance."""
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.action_indices = {}
         runner.manifest_manager = None
         runner.storage_backend = None
         return runner
@@ -392,9 +392,9 @@ class TestResolveDependencyDirectories:
 
     @pytest.fixture
     def agent_runner(self):
-        """Create AgentRunner instance with mocked dependencies."""
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.agent_indices = {"action_A": 0, "action_B": 1, "action_C": 2}
+        """Create ActionRunner instance with mocked dependencies."""
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.action_indices = {"action_A": 0, "action_B": 1, "action_C": 2}
         runner.manifest_manager = None  # No manifest manager for simple tests
         runner.storage_backend = None
         return runner
@@ -561,10 +561,10 @@ class TestResolveDependencyDirectoriesIntegration:
 
     @pytest.fixture
     def agent_runner_with_workflow(self, temp_workflow_folder):
-        """Create AgentRunner with workflow indices."""
-        runner = AgentRunner.__new__(AgentRunner)
+        """Create ActionRunner with workflow indices."""
+        runner = ActionRunner.__new__(ActionRunner)
         runner.storage_backend = None
-        runner.agent_indices = {
+        runner.action_indices = {
             "extract_raw_qa": 0,
             "flatten_raw_questions": 1,
             "classify_question_type": 2,
@@ -610,8 +610,8 @@ class TestResolveDependencyDirectoriesIntegration:
         for i in range(1, 4):
             (temp_workflow_folder / "target" / f"validate_{i}").mkdir()
 
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.agent_indices = {"validate_1": 0, "validate_2": 1, "validate_3": 2, "aggregate": 3}
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.action_indices = {"validate_1": 0, "validate_2": 1, "validate_3": 2, "aggregate": 3}
         runner.manifest_manager = None
         runner.storage_backend = None
 
@@ -670,8 +670,8 @@ class TestStrategySelectionByDependencies:
 
     def test_action_without_dependencies_uses_initial_strategy(self, mock_process_and_generate):
         """Actions without dependencies should use InitialStrategy regardless of idx."""
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.process_and_generate_for_action = mock_process_and_generate
         runner.strategies = {
             "initial": MagicMock(name="InitialStrategy"),
             "intermediate": MagicMock(name="StandardStrategy"),
@@ -679,10 +679,10 @@ class TestStrategySelectionByDependencies:
 
         # Call with idx=5 but no dependencies - should still use initial
         agent_config = {"agent_type": "test_action", "dependencies": []}
-        runner.run_agent(
-            agent_config=agent_config,
-            agent_name="test_action",
-            previous_agent_type=None,
+        runner.run_action(
+            action_config=agent_config,
+            action_name="test_action",
+            previous_action_type=None,
             idx=5,  # Non-zero index
         )
 
@@ -694,8 +694,8 @@ class TestStrategySelectionByDependencies:
 
     def test_action_with_dependencies_uses_intermediate_strategy(self, mock_process_and_generate):
         """Actions with dependencies should use StandardStrategy."""
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.process_and_generate_for_action = mock_process_and_generate
         runner.strategies = {
             "initial": MagicMock(name="InitialStrategy"),
             "intermediate": MagicMock(name="StandardStrategy"),
@@ -706,10 +706,10 @@ class TestStrategySelectionByDependencies:
             "agent_type": "downstream_action",
             "dependencies": ["upstream_action"],
         }
-        runner.run_agent(
-            agent_config=agent_config,
-            agent_name="downstream_action",
-            previous_agent_type="upstream_action",
+        runner.run_action(
+            action_config=agent_config,
+            action_name="downstream_action",
+            previous_action_type="upstream_action",
             idx=0,  # Zero index but has dependencies
         )
 
@@ -725,8 +725,8 @@ class TestStrategySelectionByDependencies:
         This is the key fix: extract_raw_qa_1, extract_raw_qa_2, extract_raw_qa_3
         should ALL use InitialStrategy to generate consistent source_guid.
         """
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.process_and_generate_for_action = mock_process_and_generate
         runner.strategies = {
             "initial": MagicMock(name="InitialStrategy"),
             "intermediate": MagicMock(name="StandardStrategy"),
@@ -755,10 +755,10 @@ class TestStrategySelectionByDependencies:
         ]
 
         for idx, config in enumerate(version_numbers):
-            runner.run_agent(
-                agent_config=config,
-                agent_name=config["agent_type"],
-                previous_agent_type=None if idx == 0 else version_numbers[idx - 1]["agent_type"],
+            runner.run_action(
+                action_config=config,
+                action_name=config["agent_type"],
+                previous_action_type=None if idx == 0 else version_numbers[idx - 1]["agent_type"],
                 idx=idx,
             )
 
@@ -767,7 +767,7 @@ class TestStrategySelectionByDependencies:
         for call in mock_process_and_generate.call_args_list:
             params = call[0][0]
             assert params.strategy == runner.strategies["initial"], (
-                f"Loop iteration {params.agent_name} should use InitialStrategy"
+                f"Loop iteration {params.action_name} should use InitialStrategy"
             )
 
     def test_loop_with_dependencies_uses_intermediate_strategy(self, mock_process_and_generate):
@@ -776,8 +776,8 @@ class TestStrategySelectionByDependencies:
         This verifies downstream loop actions (loop_b depends on loop_a)
         correctly use StandardStrategy to read source_guid from upstream.
         """
-        runner = AgentRunner.__new__(AgentRunner)
-        runner.process_and_generate_for_agent = mock_process_and_generate
+        runner = ActionRunner.__new__(ActionRunner)
+        runner.process_and_generate_for_action = mock_process_and_generate
         runner.strategies = {
             "initial": MagicMock(name="InitialStrategy"),
             "intermediate": MagicMock(name="StandardStrategy"),
@@ -800,10 +800,10 @@ class TestStrategySelectionByDependencies:
         ]
 
         for idx, config in enumerate(downstream_version_numbers):
-            runner.run_agent(
-                agent_config=config,
-                agent_name=config["agent_type"],
-                previous_agent_type="loop_a_2" if idx > 0 else "loop_a_1",
+            runner.run_action(
+                action_config=config,
+                action_name=config["agent_type"],
+                previous_action_type="loop_a_2" if idx > 0 else "loop_a_1",
                 idx=idx + 10,  # Non-zero indices
             )
 
@@ -812,5 +812,5 @@ class TestStrategySelectionByDependencies:
         for call in mock_process_and_generate.call_args_list:
             params = call[0][0]
             assert params.strategy == runner.strategies["intermediate"], (
-                f"Loop iteration {params.agent_name} with dependencies should use StandardStrategy"
+                f"Loop iteration {params.action_name} with dependencies should use StandardStrategy"
             )

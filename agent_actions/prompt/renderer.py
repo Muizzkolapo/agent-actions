@@ -9,7 +9,7 @@ import yaml
 from pydantic import ValidationError
 from yaml import YAMLError
 
-from agent_actions.config.types import AgentConfigMap, AgentEntryDict, RunMode
+from agent_actions.config.types import ActionConfigMap, ActionEntryDict, RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -174,7 +174,7 @@ class ConfigRenderingService:
         """
         self.template_renderer = template_renderer or JinjaTemplateRenderer()
 
-    def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
+    def _safe_load_yaml(self, raw: str, src: Path) -> ActionConfigMap:
         """Parse YAML and fail instantly on syntax OR empty content."""
         if not raw.strip():
             raise ConfigurationError(
@@ -202,7 +202,7 @@ class ConfigRenderingService:
                 "Configuration results in empty data",
                 context={"file_path": str(src), "operation": "parse_yaml"},
             )
-        return cast(AgentConfigMap, data)
+        return cast(ActionConfigMap, data)
 
     def _build_agent_entry_from_action(self, action: dict[str, Any]) -> dict[str, Any]:
         """Build agent entry dictionary from action configuration."""
@@ -234,11 +234,11 @@ class ConfigRenderingService:
 
     def _validate_entry_with_pydantic(
         self, entry: dict[str, Any], agent_name: str, config_key: str
-    ) -> AgentEntryDict:
+    ) -> ActionEntryDict:
         """Validate a single entry using Pydantic model."""
         try:
             entry_model = AgentConfig.model_validate(entry)
-            return cast(AgentEntryDict, entry_model.model_dump(exclude_unset=True))
+            return cast(ActionEntryDict, entry_model.model_dump(exclude_unset=True))
         except ValidationError as e:
             raise ConfigValidationError(
                 config_key=config_key,
@@ -247,7 +247,7 @@ class ConfigRenderingService:
                 cause=e,
             ) from e
 
-    def _validate_new_format(self, config: AgentConfigMap, agent_name: str) -> list[AgentEntryDict]:
+    def _validate_new_format(self, config: ActionConfigMap, agent_name: str) -> list[ActionEntryDict]:
         """Validate new format config with 'actions' key."""
         actions = config.get("actions", [])
         validated_entries = []
@@ -261,10 +261,10 @@ class ConfigRenderingService:
         return validated_entries
 
     def _validate_legacy_format(
-        self, config: AgentConfigMap, agent_name: str
-    ) -> list[AgentEntryDict]:
+        self, config: ActionConfigMap, agent_name: str
+    ) -> list[ActionEntryDict]:
         """Validate legacy format config with agent_name key."""
-        agent_entries_list = cast(list[AgentEntryDict], config.get(agent_name))
+        agent_entries_list = cast(list[ActionEntryDict], config.get(agent_name))
         if agent_entries_list is None:
             raise ConfigValidationError(
                 config_key="agent_configuration",
@@ -282,7 +282,7 @@ class ConfigRenderingService:
         return validated_entries
 
     def _run_config_validator(
-        self, validated_entries: list[AgentEntryDict], agent_name: str, project_root: Path
+        self, validated_entries: list[ActionEntryDict], agent_name: str, project_root: Path
     ) -> None:
         """Run ConfigValidator on validated entries."""
         config_validator_instance = ConfigValidator()
@@ -306,7 +306,7 @@ class ConfigRenderingService:
                 )
 
     def _validate_agent_config_block(
-        self, config: AgentConfigMap, agent_name: str, project_root: Path | None = None
+        self, config: ActionConfigMap, agent_name: str, project_root: Path | None = None
     ) -> None:
         """Validate the config - handle both old and new formats."""
         project_root_path = project_root or find_project_root()
@@ -329,7 +329,7 @@ class ConfigRenderingService:
         template_dir: str | Path,
         output_dir: str | Path | None = None,
         project_root: Path | None = None,
-    ) -> AgentConfigMap:
+    ) -> ActionConfigMap:
         """
         Render templates and load configuration data.
 
@@ -410,7 +410,7 @@ class ConfigRenderer:
         template_dir: Path,
         output_dir: Path | None = None,
         project_root: Path | None = None,
-    ) -> AgentConfigMap:
+    ) -> ActionConfigMap:
         """
         Static method for backwards compatibility.
 
@@ -428,4 +428,4 @@ class ConfigRenderer:
         result = service.render_and_load_config(
             agent_name, config_path, template_dir, output_dir, project_root=project_root
         )
-        return cast(AgentConfigMap, result)
+        return cast(ActionConfigMap, result)

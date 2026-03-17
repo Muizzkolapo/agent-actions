@@ -15,7 +15,7 @@ manually instantiating dependencies.
 | `application.py` | Module | Application container that bootstraps the DI stack and exposes factories. | `agent_actions.workflow.runner`, `config.paths`, `config.di.container` |
 | `ApplicationContainer` | Class | Central entry point for DI-bound factories, runners, and processors. | `agent_actions.workflow.runner`, `agent_actions.llm.batch` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `__init__` | Method | Build the container with config and optional pre-configured container. | `config.di.configurator` |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_agent_runner` | Method | Instantiate `AgentRunner` injected with shared processor factory and tool flag. | `agent_actions.workflow.runner` |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_action_runner` | Method | Instantiate `ActionRunner` injected with shared processor factory and tool flag. | `agent_actions.workflow.runner` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_processor_factory` | Method | Return the DI-aware `ProcessorFactory`. | `config.di.container` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_dependency_container` | Method | Expose the underlying container for ad-hoc lookups (testing, helpers). | `config.di.container` |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `create_for_environment` | Class Method | Build an `ApplicationContainer` configured for `development`, `production`, or `testing`. | `config.di.configurator` |
@@ -48,7 +48,7 @@ manually instantiating dependencies.
 
 1. `DIConfigurator.configure_container` registers core services and processors.
 2. `ApplicationContainer` wraps the configured container and exposes runner helpers.
-3. `ProcessorFactory` + `registry` produce processors, loaders, and generators used by `AgentRunner`.
+3. `ProcessorFactory` + `registry` produce processors, loaders, and generators used by `ActionRunner`.
 
 ### Testing
 

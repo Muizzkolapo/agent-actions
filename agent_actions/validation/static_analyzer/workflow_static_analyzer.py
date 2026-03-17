@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 from .data_flow_graph import (
-    AgentKind,
+    ActionKind,
     DataFlowGraph,
     DataFlowNode,
     InputSchema,
@@ -316,7 +316,7 @@ class WorkflowStaticAnalyzer:
 
         node = DataFlowNode(
             name="source",
-            agent_kind=AgentKind.SOURCE,
+            agent_kind=ActionKind.SOURCE,
             output_schema=schema,
         )
         self.graph.add_node(node)
@@ -330,11 +330,11 @@ class WorkflowStaticAnalyzer:
         model_vendor = action_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
-            agent_kind = AgentKind.TOOL
+            agent_kind = ActionKind.TOOL
         elif kind == "hitl" or model_vendor == "hitl":
-            agent_kind = AgentKind.HITL
+            agent_kind = ActionKind.HITL
         else:
-            agent_kind = AgentKind.LLM
+            agent_kind = ActionKind.LLM
 
         # Extract output schema
         output_schema = self.schema_extractor.extract_schema(action_config, self.schema_loader)

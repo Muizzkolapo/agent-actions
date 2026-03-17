@@ -12,13 +12,13 @@ class RunCommandArgs(BaseModel):
     user_code: DirectoryPath | None = Field(
         None, description="Path to the user's code folder containing UDFs"
     )
-    use_tools: bool = Field(False, description="Enable tool usage for agents")
+    use_tools: bool = Field(False, description="Enable tool usage for actions")
     execution_mode: Literal["auto", "parallel", "sequential"] = Field(
         "auto", description="Execution mode: 'auto' (detect), 'parallel', or 'sequential'"
     )
     concurrency_limit: int = Field(
         5,
-        description="Maximum number of agents to run concurrently in parallel execution",
+        description="Maximum number of actions to run concurrently in parallel execution",
         ge=1,
         le=50,
     )

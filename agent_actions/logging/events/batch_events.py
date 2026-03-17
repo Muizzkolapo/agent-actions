@@ -26,7 +26,7 @@ class BatchSubmittedEvent(BaseEvent):
     """Fired when a batch is submitted for processing."""
 
     batch_id: str = ""
-    agent_name: str = ""
+    action_name: str = ""
     request_count: int = 0
     provider: str = ""
 
@@ -38,7 +38,7 @@ class BatchSubmittedEvent(BaseEvent):
         )
         self.data = {
             "batch_id": self.batch_id,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "request_count": self.request_count,
             "provider": self.provider,
         }
@@ -80,7 +80,7 @@ class BatchCompleteEvent(BaseEvent):
     """Fired when a batch completes processing."""
 
     batch_id: str = ""
-    agent_name: str = ""
+    action_name: str = ""
     total: int = 0
     completed: int = 0
     failed: int = 0
@@ -94,7 +94,7 @@ class BatchCompleteEvent(BaseEvent):
         self.message = f"Batch {self.batch_id} {status} in {self.elapsed_time:.2f}s"
         self.data = {
             "batch_id": self.batch_id,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "total": self.total,
             "completed": self.completed,
             "failed": self.failed,
@@ -109,17 +109,17 @@ class BatchCompleteEvent(BaseEvent):
 
 @dataclass
 class BatchProcessingCompleteEvent(BaseEvent):
-    """Fired when all batch jobs for an agent are completed."""
+    """Fired when all batch jobs for an action are completed."""
 
-    agent_name: str = ""
+    action_name: str = ""
     total_jobs: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"All batch jobs completed for {self.agent_name}"
+        self.message = f"All batch jobs completed for {self.action_name}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "total_jobs": self.total_jobs,
         }
 
@@ -132,15 +132,15 @@ class BatchProcessingCompleteEvent(BaseEvent):
 class BatchResultsProcessedEvent(BaseEvent):
     """Fired when batch results have been processed."""
 
-    agent_name: str = ""
+    action_name: str = ""
     results_count: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"Processed all batch results for {self.agent_name}"
+        self.message = f"Processed all batch results for {self.action_name}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "results_count": self.results_count,
         }
 
@@ -153,16 +153,16 @@ class BatchResultsProcessedEvent(BaseEvent):
 class BatchErrorEvent(BaseEvent):
     """Fired when a batch processing error occurs."""
 
-    agent_name: str = ""
+    action_name: str = ""
     error_message: str = ""
     error_type: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
         self.category = EventCategories.BATCH
-        self.message = f"Batch error for {self.agent_name}: {self.error_message}"
+        self.message = f"Batch error for {self.action_name}: {self.error_message}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "error_message": self.error_message,
             "error_type": self.error_type,
         }
@@ -176,14 +176,14 @@ class BatchErrorEvent(BaseEvent):
 class BatchPassthroughEvent(BaseEvent):
     """Fired when all items were filtered and passthrough data was processed."""
 
-    agent_name: str = ""
+    action_name: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.BATCH
-        self.message = f"All items filtered by conditional clause - passthrough data processed for {self.agent_name}"
+        self.message = f"All items filtered by conditional clause - passthrough data processed for {self.action_name}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
         }
 
     @property
@@ -195,7 +195,7 @@ class BatchPassthroughEvent(BaseEvent):
 class BatchStatusEvent(BaseEvent):
     """Fired to report batch status."""
 
-    agent_name: str = ""
+    action_name: str = ""
     status_message: str = ""
     status_type: str = "info"  # info, warning, error
 
@@ -207,9 +207,9 @@ class BatchStatusEvent(BaseEvent):
         }
         self.level = level_map.get(self.status_type, EventLevel.INFO)
         self.category = EventCategories.BATCH
-        self.message = self.status_message or f"Batch status for {self.agent_name}"
+        self.message = self.status_message or f"Batch status for {self.action_name}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "status_message": self.status_message,
             "status_type": self.status_type,
         }

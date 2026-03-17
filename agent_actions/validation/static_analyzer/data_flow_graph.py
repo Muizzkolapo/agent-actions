@@ -1,20 +1,10 @@
 """Data flow graph for workflow static analysis."""
 
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any
 
+from agent_actions.config.schema import ActionKind
 from agent_actions.utils.constants import SPECIAL_NAMESPACES
-
-
-class AgentKind(Enum):
-    """Type of action node."""
-
-    LLM = "llm"
-    TOOL = "tool"
-    HITL = "hitl"
-    SOURCE = "source"  # Special: workflow input data
-    SEED = "seed"  # Special: static seed data
 
 
 @dataclass
@@ -92,7 +82,7 @@ class DataFlowNode:
     """Node in the data flow graph representing an action."""
 
     name: str
-    agent_kind: AgentKind
+    agent_kind: ActionKind
     output_schema: OutputSchema
     input_schema: InputSchema | None = None
     input_requirements: list[InputRequirement] = field(default_factory=list)

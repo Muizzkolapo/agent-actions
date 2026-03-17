@@ -128,11 +128,11 @@ from agent_actions.logging.events.validation_events import (
 
 # Workflow events
 from agent_actions.logging.events.workflow_events import (
-    AgentCachedEvent,
-    AgentCompleteEvent,
-    AgentFailedEvent,
-    AgentSkipEvent,
-    AgentStartEvent,
+    ActionCachedEvent,
+    ActionCompleteEvent,
+    ActionFailedEvent,
+    ActionSkipEvent,
+    ActionStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
@@ -143,12 +143,12 @@ __all__ = [
     "WorkflowStartEvent",
     "WorkflowCompleteEvent",
     "WorkflowFailedEvent",
-    # Agent
-    "AgentStartEvent",
-    "AgentCompleteEvent",
-    "AgentSkipEvent",
-    "AgentFailedEvent",
-    "AgentCachedEvent",
+    # Action
+    "ActionStartEvent",
+    "ActionCompleteEvent",
+    "ActionSkipEvent",
+    "ActionFailedEvent",
+    "ActionCachedEvent",
     # Batch
     "BatchSubmittedEvent",
     "BatchProgressEvent",

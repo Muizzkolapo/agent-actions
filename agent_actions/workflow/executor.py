@@ -1,4 +1,4 @@
-"""Single agent execution with batch support."""
+"""Single action execution with batch support."""
 
 import asyncio
 import logging
@@ -10,12 +10,12 @@ from typing import Any, cast
 
 from rich.console import Console
 
-from agent_actions.config.types import AgentConfigDict
+from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import get_error_detail
 from agent_actions.llm.providers.usage_tracker import get_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
-    AgentSkipEvent,
+    ActionSkipEvent,
     BatchCompleteEvent,
     BatchSubmittedEvent,
 )
@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ExecutorDependencies:
-    """Dependencies for AgentExecutor."""
+    """Dependencies for ActionExecutor."""
 
-    agent_runner: Any
+    action_runner: Any
     state_manager: Any
     skip_evaluator: Any
     batch_manager: Any
@@ -37,14 +37,14 @@ class ExecutorDependencies:
     def __repr__(self):
         return (
             f"{self.__class__.__name__}("
-            f"agent_runner={self.agent_runner.__class__.__name__}, "
+            f"action_runner={self.action_runner.__class__.__name__}, "
             f"state_manager={self.state_manager.__class__.__name__})"
         )
 
 
 @dataclass
 class ExecutionMetrics:
-    """Metrics from agent execution."""
+    """Metrics from action execution."""
 
     duration: float = 0.0
     tokens: dict[str, int] | None = None
@@ -54,19 +54,19 @@ class ExecutionMetrics:
 
 
 @dataclass
-class AgentRunParams:
-    """Parameters for agent execution."""
+class ActionRunParams:
+    """Parameters for action execution."""
 
-    agent_name: str
-    agent_idx: int
-    agent_config: AgentConfigDict
-    is_last_agent: bool
+    action_name: str
+    action_idx: int
+    action_config: ActionConfigDict
+    is_last_action: bool
     start_time: datetime
 
 
 @dataclass
-class AgentExecutionResult:
-    """Result of agent execution."""
+class ActionExecutionResult:
+    """Result of action execution."""
 
     success: bool
     output_folder: str | None = None
@@ -107,83 +107,83 @@ class AgentExecutionResult:
 
     def __repr__(self):
         return (
-            f"AgentExecutionResult(success={self.success}, "
+            f"ActionExecutionResult(success={self.success}, "
             f"status={self.status}, duration={self.metrics.duration:.2f})"
         )
 
 
-class AgentExecutor:
-    """Executes individual agents with full lifecycle management."""
+class ActionExecutor:
+    """Executes individual actions with full lifecycle management."""
 
     def __init__(self, deps: ExecutorDependencies, *, console: Console | None = None):
-        """Initialize agent executor."""
+        """Initialize action executor."""
         self.deps = deps
         self.console = console or Console()
 
     def __eq__(self, other):
-        if not isinstance(other, AgentExecutor):
+        if not isinstance(other, ActionExecutor):
             return False
         return self.deps == other.deps
 
     def _verify_completion_status(
-        self, agent_name: str
-    ) -> tuple[bool, AgentExecutionResult | None]:
-        """Verify a completed agent has actual output in storage.
+        self, action_name: str
+    ) -> tuple[bool, ActionExecutionResult | None]:
+        """Verify a completed action has actual output in storage.
 
         Returns:
             (should_skip, result) -- if should_skip is False, agent is re-run.
         """
-        storage_backend = getattr(self.deps.agent_runner, "storage_backend", None)
+        storage_backend = getattr(self.deps.action_runner, "storage_backend", None)
         if storage_backend is not None:
             try:
-                target_files = storage_backend.list_target_files(agent_name)
+                target_files = storage_backend.list_target_files(action_name)
                 if not target_files:
                     logger.info(
-                        "Agent %s completed but no output in storage - re-running",
-                        agent_name,
+                        "Action %s completed but no output in storage - re-running",
+                        action_name,
                     )
-                    self.deps.state_manager.update_status(agent_name, "pending")
+                    self.deps.state_manager.update_status(action_name, "pending")
                     return (False, None)
                 return (
                     True,
-                    AgentExecutionResult(
+                    ActionExecutionResult(
                         success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
                     ),
                 )
             except Exception as e:
                 logger.warning(
                     "Failed to verify output for %s, resetting to pending: %s",
-                    agent_name,
+                    action_name,
                     e,
                     exc_info=True,
                 )
-                self.deps.state_manager.update_status(agent_name, "pending")
+                self.deps.state_manager.update_status(action_name, "pending")
                 return (False, None)
         return (
             True,
-            AgentExecutionResult(
+            ActionExecutionResult(
                 success=True, status="completed", metrics=ExecutionMetrics(duration=0.0)
             ),
         )
 
-    def _handle_agent_skip(
-        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
-    ) -> AgentExecutionResult:
-        """Handle agent skip due to WHERE clause condition."""
-        self.deps.output_manager.create_passthrough_output(agent_idx, agent_name)
-        self.deps.state_manager.update_status(agent_name, "completed")
+    def _handle_action_skip(
+        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+    ) -> ActionExecutionResult:
+        """Handle action skip due to WHERE clause condition."""
+        self.deps.output_manager.create_passthrough_output(action_idx, action_name)
+        self.deps.state_manager.update_status(action_name, "completed")
 
         duration = (datetime.now() - start_time).total_seconds()
-        total_agents = (
-            len(self.deps.agent_runner.execution_order)
-            if hasattr(self.deps.agent_runner, "execution_order")
+        total_actions = (
+            len(self.deps.action_runner.execution_order)
+            if hasattr(self.deps.action_runner, "execution_order")
             else 0
         )
         fire_event(
-            AgentSkipEvent(
-                agent_name=agent_name,
-                agent_index=agent_idx,
-                total_agents=total_agents,
+            ActionSkipEvent(
+                action_name=action_name,
+                action_index=action_idx,
+                total_actions=total_actions,
                 skip_reason="WHERE clause condition not met",
             )
         )
@@ -191,22 +191,22 @@ class AgentExecutor:
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
             config = ActionCompleteConfig(
                 run_id=self.run_id,
-                action_name=agent_name,
+                action_name=action_name,
                 status="skipped",
                 duration_seconds=duration,
                 skip_reason="WHERE clause condition not met",
             )
             self.run_tracker.record_action_complete(config=config)
 
-        return AgentExecutionResult(
+        return ActionExecutionResult(
             success=True, status="skipped", metrics=ExecutionMetrics(duration=duration)
         )
 
-    def _track_action_start(self, params: AgentRunParams) -> None:
+    def _track_action_start(self, params: ActionRunParams) -> None:
         """Track action start if run_tracker is available."""
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
-            model_vendor = params.agent_config.get("model_vendor", "")
-            action_kind = params.agent_config.get("kind", "")
+            model_vendor = params.action_config.get("model_vendor", "")
+            action_kind = params.action_config.get("kind", "")
 
             if model_vendor == "tool" or action_kind == "tool":
                 action_type = "tool"
@@ -217,42 +217,42 @@ class AgentExecutor:
 
             self.run_tracker.record_action_start(
                 run_id=self.run_id,
-                action_name=params.agent_name,
+                action_name=params.action_name,
                 action_type=action_type,
-                agent_config=params.agent_config,
+                action_config=params.action_config,
             )
 
     def _handle_run_success(
         self,
-        params: AgentRunParams,
+        params: ActionRunParams,
         output_folder: str,
         duration: float,
         batch_status: str | None,
-    ) -> AgentExecutionResult:
-        """Handle successful agent run result."""
+    ) -> ActionExecutionResult:
+        """Handle successful action run result."""
         if batch_status == "batch_submitted":
-            self.deps.state_manager.update_status(params.agent_name, "batch_submitted")
-            fire_event(BatchSubmittedEvent(agent_name=params.agent_name))
-            return AgentExecutionResult(
+            self.deps.state_manager.update_status(params.action_name, "batch_submitted")
+            fire_event(BatchSubmittedEvent(action_name=params.action_name))
+            return ActionExecutionResult(
                 success=True,
                 status="batch_submitted",
                 metrics=ExecutionMetrics(duration=duration),
             )
 
         if batch_status == "passthrough":
-            self.deps.state_manager.update_status(params.agent_name, "completed")
+            self.deps.state_manager.update_status(params.action_name, "completed")
             logger.info(
-                "Agent completed (passthrough)",
+                "Action completed (passthrough)",
                 extra={
-                    "operation": "execute_agent_run",
-                    "agent_name": params.agent_name,
-                    "agent_idx": params.agent_idx,
+                    "operation": "execute_action_run",
+                    "action_name": params.action_name,
+                    "action_idx": params.action_idx,
                     "duration": duration,
                     "status": "passthrough",
-                    "is_last_agent": params.is_last_agent,
+                    "is_last_action": params.is_last_action,
                 },
             )
-            return AgentExecutionResult(
+            return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status="completed",
@@ -260,13 +260,13 @@ class AgentExecutor:
             )
 
         # Normal completion
-        self.deps.state_manager.update_status(params.agent_name, "completed")
+        self.deps.state_manager.update_status(params.action_name, "completed")
         tokens = get_last_usage()
 
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
             config = ActionCompleteConfig(
                 run_id=self.run_id,
-                action_name=params.agent_name,
+                action_name=params.action_name,
                 status="success",
                 duration_seconds=duration,
                 tokens=tokens,
@@ -274,165 +274,165 @@ class AgentExecutor:
             )
             self.run_tracker.record_action_complete(config=config)
 
-        return AgentExecutionResult(
+        return ActionExecutionResult(
             success=True,
             output_folder=output_folder,
             status="completed",
             metrics=ExecutionMetrics(
                 duration=duration,
                 tokens=tokens,
-                model_vendor=params.agent_config.get("model_vendor"),
-                model_name=params.agent_config.get("model_name"),
+                model_vendor=params.action_config.get("model_vendor"),
+                model_name=params.action_config.get("model_name"),
                 files_processed=0,
             ),
         )
 
-    def _handle_run_failure(self, params: AgentRunParams, error: Exception) -> AgentExecutionResult:
-        """Handle agent run failure."""
+    def _handle_run_failure(self, params: ActionRunParams, error: Exception) -> ActionExecutionResult:
+        """Handle action run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
-        self.deps.state_manager.update_status(params.agent_name, "failed")
+        self.deps.state_manager.update_status(params.action_name, "failed")
 
         if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
             config = ActionCompleteConfig(
                 run_id=self.run_id,
-                action_name=params.agent_name,
+                action_name=params.action_name,
                 status="failed",
                 duration_seconds=duration,
                 error=get_error_detail(error),
             )
             self.run_tracker.record_action_complete(config=config)
 
-        return AgentExecutionResult(
+        return ActionExecutionResult(
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
         )
 
-    def _cleanup_correlation(self, params: AgentRunParams, original_setup: Callable | None) -> None:
+    def _cleanup_correlation(self, params: ActionRunParams, original_setup: Callable | None) -> None:
         """Restore original setup_directories after correlation setup."""
         if original_setup:
             try:
-                self.deps.agent_runner.setup_directories = original_setup
+                self.deps.action_runner.setup_directories = original_setup
             except (AttributeError, TypeError) as cleanup_error:
                 logger.warning(
                     "Failed to restore original setup_directories",
                     extra={
-                        "operation": "agent_cleanup",
-                        "agent_name": params.agent_name,
+                        "operation": "action_cleanup",
+                        "action_name": params.action_name,
                         "error": str(cleanup_error),
                     },
                 )
 
-    def execute_agent_sync(
-        self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
-    ) -> AgentExecutionResult:
-        """Execute a single agent synchronously."""
+    def execute_action_sync(
+        self, action_name: str, *, action_idx: int, action_config: ActionConfigDict, is_last_action: bool
+    ) -> ActionExecutionResult:
+        """Execute a single action synchronously."""
         start_time = datetime.now()
-        current_status = self.deps.state_manager.get_status(agent_name)
+        current_status = self.deps.state_manager.get_status(action_name)
 
         logger.debug(
-            "Agent execution starting",
+            "Action execution starting",
             extra={
-                "operation": "execute_agent_start",
-                "agent_name": agent_name,
-                "agent_idx": agent_idx,
+                "operation": "execute_action_start",
+                "action_name": action_name,
+                "action_idx": action_idx,
                 "current_status": current_status,
-                "is_last_agent": is_last_agent,
+                "is_last_action": is_last_action,
             },
         )
 
         if current_status == "completed":
-            should_skip, result = self._verify_completion_status(agent_name)
+            should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 assert result is not None
                 return result
 
         if current_status == "batch_submitted":
-            return self._handle_batch_check(agent_name, agent_idx, agent_config, start_time)
+            return self._handle_batch_check(action_name, action_idx, action_config, start_time)
 
-        previous_outputs = self.deps.output_manager.get_previous_outputs(agent_idx)
-        if self.deps.skip_evaluator.should_skip_agent(agent_config, previous_outputs):
-            return self._handle_agent_skip(agent_name, agent_idx, agent_config, start_time)
+        previous_outputs = self.deps.output_manager.get_previous_outputs(action_idx)
+        if self.deps.skip_evaluator.should_skip_action(action_config, previous_outputs):
+            return self._handle_action_skip(action_name, action_idx, action_config, start_time)
 
-        return self._execute_agent_run(
-            AgentRunParams(
-                agent_name=agent_name,
-                agent_idx=agent_idx,
-                agent_config=agent_config,
-                is_last_agent=is_last_agent,
+        return self._execute_action_run(
+            ActionRunParams(
+                action_name=action_name,
+                action_idx=action_idx,
+                action_config=action_config,
+                is_last_action=is_last_action,
                 start_time=start_time,
             )
         )
 
-    async def execute_agent_async(
-        self, agent_name: str, *, agent_idx: int, agent_config: AgentConfigDict, is_last_agent: bool
-    ) -> AgentExecutionResult:
-        """Execute a single agent asynchronously."""
+    async def execute_action_async(
+        self, action_name: str, *, action_idx: int, action_config: ActionConfigDict, is_last_action: bool
+    ) -> ActionExecutionResult:
+        """Execute a single action asynchronously."""
         start_time = datetime.now()
-        current_status = self.deps.state_manager.get_status(agent_name)
+        current_status = self.deps.state_manager.get_status(action_name)
 
         logger.debug(
-            "Agent execution starting",
+            "Action execution starting",
             extra={
-                "operation": "execute_agent_start",
-                "agent_name": agent_name,
-                "agent_idx": agent_idx,
+                "operation": "execute_action_start",
+                "action_name": action_name,
+                "action_idx": action_idx,
                 "current_status": current_status,
-                "is_last_agent": is_last_agent,
+                "is_last_action": is_last_action,
             },
         )
 
         if current_status == "completed":
-            should_skip, result = self._verify_completion_status(agent_name)
+            should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 assert result is not None
                 return result
 
         if current_status == "batch_submitted":
             return await self._handle_batch_check_async(
-                agent_name, agent_idx, agent_config, start_time
+                action_name, action_idx, action_config, start_time
             )
 
-        previous_outputs = self.deps.output_manager.get_previous_outputs(agent_idx)
-        if self.deps.skip_evaluator.should_skip_agent(agent_config, previous_outputs):
-            return self._handle_agent_skip(agent_name, agent_idx, agent_config, start_time)
+        previous_outputs = self.deps.output_manager.get_previous_outputs(action_idx)
+        if self.deps.skip_evaluator.should_skip_action(action_config, previous_outputs):
+            return self._handle_action_skip(action_name, action_idx, action_config, start_time)
 
-        return await self._execute_agent_run_async(
-            AgentRunParams(
-                agent_name=agent_name,
-                agent_idx=agent_idx,
-                agent_config=agent_config,
-                is_last_agent=is_last_agent,
+        return await self._execute_action_run_async(
+            ActionRunParams(
+                action_name=action_name,
+                action_idx=action_idx,
+                action_config=action_config,
+                is_last_action=is_last_action,
                 start_time=start_time,
             )
         )
 
     def _handle_batch_check(
-        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
-    ) -> AgentExecutionResult:
+        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+    ) -> ActionExecutionResult:
         """Handle batch job status checking (synchronous)."""
-        self.deps.state_manager.update_status(agent_name, "checking_batch")
-        workflow_name = self.deps.agent_runner.workflow_name
-        agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / agent_name)
+        self.deps.state_manager.update_status(action_name, "checking_batch")
+        workflow_name = self.deps.action_runner.workflow_name
+        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
+        output_directory = str(agent_io_path / "target" / action_name)
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
-            agent_name, output_directory, agent_config
+            action_name, output_directory, action_config
         )
 
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(agent_name, "completed")
+            self.deps.state_manager.update_status(action_name, "completed")
             fire_event(
                 BatchCompleteEvent(
-                    batch_id=agent_config.get("batch_id", ""),
-                    agent_name=agent_name,
+                    batch_id=action_config.get("batch_id", ""),
+                    action_name=action_name,
                     total=1,
                     completed=1,
                     failed=0,
                     elapsed_time=duration,
                 )
             )
-            return AgentExecutionResult(
+            return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status="completed",
@@ -440,66 +440,66 @@ class AgentExecutor:
             )
 
         if batch_status == "in_progress":
-            self.deps.state_manager.update_status(agent_name, "batch_submitted")
+            self.deps.state_manager.update_status(action_name, "batch_submitted")
             fire_event(
                 BatchSubmittedEvent(
-                    batch_id=agent_config.get("batch_id", ""),
-                    agent_name=agent_name,
+                    batch_id=action_config.get("batch_id", ""),
+                    action_name=action_name,
                     request_count=0,
-                    provider=agent_config.get("model_vendor", ""),
+                    provider=action_config.get("model_vendor", ""),
                 )
             )
-            return AgentExecutionResult(
+            return ActionExecutionResult(
                 success=True, status="batch_submitted", metrics=ExecutionMetrics(duration=duration)
             )
 
-        self.deps.state_manager.update_status(agent_name, "failed")
+        self.deps.state_manager.update_status(action_name, "failed")
         fire_event(
             BatchCompleteEvent(
-                batch_id=agent_config.get("batch_id", ""),
-                agent_name=agent_name,
+                batch_id=action_config.get("batch_id", ""),
+                action_name=action_name,
                 total=1,
                 completed=0,
                 failed=1,
                 elapsed_time=duration,
             )
         )
-        error = Exception(f"Batch job for {agent_name} failed")
-        return AgentExecutionResult(
+        error = Exception(f"Batch job for {action_name} failed")
+        return ActionExecutionResult(
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
         )
 
     async def _handle_batch_check_async(
-        self, agent_name: str, agent_idx: int, agent_config: AgentConfigDict, start_time: datetime
-    ) -> AgentExecutionResult:
+        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+    ) -> ActionExecutionResult:
         """Handle batch job status checking (asynchronous)."""
-        self.deps.state_manager.update_status(agent_name, "checking_batch")
-        workflow_name = self.deps.agent_runner.workflow_name
-        agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / agent_name)
+        self.deps.state_manager.update_status(action_name, "checking_batch")
+        workflow_name = self.deps.action_runner.workflow_name
+        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
+        output_directory = str(agent_io_path / "target" / action_name)
 
         output_folder, batch_status = await asyncio.to_thread(
             self.deps.batch_manager.handle_batch_agent,
-            agent_name,
+            action_name,
             output_directory,
-            agent_config,
+            action_config,
         )
 
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(agent_name, "completed")
+            self.deps.state_manager.update_status(action_name, "completed")
             fire_event(
                 BatchCompleteEvent(
-                    batch_id=agent_config.get("batch_id", ""),
-                    agent_name=agent_name,
+                    batch_id=action_config.get("batch_id", ""),
+                    action_name=action_name,
                     total=1,
                     completed=1,
                     failed=0,
                     elapsed_time=duration,
                 )
             )
-            return AgentExecutionResult(
+            return ActionExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status="completed",
@@ -507,50 +507,50 @@ class AgentExecutor:
             )
 
         if batch_status == "in_progress":
-            self.deps.state_manager.update_status(agent_name, "batch_submitted")
+            self.deps.state_manager.update_status(action_name, "batch_submitted")
             fire_event(
                 BatchSubmittedEvent(
-                    batch_id=agent_config.get("batch_id", ""),
-                    agent_name=agent_name,
+                    batch_id=action_config.get("batch_id", ""),
+                    action_name=action_name,
                     request_count=0,
-                    provider=agent_config.get("model_vendor", ""),
+                    provider=action_config.get("model_vendor", ""),
                 )
             )
-            return AgentExecutionResult(
+            return ActionExecutionResult(
                 success=True, status="batch_submitted", metrics=ExecutionMetrics(duration=duration)
             )
 
-        self.deps.state_manager.update_status(agent_name, "failed")
+        self.deps.state_manager.update_status(action_name, "failed")
         fire_event(
             BatchCompleteEvent(
-                batch_id=agent_config.get("batch_id", ""),
-                agent_name=agent_name,
+                batch_id=action_config.get("batch_id", ""),
+                action_name=action_name,
                 total=1,
                 completed=0,
                 failed=1,
                 elapsed_time=duration,
             )
         )
-        error = Exception(f"Batch job for {agent_name} failed")
-        return AgentExecutionResult(
+        error = Exception(f"Batch job for {action_name} failed")
+        return ActionExecutionResult(
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
         )
 
-    def _execute_agent_run(self, params: AgentRunParams) -> AgentExecutionResult:
-        """Execute agent run (synchronous)."""
-        self.deps.state_manager.update_status(params.agent_name, "running")
+    def _execute_action_run(self, params: ActionRunParams) -> ActionExecutionResult:
+        """Execute action run (synchronous)."""
+        self.deps.state_manager.update_status(params.action_name, "running")
         self._track_action_start(params)
-        original_setup = self._setup_correlation(params.agent_idx)
+        original_setup = self._setup_correlation(params.action_idx)
 
         try:
-            output_folder = self.deps.agent_runner.run_agent(
-                params.agent_config,
-                params.agent_name,
+            output_folder = self.deps.action_runner.run_action(
+                params.action_config,
+                params.action_name,
                 None,
-                params.agent_idx,
+                params.action_idx,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(params.agent_name, params.agent_idx)
+            batch_status = self._check_batch_submission(params.action_name, params.action_idx)
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
         except Exception as e:
@@ -559,22 +559,22 @@ class AgentExecutor:
         finally:
             self._cleanup_correlation(params, original_setup)
 
-    async def _execute_agent_run_async(self, params: AgentRunParams) -> AgentExecutionResult:
-        """Execute agent run (asynchronous)."""
-        self.deps.state_manager.update_status(params.agent_name, "running")
+    async def _execute_action_run_async(self, params: ActionRunParams) -> ActionExecutionResult:
+        """Execute action run (asynchronous)."""
+        self.deps.state_manager.update_status(params.action_name, "running")
         self._track_action_start(params)
-        original_setup = self._setup_correlation(params.agent_idx)
+        original_setup = self._setup_correlation(params.action_idx)
 
         try:
             output_folder = await asyncio.to_thread(
-                self.deps.agent_runner.run_agent,
-                params.agent_config,
-                params.agent_name,
+                self.deps.action_runner.run_agent,
+                params.action_config,
+                params.action_name,
                 None,
-                params.agent_idx,
+                params.action_idx,
             )
             duration = (datetime.now() - params.start_time).total_seconds()
-            batch_status = self._check_batch_submission(params.agent_name, params.agent_idx)
+            batch_status = self._check_batch_submission(params.action_name, params.action_idx)
             return self._handle_run_success(params, output_folder, duration, batch_status)
 
         except Exception as e:
@@ -584,24 +584,25 @@ class AgentExecutor:
             self._cleanup_correlation(params, original_setup)
 
     def __repr__(self):
-        return f"AgentExecutor(deps={self.deps})"
+        return f"ActionExecutor(deps={self.deps})"
 
-    def _setup_correlation(self, agent_idx: int) -> Callable | None:
+    def _setup_correlation(self, action_idx: int) -> Callable | None:
         """Setup loop correlation if needed, return original setup function."""
-        correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(agent_idx)
+        correlation_wrapper = self.deps.output_manager.setup_correlation_wrapper(action_idx)
 
         if correlation_wrapper:
-            original = self.deps.agent_runner.setup_directories
-            self.deps.agent_runner.setup_directories = correlation_wrapper
+            original = self.deps.action_runner.setup_directories
+            self.deps.action_runner.setup_directories = correlation_wrapper
             return cast(Callable, original)
 
         return None
 
-    def _check_batch_submission(self, agent_name: str, agent_idx: int) -> str | None:
+    def _check_batch_submission(self, action_name: str, action_idx: int) -> str | None:
         """Check if batch jobs were submitted."""
-        workflow_name = self.deps.agent_runner.workflow_name
-        agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
+        workflow_name = self.deps.action_runner.workflow_name
+        agent_io_path = Path(self.deps.action_runner.get_action_folder(workflow_name))
         return cast(
             str | None,
-            self.deps.batch_manager.check_batch_submission(agent_name, agent_idx, agent_io_path),
+            self.deps.batch_manager.check_batch_submission(action_name, action_idx, agent_io_path),
         )
+

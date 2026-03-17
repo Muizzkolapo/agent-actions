@@ -79,7 +79,7 @@ class ResultCollector:
         """
         fire_event(
             ResultCollectionStartedEvent(
-                agent_name=agent_name,
+                action_name=agent_name,
                 total_results=len(results),
             )
         )
@@ -105,7 +105,7 @@ class ResultCollector:
                 )
                 fire_event(
                     ResultCollectedEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         result_index=idx,
                         status="success",
                     )
@@ -122,7 +122,7 @@ class ResultCollector:
                 )
                 fire_event(
                     ResultCollectedEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         result_index=idx,
                         status="skipped",
                     )
@@ -148,7 +148,7 @@ class ResultCollector:
                 )
                 fire_event(
                     ExhaustedRecordEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         record_index=idx,
                         source_guid=result.source_guid or "",
                         reason=f"exhausted_after_{attempts}_attempts",
@@ -172,7 +172,7 @@ class ResultCollector:
                 )
                 fire_event(
                     ResultCollectedEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         result_index=idx,
                         status="failed",
                     )
@@ -190,7 +190,7 @@ class ResultCollector:
                 logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
                 fire_event(
                     ResultCollectedEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         result_index=idx,
                         status="filtered",
                     )
@@ -215,7 +215,7 @@ class ResultCollector:
                 )
                 fire_event(
                     ResultCollectedEvent(
-                        agent_name=agent_name,
+                        action_name=agent_name,
                         result_index=idx,
                         status="unprocessed",
                     )
@@ -234,7 +234,7 @@ class ResultCollector:
 
         fire_event(
             ResultCollectionCompleteEvent(
-                agent_name=agent_name,
+                action_name=agent_name,
                 total_success=stats["success"],
                 total_skipped=stats["skipped"],
                 total_filtered=stats["filtered"],

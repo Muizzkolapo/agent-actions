@@ -241,8 +241,8 @@ class TestExtraFieldsCopying:
 
         assert capture.events[0].data.get("operation") == "fetch_data"
 
-    def test_copy_agent_name_extra(self):
-        """Test that 'agent_name' extra field is copied."""
+    def test_copy_action_name_extra(self):
+        """Test that 'action_name' extra field is copied."""
         capture = MockEventCapture()
         manager = EventManager.get()
         manager.register(capture)
@@ -253,9 +253,9 @@ class TestExtraFieldsCopying:
         logger.setLevel(logging.DEBUG)
         logger.propagate = False
 
-        logger.info("Test", extra={"agent_name": "extract_data"})
+        logger.info("Test", extra={"action_name": "extract_data"})
 
-        assert capture.events[0].data.get("agent_name") == "extract_data"
+        assert capture.events[0].data.get("action_name") == "extract_data"
 
     def test_copy_workflow_name_extra(self):
         """Test that 'workflow_name' extra field is copied."""

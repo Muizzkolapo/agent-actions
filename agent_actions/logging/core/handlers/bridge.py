@@ -55,8 +55,8 @@ class LoggingBridgeHandler(logging.Handler):
 
             if hasattr(record, "operation"):
                 event.data["operation"] = record.operation
-            if hasattr(record, "agent_name"):
-                event.data["agent_name"] = record.agent_name
+            if hasattr(record, "action_name"):
+                event.data["action_name"] = record.action_name
             if hasattr(record, "workflow_name"):
                 event.data["workflow_name"] = record.workflow_name
 

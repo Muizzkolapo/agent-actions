@@ -121,7 +121,7 @@ class RecordProcessor:
 
         fire_event(
             RecordProcessingStartedEvent(
-                agent_name=context.agent_name,
+                action_name=context.agent_name,
                 record_index=context.record_index,
                 source_guid=source_guid or "",
             )
@@ -146,7 +146,7 @@ class RecordProcessor:
         if prepared.guard_status == GuardStatus.FILTERED:
             fire_event(
                 RecordFilteredEvent(
-                    agent_name=context.agent_name,
+                    action_name=context.agent_name,
                     record_index=context.record_index,
                     source_guid=source_guid or "",
                     filter_reason="guard_filter",
@@ -161,7 +161,7 @@ class RecordProcessor:
         if prepared.guard_status == GuardStatus.SKIPPED:
             fire_event(
                 RecordFilteredEvent(
-                    agent_name=context.agent_name,
+                    action_name=context.agent_name,
                     record_index=context.record_index,
                     source_guid=source_guid or "",
                     filter_reason=f"guard_{prepared.guard_behavior}",
@@ -222,7 +222,7 @@ class RecordProcessor:
                     return self._finalize_result(result, context, source_guid)
                 fire_event(
                     RecordFilteredEvent(
-                        agent_name=context.agent_name,
+                        action_name=context.agent_name,
                         record_index=context.record_index,
                         source_guid=source_guid or "",
                         filter_reason="llm_layer_guard_filter",
@@ -236,7 +236,7 @@ class RecordProcessor:
             else:
                 fire_event(
                     RecordFilteredEvent(
-                        agent_name=context.agent_name,
+                        action_name=context.agent_name,
                         record_index=context.record_index,
                         source_guid=source_guid or "",
                         filter_reason="llm_layer_guard_skip",
@@ -263,7 +263,7 @@ class RecordProcessor:
 
             fire_event(
                 RecordEmptyOutputEvent(
-                    agent_name=context.agent_name,
+                    action_name=context.agent_name,
                     record_index=context.record_index,
                     source_guid=source_guid or "",
                     input_field_count=input_field_count,
@@ -291,7 +291,7 @@ class RecordProcessor:
         output_size = len(transformed) if isinstance(transformed, list) else 1
         fire_event(
             RecordTransformedEvent(
-                agent_name=context.agent_name,
+                action_name=context.agent_name,
                 record_index=context.record_index,
                 source_guid=source_guid or "",
                 input_size=input_size,
@@ -317,7 +317,7 @@ class RecordProcessor:
 
         fire_event(
             BatchProcessingStartedEvent(
-                agent_name=context.agent_name,
+                action_name=context.agent_name,
                 batch_size=len(items),
             )
         )
@@ -340,7 +340,7 @@ class RecordProcessor:
                 if (idx + 1) % 10 == 0 or (idx + 1) == len(items):
                     fire_event(
                         BatchProcessingProgressEvent(
-                            agent_name=context.agent_name,
+                            action_name=context.agent_name,
                             processed=idx + 1,
                             total=len(items),
                             successes=successes,
@@ -355,7 +355,7 @@ class RecordProcessor:
             except TemplateVariableError as e:
                 fire_event(
                     TemplateRenderingFailedEvent(
-                        agent_name=context.agent_name,
+                        action_name=context.agent_name,
                         missing_variables=e.missing_variables,
                         error_message=str(e),
                     )
@@ -392,7 +392,7 @@ class RecordProcessor:
         elapsed_time = (datetime.now(UTC) - start_time).total_seconds()
         fire_event(
             BatchDataProcessingCompleteEvent(
-                agent_name=context.agent_name,
+                action_name=context.agent_name,
                 total_records=len(items),
                 elapsed_time=elapsed_time,
             )
@@ -432,7 +432,7 @@ class RecordProcessor:
         enriched_result = self.enrichment_pipeline.enrich(result, context)
         fire_event(
             RecordProcessingCompleteEvent(
-                agent_name=context.agent_name,
+                action_name=context.agent_name,
                 record_index=context.record_index,
                 source_guid=source_guid or "",
                 status=enriched_result.status.value,

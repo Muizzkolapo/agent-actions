@@ -423,7 +423,7 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                 event_type = event.get("event_type")
                 meta = event.get("meta", {})
                 data = event.get("data", {})
-                agent_name = meta.get("agent_name") or data.get("agent_name")
+                agent_name = meta.get("action_name") or data.get("action_name")
 
                 if not agent_name:
                     continue
@@ -439,8 +439,8 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                         "skipped_count": 0,
                     }
 
-                # Extract from AgentCompleteEvent
-                if event_type == "AgentCompleteEvent":
+                # Extract from ActionCompleteEvent
+                if event_type == "ActionCompleteEvent":
                     action_metrics[agent_name]["execution_time"] = data.get("execution_time")
                     action_metrics[agent_name]["record_count"] = data.get("record_count", 0)
                     if data.get("tokens"):

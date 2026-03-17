@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any, cast
 
-from agent_actions.config.types import AgentConfigDict, AgentEntryDict
+from agent_actions.config.types import ActionConfigDict, ActionEntryDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -30,9 +30,9 @@ class DataGenerator(IGenerator):
 
     def __init__(
         self,
-        agent_config: AgentEntryDict,
+        agent_config: ActionEntryDict,
         agent_name: str,
-        dependency_configs: dict[str, AgentEntryDict] | None = None,
+        dependency_configs: dict[str, ActionEntryDict] | None = None,
         agent_indices: dict[str, int] | None = None,
         storage_backend: StorageBackend | None = None,
     ):
@@ -76,7 +76,7 @@ class DataGenerator(IGenerator):
         """
         try:
             context = ProcessingContext(
-                agent_config=cast(AgentConfigDict, self.agent_config),
+                agent_config=cast(ActionConfigDict, self.agent_config),
                 agent_name=self.agent_name,
                 mode=CoreProcessingMode.ONLINE,
                 is_first_stage=False,  # This is subsequent-stage processing

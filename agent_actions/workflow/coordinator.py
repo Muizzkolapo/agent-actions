@@ -13,7 +13,7 @@ from agent_actions.workflow.config_pipeline import load_workflow_configs, valida
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.models import (
-    AgentLogParams,
+    ActionLogParams,
     RuntimeContext,
     WorkflowConfig,
     WorkflowPaths,
@@ -35,7 +35,7 @@ class AgentWorkflow:
 
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
-        validate_schema_files(self.agent_configs, self.config)
+        validate_schema_files(self.action_configs, self.config)
 
         # Storage & services
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
@@ -76,14 +76,14 @@ class AgentWorkflow:
         return self.metadata.execution_order
 
     @property
-    def agent_indices(self) -> dict:
-        """Return agent indices from metadata."""
-        return self.metadata.agent_indices
+    def action_indices(self) -> dict:
+        """Return action indices from metadata."""
+        return self.metadata.action_indices
 
     @property
-    def agent_configs(self) -> dict:
-        """Return agent configs from metadata."""
-        return self.metadata.agent_configs
+    def action_configs(self) -> dict:
+        """Return action configs from metadata."""
+        return self.metadata.action_configs
 
     @property
     def child_pipeline(self) -> str | None:
@@ -148,13 +148,13 @@ class AgentWorkflow:
         return f"workflow_{config_hash}"
 
     def _inject_workflow_session_id(self):
-        """Inject workflow session ID into all agent configurations."""
+        """Inject workflow session ID into all action configurations."""
         from agent_actions.utils.correlation import VersionIdGenerator
 
         VersionIdGenerator.clear_version_correlation_registry()
 
-        for agent_config in self.agent_configs.values():
-            agent_config["workflow_session_id"] = self.workflow_session_id
+        for action_config in self.action_configs.values():
+            action_config["workflow_session_id"] = self.workflow_session_id
 
     # ── Upstream / downstream resolution ────────────────────────────────
 
@@ -163,7 +163,7 @@ class AgentWorkflow:
         if not self.config.run_upstream:
             return True
         return self.dependency_orchestrator.resolve_upstream_workflows(
-            agent_configs=self.agent_configs,
+            action_configs=self.action_configs,
             user_code_path=self.config.paths.user_code_path,
             default_path=self.config.paths.default_path,
             use_tools=self.config.use_tools,
@@ -208,26 +208,27 @@ class AgentWorkflow:
             try:
                 levels = self.services.core.action_level_orchestrator.compute_execution_levels()
                 self.services.core.action_level_orchestrator.log_execution_levels(
-                    levels, self.agent_indices
+                    levels, self.action_indices
                 )
 
                 from agent_actions.workflow.parallel.action_executor import LevelExecutionParams
 
-                for level_idx, level_agents in enumerate(levels):
-                    for agent_name in level_agents:
-                        if agent_name in self.agent_indices:
+                for level_idx, level_actions in enumerate(levels):
+                    for action_name in level_actions:
+                        if action_name in self.action_indices:
                             manager.set_context(
-                                agent_name=agent_name, agent_index=self.agent_indices[agent_name]
+                                action_name=action_name,
+                                action_index=self.action_indices[action_name],
                             )
 
                     orchestrator = self.services.core.action_level_orchestrator
                     level_complete = await orchestrator.execute_level_async(
                         LevelExecutionParams(
                             level_idx=level_idx,
-                            level_agents=level_agents,
-                            agent_indices=self.agent_indices,
+                            level_actions=level_actions,
+                            action_indices=self.action_indices,
                             state_manager=self.services.core.state_manager,
-                            agent_executor=self.services.core.agent_executor,
+                            action_executor=self.services.core.action_executor,
                             concurrency_limit=concurrency_limit,
                         )
                     )
@@ -266,13 +267,13 @@ class AgentWorkflow:
         manager = get_manager()
         with manager.context():
             try:
-                total_agents = len(self.execution_order)
-                self.console.print(f"Found {total_agents} agents to run.")
+                total_actions = len(self.execution_order)
+                self.console.print(f"Found {total_actions} actions to run.")
 
-                for idx, agent_name in enumerate(self.execution_order):
-                    manager.set_context(agent_name=agent_name, agent_index=idx)
+                for idx, action_name in enumerate(self.execution_order):
+                    manager.set_context(action_name=action_name, action_index=idx)
 
-                    should_stop = self._run_single_agent(idx, agent_name, total_agents)
+                    should_stop = self._run_single_action(idx, action_name, total_actions)
                     if should_stop:
                         break
 
@@ -294,29 +295,29 @@ class AgentWorkflow:
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 
-    def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
-        """Run a single agent in sequential mode. Return True if workflow should stop."""
-        agent_config = self.agent_configs[agent_name]
+    def _run_single_action(self, idx: int, action_name: str, total_actions: int) -> bool:
+        """Run a single action in sequential mode. Return True if workflow should stop."""
+        action_config = self.action_configs[action_name]
         start_time = datetime.now()
 
-        self.event_logger.fire_agent_start(idx, agent_name, total_agents, agent_config)
+        self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
-        if self.services.core.state_manager.is_completed(agent_name):
-            self.event_logger.log_agent_skip(idx, agent_name, total_agents)
+        if self.services.core.state_manager.is_completed(action_name):
+            self.event_logger.log_action_skip(idx, action_name, total_actions)
             return False
 
         is_last = idx == len(self.execution_order) - 1
-        result = self.services.core.agent_executor.execute_agent_sync(
-            agent_name, agent_idx=idx, agent_config=agent_config, is_last_agent=is_last
+        result = self.services.core.action_executor.execute_action_sync(
+            action_name, action_idx=idx, action_config=action_config, is_last_action=is_last
         )
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        self.event_logger.log_agent_result(
-            AgentLogParams(
+        self.event_logger.log_action_result(
+            ActionLogParams(
                 idx=idx,
-                agent_name=agent_name,
-                total_agents=total_agents,
+                action_name=action_name,
+                total_actions=total_actions,
                 result=result,
                 end_time=end_time,
                 duration=duration,
@@ -331,7 +332,7 @@ class AgentWorkflow:
                 self.state.ephemeral_directories.append(
                     {
                         "output_folder": result.output_folder,
-                        "ephemeral": agent_config.get("ephemeral", False),
+                        "ephemeral": action_config.get("ephemeral", False),
                     }
                 )
             return False

@@ -2,11 +2,11 @@
 
 import pytest
 
-from agent_actions.validation.agent_validators.inline_schema_validator import (
+from agent_actions.validation.action_validators.inline_schema_validator import (
     InlineSchemaValidator,
 )
-from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
-    AgentEntryValidationContext,
+from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+    ActionEntryValidationContext,
 )
 
 
@@ -16,9 +16,9 @@ def validator():
     return InlineSchemaValidator()
 
 
-def _make_context(entry: dict, agent_name: str = "test_agent") -> AgentEntryValidationContext:
+def _make_context(entry: dict, agent_name: str = "test_agent") -> ActionEntryValidationContext:
     """Helper to build a validation context from an entry dict."""
-    return AgentEntryValidationContext(entry=entry, agent_name_context=agent_name)
+    return ActionEntryValidationContext(entry=entry, agent_name_context=agent_name)
 
 
 # ---------------------------------------------------------------------------

@@ -51,7 +51,7 @@ class ManifestManager:
         workflow_name: str,
         execution_order: list[str],
         levels: list[list[str]],
-        agent_configs: dict[str, dict[str, Any]],
+        action_configs: dict[str, dict[str, Any]],
         workflow_run_id: str | None = None,
     ) -> None:
         """Initialize a new manifest for a workflow run.
@@ -91,7 +91,7 @@ class ManifestManager:
 
             # Initialize action entries
             for idx, action_name in enumerate(execution_order):
-                action_config = agent_configs.get(action_name, {})
+                action_config = action_configs.get(action_name, {})
                 dependencies = action_config.get("dependencies", [])
 
                 # Find which level this action belongs to

@@ -1,4 +1,4 @@
-"""Tests for AgentRunner — covers init, folder lookup, directory setup,
+"""Tests for ActionRunner — covers init, folder lookup, directory setup,
 file processing, storage backend, and orchestration methods."""
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import pytest
 from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.errors import FileSystemError
 from agent_actions.workflow.runner import (
-    AgentRunner,
+    ActionRunner,
     FileLocationParams,
     FileProcessParams,
     ProcessGenerateParams,
@@ -32,13 +32,13 @@ def factory():
 
 @pytest.fixture()
 def runner(factory):
-    return AgentRunner(use_tools=True, processor_factory=factory)
+    return ActionRunner(use_tools=True, processor_factory=factory)
 
 
 @pytest.fixture()
 def runner_with_backend(factory):
     backend = MagicMock()
-    return AgentRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
+    return ActionRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
 
 
 def _make_file(path: Path, content: str = "hello") -> Path:
@@ -60,20 +60,20 @@ def _make_strategy():
 
 class TestInit:
     def test_attributes_set(self, factory):
-        runner = AgentRunner(use_tools=True, processor_factory=factory)
+        runner = ActionRunner(use_tools=True, processor_factory=factory)
         assert runner.use_tools is True
         assert runner.processor_factory is factory
         assert runner.storage_backend is None
-        assert runner.agent_configs is None
+        assert runner.action_configs is None
         assert runner.execution_order == []
-        assert runner.agent_indices == {}
+        assert runner.action_indices == {}
         assert runner.workflow_name is None
         assert runner.manifest_manager is None
         assert runner.data_source_config is None
         assert runner.project_root is None
 
     def test_creates_three_strategies(self, factory):
-        runner = AgentRunner(use_tools=True, processor_factory=factory)
+        runner = ActionRunner(use_tools=True, processor_factory=factory)
         assert set(runner.strategies.keys()) == {"initial", "intermediate", "terminal"}
         assert isinstance(runner.strategies["initial"], InitialStrategy)
         assert isinstance(runner.strategies["intermediate"], StandardStrategy)
@@ -81,12 +81,12 @@ class TestInit:
 
     def test_storage_backend_set(self, factory):
         backend = MagicMock()
-        runner = AgentRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
+        runner = ActionRunner(use_tools=True, processor_factory=factory, storage_backend=backend)
         assert runner.storage_backend is backend
 
 
 # ---------------------------------------------------------------------------
-# get_agent_folder
+# get_action_folder
 # ---------------------------------------------------------------------------
 
 
@@ -94,28 +94,28 @@ class TestGetAgentFolder:
     @patch("agent_actions.workflow.runner.FileHandler.find_specific_folder")
     def test_returns_folder_when_found(self, mock_find, runner):
         mock_find.return_value = "/some/path/agent_io"
-        result = runner.get_agent_folder("my_agent", project_root=Path("/root"))
+        result = runner.get_action_folder("my_agent", project_root=Path("/root"))
         assert result == "/some/path/agent_io"
         mock_find.assert_called_once_with("/root", "my_agent", "agent_io")
 
     @patch("agent_actions.workflow.runner.FileHandler.find_specific_folder")
     def test_raises_when_not_found(self, mock_find, runner):
         mock_find.return_value = None
-        with pytest.raises(FileSystemError, match="Agent folder not found"):
-            runner.get_agent_folder("missing_agent", project_root=Path("/root"))
+        with pytest.raises(FileSystemError, match="Action folder not found"):
+            runner.get_action_folder("missing_agent", project_root=Path("/root"))
 
     @patch("agent_actions.workflow.runner.FileHandler.find_specific_folder")
     def test_uses_workflow_name_over_agent_name(self, mock_find, runner):
         runner.workflow_name = "my_workflow"
         mock_find.return_value = "/path"
-        runner.get_agent_folder("my_agent", project_root=Path("/root"))
+        runner.get_action_folder("my_agent", project_root=Path("/root"))
         mock_find.assert_called_once_with("/root", "my_workflow", "agent_io")
 
     @patch("agent_actions.workflow.runner.FileHandler.find_specific_folder")
     def test_uses_project_root_attribute(self, mock_find, runner):
         runner.project_root = Path("/project")
         mock_find.return_value = "/path"
-        runner.get_agent_folder("agent_a")
+        runner.get_action_folder("agent_a")
         mock_find.assert_called_once_with("/project", "agent_a", "agent_io")
 
 
@@ -248,7 +248,7 @@ class TestResolveSingleDependency:
 
 
 class TestSetupDirectories:
-    @patch.object(AgentRunner, "_resolve_start_node_directories")
+    @patch.object(ActionRunner, "_resolve_start_node_directories")
     def test_no_deps_no_previous(self, mock_resolve, runner, tmp_path):
         staging = tmp_path / "staging"
         staging.mkdir()
@@ -259,12 +259,12 @@ class TestSetupDirectories:
         assert "target/analyzer" in output
         mock_resolve.assert_called_once()
 
-    @patch.object(AgentRunner, "_resolve_dependency_directories")
+    @patch.object(ActionRunner, "_resolve_dependency_directories")
     def test_has_deps_and_indices(self, mock_dep, runner, tmp_path):
         dep_dir = tmp_path / "target" / "dep1"
         dep_dir.mkdir(parents=True)
         mock_dep.return_value = [dep_dir]
-        runner.agent_indices = {"analyzer": 0, "dep1": 1}
+        runner.action_indices = {"analyzer": 0, "dep1": 1}
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
         dirs, output = runner.setup_directories(str(tmp_path), config, None, 0)
         assert dirs == [str(dep_dir)]
@@ -276,7 +276,7 @@ class TestSetupDirectories:
         assert dirs == [str(tmp_path / "target" / "extractor")]
 
     def test_fallback_to_staging(self, runner, tmp_path):
-        runner.agent_indices = {}
+        runner.action_indices = {}
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
         dirs, output = runner.setup_directories(str(tmp_path), config, None, 0)
         assert dirs == [str(tmp_path / "staging")]
@@ -385,15 +385,15 @@ class TestProcessSingleFile:
             locations=FileLocationParams(
                 item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
             ),
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             idx=0,
         )
         runner._process_single_file(params)
         strategy.execute.assert_called_once()
         call_args = strategy.execute.call_args[0][0]
-        assert call_args.agent_name == "test_agent"
+        assert call_args.action_name == "test_agent"
         assert call_args.file_path == str(f)
 
     def test_creates_parent_dirs_no_backend(self, runner, tmp_path):
@@ -406,8 +406,8 @@ class TestProcessSingleFile:
             locations=FileLocationParams(
                 item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
             ),
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             idx=0,
         )
@@ -424,8 +424,8 @@ class TestProcessSingleFile:
             locations=FileLocationParams(
                 item=f, input_path=input_dir, output_path=output_dir, input_directory=str(input_dir)
             ),
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             idx=0,
         )
@@ -448,8 +448,8 @@ class TestProcessDirectoryFiles:
         _make_file(input_dir / "b.json")
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(input_dir)],
             output_directory=str(output_dir),
@@ -471,8 +471,8 @@ class TestProcessDirectoryFiles:
         _make_file(input_dir / "good.json")
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(input_dir)],
             output_directory=str(output_dir),
@@ -495,8 +495,8 @@ class TestWarnNoFilesFound:
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=_make_strategy(),
             upstream_data_dirs=[str(empty_dir)],
             output_directory=str(tmp_path / "out"),
@@ -511,8 +511,8 @@ class TestWarnNoFilesFound:
         d = tmp_path / "data"
         _make_file(d / "f.json")
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=_make_strategy(),
             upstream_data_dirs=[str(d)],
             output_directory=str(tmp_path / "out"),
@@ -535,8 +535,8 @@ class TestProcessMergedFiles:
         output = tmp_path / "output"
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(upstream)],
             output_directory=str(output),
@@ -557,8 +557,8 @@ class TestProcessMergedFiles:
 
         mock_merge.return_value = [{"id": 1}, {"id": 2}]
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(dir1), str(dir2)],
             output_directory=str(output),
@@ -581,8 +581,8 @@ class TestProcessMergedFiles:
 
         mock_merge.return_value = [{"id": 1}, {"id": 2}]
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(dir1), str(dir2)],
             output_directory=str(output),
@@ -601,8 +601,8 @@ class TestProcessMergedFiles:
 class TestProcessFromStorageBackend:
     def test_no_backend_returns_zero(self, runner):
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=_make_strategy(),
             upstream_data_dirs=["/some/target/dep"],
             output_directory="/out",
@@ -614,8 +614,8 @@ class TestProcessFromStorageBackend:
         backend = runner_with_backend.storage_backend
         backend.list_target_files.return_value = []
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=_make_strategy(),
             upstream_data_dirs=[str(tmp_path / "staging" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -632,8 +632,8 @@ class TestProcessFromStorageBackend:
         strategy = _make_strategy()
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(tmp_path / "target" / "dep1")],
             output_directory=str(tmp_path / "output"),
@@ -653,8 +653,8 @@ class TestProcessFromStorageBackend:
         strategy = _make_strategy()
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[
                 str(tmp_path / "target" / "dep1"),
@@ -676,8 +676,8 @@ class TestProcessFromStorageBackend:
         strategy.execute.side_effect = [None, Exception("boom")]
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(tmp_path / "target" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -695,8 +695,8 @@ class TestProcessFromStorageBackend:
         strategy = _make_strategy()
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(tmp_path / "target" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -712,8 +712,8 @@ class TestProcessFromStorageBackend:
         backend.list_target_files.side_effect = Exception("connection lost")
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=_make_strategy(),
             upstream_data_dirs=[str(tmp_path / "target" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -754,8 +754,8 @@ class TestProcessFiles:
         strategy = _make_strategy()
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(tmp_path / "target" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -775,8 +775,8 @@ class TestProcessFiles:
         strategy.execute.side_effect = Exception("fail")
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(tmp_path / "target" / "dep")],
             output_directory=str(tmp_path / "output"),
@@ -796,8 +796,8 @@ class TestProcessFiles:
         output_dir = tmp_path / "output"
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(input_dir)],
             output_directory=str(output_dir),
@@ -817,8 +817,8 @@ class TestProcessFiles:
         mock_merge.return_value = [{"id": 1}, {"id": 2}]
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(d1), str(d2)],
             output_directory=str(tmp_path / "output"),
@@ -837,8 +837,8 @@ class TestProcessFiles:
         _make_file(d2 / "unique2.json", json.dumps([{"id": 2}]))
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(d1), str(d2)],
             output_directory=str(tmp_path / "output"),
@@ -855,8 +855,8 @@ class TestProcessFiles:
         _make_file(input_dir / "b.json")
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(input_dir)],
             output_directory=str(tmp_path / "output"),
@@ -873,8 +873,8 @@ class TestProcessFiles:
         empty.mkdir()
 
         params = FileProcessParams(
-            agent_config={"agent_type": "test"},
-            agent_name="test_agent",
+            action_config={"agent_type": "test"},
+            action_name="test_agent",
             strategy=strategy,
             upstream_data_dirs=[str(empty)],
             output_directory=str(tmp_path / "output"),
@@ -886,67 +886,67 @@ class TestProcessFiles:
 
 
 # ---------------------------------------------------------------------------
-# run_agent
+# run_action
 # ---------------------------------------------------------------------------
 
 
 class TestRunAgent:
-    @patch.object(AgentRunner, "process_and_generate_for_agent")
+    @patch.object(ActionRunner, "process_and_generate_for_action")
     def test_no_deps_uses_initial_strategy(self, mock_pga, runner):
         mock_pga.return_value = "/output"
         config = {"agent_type": "analyzer"}
-        runner.run_agent(config, "analyzer", None, 0)
+        runner.run_action(config, "analyzer", None, 0)
         call_params = mock_pga.call_args[0][0]
         assert call_params.strategy is runner.strategies["initial"]
 
-    @patch.object(AgentRunner, "process_and_generate_for_agent")
+    @patch.object(ActionRunner, "process_and_generate_for_action")
     def test_has_deps_uses_intermediate_strategy(self, mock_pga, runner):
         mock_pga.return_value = "/output"
         config = {"agent_type": "analyzer", "dependencies": ["dep1"]}
-        runner.run_agent(config, "analyzer", None, 0)
+        runner.run_action(config, "analyzer", None, 0)
         call_params = mock_pga.call_args[0][0]
         assert call_params.strategy is runner.strategies["intermediate"]
 
-    @patch.object(AgentRunner, "process_and_generate_for_agent")
+    @patch.object(ActionRunner, "process_and_generate_for_action")
     def test_returns_output_folder(self, mock_pga, runner):
         mock_pga.return_value = "/output/target/analyzer"
         config = {"agent_type": "analyzer"}
-        result = runner.run_agent(config, "analyzer", None, 0)
+        result = runner.run_action(config, "analyzer", None, 0)
         assert result == "/output/target/analyzer"
 
 
 # ---------------------------------------------------------------------------
-# process_and_generate_for_agent
+# process_and_generate_for_action
 # ---------------------------------------------------------------------------
 
 
 class TestProcessAndGenerateForAgent:
-    @patch.object(AgentRunner, "process_files")
-    @patch.object(AgentRunner, "setup_directories")
-    @patch.object(AgentRunner, "get_agent_folder")
+    @patch.object(ActionRunner, "process_files")
+    @patch.object(ActionRunner, "setup_directories")
+    @patch.object(ActionRunner, "get_action_folder")
     def test_orchestrates_correctly(self, mock_folder, mock_setup, mock_process, runner):
         mock_folder.return_value = "/agent_io"
         mock_setup.return_value = (["/input"], "/output")
         strategy = _make_strategy()
 
         params = ProcessGenerateParams(
-            agent_config={"agent_type": "analyzer", "dependencies": ["dep"]},
-            agent_name="analyzer",
+            action_config={"agent_type": "analyzer", "dependencies": ["dep"]},
+            action_name="analyzer",
             strategy=strategy,
-            previous_agent_type="extractor",
+            previous_action_type="extractor",
             idx=0,
         )
-        result = runner.process_and_generate_for_agent(params)
+        result = runner.process_and_generate_for_action(params)
         assert result == "/output"
         mock_folder.assert_called_once_with("analyzer")
         mock_setup.assert_called_once()
         mock_process.assert_called_once()
 
     @patch("agent_actions.workflow.runner.resolve_start_node_data_source")
-    @patch.object(AgentRunner, "process_files")
-    @patch.object(AgentRunner, "setup_directories")
-    @patch.object(AgentRunner, "get_agent_folder")
-    @patch.object(AgentRunner, "_resolve_upstream_from_manifest")
+    @patch.object(ActionRunner, "process_files")
+    @patch.object(ActionRunner, "setup_directories")
+    @patch.object(ActionRunner, "get_action_folder")
+    @patch.object(ActionRunner, "_resolve_upstream_from_manifest")
     def test_resolves_file_type_filter_for_start_node(
         self, mock_manifest, mock_folder, mock_setup, mock_process, mock_resolve, runner
     ):
@@ -958,13 +958,13 @@ class TestProcessAndGenerateForAgent:
         mock_resolve.return_value = mock_result
 
         params = ProcessGenerateParams(
-            agent_config={"agent_type": "analyzer"},
-            agent_name="analyzer",
+            action_config={"agent_type": "analyzer"},
+            action_name="analyzer",
             strategy=_make_strategy(),
-            previous_agent_type=None,
+            previous_action_type=None,
             idx=0,
         )
-        runner.process_and_generate_for_agent(params)
+        runner.process_and_generate_for_action(params)
         # process_files should receive the file_type_filter
         file_params = mock_process.call_args[0][0]
         assert file_params.file_type_filter == {"pdf", "docx"}

@@ -14,7 +14,8 @@ class FilterScope(str, Enum):
     """Scope for WHERE clause filtering."""
 
     ITEM = "item"
-    AGENT = "agent"
+    ACTION = "action"
+
 
 
 class WhereClauseBehavior(str, Enum):
@@ -31,7 +32,7 @@ class WhereClauseConfig(BaseModel):
     scope: FilterScope = Field(
         default=FilterScope.ITEM,
         description=(
-            "Filtering scope: 'item' for individual items, 'agent' for entire agent execution"
+            "Filtering scope: 'item' for individual items, 'action' for entire action execution"
         ),
     )
     passthrough_on_empty: bool = Field(
@@ -96,13 +97,13 @@ class WhereClauseConfig(BaseModel):
 
 
 class SkipConditionConfig(BaseModel):
-    """Configuration for agent skip conditions (safe replacement for eval-based skip_if)."""
+    """Configuration for action skip conditions (safe replacement for eval-based skip_if)."""
 
     condition_type: Literal[
         "previous_outputs_empty", "previous_outputs_count", "field_condition", "custom"
     ] = Field(description="Type of skip condition")
-    agent_name: str | None = Field(
-        default=None, description="Name of the agent to check outputs for"
+    action_name: str | None = Field(
+        default=None, description="Name of the action to check outputs for"
     )
     threshold: int | None = Field(default=None, description="Threshold for count-based conditions")
     comparison: Literal["==", "!=", "<", "<=", ">", ">="] | None = Field(

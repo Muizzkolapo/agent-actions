@@ -1,11 +1,11 @@
 """Tests for VendorCompatibilityValidator RunMode boundary coercion."""
 
 from agent_actions.config.types import RunMode
-from agent_actions.validation.agent_validators.vendor_compatibility_validator import (
+from agent_actions.validation.action_validators.vendor_compatibility_validator import (
     VendorCompatibilityValidator,
 )
-from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
-    AgentEntryValidationContext,
+from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+    ActionEntryValidationContext,
 )
 
 
@@ -14,7 +14,7 @@ class TestRunModeCoercion:
 
     def test_uppercase_string_batch_coerced_and_validates(self):
         """String 'BATCH' is coerced to RunMode.BATCH; valid vendor passes."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "BATCH", "model_vendor": "openai"},
             agent_name_context="test_agent",
         )
@@ -24,7 +24,7 @@ class TestRunModeCoercion:
 
     def test_lowercase_string_batch_coerced_and_validates(self):
         """String 'batch' is coerced to RunMode.BATCH; valid vendor passes."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "batch", "model_vendor": "anthropic"},
             agent_name_context="test_agent",
         )
@@ -34,7 +34,7 @@ class TestRunModeCoercion:
 
     def test_enum_passthrough_batch(self):
         """RunMode.BATCH enum value passes through without coercion."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": RunMode.BATCH, "model_vendor": "openai"},
             agent_name_context="test_agent",
         )
@@ -44,7 +44,7 @@ class TestRunModeCoercion:
 
     def test_online_mode_skips_batch_validation(self):
         """Online mode skips batch vendor checks entirely."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "ONLINE", "model_vendor": "tool"},
             agent_name_context="test_agent",
         )
@@ -54,7 +54,7 @@ class TestRunModeCoercion:
 
     def test_batch_tool_vendor_rejected(self):
         """Batch mode with tool vendor produces an error."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "BATCH", "model_vendor": "tool"},
             agent_name_context="test_agent",
         )
@@ -65,7 +65,7 @@ class TestRunModeCoercion:
 
     def test_batch_unknown_vendor_produces_warning(self):
         """Batch mode with unknown (but non-tool) vendor emits a warning, not an error."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "BATCH", "model_vendor": "some_unknown_vendor"},
             agent_name_context="test_agent",
         )

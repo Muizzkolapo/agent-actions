@@ -1,16 +1,16 @@
-"""Validator for optional field types in agent configuration."""
+"""Validator for optional field types in action configuration."""
 
 from agent_actions.utils.constants import JSON_MODE_KEY
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    AgentEntryValidationResult,
-    BaseAgentEntryValidator,
+from agent_actions.validation.action_validators.base_action_validator import (
+    ActionEntryValidationResult,
+    BaseActionEntryValidator,
 )
 
 
-class OptionalFieldTypeValidator(BaseAgentEntryValidator):
+class OptionalFieldTypeValidator(BaseActionEntryValidator):
     """Validates types of optional configuration fields."""
 
-    def validate(self, context) -> AgentEntryValidationResult:
+    def validate(self, context) -> ActionEntryValidationResult:
         """Validate optional field types."""
         errors: list[str] = []
 
@@ -20,9 +20,9 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
         self._validate_boolean_fields(context, errors)
 
         if errors:
-            return AgentEntryValidationResult.with_errors(errors)
+            return ActionEntryValidationResult.with_errors(errors)
 
-        return AgentEntryValidationResult.success()
+        return ActionEntryValidationResult.success()
 
     def _validate_description_field(self, context, errors: list) -> None:
         """Validate description field type."""

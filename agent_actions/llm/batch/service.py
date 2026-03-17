@@ -49,7 +49,7 @@ class BatchService:
         processing_service: Any | None = None,
         # Legacy params for backward compatibility
         provider: BaseBatchClient | None = None,
-        agent_indices: dict[str, int] | None = None,
+        action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         force_batch: bool = False,
         task_preparator: BatchTaskPreparator | None = None,
@@ -77,12 +77,12 @@ class BatchService:
         self.provider = provider
         self.force_batch = force_batch
         self._provider_cache: dict[str, Any] = {}
-        self.agent_indices = agent_indices or {}
+        self.action_indices = action_indices or {}
         self.dependency_configs = dependency_configs or {}
 
         # Shared components (used by multiple services)
         self._task_preparator = task_preparator or BatchTaskPreparator(
-            agent_indices=agent_indices,
+            action_indices=action_indices,
             dependency_configs=dependency_configs,
             storage_backend=storage_backend,
         )
@@ -153,7 +153,7 @@ class BatchService:
                 result_processor=self._result_processor,
                 registry_manager_factory=self._registry_manager_factory,
                 source_handler=self._source_handler,
-                agent_indices=self.agent_indices,
+                action_indices=self.action_indices,
                 dependency_configs=self.dependency_configs,
                 storage_backend=self._storage_backend,
                 action_name=self._action_name,

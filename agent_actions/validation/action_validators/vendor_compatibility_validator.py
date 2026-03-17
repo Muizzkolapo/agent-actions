@@ -1,18 +1,18 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    AgentEntryValidationResult,
-    BaseAgentEntryValidator,
+from agent_actions.validation.action_validators.base_action_validator import (
+    ActionEntryValidationResult,
+    BaseActionEntryValidator,
 )
 
 
-class VendorCompatibilityValidator(BaseAgentEntryValidator):
+class VendorCompatibilityValidator(BaseActionEntryValidator):
     """Validates vendor compatibility for batch and online modes."""
 
     VALID_BATCH_VENDORS = {"openai", "gemini", "anthropic", "groq", "mistral"}
 
-    def validate(self, context) -> AgentEntryValidationResult:
+    def validate(self, context) -> ActionEntryValidationResult:
         """Validate vendor compatibility based on run_mode."""
         normalized_entry = context.normalized_entry
         desc = context.description
@@ -51,9 +51,9 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
                     f"Found: batch_provider='{batch_provider}'"
                 )
         if errors or warnings:
-            return AgentEntryValidationResult(errors=errors, warnings=warnings)
+            return ActionEntryValidationResult(errors=errors, warnings=warnings)
 
-        return AgentEntryValidationResult.success()
+        return ActionEntryValidationResult.success()
 
 
 # Backward compatibility alias

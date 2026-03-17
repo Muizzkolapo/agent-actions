@@ -17,7 +17,7 @@ and provide formatter hooks for the CLI/tracing system.
 |------|------|-------------|---------|
 | `formatters.py` | Module | Formatters that render runtime events for CLI output. | `logging`, `cli` |
 | `types.py` | Module | Defines `EventCategories` and `_safe_value_repr`. No re-exports — consumers import from category modules directly. | `logging` |
-| `workflow_events.py` | Module | Workflow lifecycle (W) and agent execution (A) events. 8 classes. | `logging` |
+| `workflow_events.py` | Module | Workflow lifecycle (W) and action execution (A) events. 8 classes. | `logging` |
 | `batch_events.py` | Module | Batch processing events (B prefix). 12 classes. | `logging` |
 | `llm_events.py` | Module | LLM interaction (L) and template rendering (T) events. 9 classes. | `logging` |
 | `validation_events.py` | Module | Validation (V), data parsing (D), guard (G), and recovery (R) events. 12 classes. | `logging` |

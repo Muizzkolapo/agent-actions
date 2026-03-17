@@ -485,7 +485,7 @@ def finalize_batch_output(
     fire_event(
         BatchCompleteEvent(
             batch_id=batch_id,
-            agent_name=file_name or "default",
+            action_name=file_name or "default",
             total=total_count,
             completed=successful_count,
             failed=failed_count,

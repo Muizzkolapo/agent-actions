@@ -27,7 +27,7 @@ class BatchTaskPreparator:
     def __init__(
         self,
         filter_service=None,
-        agent_indices: dict[str, int] | None = None,
+        action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         guard_handler=None,
         storage_backend: Any | None = None,
@@ -50,7 +50,7 @@ class BatchTaskPreparator:
                 DeprecationWarning,
                 stacklevel=2,
             )
-        self.agent_indices = agent_indices or {}
+        self.action_indices = action_indices or {}
         self.dependency_configs = dependency_configs or {}
         self.storage_backend = storage_backend
 
@@ -280,7 +280,7 @@ class BatchTaskPreparator:
             is_first_stage=False,  # Batch is always subsequent-stage
             is_batch_mode=True,  # Batch processing mode
             source_data=source_data,
-            agent_indices=self.agent_indices,
+            agent_indices=self.action_indices,
             dependency_configs=self.dependency_configs,
             workflow_metadata=workflow_metadata,
             file_path=file_path,

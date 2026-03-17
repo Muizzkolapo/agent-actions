@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Generic, TypeVar
 
 from agent_actions.config.interfaces import IDataLoader, ProcessingMode
-from agent_actions.config.types import AgentEntryDict
+from agent_actions.config.types import ActionEntryDict
 from agent_actions.processing.error_handling import ProcessorErrorHandlerMixin
 
 
@@ -49,7 +49,7 @@ T = TypeVar("T")
 class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     """Abstract base class for all content loaders with async support."""
 
-    def __init__(self, agent_config: AgentEntryDict | dict[str, Any], agent_name: str):
+    def __init__(self, agent_config: ActionEntryDict | dict[str, Any], agent_name: str):
         """Initialize with agent configuration and name."""
         self.agent_config = agent_config
         self.agent_name = agent_name

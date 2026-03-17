@@ -15,6 +15,8 @@ class ActionKind(str, Enum):
     LLM = "llm"
     TOOL = "tool"
     HITL = "hitl"
+    SOURCE = "source"  # Special: workflow input data
+    SEED = "seed"  # Special: static seed data
 
     @classmethod
     def _missing_(cls, value):

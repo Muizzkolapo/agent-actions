@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.validation.static_analyzer import (
-    AgentKind,
+    ActionKind,
     DataFlowGraph,
     DataFlowNode,
     InputRequirement,
@@ -86,14 +86,14 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="A",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
             )
         )
         graph.add_node(
             DataFlowNode(
                 name="B",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"A"},
             )
@@ -101,7 +101,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="C",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"B"},
             )
@@ -121,14 +121,14 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="A",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
             )
         )
         graph.add_node(
             DataFlowNode(
                 name="B",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"A"},
             )
@@ -136,7 +136,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="C",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"A"},
             )
@@ -144,7 +144,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="D",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"B", "C"},
             )
@@ -166,7 +166,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="A",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"C"},
             )
@@ -174,7 +174,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="B",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"A"},
             )
@@ -182,7 +182,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="C",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
                 dependencies={"B"},
             )
@@ -213,7 +213,7 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="source",
-                agent_kind=AgentKind.SOURCE,
+                agent_kind=ActionKind.SOURCE,
                 output_schema=OutputSchema(is_dynamic=True),
             )
         )
@@ -222,14 +222,14 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="agent1",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"out"}),
             )
         )
         graph.add_node(
             DataFlowNode(
                 name="agent2",
-                agent_kind=AgentKind.TOOL,
+                agent_kind=ActionKind.TOOL,
                 output_schema=OutputSchema(schema_fields={"result"}),
             )
         )
@@ -247,21 +247,21 @@ class TestDataFlowGraph:
         graph.add_node(
             DataFlowNode(
                 name="source",
-                agent_kind=AgentKind.SOURCE,
+                agent_kind=ActionKind.SOURCE,
                 output_schema=OutputSchema(is_dynamic=True),
             )
         )
         graph.add_node(
             DataFlowNode(
                 name="agent1",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"text"}),
             )
         )
         graph.add_node(
             DataFlowNode(
                 name="agent2",
-                agent_kind=AgentKind.LLM,
+                agent_kind=ActionKind.LLM,
                 output_schema=OutputSchema(schema_fields={"summary"}),
                 dependencies={"agent1"},
                 input_requirements=[

@@ -6,11 +6,11 @@ from agent_actions.output.response.config_fields import (
     inherit_simple_fields,
 )
 from agent_actions.output.response.expander import ActionExpander
-from agent_actions.validation.agent_validators.vendor_compatibility_validator import (
+from agent_actions.validation.action_validators.vendor_compatibility_validator import (
     VendorCompatibilityValidator,
 )
-from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
-    AgentEntryValidationContext,
+from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+    ActionEntryValidationContext,
 )
 
 
@@ -180,7 +180,7 @@ class TestVendorCompatibilityValidatorRunModeCoercion:
 
     def test_uppercase_batch_triggers_batch_validation(self):
         """Uppercase 'BATCH' run_mode must be coerced and trigger batch vendor checks."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "BATCH", "model_vendor": "openai"},
             agent_name_context="test_agent",
         )
@@ -190,7 +190,7 @@ class TestVendorCompatibilityValidatorRunModeCoercion:
 
     def test_uppercase_batch_with_invalid_vendor_warns(self):
         """Uppercase 'BATCH' with unsupported vendor must produce warning."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "BATCH", "model_vendor": "unknown_vendor"},
             agent_name_context="test_agent",
         )
@@ -201,7 +201,7 @@ class TestVendorCompatibilityValidatorRunModeCoercion:
 
     def test_online_mode_skips_batch_validation(self):
         """Online mode (any case) must not trigger batch vendor checks."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"run_mode": "ONLINE", "model_vendor": "unknown_vendor"},
             agent_name_context="test_agent",
         )

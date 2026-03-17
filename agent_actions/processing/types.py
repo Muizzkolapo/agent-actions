@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional
 
-from agent_actions.config.types import AgentConfigDict
+from agent_actions.config.types import ActionConfigDict
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -283,7 +283,7 @@ class ProcessingResult:
 class ProcessingContext:
     """Context object flowing through the processing pipeline."""
 
-    agent_config: AgentConfigDict
+    agent_config: ActionConfigDict
     agent_name: str
     mode: ProcessingMode = ProcessingMode.ONLINE
     is_first_stage: bool = False

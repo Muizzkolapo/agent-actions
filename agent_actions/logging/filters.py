@@ -138,8 +138,8 @@ class RedactingFilter(logging.Filter):
             "getMessage",
             "correlation_id",
             "workflow_name",
-            "agent_name",
-            "agent_index",
+            "action_name",
+            "action_index",
             "batch_id",
             "item_id",
         }

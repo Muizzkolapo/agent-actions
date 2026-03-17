@@ -1,4 +1,4 @@
-"""Dataclass models for agent workflow orchestration."""
+"""Dataclass models for action workflow orchestration."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -34,7 +34,7 @@ class WorkflowConfig:
 class WorkflowState:
     """Runtime state for workflow execution."""
 
-    previous_agent_type: str | None = None
+    previous_action_type: str | None = None
     ephemeral_directories: list[dict[str, Any]] | None = None
     failed: bool = False
 
@@ -58,18 +58,18 @@ class WorkflowMetadata:
 
     agent_name: str
     execution_order: list[str]
-    agent_indices: dict[str, int]
-    agent_configs: dict[str, dict[str, Any]]
+    action_indices: dict[str, int]
+    action_configs: dict[str, dict[str, Any]]
     child_pipeline: str | None = None
 
 
 @dataclass
-class AgentLogParams:
-    """Parameters for logging agent results."""
+class ActionLogParams:
+    """Parameters for logging action results."""
 
     idx: int
-    agent_name: str
-    total_agents: int
+    action_name: str
+    total_actions: int
     result: Any
     end_time: datetime
     duration: float
@@ -79,9 +79,9 @@ class AgentLogParams:
 class CoreServices:
     """Core execution services."""
 
-    agent_runner: Any
+    action_runner: Any
     state_manager: Any
-    agent_executor: Any
+    action_executor: Any
     action_level_orchestrator: Any
 
 
@@ -103,3 +103,7 @@ class WorkflowServices:
 
     core: CoreServices
     support: SupportServices
+
+
+# Backward-compatible alias
+AgentLogParams = ActionLogParams

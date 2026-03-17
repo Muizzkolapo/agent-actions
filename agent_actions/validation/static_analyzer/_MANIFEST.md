@@ -23,7 +23,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detect_all` | Method | Detect all conflicts in the workflow. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_shadowed_fields` | Method | Get mapping of shadowed fields to their producers. | - |
 | `data_flow_graph.py` | Module | Data flow graph for workflow static analysis. | - |
-| `AgentKind` | Class | Type of agent node (LLM, TOOL, HITL, SOURCE, SEED). | - |
+| `ActionKind` | Class | Type of agent node (LLM, TOOL, HITL, SOURCE, SEED). | - |
 | `OutputSchema` | Class | Represents the output schema of an agent. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `available_fields` | Method | Compute available fields. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `has_field` | Method | Check if field is available in output. | - |

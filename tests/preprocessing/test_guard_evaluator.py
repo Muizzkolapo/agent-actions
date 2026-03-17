@@ -84,9 +84,9 @@ class TestGuardEvaluator:
         assert result.should_execute is True
         mock_guard_filter.filter_item.assert_not_called()
 
-    def test_evaluate_early_agent_scope_skipped(self, evaluator, mock_guard_filter):
-        """Agent-scope guards are skipped (only item-level guards evaluated)."""
-        guard_config = {"clause": "x > 1", "scope": "agent"}
+    def test_evaluate_early_action_scope_skipped(self, evaluator, mock_guard_filter):
+        """Action-scope guards are skipped (only item-level guards evaluated)."""
+        guard_config = {"clause": "x > 1", "scope": "action"}
         result = evaluator.evaluate_early({"x": 5}, guard_config)
         assert result.should_execute is True
         mock_guard_filter.filter_item.assert_not_called()

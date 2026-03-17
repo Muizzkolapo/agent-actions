@@ -3,19 +3,19 @@
 from pathlib import Path
 
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    AgentEntryValidationResult,
-    BaseAgentEntryValidator,
+from agent_actions.validation.action_validators.base_action_validator import (
+    ActionEntryValidationResult,
+    BaseActionEntryValidator,
 )
-from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities,
+from agent_actions.validation.utils.action_config_validation_utilities import (
+    ActionConfigValidationUtilities,
 )
 
 
-class AgentTypeSpecificValidator(BaseAgentEntryValidator):
+class ActionTypeSpecificValidator(BaseActionEntryValidator):
     """Validates agent type field and type-specific requirements."""
 
-    def validate(self, context) -> AgentEntryValidationResult:
+    def validate(self, context) -> ActionEntryValidationResult:
         """Validate agent type and type-specific requirements."""
         errors: list[str] = []
 
@@ -23,9 +23,9 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
         self._validate_agent_type_field(context, errors)
 
         if errors:
-            return AgentEntryValidationResult.with_errors(errors)
+            return ActionEntryValidationResult.with_errors(errors)
 
-        return AgentEntryValidationResult.success()
+        return ActionEntryValidationResult.success()
 
     def _validate_name_field(self, context, errors: list) -> None:
         """Validate the 'name' field type."""
@@ -44,7 +44,7 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
         if "agent_type" not in context.normalized_entry:
             return
 
-        agent_type_value = AgentConfigValidationUtilities.get_case_insensitive_value(
+        agent_type_value = ActionConfigValidationUtilities.get_case_insensitive_value(
             context.entry, "agent_type"
         )
 
@@ -61,7 +61,7 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
 
     def _validate_type_specific_keys(self, context, agent_type: str, errors: list) -> None:
         """Validate type-specific required keys are present."""
-        type_specific_keys = AgentConfigValidationUtilities.get_agent_type_specific_keys(agent_type)
+        type_specific_keys = ActionConfigValidationUtilities.get_action_type_specific_keys(agent_type)
 
         if not type_specific_keys:
             return

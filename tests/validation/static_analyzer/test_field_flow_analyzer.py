@@ -3,7 +3,7 @@
 import pytest
 
 from agent_actions.validation.static_analyzer import (
-    AgentKind,
+    ActionKind,
     DataFlowGraph,
     DataFlowNode,
     FieldFlowAnalyzer,
@@ -21,7 +21,7 @@ def create_simple_graph():
     graph.add_node(
         DataFlowNode(
             name="source",
-            agent_kind=AgentKind.SOURCE,
+            agent_kind=ActionKind.SOURCE,
             output_schema=OutputSchema(is_dynamic=True),
         )
     )
@@ -30,7 +30,7 @@ def create_simple_graph():
     graph.add_node(
         DataFlowNode(
             name="extractor",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"summary", "facts", "confidence"},
             ),
@@ -45,7 +45,7 @@ def create_simple_graph():
     graph.add_node(
         DataFlowNode(
             name="summarizer",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"final_summary"},
             ),
@@ -70,7 +70,7 @@ def create_graph_with_transformations():
     graph.add_node(
         DataFlowNode(
             name="source",
-            agent_kind=AgentKind.SOURCE,
+            agent_kind=ActionKind.SOURCE,
             output_schema=OutputSchema(is_dynamic=True),
         )
     )
@@ -79,7 +79,7 @@ def create_graph_with_transformations():
     graph.add_node(
         DataFlowNode(
             name="processor",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"result", "score"},
                 observe_fields={"original_content"},

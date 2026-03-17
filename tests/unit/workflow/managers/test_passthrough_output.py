@@ -31,15 +31,15 @@ def make_manager(tmp_path, mock_storage_backend):
 
     def _make(
         execution_order=None,
-        agent_configs=None,
-        agent_status=None,
+        action_configs=None,
+        action_status=None,
         storage_backend=None,
     ):
         config = OutputManagerConfig(
             agent_folder=tmp_path,
             execution_order=execution_order or ["extract", "transform"],
-            agent_configs=agent_configs or {},
-            agent_status=agent_status or {},
+            action_configs=action_configs or {},
+            action_status=action_status or {},
             version_correlator=MagicMock(),
             storage_backend=storage_backend or mock_storage_backend,
         )
@@ -62,7 +62,7 @@ class TestPassthroughFromBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_configs={"transform": {}},
+            action_configs={"transform": {}},
         )
         mgr.create_passthrough_output(1, "transform")
 
@@ -94,7 +94,7 @@ class TestPassthroughFromBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_configs={"transform": {}},
+            action_configs={"transform": {}},
         )
         mgr.create_passthrough_output(1, "transform")
 
@@ -111,7 +111,7 @@ class TestPassthroughFromBackend:
 
         mgr = make_manager(
             execution_order=["branch_a", "branch_b", "merge_node"],
-            agent_configs={
+            action_configs={
                 "merge_node": {
                     "dependencies": ["branch_a", "branch_b"],
                     "reduce_key": "parent_target_id",
@@ -152,7 +152,7 @@ class TestPassthroughFromFilesystem:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_configs={"transform": {}},
+            action_configs={"transform": {}},
         )
         mgr.create_passthrough_output(1, "transform")
 
@@ -172,7 +172,7 @@ class TestPassthroughFromFilesystem:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_configs={"transform": {}},
+            action_configs={"transform": {}},
         )
         mgr.create_passthrough_output(1, "transform")
 
@@ -186,7 +186,7 @@ class TestPassthroughFromFilesystem:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_configs={"transform": {}},
+            action_configs={"transform": {}},
         )
         mgr.create_passthrough_output(1, "transform")
 
@@ -208,7 +208,7 @@ class TestPassthroughStartNode:
 
         mgr = make_manager(
             execution_order=["extract"],
-            agent_configs={"extract": {}},
+            action_configs={"extract": {}},
         )
         with patch.object(mgr, "get_upstream_directories", return_value=[str(staging_dir)]):
             mgr.create_passthrough_output(0, "extract")
@@ -228,7 +228,7 @@ class TestPassthroughStartNode:
 
         mgr = make_manager(
             execution_order=["ingest"],
-            agent_configs={"ingest": {}},
+            action_configs={"ingest": {}},
         )
         with patch.object(mgr, "get_upstream_directories", return_value=[str(data_dir)]):
             mgr.create_passthrough_output(0, "ingest")
@@ -252,7 +252,7 @@ class TestProcessAgentOutputBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         output_dir = tmp_path / "target" / "extract"
         result = mgr._process_agent_output(output_dir, "extract")
@@ -276,7 +276,7 @@ class TestProcessAgentOutputBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         output_dir = tmp_path / "target" / "extract"
         result = mgr._process_agent_output(output_dir, "extract")
@@ -294,7 +294,7 @@ class TestProcessAgentOutputBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         result = mgr._process_agent_output(output_dir, "extract")
 
@@ -309,7 +309,7 @@ class TestProcessAgentOutputBackend:
         output_dir = tmp_path / "target" / "extract"
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         result = mgr._process_agent_output(output_dir, "extract")
 
@@ -326,7 +326,7 @@ class TestProcessAgentOutputBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         output_dir = tmp_path / "target" / "extract"
         mgr._process_agent_output(output_dir, "extract")
@@ -347,7 +347,7 @@ class TestProcessAgentOutputBackend:
 
         mgr = make_manager(
             execution_order=["extract", "transform"],
-            agent_status={"extract": {"status": "completed"}},
+            action_status={"extract": {"status": "completed"}},
         )
         result = mgr._process_agent_output(output_dir, "extract")
 

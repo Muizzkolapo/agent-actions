@@ -59,24 +59,24 @@ class BatchLifecycleManager:
         registry_status = self.batch_service.get_batch_registry_status(output_directory)
 
         if registry_status == "completed":
-            fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
+            fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
             # Re-check — processing may have submitted recovery batches
             new_status = self.batch_service.get_batch_registry_status(output_directory)
             if new_status != "completed":
                 return (None, "in_progress")
-            fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
+            fire_event(BatchResultsProcessedEvent(action_name=agent_name))
             return (output_directory, "completed")
 
         if registry_status in ["in_progress", "partial_failed"]:
             if self.batch_service.are_all_batch_jobs_completed(output_directory):
-                fire_event(BatchProcessingCompleteEvent(agent_name=agent_name))
+                fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
                 # Re-check — processing may have submitted recovery batches
                 new_status = self.batch_service.get_batch_registry_status(output_directory)
                 if new_status != "completed":
                     return (None, "in_progress")
-                fire_event(BatchResultsProcessedEvent(agent_name=agent_name))
+                fire_event(BatchResultsProcessedEvent(action_name=agent_name))
                 return (output_directory, "completed")
             return (None, "in_progress")
 
@@ -85,11 +85,11 @@ class BatchLifecycleManager:
                 agent_name, DISPOSITION_PASSTHROUGH
             )
             if has_passthrough:
-                fire_event(BatchPassthroughEvent(agent_name=agent_name))
+                fire_event(BatchPassthroughEvent(action_name=agent_name))
                 return (output_directory, "completed")
             fire_event(
                 BatchStatusEvent(
-                    agent_name=agent_name,
+                    action_name=agent_name,
                     status_message=f"No batch jobs found for {agent_name}",
                     status_type="warning",
                 )
@@ -119,7 +119,7 @@ class BatchLifecycleManager:
         except ProcessingError:
             fire_event(
                 BatchErrorEvent(
-                    agent_name=agent_name,
+                    action_name=agent_name,
                     error_message="Could not process batch results",
                     error_type="ProcessingError",
                 )
@@ -128,7 +128,7 @@ class BatchLifecycleManager:
         except Exception as e:
             fire_event(
                 BatchErrorEvent(
-                    agent_name=agent_name,
+                    action_name=agent_name,
                     error_message=f"Could not process batch results: {str(e)}",
                     error_type=type(e).__name__,
                 )

@@ -103,7 +103,7 @@ class RunCommand:
         workflow.services.core.agent_executor.run_tracker = tracker
         workflow.services.core.agent_executor.run_id = run_id
 
-        agent_folder = workflow.services.core.agent_runner.get_agent_folder(self.agent_name)
+        agent_folder = workflow.services.core.agent_runner.get_action_folder(self.agent_name)
         LoggerFactory.initialize(
             output_dir=agent_folder,
             workflow_name=self.agent_name,
@@ -167,7 +167,7 @@ class RunCommand:
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     help="Path to the user's code folder containing UDFs",
 )
-@click.option("--use-tools", is_flag=True, help="Enable tool usage for agents")
+@click.option("--use-tools", is_flag=True, help="Enable tool usage for actions")
 @click.option(
     "--execution-mode",
     "-e",
@@ -179,7 +179,7 @@ class RunCommand:
     "--concurrency-limit",
     type=int,
     default=5,
-    help="Maximum number of agents to run concurrently (default: 5, range: 1-50)",
+    help="Maximum number of actions to run concurrently (default: 5, range: 1-50)",
 )
 @click.option("--upstream", is_flag=True, help="Recursively execute upstream dependent workflows")
 @click.option(

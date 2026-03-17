@@ -1,4 +1,4 @@
-"""Module for managing and executing agents with different strategies in a workflow."""
+"""Module for managing and executing actions with different strategies in a workflow."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
 from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.config.types import AgentConfigDict
+from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
 from agent_actions.utils.file_handler import FileHandler
@@ -41,7 +41,7 @@ from agent_actions.workflow.runner_file_processing import (
     warn_no_files_found as _warn_no_files_found,
 )
 from agent_actions.workflow.strategies import (
-    AgentStrategy,
+    ActionStrategy,
     InitialStrategy,
     StandardStrategy,
     StrategyExecutionParams,
@@ -54,9 +54,9 @@ logger = logging.getLogger(__name__)
 class FileProcessParams:
     """Parameters for processing files."""
 
-    agent_config: dict
-    agent_name: str
-    strategy: AgentStrategy
+    action_config: dict
+    action_name: str
+    strategy: ActionStrategy
     upstream_data_dirs: list[str]
     output_directory: str
     idx: int
@@ -78,9 +78,9 @@ class SingleFileProcessParams:
     """Parameters for processing a single file."""
 
     locations: FileLocationParams
-    agent_config: dict
-    agent_name: str
-    strategy: AgentStrategy
+    action_config: dict
+    action_name: str
+    strategy: ActionStrategy
     idx: int
     source_relative_path: str | None = None  # For storage backend reads
     data: list[dict[str, Any]] | None = None  # Pre-loaded data (skips file read)
@@ -88,17 +88,17 @@ class SingleFileProcessParams:
 
 @dataclass
 class ProcessGenerateParams:
-    """Parameters for process_and_generate_for_agent method."""
+    """Parameters for process_and_generate_for_action method."""
 
-    agent_config: dict
-    agent_name: str
-    strategy: AgentStrategy
-    previous_agent_type: str | None
+    action_config: dict
+    action_name: str
+    strategy: ActionStrategy
+    previous_action_type: str | None
     idx: int
 
 
-class AgentRunner:
-    """Manages agent execution using different strategies in a workflow."""
+class ActionRunner:
+    """Manages action execution using different strategies in a workflow."""
 
     def __init__(
         self,
@@ -106,45 +106,45 @@ class AgentRunner:
         processor_factory: ProcessorFactory | None = None,
         storage_backend: StorageBackend | None = None,
     ) -> None:
-        """Initialize the AgentRunner with strategy configurations."""
+        """Initialize the ActionRunner with strategy configurations."""
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
         self.storage_backend = storage_backend
-        self.agent_configs: dict[str, dict] | None = None
+        self.action_configs: dict[str, dict] | None = None
         self.execution_order: list[str] = []  # Set by service_init.initialize_services
-        self.agent_indices: dict[str, int] = {}  # Set by service_init.initialize_services
+        self.action_indices: dict[str, int] = {}  # Set by service_init.initialize_services
         self.workflow_name: str | None = None  # Set by AgentWorkflow for agent_io folder lookups
         self.manifest_manager: ManifestManager | None = None  # Set by AgentWorkflow
         self.data_source_config: str | dict[str, Any] | None = None  # Set by coordinator
         self.project_root: Path | None = None  # Set by service_init.initialize_services
-        self.strategies: dict[str, AgentStrategy] = {
+        self.strategies: dict[str, ActionStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
             "terminal": StandardStrategy(processor_factory),
         }
 
-    def get_agent_folder(self, agent_name: str, project_root: Path | None = None) -> str:
-        """Return the agent folder path.
+    def get_action_folder(self, action_name: str, project_root: Path | None = None) -> str:
+        """Return the action folder path.
 
         Raises:
-            FileSystemError: If the agent folder is not found.
+            FileSystemError: If the action folder is not found.
         """
         search_dir: Path = project_root or self.project_root or Path.cwd()
-        folder_name = self.workflow_name if self.workflow_name else agent_name
-        agent_folder: str | None = FileHandler.find_specific_folder(
+        folder_name = self.workflow_name if self.workflow_name else action_name
+        action_folder: str | None = FileHandler.find_specific_folder(
             str(search_dir), folder_name, "agent_io"
         )
-        if agent_folder is None:
+        if action_folder is None:
             raise FileSystemError(
-                f"Agent folder not found for agent: {agent_name}",
+                f"Action folder not found for action: {action_name}",
                 context={
-                    "agent_name": agent_name,
+                    "action_name": action_name,
                     "workflow_name": folder_name,
                     "search_root": str(search_dir),
-                    "operation": "get_agent_folder",
+                    "operation": "get_action_folder",
                 },
             )
-        return agent_folder
+        return action_folder
 
     def _resolve_upstream_from_manifest(self, agent_folder: Path) -> list[Path] | None:
         """Resolve upstream directories from manifest file, or None."""
@@ -172,7 +172,7 @@ class AgentRunner:
         return result.directories
 
     def _resolve_dependency_directories(
-        self, agent_folder: Path, dependencies: list[str], agent_config: dict, agent_name: str
+        self, agent_folder: Path, dependencies: list[str], action_config: dict, agent_name: str
     ) -> list[Path]:
         """Resolve upstream directories from dependencies (input sources).
 
@@ -197,7 +197,7 @@ class AgentRunner:
         # that matches version branches (research_1, research_2), ALL matching branches
         # become input sources.
         if len(dependencies) > 1:
-            has_reduce_key = agent_config.get("reduce_key") is not None
+            has_reduce_key = action_config.get("reduce_key") is not None
             is_parallel = _is_parallel_branches(dependencies)
 
             if has_reduce_key:
@@ -210,7 +210,7 @@ class AgentRunner:
                 )
             elif not is_parallel:
                 # Fan-in pattern - use shared helper
-                primary_dep = agent_config.get("primary_dependency")
+                primary_dep = action_config.get("primary_dependency")
                 try:
                     input_deps, non_primary = _resolve_input_sources_for_fan_in(
                         dependencies, primary_dep
@@ -301,33 +301,33 @@ class AgentRunner:
         logger.warning("Dependency directory not found for %s", dep_name)
         return None
 
-    def _resolve_linear_directory(self, agent_folder: Path, previous_agent_type: str) -> Path:
+    def _resolve_linear_directory(self, agent_folder: Path, previous_action_type: str) -> Path:
         """Resolve upstream directory for linear workflow (default behavior)."""
         # Use simple name without index prefix
-        return agent_folder / "target" / previous_agent_type
+        return agent_folder / "target" / previous_action_type
 
     def setup_directories(
-        self, agent_folder: str, agent_config: dict, previous_agent_type: str | None, idx: int
+        self, agent_folder: str, action_config: dict, previous_action_type: str | None, idx: int
     ) -> tuple[list[str], str]:
-        """Set up input and output directories for the agent."""
+        """Set up input and output directories for the action."""
         agent_folder_path = Path(agent_folder)
-        agent_type = agent_config["agent_type"]
-        dependencies = agent_config.get("dependencies", [])
+        agent_type = action_config["agent_type"]
+        dependencies = action_config.get("dependencies", [])
 
-        if not dependencies and not previous_agent_type:
+        if not dependencies and not previous_action_type:
             upstream_data_dirs = self._resolve_start_node_directories(
-                agent_folder_path, agent_config.get("agent_type", "unknown")
+                agent_folder_path, action_config.get("agent_type", "unknown")
             )
-        elif dependencies and hasattr(self, "agent_indices") and self.agent_indices:
+        elif dependencies and hasattr(self, "action_indices") and self.action_indices:
             upstream_data_dirs = self._resolve_dependency_directories(
                 agent_folder_path,
                 dependencies,
-                agent_config,
-                agent_type,  # agent_name
+                action_config,
+                agent_type,  # action_name
             )
-        elif previous_agent_type:
+        elif previous_action_type:
             upstream_data_dirs = [
-                self._resolve_linear_directory(agent_folder_path, previous_agent_type)
+                self._resolve_linear_directory(agent_folder_path, previous_action_type)
             ]
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
@@ -345,13 +345,13 @@ class AgentRunner:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
         params.strategy.execute(
             StrategyExecutionParams(
-                agent_config=cast("AgentConfigDict", params.agent_config),
-                agent_name=params.agent_name,
+                action_config=cast("ActionConfigDict", params.action_config),
+                action_name=params.action_name,
                 file_path=str(params.locations.item),
                 base_directory=str(params.locations.input_directory),
                 output_directory=str(output_file_path.parent),
                 idx=params.idx,
-                agent_configs=self.agent_configs,
+                action_configs=self.action_configs,
                 storage_backend=self.storage_backend,
                 source_relative_path=params.source_relative_path,
                 data=params.data,
@@ -410,28 +410,28 @@ class AgentRunner:
         """Walk upstream data directories and process each file with the given strategy."""
         _process_files(self, params)
 
-    def process_and_generate_for_agent(self, params: ProcessGenerateParams) -> str:
-        """Process and generate data for an agent using the provided strategy."""
-        agent_folder: str = self.get_agent_folder(params.agent_name)
+    def process_and_generate_for_action(self, params: ProcessGenerateParams) -> str:
+        """Process and generate data for an action using the provided strategy."""
+        agent_folder: str = self.get_action_folder(params.action_name)
         input_directories, output_directory = self.setup_directories(
-            agent_folder, params.agent_config, params.previous_agent_type, params.idx
+            agent_folder, params.action_config, params.previous_action_type, params.idx
         )
 
         # Resolve file_type_filter for start nodes — only when the data source
         # resolver is used (not when inputs come from an upstream manifest)
         file_type_filter = None
-        if not params.agent_config.get("dependencies") and not params.previous_agent_type:
+        if not params.action_config.get("dependencies") and not params.previous_action_type:
             agent_folder_path = Path(agent_folder)
             if not self._resolve_upstream_from_manifest(agent_folder_path):
                 result = resolve_start_node_data_source(
-                    agent_folder_path, self.data_source_config, params.agent_name
+                    agent_folder_path, self.data_source_config, params.action_name
                 )
                 file_type_filter = result.file_type_filter
 
         self.process_files(
             FileProcessParams(
-                agent_config=params.agent_config,
-                agent_name=params.agent_name,
+                action_config=params.action_config,
+                action_name=params.action_name,
                 strategy=params.strategy,
                 upstream_data_dirs=input_directories,
                 output_directory=output_directory,
@@ -441,28 +441,29 @@ class AgentRunner:
         )
         return output_directory
 
-    def run_agent(
+    def run_action(
         self,
-        agent_config: dict,
-        agent_name: str,
-        previous_agent_type: str | None,
+        action_config: dict,
+        action_name: str,
+        previous_action_type: str | None,
         idx: int,
     ) -> str:
-        """Run an agent with the appropriate strategy based on its position."""
-        dependencies = agent_config.get("dependencies", [])
+        """Run an action with the appropriate strategy based on its position in the workflow."""
+        dependencies = action_config.get("dependencies", [])
         if not dependencies:
             strategy_name = "initial"
         else:
             strategy_name = "intermediate"
 
         strategy = self.strategies[strategy_name]
-        output_folder: str = self.process_and_generate_for_agent(
+        output_folder: str = self.process_and_generate_for_action(
             ProcessGenerateParams(
-                agent_config=agent_config,
-                agent_name=agent_name,
+                action_config=action_config,
+                action_name=action_name,
                 strategy=strategy,
-                previous_agent_type=previous_agent_type,
+                previous_action_type=previous_action_type,
                 idx=idx,
             )
         )
         return output_folder
+

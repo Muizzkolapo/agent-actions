@@ -2,21 +2,21 @@
 
 from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
 from agent_actions.utils.schema_utils import is_compiled_schema
-from agent_actions.validation.agent_validators.base_agent_validator import (
-    AgentEntryValidationResult,
-    BaseAgentEntryValidator,
+from agent_actions.validation.action_validators.base_action_validator import (
+    ActionEntryValidationResult,
+    BaseActionEntryValidator,
 )
 from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 
 
-class InlineSchemaValidator(BaseAgentEntryValidator):
+class InlineSchemaValidator(BaseActionEntryValidator):
     """Validates inline schema configuration for shorthand and compiled formats."""
 
     def __init__(self):
         """Initialize with schema type validator."""
         self.schema_type_validator = SchemaTypeValidator()
 
-    def validate(self, context) -> AgentEntryValidationResult:
+    def validate(self, context) -> ActionEntryValidationResult:
         """Validate inline schema configuration."""
         normalized_entry = context.normalized_entry
         desc = context.description
@@ -25,7 +25,7 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
         warnings = []
 
         if SCHEMA_KEY not in normalized_entry:
-            return AgentEntryValidationResult.success()
+            return ActionEntryValidationResult.success()
 
         inline_schema = normalized_entry[SCHEMA_KEY]
 
@@ -34,7 +34,7 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
                 f"{desc} 'schema' must be a dictionary with field names "
                 f"as keys and types as values."
             )
-            return AgentEntryValidationResult.with_errors(errors)
+            return ActionEntryValidationResult.with_errors(errors)
 
         # Unified/compiled schemas are validated during render
         if is_compiled_schema(inline_schema):
@@ -44,8 +44,8 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
                     f"The inline 'schema' will take precedence over 'schema_name'."
                 )
             if warnings:
-                return AgentEntryValidationResult(errors=[], warnings=warnings)
-            return AgentEntryValidationResult.success()
+                return ActionEntryValidationResult(errors=[], warnings=warnings)
+            return ActionEntryValidationResult.success()
 
         valid_types = {"string", "number", "integer", "boolean", "array", "object"}
         valid_array_types = {
@@ -89,6 +89,6 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
             )
 
         if errors or warnings:
-            return AgentEntryValidationResult(errors=errors, warnings=warnings)
+            return ActionEntryValidationResult(errors=errors, warnings=warnings)
 
-        return AgentEntryValidationResult.success()
+        return ActionEntryValidationResult.success()

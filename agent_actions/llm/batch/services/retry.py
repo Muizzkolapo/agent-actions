@@ -24,11 +24,11 @@ class BatchRetryService:
 
     def __init__(
         self,
-        agent_indices: dict[str, int] | None = None,
+        action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
-        self._agent_indices = agent_indices or {}
+        self._action_indices = action_indices or {}
         self._dependency_configs = dependency_configs or {}
         self._storage_backend = storage_backend
 
@@ -97,7 +97,7 @@ class BatchRetryService:
         output_directory: str,
         file_name: str | None,
         agent_config: dict[str, Any] | None,
-        agent_indices: dict[str, int] | None = None,
+        action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
     ) -> list[BatchResult]:
         """Validate results and reprompt failures with feedback.
@@ -115,7 +115,7 @@ class BatchRetryService:
             output_directory,
             file_name,
             agent_config,
-            agent_indices,
+            action_indices,
             dependency_configs,
         )
 
@@ -420,7 +420,7 @@ class BatchRetryService:
         try:
             reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
             preparator = BatchTaskPreparator(
-                agent_indices=self._agent_indices,
+                action_indices=self._action_indices,
                 dependency_configs=self._dependency_configs,
                 storage_backend=self._storage_backend,
             )

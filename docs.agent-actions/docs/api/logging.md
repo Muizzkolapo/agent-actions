@@ -451,48 +451,48 @@ fire_event(WorkflowFailedEvent(
 - `error_message` (str): Error description
 - `error_type` (str): Exception type name
 - `elapsed_time` (float): Time elapsed before failure
-- `failed_agent` (str): Name of the agent that failed
+- `failed_action` (str): Name of the action that failed
 
 ---
 
-### Agent Events
+### Action Events
 
-#### AgentStartEvent
+#### ActionStartEvent
 
-Emitted when an agent starts processing.
+Emitted when an action starts processing.
 
 ```python
-from agent_actions.logging.events import AgentStartEvent
+from agent_actions.logging.events import ActionStartEvent
 
-fire_event(AgentStartEvent(
-    agent_name="extract_data",
-    agent_index=0,  # 0-based index
-    total_agents=5,
-    agent_type="llm",
+fire_event(ActionStartEvent(
+    action_name="extract_data",
+    action_index=0,  # 0-based index
+    total_actions=5,
+    action_type="llm",
     input_path="/path/to/input.json",
 ))
 ```
 
 **Fields:**
-- `agent_name` (str): Agent name
-- `agent_index` (int): Agent position in workflow (0-based)
-- `total_agents` (int): Total number of agents
-- `agent_type` (str): Type of agent ("llm", "tool", etc.)
+- `action_name` (str): Action name
+- `action_index` (int): Action position in workflow (0-based)
+- `total_actions` (int): Total number of actions
+- `action_type` (str): Type of action ("llm", "tool", etc.)
 - `input_path` (str): Path to input file
 
 ---
 
-#### AgentCompleteEvent
+#### ActionCompleteEvent
 
-Emitted when an agent completes successfully.
+Emitted when an action completes successfully.
 
 ```python
-from agent_actions.logging.events import AgentCompleteEvent
+from agent_actions.logging.events import ActionCompleteEvent
 
-fire_event(AgentCompleteEvent(
-    agent_name="extract_data",
-    agent_index=0,
-    total_agents=5,
+fire_event(ActionCompleteEvent(
+    action_name="extract_data",
+    action_index=0,
+    total_actions=5,
     execution_time=15.2,
     output_path="/path/to/output.json",
     record_count=100,
@@ -501,9 +501,9 @@ fire_event(AgentCompleteEvent(
 ```
 
 **Fields:**
-- `agent_name` (str): Agent name
-- `agent_index` (int): Agent position in workflow (0-based)
-- `total_agents` (int): Total number of agents
+- `action_name` (str): Action name
+- `action_index` (int): Action position in workflow (0-based)
+- `total_actions` (int): Total number of actions
 - `execution_time` (float): Execution time in seconds
 - `output_path` (str): Path to output file
 - `record_count` (int): Number of records processed
@@ -511,40 +511,40 @@ fire_event(AgentCompleteEvent(
 
 ---
 
-#### AgentSkipEvent
+#### ActionSkipEvent
 
-Emitted when an agent is skipped (guard condition, cache hit, etc.).
+Emitted when an action is skipped (guard condition, cache hit, etc.).
 
 ```python
-from agent_actions.logging.events import AgentSkipEvent
+from agent_actions.logging.events import ActionSkipEvent
 
-fire_event(AgentSkipEvent(
-    agent_name="optional_enrichment",
-    agent_index=2,
-    total_agents=5,
+fire_event(ActionSkipEvent(
+    action_name="optional_enrichment",
+    action_index=2,
+    total_actions=5,
     skip_reason="Guard condition failed: confidence < 0.8",
 ))
 ```
 
 **Fields:**
-- `agent_name` (str): Agent name
-- `agent_index` (int): Agent position in workflow (0-based)
-- `total_agents` (int): Total number of agents
-- `skip_reason` (str): Why agent was skipped
+- `action_name` (str): Action name
+- `action_index` (int): Action position in workflow (0-based)
+- `total_actions` (int): Total number of actions
+- `skip_reason` (str): Why action was skipped
 
 ---
 
-#### AgentFailedEvent
+#### ActionFailedEvent
 
-Emitted when an agent fails.
+Emitted when an action fails.
 
 ```python
-from agent_actions.logging.events import AgentFailedEvent
+from agent_actions.logging.events import ActionFailedEvent
 
-fire_event(AgentFailedEvent(
-    agent_name="extract_data",
-    agent_index=0,
-    total_agents=5,
+fire_event(ActionFailedEvent(
+    action_name="extract_data",
+    action_index=0,
+    total_actions=5,
     error_message="API rate limit exceeded",
     error_type="RateLimitError",
     execution_time=2.5,
@@ -553,9 +553,9 @@ fire_event(AgentFailedEvent(
 ```
 
 **Fields:**
-- `agent_name` (str): Agent name
-- `agent_index` (int): Agent position in workflow (0-based)
-- `total_agents` (int): Total number of agents
+- `action_name` (str): Action name
+- `action_index` (int): Action position in workflow (0-based)
+- `total_actions` (int): Total number of actions
 - `error_message` (str): Error description
 - `error_type` (str): Exception class name
 - `execution_time` (float): Time elapsed before failure
@@ -582,7 +582,7 @@ fire_event(BatchSubmittedEvent(
 
 **Fields:**
 - `batch_id` (str): Batch job ID
-- `agent_name` (str): Agent name
+- `action_name` (str): Action name
 - `request_count` (int): Number of requests in batch
 - `provider` (str): LLM provider
 
@@ -597,7 +597,7 @@ from agent_actions.logging.events import BatchCompleteEvent
 
 fire_event(BatchCompleteEvent(
     batch_id="batch_abc123",
-    agent_name="extract_data",
+    action_name="extract_data",
     total=1000,
     completed=995,
     failed=5,
@@ -608,7 +608,7 @@ fire_event(BatchCompleteEvent(
 
 **Fields:**
 - `batch_id` (str): Batch job ID
-- `agent_name` (str): Agent name
+- `action_name` (str): Action name
 - `total` (int): Total requests in batch
 - `completed` (int): Successfully completed requests
 - `failed` (int): Failed requests
@@ -626,7 +626,7 @@ from agent_actions.logging.events import BatchErrorEvent
 
 fire_event(BatchErrorEvent(
     message="Batch failed",
-    agent_name="extract_data",
+    action_name="extract_data",
     batch_id="batch_abc123",
     error_message="Batch expired",
     error_type="BatchExpiredError",
@@ -634,7 +634,7 @@ fire_event(BatchErrorEvent(
 ```
 
 **Fields:**
-- `agent_name` (str): Agent name
+- `action_name` (str): Action name
 - `batch_id` (str): Batch job ID
 - `error_message` (str): Error description
 - `error_type` (str): Exception class name
@@ -763,7 +763,7 @@ from agent_actions.logging.core import ConsoleEventHandler, EventLevel
 handler = ConsoleEventHandler(
     min_level=EventLevel.INFO,
     show_timestamp=True,
-    categories={"workflow", "agent", "batch"},
+    categories={"workflow", "action", "batch"},
 )
 ```
 
@@ -819,7 +819,7 @@ collector = RunResultsCollector(
 **Output:** `{output_dir}/target/run_results.json`
 
 **Methods:**
-- `accepts(event)`: Returns True for workflow/agent category events
+- `accepts(event)`: Returns True for workflow/action category events
 - `handle(event)`: Process event and update internal state
 - `flush()`: Write run_results.json to disk
 
@@ -891,7 +891,7 @@ Event categories for filtering.
 from agent_actions.logging.events.base import EventCategory
 
 EventCategory.WORKFLOW     # Workflow lifecycle events
-EventCategory.AGENT        # Agent execution events
+EventCategory.ACTION       # Action execution events
 EventCategory.BATCH        # Batch processing events
 EventCategory.VALIDATION   # Validation events
 EventCategory.PROGRESS     # Progress updates
@@ -908,8 +908,8 @@ EventCategory.SYSTEM       # System-level events
 from agent_actions.logging import LoggerFactory, fire_event
 from agent_actions.logging.events import (
     WorkflowStartEvent,
-    AgentStartEvent,
-    AgentCompleteEvent,
+    ActionStartEvent,
+    ActionCompleteEvent,
     WorkflowCompleteEvent,
 )
 
@@ -923,19 +923,19 @@ LoggerFactory.initialize(
 fire_event(WorkflowStartEvent(
     message="Starting workflow",
     workflow_name="my_workflow",
-    agent_count=3,
+    action_count=3,
 ))
 
-# Agent 1
-fire_event(AgentStartEvent(
-    message="Starting agent",
-    agent_name="extract",
-    agent_index=1,
+# Action 1
+fire_event(ActionStartEvent(
+    message="Starting action",
+    action_name="extract",
+    action_index=1,
 ))
 # ... do work ...
-fire_event(AgentCompleteEvent(
-    message="Agent completed",
-    agent_name="extract",
+fire_event(ActionCompleteEvent(
+    message="Action completed",
+    action_name="extract",
     execution_time=5.2,
 ))
 
@@ -962,12 +962,12 @@ class MetricsHandler(EventHandler):
         self.metrics = []
 
     def accepts(self, event: BaseEvent) -> bool:
-        return event.category in ("workflow", "agent")
+        return event.category in ("workflow", "action")
 
     def handle(self, event: BaseEvent) -> None:
-        if event.event_type == "agent_complete":
+        if event.event_type == "ActionCompleteEvent":
             self.metrics.append({
-                "agent": event.data.get("agent_name"),
+                "action": event.data.get("action_name"),
                 "duration": event.data.get("execution_time"),
                 "tokens": event.data.get("tokens", {}),
             })
@@ -987,7 +987,7 @@ manager.register(handler)
 
 ```python
 from agent_actions.logging import get_manager, fire_event
-from agent_actions.logging.events import AgentStartEvent
+from agent_actions.logging.events import ActionStartEvent
 
 manager = get_manager()
 
@@ -995,15 +995,15 @@ manager = get_manager()
 manager.set_context(workflow_name="main")
 
 # All events inherit workflow_name="main"
-fire_event(AgentStartEvent(message="Agent 1", agent_name="extract"))
+fire_event(ActionStartEvent(message="Action 1", action_name="extract"))
 
 # Override for nested context
 with manager.context(workflow_name="upstream"):
-    fire_event(AgentStartEvent(message="Upstream agent", agent_name="fetch"))
+    fire_event(ActionStartEvent(message="Upstream action", action_name="fetch"))
     # Event has workflow_name="upstream"
 
 # Back to workflow_name="main"
-fire_event(AgentStartEvent(message="Agent 2", agent_name="transform"))
+fire_event(ActionStartEvent(message="Action 2", action_name="transform"))
 ```
 
 ---

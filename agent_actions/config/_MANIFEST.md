@@ -26,11 +26,11 @@ orchestration, prompts, and processing to concrete implementations.
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
 | `path_config.py` | Module | Path configuration models and defaults. | `paths`, `configuration` |
-| `factory.py` | Module | DI-aware factory helpers for `AgentRunner`. | `di`, `configuration` |
+| `factory.py` | Module | DI-aware factory helpers for `ActionRunner`. | `di`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
 | `defaults.py` | Module | Centralized default constants grouped by domain (`StorageDefaults`, `LockDefaults`, `OllamaDefaults`, `ApiDefaults`, `SeedDataDefaults`, `PromptDefaults`, `DocsDefaults`). Zero imports—safe to import anywhere. | `config`, `defaults` |
-| `types.py` | Module | Typed dictionaries (`AgentConfigDict`, `AgentEntryDict`, `AgentConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) and enums (`Granularity`, `RunMode`) for config structures. | `config`, `workflow`, `processing` |
+| `types.py` | Module | Typed dictionaries (`ActionConfigDict`, `ActionEntryDict`, `ActionConfigMap`, `ContextScopeDict`, `GuardConfigDict`, `WhereClauseDict`, `HitlConfigDict`) and enums (`Granularity`, `RunMode`) for config structures. | `config`, `workflow`, `processing` |
 | `project_paths.py` | Module | `ProjectPathsFactory` and `ProjectPaths` for project directory resolution. Moved from `cli/`. | `paths`, `validation`, `output` |
 | `manager.py` | Module | `ConfigManager` for workflow config assembly: YAML loading, template rendering, schema validation, config merging, dependency inference, and execution order determination. | `configuration`, `workflow` |
 
@@ -42,7 +42,7 @@ orchestration, prompts, and processing to concrete implementations.
 flowchart TD
     A[EnvironmentConfig] --> B[ApplicationContainer]
     B --> C[DI Registrations]
-    C --> D[AgentRunner]
+    C --> D[ActionRunner]
 ```
 
 Key Functions
@@ -51,7 +51,7 @@ Key Functions
 |--------|--------|------|-------------|
 | `environment.py` | `EnvironmentConfig` | Class | Environment settings with validation helpers. |
 | `factory.py` | `application_container_context` | Function | Context-managed DI lifecycle for container. |
-| `factory.py` | `create_agent_runner` | Function | Create `AgentRunner` via DI container. |
+| `factory.py` | `create_action_runner` | Function | Create `ActionRunner` via DI container. |
 
 ### Project Path Resolution
 

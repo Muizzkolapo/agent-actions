@@ -51,31 +51,31 @@ def load_workflow_configs(config: WorkflowConfig, console: Console) -> WorkflowM
     manager.determine_execution_order()
 
     execution_order = manager.execution_order
-    agent_configs = manager.get_all_agent_configs_as_dicts()
-    agent_indices = {agent: i for i, agent in enumerate(execution_order)}
+    action_configs = manager.get_all_agent_configs_as_dicts()
+    action_indices = {action: i for i, action in enumerate(execution_order)}
 
-    # Add idx and workflow_config_path fields to each agent config
-    for agent_name, agent_config in agent_configs.items():
+    # Add idx and workflow_config_path fields to each action config
+    for action_name, action_config in action_configs.items():
         # Skip None configs (defensive check for malformed dictionaries)
-        if agent_config is None:
+        if action_config is None:
             continue
-        if agent_name in agent_indices:
-            agent_config["idx"] = agent_indices[agent_name]
+        if action_name in action_indices:
+            action_config["idx"] = action_indices[action_name]
         # Add workflow config path for static data loading
-        agent_config["workflow_config_path"] = config.paths.constructor_path
+        action_config["workflow_config_path"] = config.paths.constructor_path
         if config.project_root:
-            agent_config["_project_root"] = str(config.project_root)
+            action_config["_project_root"] = str(config.project_root)
 
     return WorkflowMetadata(
         agent_name=manager.agent_name,
         execution_order=execution_order,
-        agent_indices=agent_indices,
-        agent_configs=agent_configs,
+        action_indices=action_indices,
+        action_configs=action_configs,
         child_pipeline=manager.child_pipeline,
     )
 
 
-def validate_schema_files(agent_configs: dict, config: WorkflowConfig) -> None:
+def validate_schema_files(action_configs: dict, config: WorkflowConfig) -> None:
     """Validate that all referenced schema files exist (fail-fast).
 
     Raises:
@@ -87,11 +87,11 @@ def validate_schema_files(agent_configs: dict, config: WorkflowConfig) -> None:
 
     missing_schemas = []
 
-    for action_name, agent_config in agent_configs.items():
-        if agent_config is None:
+    for action_name, action_config in action_configs.items():
+        if action_config is None:
             continue
 
-        schema_name = agent_config.get("schema_name")
+        schema_name = action_config.get("schema_name")
         if schema_name:
             schema_file = schema_dir / f"{schema_name}.yml"
             if not schema_file.exists():

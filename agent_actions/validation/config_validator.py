@@ -9,11 +9,11 @@ from typing import Any
 
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
-from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
-    AgentEntryValidationOrchestrator,
+from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+    ActionEntryValidationOrchestrator,
 )
-from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities as ACVUtils,
+from agent_actions.validation.utils.action_config_validation_utilities import (
+    ActionConfigValidationUtilities as ACVUtils,
 )
 
 logger = logging.getLogger(__name__)
@@ -115,8 +115,8 @@ class ConfigValidator(BaseValidator):
         self, entry: dict[str, Any], cfg_ctx_name: str, proj_root: Path | None = None
     ) -> None:
         """Validate a single agent entry via the orchestrator chain."""
-        orchestrator = AgentEntryValidationOrchestrator()
-        orchestrator.validate_agent_entry(entry, cfg_ctx_name, proj_root)
+        orchestrator = ActionEntryValidationOrchestrator()
+        orchestrator.validate_action_entry(entry, cfg_ctx_name, proj_root)
 
         for error in orchestrator.get_validation_errors():
             self.add_error(error)

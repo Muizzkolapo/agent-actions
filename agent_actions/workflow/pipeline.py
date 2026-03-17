@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, cast
 
 from agent_actions.config.di.container import ProcessorFactory
-from agent_actions.config.types import AgentConfigDict, RunMode
+from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import AgentActionsError, ConfigurationError, DependencyError
 from agent_actions.input.loaders.file_reader import FileReader
 from agent_actions.llm.batch.service import BatchService
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for ProcessingPipeline."""
 
-    agent_config: AgentConfigDict
+    agent_config: ActionConfigDict
     agent_name: str
     idx: int
     agent_configs: dict[str, Any] | None = None
@@ -54,7 +54,7 @@ class PipelineConfig:
 class BatchPipelineParams:
     """Parameters for batch pipeline processing."""
 
-    pipeline_agent_config: AgentConfigDict
+    pipeline_agent_config: ActionConfigDict
     pipeline_agent_name: str
     batch_file_path: str
     batch_base_directory: str
@@ -79,7 +79,7 @@ class FilePathsConfig:
 class ProcessParams:
     """Parameters for pipeline processing."""
 
-    agent_config: AgentConfigDict
+    agent_config: ActionConfigDict
     agent_name: str
     paths: FilePathsConfig
     idx: int
@@ -477,7 +477,7 @@ class ProcessingPipeline:
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
     @staticmethod
-    def _apply_observe_filter(data: list[dict], agent_config: AgentConfigDict) -> list[dict]:
+    def _apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
         """Delegator stub — see :func:`pipeline_file_mode.apply_observe_filter`."""
         return _apply_observe_filter_impl(data, agent_config)
 
@@ -511,7 +511,7 @@ def create_processing_pipeline(
 
 
 def create_processing_pipeline_from_params(
-    agent_config: AgentConfigDict,
+    agent_config: ActionConfigDict,
     agent_name: str,
     idx: int,
     processor_factory: ProcessorFactory,

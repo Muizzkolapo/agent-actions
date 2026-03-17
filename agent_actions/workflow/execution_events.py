@@ -6,15 +6,15 @@ from datetime import datetime
 from agent_actions.errors import get_error_detail
 from agent_actions.logging import fire_event, get_manager
 from agent_actions.logging.events import (
-    AgentCompleteEvent,
-    AgentFailedEvent,
-    AgentSkipEvent,
-    AgentStartEvent,
+    ActionCompleteEvent,
+    ActionFailedEvent,
+    ActionSkipEvent,
+    ActionStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
-from agent_actions.workflow.models import AgentLogParams, WorkflowConfig, WorkflowServices
+from agent_actions.workflow.models import ActionLogParams, WorkflowConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class WorkflowEventLogger:
         fire_event(
             WorkflowStartEvent(
                 workflow_name=self.agent_name,
-                agent_count=len(self.execution_order),
+                action_count=len(self.execution_order),
                 execution_mode=mode,
                 run_upstream=self.config.run_upstream,
                 run_downstream=self.config.run_downstream,
@@ -60,43 +60,43 @@ class WorkflowEventLogger:
             extra={
                 "operation": f"workflow_start_{mode}",
                 "workflow_name": self.agent_name,
-                "agent_count": len(self.execution_order),
+                "action_count": len(self.execution_order),
             },
         )
 
-    def fire_agent_start(self, idx: int, agent_name: str, total_agents: int, agent_config: dict):
-        """Fire an AgentStartEvent."""
+    def fire_action_start(self, idx: int, action_name: str, total_actions: int, action_config: dict):
+        """Fire an ActionStartEvent."""
         fire_event(
-            AgentStartEvent(
-                agent_name=agent_name,
-                agent_index=idx,
-                total_agents=total_agents,
-                agent_type=agent_config.get("type", ""),
+            ActionStartEvent(
+                action_name=action_name,
+                action_index=idx,
+                total_actions=total_actions,
+                action_type=action_config.get("type", ""),
             )
         )
 
-    def log_agent_skip(self, idx: int, agent_name: str, total_agents: int):
-        """Log skipped agent."""
+    def log_action_skip(self, idx: int, action_name: str, total_actions: int):
+        """Log skipped action."""
         fire_event(
-            AgentSkipEvent(
-                agent_name=agent_name,
-                agent_index=idx,
-                total_agents=total_agents,
+            ActionSkipEvent(
+                action_name=action_name,
+                action_index=idx,
+                total_actions=total_actions,
                 skip_reason="already completed",
             )
         )
 
-    def log_agent_result(self, params: AgentLogParams):
-        """Log agent execution result via event system."""
+    def log_action_result(self, params: ActionLogParams):
+        """Log action execution result via event system."""
         if params.result.success and params.result.status == "completed":
             tokens = {}
             if hasattr(params.result, "tokens") and params.result.tokens:
                 tokens = params.result.tokens
             fire_event(
-                AgentCompleteEvent(
-                    agent_name=params.agent_name,
-                    agent_index=params.idx,
-                    total_agents=params.total_agents,
+                ActionCompleteEvent(
+                    action_name=params.action_name,
+                    action_index=params.idx,
+                    total_actions=params.total_actions,
                     execution_time=params.duration,
                     output_path=params.result.output_folder or "",
                     tokens=tokens,
@@ -104,10 +104,10 @@ class WorkflowEventLogger:
             )
         elif not params.result.success:
             fire_event(
-                AgentFailedEvent(
-                    agent_name=params.agent_name,
-                    agent_index=params.idx,
-                    total_agents=params.total_agents,
+                ActionFailedEvent(
+                    action_name=params.action_name,
+                    action_index=params.idx,
+                    total_actions=params.total_actions,
                     error_message=str(params.result.error) if params.result.error else "",
                     error_detail=get_error_detail(params.result.error)
                     if params.result.error
@@ -126,9 +126,9 @@ class WorkflowEventLogger:
             WorkflowCompleteEvent(
                 workflow_name=self.agent_name,
                 elapsed_time=elapsed_time,
-                agents_completed=summary.get("completed", 0),
-                agents_skipped=summary.get("skipped", 0),
-                agents_failed=summary.get("failed", 0),
+                actions_completed=summary.get("completed", 0),
+                actions_skipped=summary.get("skipped", 0),
+                actions_failed=summary.get("failed", 0),
             )
         )
 
@@ -144,7 +144,7 @@ class WorkflowEventLogger:
                 error_detail=get_error_detail(error),
                 error_type=type(error).__name__,
                 elapsed_time=elapsed_time,
-                failed_agent=get_manager().get_context("agent_name") or "",
+                failed_action=get_manager().get_context("action_name") or "",
             )
         )
 

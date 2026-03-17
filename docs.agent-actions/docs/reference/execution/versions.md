@@ -5,7 +5,7 @@ sidebar_position: 7
 
 # Version Actions
 
-Version actions generate multiple agent instances from a single configuration, enabling parallel processing with different parameters.
+Version actions generate multiple action instances from a single configuration, enabling parallel processing with different parameters.
 
 ## Configuration
 

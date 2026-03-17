@@ -20,7 +20,7 @@ from agent_actions.storage.backend import DISPOSITION_PASSTHROUGH, NODE_LEVEL_RE
 from agent_actions.utils.constants import CHUNK_CONFIG_KEY
 
 if TYPE_CHECKING:
-    from agent_actions.config.types import AgentConfigDict
+    from agent_actions.config.types import ActionConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -652,7 +652,7 @@ def _process_online_mode_with_record_processor(
     processor = RecordProcessor(ctx.agent_config, ctx.agent_name)
 
     processing_context = ProcessingContext(
-        agent_config=cast("AgentConfigDict", ctx.agent_config),
+        agent_config=cast("ActionConfigDict", ctx.agent_config),
         agent_name=ctx.agent_name,
         mode=ProcessingMode.ONLINE,
         is_first_stage=True,

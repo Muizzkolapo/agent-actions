@@ -38,16 +38,16 @@ class AgentActionsFormatter:
         elif event_type == "WorkflowFailedEvent":
             return self._format_workflow_failed(event)
 
-        elif event_type == "AgentStartEvent":
-            return self._format_agent_start(event)
-        elif event_type == "AgentCompleteEvent":
-            return self._format_agent_complete(event)
-        elif event_type == "AgentSkipEvent":
-            return self._format_agent_skip(event)
-        elif event_type == "AgentFailedEvent":
-            return self._format_agent_failed(event)
-        elif event_type == "AgentCachedEvent":
-            return self._format_agent_cached(event)
+        elif event_type == "ActionStartEvent":
+            return self._format_action_start(event)
+        elif event_type == "ActionCompleteEvent":
+            return self._format_action_complete(event)
+        elif event_type == "ActionSkipEvent":
+            return self._format_action_skip(event)
+        elif event_type == "ActionFailedEvent":
+            return self._format_action_failed(event)
+        elif event_type == "ActionCachedEvent":
+            return self._format_action_cached(event)
 
         elif event_type == "BatchSubmittedEvent":
             return self._format_batch_submitted(event)
@@ -75,22 +75,22 @@ class AgentActionsFormatter:
     def _format_workflow_start(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
         name = event.data.get("workflow_name", "")
-        count = event.data.get("agent_count", 0)
+        count = event.data.get("action_count", 0)
         mode = event.data.get("execution_mode", "sequential")
 
         mode_str = f" [{mode}]" if mode != "sequential" else ""
         return (
-            f"{ts}Running workflow [bold]{name}[/bold] ({count} agents){mode_str}"
+            f"{ts}Running workflow [bold]{name}[/bold] ({count} actions){mode_str}"
             if self.use_color
-            else f"{ts}Running workflow {name} ({count} agents){mode_str}"
+            else f"{ts}Running workflow {name} ({count} actions){mode_str}"
         )
 
     def _format_workflow_complete(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
         elapsed = event.data.get("elapsed_time", 0.0)
-        completed = event.data.get("agents_completed", 0)
-        skipped = event.data.get("agents_skipped", 0)
-        failed = event.data.get("agents_failed", 0)
+        completed = event.data.get("actions_completed", 0)
+        skipped = event.data.get("actions_skipped", 0)
+        failed = event.data.get("actions_failed", 0)
 
         ok = self._status("OK") if completed > 0 else "OK"
         skip = self._status("SKIP") if skipped > 0 else "SKIP"
@@ -106,21 +106,21 @@ class AgentActionsFormatter:
         err_status = self._status("ERROR")
         return f"{ts}{err_status} Workflow {name} failed: {error}"
 
-    def _format_agent_start(self, event: BaseEvent) -> str:
+    def _format_action_start(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        idx = event.data.get("agent_index", 0)
-        total = event.data.get("total_agents", 0)
-        name = event.data.get("agent_name", "")
+        idx = event.data.get("action_index", 0)
+        total = event.data.get("total_actions", 0)
+        name = event.data.get("action_name", "")
 
         idx_str = f"{idx + 1}/{total}"
         start = self._status("START")
         return f"{ts}{idx_str} {start} {name}"
 
-    def _format_agent_complete(self, event: BaseEvent) -> str:
+    def _format_action_complete(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        idx = event.data.get("agent_index", 0)
-        total = event.data.get("total_agents", 0)
-        name = event.data.get("agent_name", "")
+        idx = event.data.get("action_index", 0)
+        total = event.data.get("total_actions", 0)
+        name = event.data.get("action_name", "")
         time = event.data.get("execution_time", 0.0)
         tokens = event.data.get("tokens", {}).get("total_tokens", 0)
 
@@ -129,11 +129,11 @@ class AgentActionsFormatter:
         token_str = f" ({tokens} tokens)" if tokens > 0 else ""
         return f"{ts}{idx_str} {ok} {name} in {time:.2f}s{token_str}"
 
-    def _format_agent_skip(self, event: BaseEvent) -> str:
+    def _format_action_skip(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        idx = event.data.get("agent_index", 0)
-        total = event.data.get("total_agents", 0)
-        name = event.data.get("agent_name", "")
+        idx = event.data.get("action_index", 0)
+        total = event.data.get("total_actions", 0)
+        name = event.data.get("action_name", "")
         reason = event.data.get("skip_reason", "")
 
         idx_str = f"{idx + 1}/{total}"
@@ -141,21 +141,21 @@ class AgentActionsFormatter:
         reason_str = f" ({reason})" if reason else ""
         return f"{ts}{idx_str} {skip} {name}{reason_str}"
 
-    def _format_agent_cached(self, event: BaseEvent) -> str:
+    def _format_action_cached(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        idx = event.data.get("agent_index", 0)
-        total = event.data.get("total_agents", 0)
-        name = event.data.get("agent_name", "")
+        idx = event.data.get("action_index", 0)
+        total = event.data.get("total_actions", 0)
+        name = event.data.get("action_name", "")
 
         idx_str = f"{idx + 1}/{total}"
         cached = self._status("CACHED")
         return f"{ts}{idx_str} {cached} {name}"
 
-    def _format_agent_failed(self, event: BaseEvent) -> str:
+    def _format_action_failed(self, event: BaseEvent) -> str:
         ts = self._timestamp(event)
-        idx = event.data.get("agent_index", 0)
-        total = event.data.get("total_agents", 0)
-        name = event.data.get("agent_name", "")
+        idx = event.data.get("action_index", 0)
+        total = event.data.get("total_actions", 0)
+        name = event.data.get("action_name", "")
         error = event.data.get("error_message", "")
         suggestion = event.data.get("suggestion", "")
 

@@ -6,17 +6,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.logging.events import (
-    AgentCompleteEvent,
-    AgentFailedEvent,
-    AgentSkipEvent,
-    AgentStartEvent,
+    ActionCompleteEvent,
+    ActionFailedEvent,
+    ActionSkipEvent,
+    ActionStartEvent,
     WorkflowCompleteEvent,
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.models import (
-    AgentLogParams,
+    ActionLogParams,
     CoreServices,
     SupportServices,
     WorkflowConfig,
@@ -73,7 +73,7 @@ class TestLogWorkflowStart:
         assert isinstance(event, WorkflowStartEvent)
         assert event.workflow_name == "test_workflow"
         assert event.execution_mode == "sequential"
-        assert event.agent_count == 2
+        assert event.action_count == 2
         assert event.run_upstream == mock_config.run_upstream
         assert event.run_downstream == mock_config.run_downstream
 
@@ -88,40 +88,40 @@ class TestLogWorkflowStart:
         assert event.execution_mode == "async"
 
 
-# ── fire_agent_start ───────────────────────────────────────────────────
+# ── fire_action_start ───────────────────────────────────────────────────
 
 
 class TestFireAgentStart:
     def test_fires_agent_start_event(self, event_logger):
         with patch(FIRE_EVENT_PATH) as mock_fire:
-            event_logger.fire_agent_start(0, "agent_a", 2, {"type": "llm"})
+            event_logger.fire_action_start(0, "agent_a", 2, {"type": "llm"})
 
         event = mock_fire.call_args[0][0]
-        assert isinstance(event, AgentStartEvent)
-        assert event.agent_name == "agent_a"
-        assert event.agent_index == 0
-        assert event.total_agents == 2
-        assert event.agent_type == "llm"
+        assert isinstance(event, ActionStartEvent)
+        assert event.action_name == "agent_a"
+        assert event.action_index == 0
+        assert event.total_actions == 2
+        assert event.action_type == "llm"
 
 
-# ── log_agent_skip ─────────────────────────────────────────────────────
+# ── log_action_skip ─────────────────────────────────────────────────────
 
 
 class TestLogAgentSkip:
     def test_fires_agent_skip_event(self, event_logger):
-        """log_agent_skip should fire AgentSkipEvent with 'already completed' reason."""
+        """log_action_skip should fire ActionSkipEvent with 'already completed' reason."""
         with patch(FIRE_EVENT_PATH) as mock_fire:
-            event_logger.log_agent_skip(1, "agent_b", 3)
+            event_logger.log_action_skip(1, "agent_b", 3)
 
         event = mock_fire.call_args[0][0]
-        assert isinstance(event, AgentSkipEvent)
-        assert event.agent_name == "agent_b"
-        assert event.agent_index == 1
-        assert event.total_agents == 3
+        assert isinstance(event, ActionSkipEvent)
+        assert event.action_name == "agent_b"
+        assert event.action_index == 1
+        assert event.total_actions == 3
         assert event.skip_reason == "already completed"
 
 
-# ── log_agent_result ───────────────────────────────────────────────────
+# ── log_action_result ───────────────────────────────────────────────────
 
 
 class TestLogAgentResult:
@@ -136,23 +136,23 @@ class TestLogAgentResult:
 
     def test_completed_fires_agent_complete(self, event_logger):
         result = self._make_result(tokens={"total_tokens": 100})
-        params = AgentLogParams(
+        params = ActionLogParams(
             idx=0,
-            agent_name="agent_a",
-            total_agents=2,
+            action_name="agent_a",
+            total_actions=2,
             result=result,
             end_time=datetime.now(),
             duration=1.5,
         )
 
         with patch(FIRE_EVENT_PATH) as mock_fire:
-            event_logger.log_agent_result(params)
+            event_logger.log_action_result(params)
 
         event = mock_fire.call_args[0][0]
-        assert isinstance(event, AgentCompleteEvent)
-        assert event.agent_name == "agent_a"
-        assert event.agent_index == 0
-        assert event.total_agents == 2
+        assert isinstance(event, ActionCompleteEvent)
+        assert event.action_name == "agent_a"
+        assert event.action_index == 0
+        assert event.total_actions == 2
         assert event.execution_time == 1.5
         assert event.output_path == "/output"
         assert event.tokens == {"total_tokens": 100}
@@ -160,10 +160,10 @@ class TestLogAgentResult:
     def test_failed_fires_agent_failed(self, event_logger):
         error = RuntimeError("agent crashed")
         result = self._make_result(success=False, status="failed", error=error)
-        params = AgentLogParams(
+        params = ActionLogParams(
             idx=0,
-            agent_name="agent_a",
-            total_agents=2,
+            action_name="agent_a",
+            total_actions=2,
             result=result,
             end_time=datetime.now(),
             duration=0.5,
@@ -173,11 +173,11 @@ class TestLogAgentResult:
             patch(FIRE_EVENT_PATH) as mock_fire,
             patch(GET_ERROR_DETAIL_PATH, return_value="detail"),
         ):
-            event_logger.log_agent_result(params)
+            event_logger.log_action_result(params)
 
         event = mock_fire.call_args[0][0]
-        assert isinstance(event, AgentFailedEvent)
-        assert event.agent_name == "agent_a"
+        assert isinstance(event, ActionFailedEvent)
+        assert event.action_name == "agent_a"
         assert event.error_type == "RuntimeError"
         assert event.error_message == "agent crashed"
         assert event.error_detail == "detail"
@@ -186,17 +186,17 @@ class TestLogAgentResult:
     def test_batch_submitted_no_extra_event(self, event_logger):
         """batch_submitted results should not fire additional events."""
         result = self._make_result(success=True, status="batch_submitted")
-        params = AgentLogParams(
+        params = ActionLogParams(
             idx=0,
-            agent_name="agent_a",
-            total_agents=2,
+            action_name="agent_a",
+            total_actions=2,
             result=result,
             end_time=datetime.now(),
             duration=0.1,
         )
 
         with patch(FIRE_EVENT_PATH) as mock_fire:
-            event_logger.log_agent_result(params)
+            event_logger.log_action_result(params)
 
         mock_fire.assert_not_called()
 
@@ -218,9 +218,9 @@ class TestFinalizeWorkflow:
         event = mock_fire.call_args[0][0]
         assert isinstance(event, WorkflowCompleteEvent)
         assert event.workflow_name == "test_workflow"
-        assert event.agents_completed == 2
-        assert event.agents_skipped == 1
-        assert event.agents_failed == 0
+        assert event.actions_completed == 2
+        assert event.actions_skipped == 1
+        assert event.actions_failed == 0
         assert event.elapsed_time == 5.0
 
     def test_calls_manifest_manager(self, event_logger, mock_services):
@@ -255,7 +255,7 @@ class TestHandleWorkflowError:
         assert event.error_message == "workflow died"
         assert event.error_detail == "detail"
         assert event.elapsed_time == 3.0
-        assert event.failed_agent == "agent_a"
+        assert event.failed_action == "agent_a"
 
     def test_calls_manifest_manager_failed(self, event_logger, mock_services):
         error = RuntimeError("boom")

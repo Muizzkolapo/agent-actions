@@ -10,7 +10,7 @@ from agent_actions.validation.static_analyzer import (
     FieldProducer,
 )
 from agent_actions.validation.static_analyzer.data_flow_graph import (
-    AgentKind,
+    ActionKind,
     DataFlowGraph,
     DataFlowNode,
     InputRequirement,
@@ -80,7 +80,7 @@ class TestConflictDetector:
         # Add source node
         source_node = DataFlowNode(
             name="source",
-            agent_kind=AgentKind.SOURCE,
+            agent_kind=ActionKind.SOURCE,
             output_schema=OutputSchema(schema_fields={"input_text"}),
         )
         graph.add_node(source_node)
@@ -88,7 +88,7 @@ class TestConflictDetector:
         # Add extractor
         extractor_node = DataFlowNode(
             name="extractor",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"title", "summary"}),
             input_requirements=[
                 InputRequirement(
@@ -111,12 +111,12 @@ class TestConflictDetector:
         # Two actions producing same field
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"shared_field"}),
         )
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"shared_field"}),
         )
         graph.add_node(action1)
@@ -139,7 +139,7 @@ class TestConflictDetector:
         # Source with a field
         source = DataFlowNode(
             name="source",
-            agent_kind=AgentKind.SOURCE,
+            agent_kind=ActionKind.SOURCE,
             output_schema=OutputSchema(schema_fields={"ambiguous"}),
         )
         graph.add_node(source)
@@ -147,12 +147,12 @@ class TestConflictDetector:
         # Two actions producing same field name
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"ambiguous"}),
         )
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"ambiguous"}),
         )
         graph.add_node(action1)
@@ -161,7 +161,7 @@ class TestConflictDetector:
         # Action referencing the ambiguous field via source namespace
         consumer = DataFlowNode(
             name="consumer",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"result"}),
             input_requirements=[
                 InputRequirement(
@@ -191,7 +191,7 @@ class TestConflictDetector:
         # Action producing a reserved field name
         action = DataFlowNode(
             name="bad_action",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"source", "regular_field"}),
         )
         graph.add_node(action)
@@ -213,7 +213,7 @@ class TestConflictDetector:
         # First action produces and drops a field
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"temp_field"},
                 dropped_fields={"temp_field"},
@@ -224,7 +224,7 @@ class TestConflictDetector:
         # Second action recreates the field
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"temp_field"}),
         )
         graph.add_node(action2)
@@ -245,13 +245,13 @@ class TestConflictDetector:
         # Action with schema field
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"shared"}),
         )
         # Action with observe field of same name
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(observe_fields={"shared"}),
         )
         graph.add_node(action1)
@@ -272,12 +272,12 @@ class TestConflictDetector:
 
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"field1"}),
         )
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(passthrough_fields={"field1"}),
         )
         graph.add_node(action1)
@@ -296,7 +296,7 @@ class TestConflictDetector:
         # Both produce same field but one drops it
         action1 = DataFlowNode(
             name="action1",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(
                 schema_fields={"field1"},
                 dropped_fields={"field1"},
@@ -304,7 +304,7 @@ class TestConflictDetector:
         )
         action2 = DataFlowNode(
             name="action2",
-            agent_kind=AgentKind.LLM,
+            agent_kind=ActionKind.LLM,
             output_schema=OutputSchema(schema_fields={"field1"}),
         )
         graph.add_node(action1)

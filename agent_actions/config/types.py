@@ -1,4 +1,4 @@
-"""Type definitions for agent configuration structures."""
+"""Type definitions for action configuration structures."""
 
 from enum import Enum
 from typing import Any, TypedDict
@@ -57,7 +57,7 @@ class GuardConfigDict(TypedDict, total=False):
 
     # New format
     clause: str
-    scope: str  # "item" | "agent"
+    scope: str  # "item" | "action"
     behavior: str  # "skip" | "filter"
     passthrough_on_error: bool
     passthrough_on_empty: bool
@@ -71,13 +71,13 @@ class GuardConfigDict(TypedDict, total=False):
 class WhereClauseDict(TypedDict, total=False):
     """WHERE clause configuration for conditional filtering.
 
-    Supports SQL-like expressions evaluated per-item or per-agent.
+    Supports SQL-like expressions evaluated per-item or per-action.
     See WhereClauseConfig (output/response/config_schema.py) for
     validation rules and defaults.
     """
 
     clause: str
-    scope: str  # "item" | "agent"
+    scope: str  # "item" | "action"
     behavior: str  # "skip" | "filter"
     passthrough_on_empty: bool
     passthrough_on_error: bool
@@ -96,21 +96,21 @@ class HitlConfigDict(TypedDict, total=False):
     require_comment_on_reject: bool
 
 
-class AgentConfigDict(TypedDict, total=False):
-    """Fully-expanded agent configuration as used at runtime.
+class ActionConfigDict(TypedDict, total=False):
+    """Fully-expanded action configuration as used at runtime.
 
-    Distinct from AgentEntryDict (raw YAML entry). This represents the
+    Distinct from ActionEntryDict (raw YAML entry). This represents the
     post-expansion config flowing through workflow, processing, and LLM layers.
 
     Note: ``schema_file`` and ``prompt_file`` are pre-expansion YAML keys
     consumed by preflight validation only. They do not survive into the
-    runtime config and therefore belong in AgentEntryDict, not here.
+    runtime config and therefore belong in ActionEntryDict, not here.
 
     ``data_source`` is a workflow-level default (``defaults.data_source``),
-    stored on ``AgentRunner.data_source_config`` — not per-agent.
+    stored on ``ActionRunner.data_source_config`` — not per-action.
 
-    Keys shared with AgentEntryDict (agent_type, name, model_vendor, etc.)
-    are intentionally duplicated: AgentEntryDict represents raw YAML input,
+    Keys shared with ActionEntryDict (agent_type, name, model_vendor, etc.)
+    are intentionally duplicated: ActionEntryDict represents raw YAML input,
     this type represents the post-expansion runtime shape. Changes to the
     YAML schema may require updates in both places.
     """
@@ -203,10 +203,10 @@ class AgentConfigDict(TypedDict, total=False):
     batch_id: str
 
 
-class AgentEntryDict(TypedDict, total=False):
-    """Typed representation of a single agent configuration entry (raw YAML).
+class ActionEntryDict(TypedDict, total=False):
+    """Typed representation of a single action configuration entry (raw YAML).
 
-    See AgentConfigDict for the post-expansion runtime shape. Keys shared
+    See ActionConfigDict for the post-expansion runtime shape. Keys shared
     between both types are intentionally duplicated to represent different
     pipeline stages.
     """
@@ -235,12 +235,12 @@ class AgentEntryDict(TypedDict, total=False):
     enable_prompt_caching: bool | None
     # Control field flow: observe (LLM context), drop (block), passthrough (output)
     context_scope: ContextScopeDict | None
-    # HITL config (assigned by expander for kind="hitl" agents)
+    # HITL config (assigned by expander for kind="hitl" actions)
     hitl: HitlConfigDict | None
 
 
-# Alias for the list of agent entries under a pipeline name
-AgentConfigList = list[AgentEntryDict]
+# Alias for the list of action entries under a pipeline name
+ActionConfigList = list[ActionEntryDict]
 
 # Alias for the mapping of pipeline/agent name to its configuration list
-AgentConfigMap = dict[str, AgentConfigList]
+ActionConfigMap = dict[str, ActionConfigList]

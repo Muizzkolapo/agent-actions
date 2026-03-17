@@ -2,10 +2,10 @@
 
 ## Overview
 
-Orchestrator helpers that run validation flows across agent graphs.
+Orchestrator helpers that run validation flows across action graphs.
 
 ## Modules
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `agent_entry_validation_orchestrator.py` | Module | Coordinates validation runs across all agent entries before execution. | `workflow`, `validation` |
+| `action_entry_validation_orchestrator.py` | Module | Coordinates validation runs across all action entries before execution. | `workflow`, `validation` |

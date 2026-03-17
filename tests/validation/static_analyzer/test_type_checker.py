@@ -1,7 +1,7 @@
 """Tests for the static type checker."""
 
 from agent_actions.validation.static_analyzer import (
-    AgentKind,
+    ActionKind,
     DataFlowGraph,
     DataFlowNode,
     InputRequirement,
@@ -29,7 +29,7 @@ class TestStaticTypeChecker:
         graph.add_node(
             DataFlowNode(
                 name="source",
-                agent_kind=AgentKind.SOURCE,
+                agent_kind=ActionKind.SOURCE,
                 output_schema=OutputSchema(is_dynamic=True),
             )
         )
@@ -50,7 +50,7 @@ class TestStaticTypeChecker:
             graph.add_node(
                 DataFlowNode(
                     name=agent["name"],
-                    agent_kind=agent.get("kind", AgentKind.LLM),
+                    agent_kind=agent.get("kind", ActionKind.LLM),
                     output_schema=OutputSchema(
                         schema_fields=agent.get("fields", set()),
                         is_schemaless=agent.get("schemaless", False),

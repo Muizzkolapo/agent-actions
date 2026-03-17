@@ -40,7 +40,7 @@ def sample_workflow_data():
         "workflow_name": "test_workflow",
         "execution_order": ["extract", "transform", "load"],
         "levels": [["extract"], ["transform"], ["load"]],
-        "agent_configs": {
+        "action_configs": {
             "extract": {"idx": 0, "dependencies": []},
             "transform": {"idx": 1, "dependencies": ["extract"]},
             "load": {"idx": 2, "dependencies": ["transform"]},
@@ -155,7 +155,7 @@ class TestDuplicateActionValidation:
                 workflow_name="test",
                 execution_order=["action_a", "action_b", "action_a"],
                 levels=[["action_a", "action_b", "action_a"]],
-                agent_configs={},
+                action_configs={},
             )
 
         assert "action_a" in str(exc_info.value)
@@ -168,7 +168,7 @@ class TestDuplicateActionValidation:
                 workflow_name="test",
                 execution_order=["a", "b", "a", "b", "c"],
                 levels=[["a", "b", "a", "b", "c"]],
-                agent_configs={},
+                action_configs={},
             )
 
         error_msg = str(exc_info.value)
@@ -337,7 +337,7 @@ class TestQueryMethods:
             workflow_name="test",
             execution_order=["a", "b", "c", "d"],
             levels=[["a"], ["b", "c"], ["d"]],
-            agent_configs={},
+            action_configs={},
         )
 
         level_1 = manifest_manager.get_parallel_actions(1)
@@ -460,7 +460,7 @@ class TestThreadSafety:
             workflow_name="test",
             execution_order=actions,
             levels=[actions],
-            agent_configs={a: {"idx": i} for i, a in enumerate(actions)},
+            action_configs={a: {"idx": i} for i, a in enumerate(actions)},
         )
 
         errors = []
@@ -562,7 +562,7 @@ class TestThreadSafety:
             workflow_name="test",
             execution_order=actions,
             levels=[actions],
-            agent_configs={a: {"idx": i} for i, a in enumerate(actions)},
+            action_configs={a: {"idx": i} for i, a in enumerate(actions)},
         )
 
         read_results = []

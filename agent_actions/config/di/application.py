@@ -10,7 +10,7 @@ from agent_actions.config.di.container import (
 )
 from agent_actions.config.di.types import DIConfig
 from agent_actions.errors import ConfigValidationError
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.workflow.runner import ActionRunner
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -41,13 +41,13 @@ class ApplicationContainer:
         self.container = container or DIConfigurator.configure_container(config)
         self.processor_factory = DIConfigurator.create_processor_factory(self.container)
 
-    def get_agent_runner(
+    def get_action_runner(
         self,
         use_tools: bool = True,
         storage_backend: Optional["StorageBackend"] = None,
-    ) -> AgentRunner:
-        """Create an AgentRunner with all dependencies injected."""
-        return AgentRunner(
+    ) -> ActionRunner:
+        """Create an ActionRunner with all dependencies injected."""
+        return ActionRunner(
             use_tools=use_tools,
             processor_factory=self.processor_factory,
             storage_backend=storage_backend,

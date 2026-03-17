@@ -6,7 +6,7 @@ batch_events, cache_events, etc.).
 
 Event Code Prefixes:
     W - Workflow lifecycle events
-    A - Agent execution events
+    A - Action execution events
     B - Batch processing events
     L - LLM interaction events
     V - Validation events
@@ -36,7 +36,7 @@ class EventCategories:
     """Event category constants for agent-actions."""
 
     WORKFLOW = "workflow"
-    AGENT = "agent"
+    ACTION = "action"
     BATCH = "batch"
     LLM = "llm"
     VALIDATION = "validation"

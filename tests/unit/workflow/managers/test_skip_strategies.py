@@ -64,7 +64,7 @@ class TestSkipConditionStrategy:
         assert result is True
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.agent_name == "a"
+        assert event.action_name == "a"
         assert "skip_condition" in event.skip_reason
 
     def test_string_form(self, strategy):
@@ -102,7 +102,7 @@ class TestSkipConditionStrategy:
 
 
 class TestGuardStrategy:
-    """Tests for GuardStrategy (guard with scope='agent')."""
+    """Tests for GuardStrategy (guard with scope='action')."""
 
     @pytest.fixture
     def strategy(self):
@@ -118,26 +118,26 @@ class TestGuardStrategy:
     def test_matched_does_not_skip(self, strategy):
         """Guard matched → agent proceeds."""
         filt = _make_filter(FakeFilterResult(success=True, matched=True))
-        cfg = {"guard": {"scope": "agent", "clause": "x > 1"}, "agent_type": "a"}
+        cfg = {"guard": {"scope": "action", "clause": "x > 1"}, "agent_type": "a"}
         with patch(GUARD_FILTER_PATH, return_value=filt):
             assert strategy.should_skip(cfg, {}) is False
 
     def test_not_matched_skips(self, strategy):
         """Guard not matched → skip agent and fire AgentSkipEvent."""
         filt = _make_filter(FakeFilterResult(success=True, matched=False))
-        cfg = {"guard": {"scope": "agent", "clause": "x > 1"}, "agent_type": "a"}
+        cfg = {"guard": {"scope": "action", "clause": "x > 1"}, "agent_type": "a"}
         with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
             assert strategy.should_skip(cfg, {}) is True
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.agent_name == "a"
+        assert event.action_name == "a"
         assert "guard" in event.skip_reason
 
     def test_filter_error_passthrough_true(self, strategy):
         """Error with passthrough_on_error=True → don't skip."""
         filt = _make_filter(FakeFilterResult(success=False, error="oops"))
         cfg = {
-            "guard": {"scope": "agent", "clause": "x", "passthrough_on_error": True},
+            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": True},
             "agent_type": "a",
         }
         with patch(GUARD_FILTER_PATH, return_value=filt):
@@ -147,14 +147,14 @@ class TestGuardStrategy:
         """Error with passthrough_on_error=False → skip and fire event."""
         filt = _make_filter(FakeFilterResult(success=False, error="oops"))
         cfg = {
-            "guard": {"scope": "agent", "clause": "x", "passthrough_on_error": False},
+            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": False},
             "agent_type": "a",
         }
         with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH) as mock_fire:
             assert strategy.should_skip(cfg, {}) is True
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.agent_name == "a"
+        assert event.action_name == "a"
         assert "passthrough_on_error" in event.skip_reason
 
     def test_exception_passthrough_true(self, strategy):
@@ -162,7 +162,7 @@ class TestGuardStrategy:
         filt = MagicMock()
         filt.filter_item.side_effect = ValueError("boom")
         cfg = {
-            "guard": {"scope": "agent", "clause": "x", "passthrough_on_error": True},
+            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": True},
             "agent_type": "a",
         }
         with patch(GUARD_FILTER_PATH, return_value=filt):
@@ -173,7 +173,7 @@ class TestGuardStrategy:
         filt = MagicMock()
         filt.filter_item.side_effect = TypeError("boom")
         cfg = {
-            "guard": {"scope": "agent", "clause": "x", "passthrough_on_error": False},
+            "guard": {"scope": "action", "clause": "x", "passthrough_on_error": False},
             "agent_type": "a",
         }
         with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH):
@@ -183,7 +183,7 @@ class TestGuardStrategy:
         """Context passed to filter should not include the 'guard' key itself."""
         filt = _make_filter(FakeFilterResult(success=True, matched=True))
         cfg = {
-            "guard": {"scope": "agent", "clause": "x > 1"},
+            "guard": {"scope": "action", "clause": "x > 1"},
             "agent_type": "a",
             "dependencies": ["b"],
         }
@@ -215,7 +215,7 @@ class TestLegacySkipIfStrategy:
         assert result is True
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
-        assert event.agent_name == "a"
+        assert event.action_name == "a"
         assert "skip_if" in event.skip_reason
 
     def test_not_matched_does_not_skip(self, strategy):
@@ -249,7 +249,7 @@ class TestSkipEvaluator:
         evaluator = SkipEvaluator()
         # No skip_condition, guard, or skip_if → not skipped
         with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
-            assert evaluator.should_skip_agent({"agent_type": "a"}) is False
+            assert evaluator.should_skip_action({"agent_type": "a"}) is False
 
     def test_first_match_short_circuits(self):
         """If SkipConditionStrategy says skip, later strategies are not called."""
@@ -257,7 +257,7 @@ class TestSkipEvaluator:
         filt = _make_filter(FakeFilterResult(success=True, matched=False))
         cfg = {"skip_condition": {"where": "x > 1"}, "agent_type": "a"}
         with patch(GUARD_FILTER_PATH, return_value=filt), patch(FIRE_EVENT_PATH):
-            result = evaluator.should_skip_agent(cfg, {})
+            result = evaluator.should_skip_action(cfg, {})
         assert result is True
 
     def test_strategy_exception_continues(self):
@@ -276,7 +276,7 @@ class TestSkipEvaluator:
         evaluator.strategies[2].should_skip.return_value = True
         evaluator.strategies[2].get_strategy_name.return_value = "skip_if"
 
-        result = evaluator.should_skip_agent({"agent_type": "a"}, {})
+        result = evaluator.should_skip_action({"agent_type": "a"}, {})
         assert result is True
 
     def test_none_previous_outputs_normalized_to_empty_dict(self):
@@ -284,7 +284,7 @@ class TestSkipEvaluator:
         evaluator = SkipEvaluator()
         with patch(GUARD_FILTER_PATH, return_value=MagicMock()):
             # Should not raise — None is handled
-            evaluator.should_skip_agent({"agent_type": "a"}, None)
+            evaluator.should_skip_action({"agent_type": "a"}, None)
 
     def test_repr(self):
         evaluator = SkipEvaluator()

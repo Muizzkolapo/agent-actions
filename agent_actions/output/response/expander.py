@@ -348,7 +348,7 @@ class ActionExpander:
             action_config: Configuration with actions that may contain loops
 
         Returns:
-            Expanded agent configuration ready for execution (AgentConfigMap)
+            Expanded agent configuration ready for execution (ActionConfigMap)
         """
         workflow_name = action_config.get("name", "workflow")
         actions = action_config.get("actions", [])

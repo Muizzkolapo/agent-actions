@@ -18,13 +18,13 @@ Agent Actions.
 |------|------|-------------|---------|
 | `config_pipeline.py` | Module | Config loading, schema validation, and UDF discovery extracted from coordinator. | `config`, `validation` |
 | `coordinator.py` | Module | Orchestration-only facade: delegates config, services, and events to extracted modules. | `workflow` |
-| `execution_events.py` | Module | `WorkflowEventLogger` class encapsulating all workflow/agent event firing. | `logging`, `events` |
+| `execution_events.py` | Module | `WorkflowEventLogger` class encapsulating all workflow/action event firing. | `logging`, `events` |
 | `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. | `workflow`, `processing` |
-| `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, AgentWorkflow). | `typing`, `workflow` |
+| `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, ActionLogParams). | `typing`, `workflow` |
 | `pipeline.py` | Module | Builds execution pipelines for run modes (batch/online) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
 | `pipeline_file_mode.py` | Module | FILE-granularity tool and HITL processing handlers extracted from `ProcessingPipeline`. | `processing`, `workflow` |
-| `runner.py` | Module | `AgentRunner` class: init, folder lookup, dependency resolution, orchestration. Delegates file-processing to `runner_file_processing`. | `llm`, `workflow` |
+| `runner.py` | Module | `ActionRunner` class: init, folder lookup, dependency resolution, orchestration. Delegates file-processing to `runner_file_processing`. | `llm`, `workflow` |
 | `runner_file_processing.py` | Module | File walking, merging, and storage-backend processing extracted from `runner.py`. Standalone functions that take a `runner` param for instance dispatch. | `workflow`, `processing` |
 | `schema_service.py` | Module | `WorkflowSchemaService` that exposes input/output schema mapping. | `schema`, `output` |
 | `service_init.py` | Module | Service assembly and storage backend initialization extracted from coordinator. | `config`, `workflow` |

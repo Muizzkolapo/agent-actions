@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Optional
 
 from agent_actions.config.di.application import ApplicationContainer
 from agent_actions.config.di.types import DIConfig
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.workflow.runner import ActionRunner
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
@@ -26,12 +26,14 @@ def application_container_context(config: DIConfig | None = None):
     yield container
 
 
-def create_agent_runner(
+def create_action_runner(
     config: DIConfig | None = None,
     use_tools: bool = True,
     storage_backend: Optional["StorageBackend"] = None,
-) -> AgentRunner:
-    """Create an AgentRunner with proper dependency injection."""
+) -> ActionRunner:
+    """Create an ActionRunner with proper dependency injection."""
     with application_container_context(config) as container:
-        runner: AgentRunner = container.get_agent_runner(use_tools, storage_backend=storage_backend)
+        runner: ActionRunner = container.get_action_runner(
+            use_tools, storage_backend=storage_backend
+        )
         return runner

@@ -10,7 +10,7 @@ from .conflict_detector import (
     FieldProducer,
 )
 from .data_flow_graph import (
-    AgentKind,
+    ActionKind,
     DataFlowEdge,
     DataFlowGraph,
     DataFlowNode,
@@ -56,7 +56,7 @@ __all__ = [
     "OutputSchema",
     "InputSchema",
     "InputRequirement",
-    "AgentKind",
+    "ActionKind",
     # Extractors
     "SchemaExtractor",
     "ReferenceExtractor",

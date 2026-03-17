@@ -1,4 +1,4 @@
-"""Tests for AgentExecutor event firing behavior."""
+"""Tests for ActionExecutor event firing behavior."""
 
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.logging.events.batch_events import BatchCompleteEvent, BatchSubmittedEvent
-from agent_actions.workflow.executor import AgentExecutor, ExecutorDependencies
+from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 
 
 class TestHandleBatchCheckEventFiring:
@@ -18,15 +18,15 @@ class TestHandleBatchCheckEventFiring:
         deps = MagicMock(spec=ExecutorDependencies)
         deps.state_manager = MagicMock()
         deps.batch_manager = MagicMock()
-        deps.agent_runner = MagicMock()
-        deps.agent_runner.workflow_name = "test_workflow"
-        deps.agent_runner.get_agent_folder.return_value = "/tmp/agent_io"
+        deps.action_runner = MagicMock()
+        deps.action_runner.workflow_name = "test_workflow"
+        deps.action_runner.get_action_folder.return_value = "/tmp/agent_io"
         return deps
 
     @pytest.fixture
     def executor(self, mock_deps):
         """Create executor with mock dependencies."""
-        return AgentExecutor(mock_deps)
+        return ActionExecutor(mock_deps)
 
     def test_batch_complete_fires_event(self, executor, mock_deps):
         """Should fire BatchCompleteEvent when batch status is completed."""
@@ -34,9 +34,9 @@ class TestHandleBatchCheckEventFiring:
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor._handle_batch_check(
-                agent_name="test_agent",
-                agent_idx=0,
-                agent_config={"batch_id": "batch_123"},
+                action_name="test_agent",
+                action_idx=0,
+                action_config={"batch_id": "batch_123"},
                 start_time=datetime.now(),
             )
 
@@ -47,7 +47,7 @@ class TestHandleBatchCheckEventFiring:
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchCompleteEvent)
-        assert event.agent_name == "test_agent"
+        assert event.action_name == "test_agent"
         assert event.batch_id == "batch_123"
         assert event.completed == 1
         assert event.failed == 0
@@ -58,9 +58,9 @@ class TestHandleBatchCheckEventFiring:
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor._handle_batch_check(
-                agent_name="test_agent",
-                agent_idx=0,
-                agent_config={"batch_id": "batch_456", "model_vendor": "openai"},
+                action_name="test_agent",
+                action_idx=0,
+                action_config={"batch_id": "batch_456", "model_vendor": "openai"},
                 start_time=datetime.now(),
             )
 
@@ -71,7 +71,7 @@ class TestHandleBatchCheckEventFiring:
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchSubmittedEvent)
-        assert event.agent_name == "test_agent"
+        assert event.action_name == "test_agent"
         assert event.batch_id == "batch_456"
 
     def test_batch_failed_fires_event(self, executor, mock_deps):
@@ -80,9 +80,9 @@ class TestHandleBatchCheckEventFiring:
 
         with patch("agent_actions.workflow.executor.fire_event") as mock_fire:
             result = executor._handle_batch_check(
-                agent_name="test_agent",
-                agent_idx=0,
-                agent_config={"batch_id": "batch_789"},
+                action_name="test_agent",
+                action_idx=0,
+                action_config={"batch_id": "batch_789"},
                 start_time=datetime.now(),
             )
 
@@ -93,6 +93,6 @@ class TestHandleBatchCheckEventFiring:
         mock_fire.assert_called_once()
         event = mock_fire.call_args[0][0]
         assert isinstance(event, BatchCompleteEvent)
-        assert event.agent_name == "test_agent"
+        assert event.action_name == "test_agent"
         assert event.completed == 0
         assert event.failed == 1

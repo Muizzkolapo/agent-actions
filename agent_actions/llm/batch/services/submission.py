@@ -265,7 +265,7 @@ class BatchSubmissionService:
             fire_event(
                 BatchSubmittedEvent(
                     batch_id=batch_id,
-                    agent_name=batch_name or "default",
+                    action_name=batch_name or "default",
                     request_count=len(tasks),
                     provider=provider_type,
                 )

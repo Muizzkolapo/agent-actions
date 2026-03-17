@@ -24,7 +24,7 @@ class LLMRequestEvent(BaseEvent):
 
     provider: str = ""
     model: str = ""
-    agent_name: str = ""
+    action_name: str = ""
     prompt_tokens: int = 0
     request_id: str = ""
 
@@ -37,7 +37,7 @@ class LLMRequestEvent(BaseEvent):
         self.data = {
             "provider": self.provider,
             "model": self.model,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "prompt_tokens": self.prompt_tokens,
             "request_id": self.request_id,
         }
@@ -53,7 +53,7 @@ class LLMResponseEvent(BaseEvent):
 
     provider: str = ""
     model: str = ""
-    agent_name: str = ""
+    action_name: str = ""
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -67,7 +67,7 @@ class LLMResponseEvent(BaseEvent):
         self.data = {
             "provider": self.provider,
             "model": self.model,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "prompt_tokens": self.prompt_tokens,
             "completion_tokens": self.completion_tokens,
             "total_tokens": self.total_tokens,
@@ -86,7 +86,7 @@ class LLMErrorEvent(BaseEvent):
 
     provider: str = ""
     model: str = ""
-    agent_name: str = ""
+    action_name: str = ""
     error_message: str = ""
     error_type: str = ""
     retry_count: int = 0
@@ -99,7 +99,7 @@ class LLMErrorEvent(BaseEvent):
         self.data = {
             "provider": self.provider,
             "model": self.model,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "error_message": self.error_message,
             "error_type": self.error_type,
             "retry_count": self.retry_count,
@@ -117,7 +117,7 @@ class RateLimitEvent(BaseEvent):
 
     provider: str = ""
     retry_after: float = 0.0
-    agent_name: str = ""
+    action_name: str = ""
     request_id: str = ""
 
     def __post_init__(self) -> None:
@@ -127,7 +127,7 @@ class RateLimitEvent(BaseEvent):
         self.data = {
             "provider": self.provider,
             "retry_after": self.retry_after,
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "request_id": self.request_id,
         }
 
@@ -140,7 +140,7 @@ class RateLimitEvent(BaseEvent):
 class TemplateRenderingFailedEvent(BaseEvent):
     """Fired when template rendering fails due to undefined variables."""
 
-    agent_name: str = ""
+    action_name: str = ""
     missing_variables: list[str] = field(default_factory=list)
     error_message: str = ""
 
@@ -149,10 +149,10 @@ class TemplateRenderingFailedEvent(BaseEvent):
         self.category = EventCategories.TEMPLATE
         vars_str = ", ".join(self.missing_variables) if self.missing_variables else "unknown"
         self.message = (
-            f"Template for '{self.agent_name}' references undefined variables: {vars_str}"
+            f"Template for '{self.action_name}' references undefined variables: {vars_str}"
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "missing_variables": self.missing_variables,
             "error_message": self.error_message,
         }
@@ -166,15 +166,15 @@ class TemplateRenderingFailedEvent(BaseEvent):
 class TemplateSyntaxErrorEvent(BaseEvent):
     """Fired when template has syntax errors."""
 
-    agent_name: str = ""
+    action_name: str = ""
     error: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.ERROR
         self.category = EventCategories.TEMPLATE
-        self.message = f"Template syntax error in '{self.agent_name}': {self.error}"
+        self.message = f"Template syntax error in '{self.action_name}': {self.error}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "error": self.error,
         }
 

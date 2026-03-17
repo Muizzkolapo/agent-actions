@@ -1,10 +1,10 @@
 """Tests for reserved agent name validation in agent entries."""
 
-from agent_actions.validation.agent_validators.agent_type_specific_validator import (
-    AgentTypeSpecificValidator,
+from agent_actions.validation.action_validators.action_type_specific_validator import (
+    ActionTypeSpecificValidator,
 )
-from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
-    AgentEntryValidationContext,
+from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
+    ActionEntryValidationContext,
 )
 
 
@@ -13,11 +13,11 @@ class TestAgentEntryReservedNames:
 
     def test_reserved_name_rejected(self):
         """Reserved names should raise validation errors."""
-        context = AgentEntryValidationContext(
+        context = ActionEntryValidationContext(
             entry={"name": "context_scope", "agent_type": "llm"},
             agent_name_context="test_agent",
         )
-        validator = AgentTypeSpecificValidator()
+        validator = ActionTypeSpecificValidator()
         result = validator.validate(context)
 
         assert result.errors

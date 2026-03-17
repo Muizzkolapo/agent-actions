@@ -273,16 +273,16 @@ class RetryExhaustedEvent(BaseEvent):
 class RepromptValidationFailedEvent(BaseEvent):
     """Fired when reprompt validation fails."""
 
-    agent_name: str = ""
+    action_name: str = ""
     attempt: int = 0
     error: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.RECOVERY
-        self.message = f"Reprompt validation failed for '{self.agent_name}' (attempt {self.attempt}): {self.error}"
+        self.message = f"Reprompt validation failed for '{self.action_name}' (attempt {self.attempt}): {self.error}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "attempt": self.attempt,
             "error": self.error,
         }

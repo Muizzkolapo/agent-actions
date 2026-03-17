@@ -1,4 +1,4 @@
-"""Agent output management for previous output loading and passthrough creation."""
+"""Action output management for previous output loading and passthrough creation."""
 
 import json
 import logging
@@ -27,20 +27,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OutputManagerConfig:
-    """Configuration for AgentOutputManager."""
+    """Configuration for ActionOutputManager."""
 
     agent_folder: Path
     execution_order: list[str]
-    agent_configs: dict[str, dict[str, Any]]
-    agent_status: dict[str, dict[str, Any]]
+    action_configs: dict[str, dict[str, Any]]
+    action_status: dict[str, dict[str, Any]]
     version_correlator: Any
     console: Console | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     data_source_config: str | dict[str, Any] | None = None
 
 
-class AgentOutputManager:
-    """Manages agent output loading, passthrough creation, and version correlation."""
+class ActionOutputManager:
+    """Manages action output loading, passthrough creation, and version correlation."""
 
     def __init__(self, config: OutputManagerConfig):
         """Initialize output manager.
@@ -50,14 +50,14 @@ class AgentOutputManager:
         """
         if config.storage_backend is None:
             raise ConfigurationError(
-                "AgentOutputManager requires a storage_backend. "
+                "ActionOutputManager requires a storage_backend. "
                 "Disposition tracking is not optional.",
-                context={"component": "AgentOutputManager"},
+                context={"component": "ActionOutputManager"},
             )
         self.agent_folder = config.agent_folder
         self.execution_order = config.execution_order
-        self.agent_configs = config.agent_configs
-        self.agent_status = config.agent_status
+        self.action_configs = config.action_configs
+        self.action_status = config.action_status
         self.version_correlator = config.version_correlator
         self.console = config.console or Console()
         self.storage_backend = config.storage_backend
@@ -79,10 +79,10 @@ class AgentOutputManager:
         return outputs
 
     def _process_agent_output(self, output_dir: Path, prev_agent_name: str) -> dict[str, Any]:
-        """Process output directory for a single agent."""
+        """Process output directory for a single action."""
         agent_output = {
             "data": [],
-            "status": self.agent_status.get(prev_agent_name, {}).get("status", "unknown"),
+            "status": self.action_status.get(prev_agent_name, {}).get("status", "unknown"),
             "output_count": 0,
             "output_files": [],
             "has_data": False,
@@ -124,7 +124,7 @@ class AgentOutputManager:
         return agent_output
 
     def get_previous_outputs(self, current_idx: int) -> dict[str, Any]:
-        """Return outputs from previously executed agents with metadata."""
+        """Return outputs from previously executed actions with metadata."""
         previous_outputs = {}
 
         for i in range(current_idx):
@@ -161,9 +161,9 @@ class AgentOutputManager:
         return previous_outputs
 
     def create_passthrough_output(self, idx: int, agent_type: str):
-        """Create passthrough output for a skipped agent."""
+        """Create passthrough output for a skipped action."""
         upstream_dirs = self.get_upstream_directories(idx)
-        agent_config = self.agent_configs.get(agent_type, {})
+        agent_config = self.action_configs.get(agent_type, {})
         reduce_key = agent_config.get("reduce_key")
 
         # Collect data by relative_path from all upstream nodes
@@ -193,7 +193,7 @@ class AgentOutputManager:
                 data = merge_records_by_key(all_records, reduce_key)
             self.storage_backend.write_target(agent_type, relative_path, data)
 
-        reason = f"Agent {agent_type} skipped due to WHERE clause condition"
+        reason = f"Action {agent_type} skipped due to WHERE clause condition"
         self.storage_backend.set_disposition(
             agent_type, NODE_LEVEL_RECORD_ID, DISPOSITION_SKIPPED, reason=reason
         )
@@ -272,9 +272,9 @@ class AgentOutputManager:
         return [str(upstream_path)]
 
     def get_upstream_directories(self, idx: int) -> list[str]:
-        """Return upstream data directories for an agent, resolving dependencies."""
+        """Return upstream data directories for an action, resolving dependencies."""
         current_agent = self.execution_order[idx]
-        agent_config = self.agent_configs.get(current_agent, {})
+        agent_config = self.action_configs.get(current_agent, {})
         dependencies = agent_config.get("dependencies", [])
         previous_agent_type = self.execution_order[idx - 1] if idx > 0 else None
 
@@ -310,7 +310,7 @@ class AgentOutputManager:
                 return upstream_dirs
 
         version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-            self.execution_order, self.agent_configs
+            self.execution_order, self.action_configs
         )
 
         if current_agent in version_consumption_map:
@@ -350,7 +350,7 @@ class AgentOutputManager:
         current_agent = self.execution_order[idx]
 
         version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-            self.execution_order, self.agent_configs
+            self.execution_order, self.action_configs
         )
 
         if current_agent not in version_consumption_map:
@@ -393,3 +393,7 @@ class AgentOutputManager:
             )
 
         return correlation_setup_directories
+
+
+# Backward-compatible alias
+AgentOutputManager = ActionOutputManager

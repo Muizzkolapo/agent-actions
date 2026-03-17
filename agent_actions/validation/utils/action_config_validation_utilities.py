@@ -1,5 +1,5 @@
 """
-Shared utilities for agent configuration validation.
+Shared utilities for action configuration validation.
 """
 
 from typing import Any
@@ -16,9 +16,9 @@ from agent_actions.utils.constants import (
 )
 
 
-class AgentConfigValidationUtilities:
+class ActionConfigValidationUtilities:
     """
-    Centralized utilities for agent configuration validation.
+    Centralized utilities for action configuration validation.
 
     This class consolidates all shared logic that was scattered across
     the original ConfigValidator class.
@@ -26,12 +26,12 @@ class AgentConfigValidationUtilities:
 
     # ===== Configuration Constants =====
 
-    _REQUIRED_AGENT_KEYS: set[str] = {
+    _REQUIRED_ACTION_KEYS: set[str] = {
         "agent_type",
         MODEL_NAME_KEY,  # 'model_name'
     }
 
-    _OPTIONAL_AGENT_KEYS: set[str] = {
+    _OPTIONAL_ACTION_KEYS: set[str] = {
         "description",
         "version",
         "author",
@@ -58,7 +58,7 @@ class AgentConfigValidationUtilities:
         "constraints",
     }
 
-    _AGENT_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {
+    _ACTION_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {
         "llm": {MODEL_NAME_KEY},
         "function": {"code_path"},
         "tool": {MODEL_NAME_KEY},
@@ -117,7 +117,7 @@ class AgentConfigValidationUtilities:
         Format a standardized description for error messages.
 
         Args:
-            entry: Agent configuration entry
+            entry: Action configuration entry
             context_name: Context name (agent file name, etc.)
 
         Returns:
@@ -127,7 +127,7 @@ class AgentConfigValidationUtilities:
             "agent entry llm in 'my_agent'"
         """
         # Try to get agent_type from entry (case-insensitive)
-        agent_type = AgentConfigValidationUtilities.get_case_insensitive_value(
+        agent_type = ActionConfigValidationUtilities.get_case_insensitive_value(
             entry, "agent_type", "unknown"
         )
 
@@ -136,17 +136,17 @@ class AgentConfigValidationUtilities:
     # ===== Configuration Accessors =====
 
     @staticmethod
-    def get_required_agent_keys() -> set[str]:
-        """Get set of required agent configuration keys."""
-        return AgentConfigValidationUtilities._REQUIRED_AGENT_KEYS.copy()
+    def get_required_action_keys() -> set[str]:
+        """Get set of required action configuration keys."""
+        return ActionConfigValidationUtilities._REQUIRED_ACTION_KEYS.copy()
 
     @staticmethod
-    def get_optional_agent_keys() -> set[str]:
-        """Get set of optional agent configuration keys."""
-        return AgentConfigValidationUtilities._OPTIONAL_AGENT_KEYS.copy()
+    def get_optional_action_keys() -> set[str]:
+        """Get set of optional action configuration keys."""
+        return ActionConfigValidationUtilities._OPTIONAL_ACTION_KEYS.copy()
 
     @staticmethod
-    def get_agent_type_specific_keys(agent_type: str) -> set[str]:
+    def get_action_type_specific_keys(agent_type: str) -> set[str]:
         """
         Get required keys for a specific agent type.
 
@@ -156,14 +156,14 @@ class AgentConfigValidationUtilities:
         Returns:
             Set of required keys for that type, or empty set if no special requirements
         """
-        return AgentConfigValidationUtilities._AGENT_TYPE_SPECIFIC_KEYS.get(
+        return ActionConfigValidationUtilities._ACTION_TYPE_SPECIFIC_KEYS.get(
             agent_type.lower(), set()
         ).copy()
 
     @staticmethod
-    def get_all_known_agent_keys(agent_type: str | None = None) -> set[str]:
+    def get_all_known_action_keys(agent_type: str | None = None) -> set[str]:
         """
-        Get all known agent keys (required + optional + type-specific).
+        Get all known action keys (required + optional + type-specific).
 
         Args:
             agent_type: Optional agent type to include type-specific keys
@@ -172,12 +172,12 @@ class AgentConfigValidationUtilities:
             Set of all known keys
         """
         all_keys = (
-            AgentConfigValidationUtilities._REQUIRED_AGENT_KEYS
-            | AgentConfigValidationUtilities._OPTIONAL_AGENT_KEYS
+            ActionConfigValidationUtilities._REQUIRED_ACTION_KEYS
+            | ActionConfigValidationUtilities._OPTIONAL_ACTION_KEYS
         )
 
         if agent_type:
-            type_keys = AgentConfigValidationUtilities.get_agent_type_specific_keys(agent_type)
+            type_keys = ActionConfigValidationUtilities.get_action_type_specific_keys(agent_type)
             all_keys = all_keys | type_keys
 
         return all_keys
@@ -185,9 +185,9 @@ class AgentConfigValidationUtilities:
     @staticmethod
     def get_valid_batch_vendors() -> set[str]:
         """Get set of valid batch processing vendors."""
-        return AgentConfigValidationUtilities._VALID_BATCH_VENDORS.copy()
+        return ActionConfigValidationUtilities._VALID_BATCH_VENDORS.copy()
 
     @staticmethod
     def get_valid_granularity_values() -> set[str]:
         """Get set of valid granularity values."""
-        return AgentConfigValidationUtilities._VALID_GRANULARITY_VALUES.copy()
+        return ActionConfigValidationUtilities._VALID_GRANULARITY_VALUES.copy()

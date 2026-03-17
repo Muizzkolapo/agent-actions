@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 
 from rich.console import Console
 
-from agent_actions.config.factory import create_agent_runner
+from agent_actions.config.factory import create_action_runner
 from agent_actions.storage import get_storage_backend
-from agent_actions.workflow.executor import AgentExecutor, ExecutorDependencies
+from agent_actions.workflow.executor import ActionExecutor, ExecutorDependencies
 from agent_actions.workflow.managers.batch import BatchLifecycleManager
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 from agent_actions.workflow.managers.manifest import ManifestManager
-from agent_actions.workflow.managers.output import AgentOutputManager, OutputManagerConfig
+from agent_actions.workflow.managers.output import ActionOutputManager, OutputManagerConfig
 from agent_actions.workflow.managers.skip import SkipEvaluator
-from agent_actions.workflow.managers.state import AgentStateManager
+from agent_actions.workflow.managers.state import ActionStateManager
 from agent_actions.workflow.models import (
     CoreServices,
     SupportServices,
@@ -83,57 +83,57 @@ def initialize_services(
     """
     fire_event(WorkflowServicesInitializationStartEvent(workflow_name=metadata.agent_name))
 
-    agent_runner = create_agent_runner(
+    action_runner = create_action_runner(
         use_tools=config.use_tools,
         storage_backend=storage_backend,
     )
-    agent_runner.execution_order = metadata.execution_order
-    agent_runner.agent_indices = metadata.agent_indices
-    agent_runner.agent_configs = metadata.agent_configs
-    agent_runner.workflow_name = metadata.agent_name
-    agent_runner.project_root = config.project_root
+    action_runner.execution_order = metadata.execution_order
+    action_runner.action_indices = metadata.action_indices
+    action_runner.action_configs = metadata.action_configs
+    action_runner.workflow_name = metadata.agent_name
+    action_runner.project_root = config.project_root
 
     workflow_defaults = config.manager.user_config.get("defaults") or {}
-    agent_runner.data_source_config = workflow_defaults.get("data_source")
+    action_runner.data_source_config = workflow_defaults.get("data_source")
 
     from agent_actions.llm.batch.service import BatchService  # avoid circular import
 
     batch_service = BatchService(
-        agent_indices=metadata.agent_indices,
-        dependency_configs=metadata.agent_configs,
+        action_indices=metadata.action_indices,
+        dependency_configs=metadata.action_configs,
         storage_backend=storage_backend,
         action_name=metadata.agent_name,
     )
 
     agent_folder = Path(
-        agent_runner.get_agent_folder(metadata.agent_name, project_root=config.project_root)
+        action_runner.get_action_folder(metadata.agent_name, project_root=config.project_root)
     )
     status_file = agent_folder / ".agent_status.json"
 
     version_correlator = VersionOutputCorrelator(
         agent_folder,
-        storage_backend=agent_runner.storage_backend,
+        storage_backend=action_runner.storage_backend,
     )
 
-    state_manager = AgentStateManager(status_file, metadata.execution_order)
+    state_manager = ActionStateManager(status_file, metadata.execution_order)
     skip_evaluator = SkipEvaluator(console)
     batch_manager = BatchLifecycleManager(batch_service, console, storage_backend=storage_backend)
-    output_manager = AgentOutputManager(
+    output_manager = ActionOutputManager(
         OutputManagerConfig(
             agent_folder=agent_folder,
             execution_order=metadata.execution_order,
-            agent_configs=metadata.agent_configs,
-            agent_status=state_manager.agent_status,
+            action_configs=metadata.action_configs,
+            action_status=state_manager.action_status,
             version_correlator=version_correlator,
             console=console,
-            storage_backend=agent_runner.storage_backend,
-            data_source_config=agent_runner.data_source_config,
+            storage_backend=action_runner.storage_backend,
+            data_source_config=action_runner.data_source_config,
         )
     )
 
-    agent_executor = AgentExecutor(
+    action_executor = ActionExecutor(
         ExecutorDependencies(
-            agent_runner=agent_runner,
+            action_runner=action_runner,
             state_manager=state_manager,
             skip_evaluator=skip_evaluator,
             batch_manager=batch_manager,
@@ -143,7 +143,7 @@ def initialize_services(
     )
 
     action_level_orchestrator = ActionLevelOrchestrator(
-        metadata.execution_order, metadata.agent_configs, console
+        metadata.execution_order, metadata.action_configs, console
     )
 
     manifest_manager = ManifestManager(agent_folder)
@@ -153,16 +153,16 @@ def initialize_services(
         workflow_name=metadata.agent_name,
         execution_order=metadata.execution_order,
         levels=levels,
-        agent_configs=metadata.agent_configs,
+        action_configs=metadata.action_configs,
     )
 
-    agent_runner.manifest_manager = manifest_manager
+    action_runner.manifest_manager = manifest_manager
 
     services = WorkflowServices(
         core=CoreServices(
-            agent_runner=agent_runner,
+            action_runner=action_runner,
             state_manager=state_manager,
-            agent_executor=agent_executor,
+            action_executor=action_executor,
             action_level_orchestrator=action_level_orchestrator,
         ),
         support=SupportServices(

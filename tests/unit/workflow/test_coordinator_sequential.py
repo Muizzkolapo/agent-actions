@@ -1,4 +1,4 @@
-"""Tests for AgentWorkflow sequential execution (_run_single_agent, _run_workflow_with_context)."""
+"""Tests for AgentWorkflow sequential execution (_run_single_action, _run_workflow_with_context)."""
 
 from datetime import datetime
 from unittest.mock import MagicMock, patch
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.workflow.coordinator import AgentWorkflow
-from agent_actions.workflow.executor import AgentExecutionResult, ExecutionMetrics
+from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 from agent_actions.workflow.models import (
     CoreServices,
     SupportServices,
@@ -21,7 +21,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
 
     Uses object.__new__ to skip AgentWorkflow.__init__ which has 7+ side effects
     (config loading, storage init, dependency orchestration, etc.).  This lets us
-    test _run_single_agent / _run_workflow_with_context in isolation by injecting
+    test _run_single_action / _run_workflow_with_context in isolation by injecting
     mock collaborators directly.
     """
     wf = object.__new__(AgentWorkflow)
@@ -35,8 +35,8 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     metadata = MagicMock()
     metadata.agent_name = "test_workflow"
     metadata.execution_order = execution_order
-    metadata.agent_indices = {name: idx for idx, name in enumerate(execution_order)}
-    metadata.agent_configs = agent_configs
+    metadata.action_indices = {name: idx for idx, name in enumerate(execution_order)}
+    metadata.action_configs = agent_configs
     wf.metadata = metadata
 
     # Config
@@ -52,7 +52,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     # Services
     core = MagicMock(spec=CoreServices)
     core.state_manager = MagicMock()
-    core.agent_executor = MagicMock()
+    core.action_executor = MagicMock()
     support = MagicMock(spec=SupportServices)
     support.manifest_manager = MagicMock()
     wf.services = WorkflowServices(core=core, support=support)
@@ -64,7 +64,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
 
 
 def _success_result(status="completed", output_folder="/output"):
-    return AgentExecutionResult(
+    return ActionExecutionResult(
         success=True,
         status=status,
         output_folder=output_folder,
@@ -73,7 +73,7 @@ def _success_result(status="completed", output_folder="/output"):
 
 
 def _failed_result(error=None):
-    return AgentExecutionResult(
+    return ActionExecutionResult(
         success=False,
         status="failed",
         error=error or RuntimeError("agent failed"),
@@ -81,34 +81,34 @@ def _failed_result(error=None):
     )
 
 
-# ── _run_single_agent ─────────────────────────────────────────────────
+# ── _run_single_action ─────────────────────────────────────────────────
 
 
 class TestRunSingleAgent:
-    """Tests for _run_single_agent sequential execution."""
+    """Tests for _run_single_action sequential execution."""
 
     def test_already_completed_skips(self):
         """Completed agent should fire agent_start, then log skip, and not execute."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = True
 
-        should_stop = wf._run_single_agent(0, "agent_a", 2)
+        should_stop = wf._run_single_action(0, "agent_a", 2)
 
         assert should_stop is False
-        # Source fires fire_agent_start BEFORE the is_completed check (coordinator.py:296)
-        wf.event_logger.fire_agent_start.assert_called_once_with(
+        # Source fires fire_action_start BEFORE the is_completed check (coordinator.py:296)
+        wf.event_logger.fire_action_start.assert_called_once_with(
             0, "agent_a", 2, {"agent_type": "agent_a", "type": "llm"}
         )
-        wf.event_logger.log_agent_skip.assert_called_once_with(0, "agent_a", 2)
-        wf.services.core.agent_executor.execute_agent_sync.assert_not_called()
+        wf.event_logger.log_action_skip.assert_called_once_with(0, "agent_a", 2)
+        wf.services.core.action_executor.execute_action_sync.assert_not_called()
 
     def test_success_appends_ephemeral(self):
         """Successful completion should append to ephemeral_directories."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _success_result()
+        wf.services.core.action_executor.execute_action_sync.return_value = _success_result()
 
-        should_stop = wf._run_single_agent(0, "agent_a", 2)
+        should_stop = wf._run_single_action(0, "agent_a", 2)
 
         assert should_stop is False
         assert len(wf.state.ephemeral_directories) == 1
@@ -118,11 +118,11 @@ class TestRunSingleAgent:
         """batch_submitted result should stop the workflow loop."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _success_result(
+        wf.services.core.action_executor.execute_action_sync.return_value = _success_result(
             status="batch_submitted", output_folder=None
         )
 
-        should_stop = wf._run_single_agent(0, "agent_a", 2)
+        should_stop = wf._run_single_action(0, "agent_a", 2)
 
         assert should_stop is True
 
@@ -131,31 +131,31 @@ class TestRunSingleAgent:
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
         error = RuntimeError("agent crashed")
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _failed_result(error)
+        wf.services.core.action_executor.execute_action_sync.return_value = _failed_result(error)
 
         with pytest.raises(RuntimeError, match="agent crashed"):
-            wf._run_single_agent(0, "agent_a", 2)
+            wf._run_single_action(0, "agent_a", 2)
 
     def test_fires_agent_start(self):
         """Should fire agent_start event before execution."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _success_result()
+        wf.services.core.action_executor.execute_action_sync.return_value = _success_result()
 
-        wf._run_single_agent(0, "agent_a", 2)
+        wf._run_single_action(0, "agent_a", 2)
 
-        wf.event_logger.fire_agent_start.assert_called_once()
+        wf.event_logger.fire_action_start.assert_called_once()
 
-    def test_is_last_agent_flag(self):
-        """is_last_agent should be True for the final agent in execution_order."""
+    def test_is_last_action_flag(self):
+        """is_last_action should be True for the final agent in execution_order."""
         wf = _build_workflow()
         wf.services.core.state_manager.is_completed.return_value = False
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _success_result()
+        wf.services.core.action_executor.execute_action_sync.return_value = _success_result()
 
-        wf._run_single_agent(1, "agent_b", 2)
+        wf._run_single_action(1, "agent_b", 2)
 
-        call_kwargs = wf.services.core.agent_executor.execute_agent_sync.call_args[1]
-        assert call_kwargs["is_last_agent"] is True
+        call_kwargs = wf.services.core.action_executor.execute_action_sync.call_args[1]
+        assert call_kwargs["is_last_action"] is True
 
 
 # ── _run_workflow_with_context ─────────────────────────────────────────
@@ -182,7 +182,7 @@ class TestRunWorkflowWithContext:
         """When an agent returns batch_submitted, should stop and return None."""
         wf = _build_workflow(execution_order=["agent_a"])
         wf.services.core.state_manager.is_completed.return_value = False
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _success_result(
+        wf.services.core.action_executor.execute_action_sync.return_value = _success_result(
             status="batch_submitted", output_folder=None
         )
         wf.services.core.state_manager.is_workflow_complete.return_value = False
@@ -200,7 +200,7 @@ class TestRunWorkflowWithContext:
         wf = _build_workflow(execution_order=["agent_a"])
         wf.services.core.state_manager.is_completed.return_value = False
         error = RuntimeError("boom")
-        wf.services.core.agent_executor.execute_agent_sync.return_value = _failed_result(error)
+        wf.services.core.action_executor.execute_action_sync.return_value = _failed_result(error)
 
         mgr = MagicMock()
         mgr.context.return_value.__enter__ = MagicMock()

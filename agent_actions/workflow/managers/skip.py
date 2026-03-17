@@ -1,4 +1,4 @@
-"""Agent skip condition evaluation using strategy pattern."""
+"""Action skip condition evaluation using strategy pattern."""
 
 import logging
 from abc import ABC, abstractmethod
@@ -11,7 +11,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
 )
 from agent_actions.logging.core import fire_event
-from agent_actions.logging.events import AgentSkipEvent
+from agent_actions.logging.events import ActionSkipEvent
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +72,8 @@ class SkipConditionStrategy(SkipStrategy):
 
             if should_skip:
                 fire_event(
-                    AgentSkipEvent(
-                        agent_name=agent_name, skip_reason="skip_condition evaluated to True"
+                    ActionSkipEvent(
+                        action_name=agent_name, skip_reason="skip_condition evaluated to True"
                     )
                 )
 
@@ -85,13 +85,13 @@ class SkipConditionStrategy(SkipStrategy):
                 agent_name,
                 e,
                 exc_info=True,
-                extra={"agent_name": agent_name, "operation": "skip_condition_evaluation"},
+                extra={"action_name": agent_name, "operation": "skip_condition_evaluation"},
             )
             return False  # Don't skip on error
 
 
 class GuardStrategy(SkipStrategy):
-    """Strategy for evaluating 'guard' with scope='agent'."""
+    """Strategy for evaluating 'guard' with scope='action'."""
 
     def get_strategy_name(self) -> str:
         return "guard"
@@ -104,29 +104,29 @@ class GuardStrategy(SkipStrategy):
             "Guard evaluation error for %s: %s",
             agent_name,
             error_msg,
-            extra={"agent_name": agent_name, "operation": "guard_evaluation"},
+            extra={"action_name": agent_name, "operation": "guard_evaluation"},
         )
 
         if passthrough_on_error:
             logger.debug(
-                "Agent %s proceeding despite error (passthrough_on_error=True)",
+                "Action %s proceeding despite error (passthrough_on_error=True)",
                 agent_name,
-                extra={"agent_name": agent_name, "passthrough_on_error": True},
+                extra={"action_name": agent_name, "passthrough_on_error": True},
             )
             return False
 
         fire_event(
-            AgentSkipEvent(
-                agent_name=agent_name, skip_reason="error occurred and passthrough_on_error=False"
+            ActionSkipEvent(
+                action_name=agent_name, skip_reason="error occurred and passthrough_on_error=False"
             )
         )
         return True
 
     def should_skip(self, agent_config: dict[str, Any], previous_outputs: dict[str, Any]) -> bool:
-        """Evaluate agent-level guard condition."""
+        """Evaluate action-level guard condition."""
         guard_config = agent_config.get("guard")
 
-        if not guard_config or guard_config.get("scope") != "agent":
+        if not guard_config or guard_config.get("scope") != "action":
             return False
 
         agent_name = agent_config.get("agent_type", "unknown")
@@ -144,10 +144,10 @@ class GuardStrategy(SkipStrategy):
             }
 
             logger.debug(
-                "Evaluating agent-level guard for %s",
+                "Evaluating action-level guard for %s",
                 agent_name,
                 extra={
-                    "agent_name": agent_name,
+                    "action_name": agent_name,
                     "guard": guard_clause,
                     "operation": "guard_evaluation",
                 },
@@ -168,13 +168,13 @@ class GuardStrategy(SkipStrategy):
             # Handle filter result
             if not filter_result.matched:
                 fire_event(
-                    AgentSkipEvent(agent_name=agent_name, skip_reason="guard condition not met")
+                    ActionSkipEvent(action_name=agent_name, skip_reason="guard condition not met")
                 )
                 logger.debug(
                     "Guard details: %s",
                     guard_clause,
                     extra={
-                        "agent_name": agent_name,
+                        "action_name": agent_name,
                         "guard": guard_clause,
                         "context_data": context_data,
                         "operation": "guard_evaluation",
@@ -222,8 +222,8 @@ class LegacySkipIfStrategy(SkipStrategy):
 
             if should_skip:
                 fire_event(
-                    AgentSkipEvent(
-                        agent_name=agent_name, skip_reason="legacy skip_if condition matched"
+                    ActionSkipEvent(
+                        action_name=agent_name, skip_reason="legacy skip_if condition matched"
                     )
                 )
 
@@ -236,7 +236,7 @@ class LegacySkipIfStrategy(SkipStrategy):
                 e,
                 exc_info=True,
                 extra={
-                    "agent_name": agent_name,
+                    "action_name": agent_name,
                     "skip_if": skip_if,
                     "operation": "legacy_skip_if_evaluation",
                 },
@@ -259,21 +259,21 @@ class SkipEvaluator:
     def __repr__(self):
         return f"SkipEvaluator(strategies={len(self.strategies)})"
 
-    def should_skip_agent(
+    def should_skip_action(
         self, agent_config: dict[str, Any], previous_outputs: dict[str, Any] | None = None
     ) -> bool:
         """
-        Determine if an agent should be skipped based on skip conditions.
+        Determine if an action should be skipped based on skip conditions.
 
         Evaluates all skip strategies in order.
         Returns True at first skip condition that matches.
 
         Args:
-            agent_config: Agent configuration
-            previous_outputs: Previous agent outputs for context
+            agent_config: Action configuration
+            previous_outputs: Previous action outputs for context
 
         Returns:
-            True if the agent should be skipped, False otherwise
+            True if the action should be skipped, False otherwise
         """
         previous_outputs = previous_outputs or {}
 
@@ -289,7 +289,7 @@ class SkipEvaluator:
                     agent_name,
                     e,
                     extra={
-                        "agent_name": agent_name,
+                        "action_name": agent_name,
                         "strategy_name": strategy.get_strategy_name(),
                         "operation": "skip_strategy_evaluation",
                     },

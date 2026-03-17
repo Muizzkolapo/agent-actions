@@ -324,7 +324,7 @@ class TestVersionOutputCorrelatorIntegration:
         agent_folder = tmp_path / "agent_io"
         agent_folder.mkdir()
         workflow.agent_runner = MagicMock()
-        workflow.agent_runner.get_agent_folder.return_value = str(agent_folder)
+        workflow.agent_runner.get_action_folder.return_value = str(agent_folder)
         return (workflow, agent_folder)
 
     def test_integration_with_agent_workflow(self, mock_agent_workflow):
@@ -656,8 +656,8 @@ class TestVersionCorrelationFailureError:
             config = OutputManagerConfig(
                 agent_folder=agent_folder,
                 execution_order=["action_1", "action_2", "consumer"],
-                agent_configs=agent_configs,
-                agent_status={},
+                action_configs=agent_configs,
+                action_status={},
                 version_correlator=version_correlator,
                 console=MagicMock(),  # Mock console to avoid print errors
                 storage_backend=MagicMock(),

@@ -9,7 +9,7 @@ decoders to schema validators and preflight checks.
 
 | Sub-Module | Description |
 |------------|-------------|
-| [agent_validators](agent_validators/_MANIFEST.md) | Reusable agent validation rules shared across commands. |
+| [action_validators](action_validators/_MANIFEST.md) | Reusable action validation rules shared across commands. |
 | [orchestration](orchestration/_MANIFEST.md) | Workflow/runner-specific validation helpers. |
 | [preflight](preflight/_MANIFEST.md) | Validators executed before workflows run (vendors, prompts, pipelines). |
 | [static_analyzer](static_analyzer/_MANIFEST.md) | Core static analysis: data flow graphs, type checking, field analysis. |

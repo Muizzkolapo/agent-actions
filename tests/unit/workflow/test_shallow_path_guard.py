@@ -30,8 +30,8 @@ def _make_metadata(agent_name: str = "test_agent") -> WorkflowMetadata:
     return WorkflowMetadata(
         agent_name=agent_name,
         execution_order=[],
-        agent_indices={},
-        agent_configs={},
+        action_indices={},
+        action_configs={},
     )
 
 

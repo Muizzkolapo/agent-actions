@@ -1,4 +1,4 @@
-"""File walking, merging, and storage backend processing for AgentRunner.
+"""File walking, merging, and storage backend processing for ActionRunner.
 
 Extracted from runner.py to keep both modules under ~500 LOC.
 Functions that need instance method dispatch take a ``runner`` parameter
@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from agent_actions.workflow.merge import merge_json_files, merge_records_by_key
 
 if TYPE_CHECKING:
-    from agent_actions.workflow.runner import AgentRunner, FileProcessParams
+    from agent_actions.workflow.runner import ActionRunner, FileProcessParams
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def warn_no_files_found(params: FileProcessParams) -> None:
             params.upstream_data_dirs,
             extra={
                 "upstream_data_dirs": params.upstream_data_dirs,
-                "agent_name": params.agent_name,
+                "agent_name": params.action_name,
                 "operation": "directory_processing",
             },
         )
@@ -100,7 +100,7 @@ def warn_no_files_found(params: FileProcessParams) -> None:
 
 
 def process_directory_files(
-    runner: AgentRunner,
+    runner: ActionRunner,
     input_path: Path,
     output_path: Path,
     input_directory: str,
@@ -126,8 +126,8 @@ def process_directory_files(
                     output_path=output_path,
                     input_directory=input_directory,
                 ),
-                agent_config=params.agent_config,
-                agent_name=params.agent_name,
+                action_config=params.action_config,
+                action_name=params.action_name,
                 strategy=params.strategy,
                 idx=params.idx,
             )
@@ -136,7 +136,7 @@ def process_directory_files(
     return count
 
 
-def process_merged_files(runner: AgentRunner, params: FileProcessParams) -> int:
+def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int:
     """Process files from multiple upstream directories with content merging."""
     from agent_actions.workflow.runner import FileLocationParams, SingleFileProcessParams
 
@@ -168,14 +168,14 @@ def process_merged_files(runner: AgentRunner, params: FileProcessParams) -> int:
                         output_path=output_path,
                         input_directory=str(input_path),
                     ),
-                    agent_config=params.agent_config,
-                    agent_name=params.agent_name,
+                    action_config=params.action_config,
+                    action_name=params.action_name,
                     strategy=params.strategy,
                     idx=params.idx,
                 )
             )
         else:
-            reduce_key = params.agent_config.get("reduce_key")
+            reduce_key = params.action_config.get("reduce_key")
             logger.debug(
                 "Merging %d files for %s from parallel branches (reduce_key=%s)",
                 len(file_paths),
@@ -205,8 +205,8 @@ def process_merged_files(runner: AgentRunner, params: FileProcessParams) -> int:
                             output_path=output_path,
                             input_directory=str(first_upstream),
                         ),
-                        agent_config=params.agent_config,
-                        agent_name=params.agent_name,
+                        action_config=params.action_config,
+                        action_name=params.action_name,
                         strategy=params.strategy,
                         idx=params.idx,
                     )
@@ -221,7 +221,7 @@ def process_merged_files(runner: AgentRunner, params: FileProcessParams) -> int:
     return files_processed_count
 
 
-def process_from_storage_backend(runner: AgentRunner, params: FileProcessParams) -> tuple[int, int]:
+def process_from_storage_backend(runner: ActionRunner, params: FileProcessParams) -> tuple[int, int]:
     """Process data from storage backend instead of filesystem.
 
     Returns:
@@ -277,7 +277,7 @@ def process_from_storage_backend(runner: AgentRunner, params: FileProcessParams)
             if len(data_sources) == 1:
                 _, data = data_sources[0]
             else:
-                reduce_key = params.agent_config.get("reduce_key")
+                reduce_key = params.action_config.get("reduce_key")
                 logger.debug(
                     "Merging %d sources for %s from parallel branches (reduce_key=%s)",
                     len(data_sources),
@@ -309,8 +309,8 @@ def process_from_storage_backend(runner: AgentRunner, params: FileProcessParams)
                         output_path=output_path,
                         input_directory=str(output_path),
                     ),
-                    agent_config=params.agent_config,
-                    agent_name=params.agent_name,
+                    action_config=params.action_config,
+                    action_name=params.action_name,
                     strategy=params.strategy,
                     idx=params.idx,
                     source_relative_path=source_key,
@@ -334,10 +334,10 @@ def process_from_storage_backend(runner: AgentRunner, params: FileProcessParams)
             "Storage backend processing incomplete: %d/%d files processed for %s. Errors: %s",
             files_processed,
             files_found,
-            params.agent_name,
+            params.action_name,
             "; ".join(processing_errors[:3]),  # Show first 3 errors
             extra={
-                "agent_name": params.agent_name,
+                "agent_name": params.action_name,
                 "files_found": files_found,
                 "files_processed": files_processed,
                 "error_count": len(processing_errors),
@@ -347,7 +347,7 @@ def process_from_storage_backend(runner: AgentRunner, params: FileProcessParams)
     return (files_found, files_processed)
 
 
-def process_files(runner: AgentRunner, params: FileProcessParams) -> None:
+def process_files(runner: ActionRunner, params: FileProcessParams) -> None:
     """Walk upstream data directories and process each file with the given strategy."""
     if runner.storage_backend is not None:
         all_targets = all(is_target_directory(d) for d in params.upstream_data_dirs)
@@ -361,10 +361,10 @@ def process_files(runner: AgentRunner, params: FileProcessParams) -> None:
                 from agent_actions.errors import DependencyError
 
                 raise DependencyError(
-                    f"Action '{params.agent_name}': Found {files_found} files in storage "
+                    f"Action '{params.action_name}': Found {files_found} files in storage "
                     f"backend but failed to process any. Check logs for details.",
                     context={
-                        "action": params.agent_name,
+                        "action": params.action_name,
                         "files_found": files_found,
                         "upstream_dirs": params.upstream_data_dirs,
                     },

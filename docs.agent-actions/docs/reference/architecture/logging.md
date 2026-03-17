@@ -91,7 +91,7 @@ Events are dataclasses that represent specific occurrences in the system:
 
 **Event Categories:**
 - `workflow` - Workflow lifecycle events
-- `agent` - Agent execution events
+- `action` - Action execution events
 - `batch` - Batch job operations
 - `validation` - Validation results
 - `progress` - Progress updates
@@ -101,10 +101,10 @@ Events are dataclasses that represent specific occurrences in the system:
 - `WorkflowStartEvent` - Workflow execution begins
 - `WorkflowCompleteEvent` - Workflow execution completes
 - `WorkflowFailedEvent` - Workflow execution fails
-- `AgentStartEvent` - Agent begins processing
-- `AgentCompleteEvent` - Agent completes successfully
-- `AgentSkipEvent` - Agent skipped (guard condition)
-- `AgentFailedEvent` - Agent fails with error
+- `ActionStartEvent` - Action begins processing
+- `ActionCompleteEvent` - Action completes successfully
+- `ActionSkipEvent` - Action skipped (guard condition)
+- `ActionFailedEvent` - Action fails with error
 - `BatchSubmittedEvent` - Batch job submitted
 - `BatchCompleteEvent` - Batch job completes
 - `ValidationStartEvent` - Validation begins
@@ -124,17 +124,17 @@ Formats events for user-facing CLI output using Rich.
 **Features:**
 - Color-coded output by event type
 - Timestamp display
-- Category filtering (show only workflow/agent/batch events by default)
+- Category filtering (show only workflow/action/batch events by default)
 - Verbose mode shows all events
 
 **Example Output:**
 ```
-19:40:16 | ▶ WORKFLOW qanalabs_quiz_gen started (5 agents, parallel)
-19:40:17 | 1/5 START agent: extract_raw_qa...
+19:40:16 | ▶ WORKFLOW qanalabs_quiz_gen started (5 actions, parallel)
+19:40:17 | 1/5 START action: extract_raw_qa...
 19:40:32 | 1/5 DONE extract_raw_qa (15.23s, 1.2K tokens)
-19:40:32 | 2/5 START agent: flatten_raw_questions...
+19:40:32 | 2/5 START action: flatten_raw_questions...
 19:40:33 | 2/5 DONE flatten_raw_questions (0.12s, tool)
-19:42:15 | ✓ WORKFLOW complete (1m 59s, 12.5K tokens, 5 agents)
+19:42:15 | ✓ WORKFLOW complete (1m 59s, 12.5K tokens, 5 actions)
 ```
 
 #### JSONFileHandler
@@ -178,9 +178,9 @@ Writes events to a JSON file in NDJSON format (one JSON object per line).
 Collects workflow execution data and outputs a `run_results.json` artifact.
 
 **Features:**
-- Tracks agent execution status, timing, and token usage
+- Tracks action execution status, timing, and token usage
 - Aggregates total token counts
-- Records output folders for each agent
+- Records output folders for each action
 - Captures error messages and skip reasons
 
 **Output Location:** `{workflow}/agent_io/target/run_results.json`

@@ -35,7 +35,7 @@ def get_last_usage() -> dict[str, int] | None:
     """
     Retrieve token usage from the current context.
 
-    This function is called by AgentExecutor after provider invocation
+    This function is called by ActionExecutor after provider invocation
     to retrieve token usage for tracking purposes. Returns None for
     providers that don't track usage.
 

@@ -65,7 +65,7 @@ class BatchProcessingService:
         result_processor: BatchResultProcessor,
         registry_manager_factory: Callable[[str], BatchRegistryManager],
         source_handler: Any | None = None,
-        agent_indices: dict[str, int] | None = None,
+        action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
         storage_backend: Optional["StorageBackend"] = None,
         action_name: str | None = None,
@@ -78,7 +78,7 @@ class BatchProcessingService:
             result_processor: Processor for batch results
             registry_manager_factory: Factory function to create registry managers
             source_handler: Optional handler for source data
-            agent_indices: Dict mapping agent names to node indices (for reprompt)
+            action_indices: Dict mapping agent names to node indices (for reprompt)
             dependency_configs: Dict mapping dependency names to configs (for reprompt)
             storage_backend: Optional storage backend for database persistence
             action_name: Node name for backend writes (required if storage_backend provided)
@@ -88,12 +88,12 @@ class BatchProcessingService:
         self._result_processor = result_processor
         self._registry_manager_factory = registry_manager_factory
         self._source_handler = source_handler
-        self._agent_indices = agent_indices or {}
+        self._action_indices = action_indices or {}
         self._dependency_configs = dependency_configs or {}
         self._storage_backend = storage_backend
         self._action_name = action_name
         self._retry_service = BatchRetryService(
-            agent_indices=self._agent_indices,
+            action_indices=self._action_indices,
             dependency_configs=self._dependency_configs,
             storage_backend=self._storage_backend,
         )

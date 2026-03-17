@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent_actions.workflow.merge import merge_records_by_key
-from agent_actions.workflow.runner import AgentRunner
+from agent_actions.workflow.runner import ActionRunner
 
 
 class TestMergeRecordsByKey:
@@ -117,8 +117,8 @@ class TestStorageBackendMerge:
 
     @pytest.fixture
     def runner(self):
-        """Create an AgentRunner instance with mocked storage backend."""
-        runner = AgentRunner.__new__(AgentRunner)
+        """Create an ActionRunner instance with mocked storage backend."""
+        runner = ActionRunner.__new__(ActionRunner)
         runner.storage_backend = MagicMock()
         runner.console = MagicMock()
         return runner

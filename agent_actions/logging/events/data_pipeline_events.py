@@ -200,16 +200,16 @@ class DataNormalizedEvent(BaseEvent):
 class RecordProcessingStartedEvent(BaseEvent):
     """Fired when record processing starts."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Processing record {self.record_index}"
+        self.message = f"[{self.action_name}] Processing record {self.record_index}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
         }
@@ -223,7 +223,7 @@ class RecordProcessingStartedEvent(BaseEvent):
 class RecordFilteredEvent(BaseEvent):
     """Fired when a record is filtered by guard."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
     filter_reason: str = ""
@@ -232,10 +232,10 @@ class RecordFilteredEvent(BaseEvent):
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
         self.message = (
-            f"[{self.agent_name}] Record {self.record_index} filtered: {self.filter_reason}"
+            f"[{self.action_name}] Record {self.record_index} filtered: {self.filter_reason}"
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
             "filter_reason": self.filter_reason,
@@ -250,7 +250,7 @@ class RecordFilteredEvent(BaseEvent):
 class RecordTransformedEvent(BaseEvent):
     """Fired when a record is transformed."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
     input_size: int = 0
@@ -259,9 +259,9 @@ class RecordTransformedEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Record {self.record_index} transformed: {self.input_size} -> {self.output_size} items"
+        self.message = f"[{self.action_name}] Record {self.record_index} transformed: {self.input_size} -> {self.output_size} items"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
             "input_size": self.input_size,
@@ -277,7 +277,7 @@ class RecordTransformedEvent(BaseEvent):
 class RecordProcessingCompleteEvent(BaseEvent):
     """Fired when record processing completes."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
     status: str = ""
@@ -286,10 +286,10 @@ class RecordProcessingCompleteEvent(BaseEvent):
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
         self.message = (
-            f"[{self.agent_name}] Record {self.record_index} processing complete: {self.status}"
+            f"[{self.action_name}] Record {self.record_index} processing complete: {self.status}"
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
             "status": self.status,
@@ -304,7 +304,7 @@ class RecordProcessingCompleteEvent(BaseEvent):
 class RecordEmptyOutputEvent(BaseEvent):
     """Fired when an action produces empty output for a record."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
     input_field_count: int = 0
@@ -315,12 +315,12 @@ class RecordEmptyOutputEvent(BaseEvent):
         self.level = EventLevel.WARN
         self.category = EventCategories.DATA_PROCESSING
         self.message = (
-            f"[{self.agent_name}] Record {self.record_index} produced empty output "
+            f"[{self.action_name}] Record {self.record_index} produced empty output "
             f"(source_guid={self.source_guid}, input had {self.input_field_count} fields). "
             f"Downstream actions depending on this will receive no data."
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
             "input_field_count": self.input_field_count,
@@ -337,15 +337,15 @@ class RecordEmptyOutputEvent(BaseEvent):
 class BatchProcessingStartedEvent(BaseEvent):
     """Fired when batch processing starts."""
 
-    agent_name: str = ""
+    action_name: str = ""
     batch_size: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Starting batch processing: {self.batch_size} records"
+        self.message = f"[{self.action_name}] Starting batch processing: {self.batch_size} records"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "batch_size": self.batch_size,
         }
 
@@ -358,7 +358,7 @@ class BatchProcessingStartedEvent(BaseEvent):
 class BatchProcessingProgressEvent(BaseEvent):
     """Fired periodically during batch processing."""
 
-    agent_name: str = ""
+    action_name: str = ""
     processed: int = 0
     total: int = 0
     successes: int = 0
@@ -367,9 +367,9 @@ class BatchProcessingProgressEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Batch progress: {self.processed}/{self.total} ({self.successes} success, {self.failures} failures)"
+        self.message = f"[{self.action_name}] Batch progress: {self.processed}/{self.total} ({self.successes} success, {self.failures} failures)"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "processed": self.processed,
             "total": self.total,
             "successes": self.successes,
@@ -385,16 +385,16 @@ class BatchProcessingProgressEvent(BaseEvent):
 class BatchDataProcessingCompleteEvent(BaseEvent):
     """Fired when batch data processing completes."""
 
-    agent_name: str = ""
+    action_name: str = ""
     total_records: int = 0
     elapsed_time: float = 0.0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.INFO
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Batch processing complete: {self.total_records} records in {self.elapsed_time:.2f}s"
+        self.message = f"[{self.action_name}] Batch processing complete: {self.total_records} records in {self.elapsed_time:.2f}s"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "total_records": self.total_records,
             "elapsed_time": self.elapsed_time,
         }
@@ -408,17 +408,17 @@ class BatchDataProcessingCompleteEvent(BaseEvent):
 class ResultCollectionStartedEvent(BaseEvent):
     """Fired when result collection starts."""
 
-    agent_name: str = ""
+    action_name: str = ""
     total_results: int = 0
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
         self.message = (
-            f"[{self.agent_name}] Starting result collection: {self.total_results} results"
+            f"[{self.action_name}] Starting result collection: {self.total_results} results"
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "total_results": self.total_results,
         }
 
@@ -431,16 +431,16 @@ class ResultCollectionStartedEvent(BaseEvent):
 class ResultCollectedEvent(BaseEvent):
     """Fired when a result is collected."""
 
-    agent_name: str = ""
+    action_name: str = ""
     result_index: int = 0
     status: str = ""
 
     def __post_init__(self) -> None:
         self.level = EventLevel.DEBUG
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Result {self.result_index} collected: {self.status}"
+        self.message = f"[{self.action_name}] Result {self.result_index} collected: {self.status}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "result_index": self.result_index,
             "status": self.status,
         }
@@ -454,7 +454,7 @@ class ResultCollectedEvent(BaseEvent):
 class ResultCollectionCompleteEvent(BaseEvent):
     """Fired when result collection completes."""
 
-    agent_name: str = ""
+    action_name: str = ""
     total_success: int = 0
     total_skipped: int = 0
     total_filtered: int = 0
@@ -466,13 +466,13 @@ class ResultCollectionCompleteEvent(BaseEvent):
         self.level = EventLevel.INFO
         self.category = EventCategories.DATA_PROCESSING
         self.message = (
-            f"[{self.agent_name}] Result collection complete: "
+            f"[{self.action_name}] Result collection complete: "
             f"{self.total_success} success, {self.total_skipped} skipped, "
             f"{self.total_filtered} filtered, {self.total_failed} failed, "
             f"{self.total_exhausted} exhausted, {self.total_unprocessed} unprocessed"
         )
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "total_success": self.total_success,
             "total_skipped": self.total_skipped,
             "total_filtered": self.total_filtered,
@@ -490,7 +490,7 @@ class ResultCollectionCompleteEvent(BaseEvent):
 class ExhaustedRecordEvent(BaseEvent):
     """Fired when a record is exhausted (retry/reprompt failed)."""
 
-    agent_name: str = ""
+    action_name: str = ""
     record_index: int = 0
     source_guid: str = ""
     reason: str = ""
@@ -498,9 +498,9 @@ class ExhaustedRecordEvent(BaseEvent):
     def __post_init__(self) -> None:
         self.level = EventLevel.WARN
         self.category = EventCategories.DATA_PROCESSING
-        self.message = f"[{self.agent_name}] Record {self.record_index} exhausted: {self.reason}"
+        self.message = f"[{self.action_name}] Record {self.record_index} exhausted: {self.reason}"
         self.data = {
-            "agent_name": self.agent_name,
+            "action_name": self.action_name,
             "record_index": self.record_index,
             "source_guid": self.source_guid,
             "reason": self.reason,

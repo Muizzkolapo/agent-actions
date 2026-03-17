@@ -7,7 +7,7 @@ import pytest
 from agent_actions.config.schema import ActionConfig
 from agent_actions.errors import EmptyOutputError
 from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
-from agent_actions.logging.events.handlers.run_results import AgentResult, RunResultsCollector
+from agent_actions.logging.events.handlers.run_results import ActionResult, RunResultsCollector
 from agent_actions.processing.processor import _is_empty_output
 
 # =============================================================================
@@ -56,24 +56,24 @@ class TestRecordEmptyOutputEvent:
     """Tests for the RecordEmptyOutputEvent event type."""
 
     def test_event_code(self):
-        event = RecordEmptyOutputEvent(agent_name="test_agent", record_index=0)
+        event = RecordEmptyOutputEvent(action_name="test_agent", record_index=0)
         assert event.code == "RP005"
 
     def test_event_level_is_warn(self):
         from agent_actions.logging.core.events import EventLevel
 
-        event = RecordEmptyOutputEvent(agent_name="test_agent", record_index=0)
+        event = RecordEmptyOutputEvent(action_name="test_agent", record_index=0)
         assert event.level == EventLevel.WARN
 
     def test_event_category(self):
         from agent_actions.logging.events.types import EventCategories
 
-        event = RecordEmptyOutputEvent(agent_name="test_agent", record_index=0)
+        event = RecordEmptyOutputEvent(action_name="test_agent", record_index=0)
         assert event.category == EventCategories.DATA_PROCESSING
 
-    def test_event_message_contains_agent_name(self):
+    def test_event_message_contains_action_name(self):
         event = RecordEmptyOutputEvent(
-            agent_name="my_action",
+            action_name="my_action",
             record_index=3,
             source_guid="guid-123",
             input_field_count=5,
@@ -85,14 +85,14 @@ class TestRecordEmptyOutputEvent:
 
     def test_event_data_dict(self):
         event = RecordEmptyOutputEvent(
-            agent_name="act",
+            action_name="act",
             record_index=1,
             source_guid="sg",
             input_field_count=2,
             output={},
             on_empty="warn",
         )
-        assert event.data["agent_name"] == "act"
+        assert event.data["action_name"] == "act"
         assert event.data["record_index"] == 1
         assert event.data["source_guid"] == "sg"
         assert event.data["input_field_count"] == 2
@@ -190,7 +190,7 @@ class TestEmptyOutputDetection:
 
         empty_events = [e for e in fired_events if isinstance(e, RecordEmptyOutputEvent)]
         assert len(empty_events) == 1
-        assert empty_events[0].agent_name == "test_agent"
+        assert empty_events[0].action_name == "test_agent"
         assert empty_events[0].on_empty == "warn"
 
     def test_empty_output_error_raises(self):
@@ -346,23 +346,23 @@ class TestEmptyOutputDetection:
 # =============================================================================
 
 
-class TestAgentResultEmptyOutputTracking:
-    """Tests for empty_output_records tracking in AgentResult and RunResultsCollector."""
+class TestActionResultEmptyOutputTracking:
+    """Tests for empty_output_records tracking in ActionResult and RunResultsCollector."""
 
-    def test_agent_result_default_zero(self):
-        result = AgentResult(
+    def test_action_result_default_zero(self):
+        result = ActionResult(
             unique_id="wf.agent",
-            agent_name="agent",
-            agent_index=0,
+            action_name="agent",
+            action_index=0,
             status="success",
         )
         assert result.empty_output_records == 0
 
-    def test_agent_result_in_to_dict(self):
-        result = AgentResult(
+    def test_action_result_in_to_dict(self):
+        result = ActionResult(
             unique_id="wf.agent",
-            agent_name="agent",
-            agent_index=0,
+            action_name="agent",
+            action_index=0,
             status="success",
             empty_output_records=3,
         )
@@ -371,23 +371,23 @@ class TestAgentResultEmptyOutputTracking:
 
     def test_collector_accepts_empty_output_event(self):
         collector = RunResultsCollector(workflow_name="test")
-        event = RecordEmptyOutputEvent(agent_name="agent1", record_index=0)
+        event = RecordEmptyOutputEvent(action_name="agent1", record_index=0)
         assert collector.accepts(event) is True
 
     def test_collector_increments_empty_output_count(self):
-        from agent_actions.logging.events.workflow_events import AgentCompleteEvent
+        from agent_actions.logging.events.workflow_events import ActionCompleteEvent
 
         collector = RunResultsCollector(workflow_name="test")
 
         # Complete agent first so it exists in results
-        complete_event = AgentCompleteEvent(agent_name="agent1", agent_index=0)
+        complete_event = ActionCompleteEvent(action_name="agent1", action_index=0)
         collector.handle(complete_event)
 
         # Fire two empty output events
-        event1 = RecordEmptyOutputEvent(agent_name="agent1", record_index=0)
+        event1 = RecordEmptyOutputEvent(action_name="agent1", record_index=0)
         collector.handle(event1)
 
-        event2 = RecordEmptyOutputEvent(agent_name="agent1", record_index=1)
+        event2 = RecordEmptyOutputEvent(action_name="agent1", record_index=1)
         collector.handle(event2)
 
         assert collector._results["agent1"].empty_output_records == 2
@@ -397,7 +397,7 @@ class TestAgentResultEmptyOutputTracking:
         collector = RunResultsCollector(workflow_name="test")
 
         # Fire empty output BEFORE complete (real event ordering)
-        event = RecordEmptyOutputEvent(agent_name="agent1", record_index=0)
+        event = RecordEmptyOutputEvent(action_name="agent1", record_index=0)
         collector.handle(event)
 
         assert "agent1" in collector._results
@@ -405,16 +405,16 @@ class TestAgentResultEmptyOutputTracking:
 
     def test_collector_empty_output_count_survives_completion(self):
         """Empty output count set before complete should persist after AgentCompleteEvent."""
-        from agent_actions.logging.events.workflow_events import AgentCompleteEvent
+        from agent_actions.logging.events.workflow_events import ActionCompleteEvent
 
         collector = RunResultsCollector(workflow_name="test")
 
         # Empty output fires during processing (before complete)
-        collector.handle(RecordEmptyOutputEvent(agent_name="agent1", record_index=0))
-        collector.handle(RecordEmptyOutputEvent(agent_name="agent1", record_index=1))
+        collector.handle(RecordEmptyOutputEvent(action_name="agent1", record_index=0))
+        collector.handle(RecordEmptyOutputEvent(action_name="agent1", record_index=1))
 
         # Then agent completes — should update status but preserve empty count
-        collector.handle(AgentCompleteEvent(agent_name="agent1", agent_index=0))
+        collector.handle(ActionCompleteEvent(action_name="agent1", action_index=0))
 
         result = collector._results["agent1"]
         assert result.status == "success"

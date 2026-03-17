@@ -178,7 +178,7 @@ def retrieve_results_with_retry(
         output_directory=output_directory,
         file_name=file_name,
         agent_config=agent_config,
-        agent_indices=service._agent_indices,
+        action_indices=service._action_indices,
         dependency_configs=service._dependency_configs,
     )
 
@@ -283,7 +283,7 @@ def validate_and_reprompt(
     output_directory: str,
     file_name: str | None,
     agent_config: dict[str, Any] | None,
-    agent_indices: dict[str, int] | None = None,
+    action_indices: dict[str, int] | None = None,
     dependency_configs: dict[str, dict] | None = None,
 ) -> list[BatchResult]:
     """Validate results and reprompt failures with feedback.
@@ -302,7 +302,7 @@ def validate_and_reprompt(
         output_directory: Output directory path
         file_name: Original file name
         agent_config: Agent configuration with reprompt settings
-        agent_indices: Dict mapping agent names to node indices (for dependency resolution)
+        action_indices: Dict mapping agent names to node indices (for dependency resolution)
         dependency_configs: Dict mapping dependency names to configs (for dependency resolution)
 
     Returns:
@@ -463,7 +463,7 @@ def validate_and_reprompt(
         try:
             reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
             preparator = BatchTaskPreparator(
-                agent_indices=agent_indices or {},
+                action_indices=action_indices or {},
                 dependency_configs=dependency_configs or {},
                 storage_backend=service._storage_backend,
             )

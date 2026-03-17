@@ -13,7 +13,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-from agent_actions.config.types import AgentConfigDict
+from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import AgentActionsError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.io_events import ContextFieldSkippedEvent
@@ -309,7 +309,7 @@ def process_file_mode_hitl(
         return [error_result]
 
 
-def apply_observe_filter(data: list[dict], agent_config: AgentConfigDict) -> list[dict]:
+def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
     """Filter records to context_scope.observe fields in defined order.
 
     Returns filtered copy; original data is unchanged.

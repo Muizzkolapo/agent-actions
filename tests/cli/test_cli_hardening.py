@@ -359,19 +359,19 @@ class TestRequiresProjectNoChdir:
 class TestProjectRootFallback:
     """project_root=None must fall back to Path.cwd() for backward compatibility."""
 
-    def test_get_agent_folder_falls_back_to_cwd(self):
-        """AgentRunner.get_agent_folder falls back to Path.cwd() when project_root is None."""
-        from agent_actions.workflow.runner import AgentRunner
+    def test_get_action_folder_falls_back_to_cwd(self):
+        """ActionRunner.get_action_folder falls back to Path.cwd() when project_root is None."""
+        from agent_actions.workflow.runner import ActionRunner
 
-        runner = AgentRunner(use_tools=False)
+        runner = ActionRunner(use_tools=False)
         # project_root is None by default
         assert runner.project_root is None
-        # get_agent_folder will search from CWD — we just verify it doesn't crash on init
+        # get_action_folder will search from CWD — we just verify it doesn't crash on init
         # (it will raise FileSystemError because there's no agent_io folder, which is expected)
         from agent_actions.errors import FileSystemError
 
-        with pytest.raises(FileSystemError, match="Agent folder not found"):
-            runner.get_agent_folder("nonexistent_agent")
+        with pytest.raises(FileSystemError, match="Action folder not found"):
+            runner.get_action_folder("nonexistent_agent")
 
 
 class TestGetOutputFieldsWithSchemaDir:
@@ -598,14 +598,14 @@ class TestNoSysPathMutation:
         )
 
 
-class TestAgentRunnerProjectRootPaths:
-    """AgentRunner.get_agent_folder uses explicit param, instance attr, then CWD."""
+class TestActionRunnerProjectRootPaths:
+    """ActionRunner.get_action_folder uses explicit param, instance attr, then CWD."""
 
     def test_explicit_param_takes_precedence(self, tmp_path):
         """Explicit project_root parameter overrides instance attribute."""
-        from agent_actions.workflow.runner import AgentRunner
+        from agent_actions.workflow.runner import ActionRunner
 
-        runner = AgentRunner(use_tools=False)
+        runner = ActionRunner(use_tools=False)
         runner.project_root = Path("/should/not/use/this")
 
         # Create a project structure in tmp_path
@@ -614,14 +614,14 @@ class TestAgentRunnerProjectRootPaths:
         io_dir = agent_dir / "agent_io"
         io_dir.mkdir()
 
-        result = runner.get_agent_folder("test_agent", project_root=tmp_path)
+        result = runner.get_action_folder("test_agent", project_root=tmp_path)
         assert str(tmp_path) in result
 
     def test_instance_attr_used_when_no_param(self, tmp_path):
         """Instance project_root is used when no explicit param is passed."""
-        from agent_actions.workflow.runner import AgentRunner
+        from agent_actions.workflow.runner import ActionRunner
 
-        runner = AgentRunner(use_tools=False)
+        runner = ActionRunner(use_tools=False)
 
         # Create a project structure in tmp_path
         agent_dir = tmp_path / "test_agent"
@@ -630,19 +630,19 @@ class TestAgentRunnerProjectRootPaths:
         io_dir.mkdir()
 
         runner.project_root = tmp_path
-        result = runner.get_agent_folder("test_agent")
+        result = runner.get_action_folder("test_agent")
         assert str(tmp_path) in result
 
     def test_cwd_fallback_when_both_none(self):
         """Falls back to CWD when both param and instance attr are None."""
         from agent_actions.errors import FileSystemError
-        from agent_actions.workflow.runner import AgentRunner
+        from agent_actions.workflow.runner import ActionRunner
 
-        runner = AgentRunner(use_tools=False)
+        runner = ActionRunner(use_tools=False)
         assert runner.project_root is None
 
-        with pytest.raises(FileSystemError, match="Agent folder not found"):
-            runner.get_agent_folder("nonexistent_agent")
+        with pytest.raises(FileSystemError, match="Action folder not found"):
+            runner.get_action_folder("nonexistent_agent")
 
 
 class TestNoCircularImportAtLoadTime:
