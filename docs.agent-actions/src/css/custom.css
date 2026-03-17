@@ -85,11 +85,11 @@
   --bg-code: #f1f5f9;
   --border: rgba(0, 0, 0, 0.06);
   --border-strong: rgba(0, 0, 0, 0.1);
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
+  --text-primary: #0a0f1a;
+  --text-secondary: #1e293b;
+  --text-muted: #475569;
   --text-faint: #94a3b8;
-  --accent: #64748b;
+  --accent: #475569;
   --accent-dim: rgba(100, 116, 139, 0.06);
   --accent-border: rgba(100, 116, 139, 0.12);
   --code-bg: #f1f5f9;
@@ -111,10 +111,10 @@
   --ifm-navbar-background-color: rgba(250, 250, 249, 0.85);
   --ifm-navbar-link-color: var(--text-muted);
   --ifm-navbar-link-hover-color: var(--text-primary);
-  --ifm-menu-color: var(--text-secondary);
+  --ifm-menu-color: #1e293b;
   --ifm-menu-color-active: var(--text-primary);
-  --ifm-menu-color-background-active: var(--accent-dim);
-  --ifm-menu-color-background-hover: var(--accent-dim);
+  --ifm-menu-color-background-active: rgba(100, 116, 139, 0.08);
+  --ifm-menu-color-background-hover: rgba(100, 116, 139, 0.06);
   --ifm-toc-border-color: var(--border);
   --ifm-code-background: var(--code-bg);
   --prism-background-color: var(--code-bg);
@@ -124,6 +124,13 @@
   --ifm-footer-color: var(--text-faint);
   --ifm-footer-link-color: #94a3b8;
   --ifm-footer-title-color: #e2e8f0;
+}
+
+/* ── Theme-aware images ── */
+
+[data-theme='light'] .only-dark,
+[data-theme='dark'] .only-light {
+  display: none;
 }
 
 /* ── Global ── */
@@ -240,9 +247,9 @@ body {
 .menu__list-item-collapsible > .menu__link,
 .theme-doc-sidebar-item-category > div > .menu__link {
   font-family: var(--ifm-font-family-monospace);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--accent);
   padding: 0 12px;
@@ -266,13 +273,14 @@ body {
 
 .menu__link:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .menu__link--active {
   color: var(--text-primary) !important;
+  font-weight: 600;
   background: var(--accent-dim) !important;
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: none;
 }
 
 .menu__link--active::before {
@@ -293,8 +301,20 @@ body {
   padding: 5px 12px;
 }
 
+[data-theme='light'] .menu__link {
+  color: #1e293b;
+  font-weight: 500;
+}
+
 [data-theme='light'] .menu__link:hover {
   background: var(--accent-dim);
+  color: #0a0f1a;
+}
+
+[data-theme='light'] .menu__list-item-collapsible > .menu__link,
+[data-theme='light'] .theme-doc-sidebar-item-category > div > .menu__link {
+  color: #334155;
+  font-weight: 700;
 }
 
 /* ── Main Content ── */
@@ -553,9 +573,9 @@ tr:hover td {
   content: 'On this page';
   display: block;
   font-family: var(--ifm-font-family-monospace);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--accent);
   margin-bottom: 12px;
@@ -566,10 +586,10 @@ tr:hover td {
   text-decoration: none;
   color: var(--text-muted);
   font-size: 13px;
-  padding: 4px 0 4px 12px;
+  padding: 3px 0 3px 12px;
   border-left: 1.5px solid transparent;
   transition: all 0.15s;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .table-of-contents__link:hover {
@@ -591,6 +611,24 @@ tr:hover td {
   color: var(--text-muted);
 }
 
+[data-theme='light'] .table-of-contents::before {
+  color: #334155;
+  font-weight: 700;
+}
+
+[data-theme='light'] .table-of-contents__link {
+  color: #475569;
+  font-weight: 500;
+}
+
+[data-theme='light'] .table-of-contents__link:hover {
+  color: #1e293b;
+}
+
+[data-theme='light'] .table-of-contents ul .table-of-contents__link {
+  color: #64748b;
+}
+
 /* ── Footer — always dark ── */
 
 .footer {
@@ -601,10 +639,10 @@ tr:hover td {
 
 .footer__title {
   font-family: var(--ifm-font-family-monospace);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   color: #a1a1aa !important;
   margin-bottom: 14px;
 }

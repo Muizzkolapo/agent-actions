@@ -6,7 +6,8 @@ slug: /
 ---
 
 <div style={{textAlign: 'center', marginBottom: '2rem'}}>
-  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="64" height="64" />
+  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="64" height="64" className="only-dark" />
+  <img src="/img/logo-mark-light.svg" alt="Agent Actions" width="64" height="64" className="only-light" />
 </div>
 
 # Agent Actions
