@@ -12,7 +12,7 @@ class TestUDFRegistryImportError:
     """Verify broken UDF registry import surfaces a DependencyError."""
 
     @patch("agent_actions.cli.schema.AgentWorkflow")
-    @patch("agent_actions.cli.schema.ConfigRenderer.render_and_load_config")
+    @patch("agent_actions.cli.schema.ConfigRenderingService.render_and_load_config")
     @patch("agent_actions.cli.schema.find_config_file", return_value="/fake/config.yml")
     @patch("agent_actions.cli.schema.ProjectPathsFactory.create_project_paths")
     def test_import_error_raises_dependency_error(
@@ -54,7 +54,7 @@ class TestUDFRegistryImportError:
     @patch("agent_actions.cli.schema.WorkflowSchemaService")
     @patch("agent_actions.cli.schema.SchemaLoader")
     @patch("agent_actions.cli.schema.AgentWorkflow")
-    @patch("agent_actions.cli.schema.ConfigRenderer.render_and_load_config")
+    @patch("agent_actions.cli.schema.ConfigRenderingService.render_and_load_config")
     @patch("agent_actions.cli.schema.find_config_file", return_value="/fake/config.yml")
     @patch("agent_actions.cli.schema.ProjectPathsFactory.create_project_paths")
     def test_successful_import_proceeds_normally(

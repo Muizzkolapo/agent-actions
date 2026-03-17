@@ -615,12 +615,25 @@ def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_nam
 
 def _process_batch_mode(ctx: BatchProcessingContext):
     """Process data in batch mode by submitting to batch service."""
-    from agent_actions.llm.batch.service import BatchService
+    from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
+    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+    from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+    from agent_actions.llm.batch.service import create_registry_manager_factory
+    from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
-    batch_service = BatchService()
+    task_preparator = BatchTaskPreparator()
+    client_resolver = BatchClientResolver(client_cache={}, default_client=None)
+    context_manager = BatchContextManager()
+    registry_manager_factory = create_registry_manager_factory()
+    submission_service = BatchSubmissionService(
+        task_preparator=task_preparator,
+        client_resolver=client_resolver,
+        context_manager=context_manager,
+        registry_manager_factory=registry_manager_factory,
+    )
     file_name = Path(ctx.file_path).name
-    result = batch_service.submit_batch_job(
+    result = submission_service.submit_batch_job(
         ctx.agent_config, file_name, ctx.data_chunk, ctx.output_directory
     )
 

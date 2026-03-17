@@ -42,8 +42,10 @@ class TestBatchModeReturnsPath:
             output_directory=str(output),
         )
 
-        with patch("agent_actions.llm.batch.service.BatchService") as MockBatch:
-            MockBatch.return_value.submit_batch_job.return_value = SubmissionResult(
+        with patch(
+            "agent_actions.llm.batch.services.submission.BatchSubmissionService"
+        ) as MockSubmission:
+            MockSubmission.return_value.submit_batch_job.return_value = SubmissionResult(
                 batch_id="vendor_id_123"
             )
             result = _process_batch_mode(ctx)
@@ -66,10 +68,12 @@ class TestBatchModeReturnsPath:
 
         tombstone = {"type": "tombstone", "data": [{"status": "skipped"}]}
         with (
-            patch("agent_actions.llm.batch.service.BatchService") as MockBatch,
+            patch(
+                "agent_actions.llm.batch.services.submission.BatchSubmissionService"
+            ) as MockSubmission,
             patch("agent_actions.input.preprocessing.staging.initial_pipeline.FileWriter"),
         ):
-            MockBatch.return_value.submit_batch_job.return_value = SubmissionResult(
+            MockSubmission.return_value.submit_batch_job.return_value = SubmissionResult(
                 passthrough=tombstone
             )
             result = _process_batch_mode(ctx)

@@ -12,7 +12,7 @@ from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.config.project_paths import ProjectPathsFactory, find_config_file
 from agent_actions.errors import DependencyError
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow import WorkflowSchemaService
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 
@@ -43,7 +43,7 @@ class SchemaCommand:
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(
+        ConfigRenderingService().render_and_load_config(
             self.agent_name, full_path, paths.template_dir, project_root=project_root
         )
 

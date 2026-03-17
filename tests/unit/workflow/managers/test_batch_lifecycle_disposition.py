@@ -22,20 +22,30 @@ def mock_storage_backend():
 
 
 @pytest.fixture
-def mock_batch_service():
-    """Create a mock batch service."""
+def mock_job_manager():
+    """Create a mock job manager."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_processing_service():
+    """Create a mock processing service."""
     return MagicMock()
 
 
 class TestHandleBatchAgentPassthrough:
     """Test handle_batch_agent routes passthrough through DB when backend is set."""
 
-    def test_no_batches_checks_db_disposition(self, mock_batch_service, mock_storage_backend):
+    def test_no_batches_checks_db_disposition(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
         """When registry says no_batches, checks DB for passthrough disposition."""
-        mock_batch_service.get_batch_registry_status.return_value = "no_batches"
+        mock_job_manager.get_registry_status.return_value = "no_batches"
         mock_storage_backend.has_disposition.return_value = True
 
-        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
         output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
 
         mock_storage_backend.has_disposition.assert_called_once_with("extract", "passthrough")
@@ -43,32 +53,38 @@ class TestHandleBatchAgentPassthrough:
         assert output_folder == "/output/extract"
 
     def test_no_batches_no_disposition_returns_failed(
-        self, mock_batch_service, mock_storage_backend
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
     ):
         """When registry says no_batches and no DB disposition, returns failed."""
-        mock_batch_service.get_batch_registry_status.return_value = "no_batches"
+        mock_job_manager.get_registry_status.return_value = "no_batches"
         mock_storage_backend.has_disposition.return_value = False
 
-        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
         output_folder, status = manager.handle_batch_agent("extract", "/output/extract")
 
         assert status == "failed"
         assert output_folder is None
 
-    def test_no_batches_fails_without_backend(self, mock_batch_service):
+    def test_no_batches_fails_without_backend(self, mock_job_manager, mock_processing_service):
         """Without storage_backend, construction raises ConfigurationError."""
         with pytest.raises(ConfigurationError, match="requires a storage_backend"):
-            BatchLifecycleManager(mock_batch_service)
+            BatchLifecycleManager(mock_job_manager, mock_processing_service)
 
 
 class TestCheckBatchSubmission:
     """Test check_batch_submission routes passthrough through DB when backend is set."""
 
-    def test_passthrough_via_db(self, mock_batch_service, mock_storage_backend):
+    def test_passthrough_via_db(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
         """Returns 'passthrough' when DB has passthrough disposition."""
         mock_storage_backend.has_disposition.return_value = True
 
-        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
         # Create a tmp dir that exists but has no registry file
         agent_io = Path("/tmp/fake_agent_io")
 
@@ -78,11 +94,15 @@ class TestCheckBatchSubmission:
         mock_storage_backend.has_disposition.assert_called_once_with("extract", "passthrough")
         assert result == "passthrough"
 
-    def test_no_passthrough_falls_through(self, mock_batch_service, mock_storage_backend):
+    def test_no_passthrough_falls_through(
+        self, mock_job_manager, mock_processing_service, mock_storage_backend
+    ):
         """When DB has no passthrough, falls through to check output dir."""
         mock_storage_backend.has_disposition.return_value = False
 
-        manager = BatchLifecycleManager(mock_batch_service, storage_backend=mock_storage_backend)
+        manager = BatchLifecycleManager(
+            mock_job_manager, mock_processing_service, storage_backend=mock_storage_backend
+        )
         agent_io = Path("/tmp/fake_agent_io")
 
         with patch.object(Path, "exists", return_value=False):

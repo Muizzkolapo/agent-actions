@@ -24,7 +24,7 @@ from .transformation.string_transformer import StringProcessor, Tokenizer
 from .transformation.transformer import DataTransformer
 
 # Lazy imports to avoid circular dependencies:
-# - staging.initial_pipeline: imports BatchService -> DataTransformer (circular)
+# - staging.initial_pipeline: imports BatchSubmissionService -> DataTransformer (circular)
 # - processing.data_processor: imports processor_helpers -> agent_builder -> StringProcessor (circular)
 
 __all__ = [

@@ -30,10 +30,8 @@ class DIConfigurator:
     def _register_core_services(container: DependencyContainer):
         """Register core application services."""
         from agent_actions.config.paths import PathManager
-        from agent_actions.llm.batch.service import BatchService
 
         container.register_singleton(PathManager, PathManager)
-        container.register_singleton(BatchService, BatchService)
 
     @staticmethod
     def _register_processors(container: DependencyContainer):
@@ -85,10 +83,8 @@ class DIConfigurator:
         container.register_factory(IDataProcessor, processor_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
         container.register_factory(IGenerator, generator_factory)  # type: ignore[type-abstract]  # intentional DI: factory returns mock satisfying abstract interface
         from agent_actions.config.paths import PathManager
-        from agent_actions.llm.batch.service import BatchService
 
         container.register_instance(PathManager, Mock(spec=PathManager))
-        container.register_instance(BatchService, Mock(spec=BatchService))
         return container
 
 

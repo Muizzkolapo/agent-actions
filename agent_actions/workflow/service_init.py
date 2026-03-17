@@ -96,9 +96,32 @@ def initialize_services(
     workflow_defaults = config.manager.user_config.get("defaults") or {}
     action_runner.data_source_config = workflow_defaults.get("data_source")
 
-    from agent_actions.llm.batch.service import BatchService  # avoid circular import
+    # Build batch components directly (no facade)
+    from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
+        BatchClientResolver,
+    )
+    from agent_actions.llm.batch.infrastructure.batch_source_handler import (
+        BatchSourceHandler,
+    )
+    from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+    from agent_actions.llm.batch.infrastructure.job_manager import BatchJobManager
+    from agent_actions.llm.batch.processing.result_processor import BatchResultProcessor
+    from agent_actions.llm.batch.service import create_registry_manager_factory
+    from agent_actions.llm.batch.services.processing import BatchProcessingService
 
-    batch_service = BatchService(
+    result_processor = BatchResultProcessor()
+    context_manager = BatchContextManager()
+    client_resolver = BatchClientResolver(client_cache={}, default_client=None)
+    source_handler = BatchSourceHandler()
+    registry_manager_factory = create_registry_manager_factory()
+    job_manager = BatchJobManager(client_resolver=client_resolver)
+
+    processing_service = BatchProcessingService(
+        client_resolver=client_resolver,
+        context_manager=context_manager,
+        result_processor=result_processor,
+        registry_manager_factory=registry_manager_factory,
+        source_handler=source_handler,
         action_indices=metadata.action_indices,
         dependency_configs=metadata.action_configs,
         storage_backend=storage_backend,
@@ -117,7 +140,9 @@ def initialize_services(
 
     state_manager = ActionStateManager(status_file, metadata.execution_order)
     skip_evaluator = SkipEvaluator(console)
-    batch_manager = BatchLifecycleManager(batch_service, console, storage_backend=storage_backend)
+    batch_manager = BatchLifecycleManager(
+        job_manager, processing_service, console, storage_backend=storage_backend
+    )
     output_manager = ActionOutputManager(
         OutputManagerConfig(
             agent_folder=agent_folder,
@@ -166,7 +191,6 @@ def initialize_services(
             action_level_orchestrator=action_level_orchestrator,
         ),
         support=SupportServices(
-            batch_service=batch_service,
             version_correlator=version_correlator,
             skip_evaluator=skip_evaluator,
             batch_manager=batch_manager,

@@ -14,4 +14,4 @@
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `batch_cli.py` | Module | CLI commands for batch processing operations. | llm.batch |
-| `service.py` | Module | Batch processing service facade for managing batch job lifecycle. | llm.batch |
+| `service.py` | Module | Shared batch utilities (registry manager factory). | llm.batch |

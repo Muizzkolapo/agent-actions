@@ -17,7 +17,7 @@ from agent_actions.config.project_paths import (
     ProjectPathsFactory,
     find_config_file,
 )
-from agent_actions.prompt.renderer import ConfigRenderer
+from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class BaseInspectCommand:
         filename = f"{self.agent_name}.yml"
         full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
 
-        ConfigRenderer.render_and_load_config(
+        ConfigRenderingService().render_and_load_config(
             self.agent_name, full_path, paths.template_dir, project_root=project_root
         )
 

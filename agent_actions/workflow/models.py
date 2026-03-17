@@ -89,7 +89,6 @@ class CoreServices:
 class SupportServices:
     """Supporting services for workflow execution."""
 
-    batch_service: Any
     version_correlator: Any
     skip_evaluator: Any
     batch_manager: Any

@@ -397,35 +397,3 @@ class ConfigRenderingService:
             extra={"operation": "render and load config", "agent_name": agent_name},
         )
         return config
-
-
-class ConfigRenderer:
-    """Static facade for backwards compatibility with old code."""
-
-    @staticmethod
-    @as_validation_error(ConfigValidationError)
-    def render_and_load_config(
-        agent_name: str,
-        config_path: Path,
-        template_dir: Path,
-        output_dir: Path | None = None,
-        project_root: Path | None = None,
-    ) -> ActionConfigMap:
-        """
-        Static method for backwards compatibility.
-
-        Args:
-            agent_name: Name of the agent.
-            config_path: Path to the agent configuration file.
-            template_dir: Path to the template directory.
-            output_dir: Path to the output directory. None to skip file write.
-            project_root: Optional project root for resolving relative paths.
-
-        Returns:
-            Parsed configuration data as a dictionary.
-        """
-        service = ConfigRenderingService()
-        result = service.render_and_load_config(
-            agent_name, config_path, template_dir, output_dir, project_root=project_root
-        )
-        return cast(ActionConfigMap, result)

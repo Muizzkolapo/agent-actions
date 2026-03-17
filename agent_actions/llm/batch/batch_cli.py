@@ -5,7 +5,12 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
-from agent_actions.llm.batch.service import BatchService
+from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.service import create_registry_manager_factory
+from agent_actions.llm.batch.services.retrieval import BatchRetrievalService
+from agent_actions.llm.batch.services.submission import BatchSubmissionService
 
 
 @click.group()
@@ -27,7 +32,16 @@ def status(batch_id: str | None = None, project_root: Path | None = None):
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
-    service = BatchService()
+    client_resolver = BatchClientResolver(client_cache={}, default_client=None)
+    context_manager = BatchContextManager()
+    registry_manager_factory = create_registry_manager_factory()
+    task_preparator = BatchTaskPreparator()
+    service = BatchSubmissionService(
+        task_preparator=task_preparator,
+        client_resolver=client_resolver,
+        context_manager=context_manager,
+        registry_manager_factory=registry_manager_factory,
+    )
     output_dir = str(project_root) if project_root else None
     batch_status = service.check_status(args.batch_id, output_directory=output_dir)
     click.echo(f"Batch job status: {batch_status}")
@@ -51,6 +65,13 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
     args = BatchCommandArgs(batch_id=batch_id)
     if not args.batch_id:
         raise click.UsageError("--batch-id is required.")
-    service = BatchService()
+    client_resolver = BatchClientResolver(client_cache={}, default_client=None)
+    context_manager = BatchContextManager()
+    registry_manager_factory = create_registry_manager_factory()
+    service = BatchRetrievalService(
+        client_resolver=client_resolver,
+        context_manager=context_manager,
+        registry_manager_factory=registry_manager_factory,
+    )
     result = service.retrieve_results(args.batch_id, str(project_root or Path.cwd()))
     click.echo(result)

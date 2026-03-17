@@ -2,7 +2,7 @@
 
 ## Conventions
 
-- **Read-only commands** (inspect, schema, status, preview) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderer.render_and_load_config()` to avoid filesystem mutations.
+- **Read-only commands** (inspect, schema, status, preview) must pass `auto_create=False` to `ProjectPathsFactory.create_project_paths()` and omit `output_dir` from `ConfigRenderingService().render_and_load_config()` to avoid filesystem mutations.
 - **Write commands** (run, init, compile) use the defaults (`auto_create=True`, explicit `output_dir`).
 
 ## Sub-Modules

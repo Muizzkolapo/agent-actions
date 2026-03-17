@@ -10,7 +10,11 @@ from agent_actions.config.di.container import ProcessorFactory
 from agent_actions.config.types import ActionConfigDict, RunMode
 from agent_actions.errors import AgentActionsError, ConfigurationError, DependencyError
 from agent_actions.input.loaders.file_reader import FileReader
-from agent_actions.llm.batch.service import BatchService
+from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
+from agent_actions.llm.batch.infrastructure.context import BatchContextManager
+from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
+from agent_actions.llm.batch.service import create_registry_manager_factory
+from agent_actions.llm.batch.services.submission import BatchSubmissionService
 from agent_actions.llm.realtime.output import OutputHandler
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
@@ -153,11 +157,19 @@ class ProcessingPipeline:
                 if config is not None and "idx" in config
             }
 
-        batch_service = BatchService(
-            agent_indices=agent_indices,
+        task_preparator = BatchTaskPreparator(
+            action_indices=agent_indices,
             dependency_configs=params.batch_agent_configs,
             storage_backend=params.storage_backend,
-            action_name=params.pipeline_agent_name,
+        )
+        client_resolver = BatchClientResolver(client_cache={}, default_client=None)
+        context_manager = BatchContextManager()
+        registry_manager_factory = create_registry_manager_factory()
+        submission_service = BatchSubmissionService(
+            task_preparator=task_preparator,
+            client_resolver=client_resolver,
+            context_manager=context_manager,
+            registry_manager_factory=registry_manager_factory,
         )
         # Use pre-loaded data if available (storage backend), otherwise read from file
         if params.data is not None:
@@ -171,7 +183,7 @@ class ProcessingPipeline:
             data = file_reader.read()
         file_name = Path(params.batch_file_path).name
 
-        result = batch_service.submit_batch_job(
+        result = submission_service.submit_batch_job(
             params.pipeline_agent_config,
             file_name,
             data,

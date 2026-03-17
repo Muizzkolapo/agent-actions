@@ -28,11 +28,18 @@ class BatchLifecycleManager:
 
     def __init__(
         self,
-        batch_service,
+        job_manager,
+        processing_service,
         console: Console | None = None,
         storage_backend: Optional["StorageBackend"] = None,
     ):
         """Initialize batch lifecycle manager.
+
+        Args:
+            job_manager: BatchJobManager for registry status and completion checks.
+            processing_service: BatchProcessingService for result processing.
+            console: Optional Rich console for output.
+            storage_backend: Required storage backend for disposition tracking.
 
         Raises:
             ConfigurationError: If storage_backend is None
@@ -43,7 +50,8 @@ class BatchLifecycleManager:
                 "Disposition tracking is not optional.",
                 context={"component": "BatchLifecycleManager"},
             )
-        self.batch_service = batch_service
+        self.job_manager = job_manager
+        self.processing_service = processing_service
         self.console = console or Console()
         self.storage_backend = storage_backend
 
@@ -56,24 +64,24 @@ class BatchLifecycleManager:
             (output_folder or None, batch_status) where status is
             'completed', 'in_progress', or 'failed'.
         """
-        registry_status = self.batch_service.get_batch_registry_status(output_directory)
+        registry_status = self.job_manager.get_registry_status(output_directory)
 
         if registry_status == "completed":
             fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
             self._process_batch_results(output_directory, agent_config, agent_name)
             # Re-check — processing may have submitted recovery batches
-            new_status = self.batch_service.get_batch_registry_status(output_directory)
+            new_status = self.job_manager.get_registry_status(output_directory)
             if new_status != "completed":
                 return (None, "in_progress")
             fire_event(BatchResultsProcessedEvent(action_name=agent_name))
             return (output_directory, "completed")
 
         if registry_status in ["in_progress", "partial_failed"]:
-            if self.batch_service.are_all_batch_jobs_completed(output_directory):
+            if self.job_manager.are_all_jobs_completed(output_directory):
                 fire_event(BatchProcessingCompleteEvent(action_name=agent_name))
                 self._process_batch_results(output_directory, agent_config, agent_name)
                 # Re-check — processing may have submitted recovery batches
-                new_status = self.batch_service.get_batch_registry_status(output_directory)
+                new_status = self.job_manager.get_registry_status(output_directory)
                 if new_status != "completed":
                     return (None, "in_progress")
                 fire_event(BatchResultsProcessedEvent(action_name=agent_name))
@@ -107,7 +115,7 @@ class BatchLifecycleManager:
             ProcessingError: If result processing fails.
         """
         try:
-            processed_files = self.batch_service.process_all_batch_results(
+            processed_files = self.processing_service.process_all_batch_results(
                 output_directory, agent_config=agent_config, action_name=agent_name
             )
             if not processed_files:
