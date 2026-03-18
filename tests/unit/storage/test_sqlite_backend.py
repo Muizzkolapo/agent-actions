@@ -381,3 +381,209 @@ class TestValidation:
         """Test that characters outside the allowlist are rejected."""
         with pytest.raises(ValueError, match="Invalid characters"):
             backend.write_target("node_1", "file;name.json", [{}])
+
+
+class TestWriteSourceDropGuard:
+    """Tests for write_source raising on silently dropped records."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_all_records_missing_source_guid_raises(self, backend):
+        """write_source raises ValueError when every record lacks source_guid."""
+        data = [{"content": "no_guid"}, {"content": "also_no_guid"}]
+        with pytest.raises(ValueError, match="dropped"):
+            backend.write_source("batch_001", data)
+
+    def test_mix_valid_and_invalid_records_succeeds(self, backend):
+        """write_source succeeds when at least one record has source_guid."""
+        data = [
+            {"source_guid": "g1", "content": "valid"},
+            {"content": "no_guid"},
+        ]
+        result = backend.write_source("batch_001", data)
+        assert result == "batch_001"
+
+    def test_empty_data_list_succeeds(self, backend):
+        """write_source succeeds with empty data (nothing to drop)."""
+        result = backend.write_source("batch_001", [])
+        assert result == "batch_001"
+
+    def test_all_duplicates_dedup_does_not_raise(self, backend):
+        """write_source succeeds when all records are dedup-skipped."""
+        data = [{"source_guid": "g1", "content": "original"}]
+        backend.write_source("batch_001", data)
+        # Second write: same guid, dedup enabled → skipped, not dropped
+        result = backend.write_source("batch_001", data, enable_deduplication=True)
+        assert result == "batch_001"
+
+
+class TestPreviewTargetNullRecordCount:
+    """Tests for preview_target fallback when record_count IS NULL."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_null_record_count_uses_json_length(self, backend):
+        """preview_target computes correct count from JSON when record_count IS NULL."""
+        import json
+
+        records = [{"id": 1}, {"id": 2}, {"id": 3}]
+        # Insert directly with NULL record_count to simulate legacy data
+        backend.connection.execute(
+            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
+            "VALUES (?, ?, ?, NULL)",
+            ("node_1", "legacy.json", json.dumps(records)),
+        )
+        backend.connection.commit()
+
+        result = backend.preview_target("node_1")
+        assert result["total_count"] == 3
+        assert len(result["records"]) == 3
+
+
+class TestGetStorageStatsNullRecordCount:
+    """Tests for get_storage_stats with NULL record_count values."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_null_record_count_returns_zero_not_none(self, backend):
+        """Per-node stats return 0 (not None) when all record_count values are NULL."""
+        import json
+
+        backend.connection.execute(
+            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
+            "VALUES (?, ?, ?, NULL)",
+            ("node_1", "file.json", json.dumps([{"id": 1}])),
+        )
+        backend.connection.commit()
+
+        stats = backend.get_storage_stats()
+        assert stats["nodes"]["node_1"] == 0
+        assert isinstance(stats["nodes"]["node_1"], int)
+
+    def test_mixed_null_and_populated_record_count(self, backend):
+        """Per-node stats sum correctly when mixing NULL and populated record_count."""
+        import json
+
+        backend.connection.execute(
+            "INSERT INTO target_data (action_name, relative_path, data, record_count) "
+            "VALUES (?, ?, ?, NULL)",
+            ("node_1", "legacy.json", json.dumps([{"id": 1}])),
+        )
+        backend.write_target("node_1", "new.json", [{"id": 2}, {"id": 3}])
+
+        stats = backend.get_storage_stats()
+        # SUM ignores NULLs: only the non-NULL row (2) is summed
+        assert stats["nodes"]["node_1"] == 2
+
+
+class TestSetDispositionRecordIdValidation:
+    """Tests for record_id validation in disposition methods."""
+
+    @pytest.fixture
+    def backend(self, tmp_path):
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        yield backend
+        backend.close()
+
+    def test_path_traversal_record_id_rejected(self, backend):
+        """set_disposition rejects path-traversal record_id."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            backend.set_disposition("node_1", "../../etc/passwd", "filtered")
+
+    def test_empty_record_id_rejected(self, backend):
+        """set_disposition rejects empty record_id."""
+        with pytest.raises(ValueError, match="Empty"):
+            backend.set_disposition("node_1", "", "filtered")
+
+    def test_invalid_chars_in_record_id_rejected(self, backend):
+        """set_disposition rejects record_id with invalid characters."""
+        with pytest.raises(ValueError, match="Invalid characters"):
+            backend.set_disposition("node_1", "rec;id", "filtered")
+
+    def test_uuid_style_record_id_accepted(self, backend):
+        """set_disposition accepts UUID-style record_id (hyphens allowed)."""
+        backend.set_disposition(
+            "node_1", "550e8400-e29b-41d4-a716-446655440000", "filtered"
+        )
+        results = backend.get_disposition("node_1")
+        assert len(results) == 1
+
+    def test_get_disposition_validates_record_id(self, backend):
+        """get_disposition rejects invalid record_id filter."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            backend.get_disposition("node_1", record_id="../../etc/passwd")
+
+    def test_has_disposition_validates_record_id(self, backend):
+        """has_disposition rejects invalid record_id filter."""
+        with pytest.raises(ValueError, match="Invalid characters"):
+            backend.has_disposition("node_1", "filtered", record_id="rec;id")
+
+    def test_clear_disposition_validates_record_id(self, backend):
+        """clear_disposition rejects invalid record_id filter."""
+        with pytest.raises(ValueError, match="Path traversal"):
+            backend.clear_disposition("node_1", record_id="../../etc/passwd")
+
+
+class TestCloseThreadSafety:
+    """Tests for close() acquiring the lock."""
+
+    def test_double_close_is_safe(self, tmp_path):
+        """Calling close() twice does not raise."""
+        db_path = tmp_path / "agent_io" / "test.db"
+        backend = SQLiteBackend(str(db_path), "test_workflow")
+        backend.initialize()
+        backend.close()
+        backend.close()  # Should not raise
+        assert backend._connection is None
+
+
+class TestServiceInitSqliteError:
+    """Tests for service_init catching sqlite3.Error."""
+
+    def test_sqlite_error_caught_and_reraised(self):
+        """initialize_storage_backend catches sqlite3.Error with structured logging."""
+        import sqlite3
+        from unittest.mock import MagicMock, patch
+
+        from agent_actions.workflow.service_init import initialize_storage_backend
+
+        config = MagicMock()
+        config.paths.constructor_path = "a/b/c.yml"
+        metadata = MagicMock()
+        metadata.agent_name = "test_agent"
+        console = MagicMock()
+
+        mock_backend = MagicMock()
+        mock_backend.initialize.side_effect = sqlite3.OperationalError("disk I/O error")
+
+        with patch(
+            "agent_actions.workflow.service_init.get_storage_backend",
+            return_value=mock_backend,
+        ):
+            with pytest.raises(sqlite3.OperationalError, match="disk I/O error"):
+                initialize_storage_backend(config, metadata, console)
+
+        # Verify user-facing error message was printed
+        console.print.assert_called()
+        error_output = console.print.call_args[0][0]
+        assert "Storage backend failed" in error_output

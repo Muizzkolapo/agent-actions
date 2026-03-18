@@ -1,6 +1,7 @@
 """Service assembly and storage initialization for workflow startup."""
 
 import logging
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -60,7 +61,7 @@ def initialize_storage_backend(
         db_path = workflow_dir / "agent_io" / "target" / f"{metadata.agent_name}.db"
         console.print(f"[cyan]\U0001f4e6 Storage backend: {db_path}[/cyan]")
         return backend
-    except (OSError, ValueError) as e:
+    except (OSError, ValueError, sqlite3.Error) as e:
         logger.error(
             "Storage backend initialization failed: %s",
             e,

@@ -260,6 +260,13 @@ class SQLiteBackend(StorageBackend):
                         skipped_count += 1
 
                 self.connection.commit()
+
+                if inserted_count == 0 and len(data) > 0 and skipped_count == 0:
+                    raise ValueError(
+                        f"All {len(data)} source records were dropped for "
+                        f"'{relative_path}' (missing source_guid); 0 inserted"
+                    )
+
                 logger.debug(
                     "Wrote source data to %s: %d inserted, %d skipped (dedup)",
                     relative_path,
@@ -334,7 +341,8 @@ class SQLiteBackend(StorageBackend):
 
         cursor.execute(
             """
-            SELECT relative_path, COALESCE(record_count, 0) as record_count
+            SELECT relative_path,
+                   COALESCE(record_count, json_array_length(data)) as record_count
             FROM target_data
             WHERE action_name = ?
             ORDER BY relative_path
@@ -414,7 +422,7 @@ class SQLiteBackend(StorageBackend):
 
         cursor.execute(
             """
-            SELECT action_name, SUM(record_count) as count
+            SELECT action_name, COALESCE(SUM(record_count), 0) as count
             FROM target_data
             GROUP BY action_name
             ORDER BY action_name
@@ -422,9 +430,8 @@ class SQLiteBackend(StorageBackend):
         )
         nodes = {row["action_name"]: row["count"] for row in cursor.fetchall()}
 
-        cursor.execute("SELECT SUM(record_count) as count FROM target_data")
-        row = cursor.fetchone()
-        target_count = row["count"] if row["count"] else 0
+        cursor.execute("SELECT COALESCE(SUM(record_count), 0) as count FROM target_data")
+        target_count = cursor.fetchone()["count"]
 
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
 
@@ -457,6 +464,7 @@ class SQLiteBackend(StorageBackend):
     ) -> None:
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
+        record_id = self._validate_identifier(record_id, "record_id")
         if disposition not in VALID_DISPOSITIONS:
             raise ValueError(
                 f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
@@ -511,6 +519,7 @@ class SQLiteBackend(StorageBackend):
         params: list[str] = [action_name]
 
         if record_id is not None:
+            record_id = self._validate_identifier(record_id, "record_id")
             query += " AND record_id = ?"
             params.append(record_id)
         if disposition is not None:
@@ -536,6 +545,7 @@ class SQLiteBackend(StorageBackend):
         params: list[str] = [action_name, disposition]
 
         if record_id is not None:
+            record_id = self._validate_identifier(record_id, "record_id")
             query += " AND record_id = ?"
             params.append(record_id)
 
@@ -561,6 +571,7 @@ class SQLiteBackend(StorageBackend):
             query += " AND disposition = ?"
             params.append(disposition)
         if record_id is not None:
+            record_id = self._validate_identifier(record_id, "record_id")
             query += " AND record_id = ?"
             params.append(record_id)
 
@@ -603,19 +614,20 @@ class SQLiteBackend(StorageBackend):
 
     def close(self) -> None:
         """Close the database connection."""
-        if self._connection is not None:
-            try:
-                self._connection.close()
-                logger.debug(
-                    "Closed SQLite connection: %s",
-                    self.db_path,
-                    extra={"workflow_name": self.workflow_name},
-                )
-            except sqlite3.Error as e:
-                logger.warning(
-                    "Error closing SQLite connection: %s",
-                    e,
-                    extra={"workflow_name": self.workflow_name},
-                )
-            finally:
-                self._connection = None
+        with self._lock:
+            if self._connection is not None:
+                try:
+                    self._connection.close()
+                    logger.debug(
+                        "Closed SQLite connection: %s",
+                        self.db_path,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                except sqlite3.Error as e:
+                    logger.warning(
+                        "Error closing SQLite connection: %s",
+                        e,
+                        extra={"workflow_name": self.workflow_name},
+                    )
+                finally:
+                    self._connection = None
