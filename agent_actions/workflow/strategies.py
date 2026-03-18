@@ -54,11 +54,11 @@ class ActionStrategy(ABC):
         )
 
         pipeline = create_processing_pipeline_from_params(
-            agent_config=params.action_config,
-            agent_name=params.action_name,
+            action_config=params.action_config,
+            action_name=params.action_name,
             idx=params.idx,
             processor_factory=self.processor_factory,
-            agent_configs=params.action_configs,
+            action_configs=params.action_configs,
             storage_backend=params.storage_backend,
             source_relative_path=params.source_relative_path,
         )

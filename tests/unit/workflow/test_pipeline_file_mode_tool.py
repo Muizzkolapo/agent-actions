@@ -15,8 +15,8 @@ def _make_pipeline_and_context():
     """Create a minimal pipeline and context for FILE-mode tool tests."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "tool", "granularity": "file"},
-            agent_name="my_file_tool",
+            action_config={"kind": "tool", "granularity": "file"},
+            action_name="my_file_tool",
             idx=0,
         ),
         processor_factory=object(),

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -88,7 +89,7 @@ def warn_no_files_found(params: FileProcessParams) -> None:
             params.upstream_data_dirs,
             extra={
                 "upstream_data_dirs": params.upstream_data_dirs,
-                "agent_name": params.action_name,
+                "action_name": params.action_name,
                 "operation": "directory_processing",
             },
         )
@@ -184,26 +185,25 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
             )
             merged_data = merge_json_files(file_paths, reduce_key=reduce_key)
 
-            first_upstream = Path(params.upstream_data_dirs[0])
-            merged_file = first_upstream / relative_path
+            # Write merged data to a temp directory instead of mutating the
+            # upstream file in-place.  The old approach (overwrite + restore
+            # in finally) left corrupt files on SIGKILL because the finally
+            # block never ran.  Using TemporaryDirectory preserves the
+            # relative_path structure so _process_single_file computes the
+            # correct output filename.
+            with tempfile.TemporaryDirectory() as td:
+                tmp_file = Path(td) / relative_path
+                tmp_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump(merged_data, f)
 
-            original_content = None
-            if merged_file.exists():
-                with open(merged_file, encoding="utf-8") as f:
-                    original_content = f.read()
-
-            merged_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(merged_file, "w", encoding="utf-8") as f:
-                json.dump(merged_data, f)
-
-            try:
                 runner._process_single_file(
                     SingleFileProcessParams(
                         locations=FileLocationParams(
-                            item=merged_file,
-                            input_path=first_upstream,
+                            item=tmp_file,
+                            input_path=Path(td),
                             output_path=output_path,
-                            input_directory=str(first_upstream),
+                            input_directory=str(Path(td)),
                         ),
                         action_config=params.action_config,
                         action_name=params.action_name,
@@ -211,10 +211,6 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
                         idx=params.idx,
                     )
                 )
-            finally:
-                if original_content is not None:
-                    with open(merged_file, "w", encoding="utf-8") as f:
-                        f.write(original_content)
 
         files_processed_count += 1
 
@@ -337,7 +333,7 @@ def process_from_storage_backend(runner: ActionRunner, params: FileProcessParams
             params.action_name,
             "; ".join(processing_errors[:3]),  # Show first 3 errors
             extra={
-                "agent_name": params.action_name,
+                "action_name": params.action_name,
                 "files_found": files_found,
                 "files_processed": files_processed,
                 "error_count": len(processing_errors),

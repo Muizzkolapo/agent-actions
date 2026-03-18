@@ -45,10 +45,10 @@ logger = logging.getLogger(__name__)
 class PipelineConfig:
     """Configuration for ProcessingPipeline."""
 
-    agent_config: ActionConfigDict
-    agent_name: str
+    action_config: ActionConfigDict
+    action_name: str
     idx: int
-    agent_configs: dict[str, Any] | None = None
+    action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
     source_relative_path: str | None = None  # For storage backend source lookups
@@ -58,12 +58,12 @@ class PipelineConfig:
 class BatchPipelineParams:
     """Parameters for batch pipeline processing."""
 
-    pipeline_agent_config: ActionConfigDict
-    pipeline_agent_name: str
+    pipeline_action_config: ActionConfigDict
+    pipeline_action_name: str
     batch_file_path: str
     batch_base_directory: str
     batch_output_directory: str
-    batch_agent_configs: dict[str, Any] | None = None
+    batch_action_configs: dict[str, Any] | None = None
     source_data: Any | None = None
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
@@ -83,12 +83,12 @@ class FilePathsConfig:
 class ProcessParams:
     """Parameters for pipeline processing."""
 
-    agent_config: ActionConfigDict
-    agent_name: str
+    action_config: ActionConfigDict
+    action_name: str
     paths: FilePathsConfig
     idx: int
     processor_factory: ProcessorFactory | None
-    agent_configs: dict[str, Any] | None = None
+    action_configs: dict[str, Any] | None = None
     workflow_metadata: dict[str, Any] | None = None
     storage_backend: Optional["StorageBackend"] = field(default=None)
 
@@ -106,21 +106,21 @@ class ProcessingPipeline:
 
         Raises:
             DependencyError: If processor_factory is not provided
-            ConfigurationError: If agent_config is None or invalid
+            ConfigurationError: If action_config is None or invalid
         """
-        if config.agent_config is None:
+        if config.action_config is None:
             raise ConfigurationError(
-                f"agent_config is None for agent '{config.agent_name}'. "
-                f"This usually means the agent is not defined in the "
+                f"action_config is None for action '{config.action_name}'. "
+                f"This usually means the action is not defined in the "
                 f"workflow configuration or the configuration failed to "
                 f"load properly. Please check your workflow YAML file.",
-                context={"agent_name": config.agent_name, "idx": config.idx},
+                context={"action_name": config.action_name, "idx": config.idx},
             )
 
         self.config = config
-        self.model_vendor = str(config.agent_config.get(MODEL_VENDOR_KEY) or "").lower()
-        self.action_kind = str(config.agent_config.get("kind") or "").lower()
-        self.granularity = str(config.agent_config.get("granularity") or "").lower()
+        self.model_vendor = str(config.action_config.get(MODEL_VENDOR_KEY) or "").lower()
+        self.action_kind = str(config.action_config.get("kind") or "").lower()
+        self.granularity = str(config.action_config.get("granularity") or "").lower()
         # Detect synchronous action types via kind OR model_vendor so that
         # batch-mode bypass works regardless of which field the user sets.
         self.is_tool_action = self.action_kind == "tool" or self.model_vendor == "tool"
@@ -131,35 +131,35 @@ class ProcessingPipeline:
                 {
                     "component": "ProcessingPipeline",
                     "dependency": "processor_factory",
-                    "agent_name": config.agent_name,
+                    "action_name": config.action_name,
                 },
             )
 
         # Initialize RecordProcessor directly
         self.record_processor = RecordProcessor(
-            agent_config=cast(dict[str, Any], config.agent_config),
-            agent_name=config.agent_name,
+            agent_config=cast(dict[str, Any], config.action_config),
+            agent_name=config.action_name,
         )
         # Initialize OutputHandler with optional storage backend
         self.output_handler = OutputHandler(
             storage_backend=config.storage_backend,
-            action_name=config.agent_name,
+            action_name=config.action_name,
         )
 
     @staticmethod
     def _handle_batch_generation(params: BatchPipelineParams) -> str:
         """Handle batch mode processing."""
         agent_indices = None
-        if params.batch_agent_configs:
+        if params.batch_action_configs:
             agent_indices = {
                 name: config.get("idx", 999)
-                for name, config in params.batch_agent_configs.items()
+                for name, config in params.batch_action_configs.items()
                 if config is not None and "idx" in config
             }
 
         task_preparator = BatchTaskPreparator(
             action_indices=agent_indices,
-            dependency_configs=params.batch_agent_configs,
+            dependency_configs=params.batch_action_configs,
             storage_backend=params.storage_backend,
         )
         client_resolver = BatchClientResolver(client_cache={}, default_client=None)
@@ -184,7 +184,7 @@ class ProcessingPipeline:
         file_name = Path(params.batch_file_path).name
 
         result = submission_service.submit_batch_job(
-            params.pipeline_agent_config,
+            params.pipeline_action_config,
             file_name,
             data,
             params.batch_output_directory,
@@ -198,13 +198,13 @@ class ProcessingPipeline:
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=params.storage_backend,
-                action_name=params.pipeline_agent_name,
+                action_name=params.pipeline_action_name,
                 output_directory=params.batch_output_directory,
             )
             file_writer.write_target(result.passthrough["data"])
             if params.storage_backend:
                 params.storage_backend.set_disposition(
-                    params.pipeline_agent_name,
+                    params.pipeline_action_name,
                     NODE_LEVEL_RECORD_ID,
                     DISPOSITION_PASSTHROUGH,
                     reason="All records tombstoned",
@@ -216,7 +216,7 @@ class ProcessingPipeline:
         placeholder = {
             "batch_job_id": result.batch_id,
             "status": "submitted",
-            "agent": params.pipeline_agent_name,
+            "agent": params.pipeline_action_name,
         }
         with open(output_file_path, "w", encoding="utf-8") as f:
             json.dump(placeholder, f)
@@ -242,35 +242,35 @@ class ProcessingPipeline:
                 {
                     "method": "ProcessingPipeline.process_file",
                     "dependency": "processor_factory",
-                    "agent_name": params.agent_name,
+                    "agent_name": params.action_name,
                 },
             )
         # Tool and HITL actions run synchronously regardless of run_mode
         # (tools are Python functions, HITL blocks for human input)
-        is_synchronous = params.agent_config.get("model_vendor") in [
+        is_synchronous = params.action_config.get("model_vendor") in [
             TOOL_VENDOR,
             HITL_VENDOR,
-        ] or params.agent_config.get("kind") in ["tool", "hitl"]
+        ] or params.action_config.get("kind") in ["tool", "hitl"]
 
-        if params.agent_config.get("run_mode") == RunMode.BATCH and not is_synchronous:
+        if params.action_config.get("run_mode") == RunMode.BATCH and not is_synchronous:
             return ProcessingPipeline._handle_batch_generation(
                 BatchPipelineParams(
-                    pipeline_agent_config=params.agent_config,
-                    pipeline_agent_name=params.agent_name,
+                    pipeline_action_config=params.action_config,
+                    pipeline_action_name=params.action_name,
                     batch_file_path=params.paths.file_path,
                     batch_base_directory=params.paths.base_directory,
                     batch_output_directory=params.paths.output_directory,
-                    batch_agent_configs=params.agent_configs,
+                    batch_action_configs=params.action_configs,
                     workflow_metadata=params.workflow_metadata,
                     storage_backend=params.storage_backend,
                 )
             )
         pipeline = create_processing_pipeline_from_params(
-            agent_config=params.agent_config,
-            agent_name=params.agent_name,
+            action_config=params.action_config,
+            action_name=params.action_name,
             idx=params.idx,
             processor_factory=params.processor_factory,
-            agent_configs=params.agent_configs,
+            action_configs=params.action_configs,
             storage_backend=params.storage_backend,
         )
         return pipeline.process(
@@ -314,7 +314,7 @@ class ProcessingPipeline:
                     "file_path": str(file_path),
                     "base_directory": str(base_directory),
                     "output_directory": str(output_directory),
-                    "agent_name": self.config.agent_name,
+                    "agent_name": self.config.action_name,
                 },
                 cause=e,
             ) from e
@@ -325,7 +325,7 @@ class ProcessingPipeline:
                     "file_path": str(file_path),
                     "base_directory": str(base_directory),
                     "output_directory": str(output_directory),
-                    "agent_name": self.config.agent_name,
+                    "agent_name": self.config.action_name,
                 },
                 cause=e,
             ) from e
@@ -354,12 +354,12 @@ class ProcessingPipeline:
         """
         result_path = self._handle_batch_generation(
             BatchPipelineParams(
-                pipeline_agent_config=self.config.agent_config,
-                pipeline_agent_name=self.config.agent_name,
+                pipeline_action_config=self.config.action_config,
+                pipeline_action_name=self.config.action_name,
                 batch_file_path=file_path,
                 batch_base_directory=base_directory,
                 batch_output_directory=output_directory,
-                batch_agent_configs=self.config.agent_configs,
+                batch_action_configs=self.config.action_configs,
                 source_data=source_data,
                 workflow_metadata=self.config.workflow_metadata,
                 storage_backend=self.config.storage_backend,
@@ -386,7 +386,7 @@ class ProcessingPipeline:
             from agent_actions.input.loaders.source_data import SourceDataLoader
 
             source_loader = SourceDataLoader(
-                agent_name=self.config.agent_name,
+                agent_name=self.config.action_name,
                 storage_backend=self.config.storage_backend,  # type: ignore[arg-type]
             )
 
@@ -409,12 +409,12 @@ class ProcessingPipeline:
                 "This will likely cause 'undefined variable' errors if templates expect source fields.",
                 file_path,
                 e,
-                self.config.agent_name,
+                self.config.action_name,
             )
             # source_data remains 'data' (the fallback)
 
         # Batch mode check (tools and HITL run synchronously, not in batch)
-        run_mode = self.config.agent_config.get("run_mode")
+        run_mode = self.config.action_config.get("run_mode")
         if run_mode == RunMode.BATCH and not (self.is_tool_action or self.is_hitl_action):
             self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
@@ -423,18 +423,18 @@ class ProcessingPipeline:
         # (These might be needed if RecordProcessor does historical lookups)
         agent_indices = None
         dependency_configs = None
-        if self.config.agent_configs:
+        if self.config.action_configs:
             agent_indices = {
                 name: kconf.get("idx", 999)
-                for name, kconf in self.config.agent_configs.items()
+                for name, kconf in self.config.action_configs.items()
                 if kconf is not None and "idx" in kconf
             }
-            dependency_configs = self.config.agent_configs
+            dependency_configs = self.config.action_configs
 
         # Extract version context for versioned agents
         # This enables {{ i }}, {{ version.length }}, etc. in Jinja2 templates
         version_context = None
-        agent_config = self.config.agent_config
+        agent_config = self.config.action_config
         if agent_config.get("is_versioned_agent"):
             version_context = agent_config.get("_version_context")
             if version_context:
@@ -442,8 +442,8 @@ class ProcessingPipeline:
 
         # Create processing context
         context = ProcessingContext(
-            agent_config=self.config.agent_config,
-            agent_name=self.config.agent_name,
+            agent_config=self.config.action_config,
+            agent_name=self.config.action_name,
             mode=ProcessingMode.ONLINE,
             is_first_stage=False,
             source_data=source_data,  # Pass the loaded source data
@@ -462,8 +462,8 @@ class ProcessingPipeline:
             context.source_data = data
             filtered = apply_observe_for_file_mode(
                 data=data,
-                agent_config=cast(dict[str, Any], self.config.agent_config),
-                agent_name=self.config.agent_name,
+                agent_config=cast(dict[str, Any], self.config.action_config),
+                agent_name=self.config.action_name,
                 agent_indices=agent_indices,
                 file_path=file_path,
                 source_data=source_data,
@@ -480,8 +480,8 @@ class ProcessingPipeline:
         # Collect success results
         output = ResultCollector.collect_results(
             results,
-            cast(dict[str, Any], self.config.agent_config),
-            self.config.agent_name,
+            cast(dict[str, Any], self.config.action_config),
+            self.config.action_name,
             is_first_stage=False,
             storage_backend=self.config.storage_backend,
         )
@@ -523,11 +523,11 @@ def create_processing_pipeline(
 
 
 def create_processing_pipeline_from_params(
-    agent_config: ActionConfigDict,
-    agent_name: str,
+    action_config: ActionConfigDict,
+    action_name: str,
     idx: int,
     processor_factory: ProcessorFactory,
-    agent_configs: dict[str, Any] | None = None,
+    action_configs: dict[str, Any] | None = None,
     workflow_metadata: dict[str, Any] | None = None,
     storage_backend: Optional["StorageBackend"] = None,
     source_relative_path: str | None = None,
@@ -536,11 +536,11 @@ def create_processing_pipeline_from_params(
     Factory function for creating a ProcessingPipeline instance from individual parameters.
 
     Args:
-        agent_config: Configuration for the agent
-        agent_name: Name of the agent
-        idx: Index of the agent
+        action_config: Configuration for the action
+        action_name: Name of the action
+        idx: Index of the action
         processor_factory: Required factory for creating processors with DI
-        agent_configs: Optional dictionary of all agent configurations
+        action_configs: Optional dictionary of all action configurations
         workflow_metadata: Optional workflow metadata for {{ workflow.* }} templates
         storage_backend: Optional storage backend for database persistence
         source_relative_path: Optional explicit path for storage backend source lookups
@@ -549,10 +549,10 @@ def create_processing_pipeline_from_params(
         ProcessingPipeline instance
     """
     config = PipelineConfig(
-        agent_config=agent_config,
-        agent_name=agent_name,
+        action_config=action_config,
+        action_name=action_name,
         idx=idx,
-        agent_configs=agent_configs,
+        action_configs=action_configs,
         workflow_metadata=workflow_metadata,
         storage_backend=storage_backend,
         source_relative_path=source_relative_path,

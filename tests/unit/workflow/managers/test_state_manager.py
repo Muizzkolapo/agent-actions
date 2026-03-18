@@ -140,7 +140,7 @@ class TestWorkflowLevel:
 
         result = mgr.mark_running_as_failed()
 
-        assert result == "a"
+        assert result == ["a"]
         assert mgr.get_status("a") == "failed"
 
     def test_mark_running_as_failed_marks_checking_batch(self, tmp_path):
@@ -150,11 +150,11 @@ class TestWorkflowLevel:
 
         result = mgr.mark_running_as_failed()
 
-        assert result == "a"
+        assert result == ["a"]
         assert mgr.get_status("a") == "failed"
 
-    def test_mark_running_as_failed_only_marks_first(self, tmp_path):
-        """Only the first running/checking_batch agent should be marked; others stay."""
+    def test_mark_running_as_failed_marks_all(self, tmp_path):
+        """All running/checking_batch agents should be marked failed."""
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a", "b", "c"])
         mgr.update_status("a", "running")
@@ -163,17 +163,17 @@ class TestWorkflowLevel:
 
         result = mgr.mark_running_as_failed()
 
-        assert result == "a"
+        assert set(result) == {"a", "b", "c"}
         assert mgr.get_status("a") == "failed"
-        assert mgr.get_status("b") == "running"
-        assert mgr.get_status("c") == "checking_batch"
+        assert mgr.get_status("b") == "failed"
+        assert mgr.get_status("c") == "failed"
 
-    def test_mark_running_as_failed_returns_none_if_none_running(self, tmp_path):
+    def test_mark_running_as_failed_returns_empty_if_none_running(self, tmp_path):
         status_file = tmp_path / "status.json"
         mgr = ActionStateManager(status_file, ["a"])
         mgr.update_status("a", "completed")
 
-        assert mgr.mark_running_as_failed() is None
+        assert mgr.mark_running_as_failed() == []
 
     def test_is_workflow_complete_true(self, tmp_path):
         status_file = tmp_path / "status.json"

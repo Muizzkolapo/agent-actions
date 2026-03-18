@@ -12,8 +12,8 @@ def test_file_mode_hitl_applies_file_decision_to_each_input_record():
     """FILE-mode HITL should preserve all records and attach shared decision payload."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -56,8 +56,8 @@ def test_file_mode_hitl_applies_per_record_decisions_when_provided():
     """Per-record review payload should override shared status for each record."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -101,8 +101,8 @@ def test_file_mode_hitl_preserves_existing_status_field():
     """HITL decision metadata should not overwrite content.status."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -140,8 +140,8 @@ def test_file_mode_hitl_empty_input_returns_empty_output():
     """Empty data input should produce zero output records, not a synthetic one."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -174,8 +174,8 @@ def test_file_mode_hitl_preserves_unprocessed_tombstone_markers():
     """Tombstone markers (_unprocessed, metadata) must survive HITL merge."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -224,8 +224,8 @@ def test_file_mode_hitl_preserves_target_id():
     """Input target_id should be preserved through HITL merge."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={"kind": "hitl", "granularity": "file"},
-            agent_name="review_data",
+            action_config={"kind": "hitl", "granularity": "file"},
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
@@ -267,7 +267,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     """context_scope.observe should filter fields shown to HITL and preserve order."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={
+            action_config={
                 "kind": "hitl",
                 "granularity": "file",
                 "context_scope": {
@@ -277,13 +277,13 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
                     ],
                 },
             },
-            agent_name="review_data",
+            action_name="review_data",
             idx=0,
         ),
         processor_factory=object(),
     )
     context = ProcessingContext(
-        agent_config=pipeline.config.agent_config,
+        agent_config=pipeline.config.action_config,
         agent_name="review_data",
     )
 
@@ -312,7 +312,7 @@ def test_file_mode_hitl_observe_filters_and_orders_fields():
     # Apply the filter as _process_by_strategy would (using new namespace-aware method)
     filtered = apply_observe_for_file_mode(
         data=original_data,
-        agent_config=pipeline.config.agent_config,
+        agent_config=pipeline.config.action_config,
         agent_name="review_data",
     )
 

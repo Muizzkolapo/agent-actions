@@ -80,7 +80,7 @@ class TestActionStrategyPipelineKwargs:
     """create_processing_pipeline_from_params must receive agent_config, agent_name, agent_configs."""
 
     def test_execute_generate_target_passes_agent_kwargs(self):
-        """Verify pipeline factory receives agent_config, agent_name, agent_configs."""
+        """Verify pipeline factory receives action_config, action_name, action_configs."""
         mock_factory = MagicMock()
         strategy = StandardStrategy(processor_factory=mock_factory)
 
@@ -106,26 +106,26 @@ class TestActionStrategyPipelineKwargs:
             mock_create.assert_called_once()
             call_kwargs = mock_create.call_args.kwargs
 
-            # Must use agent_* parameter names, not action_*
-            assert "agent_config" in call_kwargs, (
-                "Should pass 'agent_config', not 'action_config'"
+            # Pipeline params now use action_* naming (unified in Wave 2)
+            assert "action_config" in call_kwargs, (
+                "Should pass 'action_config' to pipeline factory"
             )
-            assert "agent_name" in call_kwargs, (
-                "Should pass 'agent_name', not 'action_name'"
+            assert "action_name" in call_kwargs, (
+                "Should pass 'action_name' to pipeline factory"
             )
-            assert "agent_configs" in call_kwargs, (
-                "Should pass 'agent_configs', not 'action_configs'"
+            assert "action_configs" in call_kwargs, (
+                "Should pass 'action_configs' to pipeline factory"
             )
 
-            # Verify none of the old action_* names snuck in
-            assert "action_config" not in call_kwargs
-            assert "action_name" not in call_kwargs
-            assert "action_configs" not in call_kwargs
+            # Verify old agent_* kwarg names are not used
+            assert "agent_config" not in call_kwargs
+            assert "agent_name" not in call_kwargs
+            assert "agent_configs" not in call_kwargs
 
             # Verify values are correct
-            assert call_kwargs["agent_config"] == {"model_vendor": "openai"}
-            assert call_kwargs["agent_name"] == "my_action"
-            assert call_kwargs["agent_configs"] == {"my_action": {"model_vendor": "openai"}}
+            assert call_kwargs["action_config"] == {"model_vendor": "openai"}
+            assert call_kwargs["action_name"] == "my_action"
+            assert call_kwargs["action_configs"] == {"my_action": {"model_vendor": "openai"}}
 
 
 # ── Bug 3: executor async_run must call run_action, not run_agent ───────────

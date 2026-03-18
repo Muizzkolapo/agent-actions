@@ -10,7 +10,7 @@ def test_record_mode_hitl_processes_each_record_independently():
     """RECORD-mode HITL invokes the HITL client once per input record."""
     pipeline = ProcessingPipeline(
         config=PipelineConfig(
-            agent_config={
+            action_config={
                 "kind": "hitl",
                 "granularity": "record",
                 "model_vendor": "hitl",
@@ -20,7 +20,7 @@ def test_record_mode_hitl_processes_each_record_independently():
                     "timeout": 60,
                 },
             },
-            agent_name="review_items",
+            action_name="review_items",
             idx=0,
         ),
         processor_factory=object(),
@@ -32,7 +32,7 @@ def test_record_mode_hitl_processes_each_record_independently():
     ]
 
     context = ProcessingContext(
-        agent_config=pipeline.config.agent_config,
+        agent_config=pipeline.config.action_config,
         agent_name="review_items",
     )
 

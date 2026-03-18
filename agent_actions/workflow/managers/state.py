@@ -90,13 +90,18 @@ class ActionStateManager:
         """Return actions that have failed."""
         return [agent for agent in agents if self.is_failed(agent)]
 
-    def mark_running_as_failed(self):
-        """Mark any action in 'running' or 'checking_batch' status as failed."""
+    def mark_running_as_failed(self) -> list[str]:
+        """Mark all actions in 'running' or 'checking_batch' status as failed.
+
+        Returns list of action names that were marked failed.
+        """
+        marked: list[str] = []
         for action_name, details in self.action_status.items():
             if details.get("status") in ["running", "checking_batch"]:
-                self.update_status(action_name, "failed")
-                return action_name
-        return None
+                marked.append(action_name)
+        for action_name in marked:
+            self.update_status(action_name, "failed")
+        return marked
 
     def get_summary(self) -> dict[str, int]:
         """Return summary counts of action statuses."""

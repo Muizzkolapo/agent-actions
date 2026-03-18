@@ -347,8 +347,14 @@ class VersionOutputCorrelator:
                         merged_lineage.append(entry)
                         seen_lineage_entries.add(entry_key)
 
+        source_guid = base_record.get("source_guid")
+        if source_guid is None:
+            logger.warning(
+                "Missing 'source_guid' in base record during version output correlation; "
+                "merged record will have source_guid=None"
+            )
         merged_record = {
-            "source_guid": base_record["source_guid"],
+            "source_guid": source_guid,
             "target_id": base_record.get("target_id"),
             "node_id": base_record.get("node_id"),
             "lineage": merged_lineage,
