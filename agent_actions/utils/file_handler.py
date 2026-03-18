@@ -42,14 +42,19 @@ class FileHandler:
 
     @staticmethod
     def find_config_file(base_dir, filename):
-        """Recursively search for a config file in base_dir and its parents."""
-        for root, _, files in os.walk(base_dir):
-            if filename in files:
-                return str(Path(root) / filename)
+        """Search for a config file in base_dir and its parent directories.
 
-        parent_dir = Path(base_dir).parent
-        if parent_dir != Path(base_dir):
-            return FileHandler.find_config_file(str(parent_dir), filename)
+        Checks each directory (without recursing into subdirectories) by
+        walking up the parent chain using ``Path.parents``.
+        """
+        base = Path(base_dir).resolve()
+        for directory in (base, *base.parents):
+            candidate = directory / filename
+            if candidate.is_file():
+                return str(candidate)
+            # Stop at filesystem root to avoid matching unrelated files
+            if directory == directory.parent:
+                break
 
         logger.warning(
             "Config file '%s' not found in %s or its parent directories.", filename, base_dir

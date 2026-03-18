@@ -36,11 +36,15 @@ class DIConfigurator:
     @staticmethod
     def _register_processors(container: DependencyContainer):
         """Register processor implementations."""
+        from agent_actions.input.loaders.json import JsonLoader
+        from agent_actions.input.loaders.source_data import SourceDataLoader
         from agent_actions.input.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt.data_generator import DataGenerator
 
         container.register_transient(IDataProcessor, DataProcessor)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
         container.register_transient(IGenerator, DataGenerator)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
+        container.register_transient(ISourceDataLoader, SourceDataLoader)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
+        container.register_transient(IDataLoader, JsonLoader)  # type: ignore[type-abstract]  # intentional DI: concrete impl satisfies abstract interface
 
     @staticmethod
     def _register_utilities(container: DependencyContainer):

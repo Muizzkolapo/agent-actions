@@ -65,7 +65,7 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
     agent["model_vendor"] = "tool"
     agent["model_name"] = action.get("impl", action.get("name"))
 
-    if run_mode == RunMode.BATCH and action.get("run_mode") == RunMode.BATCH:
+    if run_mode == RunMode.BATCH:
         action_name = action.get("name", "unknown")
         raise ConfigurationError(
             "Tool actions do not support batch processing. "
@@ -78,8 +78,6 @@ def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode:
                 "operation": "expand_actions_to_agents",
             },
         )
-    if run_mode == RunMode.BATCH:
-        agent["run_mode"] = RunMode.ONLINE
 
     # Tool actions MUST declare an output schema.
     # Ordering: runs BEFORE compile_output_schema (which populates

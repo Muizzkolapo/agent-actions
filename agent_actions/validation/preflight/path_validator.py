@@ -20,13 +20,10 @@ class PathValidator(BaseValidator):
 
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate paths in the provided configuration."""
-        self.clear_errors()
-        self.clear_warnings()
         self.issues = []
 
-        if not isinstance(data, dict):
-            self.add_error("Validation data must be a dictionary with 'paths' key.")
-            return False
+        if not self._prepare_validation(data):
+            return self._complete_validation()
 
         paths = data.get("paths", [])
         path_type = data.get("path_type", "file")
@@ -38,7 +35,7 @@ class PathValidator(BaseValidator):
         strict = config.get("strict", True)
 
         if not paths:
-            return True  # No paths to validate
+            return self._complete_validation()
 
         invalid_paths = []
         permission_errors = []
@@ -99,7 +96,7 @@ class PathValidator(BaseValidator):
                 )
             )
 
-        return not self.has_errors()
+        return self._complete_validation()
 
     def validate_paths(
         self,

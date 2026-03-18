@@ -31,7 +31,16 @@ def _load_template_globals(env, templates_folder):
         try:
             template = env.get_template(template_file)
             module = template.module
-            env.globals.update(vars(module))
+            new_names = vars(module)
+            collisions = set(new_names) & set(env.globals)
+            if collisions:
+                logger.warning(
+                    "Template '%s' redefines global name(s) already set by a previous template: %s. "
+                    "The previous definition(s) will be overwritten.",
+                    template_file,
+                    ", ".join(sorted(collisions)),
+                )
+            env.globals.update(new_names)
         except jinja2.TemplateNotFound:
             logger.warning("Template file '%s' not found in %s.", template_file, templates_folder)
         except jinja2.TemplateSyntaxError as e:

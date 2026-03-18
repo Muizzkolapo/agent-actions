@@ -57,7 +57,7 @@ class ProjectInitializer:
             with open(path, "x", encoding="utf-8") as f:
                 f.write(content)
         except FileExistsError:
-            pass
+            logger.debug("File already exists: %s", path)
 
     def init_project(self) -> None:
         """

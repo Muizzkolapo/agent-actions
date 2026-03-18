@@ -1,13 +1,10 @@
 """Loading and execution of user-defined functions from specified modules."""
 
-import importlib
-import importlib.util
-import sys
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from agent_actions.errors import AgentActionsError, ConfigurationError
+from agent_actions.utils.module_loader import load_module_from_path
 from agent_actions.utils.safe_format import safe_format_error
 
 
@@ -31,45 +28,32 @@ def _split_udf_name(udf_name: str) -> tuple[str, str]:
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
     """Load a user-defined function from a specified module.
 
+    Delegates module loading to :func:`~agent_actions.utils.module_loader.load_module_from_path`
+    which handles file-based loading with caching and fallback to standard import.
+
     Raises:
         ConfigurationError: If the module or function cannot be found.
     """
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError as e:
-        module = None
-        for path in sys.path:
-            potential_file = Path(path) / f"{module_name}.py"
-            if potential_file.exists():
-                spec = importlib.util.spec_from_file_location(module_name, potential_file)
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    try:
-                        spec.loader.exec_module(module)
-                    except Exception as exec_err:
-                        raise ConfigurationError(
-                            f"Failed to load UDF module '{module_name}' from {potential_file}: {exec_err}",
-                            context={"module_name": module_name, "path": str(potential_file)},
-                            cause=exec_err,
-                        ) from exec_err
-                    break
-        if module is None:
-            search_paths = ", ".join(sys.path)
-            raise ConfigurationError(
-                f"Module '{module_name}' for UDF not found",
-                context={"module_name": module_name, "search_paths": search_paths},
-                cause=e,
-            ) from e
+    module = load_module_from_path(
+        module_name,
+        module_path=None,
+        execute=True,
+        fallback_import=True,
+        cache=True,
+    )
+    if module is None:
+        raise ConfigurationError(
+            f"Module '{module_name}' for UDF not found",
+            context={"module_name": module_name},
+        )
     try:
         function = getattr(module, function_name)
     except AttributeError as e:
-        search_paths = ", ".join(sys.path)
         raise ConfigurationError(
             f"Function '{function_name}' not found in module '{module_name}'",
             context={
                 "function_name": function_name,
                 "module_name": module_name,
-                "search_paths": search_paths,
             },
             cause=e,
         ) from e

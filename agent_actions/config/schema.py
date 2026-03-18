@@ -242,7 +242,7 @@ class ActionConfig(BaseModel):
     context_scope: dict[str, Any] | None = Field(
         default=None, description="Context scope configuration"
     )
-    version_mode: str | None = Field(default=None, description="Version execution mode")
+    version_mode: VersionMode | None = Field(default=None, description="Version execution mode")
     child: list[str] | None = Field(default=None, description="Child pipeline reference")
 
     # --- Internal (injected by render step) ---

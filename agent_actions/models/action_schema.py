@@ -13,7 +13,6 @@ class ActionKind(Enum):
     LLM = "llm"
     TOOL = "tool"
     SOURCE = "source"
-    SEED = "seed"
     HITL = "hitl"
 
 
@@ -23,7 +22,6 @@ class FieldSource(Enum):
     SCHEMA = "schema"
     OBSERVE = "observe"
     PASSTHROUGH = "passthrough"
-    SOURCE = "source"
     TOOL_OUTPUT = "tool_output"
 
 
@@ -65,7 +63,7 @@ class UpstreamReference:
 
 @dataclass
 class ActionSchema:
-    """Unified schema for any action type (llm, tool, source, seed)."""
+    """Unified schema for any action type (llm, tool, source, hitl)."""
 
     name: str
     kind: ActionKind

@@ -213,32 +213,33 @@ class EnrichmentPipeline:
             )
         )
 
-        for enricher in self.enrichers:
-            enricher_name = enricher.__class__.__name__
-            try:
-                result = enricher.enrich(result, context)
-                fire_event(
-                    EnricherExecutedEvent(
-                        enricher_name=enricher_name,
-                        status="success",
+        try:
+            for enricher in self.enrichers:
+                enricher_name = enricher.__class__.__name__
+                try:
+                    result = enricher.enrich(result, context)
+                    fire_event(
+                        EnricherExecutedEvent(
+                            enricher_name=enricher_name,
+                            status="success",
+                        )
                     )
-                )
-            except Exception:
-                logger.exception("Enricher %s failed", enricher_name)
-                fire_event(
-                    EnricherExecutedEvent(
-                        enricher_name=enricher_name,
-                        status="failed",
+                except Exception:
+                    logger.exception("Enricher %s failed", enricher_name)
+                    fire_event(
+                        EnricherExecutedEvent(
+                            enricher_name=enricher_name,
+                            status="failed",
+                        )
                     )
+                    raise
+        finally:
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+            fire_event(
+                EnrichmentPipelineCompleteEvent(
+                    enricher_count=len(self.enrichers),
+                    elapsed_time=elapsed_time,
                 )
-                raise
-
-        elapsed_time = (datetime.now() - start_time).total_seconds()
-        fire_event(
-            EnrichmentPipelineCompleteEvent(
-                enricher_count=len(self.enrichers),
-                elapsed_time=elapsed_time,
             )
-        )
 
         return result

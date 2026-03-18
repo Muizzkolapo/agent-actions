@@ -110,7 +110,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         except ImportError:
             try:
                 return await asyncio.to_thread(self.process, content, file_path)
-            except (AttributeError, RuntimeError):
+            except AttributeError:
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, self.process, content, file_path)
 

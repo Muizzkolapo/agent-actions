@@ -24,6 +24,7 @@ pathways.
 |------|------|-------------|---------|
 | `constants.py` | Module | Shared configuration key constants and reserved names used across CLI/workflows. | `configuration`, `validation` |
 | `dict.py` | Module | `get_nested_value` helper for safely reading dot-separated fields from nested dicts. | `filtering`, `preprocessing` |
+| `graph_utils.py` | Module | Graph algorithms for dependency resolution (`topological_sort`). | `errors` |
 | `module_loader.py` | Module | Thread-safe module loading and UDF discovery (`load_module_from_path`, `load_module_from_directory`, `discover_and_load_udfs`). No `sys.path` mutation. | `logging`, `errors`, `utils.udf_management` |
 | `passthrough_builder.py` | Module | `PassthroughItemBuilder` that creates normalized passthrough objects with metadata and lineage for batch/online modes. | `preprocessing`, `lineage`, `id_generation` |
 | `path_utils.py` | Module | Convenience path helpers (ensure dirs, mirror target-to-source, resolve absolute paths, find project root) backed by `PathManager`. Thread-safe global singleton with double-checked locking. `set_path_manager()` allows explicit DI of a scoped instance. `derive_workflow_root()` safely finds the workflow root from a path inside a workflow (agent_io fast-path + agent_config walk-up + safe fallback). | `config.paths`, `file_io` |

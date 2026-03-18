@@ -135,10 +135,14 @@ def build_field_context_with_history(
     )
     if batch_mode_enabled:
         # Narrowed by batch_mode_enabled — all are truthy
-        assert agent_config is not None
-        assert agent_indices is not None
-        assert current_item is not None
-        assert file_path is not None
+        if agent_config is None:
+            raise ValueError("agent_config must not be None when batch_mode is enabled")
+        if agent_indices is None:
+            raise ValueError("agent_indices must not be None when batch_mode is enabled")
+        if current_item is None:
+            raise ValueError("current_item must not be None when batch_mode is enabled")
+        if file_path is None:
+            raise ValueError("file_path must not be None when batch_mode is enabled")
 
         # BATCH MODE - Use auto-inferred context dependencies
         workflow_actions = list(agent_indices.keys())

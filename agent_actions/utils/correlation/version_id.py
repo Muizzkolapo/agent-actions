@@ -2,12 +2,14 @@
 
 import hashlib
 import threading
+from collections import OrderedDict
 
 
 class VersionIdGenerator:
     """Thread-safe version correlation ID generator using a class-level registry."""
 
-    _version_correlation_registry: dict[str, str] = {}
+    _MAX_REGISTRY_SIZE: int = 10_000
+    _version_correlation_registry: OrderedDict[str, str] = OrderedDict()
     _version_correlation_lock = threading.RLock()
 
     @classmethod
@@ -17,13 +19,16 @@ class VersionIdGenerator:
         """Get or create a version correlation ID for a source_guid."""
         registry_key = f"{workflow_session_id}:{version_base_name}:{source_guid}"
         with cls._version_correlation_lock:
-            if registry_key not in cls._version_correlation_registry:
-                content = f"{version_base_name}:{source_guid}"
-                correlation_id = cls._generate_deterministic_correlation_id(
-                    workflow_session_id, content
-                )
-                cls._version_correlation_registry[registry_key] = correlation_id
-            return cls._version_correlation_registry[registry_key]
+            if registry_key in cls._version_correlation_registry:
+                cls._version_correlation_registry.move_to_end(registry_key)
+                return cls._version_correlation_registry[registry_key]
+            content = f"{version_base_name}:{source_guid}"
+            correlation_id = cls._generate_deterministic_correlation_id(
+                workflow_session_id, content
+            )
+            cls._version_correlation_registry[registry_key] = correlation_id
+            cls._evict_oldest_if_needed()
+            return correlation_id
 
     @classmethod
     def get_or_create_position_based_version_correlation_id(
@@ -38,13 +43,16 @@ class VersionIdGenerator:
             f"{workflow_session_id}:{version_base_name}:position_{record_index}:{file_context}"
         )
         with cls._version_correlation_lock:
-            if registry_key not in cls._version_correlation_registry:
-                content = f"{version_base_name}:position_{record_index}:{file_context}"
-                correlation_id = cls._generate_deterministic_correlation_id(
-                    workflow_session_id, content
-                )
-                cls._version_correlation_registry[registry_key] = correlation_id
-            return cls._version_correlation_registry[registry_key]
+            if registry_key in cls._version_correlation_registry:
+                cls._version_correlation_registry.move_to_end(registry_key)
+                return cls._version_correlation_registry[registry_key]
+            content = f"{version_base_name}:position_{record_index}:{file_context}"
+            correlation_id = cls._generate_deterministic_correlation_id(
+                workflow_session_id, content
+            )
+            cls._version_correlation_registry[registry_key] = correlation_id
+            cls._evict_oldest_if_needed()
+            return correlation_id
 
     @classmethod
     def _generate_deterministic_correlation_id(cls, workflow_session_id: str, content: str) -> str:
@@ -52,6 +60,12 @@ class VersionIdGenerator:
         hash_input = f"{workflow_session_id}:{content}"
         hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()
         return f"corr_{hash_digest[:16]}"
+
+    @classmethod
+    def _evict_oldest_if_needed(cls) -> None:
+        """Evict oldest entries when registry exceeds max size. Must be called under lock."""
+        while len(cls._version_correlation_registry) > cls._MAX_REGISTRY_SIZE:
+            cls._version_correlation_registry.popitem(last=False)
 
     @classmethod
     def clear_version_correlation_registry(cls):

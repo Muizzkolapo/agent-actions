@@ -44,8 +44,12 @@ class CLI:
         fire_event(CLIInitCompleteEvent(command="agent-actions"))
 
     def _create_click_group(self) -> click.Group:
+        cli_instance = self
+
         @click.group(name="agent-actions")
-        @click.version_option(version=__version__)
+        @click.version_option(
+            version=__version__, prog_name="Agent Actions CLI", message="%(prog)s v%(version)s"
+        )
         @click.option(
             "--debug",
             is_flag=True,
@@ -55,6 +59,7 @@ class CLI:
         @click.option("-q", "--quiet", is_flag=True, help="Show only warnings and errors")
         def group(debug: bool, verbose: bool, quiet: bool) -> None:
             """Agent Actions CLI tool for managing and running agent workflows."""
+            cli_instance._configure_logging(debug=debug, verbose=verbose, quiet=quiet)
 
         return group
 
@@ -91,38 +96,31 @@ class CLI:
         click.echo(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
         sys.exit(130)
 
-    def _configure_logging(self, argv: Sequence[str]) -> None:
-        debug_mode = "--debug" in argv
-        verbose_mode = "--verbose" in argv or "-v" in argv
-        quiet_mode = "--quiet" in argv or "-q" in argv
-
+    def _configure_logging(
+        self, debug: bool = False, verbose: bool = False, quiet: bool = False
+    ) -> None:
         config = LoggingConfig.from_environment()
-        if debug_mode:
+        if debug:
             config.default_level = "DEBUG"
-        elif verbose_mode:
+        elif verbose:
             config.default_level = "INFO"
-        elif quiet_mode:
+        elif quiet:
             config.default_level = "WARNING"
 
         LoggerFactory.initialize(
             config=config,
-            verbose=debug_mode or verbose_mode,
-            quiet=quiet_mode,
+            verbose=debug or verbose,
+            quiet=quiet,
             force=True,
         )
         self.logger = LoggerFactory.get_logger("cli")
-
-    def _show_version_and_exit(self) -> int:
-        click.echo(f"Agent Actions CLI v{__version__}")
-        return 0
 
     def execute(self, argv: Sequence[str] | None = None) -> int:
         try:
             if argv is None:
                 argv = sys.argv[1:]
-            if "--version" in argv or "-V" in argv:
-                return self._show_version_and_exit()
-            self._configure_logging(argv)
+            # Initialize logging with defaults; Click callback overrides with flags
+            self._configure_logging()
             self.logger.info(
                 "Starting agent-actions CLI", extra={"version": __version__, "cli_args": argv}
             )

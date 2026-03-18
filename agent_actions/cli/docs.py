@@ -116,7 +116,7 @@ def run_tests(test_suite: str, port: int, project_root: Path | None = None):
     test_files = {
         "schemas": ["test-all-schemas.js"],
         "actions": ["test-run-actions-complete.js", "test-actions-specific.js"],
-        "all": ["test-all-schemas.js", "test-run-actions-complete.js"],
+        "all": ["test-all-schemas.js", "test-run-actions-complete.js", "test-actions-specific.js"],
     }
 
     files_to_run = test_files.get(test_suite, test_files["all"])

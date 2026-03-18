@@ -16,6 +16,7 @@
 | [processing](processing/_MANIFEST.md) | Shared processing helpers (enrichment, error handling, recovery). |
 | [prompt](prompt/_MANIFEST.md) | Prompt rendering, context building, and formatting helpers. |
 | [skills](skills/_MANIFEST.md) | Reusable skills and templates for agent workflows. |
+| [storage](storage/_MANIFEST.md) | Extensible storage backend module for workflow data persistence. |
 | [tooling](tooling/_MANIFEST.md) | Documentation generation and IDE tooling (docs site + LSP). |
 | [utils](utils/_MANIFEST.md) | Core utilities for Agent Actions. |
 | [validation](validation/_MANIFEST.md) | Configuration and workflow validation. |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from agent_actions.models.action_schema import (
@@ -40,7 +41,9 @@ class WorkflowSchemaService:
             schema_dir=schema_dir,
         )
         self._schemas: dict[str, ActionSchema] = {}
+        self._schema_lock = threading.Lock()
         self._validation_result: StaticValidationResult | None = None
+        self._validation_lock = threading.Lock()
 
     @property
     def graph(self) -> DataFlowGraph:
@@ -49,29 +52,35 @@ class WorkflowSchemaService:
 
     def get_action_schema(self, action_name: str) -> ActionSchema | None:
         """Return the ActionSchema for action_name, or None if it does not exist."""
-        if action_name in self._schemas:
-            return self._schemas[action_name]
+        with self._schema_lock:
+            if action_name in self._schemas:
+                return self._schemas[action_name]
 
         node = self.graph.get_node(action_name)
         if not node:
             return None
 
         schema = self._build_action_schema(node)
-        self._schemas[action_name] = schema
-        return schema
+        with self._schema_lock:
+            # Double-check: another thread may have built it concurrently
+            if action_name not in self._schemas:
+                self._schemas[action_name] = schema
+            return self._schemas[action_name]
 
     def get_all_schemas(self) -> dict[str, ActionSchema]:
         """Return schemas for all actions."""
         for name in self.graph.nodes:
             if not self.graph.is_special_namespace(name):
                 self.get_action_schema(name)
-        return self._schemas
+        with self._schema_lock:
+            return dict(self._schemas)
 
     def validate(self) -> StaticValidationResult:
         """Run static validation on the workflow."""
-        if self._validation_result is None:
-            self._validation_result = self._analyzer.analyze()
-        return self._validation_result
+        with self._validation_lock:
+            if self._validation_result is None:
+                self._validation_result = self._analyzer.analyze()
+            return self._validation_result
 
     def get_execution_order(self) -> list[str]:
         """Return topological execution order of actions, excluding special namespaces."""
@@ -129,35 +138,38 @@ class WorkflowSchemaService:
                     )
                 )
 
-        output_fields = []
         out = node.output_schema
 
+        # Deduplicate: a field in both schema_fields and observe_fields should
+        # appear only once.  We use a dict keyed by name, first-seen wins
+        # (schema > observe > passthrough) to preserve priority while keeping
+        # insertion order.
+        seen: dict[str, FieldInfo] = {}
         for field_name in out.schema_fields:
-            output_fields.append(
-                FieldInfo(
+            if field_name not in seen:
+                seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.SCHEMA,
                     is_dropped=field_name in out.dropped_fields,
                 )
-            )
 
         for field_name in out.observe_fields:
-            output_fields.append(
-                FieldInfo(
+            if field_name not in seen:
+                seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.OBSERVE,
                     is_dropped=field_name in out.dropped_fields,
                 )
-            )
 
         for field_name in out.passthrough_fields:
-            output_fields.append(
-                FieldInfo(
+            if field_name not in seen:
+                seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.PASSTHROUGH,
                     is_dropped=field_name in out.dropped_fields,
                 )
-            )
+
+        output_fields = list(seen.values())
 
         downstream = self.get_downstream_actions(node.name)
 

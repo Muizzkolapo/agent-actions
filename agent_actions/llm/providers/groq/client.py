@@ -11,7 +11,6 @@ JSON parse failures return error dicts for RepromptEngine repair support,
 as Groq's json_object mode can produce malformed output.
 """
 
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -75,7 +74,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
         client = Groq(api_key=api_key)
         model_name = agent_config[MODEL_NAME_KEY]
         context_data_str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n            <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n\n            <|begin_of_text|>:: {context_data_str} :<|end_of_text|>\n\n            <|begin_of_output_schema|> :WRITE OUTPUTS IN JSON SCHEMA: {json.dumps(schema)}. : <|end_of_output_schema|>\n        "
+        prompt = f"\n            <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n\n            <|begin_of_text|>:: {context_data_str} :<|end_of_text|>\n        "
         prompt_dedent = dedent(prompt)
 
         # Generate request ID for correlation
@@ -90,7 +89,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
             )
         )
 
-        json_completion_kwargs = {
+        json_completion_kwargs: dict[str, Any] = {
             "messages": [{"role": "system", "content": prompt_dedent}],
             "model": model_name,
             "response_format": {"type": "json_object"},

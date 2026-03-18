@@ -27,35 +27,27 @@ class AgentActionsFormatter:
         self.show_timestamp = show_timestamp
         self.use_color = use_color and RICH_AVAILABLE
 
+    # Dispatch table mapping event types to formatter methods (by name).
+    # Looked up in format(); falls back to _format_default for unknown types.
+    _DISPATCH: dict[str, str] = {
+        "WorkflowStartEvent": "_format_workflow_start",
+        "WorkflowCompleteEvent": "_format_workflow_complete",
+        "WorkflowFailedEvent": "_format_workflow_failed",
+        "ActionStartEvent": "_format_action_start",
+        "ActionCompleteEvent": "_format_action_complete",
+        "ActionSkipEvent": "_format_action_skip",
+        "ActionFailedEvent": "_format_action_failed",
+        "ActionCachedEvent": "_format_action_cached",
+        "BatchSubmittedEvent": "_format_batch_submitted",
+        "BatchCompleteEvent": "_format_batch_complete",
+    }
+
     def format(self, event: BaseEvent) -> str:
         """Format an event for console output."""
-        event_type = event.event_type
-
-        if event_type == "WorkflowStartEvent":
-            return self._format_workflow_start(event)
-        elif event_type == "WorkflowCompleteEvent":
-            return self._format_workflow_complete(event)
-        elif event_type == "WorkflowFailedEvent":
-            return self._format_workflow_failed(event)
-
-        elif event_type == "ActionStartEvent":
-            return self._format_action_start(event)
-        elif event_type == "ActionCompleteEvent":
-            return self._format_action_complete(event)
-        elif event_type == "ActionSkipEvent":
-            return self._format_action_skip(event)
-        elif event_type == "ActionFailedEvent":
-            return self._format_action_failed(event)
-        elif event_type == "ActionCachedEvent":
-            return self._format_action_cached(event)
-
-        elif event_type == "BatchSubmittedEvent":
-            return self._format_batch_submitted(event)
-        elif event_type == "BatchCompleteEvent":
-            return self._format_batch_complete(event)
-
-        else:
-            return self._format_default(event)
+        method_name = self._DISPATCH.get(event.event_type)
+        if method_name is not None:
+            return getattr(self, method_name)(event)
+        return self._format_default(event)
 
     def _timestamp(self, event: BaseEvent) -> str:
         """Get formatted timestamp."""

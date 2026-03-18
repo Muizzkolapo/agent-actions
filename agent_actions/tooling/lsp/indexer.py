@@ -433,7 +433,7 @@ def _add_reference(
 def _extract_condition_variables(condition: str) -> list[str]:
     """Extract variable-like tokens from a guard/validation condition."""
     tokens = re.findall(r"\b[a-zA-Z_][\w\.]*\b", condition)
-    keywords = {"and", "or", "not", "in", "true", "false", "null", "none"}
+    keywords = {"and", "or", "not", "in", "is", "true", "false", "null", "none"}
     return [token for token in tokens if token.lower() not in keywords]
 
 

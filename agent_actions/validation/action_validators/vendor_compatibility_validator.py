@@ -5,12 +5,15 @@ from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
 )
+from agent_actions.validation.utils.action_config_validation_utilities import (
+    ActionConfigValidationUtilities,
+)
 
 
 class VendorCompatibilityValidator(BaseActionEntryValidator):
     """Validates vendor compatibility for batch and online modes."""
 
-    VALID_BATCH_VENDORS = {"openai", "gemini", "anthropic", "groq", "mistral"}
+    VALID_BATCH_VENDORS = ActionConfigValidationUtilities.get_valid_batch_vendors()
 
     def validate(self, context) -> ActionEntryValidationResult:
         """Validate vendor compatibility based on run_mode."""

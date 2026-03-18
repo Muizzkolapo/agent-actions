@@ -2,10 +2,13 @@
 
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Any
 
 from agent_actions.config.defaults import PromptDefaults
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import ValidationStartEvent
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -149,25 +152,36 @@ class PromptValidator(BaseValidator):
         """Validate all prompt files in the directory specified by data (Path)."""
         self.clear_errors()
         self.clear_warnings()
+        self._validation_target = str(data) if isinstance(data, Path) else self.validator_name
+        self._validation_start_time = time.time()
+
+        if self._fire_events:
+            fire_event(
+                ValidationStartEvent(
+                    target=self._validation_target,
+                    validator=self.validator_name,
+                )
+            )
+
         if not isinstance(data, Path):
             self.add_error(
                 "Validation data must be a Path object pointing to the prompt directory."
             )
-            return False
+            return self._complete_validation()
         prompt_dir: Path = data
         logger.debug("Starting prompt validation for directory: %s", prompt_dir)
         if not self._ensure_path_exists(prompt_dir):
             self.add_error(f"Prompt directory not found: {prompt_dir}.")
-            return False
+            return self._complete_validation()
         if not self._is_directory(prompt_dir):
             self.add_error(f"Prompt path is not a directory: {prompt_dir}.")
-            return False
+            return self._complete_validation()
         all_prompt_ids_seen: set[str] = set()
         stats = {"total_files_processed": 0, "files_with_errors": 0, "total_prompts_validated": 0}
         prompt_files = list(prompt_dir.glob("*.md"))
         if not prompt_files:
             self.add_warning(f"No .md files found in prompt directory: {prompt_dir}")
-            return True
+            return self._complete_validation()
         for prompt_file in prompt_files:
             stats["total_files_processed"] += 1
             errors_before_file = len(self.get_errors())
@@ -176,4 +190,4 @@ class PromptValidator(BaseValidator):
                 stats["files_with_errors"] += 1
             stats["total_prompts_validated"] += prompts_in_file
         logger.debug("Prompt validation complete for directory: %s. Stats: %s", prompt_dir, stats)
-        return not self.has_errors()
+        return self._complete_validation()

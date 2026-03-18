@@ -229,6 +229,12 @@ class ResultCollector:
                         reason=result.skip_reason or "unprocessed",
                     )
 
+            elif status == ProcessingStatus.DEFERRED:
+                logger.info(
+                    "Collected DEFERRED result source_guid=%s",
+                    result.source_guid,
+                )
+
             else:
                 logger.debug("Unhandled result status=%s", status)
 

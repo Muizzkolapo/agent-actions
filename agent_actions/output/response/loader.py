@@ -162,13 +162,16 @@ class SchemaLoader:
             ConfigValidationError: If one or more schema files are missing
         """
         schema_names = SchemaLoader.return_schema(agent_name, project_root=project_root)
+        schema_dir = (project_root or Path.cwd()) / "schema"
         missing_files = []
         for schema_name in schema_names:
-            try:
-                loaded = SchemaLoader.load_schema(schema_name, project_root=project_root)
-                if loaded is None:
+            schema_file = schema_dir / f"{schema_name}.yml"
+            if not schema_file.exists() and schema_dir.exists():
+                # Mirror load_schema's recursive fallback search
+                matches = list(schema_dir.rglob(f"{schema_name}.yml"))
+                if not matches:
                     missing_files.append(f"{schema_name}.yml")
-            except FileNotFoundError:
+            elif not schema_file.exists():
                 missing_files.append(f"{schema_name}.yml")
         if missing_files:
             if len(missing_files) == 1:

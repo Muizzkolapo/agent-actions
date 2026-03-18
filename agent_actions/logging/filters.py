@@ -53,8 +53,8 @@ class RedactingFilter(logging.Filter):
         r'secret["\']?\s*[:=]\s*["\']?[\w-]+',
         r'token["\']?\s*[:=]\s*["\']?[\w-]+',
         r'password["\']?\s*[:=]\s*["\']?[\w-]+',
+        r"sk-ant-[a-zA-Z0-9-]{20,}",  # Anthropic keys (before sk- to match first)
         r"sk-[a-zA-Z0-9]{20,}",  # OpenAI keys
-        r"sk-ant-[a-zA-Z0-9-]{20,}",  # Anthropic keys
         r"AIza[a-zA-Z0-9_-]{35}",  # Google API keys
     ]
 

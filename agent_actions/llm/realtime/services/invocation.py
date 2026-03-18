@@ -70,7 +70,6 @@ class ClientInvocationService:
         Delegate to the specific client and normalize the response.
 
         Handles client-specific invocation patterns:
-        - Groq: Uses formatted_prompt parameter
         - Tool: Uses tool_args and source_content
         - Others: Standard prompt_config and context_data
 
@@ -81,7 +80,7 @@ class ClientInvocationService:
             context_data: Context data (str or dict)
             schema: Prepared schema (optional)
             granularity: Processing granularity ('record' or 'file')
-            formatted_prompt: Pre-formatted prompt for groq (optional)
+            formatted_prompt: Pre-formatted prompt (unused, kept for API compat)
             tool_args: Tool arguments (optional)
             source_content: Source content for tool client (optional)
             action_name: Action name for logging (optional)
@@ -110,12 +109,8 @@ class ClientInvocationService:
             )
             return [result]
 
-        # Groq client has special invocation signature
-        if model_vendor == "groq":
-            result = client.invoke(agent_config, formatted_prompt, context_data, schema)
-        else:
-            # Standard client invocation
-            result = client.invoke(agent_config, prompt_config, context_data, schema)
+        # Standard client invocation (all providers, including Groq)
+        result = client.invoke(agent_config, prompt_config, context_data, schema)
 
         # Single-response clients return single item, wrap in list for consistency
         if model_vendor in SINGLE_RESPONSE_CLIENTS:
