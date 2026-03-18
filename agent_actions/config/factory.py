@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Optional
 
 from agent_actions.config.di.application import ApplicationContainer
 from agent_actions.config.di.types import DIConfig
-from agent_actions.workflow.runner import ActionRunner
 
 if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
+    from agent_actions.workflow.runner import ActionRunner
 
 
 @contextmanager
@@ -30,8 +30,10 @@ def create_action_runner(
     config: DIConfig | None = None,
     use_tools: bool = True,
     storage_backend: Optional["StorageBackend"] = None,
-) -> ActionRunner:
+) -> "ActionRunner":
     """Create an ActionRunner with proper dependency injection."""
+    from agent_actions.workflow.runner import ActionRunner
+
     with application_container_context(config) as container:
         runner: ActionRunner = container.get_action_runner(
             use_tools, storage_backend=storage_backend

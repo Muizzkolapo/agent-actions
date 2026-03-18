@@ -56,7 +56,9 @@ class TestUdfValidator:
         assert v.name == "check_positive"
 
     def test_unknown_udf_raises(self):
-        with pytest.raises(ValueError, match="not found"):
+        from agent_actions.errors import ConfigurationError
+
+        with pytest.raises(ConfigurationError, match="not found"):
             UdfValidator("nonexistent")
 
     def test_satisfies_protocol(self):

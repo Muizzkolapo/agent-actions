@@ -91,7 +91,7 @@ def load_module_from_path(
 
                         # CRITICAL: Register in sys.modules BEFORE execution
                         # This ensures decorators can find the module
-                        sys.modules[module_name] = module
+                        sys.modules[f"agent_actions._udfs.{module_name}"] = module
 
                         if execute:
                             try:
@@ -100,7 +100,7 @@ def load_module_from_path(
                                 # Module file found but its code is broken.
                                 # Clean up and block fallback so a different
                                 # same-named package doesn't silently replace it.
-                                sys.modules.pop(module_name, None)
+                                sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
                                 logger.warning(
                                     "Failed to execute module %s from %s: %s",
                                     module_name,
@@ -130,7 +130,7 @@ def load_module_from_path(
                 # Path resolution or spec creation failed — the file couldn't
                 # be located.  Clean up but allow fallback_import to try a
                 # normal import (the module may be importable via sys.path).
-                sys.modules.pop(module_name, None)
+                sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
                 logger.warning("Failed to load module %s from path: %s", module_name, e)
                 module = None
 

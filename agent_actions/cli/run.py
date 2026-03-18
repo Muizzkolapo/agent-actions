@@ -100,10 +100,10 @@ class RunCommand:
             actions_total=len(workflow.execution_order),
         )
 
-        workflow.services.core.agent_executor.run_tracker = tracker
-        workflow.services.core.agent_executor.run_id = run_id
+        workflow.services.core.action_executor.run_tracker = tracker
+        workflow.services.core.action_executor.run_id = run_id
 
-        agent_folder = workflow.services.core.agent_runner.get_action_folder(self.agent_name)
+        agent_folder = workflow.services.core.action_runner.get_action_folder(self.agent_name)
         LoggerFactory.initialize(
             output_dir=agent_folder,
             workflow_name=self.agent_name,
@@ -177,7 +177,7 @@ class RunCommand:
 )
 @click.option(
     "--concurrency-limit",
-    type=int,
+    type=click.IntRange(min=1, max=50),
     default=5,
     help="Maximum number of actions to run concurrently (default: 5, range: 1-50)",
 )

@@ -165,7 +165,8 @@ class SchemaLoader:
         missing_files = []
         for schema_name in schema_names:
             try:
-                if not SchemaLoader.load_schema(schema_name, project_root=project_root):
+                loaded = SchemaLoader.load_schema(schema_name, project_root=project_root)
+                if loaded is None:
                     missing_files.append(f"{schema_name}.yml")
             except FileNotFoundError:
                 missing_files.append(f"{schema_name}.yml")

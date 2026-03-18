@@ -165,6 +165,8 @@ class ConfigManager:
             actions = self.user_config.get("actions", [])
             for action in actions:
                 if isinstance(action, dict) and "child" in action:
+                    if not action["child"]:
+                        continue
                     self.child_pipeline = action["child"][0]
                     return
         else:
@@ -176,6 +178,8 @@ class ConfigManager:
             agent_list = self.user_config.get(self.agent_name, [])
             for item in agent_list:
                 if isinstance(item, dict) and "child" in item:
+                    if not item["child"]:
+                        continue
                     self.child_pipeline = item["child"][0]
                     return
         self.child_pipeline = None

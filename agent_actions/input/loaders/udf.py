@@ -44,7 +44,7 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             relative_path = py_file.relative_to(user_code_path)
             module_name = str(relative_path.with_suffix("")).replace("/", ".").replace("\\", ".")
 
-            if module_name in sys.modules:
+            if f"agent_actions._udfs.{module_name}" in sys.modules:
                 continue
 
             # Keep original module loading logic to preserve exception behavior
@@ -52,7 +52,7 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             spec = importlib.util.spec_from_file_location(module_name, py_file)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
-                sys.modules[module_name] = module
+                sys.modules[f"agent_actions._udfs.{module_name}"] = module
                 spec.loader.exec_module(module)
 
         except DuplicateFunctionError:

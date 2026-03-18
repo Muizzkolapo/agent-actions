@@ -4,6 +4,7 @@ import functools
 import json
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -132,8 +133,7 @@ class RunTracker:
 
     def _create_run_record(self, runs_data: dict[str, Any], config: RunConfig) -> str:
         """Create run record and add to runs_data."""
-        run_count = len(runs_data["executions"]) + 1
-        run_id = f"run_{config.workflow_id}_{run_count:03d}"
+        run_id = f"run_{config.workflow_id}_{uuid.uuid4().hex[:8]}"
 
         calc_duration = config.duration_seconds
         if calc_duration is None and config.started_at and config.ended_at:
@@ -250,8 +250,7 @@ class RunTracker:
             if "workflow_metrics" not in runs_data:
                 runs_data["workflow_metrics"] = {}
 
-            run_count = len(runs_data["executions"]) + 1
-            run_id = f"run_{workflow_id}_{run_count:03d}"
+            run_id = f"run_{workflow_id}_{uuid.uuid4().hex[:8]}"
 
             run_record: dict[str, Any] = {
                 "id": run_id,
@@ -284,14 +283,14 @@ class RunTracker:
 
     @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def record_action_start(
-        self, *, run_id: str, action_name: str, action_type: str, agent_config: dict[str, Any]
+        self, *, run_id: str, action_name: str, action_type: str, action_config: dict[str, Any]
     ) -> None:
         """Record when an action starts executing."""
         with portalocker.Lock(
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-            flags=portalocker.LOCK_EX,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
             f.seek(0)
             runs_data = json.load(f)
@@ -307,11 +306,13 @@ class RunTracker:
                     }
 
                     if action_type == "llm":
-                        action_entry["vendor"] = agent_config.get("model_vendor")
-                        action_entry["model"] = agent_config.get("model_name")
+                        action_entry["vendor"] = action_config.get("model_vendor")
+                        action_entry["model"] = action_config.get("model_name")
                     elif action_type == "tool":
-                        action_entry["impl"] = agent_config.get("model_name")
+                        action_entry["impl"] = action_config.get("model_name")
 
+                    if "actions" not in run:
+                        run["actions"] = {}
                     run["actions"][action_name] = action_entry
 
                     f.seek(0)
@@ -328,7 +329,7 @@ class RunTracker:
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-            flags=portalocker.LOCK_EX,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
             f.seek(0)
             runs_data = json.load(f)
@@ -388,7 +389,7 @@ class RunTracker:
             self.runs_file,
             "r+",
             timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-            flags=portalocker.LOCK_EX,
+            flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
         ) as f:
             f.seek(0)
             runs_data = json.load(f)
@@ -431,9 +432,10 @@ class RunTracker:
 
             metrics[wf_id]["total_runs"] += 1
 
-            if run["status"] == "SUCCESS":
+            status_lower = run["status"].lower() if isinstance(run["status"], str) else ""
+            if status_lower == "success":
                 metrics[wf_id]["successful_runs"] += 1
-            elif run["status"] == "FAILED":
+            elif status_lower == "failed":
                 metrics[wf_id]["failed_runs"] += 1
 
             metrics[wf_id]["total_duration"] += run.get("duration_seconds", 0)

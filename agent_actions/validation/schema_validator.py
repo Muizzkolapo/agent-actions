@@ -138,8 +138,15 @@ class SchemaValidator(BaseValidator):
                 f"'type', 'properties', etc.",
                 field=schema_name,
             )
+            return
         try:
             self._validate_against_meta_schema_static(schema_data)
+        except jsonschema.exceptions.SchemaError as e:
+            self.add_error(
+                f"{display_name} (file: {file_path.name}) has a malformed JSON Schema: {e.message}.",
+                field=schema_name,
+            )
+            return
         except jsonschema.exceptions.ValidationError as e:
             error_path = " -> ".join(map(str, e.path))
             context_msg = f" (at path: '{error_path}')" if e.path else ""

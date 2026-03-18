@@ -41,6 +41,10 @@ DANGEROUS_PATTERNS = frozenset(
         "getattr",
         "setattr",
         "delattr",
+        "importlib",
+        "subprocess",
+        "os.system",
+        "sys.modules",
     }
 )
 

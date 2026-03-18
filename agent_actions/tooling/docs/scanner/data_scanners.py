@@ -24,7 +24,11 @@ def scan_prompts(project_root: Path) -> dict[str, Any]:
     prompt_pattern = re.compile(r"\{prompt\s+(\w+)\}(.*?)\{end_prompt\}", re.DOTALL)
 
     for md_file in prompt_store_dir.glob("*.md"):
-        content = md_file.read_text()
+        try:
+            content = md_file.read_text()
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning("Skipping unreadable prompt file %s: %s", md_file, e)
+            continue
 
         # Find all prompts in this file
         for match in prompt_pattern.finditer(content):
@@ -63,7 +67,8 @@ def scan_schemas(project_root: Path) -> dict[str, Any]:
 
         try:
             raw_schema = SchemaLoader.load_schema(schema_name, schema_dir)
-        except FileNotFoundError:
+        except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
+            logger.warning("Skipping unreadable schema file %s: %s", yml_file, e)
             continue
 
         fields = extract_fields_for_docs(raw_schema)

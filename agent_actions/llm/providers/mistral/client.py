@@ -247,6 +247,15 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         )
 
         response_output = chat_response.choices[0].message.content
+        if response_output is None:
+            raise VendorAPIError(
+                "Mistral API returned null content",
+                context={
+                    "model_name": model_name,
+                    "vendor": "mistral",
+                    "api_operation": "chat.complete",
+                },
+            )
         output_field = agent_config.get("output_field", "raw_response")
 
         logger.debug(

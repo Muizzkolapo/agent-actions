@@ -40,7 +40,7 @@ class BaseInspectCommand:
         )
         self.paths = paths
         filename = f"{self.agent_name}.yml"
-        full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename)
+        full_path = find_config_file(self.agent_name, paths.agent_config_dir, filename, check_alternatives=True)
 
         ConfigRenderingService().render_and_load_config(
             self.agent_name, full_path, paths.template_dir, project_root=project_root

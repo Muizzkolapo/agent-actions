@@ -27,6 +27,8 @@ def retry(
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            if max_attempts < 1:
+                return func(*args, **kwargs)
             last_exception = None
             for attempt in range(max_attempts):
                 try:

@@ -113,18 +113,19 @@ class BatchStrategy(InvocationStrategy):
 
         task_count = len(batch_tasks)
         context_snapshot = self._context_map.copy()
-        try:
-            if self._agent_config is None:
-                raise RuntimeError("BatchStrategy._agent_config is None at flush time")
-            formatted_tasks = self._provider.prepare_tasks(batch_tasks, dict(self._agent_config))
-            resolved_name = batch_name or f"batch-{task_count}-tasks"
-            batch_id, _status = self._provider.submit_batch(
-                formatted_tasks, resolved_name, output_directory
-            )
-        finally:
-            self._queued = []
-            self._context_map = {}
-            self._agent_config = None
+        if self._agent_config is None:
+            raise RuntimeError("BatchStrategy._agent_config is None at flush time")
+        formatted_tasks = self._provider.prepare_tasks(batch_tasks, dict(self._agent_config))
+        resolved_name = batch_name or f"batch-{task_count}-tasks"
+        batch_id, _status = self._provider.submit_batch(
+            formatted_tasks, resolved_name, output_directory
+        )
+
+        # Clear state only after successful submission — transient failures
+        # preserve queued tasks so the caller can retry flush().
+        self._queued = []
+        self._context_map = {}
+        self._agent_config = None
 
         logger.info(
             "BatchStrategy submitted %d tasks as batch %s",

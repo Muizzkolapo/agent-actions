@@ -379,7 +379,7 @@ class ConfigRenderingService:
         try:
             schema_validate_instance = SchemaValidator()
             schema_validate_instance.validate(
-                {"agent_name": agent_name, "template_dir": str(template_dir)}
+                {"agent_name": agent_name, "schema_dir": Path(template_dir).parent / "schema"}
             )
         except Exception as e:
             raise ConfigurationError(

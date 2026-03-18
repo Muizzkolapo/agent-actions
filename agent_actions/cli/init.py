@@ -46,7 +46,7 @@ class InitCommand:
         if self.args.output_dir:
             path_str = str(Path(self.args.output_dir))
 
-            if ".." in path_str:
+            if any(part == ".." for part in Path(self.args.output_dir).parts):
                 raise ValidationError(
                     "Path traversal not allowed in output directory",
                     context={

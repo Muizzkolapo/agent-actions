@@ -40,14 +40,14 @@ def cleanup_registry():
         "func3",
     ]
     for mod_name in test_module_names:
-        if mod_name in sys.modules:
-            del sys.modules[mod_name]
+        sys.modules.pop(mod_name, None)
+        sys.modules.pop(f"agent_actions._udfs.{mod_name}", None)
     yield
     clear_registry()
     # Clean up again after test
     for mod_name in test_module_names:
-        if mod_name in sys.modules:
-            del sys.modules[mod_name]
+        sys.modules.pop(mod_name, None)
+        sys.modules.pop(f"agent_actions._udfs.{mod_name}", None)
 
 
 @pytest.fixture

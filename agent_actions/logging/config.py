@@ -41,19 +41,26 @@ class LoggingConfig:
         file_settings = FileHandlerSettings(
             enabled=file_config.get("enabled", True),
             path=file_config.get("path"),
-            level=file_config.get("level", "DEBUG"),
+            level=cls._validate_log_level(file_config.get("level", "DEBUG"), "DEBUG"),
             max_bytes=file_config.get("max_bytes", 10_485_760),
             backup_count=file_config.get("backup_count", 5),
             format=file_config.get("format", "human"),
         )
 
         return cls(
-            default_level=logging_config.get("level", "INFO"),
+            default_level=cls._validate_log_level(logging_config.get("level", "INFO"), "INFO"),
             module_levels=logging_config.get("module_levels", {}),
             include_timestamps=logging_config.get("include_timestamps", True),
-            include_source_location=logging_config.get("include_source_location", True),
+            include_source_location=logging_config.get("include_source_location", False),
             file_handler=file_settings,
         )
+
+    @staticmethod
+    def _validate_log_level(value: str, default: str) -> LogLevel:
+        """Validate and return a LogLevel, falling back to default."""
+        valid = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        upper = value.upper() if isinstance(value, str) else default
+        return cast(LogLevel, upper if upper in valid else default)
 
     @classmethod
     def from_environment(cls) -> LoggingConfig:

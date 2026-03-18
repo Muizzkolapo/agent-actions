@@ -62,19 +62,19 @@ class UnifiedSourceDataSaver:
             self.storage_backend is not None,
         )
 
-        fire_event(
-            SourceDataSavingEvent(
-                file_path=str(source_file),
-                item_count=len(items),
-            )
-        )
-
         if self.storage_backend is None:
             raise ValueError(
                 f"Storage backend not configured for write_source. "
                 f"Configure a storage backend (sqlite, tinydb) in your workflow. "
                 f"File: {source_file}"
             )
+
+        fire_event(
+            SourceDataSavingEvent(
+                file_path=str(source_file),
+                item_count=len(items),
+            )
+        )
 
         self.storage_backend.write_source(
             relative_path, items, enable_deduplication=self.enable_deduplication

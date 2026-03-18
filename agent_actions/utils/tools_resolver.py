@@ -1,6 +1,7 @@
 """Resolve tools_path from agent configuration (legacy, simple, and OpenAI formats)."""
 
 import logging
+from pathlib import Path
 from typing import Any, cast
 
 import yaml
@@ -37,6 +38,12 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                 if "file" in function_def:
                     try:
                         tool_file_path = function_def["file"]
+                        if ".." in Path(tool_file_path).parts:
+                            logger.warning(
+                                "Tool file path %s contains path traversal, skipping",
+                                tool_file_path,
+                            )
+                            continue
                         with open(tool_file_path, encoding="utf-8") as f:
                             tool_config = yaml.safe_load(f)
                             if tool_config and "module_path" in tool_config:

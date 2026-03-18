@@ -5,8 +5,8 @@ import importlib
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.validation.preflight.vendor_compatibility_validator import (
     VALID_VENDORS,
-    VENDOR_CAPABILITIES,
     VendorCompatibilityValidator,
+    _get_vendor_capabilities,
     _resolve_capabilities,
 )
 
@@ -58,7 +58,8 @@ class TestVendorParity:
         """Module-level VENDOR_CAPABILITIES must match each client's CAPABILITIES."""
         for vendor, entry in CLIENT_REGISTRY.items():
             cls = _resolve_class(entry)
-            assert VENDOR_CAPABILITIES[vendor] is cls.CAPABILITIES, (
+            caps = _get_vendor_capabilities()
+            assert caps[vendor] is cls.CAPABILITIES, (
                 f"VENDOR_CAPABILITIES['{vendor}'] does not reference {cls.__name__}.CAPABILITIES"
             )
 

@@ -52,12 +52,32 @@ class PromptLoader:
 
     @staticmethod
     def validate_prompt_blocks(filename: str, content: str) -> None:
-        """Ensure every prompt block is closed with an end token."""
-        for match in PROMPT_PATTERN.finditer(content):
-            name = match.group(1)
-            start = match.end()
-            if content.find("{end_prompt}", start) == -1:
+        """Ensure every prompt block is properly closed with an end token."""
+        end_token = "{end_prompt}"
+        opens = [(m.start(), m.end(), m.group(1)) for m in PROMPT_PATTERN.finditer(content)]
+        ends = []
+        search_start = 0
+        while True:
+            idx = content.find(end_token, search_start)
+            if idx == -1:
+                break
+            ends.append(idx)
+            search_start = idx + len(end_token)
+
+        end_iter = iter(ends)
+        next_end = next(end_iter, None)
+
+        for i, (open_pos, _open_end, name) in enumerate(opens):
+            # Advance past any end_prompt that appears before this open
+            while next_end is not None and next_end < open_pos:
+                next_end = next(end_iter, None)
+
+            next_open_pos = opens[i + 1][0] if i + 1 < len(opens) else len(content)
+
+            if next_end is None or next_end > next_open_pos:
                 raise ValueError(f"Unclosed prompt block for '{name}' in {filename}.")
+
+            next_end = next(end_iter, None)
 
     @staticmethod
     def load_prompt(prompt_name: str, project_root: Path | None = None) -> str:

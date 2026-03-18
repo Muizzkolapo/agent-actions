@@ -33,6 +33,7 @@ def _redact_sensitive_data(
         return [_redact_sensitive_data(item, redact_keys) for item in data]
     if isinstance(data, str):
         patterns = [
+            (r"sk-ant-[a-zA-Z0-9-]{20,}", "sk-ant-[REDACTED]"),
             (r"sk-[a-zA-Z0-9]{20,}", "sk-[REDACTED]"),
             (r"anthropic-[a-zA-Z0-9-]{20,}", "anthropic-[REDACTED]"),
             (r"AIza[a-zA-Z0-9_-]{35}", "AIza[REDACTED]"),
@@ -79,10 +80,10 @@ class RedactingFilter(logging.Filter):
                     replacement = "token=***"
                 elif "password" in pattern.lower():
                     replacement = "password=***"
-                elif pattern.startswith(r"sk-"):
-                    replacement = "sk-***"
                 elif pattern.startswith(r"sk-ant"):
                     replacement = "sk-ant-***"
+                elif pattern.startswith(r"sk-"):
+                    replacement = "sk-***"
                 elif pattern.startswith(r"AIza"):
                     replacement = "AIza***"
                 else:

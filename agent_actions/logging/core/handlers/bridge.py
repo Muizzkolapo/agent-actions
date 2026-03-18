@@ -108,6 +108,19 @@ class LogEvent(BaseEvent):
         """Check if this log event has exception info."""
         return self.exc_info is not None and self.exc_info[0] is not None
 
+    def to_dict(self) -> dict[str, Any]:
+        """Include diagnostic fields in serialized output."""
+        d = super().to_dict()
+        d["logger_name"] = self.logger_name
+        d["source_file"] = self.source_file
+        d["source_line"] = self.source_line
+        d["func_name"] = self.func_name
+        if self.has_exception and self.exc_info is not None:
+            import traceback
+
+            d["exc_info"] = "".join(traceback.format_exception(*self.exc_info))
+        return d
+
 
 @dataclass
 class DebugEvent(BaseEvent):

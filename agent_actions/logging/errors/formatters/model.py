@@ -13,8 +13,6 @@ class ModelErrorFormatter(ErrorFormatter):
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
         message_lower = message.lower()
         model_patterns = [
-            "model",
-            "not supported",
             "unsupported model",
             "invalid model",
             "model not found",

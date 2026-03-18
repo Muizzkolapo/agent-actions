@@ -90,17 +90,17 @@ class FieldReferenceResolver:
 
             value = self._resolve_nested_path(action_data, reference.field_path)
 
-            if value is None and self.strict_mode:
+            if value is self._SENTINEL and self.strict_mode:
                 raise ReferenceNotFoundError(
                     f"Field path '{'.'.join(reference.field_path)}' not found "
                     f"in action '{reference.action_name}'"
                 )
 
             return ResolvedReference(
-                value=value if value is not None else fallback_value,
+                value=value if value is not self._SENTINEL else fallback_value,
                 source_action=reference.action_name,
                 field_path=reference.field_path,
-                success=value is not None,
+                success=value is not self._SENTINEL,
             )
 
         except ReferenceNotFoundError as e:
@@ -174,31 +174,34 @@ class FieldReferenceResolver:
             current_agent_name=current_agent_name,
         )
 
+    _SENTINEL = object()  # Distinguishes "key missing" from "key present with None value"
+
     def _resolve_nested_path(self, data: Any, path: list[str]) -> Any:
-        """Resolve a nested path, supporting both dict key access and array index access."""
+        """Resolve a nested path, supporting both dict key access and array index access.
+
+        Returns _SENTINEL for missing keys, or the actual value (including None) for present keys.
+        """
         current = data
 
         for key in path:
             if current is None:
-                return None
+                return self._SENTINEL
 
             if isinstance(current, dict):
-                current = current.get(key)
-                if current is None:
-                    return None
+                current = current.get(key, self._SENTINEL)
+                if current is self._SENTINEL:
+                    return self._SENTINEL
             elif isinstance(current, list) and key.isdigit():
                 idx = int(key)
                 if 0 <= idx < len(current):
                     current = current[idx]
                 else:
-                    return None
+                    return self._SENTINEL
             else:
                 if hasattr(current, key):
                     current = getattr(current, key)
-                    if current is None:
-                        return None
                 else:
-                    return None
+                    return self._SENTINEL
 
         return current
 

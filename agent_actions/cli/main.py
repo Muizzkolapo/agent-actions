@@ -193,7 +193,24 @@ def main() -> None:
     sys.exit(main_entrypoint())
 
 
-cli = CLI().click_group
+class _LazyCLI:
+    """Lazy proxy that defers CLI() instantiation until the click group is accessed."""
+
+    def __init__(self):
+        self._cli = None
+
+    def __getattr__(self, name):
+        if self._cli is None:
+            self._cli = CLI().click_group
+        return getattr(self._cli, name)
+
+    def __call__(self, *args, **kwargs):
+        if self._cli is None:
+            self._cli = CLI().click_group
+        return self._cli(*args, **kwargs)
+
+
+cli = _LazyCLI()
 
 if __name__ == "__main__":
     main()

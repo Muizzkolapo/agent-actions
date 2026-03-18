@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -80,22 +82,40 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """
 
         def do_write() -> int:
-            with open(self.file_path, "w", encoding="utf-8") as file:
-                if self.file_type == ".json":
-                    json.dump(data, file, indent=4)
-                elif self.file_type == ".txt":
+            Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
+            if self.file_type == ".json":
+                dir_path = os.path.dirname(self.file_path) or "."
+                fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+                try:
+                    with os.fdopen(fd, "w", encoding="utf-8") as file:
+                        json.dump(data, file, indent=4)
+                    os.replace(tmp_path, self.file_path)
+                except BaseException:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+                    raise
+            elif self.file_type == ".txt":
+                with open(self.file_path, "w", encoding="utf-8") as file:
                     if isinstance(data, list):
                         file.write("\n".join(data))
                     else:
                         file.write(data)
-                elif self.file_type == ".csv":
-                    writer = csv.writer(file)
-                    writer.writerows(data)
-                else:
-                    raise AgentActionsError(
-                        f"Unsupported file type for staging: {self.file_type} "
-                        f"for file {self.file_path}"
-                    )
+            elif self.file_type == ".csv":
+                with open(self.file_path, "w", encoding="utf-8", newline="") as file:
+                    if data and isinstance(data[0], dict):
+                        writer = csv.DictWriter(file, fieldnames=data[0].keys())
+                        writer.writeheader()
+                        writer.writerows(data)
+                    else:
+                        writer = csv.writer(file)
+                        writer.writerows(data)
+            else:
+                raise AgentActionsError(
+                    f"Unsupported file type for staging: {self.file_type} "
+                    f"for file {self.file_path}"
+                )
             return Path(self.file_path).stat().st_size
 
         self._execute_write("Write staging file", do_write)
@@ -127,8 +147,16 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """Write data to source file in JSON format."""
 
         def do_write() -> int:
-            with open(self.file_path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=4)
+            Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
+            dir_path = os.path.dirname(self.file_path) or "."
+            fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=4)
+                os.replace(tmp_path, self.file_path)
+            except BaseException:
+                os.unlink(tmp_path)
+                raise
             return Path(self.file_path).stat().st_size
 
         self._execute_write("Write source file", do_write)

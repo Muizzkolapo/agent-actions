@@ -76,6 +76,13 @@ def apply_context_scope(
                 prompt_context[ns_name].pop(field_name, None)
 
         except ValueError as e:
+            logger.warning(
+                "Drop directive failed to parse field reference '%s' in action '%s': %s. "
+                "Field will NOT be removed — review context_scope.drop configuration.",
+                field_ref,
+                action_name,
+                e,
+            )
             fire_event(
                 ContextFieldSkippedEvent(
                     action_name=action_name,
@@ -93,12 +100,12 @@ def apply_context_scope(
             ns_name, field_name = parse_field_reference(field_ref)
 
             if field_name == "*":
-                action_fields = extract_action_fields(field_context, ns_name)
+                action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
                     llm_context.update(action_fields)
             else:
-                # Extract value from original field_context (before drop removed it)
-                value = extract_field_value(field_context, ns_name, field_name)
+                # Extract value from prompt_context (after drop removed sensitive fields)
+                value = extract_field_value(prompt_context, ns_name, field_name)
 
                 if value is not None:
                     # Add to llm_context (flat dict with field names as keys)

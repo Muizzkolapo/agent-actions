@@ -301,18 +301,6 @@ class AnthropicBatchClient(BaseBatchClient):
                 context={"operation": "batch_submission", "batch_name": batch_name},
                 cause=e,
             ) from e
-        except self.anthropic.AuthenticationError as e:
-            from agent_actions.errors import AnthropicError
-
-            raise AnthropicError(
-                "Anthropic authentication failed during batch submission",
-                context={
-                    "operation": "batch_submission",
-                    "batch_name": batch_name,
-                    "error": "Check your API key",
-                },
-                cause=e,
-            ) from e
         except Exception as e:
             from agent_actions.errors import AnthropicError
 
@@ -384,18 +372,6 @@ class AnthropicBatchClient(BaseBatchClient):
             raise AnthropicError(
                 "Anthropic API error retrieving batch results",
                 context={"operation": "retrieve_results", "batch_id": batch_id},
-                cause=e,
-            ) from e
-        except self.anthropic.AuthenticationError as e:
-            from agent_actions.errors import AnthropicError
-
-            raise AnthropicError(
-                "Anthropic authentication failed during retrieve results",
-                context={
-                    "operation": "retrieve_results",
-                    "batch_id": batch_id,
-                    "error": "Check your API key",
-                },
                 cause=e,
             ) from e
         except Exception as e:

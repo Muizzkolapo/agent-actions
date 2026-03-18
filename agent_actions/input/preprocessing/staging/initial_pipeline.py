@@ -641,10 +641,11 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if result.is_passthrough and result.passthrough.get("type") == "tombstone":
+    passthrough = result.passthrough
+    if passthrough is not None and passthrough.get("type") == "tombstone":
         _write_passthrough_result(
             output_file_path,
-            result.passthrough["data"],
+            passthrough["data"],
             storage_backend=ctx.storage_backend,
             action_name=ctx.agent_name,
             output_directory=ctx.output_directory,

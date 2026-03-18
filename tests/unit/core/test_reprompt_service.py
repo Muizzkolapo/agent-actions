@@ -51,8 +51,10 @@ class TestRepromptServiceInit:
         assert service.on_exhausted == "return_last"  # Default
 
     def test_init_with_nonexistent_udf(self):
-        """Should raise ValueError if UDF not registered."""
-        with pytest.raises(ValueError) as exc_info:
+        """Should raise ConfigurationError if UDF not registered."""
+        from agent_actions.errors import ConfigurationError
+
+        with pytest.raises(ConfigurationError) as exc_info:
             RepromptService(validation_name="nonexistent_validator")
 
         assert "Validation UDF 'nonexistent_validator' not found" in str(exc_info.value)

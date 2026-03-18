@@ -57,6 +57,15 @@ class GuardParser:
             )
         original_guard = guard
         guard = guard.strip()
+        if not guard:
+            raise ValidationError(
+                "Guard expression must not be empty or whitespace-only",
+                context={
+                    "guard": original_guard,
+                    "operation": "parse_guard",
+                    "failed_field": "guard_expression",
+                },
+            )
         if guard.startswith(cls.UDF_PREFIX):
             udf_expression = guard[len(cls.UDF_PREFIX) :].strip()
             if not udf_expression:

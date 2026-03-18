@@ -49,8 +49,15 @@ def get_vendor_capabilities_map() -> dict[str, dict[str, Any]]:
     return result
 
 
-# Convenience alias — resolves all vendors eagerly when accessed.
-VENDOR_CAPABILITIES = get_vendor_capabilities_map()
+_VENDOR_CAPABILITIES: dict | None = None
+
+
+def _get_vendor_capabilities() -> dict:
+    """Lazy-initialize vendor capabilities on first access."""
+    global _VENDOR_CAPABILITIES
+    if _VENDOR_CAPABILITIES is None:
+        _VENDOR_CAPABILITIES = get_vendor_capabilities_map()
+    return _VENDOR_CAPABILITIES
 
 
 class VendorCompatibilityValidator(BaseValidator):

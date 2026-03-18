@@ -1,6 +1,8 @@
 """Retry service for handling transport-layer failures in LLM calls."""
 
 import logging
+import random
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -58,6 +60,8 @@ class RetryService:
     def __init__(
         self,
         max_attempts: int = 3,
+        base_delay: float = 1.0,
+        max_delay: float = 60.0,
     ):
         """Initialize with max_attempts (must be >= 1).
 
@@ -68,6 +72,8 @@ class RetryService:
             raise ValueError(f"max_attempts must be >= 1, got: {max_attempts}")
 
         self.max_attempts = max_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
 
     def execute(
         self,
@@ -100,14 +106,18 @@ class RetryService:
                 if is_retriable_error(e):
                     log_context = f" ({context})" if context else ""
                     if attempt < self.max_attempts:
+                        delay = min(self.base_delay * (2 ** (attempt - 1)), self.max_delay)
+                        jittered = random.uniform(0, delay)
                         logger.info(
-                            "Retry attempt %d/%d%s: %s - %s",
+                            "Retry attempt %d/%d%s: %s - %s (backoff %.2fs)",
                             attempt,
                             self.max_attempts,
                             log_context,
                             reason,
                             str(e),
+                            jittered,
                         )
+                        time.sleep(jittered)
                         continue
                     else:
                         logger.warning(
@@ -154,4 +164,6 @@ def create_retry_service_from_config(
 
     return RetryService(
         max_attempts=retry_config.get("max_attempts", 3),
+        base_delay=retry_config.get("base_delay", 1.0),
+        max_delay=retry_config.get("max_delay", 60.0),
     )

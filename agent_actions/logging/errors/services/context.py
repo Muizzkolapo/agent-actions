@@ -26,9 +26,17 @@ class ErrorContextService:
             if hasattr(exception, "context") and isinstance(exception.context, dict):
                 merged_context.update(exception.context)
 
-        excluded_attrs = ["args", "with_traceback", "context"]
+        _ALLOWED_ATTRS = frozenset({
+            "reason", "status", "status_code", "url", "request",
+            "response", "message", "code", "detail", "name",
+        })
+        excluded_attrs = {"args", "with_traceback", "context"}
         for attr_name in dir(exc):
-            if not attr_name.startswith("_") and attr_name not in excluded_attrs:
+            if (
+                not attr_name.startswith("_")
+                and attr_name not in excluded_attrs
+                and attr_name in _ALLOWED_ATTRS
+            ):
                 try:
                     attr_value = getattr(exc, attr_name)
                     if not callable(attr_value) and isinstance(

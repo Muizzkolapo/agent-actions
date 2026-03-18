@@ -44,7 +44,14 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
                 spec = importlib.util.spec_from_file_location(module_name, potential_file)
                 if spec and spec.loader:
                     module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
+                    try:
+                        spec.loader.exec_module(module)
+                    except Exception as exec_err:
+                        raise ConfigurationError(
+                            f"Failed to load UDF module '{module_name}' from {potential_file}: {exec_err}",
+                            context={"module_name": module_name, "path": str(potential_file)},
+                            cause=exec_err,
+                        ) from exec_err
                     break
         if module is None:
             search_paths = ", ".join(sys.path)

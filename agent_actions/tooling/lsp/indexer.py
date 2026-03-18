@@ -621,6 +621,7 @@ def _collect_schema_fields(data: Any, fields: list[str], prefix: str = "") -> No
     field_list = data.get("fields")
     if isinstance(field_list, list):
         for item in field_list:
-            if isinstance(item, dict) and "name" in item:
-                name = f"{prefix}{item['name']}" if not prefix else f"{prefix}.{item['name']}"
+            if isinstance(item, dict) and ("name" in item or "id" in item):
+                field_name = item.get("name") or item.get("id")
+                name = f"{prefix}{field_name}" if not prefix else f"{prefix}.{field_name}"
                 fields.append(name)

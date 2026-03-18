@@ -363,7 +363,9 @@ class TestBuildValidatorUnregisteredUdf:
         _VALIDATION_REGISTRY.clear()
 
     def test_unregistered_udf_raises_valueerror(self):
-        """_build_validator with a UDF name not in the registry raises ValueError."""
+        """_build_validator with a UDF name not in the registry raises ConfigurationError."""
+        from agent_actions.errors import ConfigurationError
+
         config = {"reprompt": {"validation": "nonexistent_udf"}}
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ConfigurationError, match="not found"):
             InvocationStrategyFactory._build_validator(config)

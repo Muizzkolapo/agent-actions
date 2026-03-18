@@ -37,7 +37,10 @@ class LoggerFactory:
     ) -> EventManager:
         """Initialize the unified logging system and return the EventManager."""
         if cls._initialized and not force:
-            return cls._event_manager  # type: ignore
+            assert cls._event_manager is not None, (
+                "LoggerFactory._initialized is True but _event_manager is None"
+            )
+            return cls._event_manager
 
         cls._config = config or LoggingConfig.from_environment()
 

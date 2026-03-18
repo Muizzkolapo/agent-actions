@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 
+from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.errors import ConfigurationError
 from agent_actions.utils.project_root import find_project_root
 
@@ -29,6 +30,7 @@ def skills():
 
 
 @skills.command(name="install")
+@handles_user_errors("skills install")
 @click.option(
     "--claude",
     "tool",
@@ -132,6 +134,7 @@ def install(tool: str, force: bool):
 
 
 @skills.command(name="list")
+@handles_user_errors("skills list")
 def list_skills():
     """List available bundled skills."""
     bundled_skills = get_bundled_skills_path()

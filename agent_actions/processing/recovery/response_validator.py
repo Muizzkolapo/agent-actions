@@ -42,10 +42,19 @@ class UdfValidator:
     """Wraps a UDF registered via ``@reprompt_validation``."""
 
     def __init__(self, validation_name: str) -> None:
+        from agent_actions.errors import ConfigurationError
+
         from .validation import get_validation_function
 
         self._name = validation_name
-        self._func, self._feedback_message = get_validation_function(validation_name)
+        try:
+            self._func, self._feedback_message = get_validation_function(validation_name)
+        except ValueError as e:
+            raise ConfigurationError(
+                f"Validation UDF '{validation_name}' not found: {e}",
+                context={"validation_name": validation_name},
+                cause=e,
+            ) from e
 
     def validate(self, response: Any) -> bool:  # noqa: D401
         return self._func(response)

@@ -152,7 +152,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         )
 
         result = GeminiClient.parse_json_response(
-            response_content=response_temp.text,
+            response_content=response_temp.text or "",
             vendor_name="Gemini",
             operation="call_json",
             model_name=model_name,

@@ -28,7 +28,7 @@ class EnvironmentConfig(BaseSettings):
     """Environment configuration loaded from environment variables with validation."""
 
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="forbid"
+        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
     )
     openai_api_key: SecretStr | None = Field(
         default=None, description="OpenAI API Key for GPT models"

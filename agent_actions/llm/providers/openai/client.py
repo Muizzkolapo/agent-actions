@@ -9,10 +9,13 @@ consistent retry handling across all providers.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 import openai
 from openai import OpenAI
@@ -153,7 +156,32 @@ class OpenAIClient(BaseClient):
                     "api_operation": "chat.completions.create",
                 },
             )
-        response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
+        try:
+            response_data: dict[str, Any] | list[dict[str, Any]] = json.loads(response_content)
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Failed to parse JSON from OpenAI response: %s",
+                e,
+                extra={"model": model_name, "operation": "call_json"},
+            )
+            fire_event(
+                LLMErrorEvent(
+                    provider="openai",
+                    model=model_name,
+                    error_type="JSONDecodeError",
+                    error_message=f"Failed to parse JSON from response: {e}",
+                    request_id=request_id,
+                )
+            )
+            raise VendorAPIError(
+                f"Failed to parse JSON response from OpenAI: {e}",
+                context={
+                    "model_name": model_name,
+                    "vendor": "openai",
+                    "api_operation": "chat.completions.create",
+                    "raw_response_snippet": response_content[:200],
+                },
+            ) from e
         response_list: list[dict[str, Any]] = (
             response_data if isinstance(response_data, list) else [response_data]
         )

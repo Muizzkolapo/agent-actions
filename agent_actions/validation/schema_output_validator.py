@@ -238,9 +238,12 @@ def _extract_output_fields(llm_output: Any) -> set[str]:
     if isinstance(llm_output, dict):
         return set(llm_output.keys())
     elif isinstance(llm_output, list) and llm_output:
-        # For array output, extract fields from first item
-        if isinstance(llm_output[0], dict):
-            return set(llm_output[0].keys())
+        # For array output, extract fields from all items
+        all_keys: set[str] = set()
+        for item in llm_output:
+            if isinstance(item, dict):
+                all_keys.update(item.keys())
+        return all_keys
     return set()
 
 
