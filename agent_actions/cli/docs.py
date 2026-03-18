@@ -58,7 +58,7 @@ def generate(output: str, project_root: Path | None = None):
 )
 @handles_user_errors("docs serve")
 @requires_project
-def serve(port: int, artefact: str, project_root: Path | None = None):
+def serve(port: int, artefact: str | None, project_root: Path | None = None):
     """
     Start HTTP server to view documentation.
 
@@ -146,7 +146,7 @@ def run_tests(test_suite: str, port: int, project_root: Path | None = None):
     click.echo("\n✅ All tests passed!")
 
 
-@docs.command()
+@docs.command(hidden=True)
 @handles_user_errors("docs dev")
 def dev():
     """

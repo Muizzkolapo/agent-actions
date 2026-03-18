@@ -340,13 +340,16 @@ def build_field_context_with_history(
 
                 if not is_ancestor:
                     logger.debug(
-                        f"Context dependency '{dep_name}' not in lineage (may not have executed yet). "
-                        f"Will attempt to load from historical files."
+                        "Context dependency '%s' not in lineage (may not have executed yet). "
+                        "Will attempt to load from historical files.",
+                        dep_name,
                     )
 
                 # Load historical data
                 logger.debug(
-                    f"[HISTORICAL LOAD] Loading context dep '{dep_name}' from file_path={file_path}"
+                    "[HISTORICAL LOAD] Loading context dep '%s' from file_path=%s",
+                    dep_name,
+                    file_path,
                 )
                 try:
                     historical_data = _load_historical_node(
@@ -376,9 +379,12 @@ def build_field_context_with_history(
                 )
                 if historical_data is None:
                     logger.warning(
-                        f"[CONTEXT SOURCE] Context dependency '{dep_name}' historical data not found. "
-                        f"Lineage: {lineage}, source_guid: {source_guid}. "
-                        f"Dependency will not be available in field_context."
+                        "[CONTEXT SOURCE] Context dependency '%s' historical data not found. "
+                        "Lineage: %s, source_guid: %s. "
+                        "Dependency will not be available in field_context.",
+                        dep_name,
+                        lineage,
+                        source_guid,
                     )
                     continue
 

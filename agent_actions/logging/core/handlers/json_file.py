@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
@@ -38,6 +38,9 @@ class JSONFileHandler:
         self._current_size = 0
 
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if self.file_path.exists():
+            self._current_size = self.file_path.stat().st_size
 
     def accepts(self, event: BaseEvent) -> bool:
         """Check if this event meets the minimum level threshold."""
@@ -106,7 +109,7 @@ class JSONFileHandler:
             self._file.close()
             self._file = None
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         rotated_path = self.file_path.with_suffix(f".{timestamp}.json")
 
         if self.file_path.exists():

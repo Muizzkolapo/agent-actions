@@ -110,7 +110,9 @@ class ContextDebugHandler:
 
     def flush(self) -> None:
         """Flush is a no-op for this handler."""
-        pass
+
+    def close(self) -> None:
+        """Close the handler (no-op for context debug)."""
 
     def get_action_info(self, action_name: str) -> ActionContextInfo | None:
         """Get context info for a specific action."""

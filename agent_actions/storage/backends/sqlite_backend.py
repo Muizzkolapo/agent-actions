@@ -88,6 +88,18 @@ class SQLiteBackend(StorageBackend):
         self._connection: sqlite3.Connection | None = None
         self._lock = threading.Lock()  # Serialize write operations
 
+    @classmethod
+    def create(cls, **kwargs) -> "SQLiteBackend":
+        """Factory classmethod for SQLiteBackend construction.
+
+        Required kwargs:
+            db_path: Path to the SQLite database file.
+            workflow_name: Name of the workflow.
+        """
+        db_path = kwargs.pop("db_path")
+        workflow_name = kwargs.pop("workflow_name")
+        return cls(str(db_path), workflow_name)
+
     def _validate_identifier(self, name: str, field: str) -> str:
         """Validate and POSIX-normalize an identifier to prevent injection.
 
@@ -96,6 +108,7 @@ class SQLiteBackend(StorageBackend):
         """
         if not name or not name.strip():
             raise ValueError(f"Empty {field} not allowed")
+        name = name.strip()
         name = name.replace("\\", "/")
         if ".." in name.split("/"):
             raise ValueError(f"Path traversal ('..') not allowed in {field}")
@@ -267,11 +280,12 @@ class SQLiteBackend(StorageBackend):
                         f"'{relative_path}' (missing source_guid); 0 inserted"
                     )
 
+                dedup_detail = f", {skipped_count} skipped (dedup)" if skipped_count > 0 else ""
                 logger.debug(
-                    "Wrote source data to %s: %d inserted, %d skipped (dedup)",
+                    "Wrote source data to %s: %d inserted%s",
                     relative_path,
                     inserted_count,
-                    skipped_count,
+                    dedup_detail,
                     extra={"workflow_name": self.workflow_name},
                 )
                 return relative_path
@@ -605,6 +619,7 @@ class SQLiteBackend(StorageBackend):
     @staticmethod
     def _format_size(size_bytes: int) -> str:
         """Format bytes as human-readable size."""
+        size_bytes = max(0, size_bytes)
         size = float(size_bytes)
         for unit in ["B", "KB", "MB", "GB"]:
             if size < 1024:

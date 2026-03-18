@@ -285,7 +285,7 @@ class PathManager:
         search_base = base_path or self.get_project_root()
         search_base = self.normalize_path(search_base)
 
-        return list(search_base.glob(pattern))
+        return sorted(search_base.glob(pattern))
 
     def clean_path(self, path: Path, recursive: bool = False) -> bool:
         """Remove a path, optionally recursively."""

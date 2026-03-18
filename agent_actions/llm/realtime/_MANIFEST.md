@@ -18,6 +18,5 @@ metadata.
 |------|------|-------------|---------|
 | `builder.py` | Module | Constructs the online workflow builder that wires agents, guards, and prompts. | `workflow`, `preprocessing` |
 | `cleaner.py` | Module | Removes temporary directories during `agac clean`. | `cli`, `file_io` |
-| `config.py` | Module | Backward-compatibility shim — re-exports `ConfigManager` from `agent_actions.config.manager`. | `configuration` |
 | `handlers.py` | Module | Response/stream handlers for processing online outputs and streaming events. `AgentManager.get_agent_paths` accepts `project_root: Path \| None`. Delegates root discovery to `utils.project_root`. | `logging`, `output` |
 | `output.py` | Module | Emits online outputs, handling side outputs, metadata, and retry loops. | `output`, `processing` |

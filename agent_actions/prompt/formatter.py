@@ -23,11 +23,13 @@ class PromptFormatter:
             ValueError: If prompt retrieval fails
         """
         try:
-            raw_prompt = agent_config.get(PROMPT_KEY, "")
+            if PROMPT_KEY not in agent_config:
+                return "Process the following content: {content}"
+            raw_prompt = agent_config[PROMPT_KEY]
             if isinstance(raw_prompt, str) and raw_prompt.startswith("$"):
                 raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
             if not raw_prompt:
-                raw_prompt = "Process the following content: {content}"
+                return "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
             raise PromptValidationError(

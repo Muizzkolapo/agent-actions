@@ -156,7 +156,6 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 config_path,
                 context={"template_dir": template_dir, "output_path": output_path},
             )
-            raise
 
 
 class ConfigRenderingService:

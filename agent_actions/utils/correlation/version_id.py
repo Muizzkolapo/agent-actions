@@ -1,8 +1,11 @@
 """Thread-safe version correlation ID generation for workflow sessions."""
 
 import hashlib
+import logging
 import threading
 from collections import OrderedDict
+
+logger = logging.getLogger(__name__)
 
 
 class VersionIdGenerator:
@@ -107,5 +110,10 @@ class VersionIdGenerator:
             if source_guid:
                 obj["version_correlation_id"] = cls.get_or_create_version_correlation_id(
                     source_guid, version_base_name, workflow_session_id
+                )
+            else:
+                logger.debug(
+                    "Skipping version correlation: source_guid absent for %s",
+                    version_base_name,
                 )
         return obj

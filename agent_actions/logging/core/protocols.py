@@ -22,6 +22,10 @@ class EventHandler(Protocol):
         """Flush any buffered output."""
         ...
 
+    def close(self) -> None:
+        """Close the handler and release resources."""
+        ...
+
 
 @runtime_checkable
 class EventFilter(Protocol):

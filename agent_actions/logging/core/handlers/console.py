@@ -67,6 +67,9 @@ class ConsoleEventHandler:
         """Flush console output."""
         sys.stderr.flush()
 
+    def close(self) -> None:
+        """Close the handler (no-op for console)."""
+
     def _default_format(self, event: BaseEvent) -> str:
         """Default event formatting."""
         from agent_actions.logging.core.events import EventLevel

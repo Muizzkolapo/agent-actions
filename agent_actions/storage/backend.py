@@ -28,6 +28,15 @@ VALID_DISPOSITIONS = frozenset(
 class StorageBackend(ABC):
     """Abstract interface for pluggable storage backends (SQLite, S3, DuckDB, etc.)."""
 
+    @classmethod
+    @abstractmethod
+    def create(cls, **kwargs: Any) -> "StorageBackend":
+        """Factory classmethod for backend construction.
+
+        Each backend defines its own required keyword arguments.
+        """
+        ...
+
     @property
     @abstractmethod
     def backend_type(self) -> str:

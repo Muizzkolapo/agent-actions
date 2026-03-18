@@ -286,27 +286,73 @@ class TestValidationUDFErrors:
             # Intentionally buggy - raises KeyError
             return response["required_field"] == "value"
 
-    def test_udf_exception_treated_as_invalid(self):
-        """When UDF raises exception, should treat as validation failure."""
+    def test_udf_key_error_treated_as_validation_failure(self):
+        """KeyError from dict-accessing UDFs is caught and treated as validation failure."""
         service = RepromptService(
             validation_name="buggy_validator", max_attempts=2, on_exhausted="return_last"
         )
 
-        # Mock LLM operation
-        llm_operation = Mock(
-            side_effect=[
-                ({"other_field": "value"}, True),
-                ({"other_field": "value2"}, True),
-            ]
-        )
+        llm_operation = Mock(return_value=({"other_field": "value"}, True))
 
         result = service.execute(
             llm_operation=llm_operation, original_prompt="Test prompt", context="test_action"
         )
+        assert result.passed is False
+        assert result.exhausted is True
 
-        # Should exhaust attempts (UDF always raises)
-        assert llm_operation.call_count == 2
-        assert result.attempts == 2
+    def test_udf_index_error_treated_as_validation_failure(self):
+        """IndexError from list-accessing UDFs is caught (via LookupError)."""
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be valid")
+        def index_error_validator(response: dict) -> bool:
+            return response.get("items", [])[0] == "value"  # IndexError on empty list
+
+        service = RepromptService(
+            validation_name="index_error_validator", max_attempts=2, on_exhausted="return_last"
+        )
+        llm_operation = Mock(return_value=({"items": []}, True))
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="Test prompt", context="test_action"
+        )
+        assert result.passed is False
+        assert result.exhausted is True
+
+    def test_udf_attribute_error_propagates(self):
+        """Non-validation exceptions (e.g. AttributeError) should propagate, not be swallowed."""
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be valid")
+        def attr_error_validator(response: dict) -> bool:
+            return response.nonexistent_method()  # AttributeError — a real bug
+
+        service = RepromptService(
+            validation_name="attr_error_validator", max_attempts=2, on_exhausted="return_last"
+        )
+        llm_operation = Mock(return_value=({"field": "value"}, True))
+
+        with pytest.raises(AttributeError):
+            service.execute(
+                llm_operation=llm_operation, original_prompt="Test prompt", context="test_action"
+            )
+
+    def test_udf_value_error_treated_as_validation_failure(self):
+        """ValueError from UDFs is caught and treated as validation failure."""
+        _VALIDATION_REGISTRY.clear()
+
+        @reprompt_validation("Must be valid")
+        def value_error_validator(response: dict) -> bool:
+            raise ValueError("bad format")
+
+        service = RepromptService(
+            validation_name="value_error_validator", max_attempts=2, on_exhausted="return_last"
+        )
+        llm_operation = Mock(return_value=({"field": "value"}, True))
+
+        result = service.execute(
+            llm_operation=llm_operation, original_prompt="Test prompt", context="test_action"
+        )
         assert result.passed is False
         assert result.exhausted is True
 

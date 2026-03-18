@@ -12,7 +12,11 @@ T = TypeVar("T")
 class ProcessingMode(Enum):
     """Execution strategy for individual components (loaders, processors, generators).
 
-    SYNC/ASYNC/AUTO. Not to be confused with processing.types.ProcessingMode (ONLINE/BATCH).
+    This enum controls *how* a single component runs: synchronously, asynchronously,
+    or auto-detected.  Values: SYNC, ASYNC, AUTO.
+
+    Not to be confused with ``processing.types.ProcessingMode`` which controls the
+    *pipeline-level* dispatch mode (ONLINE vs BATCH).
     """
 
     SYNC = "sync"

@@ -243,7 +243,6 @@ class SchemaValidator(BaseValidator):
         all_keys = _collect_all_keys(schema_data)
         unknown_keys = all_keys - cls.JSON_SCHEMA_RESERVED_KEYWORDS
         acceptable_custom = {
-            "examples",
             "errorMessage",
             "readonly",
             "writeonly",

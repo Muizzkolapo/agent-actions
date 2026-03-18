@@ -122,7 +122,7 @@ class RepromptService:
 
             try:
                 is_valid = self._validator.validate(response)
-            except Exception as e:
+            except (ValueError, TypeError, LookupError) as e:
                 logger.warning(
                     "[%s] Validation '%s' raised exception "
                     "(treating as validation failure): %s: %s",

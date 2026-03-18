@@ -36,8 +36,14 @@ class GuardParser:
     UDF_PREFIX = "udf:"
 
     @classmethod
-    def parse(cls, guard: str) -> GuardExpression:
-        """Parse a guard expression string into a typed GuardExpression (SQL or UDF)."""
+    def parse(cls, guard: str | None) -> GuardExpression:
+        """Parse a guard expression string into a typed GuardExpression (SQL or UDF).
+
+        Note: SQL guard expressions operate on column values only. Built-in
+        Python names such as ``file``, ``input``, ``vars``, and ``dir`` are
+        treated as column references, not as Python builtins, so they will not
+        trigger the dangerous-pattern validator.
+        """
         if not guard or not isinstance(guard, str):
             raise ValidationError(
                 "Guard expression must be a non-empty string",
@@ -175,7 +181,7 @@ class GuardParser:
             )
 
 
-def parse_guard(guard: str) -> GuardExpression:
+def parse_guard(guard: str | None) -> GuardExpression:
     """Convenience function to parse guard expressions."""
     return GuardParser.parse(guard)
 

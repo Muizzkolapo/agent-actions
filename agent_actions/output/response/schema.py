@@ -1,472 +1,42 @@
 """
 Schema compilation and transformation utilities for multi-vendor support.
+
+This module serves as a re-export hub for backward compatibility.
+Implementation is split across focused submodules:
+
+- schema_conversion: JSON Schema to unified format conversion, field compilation
+- vendor_compilation: Vendor-specific schema compilation (OpenAI, Anthropic, etc.)
+- dispatch_injection: dispatch_task() resolution and injection into schemas
+- context_data: Context data handling, schema loading/unwrapping helpers
 """
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError, SchemaValidationError
-from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.utils.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
+# Re-export all public and semi-public APIs for backward compatibility
+from agent_actions.output.response.context_data import (  # noqa: F401
+    _compile_schema_for_vendor,
+    _is_unified_format,
+    _load_inline_schema,
+    _load_named_schema,
+    _prepare_context_data_str,
+    _unwrap_nested_schema,
+)
+from agent_actions.output.response.dispatch_injection import (  # noqa: F401
+    _inject_functions_into_schema,
+    _resolve_dispatch_in_schema,
+)
+from agent_actions.output.response.schema_conversion import (  # noqa: F401
+    _convert_json_schema_to_unified,
+    compile_field,
+)
+from agent_actions.output.response.vendor_compilation import (  # noqa: F401
+    compile_unified_schema,
+)
+from agent_actions.utils.constants import SCHEMA_KEY
 
 logger = logging.getLogger(__name__)
-
-
-def _convert_json_schema_to_unified(json_schema: dict[str, Any]) -> dict[str, Any]:
-    """
-    Convert JSON Schema format (type: array) to unified format (fields: [...]).
-
-    Handles schemas like:
-    {
-        'name': 'candidate_facts_list',
-        'type': 'array',
-        'items': {
-            'type': 'object',
-            'properties': {'fact': {...}, 'paraphrase': {...}},
-            'required': ['fact', 'paraphrase']
-        }
-    }
-
-    Also supports primitive arrays:
-    {
-        'name': 'tags',
-        'type': 'array',
-        'items': {'type': 'string'}
-    }
-
-    Converts to unified format by wrapping the array in a field with the schema name.
-
-    Args:
-        json_schema: JSON Schema format dictionary with type='array'
-
-    Returns:
-        Dictionary in unified format with fields array
-    """
-    schema_name = json_schema.get("name", "response")
-    items = json_schema.get("items", {})
-
-    logger.debug("Converting array-type schema: %s", schema_name)
-
-    # Validation: Check if items is valid - fail fast instead of silent fallback
-    if not items or not isinstance(items, dict):
-        raise SchemaValidationError(
-            f"Array schema '{schema_name}' has empty or invalid 'items' definition",
-            schema_name=schema_name,
-            validation_type="structure",
-            hint=(
-                "Array schemas must have an 'items' definition specifying the element type. "
-                "Example: items: {type: object, properties: {...}} or items: {type: string}"
-            ),
-        )
-
-    # Check if array is required (default to True for backward compatibility)
-    is_required = json_schema.get("required", True)
-
-    # Determine if items are objects or primitives
-    item_type = items.get("type", "object")
-
-    logger.debug("  - Items type: %s", item_type)
-
-    if item_type == "object":
-        # Handle object arrays (existing logic)
-        item_properties = items.get("properties", {})
-        item_required = items.get("required", [])
-
-        logger.debug("  - Item properties: %s", list(item_properties.keys()))
-
-        fields = [
-            {
-                "id": schema_name,
-                "type": "array",
-                "required": is_required,
-                "items": {
-                    "type": "object",
-                    "properties": item_properties,
-                    "required": item_required,
-                },
-            }
-        ]
-    else:
-        # Handle primitive arrays (string, number, boolean, etc.)
-        logger.debug("  - Handling primitive array")
-
-        fields = [
-            {
-                "id": schema_name,
-                "type": "array",
-                "required": is_required,
-                "items": items,  # Pass items as-is for primitives
-            }
-        ]
-
-    logger.debug("Converted to unified format with %d field(s)", len(fields))
-
-    return {
-        "name": schema_name,
-        "description": json_schema.get("description", ""),
-        "fields": fields,
-    }
-
-
-def compile_field(field: dict[str, Any], target_system: str) -> tuple[str, dict]:
-    """
-    Convert a single unified field into the shape required by the target system.
-    If custom name-mappings exist for that system, apply them.
-
-    Supports both unified format (id) and docs format (name) for field identifier.
-    """
-    # Support both 'id' (unified format) and 'name' (docs format) for field identifier
-    field_id = field.get("id") or field.get("name")
-    if not field_id:
-        raise KeyError(f"Field missing both 'id' and 'name' keys: {field}")
-    target_field = field.get("mappings", {}).get(target_system.lower(), field_id)
-    prop: dict[str, Any] = {"type": field["type"]}
-    for k in ("title", "description", "pattern", "minItems", "maxItems"):
-        if k in field:
-            prop[k] = field[k]
-    if field["type"] == "array" and "items" in field:
-        prop["items"] = field["items"]
-    if "enum" in field:
-        prop["enum"] = field["enum"]
-    if "validators" in field:
-        for v in field["validators"]:
-            if "not" in v:
-                prop["not"] = v["not"]
-                if "errorMessage" in v:
-                    prop["errorMessage"] = v["errorMessage"]
-    return (target_field, prop)
-
-
-def compile_unified_schema(
-    unified: dict[str, Any], target_system: str
-) -> dict[str, Any] | list[dict[str, Any]]:
-    """
-    Convert a unified YAML/JSON definition into the schema dialect required by
-    OpenAI, Anthropic, Gemini, **or Ollama** (new).
-
-    Handles two schema formats:
-    1. Unified format: {'name': '...', 'fields': [{id: 'field', type: 'string'}, ...]}
-    2. JSON Schema format: {'name': '...', 'type': 'array', 'items': {...}}
-    """
-    # Check if this is a JSON Schema format (type: array)
-    # instead of unified format (fields: [...])
-    if (
-        "type" in unified
-        and unified.get("type") == "array"
-        and "items" in unified
-        and "fields" not in unified
-    ):
-        # This is a JSON Schema array format - convert to unified format
-        logger.debug(
-            "Converting JSON Schema array format to unified format for schema: %s",
-            unified.get("name", "unknown"),
-        )
-        unified = _convert_json_schema_to_unified(unified)
-
-    properties: dict[str, Any] = {}
-    required: list[str] = []
-    for field in unified.get("fields", []):
-        key, schema_prop = compile_field(field, target_system)
-        properties[key] = schema_prop
-        if field.get("required", False):
-            required.append(key)
-    target = target_system.lower()
-    compiled: dict[str, Any] | list[dict[str, Any]]
-    if target in ("openai", "groq", "mistral", "agac-provider"):
-        # OpenAI-compatible format — Groq, Mistral, and agac-provider use the same shape
-        compiled = {
-            "name": unified.get("name", ""),
-            "schema": {
-                "type": "object",
-                "properties": properties,
-                "required": required,
-                "additionalProperties": False,
-            },
-        }
-    elif target == "anthropic":
-        compiled = [
-            {
-                "name": unified.get("name", ""),
-                "description": unified.get("description", ""),
-                "input_schema": {
-                    "type": "object",
-                    "properties": properties,
-                    "required": required,
-                    "additionalProperties": False,
-                },
-            }
-        ]
-    elif target == "gemini":
-        compiled = {"name": unified.get("name", ""), "schema": properties}
-    elif target == "ollama":
-        compiled = {
-            "title": unified.get("name", ""),
-            "type": "object",
-            "properties": properties,
-            "required": required,
-            "additionalProperties": False,
-        }
-    elif target == "cohere":
-        # Cohere native format
-        compiled = {
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
-    else:
-        raise ConfigValidationError(
-            "target_system",
-            f"Unknown target system: {target}",
-            context={
-                "target_system": target,
-                "valid_systems": [
-                    "openai",
-                    "anthropic",
-                    "gemini",
-                    "ollama",
-                    "agac-provider",
-                    "groq",
-                    "mistral",
-                    "cohere",
-                ],
-                "operation": "compile_unified_schema",
-            },
-        )
-    return compiled
-
-
-def _inject_functions_into_schema(
-    schema: Any,
-    tools_path: str | None,
-    context_data_str: str | None,
-    agent_config: dict[str, Any] | None,
-    captured_results: dict[str, Any],
-) -> Any:
-    """
-    Recursively traverse schema and replace dispatch_task() calls.
-
-    Args:
-        schema: The schema object (dict, list, or primitive)
-        tools_path: Path to tools directory
-        context_data_str: Context data for functions
-        agent_config: Agent configuration
-        captured_results: Dictionary to collect function outputs (add_dispatch)
-
-    Returns:
-        The processed schema with function outputs injected
-    """
-    if isinstance(schema, dict):
-        return {
-            k: _inject_functions_into_schema(
-                v, tools_path, context_data_str, agent_config, captured_results
-            )
-            for k, v in schema.items()
-        }
-    if isinstance(schema, list):
-        return [
-            _inject_functions_into_schema(
-                item, tools_path, context_data_str, agent_config, captured_results
-            )
-            for item in schema
-        ]
-    if isinstance(schema, str):
-        # Only process strings containing dispatch_task
-        if "dispatch_task(" in schema:
-            from agent_actions.prompt.prompt_utils import PromptUtils
-
-            return PromptUtils.process_dispatch_in_text(
-                schema,
-                tools_path=tools_path or "",
-                context_data_str=context_data_str or "",
-                agent_config=agent_config,
-                captured_results=captured_results,
-                preserve_type_on_exact_match=True,
-            )
-        return schema
-    return schema
-
-
-def _prepare_context_data_str(
-    context_data: dict | str | None,
-    tools_path: str | None,
-) -> str:
-    """
-    Prepare context data as JSON string for dispatch_task processing.
-
-    Args:
-        context_data: Context data (dict, list, or string)
-        tools_path: Path to tools directory
-
-    Returns:
-        JSON string representation of context data
-    """
-    if not tools_path:
-        return "{}"
-    if isinstance(context_data, (dict, list)):
-        return json.dumps(context_data, ensure_ascii=False)
-    return str(context_data or "{}")
-
-
-def _resolve_dispatch_in_schema(
-    schema: Any,
-    tools_path: str | None,
-    context_data_str: str,
-    agent_config: dict[str, Any],
-    captured_results: dict[str, Any],
-) -> Any:
-    """
-    Resolve dispatch_task calls in schema string.
-
-    Args:
-        schema: Schema value (may be string with dispatch_task)
-        tools_path: Path to tools directory
-        context_data_str: Context data as JSON string
-        agent_config: Agent configuration
-        captured_results: Dictionary to collect function outputs
-
-    Returns:
-        Resolved schema (original if not a dispatch call or resolution fails)
-    """
-    if not isinstance(schema, str) or "dispatch_task(" not in schema:
-        return schema
-
-    try:
-        from agent_actions.prompt.prompt_utils import PromptUtils
-
-        return PromptUtils.process_dispatch_in_text(
-            schema,
-            tools_path=tools_path or "",
-            context_data_str=context_data_str,
-            agent_config=agent_config,
-            captured_results=captured_results,
-            preserve_type_on_exact_match=True,
-        )
-    except (ValueError, TypeError, KeyError) as e:
-        logger.debug("dispatch_task resolution failed, deferring to downstream: %s", e)
-        return schema
-
-
-def _is_unified_format(schema: Any) -> bool:
-    """Check if schema is already in unified format with 'fields' list."""
-    return isinstance(schema, dict) and "fields" in schema and isinstance(schema["fields"], list)
-
-
-def _load_inline_schema(
-    inline_schema: Any,
-    tools_path: str | None,
-    context_data_str: str,
-    agent_config: dict[str, Any],
-    captured_results: dict[str, Any],
-) -> tuple[dict[str, Any], str]:
-    """
-    Load and prepare inline schema from agent config.
-
-    Args:
-        inline_schema: Raw inline schema from config
-        tools_path: Path to tools directory
-        context_data_str: Context data as JSON string
-        agent_config: Agent configuration
-        captured_results: Dictionary to collect function outputs
-
-    Returns:
-        Tuple of (prepared schema dict, schema name)
-    """
-    # Resolve dispatch if schema is a dispatch call string
-    resolved_schema = _resolve_dispatch_in_schema(
-        inline_schema, tools_path, context_data_str, agent_config, captured_results
-    )
-
-    # Convert to unified format if needed
-    if _is_unified_format(resolved_schema):
-        base_schema = resolved_schema
-    else:
-        base_schema = SchemaLoader.construct_schema_from_dict(resolved_schema)
-
-    schema_name = agent_config.get("name", "inline_schema")
-    return base_schema, schema_name
-
-
-def _load_named_schema(
-    agent_config: dict[str, Any], project_root: Path | None = None
-) -> tuple[dict[str, Any] | None, str]:
-    """
-    Load schema by name from schema store.
-
-    Args:
-        agent_config: Agent configuration with schema_name
-        project_root: Optional project root for schema directory resolution
-
-    Returns:
-        Tuple of (schema dict or None, schema name)
-    """
-    schema_name = agent_config.get(SCHEMA_NAME_KEY)
-    if not schema_name:
-        return None, ""
-    return SchemaLoader.load_schema(schema_name, project_root=project_root), schema_name
-
-
-def _unwrap_nested_schema(base_schema: dict[str, Any]) -> dict[str, Any]:
-    """
-    Unwrap nested schema structure if present.
-
-    Handles pattern: {name: '...', schema: {name: '...', fields: [...]}}
-    Converts to: {name: '...', fields: [...]}
-
-    Args:
-        base_schema: Schema dict that may have nested 'schema' key
-
-    Returns:
-        Unwrapped schema dict
-    """
-    if not isinstance(base_schema, dict):
-        return base_schema  # type: ignore[unreachable]
-
-    if SCHEMA_KEY not in base_schema:
-        return base_schema
-
-    nested_schema = base_schema[SCHEMA_KEY]
-    if not isinstance(nested_schema, dict):
-        return base_schema
-
-    # Only unwrap if nested schema looks like unified or JSON schema
-    if "fields" not in nested_schema and "type" not in nested_schema:
-        return base_schema
-
-    # Merge top-level name if missing in nested
-    if "name" not in nested_schema and "name" in base_schema:
-        nested_schema["name"] = base_schema["name"]
-
-    return nested_schema
-
-
-def _compile_schema_for_vendor(
-    base_schema: dict[str, Any],
-    vendor: str,
-    schema_name: str,
-) -> dict[str, Any] | list[dict[str, Any]] | None:
-    """
-    Compile schema for specific vendor with error handling.
-
-    Args:
-        base_schema: Unified schema dict
-        vendor: Target vendor name
-        schema_name: Schema name for logging
-
-    Returns:
-        Compiled schema or None if vendor doesn't support schemas
-    """
-    try:
-        return compile_unified_schema(base_schema, vendor)
-    except ConfigValidationError:
-        logger.warning(
-            "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
-            "For schema support, use one of: openai, anthropic, gemini, ollama, groq, mistral, cohere, agac-provider",
-            vendor,
-            schema_name,
-        )
-        return None
 
 
 def prepare_schema_unified(
@@ -488,6 +58,7 @@ def prepare_schema_unified(
         vendor: Vendor name (e.g., 'openai', 'anthropic', 'gemini', 'ollama')
         tools_path: Path to tools directory (optional, for dispatch_task)
         context_data: Context data for dispatch_task (optional)
+        project_root: Optional project root for schema directory resolution
 
     Returns:
         Tuple containing:

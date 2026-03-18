@@ -171,7 +171,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 # Failure injection AFTER successful call - simulates "result lost/missing"
                 # We simply don't add this result, making it a "missing" record for retry
                 if should_fail_batch_record(custom_id, idx):
-                    logger.debug(f"[INJECTION] Simulating missing result for {custom_id}")
+                    logger.debug("[INJECTION] Simulating missing result for %s", custom_id)
                     # Don't add to results - this makes it truly "missing"
                     failed += 1
                     continue

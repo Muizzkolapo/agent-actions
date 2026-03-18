@@ -25,6 +25,8 @@ def retry(
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            if max_attempts < 1:
+                return func(*args, **kwargs)
             last_exception = None
             for attempt in range(max_attempts):
                 try:
@@ -33,9 +35,7 @@ def retry(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         time.sleep(delay * (attempt + 1))
-            if last_exception is None:
-                raise RuntimeError("retry exhausted with no exception captured")
-            raise last_exception
+            raise last_exception  # Always set: loop only continues on exception
 
         return wrapper
 

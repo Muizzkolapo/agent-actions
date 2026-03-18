@@ -16,6 +16,8 @@ class VendorType(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
+    # GOOGLE is an alias for GEMINI so users can write vendor_type="google"
+    # and resolve to the same Gemini provider. Both names share the "gemini" value.
     GOOGLE = "gemini"
     GROQ = "groq"
     COHERE = "cohere"
