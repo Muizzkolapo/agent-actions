@@ -54,11 +54,11 @@ class ActionStrategy(ABC):
         )
 
         pipeline = create_processing_pipeline_from_params(
-            action_config=params.action_config,
-            action_name=params.action_name,
+            agent_config=params.action_config,
+            agent_name=params.action_name,
             idx=params.idx,
             processor_factory=self.processor_factory,
-            action_configs=params.action_configs,
+            agent_configs=params.action_configs,
             storage_backend=params.storage_backend,
             source_relative_path=params.source_relative_path,
         )
@@ -84,8 +84,8 @@ class InitialStrategy(ActionStrategy):
             str,
             process_initial_stage(
                 InitialStageContext(
-                    action_config=cast(dict[str, Any], params.action_config),
-                    action_name=params.action_name,
+                    agent_config=cast(dict[str, Any], params.action_config),
+                    agent_name=params.action_name,
                     file_path=params.file_path,
                     base_directory=params.base_directory,
                     output_directory=params.output_directory,

@@ -567,7 +567,7 @@ class ActionExecutor:
 
         try:
             output_folder = await asyncio.to_thread(
-                self.deps.action_runner.run_agent,
+                self.deps.action_runner.run_action,
                 params.action_config,
                 params.action_name,
                 None,
