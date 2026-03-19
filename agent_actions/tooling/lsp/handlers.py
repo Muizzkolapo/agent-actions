@@ -1,6 +1,9 @@
 """LSP request/notification handler helpers — hover, semantic tokens, symbols."""
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 from lsprotocol import types as lsp
 
@@ -129,6 +132,9 @@ def build_semantic_tokens(references) -> list[int]:
     for reference in sorted_refs:
         token_type_name = SEMANTIC_TOKEN_TYPE_MAP.get(reference.type)
         if not token_type_name:
+            continue
+        if token_type_name not in legend:
+            logger.warning("Token type %r not in semantic tokens legend; skipping", token_type_name)
             continue
         token_type_index = legend.index(token_type_name)
         line = reference.location.line

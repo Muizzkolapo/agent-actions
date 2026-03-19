@@ -17,6 +17,7 @@ from typing import Any
 from ollama import Client
 
 from agent_actions.config.defaults import OllamaDefaults
+from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
     should_fail_batch_record,
 )
@@ -183,6 +184,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 completed += 1
 
             except Exception as e:
+                # Catches all per-record failures including VendorAPIError from
+                # _transform_ollama_response; downgraded to a soft error record
+                # so the rest of the batch continues.
                 logger.error("Error processing %s: %s", custom_id, e)
                 error_response = {
                     "custom_id": custom_id,
@@ -278,6 +282,22 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             "error": null
         }
         """
+        # Support both dict responses (tests) and Pydantic model responses (live SDK)
+        if isinstance(ollama_response, dict):
+            _msg = ollama_response.get("message", {})
+            role = _msg.get("role") if isinstance(_msg, dict) else getattr(_msg, "role", None)
+            content = _msg.get("content") if isinstance(_msg, dict) else getattr(_msg, "content", None)
+        else:
+            _msg = getattr(ollama_response, "message", None)
+            role = getattr(_msg, "role", None) if _msg else None
+            content = getattr(_msg, "content", None) if _msg else None
+
+        if not role or content is None:
+            raise VendorAPIError(
+                f"Ollama response missing or malformed 'message' field for {custom_id!r}",
+                context={"vendor": "ollama", "custom_id": custom_id},
+            )
+
         return {
             "custom_id": custom_id,
             "response": {
@@ -292,18 +312,33 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                         {
                             "index": 0,
                             "message": {
-                                "role": ollama_response["message"]["role"],
-                                "content": ollama_response["message"]["content"],
+                                "role": role,
+                                "content": content,
                             },
-                            "finish_reason": "stop" if ollama_response.get("done") else "length",
+                            "finish_reason": "stop" if (
+                                ollama_response.get("done") if isinstance(ollama_response, dict)
+                                else getattr(ollama_response, "done", False)
+                            ) else "length",
                         }
                     ],
                     "usage": {
-                        "prompt_tokens": ollama_response.get("prompt_eval_count", 0),
-                        "completion_tokens": ollama_response.get("eval_count", 0),
+                        "prompt_tokens": (
+                            ollama_response.get("prompt_eval_count", 0) if isinstance(ollama_response, dict)
+                            else getattr(ollama_response, "prompt_eval_count", None) or 0
+                        ),
+                        "completion_tokens": (
+                            ollama_response.get("eval_count", 0) if isinstance(ollama_response, dict)
+                            else getattr(ollama_response, "eval_count", None) or 0
+                        ),
                         "total_tokens": (
-                            ollama_response.get("prompt_eval_count", 0)
-                            + ollama_response.get("eval_count", 0)
+                            (
+                                ollama_response.get("prompt_eval_count", 0) if isinstance(ollama_response, dict)
+                                else getattr(ollama_response, "prompt_eval_count", None) or 0
+                            )
+                            + (
+                                ollama_response.get("eval_count", 0) if isinstance(ollama_response, dict)
+                                else getattr(ollama_response, "eval_count", None) or 0
+                            )
                         ),
                     },
                     "system_fingerprint": None,

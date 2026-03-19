@@ -1,6 +1,5 @@
 """Base class for content loaders."""
 
-# import-outside-toplevel: anyio is an optional dependency with fallback behavior
 # super-init-not-called: ProcessorErrorHandlerMixin doesn't require __init__ call
 # unnecessary-pass: Required for abstract methods to satisfy ABC contract
 import asyncio
@@ -79,19 +78,16 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
             raise
 
     async def load_file_async(self, file_path: str) -> str:
-        """Safely load a file's content asynchronously with retry logic."""
-        try:
-            try:
-                import anyio
+        """Safely load a file's content asynchronously.
 
-                async with await anyio.open_file(file_path, "r", encoding="utf-8") as f:
-                    return await f.read()
-            except ImportError:
-                try:
-                    return await asyncio.to_thread(self.load_file, file_path)
-                except AttributeError:
-                    loop = asyncio.get_event_loop()
-                    return await loop.run_in_executor(None, self.load_file, file_path)
+        Note: unlike the sync load_file(), this path does not retry on IOError/OSError.
+        Use load_file() via asyncio.to_thread() if retry behavior is required.
+        """
+        import aiofiles
+
+        try:
+            async with aiofiles.open(file_path, encoding="utf-8") as f:
+                return await f.read()
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise
@@ -103,16 +99,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
 
     async def process_async(self, content: Any, file_path: str | None = None) -> T:
         """Async version of process method."""
-        try:
-            import anyio
-
-            return await anyio.to_thread.run_sync(self.process, content, file_path)
-        except ImportError:
-            try:
-                return await asyncio.to_thread(self.process, content, file_path)
-            except AttributeError:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, self.process, content, file_path)
+        return await asyncio.to_thread(self.process, content, file_path)
 
     def load_data(self, file_path: str) -> T:
         """Implementation of IDataLoader interface."""

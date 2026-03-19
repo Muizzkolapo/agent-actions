@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 import cohere
 from cohere.core import api_error as cohere_errors
 
-from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
+from agent_actions.errors import ConfigurationError, NetworkError, RateLimitError, VendorAPIError
 from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
@@ -70,6 +70,34 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
 
+        # Validate schema and build schema_instruction before firing LLMRequestEvent
+        # so a validation error doesn't orphan the request event in the log.
+        if schema is not None:
+            if not schema:
+                raise ConfigurationError("Schema must not be empty")
+            if "properties" in schema:
+                schema_fields = schema["properties"].keys()
+            elif schema.get("type") == "object":
+                # JSON Schema structure with type:object but no properties key
+                raise ConfigurationError(
+                    f"Schema is a JSON Schema object but missing 'properties' key (got: {list(schema.keys())})"
+                )
+            else:
+                # Legacy raw field dict: {"field_name": {"type": ...}, ...}
+                # Validate values are dicts to reject schemas like {type:array, items:{...}}
+                if not all(isinstance(v, dict) for v in schema.values()):
+                    raise ConfigurationError(
+                        f"Schema is neither a JSON Schema nor a valid field dict "
+                        f"(keys: {list(schema.keys())})"
+                    )
+                schema_fields = schema.keys()
+            fields_str = ", ".join([f"'{field}'" for field in schema_fields])
+            schema_instruction = f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
+        else:
+            schema_instruction = (
+                "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
+            )
+
         # Fire LLM request event
         fire_event(
             LLMRequestEvent(
@@ -83,15 +111,6 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         try:
             context_data_str = StringProcessor.process_as_string(context_data)
             co = cohere.ClientV2(api_key=api_key)
-            # Extract field names from compiled schema format or raw schema
-            if schema is not None:
-                schema_fields = schema.get("properties", schema).keys()
-                fields_str = ", ".join([f"'{field}'" for field in schema_fields])
-                schema_instruction = f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
-            else:
-                schema_instruction = (
-                    "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
-                )
             prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            {schema_instruction}\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
             prompt_dedent = dedent(prompt)
             messages = [{"role": "user", "content": prompt_dedent}]

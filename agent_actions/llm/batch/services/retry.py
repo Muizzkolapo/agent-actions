@@ -333,12 +333,12 @@ class BatchRetryService:
 
             try:
                 is_valid = validation_func(result.content)
-            except Exception as e:
-                logger.warning(
-                    "Validation UDF error for %s (treating as failure): %s",
+            except Exception:
+                # UDF raised at runtime — could be a code bug or unexpected LLM output.
+                # Treat as validation failure so the batch can reprompt rather than abort.
+                logger.exception(
+                    "Validation UDF raised an exception for record %s (treating as failure)",
                     result.custom_id,
-                    e,
-                    exc_info=True,
                 )
                 is_valid = False
 

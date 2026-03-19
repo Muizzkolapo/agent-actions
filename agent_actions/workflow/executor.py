@@ -342,7 +342,10 @@ class ActionExecutor:
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
-                assert result is not None
+                if result is None:
+                    raise RuntimeError(
+                        f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
+                    )
                 return result
 
         if current_status == "batch_submitted":
@@ -383,7 +386,10 @@ class ActionExecutor:
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
-                assert result is not None
+                if result is None:
+                    raise RuntimeError(
+                        f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
+                    )
                 return result
 
         if current_status == "batch_submitted":

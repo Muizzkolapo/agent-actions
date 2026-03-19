@@ -1,6 +1,9 @@
 """Error context extraction and merging service."""
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class ErrorContextService:
@@ -43,8 +46,11 @@ class ErrorContextService:
                         attr_value, (str, int, float, bool, type(None))
                     ):
                         merged_context[attr_name] = attr_value
-                except Exception:
-                    pass
+                except Exception as exc_inner:
+                    logger.debug(
+                        "Failed to extract attribute %r from %s: %s",
+                        attr_name, type(exc).__name__, exc_inner,
+                    )
 
         if additional_context:
             merged_context.update(additional_context)

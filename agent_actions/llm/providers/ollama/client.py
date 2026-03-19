@@ -18,6 +18,7 @@ from typing import Any, ClassVar
 import httpx
 from ollama import Client, ResponseError
 
+from agent_actions.errors import ConfigurationError, VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -91,17 +92,8 @@ class OllamaClient(BaseClient):
         if not schema:
             return None
 
-        # If schema is a tuple (shouldn't happen but handle it)
-        if isinstance(schema, tuple):  # type: ignore[unreachable]
-            logger.warning("Schema is a tuple, extracting first element: %s", schema)  # type: ignore[unreachable]
-            schema = schema[0] if schema else None
-            if not schema:
-                return None
-
-        # Ensure schema is a dict
         if not isinstance(schema, dict):
-            logger.warning("Schema is not a dict (type=%s), returning None", type(schema))  # type: ignore[unreachable]
-            return None
+            raise ConfigurationError(f"Schema must be a dict, got {type(schema).__name__}")
 
         # If schema has nested "schema" key (OpenAI format), extract it
         if "schema" in schema and isinstance(schema["schema"], dict):
@@ -111,7 +103,7 @@ class OllamaClient(BaseClient):
         if "type" in schema or "properties" in schema:
             return schema
 
-        return schema
+        raise ConfigurationError(f"Unrecognised schema format (keys: {list(schema.keys())})")
 
     @staticmethod
     def call_json(  # type: ignore[override]
@@ -194,8 +186,9 @@ class OllamaClient(BaseClient):
         latency_ms = duration * 1000
 
         # Extract token counts from Ollama response
-        prompt_tokens = getattr(response, "prompt_eval_count", 0) or 0
-        completion_tokens = getattr(response, "eval_count", 0) or 0
+        # Ollama SDK declares these as Optional[int] = None; attribute exists but may be None
+        prompt_tokens = getattr(response, "prompt_eval_count", None) or 0
+        completion_tokens = getattr(response, "eval_count", None) or 0
         total_tokens = prompt_tokens + completion_tokens
 
         if total_tokens > 0:
@@ -241,7 +234,11 @@ class OllamaClient(BaseClient):
                         error=str(e),
                     )
                 )
-                return [{"raw_response": content, "_parse_error": str(e)}]
+                raise VendorAPIError(
+                    f"Ollama returned invalid JSON: {e}",
+                    context={"vendor": "ollama", "request_id": request_id},
+                    cause=e,
+                ) from e
 
         if isinstance(content, dict):
             return [content]
@@ -316,8 +313,9 @@ class OllamaClient(BaseClient):
         latency_ms = duration * 1000
 
         # Extract token counts from Ollama response
-        prompt_tokens = getattr(response, "prompt_eval_count", 0) or 0
-        completion_tokens = getattr(response, "eval_count", 0) or 0
+        # Ollama SDK declares these as Optional[int] = None; attribute exists but may be None
+        prompt_tokens = getattr(response, "prompt_eval_count", None) or 0
+        completion_tokens = getattr(response, "eval_count", None) or 0
         total_tokens = prompt_tokens + completion_tokens
 
         if total_tokens > 0:
