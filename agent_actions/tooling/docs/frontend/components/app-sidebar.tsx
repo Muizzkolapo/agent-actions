@@ -181,7 +181,7 @@ export function AppSidebar({ activeSection, onNavigate }: AppSidebarProps) {
           <div className="flex items-center gap-2">
             <div className="relative">
               <div className="h-2 w-2 rounded-full bg-[hsl(var(--success))]" />
-              <div className="absolute inset-0 h-2 w-2 rounded-full bg-[hsl(var(--success))] animate-ping opacity-30" />
+              <div className="absolute inset-0 h-2 w-2 rounded-full bg-[hsl(var(--success))] animate-breathe" />
             </div>
             <span className="text-[11px] text-muted-foreground">All systems operational</span>
           </div>

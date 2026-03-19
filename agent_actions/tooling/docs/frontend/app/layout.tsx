@@ -1,14 +1,14 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
-import { DM_Sans, JetBrains_Mono } from 'next/font/google'
+import { Sora, JetBrains_Mono } from 'next/font/google'
 import { CatalogProvider } from "@/lib/catalog-context"
 import { ThemeProvider } from "@/components/theme-provider"
 
 import './globals.css'
 
-const dmSans = DM_Sans({
+const sora = Sora({
   subsets: ['latin'],
-  variable: '--font-dm-sans',
+  variable: '--font-sora',
   weight: ['400', '500', '600', '700'],
 })
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains-mono' })
@@ -35,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${dmSans.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+      <body className={`${sora.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
