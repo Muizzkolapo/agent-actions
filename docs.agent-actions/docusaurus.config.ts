@@ -21,7 +21,7 @@ const config: Config = {
   themes: ['@docusaurus/theme-mermaid'],
   stylesheets: [
     {
-      href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap',
+      href: 'https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap',
       type: 'text/css',
     },
   ],

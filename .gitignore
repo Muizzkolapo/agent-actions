@@ -52,6 +52,7 @@ htmlcov/
 .venv/
 .venv-dev/
 .venv-prod/
+.env*/
 venv/
 env/
 

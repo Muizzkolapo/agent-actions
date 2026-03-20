@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       label: 'Tutorials',
       collapsed: false,
       collapsible: false,
+      customProps: { className: 'sidebar-item-tutorials' },
       link: {
         type: 'doc',
         id: 'tutorials/index',
@@ -22,6 +23,7 @@ const sidebars: SidebarsConfig = {
       label: 'Guides',
       collapsed: false,
       collapsible: false,
+      customProps: { className: 'sidebar-item-guides' },
       link: {
         type: 'doc',
         id: 'guides/index',
@@ -38,6 +40,7 @@ const sidebars: SidebarsConfig = {
       label: 'Reference',
       collapsed: false,
       collapsible: false,
+      customProps: { className: 'sidebar-item-reference' },
       link: {
         type: 'doc',
         id: 'reference/index',
@@ -48,6 +51,7 @@ const sidebars: SidebarsConfig = {
           label: 'CLI',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-cli' },
           link: {
             type: 'doc',
             id: 'reference/cli/index',
@@ -68,6 +72,7 @@ const sidebars: SidebarsConfig = {
           label: 'Configuration',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-configuration' },
           link: {
             type: 'doc',
             id: 'reference/configuration/index',
@@ -82,6 +87,7 @@ const sidebars: SidebarsConfig = {
           label: 'Context',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-context' },
           link: {
             type: 'doc',
             id: 'reference/context/index',
@@ -97,6 +103,7 @@ const sidebars: SidebarsConfig = {
           label: 'Data I/O',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-dataio' },
           link: {
             type: 'doc',
             id: 'reference/data-io/index',
@@ -113,6 +120,7 @@ const sidebars: SidebarsConfig = {
           label: 'Prompts',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-prompts' },
           link: {
             type: 'doc',
             id: 'reference/prompts/index',
@@ -128,6 +136,7 @@ const sidebars: SidebarsConfig = {
           label: 'Execution',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-execution' },
           link: {
             type: 'doc',
             id: 'reference/execution/index',
@@ -148,6 +157,7 @@ const sidebars: SidebarsConfig = {
           label: 'Validation',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-validation' },
           link: {
             type: 'doc',
             id: 'reference/validation/index',
@@ -163,6 +173,7 @@ const sidebars: SidebarsConfig = {
           label: 'Architecture',
           collapsed: true,
           collapsible: true,
+          customProps: { className: 'sidebar-item-architecture' },
           link: {
             type: 'doc',
             id: 'reference/architecture/index',
@@ -180,6 +191,7 @@ const sidebars: SidebarsConfig = {
       label: 'API',
       collapsed: false,
       collapsible: false,
+      customProps: { className: 'sidebar-item-api' },
       link: {
         type: 'doc',
         id: 'api/index',

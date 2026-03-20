@@ -5,11 +5,6 @@ sidebar_position: 1
 slug: /
 ---
 
-<div style={{textAlign: 'center', marginBottom: '2rem'}}>
-  <img src="/img/logo-mark-dark.svg" alt="Agent Actions" width="64" height="64" className="only-dark" />
-  <img src="/img/logo-mark-light.svg" alt="Agent Actions" width="64" height="64" className="only-light" />
-</div>
-
 # Agent Actions
 
 An agentic workflow engine that runs in your terminal. Define LLM pipelines in YAML, and the engine handles orchestration, validation, and error recovery.
