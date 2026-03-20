@@ -26,10 +26,10 @@ class VendorAPIError(ExternalServiceError):
         ctx = dict(context) if context else {}
 
         if vendor:
+            endpoint = endpoint or "<unknown>"
             msg = f"Error calling {vendor} API endpoint {endpoint}"
             ctx["vendor"] = vendor
-            if endpoint:
-                ctx["endpoint"] = endpoint
+            ctx["endpoint"] = endpoint
         else:
             msg = message or "Unknown Vendor API Error"
 

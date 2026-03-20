@@ -6,7 +6,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,7 @@ from agent_actions.config.defaults import LockDefaults
 def _empty_runs_data(*, extended: bool = False) -> dict[str, Any]:
     """Create empty runs data structure, optionally with workflow_metrics fields."""
     runs: dict[str, Any] = {
-        "metadata": {"generated_at": datetime.now().isoformat(), "total_runs": 0},
+        "metadata": {"generated_at": datetime.now(UTC).isoformat(), "total_runs": 0},
         "executions": [],
     }
     if extended:
@@ -99,27 +99,25 @@ class RunTracker:
         # Ensure directory exists
         self.artefact_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create file if it doesn't exist
-        if not self.runs_file.exists():
-            self._create_empty_runs_file()
+        # Create file atomically — touch is safe under concurrent access
+        self.runs_file.touch(exist_ok=True)
 
-        # Atomic read-modify-write with exclusive lock
-        with portalocker.Lock(
-            self.runs_file,
-            "r+",
-            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-            flags=portalocker.LOCK_EX,
-        ) as f:
-            runs_data = self._load_runs_data_from_file(f)
-            run_id = self._create_run_record(runs_data, config)
-            self._write_runs_data_to_file(f, runs_data)
+        # Atomic read-modify-write with exclusive non-blocking lock + timeout
+        try:
+            with portalocker.Lock(
+                self.runs_file,
+                "r+",
+                timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+                flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+            ) as f:
+                runs_data = self._load_runs_data_from_file(f)
+                run_id = self._create_run_record(runs_data, config)
+                self._write_runs_data_to_file(f, runs_data)
+        except portalocker.exceptions.LockException:
+            logger.warning("Could not acquire lock on %s within timeout", self.runs_file)
+            raise
 
         return run_id
-
-    def _create_empty_runs_file(self) -> None:
-        """Create empty runs file with initial structure."""
-        with open(self.runs_file, "w", encoding="utf-8") as f:
-            json.dump(_empty_runs_data(), f, indent=2)
 
     def _load_runs_data_from_file(self, f) -> dict[str, Any]:
         """Load runs data from file handle."""
@@ -164,7 +162,7 @@ class RunTracker:
 
     def _write_runs_data_to_file(self, f, runs_data: dict[str, Any]) -> None:
         """Write runs data to file handle."""
-        runs_data["metadata"]["generated_at"] = datetime.now().isoformat()
+        runs_data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
         runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
         f.seek(0)
         f.truncate()
@@ -230,54 +228,58 @@ class RunTracker:
         """Start tracking a new workflow run with action-level metrics."""
         self.artefact_dir.mkdir(parents=True, exist_ok=True)
 
-        if not self.runs_file.exists():
-            with open(self.runs_file, "w", encoding="utf-8") as f:
-                json.dump(_empty_runs_data(extended=True), f)
+        # Create file atomically before acquiring the lock — avoids TOCTOU race
+        self.runs_file.touch(exist_ok=True)
 
-        with portalocker.Lock(
-            self.runs_file,
-            "r+",
-            timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
-            flags=portalocker.LOCK_EX,
-        ) as f:
-            try:
+        try:
+            with portalocker.Lock(
+                self.runs_file,
+                "r+",
+                timeout=LockDefaults.ATOMIC_LOCK_TIMEOUT_SECONDS,
+                flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+            ) as f:
+                try:
+                    f.seek(0)
+                    runs_data = json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    # File is empty or corrupted, create new structure
+                    runs_data = _empty_runs_data(extended=True)
+
+                if "workflow_metrics" not in runs_data:
+                    runs_data["workflow_metrics"] = {}
+
+                run_id = f"run_{workflow_id}_{uuid.uuid4().hex[:8]}"
+
+                run_record: dict[str, Any] = {
+                    "id": run_id,
+                    "workflow_id": workflow_id,
+                    "workflow_name": workflow_name,
+                    "status": "running",
+                    "started_at": datetime.now(UTC).isoformat(),
+                    "ended_at": None,
+                    "duration_seconds": 0,
+                    "total_actions": actions_total,
+                    "successful_actions": 0,
+                    "failed_actions": 0,
+                    "skipped_actions": 0,
+                    "total_tokens": 0,
+                    "error_message": None,
+                    "actions": {},
+                }
+
+                runs_data["executions"].insert(0, run_record)
+                runs_data["executions"] = runs_data["executions"][:100]
+
+                runs_data["metadata"]["generated_at"] = datetime.now(UTC).isoformat()
+                runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
+
                 f.seek(0)
-                runs_data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                # File is empty or corrupted, create new structure
-                runs_data = _empty_runs_data(extended=True)
+                f.truncate()
+                json.dump(runs_data, f, indent=2)
 
-            if "workflow_metrics" not in runs_data:
-                runs_data["workflow_metrics"] = {}
-
-            run_id = f"run_{workflow_id}_{uuid.uuid4().hex[:8]}"
-
-            run_record: dict[str, Any] = {
-                "id": run_id,
-                "workflow_id": workflow_id,
-                "workflow_name": workflow_name,
-                "status": "running",
-                "started_at": datetime.now().isoformat(),
-                "ended_at": None,
-                "duration_seconds": 0,
-                "total_actions": actions_total,
-                "successful_actions": 0,
-                "failed_actions": 0,
-                "skipped_actions": 0,
-                "total_tokens": 0,
-                "error_message": None,
-                "actions": {},
-            }
-
-            runs_data["executions"].insert(0, run_record)
-            runs_data["executions"] = runs_data["executions"][:100]
-
-            runs_data["metadata"]["generated_at"] = datetime.now().isoformat()
-            runs_data["metadata"]["total_runs"] = len(runs_data["executions"])
-
-            f.seek(0)
-            f.truncate()
-            json.dump(runs_data, f, indent=2)
+        except portalocker.exceptions.LockException:
+            logger.warning("Could not acquire lock on %s within timeout", self.runs_file)
+            raise
 
         return run_id
 
@@ -299,7 +301,7 @@ class RunTracker:
                 if run["id"] == run_id:
                     action_entry = {
                         "status": "running",
-                        "started_at": datetime.now().isoformat(),
+                        "started_at": datetime.now(UTC).isoformat(),
                         "ended_at": None,
                         "duration_seconds": 0,
                         "type": action_type,
@@ -353,7 +355,7 @@ class RunTracker:
 
         action_entry = run["actions"][config.action_name]
         action_entry["status"] = config.status
-        action_entry["ended_at"] = datetime.now().isoformat()
+        action_entry["ended_at"] = datetime.now(UTC).isoformat()
         action_entry["duration_seconds"] = config.duration_seconds
 
         if config.tokens:
@@ -397,7 +399,7 @@ class RunTracker:
             for run in runs_data["executions"]:
                 if run["id"] == run_id:
                     run["status"] = status
-                    run["ended_at"] = datetime.now().isoformat()
+                    run["ended_at"] = datetime.now(UTC).isoformat()
                     run["duration_seconds"] = self._calculate_duration(
                         run["started_at"], run["ended_at"]
                     )

@@ -23,7 +23,7 @@ class ConfigValidationError(ConfigurationError):
     ):
         ctx = dict(context) if context else {}
         if reason is not None:
-            effective_key = config_key or message
+            effective_key = config_key or message or "<no key>"
             msg = f"Configuration validation failed for '{effective_key}': {reason}"
             ctx.update({"config_key": effective_key, "reason": reason})
         elif config_key is not None:

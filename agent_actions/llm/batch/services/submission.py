@@ -2,10 +2,10 @@
 
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
-from agent_actions.errors import ConfigValidationError, ExternalServiceError
+from agent_actions.errors import ConfigurationError, ConfigValidationError, ExternalServiceError
 from agent_actions.llm.batch.core.batch_constants import BatchStatus
 from agent_actions.llm.batch.core.batch_models import BatchJobEntry, SubmissionResult
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import (
@@ -110,13 +110,21 @@ class BatchSubmissionService:
             Current batch status
 
         Raises:
+            ConfigurationError: If output_directory is None
             ExternalServiceError: If status check fails
         """
+        if output_directory is None:
+            raise ConfigurationError(
+                "check_status requires output_directory to resolve the batch provider",
+                context={"batch_id": batch_id},
+            )
         provider = None
         try:
-            manager = self._registry_manager_factory(output_directory) if output_directory else None
+            manager = self._registry_manager_factory(output_directory)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             return provider.check_status(batch_id)  # type: ignore[return-value]
+        except ConfigurationError:
+            raise
         except Exception as e:
             vendor = (
                 getattr(provider, "vendor_type", "unknown") if provider is not None else "unknown"
@@ -277,7 +285,7 @@ class BatchSubmissionService:
                 entry = BatchJobEntry(
                     batch_id=batch_id,
                     status=initial_status,
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=datetime.now(UTC).isoformat(),
                     provider=provider_type,
                     record_count=len(tasks),
                     workflow_session_id=agent_config.get("workflow_session_id"),

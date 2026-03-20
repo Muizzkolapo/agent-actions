@@ -253,7 +253,7 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         )
 
         output_field = agent_config.get("output_field", "raw_response")
-        response_text = response_temp.text
+        response_text = response_temp.text or ""
 
         logger.debug(
             "Gemini non-JSON response retrieved successfully",

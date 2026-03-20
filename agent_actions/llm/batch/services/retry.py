@@ -611,5 +611,13 @@ def _import_validation_module(validation_module: str, validation_path: str | Non
                 "Ensure the module exists and validation_path is configured correctly.",
                 validation_module,
             )
+    except ImportError as e:
+        from agent_actions.errors import ConfigurationError
+
+        raise ConfigurationError(
+            f"Cannot import validation module '{validation_module}': {e}",
+            context={"validation_module": validation_module, "validation_path": validation_path},
+            cause=e,
+        ) from e
     except Exception as e:
         logger.warning("Failed to import validation module '%s': %s", validation_module, e)

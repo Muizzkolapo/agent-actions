@@ -107,6 +107,8 @@ class BatchClientResolver:
             self._client_cache[cache_key] = client
             return client
 
+        except ConfigurationError:
+            raise
         except Exception as e:
             raise ConfigurationError(
                 f"Failed to create client for batch_client_{client_type}: {e}",

@@ -14,7 +14,7 @@ class AgentActionsError(Exception):
         cause: Exception | None = None,
     ):
         super().__init__(message)
-        self.context = context or {}
+        self.context = dict(context) if isinstance(context, dict) else (context or {})
         self.cause = cause
         if cause is not None:
             self.__cause__ = cause

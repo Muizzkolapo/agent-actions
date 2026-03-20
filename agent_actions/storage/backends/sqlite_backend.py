@@ -86,7 +86,7 @@ class SQLiteBackend(StorageBackend):
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: sqlite3.Connection | None = None
-        self._lock = threading.Lock()  # Serialize write operations
+        self._lock = threading.RLock()  # Serialize write operations; RLock allows re-entry from connection property
 
     @classmethod
     def create(cls, **kwargs) -> "SQLiteBackend":
@@ -139,9 +139,10 @@ class SQLiteBackend(StorageBackend):
     @property
     def connection(self) -> sqlite3.Connection:
         """Get the database connection. Raises if not initialized."""
-        if self._connection is None:
-            raise RuntimeError("Backend not initialized. Call initialize() first.")
-        return self._connection
+        with self._lock:
+            if self._connection is None:
+                raise RuntimeError("Backend not initialized. Call initialize() first.")
+            return self._connection
 
     def initialize(self) -> None:
         """Create connection, tables, and indexes."""
@@ -464,8 +465,9 @@ class SQLiteBackend(StorageBackend):
 
     # ------------------------------------------------------------------
     # Record disposition tracking
-    # Writes hold self._lock; reads don't (WAL mode handles concurrent
-    # reads safely). This matches read_target/read_source above.
+    # All callers (reads and writes) access self.connection, which now
+    # briefly acquires self._lock (RLock). Write methods additionally
+    # hold the lock for the full operation duration.
     # ------------------------------------------------------------------
 
     def set_disposition(
@@ -479,6 +481,8 @@ class SQLiteBackend(StorageBackend):
         """Write a disposition record (INSERT OR REPLACE)."""
         action_name = self._validate_identifier(action_name, "action_name")
         record_id = self._validate_identifier(record_id, "record_id")
+        if relative_path is not None:
+            relative_path = self._validate_identifier(relative_path, "relative_path")
         if disposition not in VALID_DISPOSITIONS:
             raise ValueError(
                 f"Invalid disposition '{disposition}'. Valid: {sorted(VALID_DISPOSITIONS)}"
