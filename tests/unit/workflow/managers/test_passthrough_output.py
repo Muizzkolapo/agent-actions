@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.storage.backend import NODE_LEVEL_RECORD_ID
 from agent_actions.workflow.managers.output import (
     AgentOutputManager,
@@ -353,3 +354,36 @@ class TestProcessAgentOutputBackend:
 
         assert result["has_data"] is True
         assert result["data"][0]["val"] == "fallback"
+
+
+# ---------------------------------------------------------------------------
+# C-2  ·  get_upstream_directories — guard dep_index < 0
+# ---------------------------------------------------------------------------
+
+
+class TestGetUpstreamDirectoriesGuard:
+    """C-2 — idx=0 with no resolvable upstream raises ConfigurationError."""
+
+    def test_idx_zero_with_deps_that_dont_exist_raises(self, make_manager, tmp_path):
+        """When idx=0 has dependencies but none resolve, ConfigurationError is raised."""
+        mgr = make_manager(
+            execution_order=["first", "second"],
+            action_configs={"first": {"dependencies": ["nonexistent_dep"]}},
+        )
+        # version_correlator returns empty map so we fall through to the guard
+        mgr.version_correlator.detect_explicit_version_consumption.return_value = {}
+
+        with pytest.raises(ConfigurationError, match="declared dependencies that could not be resolved"):
+            mgr.get_upstream_directories(0)
+
+    def test_idx_one_returns_correct_upstream_path(self, make_manager, tmp_path):
+        """idx=1 with no explicit deps falls through to the previous-agent path."""
+        mgr = make_manager(
+            execution_order=["first", "second"],
+            action_configs={"second": {}},
+        )
+        mgr.version_correlator.detect_explicit_version_consumption.return_value = {}
+
+        result = mgr.get_upstream_directories(1)
+        assert len(result) == 1
+        assert result[0].endswith("first")

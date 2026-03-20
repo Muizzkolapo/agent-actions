@@ -79,7 +79,7 @@ class ProjectValidator(BaseValidator):
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate project creation parameters from the data dict."""
         if not self._prepare_validation(data):
-            return False
+            return self._complete_validation()
         project_name = data.get("project_name")
         output_dir = data.get("output_dir")
         project_dir = data.get("project_dir")
@@ -99,8 +99,8 @@ class ProjectValidator(BaseValidator):
         if not isinstance(force, bool):
             self.add_error("Data field 'force' must be a boolean.")
         if self.has_errors():
-            return False
+            return self._complete_validation()
         self._validate_project_name_logic(project_name)
         self._validate_project_directory_logic(output_dir, project_dir, force)
         self._validate_project_template_logic(template, available_templates)
-        return not self.has_errors()
+        return self._complete_validation()

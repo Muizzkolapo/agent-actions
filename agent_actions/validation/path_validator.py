@@ -209,12 +209,12 @@ class PathValidator(BaseValidator):
     def validate(self, data: Any, config: dict[str, Any] | None = None) -> bool:
         """Validate file or directory paths based on the operation specified in data."""
         if not self._prepare_validation(data):
-            return False
+            return self._complete_validation()
         operation = data.get("operation")
         path_input = data.get("path")
         if not operation:
             self.add_error("Operation not specified in validation data.")
-            return False
+            return self._complete_validation()
         path_obj = self._parse_path_input(path_input, operation)
         if operation == "validate_user_code_path":
             self._handle_user_code_path_operation(path_input)
@@ -238,4 +238,4 @@ class PathValidator(BaseValidator):
                     "error_details": self.get_errors(),
                 },
             )
-        return not self.has_errors()
+        return self._complete_validation()

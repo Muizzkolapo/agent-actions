@@ -181,6 +181,7 @@ class SchemaValidator(BaseValidator):
                 f"JSON Schema: {e.message}{context_msg}.",
                 field=field_name,
             )
+            return
         except (OSError, ValueError, TypeError) as e:
             logger.exception(
                 "Unexpected error during meta-schema validation for %s",
@@ -196,6 +197,7 @@ class SchemaValidator(BaseValidator):
                 f"{display_name} (file: {file_path.name}): {e}",
                 field=schema_name,
             )
+            return
         common_issues = self._check_common_schema_issues_static(schema_data, schema_name)
         for issue in common_issues:
             self.add_error(
@@ -460,6 +462,7 @@ class SchemaValidator(BaseValidator):
     ) -> bool:
         """Return True if two schemas are compatible; clears and repopulates errors."""
         self.clear_errors()
+        self.clear_warnings()
         logger.debug(
             "Checking schema compatibility between '%s' and '%s'.", schema1_name, schema2_name
         )

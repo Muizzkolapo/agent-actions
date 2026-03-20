@@ -38,7 +38,7 @@ def initialize_storage_backend(
     config: WorkflowConfig,
     metadata: WorkflowMetadata,
     console: Console,
-) -> "StorageBackend | None":
+) -> "StorageBackend":
     """Initialize the SQLite storage backend for the workflow."""
     try:
         config_path = Path(config.paths.constructor_path)

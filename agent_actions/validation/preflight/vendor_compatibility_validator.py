@@ -201,3 +201,9 @@ class VendorCompatibilityValidator(BaseValidator):
     def get_issues(self) -> list[ValidationIssue]:
         """Get the list of validation issues found."""
         return self.issues
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Reset the lazy-loaded vendor capabilities cache. Call from test teardown."""
+        global _VENDOR_CAPABILITIES
+        _VENDOR_CAPABILITIES = None

@@ -485,15 +485,10 @@ class SchemaExtractor:
         """Extract field name from a reference string."""
         if not reference:
             return None
-
-        if "." in reference:
-            parts = reference.split(".")
-            if len(parts) >= 2:
-                return parts[1]
-        else:
+        if "." not in reference:
             return reference
-
-        return None
+        parts = reference.split(".", 1)
+        return parts[1] if parts[1] else None  # None for malformed like "ns."
 
     def extract_from_workflow(
         self,

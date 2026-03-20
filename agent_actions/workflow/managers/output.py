@@ -329,8 +329,6 @@ class ActionOutputManager:
                 )
                 return [correlated_dir]
 
-            from agent_actions.errors import ConfigurationError
-
             raise ConfigurationError(
                 f"Version correlation failed for '{current_agent}'. "
                 f"Could not load outputs from version sources: {version_sources}. "
@@ -342,6 +340,11 @@ class ActionOutputManager:
                 },
             )
 
+        if idx <= 0:
+            raise ConfigurationError(
+                f"Action at idx={idx} has declared dependencies that could not be resolved "
+                f"and has no upstream agent to fall back to."
+            )
         prev_agent = self.execution_order[idx - 1]
         return [str(self.agent_folder / "target" / prev_agent)]
 

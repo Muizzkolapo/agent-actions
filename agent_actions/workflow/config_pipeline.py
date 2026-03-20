@@ -124,7 +124,7 @@ def discover_workflow_udfs(config: WorkflowConfig, console: Console) -> None:
         total_udfs = _discover_udfs_from_path(
             config.paths.user_code_path, config.project_root, console
         )
-    elif config.manager.tool_path:
+    elif config.manager and config.manager.tool_path:
         for path in config.manager.tool_path:
             count = _discover_udfs_from_path(path, config.project_root, console)
             total_udfs += count
