@@ -410,6 +410,20 @@ class WorkflowConfigV2(BaseModel):
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
             )
 
+        # Validate primary_dependency references exist as action names
+        invalid_primary = [
+            (action.name, action.primary_dependency)
+            for action in self.actions
+            if action.primary_dependency is not None and action.primary_dependency not in seen
+        ]
+        if invalid_primary:
+            details = ", ".join(
+                f"'{a}' references '{p}'" for a, p in invalid_primary
+            )
+            raise ValueError(
+                f"primary_dependency references non-existent action(s): {details}"
+            )
+
         # Iterative DFS cycle detection (avoids RecursionError on deep chains)
         dep_graph = self.get_dependency_graph()
         WHITE, GRAY, BLACK = 0, 1, 2

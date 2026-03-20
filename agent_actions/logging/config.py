@@ -93,7 +93,10 @@ class LoggingConfig:
             file_level = "DEBUG"
 
         file_settings = FileHandlerSettings(
-            enabled=file_enabled, path=file_path, level=cast(LogLevel, file_level)
+            enabled=file_enabled,
+            path=file_path,
+            level=cast(LogLevel, file_level),
+            format=cast(Literal["human", "json"], log_format),
         )
 
         return cls(

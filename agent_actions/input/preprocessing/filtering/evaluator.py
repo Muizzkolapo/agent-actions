@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.preprocessing.filtering.guard_filter import (
     FilterItemRequest,
     FilterResult,
@@ -12,6 +13,8 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
 )
 from agent_actions.utils.udf_management.tooling import execute_user_defined_function
+
+_UNSUPPORTED_BEHAVIORS = frozenset({"write_to", "reprocess"})
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +156,13 @@ class GuardEvaluator:
             return GuardResult.passed()
 
         behavior = guard_config.get("behavior", "filter")
+        if behavior in _UNSUPPORTED_BEHAVIORS:
+            raise ConfigValidationError(
+                "behavior",
+                f"Guard behavior '{behavior}' is not supported in guard evaluation. "
+                f"Only 'skip' and 'filter' are valid on_false values for guards.",
+                context={"behavior": behavior},
+            )
         passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
         try:

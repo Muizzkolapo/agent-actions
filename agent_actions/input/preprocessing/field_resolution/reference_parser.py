@@ -56,7 +56,7 @@ class ReferenceParser:
 
     def parse(
         self, reference: str, format_hint: ReferenceFormat | None = None, strict: bool = False
-    ) -> ParsedReference:
+    ) -> "ParsedReference | None":
         """Parse a single field reference string into structured format.
 
         Raises:
@@ -67,7 +67,7 @@ class ReferenceParser:
                 raise InvalidReferenceError(
                     f"Invalid reference: {reference!r}. Expected non-empty string."
                 )
-            return self._create_fallback_reference(str(reference) if reference else "")
+            return None
 
         reference = reference.strip()
 
@@ -90,7 +90,7 @@ class ReferenceParser:
         try:
             return self._parse_selector_format(reference, ReferenceFormat.SELECTOR)
         except InvalidReferenceError:
-            return self._create_fallback_reference(reference)
+            return None
 
     def parse_batch(
         self, text: str, format_hint: ReferenceFormat | None = None, strict: bool = False
@@ -225,11 +225,3 @@ class ReferenceParser:
             (self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR),
         ]
 
-    def _create_fallback_reference(self, reference: str) -> ParsedReference:
-        """Create a fallback reference for invalid input."""
-        return ParsedReference(
-            action_name=reference,
-            field_path=[],
-            full_reference=reference,
-            format_type=ReferenceFormat.SELECTOR,
-        )

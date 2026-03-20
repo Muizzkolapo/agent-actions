@@ -32,11 +32,14 @@ class FieldReferenceResolver:
         self.validate_dependencies = validate_dependencies
         self._parser = ReferenceParser()
 
-    def parse(self, reference: str, format_hint: ReferenceFormat | None = None) -> ParsedReference:
+    def parse(
+        self, reference: str, format_hint: ReferenceFormat | None = None
+    ) -> "ParsedReference | None":
         """Parse a field reference string into structured format.
 
+        Returns None if the reference is malformed and strict mode is off.
         Raises:
-            InvalidReferenceError: If reference is malformed (strict mode).
+            InvalidReferenceError: If reference is malformed (strict mode only).
         """
         return self._parser.parse(reference, format_hint, self.strict_mode)
 
@@ -58,7 +61,7 @@ class FieldReferenceResolver:
         """
         if isinstance(reference, str):
             try:
-                reference = self.parse(reference)
+                parsed = self.parse(reference)
             except (ValueError, TypeError, KeyError) as e:
                 return ResolvedReference(
                     value=fallback_value,
@@ -67,6 +70,15 @@ class FieldReferenceResolver:
                     success=False,
                     error=str(e),
                 )
+            if parsed is None:
+                return ResolvedReference(
+                    value=fallback_value,
+                    source_action="",
+                    field_path=[],
+                    success=False,
+                    error=f"Failed to parse field reference: {reference!r}",
+                )
+            reference = parsed
 
         try:
             if reference.action_name not in field_context:

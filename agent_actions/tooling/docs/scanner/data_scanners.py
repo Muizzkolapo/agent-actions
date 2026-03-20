@@ -20,8 +20,10 @@ def scan_prompts(project_root: Path) -> dict[str, Any]:
     if not prompt_store_dir.exists():
         return prompts
 
-    # Pattern to match {prompt name} ... {end_prompt}
-    prompt_pattern = re.compile(r"\{prompt\s+(\w+)\}(.*?)\{end_prompt\}", re.DOTALL)
+    # Pattern to match {prompt name} ... {end_prompt} — unified with prompt.handler.PROMPT_PATTERN
+    prompt_pattern = re.compile(
+        r"\{prompt\s+([\w.]+)\}(.*?)\{end_prompt\}", re.DOTALL
+    )
 
     for md_file in prompt_store_dir.glob("*.md"):
         try:
@@ -160,9 +162,9 @@ def scan_sqlite_readonly(db_file: Path, workflow_name: str) -> dict[str, Any] | 
         cursor.execute("SELECT COUNT(*) as count FROM source_data")
         source_count = cursor.fetchone()["count"]
 
-        # Target counts per node
+        # Target counts per node — COALESCE guards against NULL record_count rows
         cursor.execute(
-            "SELECT action_name, SUM(record_count) as count "
+            "SELECT action_name, COALESCE(SUM(record_count), 0) as count "
             "FROM target_data GROUP BY action_name ORDER BY action_name"
         )
         node_counts = {row["action_name"]: row["count"] for row in cursor.fetchall()}

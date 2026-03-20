@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from agent_actions.prompt.context.scope_application import apply_context_scope
 
 
@@ -120,3 +118,83 @@ class TestDropWildcard:
         assert "api_key" not in llm_context
         assert "name" in llm_context
         assert "value" in llm_context
+
+
+class TestFalsyFieldPassthrough:
+    """G-2: falsy values (0, "", False, None) must not be silently dropped."""
+
+    def test_observe_includes_zero_value(self):
+        """observe: field with value 0 must appear in llm_context."""
+        field_context = {"dep": {"score": 0}}
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["dep.score"]},
+            action_name="test_action",
+        )
+        assert "score" in llm_context
+        assert llm_context["score"] == 0
+
+    def test_observe_includes_empty_string(self):
+        """observe: field with value "" must appear in llm_context."""
+        field_context = {"dep": {"label": ""}}
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["dep.label"]},
+            action_name="test_action",
+        )
+        assert "label" in llm_context
+        assert llm_context["label"] == ""
+
+    def test_passthrough_includes_zero_value(self):
+        """passthrough: field with value 0 must appear in passthrough_fields."""
+        field_context = {"dep": {"count": 0}}
+        _, _, passthrough = apply_context_scope(
+            field_context=field_context,
+            context_scope={"passthrough": ["dep.count"]},
+            action_name="test_action",
+        )
+        assert "count" in passthrough
+        assert passthrough["count"] == 0
+
+    def test_passthrough_includes_false_value(self):
+        """passthrough: field with value False must appear in passthrough_fields."""
+        field_context = {"dep": {"enabled": False}}
+        _, _, passthrough = apply_context_scope(
+            field_context=field_context,
+            context_scope={"passthrough": ["dep.enabled"]},
+            action_name="test_action",
+        )
+        assert "enabled" in passthrough
+        assert passthrough["enabled"] is False
+
+    def test_missing_field_still_excluded(self):
+        """Fields truly absent from context must not appear in llm_context."""
+        field_context = {"dep": {"other": "value"}}
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["dep.missing"]},
+            action_name="test_action",
+        )
+        assert "missing" not in llm_context
+
+    def test_observe_includes_explicit_none_value(self):
+        """G-2 boundary: field whose value IS None must still appear in llm_context.
+        None is a valid observed value — only a missing field should be excluded."""
+        field_context = {"dep": {"nullable_field": None}}
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"observe": ["dep.nullable_field"]},
+            action_name="test_action",
+        )
+        assert "nullable_field" in llm_context
+        assert llm_context["nullable_field"] is None
+
+    def test_passthrough_nested_path_missing_field_excluded(self):
+        """G-2 nested-path: a truly missing nested field must NOT appear in passthrough."""
+        field_context = {"dep": {"top": {"exists": 1}}}
+        _, _, passthrough = apply_context_scope(
+            field_context=field_context,
+            context_scope={"passthrough": ["dep.top.missing"]},
+            action_name="test_action",
+        )
+        assert "missing" not in passthrough

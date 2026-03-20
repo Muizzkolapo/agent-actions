@@ -17,6 +17,9 @@ from agent_actions.prompt.context.scope_parsing import (
 
 logger = logging.getLogger(__name__)
 
+# Sentinel distinguishing "field not found" from a field whose value is falsy (0, "", False, None).
+_MISSING = object()
+
 __all__ = [
     "apply_context_scope",
     "format_llm_context",
@@ -133,9 +136,9 @@ def apply_context_scope(
                     llm_context.update(action_fields)
             else:
                 # Extract value from prompt_context (after drop removed sensitive fields)
-                value = extract_field_value(prompt_context, ns_name, field_name)
+                value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
-                if value is not None:
+                if value is not _MISSING:
                     # Add to llm_context (flat dict with field names as keys)
                     llm_context[field_name] = value
 
@@ -164,9 +167,9 @@ def apply_context_scope(
                     passthrough_fields.update(action_fields)
             else:
                 # Extract value from original field_context
-                value = extract_field_value(field_context, ns_name, field_name)
+                value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
 
-                if value is not None:
+                if value is not _MISSING:
                     # Add to passthrough_fields (flat dict with field names as keys)
                     passthrough_fields[field_name] = value
 

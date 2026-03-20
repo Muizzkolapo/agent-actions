@@ -140,11 +140,10 @@ class TestReferenceParser:
         assert "metadata.type" in paths
 
     def test_parse_invalid_reference_non_strict(self, parser):
-        """Test that invalid references don't raise in non-strict mode."""
-        # Missing dot - should create fallback reference
+        """Test that invalid references return None in non-strict mode (K-3)."""
+        # Missing dot - parse() returns None instead of a fallback reference
         ref = parser.parse("invalid", strict=False)
-        assert ref.action_name == "invalid"
-        assert ref.field_path == []
+        assert ref is None
 
     def test_parse_invalid_reference_strict(self, parser):
         """Test that invalid references raise in strict mode."""

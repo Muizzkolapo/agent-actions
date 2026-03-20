@@ -8,6 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
 from .models import (
@@ -481,15 +482,17 @@ def _index_prompts(index: ProjectIndex, project_root: Path) -> None:
     if not prompt_dir.exists():
         return
 
-    prompt_pattern = re.compile(r"\{prompt\s+(\w+)\}")
-
     for md_file in prompt_dir.glob("*.md"):
         file_stem = md_file.stem
-        content = md_file.read_text()
+        try:
+            content = md_file.read_text()
+        except (OSError, UnicodeDecodeError):
+            logger.warning("LSP indexer: skipping unreadable prompt file %s", md_file)
+            continue
         lines = content.split("\n")
 
         for i, line in enumerate(lines):
-            match = prompt_pattern.search(line)
+            match = _PROMPT_PATTERN.search(line)
             if match:
                 prompt_name = match.group(1)
                 full_name = f"{file_stem}.{prompt_name}"

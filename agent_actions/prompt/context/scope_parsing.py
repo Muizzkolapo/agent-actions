@@ -179,20 +179,20 @@ def extract_action_names_from_template(template: str | None) -> set:
     return referenced_actions
 
 
-def extract_field_value(field_context: dict, action_name: str, field_name: str):
-    """Extract field value from nested field_context structure, returning None if not found."""
+def extract_field_value(field_context: dict, action_name: str, field_name: str, default=None):
+    """Extract field value from nested field_context structure, returning default if not found."""
     from agent_actions.utils.dict import get_nested_value
 
     if not isinstance(field_context, dict):
-        return None  # type: ignore[unreachable]
+        return default  # type: ignore[unreachable]
 
     if action_name not in field_context:
-        return None
+        return default
 
     action_data = field_context[action_name]
 
     if not isinstance(action_data, dict):
-        return None
+        return default
 
     # Exact key match first (backward compat for flat fields and literal dotted keys)
     if field_name in action_data:
@@ -200,9 +200,9 @@ def extract_field_value(field_context: dict, action_name: str, field_name: str):
 
     # Nested path traversal for dot-separated paths
     if "." in field_name:
-        return get_nested_value(action_data, field_name)
+        return get_nested_value(action_data, field_name, default=default)
 
-    return None
+    return default
 
 
 def extract_action_fields(field_context: dict, action_name: str) -> dict | None:

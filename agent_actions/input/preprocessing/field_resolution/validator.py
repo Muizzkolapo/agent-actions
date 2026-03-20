@@ -40,10 +40,14 @@ class ReferenceValidator:
         for ref in references:
             if isinstance(ref, str):
                 try:
-                    ref = self._parser.parse(ref)
+                    parsed = self._parser.parse(ref)
                 except (ValueError, TypeError) as e:
                     errors.append(f"Invalid reference syntax: '{ref}' - {e}")
                     continue
+                if parsed is None:
+                    errors.append(f"Invalid reference syntax: '{ref}' - could not parse")
+                    continue
+                ref = parsed
 
             action_name = ref.action_name
 
@@ -142,10 +146,14 @@ class ReferenceValidator:
         for ref in references:
             if isinstance(ref, str):
                 try:
-                    ref = self._parser.parse(ref)
+                    parsed = self._parser.parse(ref)
                 except (ValueError, TypeError) as e:
                     errors.append(f"Invalid reference syntax: '{ref}' - {e}")
                     continue
+                if parsed is None:
+                    errors.append(f"Invalid reference syntax: '{ref}' - could not parse")
+                    continue
+                ref = parsed
 
             action_name = ref.action_name
 

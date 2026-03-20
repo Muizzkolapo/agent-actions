@@ -9,8 +9,10 @@ from agent_actions.utils.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 
-# Compiled regex pattern for matching {prompt name} blocks
-PROMPT_PATTERN = re.compile(r"\{prompt\s+(\w+)\}")
+# Compiled regex pattern for matching {prompt name} blocks.
+# Supports dots in prompt names (e.g. {prompt file.block}) so that validate_prompt_blocks
+# and get_all_prompt_names correctly handle dot-in-name references.
+PROMPT_PATTERN = re.compile(r"\{prompt\s+([\w.]+)\}")
 
 
 class PromptLoader:
