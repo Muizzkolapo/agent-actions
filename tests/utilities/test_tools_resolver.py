@@ -1,5 +1,7 @@
 """Tests for shared tools_resolver utility."""
 
+from unittest.mock import patch
+
 from agent_actions.utils.tools_resolver import resolve_tools_path
 
 
@@ -38,7 +40,11 @@ class TestToolsResolver:
             "prompt": "Test prompt",
         }
 
-        resolved = resolve_tools_path(agent_config)
+        with patch(
+            "agent_actions.utils.tools_resolver.find_project_root",
+            return_value=tmp_path,
+        ):
+            resolved = resolve_tools_path(agent_config)
         assert resolved == str(tmp_path), f"Expected module_path from tool config, got {resolved}"
 
     def test_no_tools_configured(self):

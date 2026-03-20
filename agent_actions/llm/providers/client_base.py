@@ -75,9 +75,13 @@ class BaseClient(ABC):
         Raises:
             ConfigurationError: If api_key is not configured or environment variable doesn't exist
         """
+        from pydantic import SecretStr
+
         from agent_actions.errors import ConfigurationError
 
-        key_name: str | None = agent_config.get(API_KEY_KEY)
+        key_name = agent_config.get(API_KEY_KEY)
+        if isinstance(key_name, SecretStr):
+            key_name = key_name.get_secret_value()
         if not key_name:
             raise ConfigurationError(
                 "API key configuration is missing",

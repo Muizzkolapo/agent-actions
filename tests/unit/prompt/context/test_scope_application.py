@@ -1,0 +1,122 @@
+"""Regression tests for A-3/G-1: drop wildcard and zero-match warnings."""
+
+from unittest.mock import patch
+
+import pytest
+
+from agent_actions.prompt.context.scope_application import apply_context_scope
+
+
+class TestDropWildcard:
+    def test_wildcard_clears_entire_namespace(self):
+        """drop: ['dep.*'] removes ALL fields from the dep namespace."""
+        field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
+        prompt_context, _, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"drop": ["dep.*"]},
+            action_name="test_action",
+        )
+        assert prompt_context["dep"] == {}
+
+    def test_exact_field_drop_removes_only_that_field(self):
+        """drop: ['dep.api_key'] removes only api_key from dep namespace."""
+        field_context = {"dep": {"api_key": "secret", "name": "test"}}
+        prompt_context, _, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"drop": ["dep.api_key"]},
+            action_name="test_action",
+        )
+        assert "api_key" not in prompt_context["dep"]
+        assert prompt_context["dep"]["name"] == "test"
+
+    def test_wildcard_on_empty_namespace_warns(self):
+        """drop: ['dep.*'] on empty namespace logs a warning, no crash."""
+        field_context = {"dep": {}}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.*"]},
+                action_name="test_action",
+            )
+        mock_logger.warning.assert_called()
+        args = mock_logger.warning.call_args[0]
+        assert "matched zero fields" in args[0]
+
+    def test_missing_field_warns(self):
+        """drop: ['dep.missing'] when field absent logs a warning, no crash."""
+        field_context = {"dep": {"other": "value"}}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.missing"]},
+                action_name="test_action",
+            )
+        mock_logger.warning.assert_called()
+        args = mock_logger.warning.call_args[0]
+        assert "matched zero fields" in args[0]
+
+    def test_missing_namespace_warns(self):
+        """drop: ['ghost.*'] when namespace absent logs a warning, no crash."""
+        field_context = {"dep": {"key": "value"}}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["ghost.*"]},
+                action_name="test_action",
+            )
+        mock_logger.warning.assert_called()
+        args = mock_logger.warning.call_args[0]
+        assert "matched zero fields" in args[0]
+
+    def test_non_dict_namespace_warns(self):
+        """Namespace exists but is a non-dict value (e.g. a string) — warns, no crash."""
+        field_context = {"dep": "a_string_not_a_dict"}
+        with patch("agent_actions.prompt.context.scope_application.logger") as mock_logger:
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.field"]},
+                action_name="test_action",
+            )
+        mock_logger.warning.assert_called()
+        args = mock_logger.warning.call_args[0]
+        assert "not a dict" in args[0]
+
+    def test_malformed_drop_ref_does_not_crash(self):
+        """Malformed drop directive (no dot) is caught, logged, field not removed."""
+        field_context = {"dep": {"api_key": "secret"}}
+        # "noperiod" has no dot — parse_field_reference raises ValueError
+        prompt_context, _, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"drop": ["noperiod"]},
+            action_name="test_action",
+        )
+        # Field must NOT be removed (drop failed to parse — safe failure)
+        assert prompt_context["dep"]["api_key"] == "secret"
+
+    def test_wildcard_drop_then_observe_specific_field_returns_nothing(self):
+        """After drop: ['dep.*'], observe: ['dep.name'] must return nothing — all fields gone."""
+        field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
+            action_name="test_action",
+        )
+        assert "name" not in llm_context
+
+    def test_drop_then_observe_wildcard_excludes_dropped_field(self):
+        """Existing security test: drop + observe wildcard must not leak dropped field."""
+        field_context = {
+            "dep": {"api_key": "sk-secret-123", "name": "test", "value": "safe_data"}
+        }
+        context_scope = {
+            "drop": ["dep.api_key"],
+            "observe": ["dep.*"],
+        }
+        _, llm_context, _ = apply_context_scope(
+            field_context=field_context,
+            context_scope=context_scope,
+            action_name="test_action",
+        )
+        assert "api_key" not in llm_context
+        assert "name" in llm_context
+        assert "value" in llm_context

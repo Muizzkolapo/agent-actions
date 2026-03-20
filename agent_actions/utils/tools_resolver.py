@@ -6,6 +6,9 @@ from typing import Any, cast
 
 import yaml
 
+from agent_actions.errors import ConfigValidationError
+from agent_actions.utils.project_root import find_project_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,13 +41,16 @@ def resolve_tools_path(agent_config: dict[str, Any]) -> str | None:
                 if "file" in function_def:
                     try:
                         tool_file_path = function_def["file"]
-                        if ".." in Path(tool_file_path).parts:
-                            logger.warning(
-                                "Tool file path %s contains path traversal, skipping",
-                                tool_file_path,
-                            )
-                            continue
-                        with open(tool_file_path, encoding="utf-8") as f:
+                        resolved = Path(tool_file_path).resolve()
+                        safe_root = find_project_root() or Path.cwd().resolve()
+                        try:
+                            resolved.relative_to(safe_root)
+                        except ValueError as exc:
+                            raise ConfigValidationError(
+                                f"Tool file path '{tool_file_path}' resolves outside the project root "
+                                f"'{safe_root}' — possible path traversal"
+                            ) from exc
+                        with open(resolved, encoding="utf-8") as f:
                             tool_config = yaml.safe_load(f)
                             if tool_config and "module_path" in tool_config:
                                 module_path = tool_config["module_path"]

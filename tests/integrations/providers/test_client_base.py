@@ -1,6 +1,7 @@
 """Tests for BaseClient API key validation."""
 
 import pytest
+from pydantic import SecretStr
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.client_base import BaseClient
@@ -49,6 +50,16 @@ class TestClientBaseAPIKeyValidation:
         agent_config = {"agent_type": "test_agent", "api_key": "TEST_LEGACY_KEY_12345"}
         result = BaseClient.get_api_key(agent_config)
         assert result == "legacy-api-key-value"
+
+    def test_api_key_secret_str_is_unwrapped(self, monkeypatch):
+        """SecretStr api_key is unwrapped before startswith() — no AttributeError."""
+        monkeypatch.setenv("TEST_SECRET_STR_KEY_12345", "secret-api-key-value")
+        agent_config = {
+            "agent_type": "test_agent",
+            "api_key": SecretStr("TEST_SECRET_STR_KEY_12345"),
+        }
+        result = BaseClient.get_api_key(agent_config)
+        assert result == "secret-api-key-value"
 
     def test_api_key_missing_from_config(self):
         """Test error when api_key field is missing from config."""

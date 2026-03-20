@@ -6,6 +6,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from pydantic import SecretStr
+
 logger = logging.getLogger(__name__)
 
 from agent_actions.errors import ConfigurationError
@@ -174,7 +176,8 @@ class BatchClientResolver:
 
     @staticmethod
     def _build_cache_key(client_type: str, agent_config: dict[str, Any]) -> str:
-        api_key = agent_config.get("api_key") or agent_config.get(f"{client_type}_api_key") or ""
+        _raw = agent_config.get("api_key") or agent_config.get(f"{client_type}_api_key") or ""
+        api_key = _raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw
         if api_key:
             key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:12]
             return f"{client_type}:{key_hash}"

@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from agent_actions.config.types import Granularity, RunMode
 from agent_actions.guards import GuardParser, parse_guard_config
@@ -203,7 +203,7 @@ class ActionConfig(BaseModel):
     )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
-    api_key: str | None = Field(default=None, description="API key")
+    api_key: SecretStr | None = Field(default=None, description="API key")
     base_url: str | None = Field(default=None, description="Base URL for vendors like Ollama")
     run_mode: RunMode | None = Field(default=None, description="Execution run mode")
     is_operational: bool | None = Field(default=None, description="Whether action is enabled")
@@ -328,7 +328,7 @@ class DefaultsConfig(BaseModel):
     )
 
     # --- Fields from SIMPLE_CONFIG_FIELDS (not already above) ---
-    api_key: str | None = Field(default=None, description="Default API key")
+    api_key: SecretStr | None = Field(default=None, description="Default API key")
     base_url: str | None = Field(default=None, description="Default base URL")
     kind: ActionKind | None = Field(default=None, description="Default action kind")
     is_operational: bool | None = Field(default=None, description="Default operational flag")
