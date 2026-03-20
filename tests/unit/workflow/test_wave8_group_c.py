@@ -113,10 +113,9 @@ def _make_pipeline():
 
 
 class TestHITLFileModePropagatesExceptions:
-    """C-3 — non-AgentActionsError is wrapped in AgentActionsError with context,
-    not swallowed into a failed ProcessingResult."""
+    """C-3 — non-AgentActionsError propagates bare (not swallowed or wrapped)."""
 
-    def test_runtime_error_wrapped_in_agent_actions_error(self):
+    def test_runtime_error_propagates_bare(self):
         pipeline = _make_pipeline()
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
@@ -127,11 +126,11 @@ class TestHITLFileModePropagatesExceptions:
                 "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
                 side_effect=RuntimeError("infra failure"),
             ),
-            pytest.raises(AgentActionsError, match="infra failure"),
+            pytest.raises(RuntimeError, match="infra failure"),
         ):
             process_file_mode_hitl(pipeline, [{"source_guid": "sg-1", "content": {}}], [], context)
 
-    def test_wrapped_error_preserves_agent_name_and_cause(self):
+    def test_non_agent_error_propagates_as_original_type(self):
         pipeline = _make_pipeline()
         context = ProcessingContext(
             agent_config={"kind": "hitl", "granularity": "file"},
@@ -143,14 +142,11 @@ class TestHITLFileModePropagatesExceptions:
                 "agent_actions.workflow.pipeline_file_mode.run_dynamic_agent",
                 side_effect=original,
             ),
-            pytest.raises(AgentActionsError) as exc_info,
+            pytest.raises(ValueError) as exc_info,
         ):
             process_file_mode_hitl(pipeline, [{"source_guid": "sg-1", "content": {}}], [], context)
 
-        err = exc_info.value
-        assert "review" in str(err)
-        assert err.cause is original
-        assert err.__cause__ is original
+        assert exc_info.value is original
 
     def test_agent_actions_error_passes_through_unchanged(self):
         """AgentActionsError is NOT re-wrapped — it re-raises directly."""

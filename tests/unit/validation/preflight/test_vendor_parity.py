@@ -2,6 +2,8 @@
 
 import importlib
 
+import pytest
+
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
 from agent_actions.validation.preflight.vendor_compatibility_validator import (
     VALID_VENDORS,
@@ -9,6 +11,13 @@ from agent_actions.validation.preflight.vendor_compatibility_validator import (
     _get_vendor_capabilities,
     _resolve_capabilities,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_vendor_cache():
+    VendorCompatibilityValidator.clear_cache()
+    yield
+    VendorCompatibilityValidator.clear_cache()
 
 EXPECTED_CAPABILITY_KEYS = {
     "supports_json_mode",
@@ -82,3 +91,10 @@ class TestVendorParity:
                 config[field] = "test-value"
             result = validator.validate_vendor_config(config)
             assert result, f"Vendor '{vendor}' failed preflight: {validator.get_errors()}"
+
+    def test_clear_cache_reinitialises_on_next_access(self):
+        """clear_cache() resets the cache so the next call to _get_vendor_capabilities re-builds it."""
+        caps_first = _get_vendor_capabilities()
+        VendorCompatibilityValidator.clear_cache()
+        caps_second = _get_vendor_capabilities()
+        assert caps_first == caps_second

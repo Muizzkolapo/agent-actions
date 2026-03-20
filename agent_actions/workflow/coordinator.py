@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from rich.console import Console
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.logging import get_manager
 from agent_actions.workflow.config_pipeline import load_workflow_configs, validate_schema_files
 from agent_actions.workflow.execution_events import WorkflowEventLogger
@@ -39,6 +40,10 @@ class AgentWorkflow:
 
         # Storage & services
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
+        if self.storage_backend is None:
+            raise ConfigurationError(
+                "storage_backend could not be initialized — check storage configuration."
+            )
         self.services, self._agent_folder = initialize_services(
             self.metadata, config, self.storage_backend, self.console
         )

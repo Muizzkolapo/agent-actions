@@ -297,17 +297,9 @@ def process_file_mode_hitl(
         return [result]
     except AgentActionsError:
         raise
-    except Exception as e:
+    except Exception:
         logger.exception("Unexpected error in FILE mode HITL processing")
-        raise AgentActionsError(
-            f"FILE mode HITL '{context.agent_name}' failed: {e}",
-            context={
-                "agent_name": context.agent_name,
-                "record_count": len(data),
-                "operation": "file_mode_hitl",
-            },
-            cause=e,
-        ) from e
+        raise
 
 
 def apply_observe_filter(data: list[dict], agent_config: ActionConfigDict) -> list[dict]:
