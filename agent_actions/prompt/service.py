@@ -533,6 +533,7 @@ class PromptPreparationService:
             ProjectRootNotFoundError,
         )
 
+        workflow_seed_dir = None
         try:
             if workflow_config_path:
                 file_path_obj = Path(workflow_config_path).resolve()
@@ -573,7 +574,7 @@ class PromptPreparationService:
 
             logger.warning(
                 "Could not find seed_data at workflow level (%s) or project level (%s)",
-                workflow_seed_dir if "workflow_seed_dir" in locals() else "unknown",
+                workflow_seed_dir if workflow_seed_dir is not None else "unknown",
                 project_seed_dir,
             )
 
