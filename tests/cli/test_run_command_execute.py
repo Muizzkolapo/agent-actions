@@ -7,6 +7,7 @@ import pytest
 from agent_actions.cli.run import RunCommand
 from agent_actions.utils.path_utils import get_path_manager, reset_path_manager
 from agent_actions.validation.run_validator import RunCommandArgs
+from agent_actions.workflow.coordinator import AgentWorkflow
 
 
 def _make_args(**overrides) -> RunCommandArgs:
@@ -58,7 +59,7 @@ class TestRunCommandProjectRootWiring:
             )
             mock_wf_instance = MagicMock()
             mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.agent_configs = {"a1": {}}
+            mock_wf_instance.action_configs = {"a1": {}}
             mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"
@@ -95,7 +96,7 @@ class TestRunCommandProjectRootWiring:
             )
             mock_wf_instance = MagicMock()
             mock_wf_instance.execution_order = ["a1"]
-            mock_wf_instance.agent_configs = {"a1": {}}
+            mock_wf_instance.action_configs = {"a1": {}}
             mock_wf.return_value = mock_wf_instance
             mock_tracker_instance = MagicMock()
             mock_tracker_instance.start_workflow_run.return_value = "run-123"

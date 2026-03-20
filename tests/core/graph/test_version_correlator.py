@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.managers.loop import VersionOutputCorrelator
 
 
@@ -311,10 +312,10 @@ class TestVersionOutputCorrelatorIntegration:
         """Create a mock AgentWorkflow setup."""
         from unittest.mock import MagicMock
 
-        workflow = MagicMock()
+        workflow = MagicMock(spec=AgentWorkflow)
         workflow.agent_name = "test_workflow"
         workflow.execution_order = ["extract", "loop_1", "loop_2", "loop_3", "consumer"]
-        workflow.agent_configs = {
+        workflow.action_configs = {
             "extract": {"agent_type": "extract"},
             "loop_1": {"agent_type": "loop"},
             "loop_2": {"agent_type": "loop"},

@@ -4,6 +4,7 @@ import json
 from io import StringIO
 from unittest.mock import MagicMock
 
+import pytest
 from rich.console import Console
 
 from agent_actions.cli.inspect import (
@@ -12,12 +13,13 @@ from agent_actions.cli.inspect import (
     DependenciesCommand,
     GraphCommand,
 )
+from agent_actions.workflow.coordinator import AgentWorkflow
 
 
 def _make_workflow_mock():
     """Create a mock AgentWorkflow with realistic action configs."""
-    wf = MagicMock()
-    wf.agent_configs = {
+    wf = MagicMock(spec=AgentWorkflow)
+    wf.action_configs = {
         "extract": {
             "kind": "llm",
             "model_name": "gpt-4",
@@ -146,7 +148,7 @@ class TestGraphCommandOutput:
 class TestActionCommandOutput:
     def test_output_json(self, capsys):
         cmd = _new_cmd(ActionCommand, action_name="summarize")
-        action_config = _make_workflow_mock().agent_configs["summarize"]
+        action_config = _make_workflow_mock().action_configs["summarize"]
         info = _make_dependency_info()["summarize"]
 
         cmd._output_json(action_config, info)
@@ -162,7 +164,7 @@ class TestActionCommandOutput:
 
     def test_output_rich_renders_panel_and_tree(self):
         cmd = _new_cmd(ActionCommand, action_name="summarize")
-        action_config = _make_workflow_mock().agent_configs["summarize"]
+        action_config = _make_workflow_mock().action_configs["summarize"]
         info = _make_dependency_info()["summarize"]
 
         cmd._output_rich(action_config, info)
@@ -175,7 +177,7 @@ class TestActionCommandOutput:
     def test_output_rich_source_action(self):
         """Source action (no inputs) renders 'source data' label."""
         cmd = _new_cmd(ActionCommand, action_name="extract")
-        action_config = _make_workflow_mock().agent_configs["extract"]
+        action_config = _make_workflow_mock().action_configs["extract"]
         info = _make_dependency_info()["extract"]
 
         cmd._output_rich(action_config, info)
@@ -251,3 +253,21 @@ class TestContextCommandOutput:
 
         output = cmd.console.file.getvalue()
         assert "extract" in output
+
+
+# ── Regression: spec= mock enforces attribute names (B-1/B-5) ────────────────
+
+
+class TestWorkflowMockSpecEnforcement:
+    """MagicMock(spec=AgentWorkflow) raises AttributeError on .agent_configs access."""
+
+    def test_spec_mock_raises_on_old_attribute(self):
+        wf = _make_workflow_mock()
+        with pytest.raises(AttributeError):
+            _ = wf.agent_configs  # renamed to action_configs; spec enforces this
+        # Durable guard: fails immediately if agent_configs is ever re-added as an alias
+        assert not hasattr(AgentWorkflow, "agent_configs")
+
+    def test_spec_mock_allows_new_attribute(self):
+        wf = _make_workflow_mock()
+        assert wf.action_configs is not None

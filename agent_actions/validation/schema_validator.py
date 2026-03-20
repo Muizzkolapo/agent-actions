@@ -33,16 +33,41 @@ def _find_refs(obj: dict[str, Any] | list[Any]) -> set[str]:
     return refs
 
 
-def _collect_all_keys(obj: dict[str, Any] | list[Any]) -> set[str]:
-    """Collect all keys used in a schema object (recursive)."""
+# Keys whose immediate child *names* are user-defined identifiers (field names,
+# definition names, pattern strings) rather than JSON Schema keywords.  We skip
+# those names during suspicious-key detection to avoid false positives.
+# Intentionally excludes items/allOf/anyOf/oneOf/additionalProperties — their
+# values are sub-schemas (not user-field-name dicts), so we recurse into them
+# normally and keyword typos inside them remain detectable.
+_SCHEMA_CONTENT_KEYS = frozenset({"properties", "$defs", "definitions", "patternProperties"})
+
+
+def _collect_all_keys(obj: Any) -> set[str]:
+    """Collect all keys used in a schema object (recursive).
+
+    For property-container keys (``properties``, ``$defs``, etc.) skips the
+    immediate child *names* (which are user-defined field names, not schema
+    keywords) but still recurses into each child's *sub-schema value* so that
+    keyword typos inside property definitions remain detectable.
+    """
     keys: set[str] = set()
     if isinstance(obj, dict):
-        keys.update(obj.keys())
-        for value in obj.values():
-            keys.update(_collect_all_keys(value))
+        for k, v in obj.items():
+            keys.add(k)
+            if k in _SCHEMA_CONTENT_KEYS:
+                # Skip child names (user field names / definition names) but
+                # recurse into each child's sub-schema so typos are caught.
+                if isinstance(v, dict):
+                    for sub_schema in v.values():
+                        keys |= _collect_all_keys(sub_schema)
+                elif isinstance(v, list):
+                    for item in v:
+                        keys |= _collect_all_keys(item)
+            else:
+                keys |= _collect_all_keys(v)
     elif isinstance(obj, list):
         for item in obj:
-            keys.update(_collect_all_keys(item))
+            keys |= _collect_all_keys(item)
     return keys
 
 

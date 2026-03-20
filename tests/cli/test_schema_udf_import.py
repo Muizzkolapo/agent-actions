@@ -32,7 +32,7 @@ class TestUDFRegistryImportError:
         mock_paths_factory.return_value = mock_paths
 
         mock_workflow_instance = MagicMock()
-        mock_workflow_instance.agent_configs = {"action1": {"kind": "llm"}}
+        mock_workflow_instance.action_configs = {"action1": {"kind": "llm"}}
         mock_workflow.return_value = mock_workflow_instance
 
         command = SchemaCommand(
@@ -76,7 +76,7 @@ class TestUDFRegistryImportError:
         mock_paths_factory.return_value = mock_paths
 
         mock_workflow_instance = MagicMock()
-        mock_workflow_instance.agent_configs = {"action1": {"kind": "llm"}}
+        mock_workflow_instance.action_configs = {"action1": {"kind": "llm"}}
         mock_workflow_instance.execution_order = ["action1"]
         mock_workflow.return_value = mock_workflow_instance
 

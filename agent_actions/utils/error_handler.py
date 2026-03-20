@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, NoReturn, TypeVar
 
 from agent_actions.errors import (
     AgentActionsError,
@@ -35,7 +35,7 @@ class ErrorHandler:
         message: str,
         error_type: type[T] | None = None,
         context: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> NoReturn:
         """Log and re-raise as *error_type* (or AgentActionsError)."""
         error_details = {"error": get_error_detail(error), **(context or {})}
         # DEBUG only; the top-level handler (main.py) logs at ERROR
@@ -50,7 +50,7 @@ class ErrorHandler:
     @staticmethod
     def handle_validation_error(
         error: Exception, target: str, context: dict[str, Any] | None = None
-    ) -> None:
+    ) -> NoReturn:
         """Re-raise as ValidationError for the given *target*."""
         message = f"Validation failed for {target}"
         ErrorHandler.handle_error(error, message, ValidationError, context)
@@ -61,7 +61,7 @@ class ErrorHandler:
         operation: str,
         path: str | Path,
         context: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> NoReturn:
         """Re-raise as FileLoadError or FileSystemError."""
 
         error_type: type[FileSystemError]
@@ -77,7 +77,7 @@ class ErrorHandler:
     @staticmethod
     def handle_config_error(
         error: Exception, operation: str, config_name: str, context: dict[str, Any] | None = None
-    ) -> None:
+    ) -> NoReturn:
         """Re-raise as ConfigurationError for the given *config_name*."""
 
         message = f"Configuration operation '{operation}' failed for {config_name}"
@@ -89,7 +89,7 @@ class ErrorHandler:
         operation: str,
         template_name: str,
         context: dict[str, Any] | None = None,
-    ) -> None:
+    ) -> NoReturn:
         """Re-raise as TemplateRenderingError for the given *template_name*."""
 
         message = f"Template operation '{operation}' failed for {template_name}"
@@ -98,7 +98,7 @@ class ErrorHandler:
     @staticmethod
     def handle_execution_error(
         error: Exception, operation: str, target: str, context: dict[str, Any] | None = None
-    ) -> None:
+    ) -> NoReturn:
         """Re-raise as AgentExecutionError for the given *target*."""
 
         message = f"Execution of '{operation}' failed for {target}"

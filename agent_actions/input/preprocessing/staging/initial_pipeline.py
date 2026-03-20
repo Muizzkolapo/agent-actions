@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from agent_actions.config.types import RunMode
-from agent_actions.errors import AgentActionsError
+from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
@@ -111,7 +111,7 @@ def _validate_staged_data(
 
     try:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, ConfigValidationError):
         return
 
     if not raw_prompt:

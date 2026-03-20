@@ -62,10 +62,10 @@ class BaseInspectCommand:
     def _analyze_dependencies(self, workflow: AgentWorkflow) -> dict[str, Any]:
         from agent_actions.prompt.context.scope_inference import infer_dependencies
 
-        workflow_actions = list(workflow.agent_configs.keys())
+        workflow_actions = list(workflow.action_configs.keys())
         result = {}
 
-        for action_name, action_config in workflow.agent_configs.items():
+        for action_name, action_config in workflow.action_configs.items():
             deps_raw = action_config.get("dependencies", [])
             if isinstance(deps_raw, str):
                 explicit_deps = [deps_raw]
@@ -267,7 +267,7 @@ class GraphCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
         dependency_info = self._analyze_dependencies(workflow)
-        execution_order = workflow.execution_order or list(workflow.agent_configs.keys())
+        execution_order = workflow.execution_order or list(workflow.action_configs.keys())
 
         if self.json_output:
             self._output_json(workflow, dependency_info, execution_order)
@@ -289,7 +289,7 @@ class GraphCommand(BaseInspectCommand):
                     "input_sources": info["input_sources"],
                     "context_sources": info["context_sources"],
                     "output_fields": self._get_output_fields(
-                        workflow.agent_configs.get(name, {}),
+                        workflow.action_configs.get(name, {}),
                         self.paths.schema_dir if self.paths else None,
                     ),
                 }
@@ -315,7 +315,7 @@ class GraphCommand(BaseInspectCommand):
                 continue
 
             info = dependency_info[action_name]
-            action_config = workflow.agent_configs.get(action_name, {})
+            action_config = workflow.action_configs.get(action_name, {})
             action_type = self._get_action_type(info["input_sources"], info["context_sources"])
 
             node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")
@@ -383,13 +383,13 @@ class ActionCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
 
-        if self.action_name not in workflow.agent_configs:
-            available = ", ".join(workflow.agent_configs.keys())
+        if self.action_name not in workflow.action_configs:
+            available = ", ".join(workflow.action_configs.keys())
             raise click.ClickException(
                 f"Action '{self.action_name}' not found. Available: {available}"
             )
 
-        action_config = workflow.agent_configs[self.action_name]
+        action_config = workflow.action_configs[self.action_name]
         dependency_info = self._analyze_dependencies(workflow)
         info = dependency_info[self.action_name]
 
@@ -520,13 +520,13 @@ class ContextCommand(BaseInspectCommand):
     def execute(self, project_root: Path | None = None) -> None:
         workflow = self._load_workflow(project_root=project_root)
 
-        if self.target_action_name not in workflow.agent_configs:
-            available = ", ".join(workflow.agent_configs.keys())
+        if self.target_action_name not in workflow.action_configs:
+            available = ", ".join(workflow.action_configs.keys())
             raise click.ClickException(
                 f"Action '{self.target_action_name}' not found. Available: {available}"
             )
 
-        action_config = workflow.agent_configs[self.target_action_name]
+        action_config = workflow.action_configs[self.target_action_name]
         dependency_info = self._analyze_dependencies(workflow)
         info = dependency_info[self.target_action_name]
 
@@ -549,12 +549,12 @@ class ContextCommand(BaseInspectCommand):
         namespaces["source"] = ["[from source data]"]
 
         for dep in info["input_sources"]:
-            dep_config = workflow.agent_configs.get(dep, {})
+            dep_config = workflow.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(dep_config, schema_dir)
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 
         for dep in info["context_sources"]:
-            dep_config = workflow.agent_configs.get(dep, {})
+            dep_config = workflow.action_configs.get(dep, {})
             dep_fields = self._get_output_fields(dep_config, schema_dir)
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 

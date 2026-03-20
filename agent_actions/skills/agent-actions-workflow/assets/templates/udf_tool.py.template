@@ -29,7 +29,7 @@ class {{ToolName}}Input(TypedDict, total=False):
     record_type: str
 
 
-@udf_tool(input_type={{ToolName}}Input)
+@udf_tool()
 def {{tool_function_name}}(data: dict) -> dict:
     """
     {{Brief description of what this tool does.}}

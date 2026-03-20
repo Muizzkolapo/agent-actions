@@ -62,7 +62,7 @@ class SchemaCommand:
         workflow_config = {
             "name": self.agent_name,
             "actions": [
-                {**config, "name": name} for name, config in workflow.agent_configs.items()
+                {**config, "name": name} for name, config in workflow.action_configs.items()
             ],
         }
 

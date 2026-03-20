@@ -57,10 +57,12 @@ class TestCollectAllKeys:
         assert keys == {"type", "required"}
 
     def test_nested_dict(self):
+        # Child names of "properties" are skipped (user field names, not schema
+        # keywords) but sub-schema values ARE recursed so typos are detectable.
         keys = _collect_all_keys({"properties": {"name": {"type": "string"}}})
         assert "properties" in keys
-        assert "name" in keys
-        assert "type" in keys
+        assert "name" not in keys
+        assert "type" in keys  # sub-schema {"type": "string"} is still visited
 
     def test_list_of_dicts(self):
         keys = _collect_all_keys([{"a": 1}, {"b": 2}])
@@ -222,9 +224,7 @@ class TestProcessSchemaFile:
         assert any("invalid json" in e.lower() for e in validator.get_errors())
 
     def test_valid_schema_file_no_structural_errors(self, validator, tmp_path):
-        """A well-formed schema may still trigger 'suspicious key' warnings from
-        nested property names (since _collect_all_keys is recursive). Verify
-        there are no JSON-parse or meta-schema errors."""
+        """Verify a well-formed schema produces no JSON-parse or meta-schema errors."""
         schema = {
             "type": "object",
             "properties": {"title": {"type": "string"}},
@@ -436,3 +436,88 @@ class TestValidateMethod:
             }
         )
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Regression B-4/D-1: user field names not treated as schema keywords
+# ---------------------------------------------------------------------------
+
+
+class TestCollectAllKeysPropertySkipping:
+    """User-defined field names inside 'properties' must not be flagged as unknown keys."""
+
+    def test_user_field_names_not_collected(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string"},
+                "email": {"type": "string"},
+            },
+        }
+        keys = _collect_all_keys(schema)
+        assert "customer_id" not in keys
+        assert "email" not in keys
+        assert "properties" in keys
+        assert "type" in keys
+
+    def test_defs_field_names_not_collected(self):
+        schema = {
+            "$defs": {
+                "Address": {"type": "object", "properties": {"street": {"type": "string"}}}
+            }
+        }
+        keys = _collect_all_keys(schema)
+        assert "Address" not in keys
+        assert "street" not in keys
+        assert "$defs" in keys
+
+    def test_definitions_field_names_not_collected(self):
+        schema = {
+            "definitions": {
+                "MyType": {"type": "string", "description": "a custom type"}
+            }
+        }
+        keys = _collect_all_keys(schema)
+        assert "MyType" not in keys
+        assert "definitions" in keys
+
+    def test_pattern_properties_field_names_not_collected(self):
+        schema = {
+            "patternProperties": {
+                "^S_": {"type": "string"},
+                "^I_": {"type": "integer"},
+            }
+        }
+        keys = _collect_all_keys(schema)
+        assert "^S_" not in keys
+        assert "^I_" not in keys
+        assert "patternProperties" in keys
+
+    def test_items_keywords_are_descended(self):
+        # items is NOT in _SCHEMA_CONTENT_KEYS — schema keywords inside it are visible
+        # so typos like {"tpye": "string"} inside items will still be flagged.
+        schema = {"type": "array", "items": {"type": "string", "tpye": "oops"}}
+        keys = _collect_all_keys(schema)
+        assert "tpye" in keys  # typo is detectable
+        assert "items" in keys
+
+    def test_all_of_keywords_are_descended(self):
+        # allOf is NOT in _SCHEMA_CONTENT_KEYS — keywords inside it are visible.
+        schema = {"allOf": [{"type": "string"}, {"tpye": "oops"}]}
+        keys = _collect_all_keys(schema)
+        assert "tpye" in keys  # typo inside allOf is detectable
+        assert "allOf" in keys
+
+    def test_real_schema_with_user_fields_produces_zero_suspicious_warnings(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "customer_id": {"type": "string"},
+                "email": {"type": "string"},
+                "order_count": {"type": "integer"},
+            },
+            "required": ["customer_id", "email"],
+        }
+        issues = SchemaValidator._check_common_schema_issues_static(schema, "customer_schema")
+        suspicious = [i for i in issues if "unknown/typo" in i.lower()]
+        assert suspicious == [], f"False-positive suspicious key warnings: {suspicious}"

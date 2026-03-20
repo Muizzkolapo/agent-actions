@@ -3,10 +3,13 @@
 
 import argparse
 import json
+import logging
 import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Pure infrastructure keys excluded from field analysis.
 # Subset of agent_actions.prompt.context.scope._RECORD_METADATA_KEYS —
@@ -87,7 +90,14 @@ def extract_fields(data: dict) -> dict[str, str]:
 
 
 def load_node_data(node_dir: Path) -> dict[str, str] | None:
-    """Load and extract fields from a node's output."""
+    """Load and extract fields from a node's output.
+
+    Returns:
+        None  — no JSON files exist in the directory; node is skipped entirely.
+        {}    — a JSON file was found but was unreadable/malformed; node is
+                included with zero fields so it still appears in the flow diff.
+        dict  — successfully extracted field-name → type-string mapping.
+    """
     json_files = list(node_dir.glob("combined_*.json"))
     if not json_files:
         json_files = list(node_dir.glob("*.json"))
@@ -95,11 +105,34 @@ def load_node_data(node_dir: Path) -> dict[str, str] | None:
     if not json_files:
         return None
 
-    with open(json_files[0]) as f:
-        data = json.load(f)
+    try:
+        with open(json_files[0]) as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        logger.warning("Invalid JSON in %s: %s", json_files[0], e)
+        return {}
+    except OSError as e:
+        logger.warning("Could not read %s: %s", json_files[0], e)
+        return {}
 
-    if isinstance(data, list) and data:
+    if data is None:
+        logger.warning("JSON file contained null, expected dict or list")
+        return {}
+
+    if isinstance(data, list):
+        if not data:
+            logger.warning("JSON file contained empty array")
+            return {}
+        if not isinstance(data[0], dict):
+            logger.warning(
+                "Expected dict in JSON array, got %s", type(data[0]).__name__
+            )
+            return {}
         data = data[0]
+
+    if not isinstance(data, dict):
+        logger.warning("Expected dict at top level, got %s", type(data).__name__)
+        return {}
 
     return extract_fields(data)
 

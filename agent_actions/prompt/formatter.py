@@ -1,6 +1,6 @@
 """Prompt formatting and loading."""
 
-from agent_actions.errors import PromptValidationError
+from agent_actions.errors import ConfigValidationError, PromptValidationError
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.constants import PROMPT_KEY
 
@@ -20,12 +20,15 @@ class PromptFormatter:
             Raw prompt string
 
         Raises:
-            ValueError: If prompt retrieval fails
+            ConfigValidationError: If prompt is an empty/whitespace string for non-tool/hitl/seed actions
+            PromptValidationError: If prompt retrieval or loading fails
         """
+        raw_prompt = agent_config.get(PROMPT_KEY)
+        if agent_config.get("kind") not in ("tool", "hitl", "seed", "source") and isinstance(raw_prompt, str) and not raw_prompt.strip():
+            raise ConfigValidationError("prompt cannot be an empty string")
         try:
             if PROMPT_KEY not in agent_config:
                 return "Process the following content: {content}"
-            raw_prompt = agent_config[PROMPT_KEY]
             if isinstance(raw_prompt, str) and raw_prompt.startswith("$"):
                 raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
             if not raw_prompt:
