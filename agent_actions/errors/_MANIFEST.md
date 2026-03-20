@@ -4,13 +4,13 @@
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `base.py` | Module | Base exception classes for agent-actions. | `utilities` |
+| `base.py` | Module | Base exception classes for agent-actions. `AgentActionsError.__init__` defensively copies `context` (`dict(context) if context else {}`), preventing mutation by callers — inherited by all subclasses. | `utilities` |
 | `AgentActionsError` | Class | Base exception for all agent-actions errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `detailed_str` | Method | Return message with full context dict — use at debug/event boundaries. | - |
 | `get_error_detail` | Function | Return `detailed_str()` for `AgentActionsError`, else `str()`. Use instead of `str(error)` at structured-logging boundaries. | - |
 | `common.py` | Module | Common errors used across multiple domains. | `errors` |
 | `InvalidParameterError` | Class | Raised when invalid or missing parameters are provided. | - |
-| `configuration.py` | Module | Configuration-related errors. | `errors` |
+| `configuration.py` | Module | Configuration-related errors. `ConfigurationError.__init__` guards `config_key` with `config_key or message or "<no key>"` to ensure the interpolated key is never `None`. | `errors` |
 | `ConfigurationError` | Class | Base exception for configuration-related errors. | - |
 | `ConfigValidationError` | Class | Raised when configuration validation fails. | - |
 | `DuplicateFunctionError` | Class | Raised when duplicate @udf_tool function names are detected. | - |
@@ -18,7 +18,7 @@
 | `UDFLoadError` | Class | Raised when a UDF module fails to load. | - |
 | `AgentNotFoundError` | Class | Raised when a specified agent cannot be found. | - |
 | `ProjectNotFoundError` | Class | Raised when a command requires being in a project but agent_actions.yml is not found. | - |
-| `external_services.py` | Module | External service and vendor API errors. | `errors` |
+| `external_services.py` | Module | External service and vendor API errors. `ExternalServiceError.__init__` guards `endpoint` with `endpoint or "<unknown>"` before interpolation. | `errors` |
 | `ExternalServiceError` | Class | Base exception for external service interactions. | - |
 | `VendorAPIError` | Class | Raised when an error occurs during a call to a vendor's API. | - |
 | `AnthropicError` | Class | Specific error for Anthropic API failures. | - |

@@ -10,7 +10,7 @@ architecture designed for future backends (S3, DuckDB, PostgreSQL, etc.).
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
 | `__init__.py` | Module | Package exports for backend implementations. | `typing` |
-| `sqlite_backend.py` | Module | SQLite implementation of `StorageBackend` using WAL mode for concurrency. | `sqlite3`, `json`, `storage.backend` |
+| `sqlite_backend.py` | Module | SQLite implementation of `StorageBackend` using WAL mode for concurrency. Thread-safe: `_lock` is acquired inside the `connection` property before returning the connection; `set_disposition` validates `relative_path` via `_validate_identifier` before use. | `sqlite3`, `json`, `storage.backend` |
 | `SQLiteBackend` | Class | Stores source/target data in SQLite with deduplication by `source_guid`. Tables: `source_data`, `target_data`, `record_disposition`. | `storage.backend` |
 
 ## SQLite Schema
