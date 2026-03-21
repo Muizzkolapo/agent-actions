@@ -9,7 +9,7 @@ from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.tooling.code_scanner import scan_tool_functions
-from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND, HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -150,7 +150,7 @@ class SchemaExtractor:
         """Extract output schema from action config."""
         output = OutputSchema()
 
-        kind = agent_config.get("kind", get_default("kind"))
+        kind = agent_config.get("kind", DEFAULT_ACTION_KIND)
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
@@ -172,7 +172,7 @@ class SchemaExtractor:
         """Extract input schema from action config."""
         input_schema = InputSchema()
 
-        kind = agent_config.get("kind", get_default("kind"))
+        kind = agent_config.get("kind", DEFAULT_ACTION_KIND)
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":

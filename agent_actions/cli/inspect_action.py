@@ -12,6 +12,7 @@ from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 from .inspect_base import BaseInspectCommand
 
@@ -54,7 +55,7 @@ class ActionCommand(BaseInspectCommand):
             "workflow": self.agent_name,
             "action": self.action_name,
             "type": self._get_action_type(info["input_sources"], info["context_sources"]),
-            "kind": action_config.get("kind", get_default("kind")),
+            "kind": action_config.get("kind", DEFAULT_ACTION_KIND),
             "model": action_config.get("model_name"),
             "input_sources": info["input_sources"],
             "context_sources": info["context_sources"],
@@ -72,7 +73,7 @@ class ActionCommand(BaseInspectCommand):
         self.console.print(f"[bold cyan]Action: {self.action_name}[/bold cyan]")
         self.console.print(f"[dim]Type: {action_type}[/dim]\n")
 
-        kind = action_config.get("kind", get_default("kind"))
+        kind = action_config.get("kind", DEFAULT_ACTION_KIND)
         model = action_config.get("model_name", "default")
         granularity = action_config.get("granularity", get_default("granularity"))
 

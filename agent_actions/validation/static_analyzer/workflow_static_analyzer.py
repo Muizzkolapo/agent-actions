@@ -8,8 +8,11 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.output.response.config_fields import get_default
-from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
+from agent_actions.utils.constants import (
+    DEFAULT_ACTION_KIND,
+    RESERVED_AGENT_NAMES,
+    SPECIAL_NAMESPACES,
+)
 
 from .data_flow_graph import (
     ActionKind,
@@ -351,7 +354,7 @@ class WorkflowStaticAnalyzer:
         name = action_config.get("name", "unknown")
 
         # Determine action type
-        kind = action_config.get("kind", get_default("kind"))
+        kind = action_config.get("kind", DEFAULT_ACTION_KIND)
         model_vendor = action_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":

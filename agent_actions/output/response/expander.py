@@ -15,6 +15,8 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+
 from .config_fields import get_default, inherit_simple_fields
 from .expander_action_types import (
     process_guard_config,
@@ -252,7 +254,7 @@ class ActionExpander:
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
 
-        action_kind = action.get("kind", get_default("kind"))
+        action_kind = action.get("kind", DEFAULT_ACTION_KIND)
         # HITL is a non-LLM action type and should always route to the HITL client,
         # regardless of inherited/default model_vendor.
         if action_kind == "hitl":
