@@ -231,6 +231,34 @@ class TestEndToEndSecretStrPipeline:
         assert isinstance(restored.api_key, SecretStr)
         assert restored.api_key.get_secret_value() == "sk-roundtrip"
 
+    def test_manager_serialization_path_preserves_secret_str(self):
+        """When manager.py serializes a validated ActionConfig via model_dump(mode='python'),
+        api_key must remain SecretStr through the expander to the final agent dict.
+        This verifies the fix for the validate-and-discard pattern (issue #1174)."""
+        from agent_actions.output.response.expander import ActionExpander
+
+        action_model = ActionConfig(
+            name="classify",
+            intent="Classify items",
+            model_vendor="openai",
+            model_name="gpt-4",
+            api_key="sk-manager-path",
+        )
+        # Simulate what manager.py now does after capturing the validated WorkflowConfig
+        action_dict = action_model.model_dump(mode="python", exclude_unset=True, by_alias=True)
+        assert isinstance(action_dict["api_key"], SecretStr)
+
+        # Unlike test_expander_output_coerced_to_secret_str_by_agent_config (which feeds
+        # plain-str dicts and expects plain-str output), here the input dict already
+        # contains a SecretStr — the expander passes it through opaquely.
+        # When expander receives a Pydantic-serialized dict, SecretStr flows through
+        result = ActionExpander.expand_actions_to_agents(
+            {"name": "test_wf", "actions": [action_dict], "defaults": {}}
+        )
+        agent = result["test_wf"][0]
+        assert isinstance(agent["api_key"], SecretStr)
+        assert agent["api_key"].get_secret_value() == "sk-manager-path"
+
     def test_defaults_dump_flows_into_agent_config_as_secret_str(self):
         """DefaultAgentConfig.model_dump() -> merge -> AgentConfig.model_validate()
         must preserve SecretStr through the merge path."""

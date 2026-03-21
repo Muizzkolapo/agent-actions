@@ -205,14 +205,10 @@ class ConfigManager:
                     context={"operation": "load_project_defaults"},
                     cause=e,
                 ) from e
-            workflow_defaults = self.user_config.get("defaults", {})
-            merged_defaults = {**project_defaults, **workflow_defaults}
-            config_with_merged_defaults = {**self.user_config, "defaults": merged_defaults}
-
             # Validate entire workflow config (actions, defaults, duplicates,
             # dangling deps, circular deps) in one pass via Pydantic.
             try:
-                WorkflowConfig.model_validate(self.user_config)
+                workflow = WorkflowConfig.model_validate(self.user_config)
             except ValidationError as e:
                 raise ConfigurationError(
                     "Workflow configuration is invalid",
@@ -220,8 +216,24 @@ class ConfigManager:
                     cause=e,
                 ) from e
 
-            agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
-            workflow_name = self.user_config.get("name", "workflow")
+            validated_actions = [
+                action.model_dump(mode="python", exclude_unset=True, by_alias=True)
+                for action in workflow.actions
+            ]
+            validated_defaults = (
+                workflow.defaults.model_dump(mode="python", exclude_unset=True, by_alias=True)
+                if workflow.defaults
+                else {}
+            )
+            merged_defaults = {**project_defaults, **validated_defaults}
+            workflow_name = workflow.name
+            config_for_expander = {
+                "name": workflow_name,
+                "actions": validated_actions,
+                "defaults": merged_defaults,
+            }
+
+            agent_config_map = ActionExpander.expand_actions_to_agents(config_for_expander)
             return agent_config_map.get(workflow_name, [])  # type: ignore[return-value]
         else:
             if self.agent_name is None:
