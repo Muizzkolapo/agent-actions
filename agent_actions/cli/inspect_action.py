@@ -60,7 +60,8 @@ class ActionCommand(BaseInspectCommand):
             "context_sources": info["context_sources"],
             "context_scope": info["context_scope"],
             "output_fields": self._get_output_fields(
-                action_config, self.paths.schema_dir if self.paths else None
+                action_config,
+                action_schema=self._get_action_schema(self.action_name),
             ),
         }
         click.echo(json_lib.dumps(output, indent=2))
@@ -116,7 +117,8 @@ class ActionCommand(BaseInspectCommand):
             self.console.print(scope_tree)
 
         output_fields = self._get_output_fields(
-            action_config, self.paths.schema_dir if self.paths else None
+            action_config,
+            action_schema=self._get_action_schema(self.action_name),
         )
         if output_fields:
             self.console.print()
@@ -180,8 +182,7 @@ class ContextCommand(BaseInspectCommand):
         dependency_info = self._analyze_dependencies(workflow)
         info = dependency_info[self.target_action_name]
 
-        schema_dir = self.paths.schema_dir if self.paths else None
-        context_data = self._build_context_data(workflow, action_config, info, schema_dir)
+        context_data = self._build_context_data(workflow, action_config, info)
 
         if self.json_output:
             self._output_json(context_data)
@@ -193,26 +194,31 @@ class ContextCommand(BaseInspectCommand):
         workflow,
         action_config: dict[str, Any],
         info: dict[str, Any],
-        schema_dir: Path | None,
     ) -> dict[str, Any]:
         namespaces = {}
         namespaces["source"] = ["[from source data]"]
 
         for dep in info["input_sources"]:
             dep_config = workflow.action_configs.get(dep, {})
-            dep_fields = self._get_output_fields(dep_config, schema_dir)
+            dep_fields = self._get_output_fields(
+                dep_config, action_schema=self._get_action_schema(dep)
+            )
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 
         for dep in info["context_sources"]:
             dep_config = workflow.action_configs.get(dep, {})
-            dep_fields = self._get_output_fields(dep_config, schema_dir)
+            dep_fields = self._get_output_fields(
+                dep_config, action_schema=self._get_action_schema(dep)
+            )
             namespaces[dep] = dep_fields if dep_fields else ["[schema fields]"]
 
         namespaces["version"] = ["i", "idx", "length", "first", "last"]
         namespaces["workflow"] = ["name", "run_id"]
 
         context_scope = action_config.get("context_scope", {})
-        output_fields = self._get_output_fields(action_config, schema_dir)
+        output_fields = self._get_output_fields(
+            action_config, action_schema=self._get_action_schema(self.target_action_name)
+        )
         total_vars = sum(len(fields) for fields in namespaces.values())
 
         return {

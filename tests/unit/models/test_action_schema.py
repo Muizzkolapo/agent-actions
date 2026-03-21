@@ -95,7 +95,20 @@ class TestFieldInfo:
             "source": "schema",
             "is_required": True,
             "is_dropped": False,
+            "type": "unknown",
+            "description": "",
         }
+
+    def test_to_dict_with_type_and_description(self):
+        f = FieldInfo(
+            name="age",
+            source=FieldSource.SCHEMA,
+            field_type="integer",
+            description="User age",
+        )
+        d = f.to_dict()
+        assert d["type"] == "integer"
+        assert d["description"] == "User age"
 
     def test_to_dict_tool_output_source(self):
         f = FieldInfo(
@@ -110,6 +123,8 @@ class TestFieldInfo:
             "source": "tool_output",
             "is_required": False,
             "is_dropped": True,
+            "type": "unknown",
+            "description": "",
         }
 
     def test_all_field_sources_serialize(self):

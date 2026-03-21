@@ -7,8 +7,7 @@ similar to TypeScript's compile-time type checking.
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
+from agent_actions.errors import ConfigurationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
@@ -22,6 +21,8 @@ from .data_flow_graph import (
 from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
+
+logger = logging.getLogger(__name__)
 from .schema_structure_validator import SchemaStructureValidator
 from .type_checker import StaticTypeChecker
 
@@ -399,8 +400,8 @@ class WorkflowStaticAnalyzer:
             )
             # All dependencies (both input and context) for graph building
             dependencies = set(input_sources + context_sources)
-        except Exception as e:
-            logger.debug("Dependency inference failed for '%s': %s", name, e, exc_info=True)
+        except (ConfigurationError, KeyError, ValueError) as e:
+            logger.warning("Dependency inference failed for '%s': %s", name, e, exc_info=True)
             deps_list = action_config.get("depends_on") or action_config.get("dependencies", [])
             dependencies = set()
             if isinstance(deps_list, str):

@@ -377,16 +377,27 @@ class TestProjectRootFallback:
 class TestGetOutputFieldsWithSchemaDir:
     """_get_output_fields correctly uses schema_dir for named schema resolution."""
 
-    def test_get_output_fields_loads_schema_from_dir(self, tmp_path):
-        """Named schema is loaded from the provided schema_dir."""
+    def test_get_output_fields_from_action_schema(self):
+        """Named schema fields are resolved via ActionSchema (WorkflowSchemaService)."""
         from agent_actions.cli.inspect import BaseInspectCommand
+        from agent_actions.models.action_schema import (
+            ActionKind,
+            ActionSchema,
+            FieldInfo,
+            FieldSource,
+        )
 
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
-        (schema_dir / "test_schema.yml").write_text("properties:\n  field_a: {}\n  field_b: {}")
+        action_schema = ActionSchema(
+            name="test_action",
+            kind=ActionKind.LLM,
+            output_fields=[
+                FieldInfo(name="field_a", source=FieldSource.SCHEMA),
+                FieldInfo(name="field_b", source=FieldSource.SCHEMA),
+            ],
+        )
 
         config = {"schema_name": "test_schema"}
-        fields = BaseInspectCommand._get_output_fields(config, schema_dir=schema_dir)
+        fields = BaseInspectCommand._get_output_fields(config, action_schema=action_schema)
         assert set(fields) == {"field_a", "field_b"}
 
     def test_get_output_fields_without_schema_dir_returns_placeholder(self):

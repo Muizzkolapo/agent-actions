@@ -14,8 +14,12 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.defaults import DocsDefaults
+from agent_actions.tooling.code_scanner import (
+    extract_function_details,
+    extract_typed_dicts,
+    scan_tool_functions,
+)
 
-from .code_scanners import extract_function_details, extract_typed_dicts, scan_tool_functions
 from .component_scanners import (
     scan_data_loaders,
     scan_error_types,

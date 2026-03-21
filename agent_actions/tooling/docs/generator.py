@@ -11,14 +11,15 @@ from typing import Any
 import click
 import yaml
 
-logger = logging.getLogger(__name__)
-
 from agent_actions.config.path_config import load_project_config
-from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
+from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 from . import scanner
-from .parser import WorkflowParser, extract_fields_for_docs
+from .parser import WorkflowParser
 from .run_tracker import _empty_runs_data
+
+logger = logging.getLogger(__name__)
 
 
 class CatalogGenerator:
@@ -28,58 +29,58 @@ class CatalogGenerator:
         self.workflows_data = workflows_data
         self.parser = WorkflowParser()
         self.project_path = Path(project_path) if project_path else None
-        self.schema_dir = self._find_schema_dir()
 
-    def _find_schema_dir(self) -> Path | None:
-        """Find the schema directory in the project."""
-        if not self.project_path:
+    def _build_schema_service(self, workflow: dict[str, Any]) -> WorkflowSchemaService | None:
+        """Build a WorkflowSchemaService for a parsed workflow.
+
+        Returns None only if the workflow has no actions.
+        """
+        actions = workflow.get("actions", {})
+        if not actions:
             return None
 
-        # Try common locations
-        schema_locations = [
-            self.project_path / "schema",
-            self.project_path / "schemas",
-            self.project_path.parent / "schema",
-        ]
+        workflow_config = WorkflowSchemaService.build_workflow_config(
+            workflow.get("name", "unknown"), actions
+        )
+        schema_dir = self.project_path / "schema" if self.project_path else None
+        return WorkflowSchemaService(
+            workflow_config,
+            project_root=self.project_path,
+            schema_dir=schema_dir,
+        )
 
-        for schema_dir in schema_locations:
-            if schema_dir.exists() and schema_dir.is_dir():
-                return schema_dir
+    def _enrich_action_with_fields(
+        self, action: dict[str, Any], action_schema: ActionSchema | None = None
+    ) -> dict[str, Any]:
+        """Enrich action with input/output field information for lineage.
 
-        return None
-
-    def _enrich_action_with_fields(self, action: dict[str, Any]) -> dict[str, Any]:
-        """Enrich action with input/output field information for lineage."""
+        Uses ActionSchema from WorkflowSchemaService when available (preferred).
+        Falls back to inline schema dict extraction for inline definitions.
+        """
         enriched = action.copy()
 
-        # Extract output fields from schema
-        if "schema" in action:
+        if action_schema and action_schema.output_fields:
+            # Preferred path: consume pre-resolved ActionSchema
+            non_dropped = [f for f in action_schema.output_fields if not f.is_dropped]
+            enriched["outputs"] = [f.name for f in non_dropped]
+            enriched["output_fields"] = [f.to_dict() for f in non_dropped]
+        elif "schema" in action and isinstance(action["schema"], dict):
+            # Inline schema dict — not file-based, so WorkflowSchemaService
+            # doesn't resolve these. Extract field names directly.
             schema_value = action["schema"]
-
-            # Handle two types of schemas:
-            # 1. String reference to schema file (e.g., "candidate_facts_list")
-            # 2. Inline schema dict (e.g., {"summary_title": "string", ...})
-
-            if isinstance(schema_value, str) and self.schema_dir:
-                # Referenced schema - load raw YAML and extract fields
-                try:
-                    raw_schema = SchemaLoader.load_schema(schema_value, self.schema_dir)
-                    fields = extract_fields_for_docs(raw_schema)
-                    if fields:
-                        enriched["outputs"] = [field["name"] for field in fields]
-                        enriched["output_fields"] = fields
-                except FileNotFoundError:
-                    pass  # Schema file not found, skip
-
-            elif isinstance(schema_value, dict):
-                # Inline schema - extract field names directly
-                field_names = list(schema_value.keys())
-                enriched["outputs"] = field_names
-                # Create field details from inline schema
-                enriched["output_fields"] = [
-                    {"name": name, "type": type_val, "description": ""}
-                    for name, type_val in schema_value.items()
-                ]
+            field_names = list(schema_value.keys())
+            enriched["outputs"] = field_names
+            enriched["output_fields"] = [
+                FieldInfo(
+                    name=name,
+                    source=FieldSource.SCHEMA,
+                    is_required=True,
+                    is_dropped=False,
+                    field_type=type_val if isinstance(type_val, str) else "unknown",
+                    description="",
+                ).to_dict()
+                for name, type_val in schema_value.items()
+            ]
 
         # Extract input fields from context_scope
         if "context_scope" in action:
@@ -175,13 +176,20 @@ class CatalogGenerator:
             if workflow is None:
                 continue
 
+            # Build WorkflowSchemaService for this workflow to get ActionSchemas
+            schema_service = self._build_schema_service(workflow)
+
             # Merge dependencies and enrich actions with field information
             enriched_actions = {}
             workflow_id = workflow_name
 
             for action_name, action in workflow["actions"].items():
+                # Get pre-resolved ActionSchema (has field types, descriptions)
+                action_schema = (
+                    schema_service.get_action_schema(action_name) if schema_service else None
+                )
                 # Enrich with input/output fields for lineage
-                enriched_action = self._enrich_action_with_fields(action)
+                enriched_action = self._enrich_action_with_fields(action, action_schema)
 
                 # Attach tool function details for tool actions
                 if action.get("type") == "tool" and tool_functions_data:

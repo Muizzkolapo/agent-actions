@@ -36,8 +36,7 @@ class WorkflowSchemaService:
         return {
             "name": name,
             "actions": [
-                {**config, "name": action_name}
-                for action_name, config in action_configs.items()
+                {**config, "name": action_name} for action_name, config in action_configs.items()
             ],
         }
 
@@ -125,6 +124,83 @@ class WorkflowSchemaService:
             "validation": validation.to_dict(),
         }
 
+    @staticmethod
+    def _lookup_in_properties(
+        properties: dict[str, Any], required_list: list[str], field_name: str
+    ) -> tuple[str, str, bool] | None:
+        """Look up a field in a JSON Schema properties dict.
+
+        Returns (field_type, description, is_required) or None if not found.
+        """
+        if field_name not in properties:
+            return None
+        prop = properties[field_name]
+        return (
+            prop.get("type", "unknown"),
+            prop.get("description", ""),
+            field_name in required_list,
+        )
+
+    @staticmethod
+    def _extract_field_metadata(
+        json_schema: dict[str, Any] | None, field_name: str
+    ) -> tuple[str, str, bool]:
+        """Extract type, description, and required flag from a JSON schema for a field.
+
+        Returns (field_type, description, is_required).
+        """
+        if not json_schema:
+            return "unknown", "", False
+
+        lookup = WorkflowSchemaService._lookup_in_properties
+
+        # Format 1: Custom 'fields' array — [{id, type, description}, ...]
+        if "fields" in json_schema and isinstance(json_schema["fields"], list):
+            for field_def in json_schema["fields"]:
+                if not isinstance(field_def, dict):
+                    continue
+                field_id = field_def.get("id") or field_def.get("name")
+                if field_id == field_name:
+                    return (
+                        field_def.get("type", "unknown"),
+                        field_def.get("description", ""),
+                        field_def.get("required", False),
+                    )
+                # Array field with items.properties
+                if (
+                    field_def.get("type") == "array"
+                    and "items" in field_def
+                    and "properties" in field_def["items"]
+                ):
+                    result = lookup(
+                        field_def["items"]["properties"],
+                        field_def["items"].get("required", []),
+                        field_name,
+                    )
+                    if result:
+                        return result
+
+        # Format 2: Array schema with items.properties
+        if json_schema.get("type") == "array" and "items" in json_schema:
+            result = lookup(
+                json_schema.get("items", {}).get("properties", {}),
+                json_schema.get("items", {}).get("required", []),
+                field_name,
+            )
+            if result:
+                return result
+
+        # Format 3: Object schema with properties
+        result = lookup(
+            json_schema.get("properties", {}),
+            json_schema.get("required", []),
+            field_name,
+        )
+        if result:
+            return result
+
+        return "unknown", "", False
+
     def _build_action_schema(self, node: DataFlowNode) -> ActionSchema:
         """Build ActionSchema from a DataFlowNode."""
         upstream_refs = [
@@ -157,6 +233,7 @@ class WorkflowSchemaService:
                 )
 
         out = node.output_schema
+        json_schema = out.json_schema
 
         # Deduplicate: a field in both schema_fields and observe_fields should
         # appear only once.  We use a dict keyed by name, first-seen wins
@@ -165,10 +242,14 @@ class WorkflowSchemaService:
         seen: dict[str, FieldInfo] = {}
         for field_name in out.schema_fields:
             if field_name not in seen:
+                ft, desc, req = self._extract_field_metadata(json_schema, field_name)
                 seen[field_name] = FieldInfo(
                     name=field_name,
                     source=FieldSource.SCHEMA,
+                    is_required=req,
                     is_dropped=field_name in out.dropped_fields,
+                    field_type=ft,
+                    description=desc,
                 )
 
         for field_name in out.observe_fields:

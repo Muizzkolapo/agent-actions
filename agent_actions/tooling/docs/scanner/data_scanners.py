@@ -3,6 +3,7 @@
 import itertools
 import logging
 import re
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -112,8 +113,8 @@ def scan_workflow_data(project_root: Path) -> dict[str, Any]:
                 data = scan_sqlite_readonly(db_file, workflow_name)
                 if data is not None:
                     workflow_data[workflow_name] = data
-            except Exception as e:
-                logger.debug("Failed to scan workflow DB %s: %s", db_file, e, exc_info=True)
+            except (OSError, sqlite3.Error) as e:
+                logger.warning("Failed to scan workflow DB %s: %s", db_file, e, exc_info=True)
 
     return workflow_data
 
@@ -297,8 +298,8 @@ def scan_runs(project_root: Path) -> dict[str, Any]:
         if events_path.exists():
             try:
                 action_metrics = extract_action_metrics(events_path)
-            except Exception as e:
-                logger.debug(
+            except (OSError, ValueError, KeyError) as e:
+                logger.warning(
                     "Failed to extract action metrics from %s: %s",
                     events_path,
                     e,

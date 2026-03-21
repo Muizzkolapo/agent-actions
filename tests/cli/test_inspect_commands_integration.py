@@ -13,6 +13,12 @@ from agent_actions.cli.inspect import (
     DependenciesCommand,
     GraphCommand,
 )
+from agent_actions.models.action_schema import (
+    ActionKind,
+    ActionSchema,
+    FieldInfo,
+    FieldSource,
+)
 from agent_actions.workflow.coordinator import AgentWorkflow
 
 
@@ -61,6 +67,35 @@ def _make_dependency_info():
     }
 
 
+def _make_action_schemas():
+    """Create ActionSchema objects matching the workflow mock fixture."""
+    return {
+        "extract": ActionSchema(
+            name="extract",
+            kind=ActionKind.LLM,
+            upstream_refs=[],
+            input_fields=[],
+            output_fields=[
+                FieldInfo(name="fact", source=FieldSource.SCHEMA, field_type="string"),
+            ],
+            dependencies=[],
+            downstream=["summarize"],
+        ),
+        "summarize": ActionSchema(
+            name="summarize",
+            kind=ActionKind.LLM,
+            upstream_refs=[],
+            input_fields=[],
+            output_fields=[
+                FieldInfo(name="score", source=FieldSource.SCHEMA, field_type="number"),
+                FieldInfo(name="summary", source=FieldSource.SCHEMA, field_type="string"),
+            ],
+            dependencies=["extract"],
+            downstream=[],
+        ),
+    }
+
+
 def _new_cmd(cls, **extra_attrs):
     """Instantiate a command class bypassing __init__.
 
@@ -74,6 +109,9 @@ def _new_cmd(cls, **extra_attrs):
     cmd.json_output = False
     cmd.console = Console(file=StringIO(), force_terminal=True, width=120)
     cmd.paths = MagicMock(schema_dir=None)
+    schemas = _make_action_schemas()
+    cmd.schema_service = MagicMock()
+    cmd.schema_service.get_action_schema.side_effect = lambda name: schemas.get(name)
     for k, v in extra_attrs.items():
         setattr(cmd, k, v)
     return cmd

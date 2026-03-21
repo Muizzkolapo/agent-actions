@@ -1,4 +1,11 @@
-"""Code-oriented scan functions: tool functions, TypedDicts, function details."""
+"""AST-based code introspection for tool function discovery.
+
+Shared utility used by both the static analyzer (for input schema inference)
+and the docs scanner (for catalog generation). Extracted from
+tooling/docs/scanner/code_scanners.py to break a circular import:
+    generator.py → schema_service → static_analyzer → schema_extractor
+    → docs.scanner → docs.__init__ → generator.py
+"""
 
 import ast
 import logging

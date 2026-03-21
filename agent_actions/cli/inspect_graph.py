@@ -46,7 +46,7 @@ class GraphCommand(BaseInspectCommand):
                     "context_sources": info["context_sources"],
                     "output_fields": self._get_output_fields(
                         workflow.action_configs.get(name, {}),
-                        self.paths.schema_dir if self.paths else None,
+                        action_schema=self._get_action_schema(name),
                     ),
                 }
                 for name, info in dependency_info.items()
@@ -89,8 +89,9 @@ class GraphCommand(BaseInspectCommand):
             for src in info["context_sources"]:
                 node.add(f"[yellow]◇ {src}[/yellow] [dim](context)[/dim]")
 
-            schema_dir = self.paths.schema_dir if self.paths else None
-            output_fields = self._get_output_fields(action_config, schema_dir)
+            output_fields = self._get_output_fields(
+                action_config, action_schema=self._get_action_schema(action_name)
+            )
             if output_fields:
                 outputs_str = ", ".join(output_fields)
                 node.add(f"[magenta]→ {outputs_str}[/magenta]")

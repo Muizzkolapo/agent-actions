@@ -250,3 +250,226 @@ class TestWorkflowSchemaService:
         schema = service.get_action_schema("producer")
 
         assert "consumer" in schema.downstream
+
+
+class TestExtractFieldMetadata:
+    """Tests for WorkflowSchemaService._extract_field_metadata."""
+
+    _extract = staticmethod(WorkflowSchemaService._extract_field_metadata)
+
+    # -- None / empty schema --------------------------------------------------
+
+    def test_none_schema_returns_defaults(self):
+        ft, desc, req = self._extract(None, "any_field")
+        assert ft == "unknown"
+        assert desc == ""
+        assert req is False
+
+    def test_empty_schema_returns_defaults(self):
+        ft, desc, req = self._extract({}, "any_field")
+        assert ft == "unknown"
+        assert desc == ""
+        assert req is False
+
+    # -- Format 1: Custom 'fields' array --------------------------------------
+
+    def test_format1_exact_match(self):
+        schema = {
+            "fields": [
+                {"id": "name", "type": "string", "description": "Full name", "required": True},
+                {"id": "age", "type": "integer", "description": "Age in years"},
+            ]
+        }
+        ft, desc, req = self._extract(schema, "name")
+        assert ft == "string"
+        assert desc == "Full name"
+        assert req is True
+
+    def test_format1_defaults_required_false(self):
+        schema = {
+            "fields": [
+                {"id": "age", "type": "integer", "description": "Age in years"},
+            ]
+        }
+        ft, desc, req = self._extract(schema, "age")
+        assert ft == "integer"
+        assert desc == "Age in years"
+        assert req is False
+
+    def test_format1_field_not_found(self):
+        schema = {"fields": [{"id": "name", "type": "string"}]}
+        ft, desc, req = self._extract(schema, "missing")
+        assert ft == "unknown"
+        assert desc == ""
+        assert req is False
+
+    def test_format1_name_key_matches(self):
+        """Fields using 'name' instead of 'id' should be found."""
+        schema = {
+            "fields": [
+                {"name": "title", "type": "string", "description": "Title field"},
+            ]
+        }
+        ft, desc, req = self._extract(schema, "title")
+        assert ft == "string"
+        assert desc == "Title field"
+        assert req is False
+
+    def test_format1_non_dict_items_skipped(self):
+        """Non-dict items in the fields array should be skipped, not raise."""
+        schema = {
+            "fields": [
+                "just_a_string",
+                42,
+                {"id": "valid", "type": "boolean", "description": "A flag"},
+            ]
+        }
+        ft, desc, req = self._extract(schema, "valid")
+        assert ft == "boolean"
+        assert desc == "A flag"
+        assert req is False
+
+    def test_format1_id_takes_precedence_over_name(self):
+        """When both 'id' and 'name' are present, 'id' is used (via or short-circuit)."""
+        schema = {
+            "fields": [
+                {"id": "real_id", "name": "alt_name", "type": "string", "description": "Test"},
+            ]
+        }
+        ft, desc, req = self._extract(schema, "real_id")
+        assert ft == "string"
+        # 'alt_name' should NOT match
+        ft2, desc2, req2 = self._extract(schema, "alt_name")
+        assert ft2 == "unknown"
+
+    def test_format1_array_field_with_items_properties(self):
+        schema = {
+            "fields": [
+                {
+                    "id": "items",
+                    "type": "array",
+                    "items": {
+                        "properties": {
+                            "sku": {"type": "string", "description": "Product SKU"},
+                        },
+                        "required": ["sku"],
+                    },
+                }
+            ]
+        }
+        ft, desc, req = self._extract(schema, "sku")
+        assert ft == "string"
+        assert desc == "Product SKU"
+        assert req is True
+
+    # -- Format 2: Array schema with items.properties --------------------------
+
+    def test_format2_array_schema(self):
+        schema = {
+            "type": "array",
+            "items": {
+                "properties": {
+                    "id": {"type": "integer", "description": "Record ID"},
+                    "value": {"type": "number", "description": "Metric value"},
+                },
+                "required": ["id"],
+            },
+        }
+        ft, desc, req = self._extract(schema, "id")
+        assert ft == "integer"
+        assert desc == "Record ID"
+        assert req is True
+
+    def test_format2_optional_field(self):
+        schema = {
+            "type": "array",
+            "items": {
+                "properties": {
+                    "value": {"type": "number", "description": "Metric value"},
+                },
+                "required": [],
+            },
+        }
+        ft, desc, req = self._extract(schema, "value")
+        assert ft == "number"
+        assert desc == "Metric value"
+        assert req is False
+
+    def test_format2_field_not_found(self):
+        schema = {
+            "type": "array",
+            "items": {"properties": {"x": {"type": "string"}}, "required": []},
+        }
+        ft, desc, req = self._extract(schema, "missing")
+        assert ft == "unknown"
+        assert desc == ""
+        assert req is False
+
+    # -- Format 3: Object schema with properties -------------------------------
+
+    def test_format3_object_schema(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "Executive summary"},
+                "score": {"type": "number", "description": "Quality score"},
+            },
+            "required": ["summary"],
+        }
+        ft, desc, req = self._extract(schema, "summary")
+        assert ft == "string"
+        assert desc == "Executive summary"
+        assert req is True
+
+    def test_format3_optional_field(self):
+        schema = {
+            "properties": {
+                "score": {"type": "number", "description": "Quality score"},
+            },
+            "required": [],
+        }
+        ft, desc, req = self._extract(schema, "score")
+        assert ft == "number"
+        assert desc == "Quality score"
+        assert req is False
+
+    def test_format3_field_not_found(self):
+        schema = {
+            "properties": {"x": {"type": "string"}},
+            "required": ["x"],
+        }
+        ft, desc, req = self._extract(schema, "missing")
+        assert ft == "unknown"
+        assert desc == ""
+        assert req is False
+
+
+class TestLookupInProperties:
+    """Tests for WorkflowSchemaService._lookup_in_properties."""
+
+    _lookup = staticmethod(WorkflowSchemaService._lookup_in_properties)
+
+    def test_found_required(self):
+        props = {"name": {"type": "string", "description": "Name"}}
+        result = self._lookup(props, ["name"], "name")
+        assert result == ("string", "Name", True)
+
+    def test_found_optional(self):
+        props = {"name": {"type": "string", "description": "Name"}}
+        result = self._lookup(props, [], "name")
+        assert result == ("string", "Name", False)
+
+    def test_not_found(self):
+        props = {"name": {"type": "string"}}
+        result = self._lookup(props, ["name"], "missing")
+        assert result is None
+
+    def test_missing_type_defaults_unknown(self):
+        props = {"name": {"description": "Name"}}
+        result = self._lookup(props, [], "name")
+        assert result == ("unknown", "Name", False)
+
+    def test_missing_description_defaults_empty(self):
+        props = {"name": {"type": "string"}}
+        result = self._lookup(props, [], "name")
+        assert result == ("string", "", False)

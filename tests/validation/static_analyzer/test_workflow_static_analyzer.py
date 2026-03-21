@@ -894,7 +894,6 @@ class TestContextScopeValidation:
             for e in context_errors
         )
 
-
 class TestPrimaryDependencyValidation:
     """Tests for primary_dependency validation."""
 

@@ -33,6 +33,8 @@ class FieldInfo:
     source: FieldSource
     is_required: bool = True
     is_dropped: bool = False
+    field_type: str = "unknown"
+    description: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +42,8 @@ class FieldInfo:
             "source": self.source.value,
             "is_required": self.is_required,
             "is_dropped": self.is_dropped,
+            "type": self.field_type,
+            "description": self.description,
         }
 
 

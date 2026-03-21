@@ -7,7 +7,7 @@ from typing import Any
 from agent_actions.config.path_config import load_project_config
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.tooling.docs.scanner import scan_tool_functions
+from agent_actions.tooling.code_scanner import scan_tool_functions
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
 
 from .data_flow_graph import InputSchema, OutputSchema
@@ -100,6 +100,46 @@ class SchemaExtractor:
             output.load_error = f"Schema '{schema_id}' could not be loaded: {error}"
         else:
             output.load_error = f"Schema '{schema_id}' not found in {self.schema_dir}"
+
+    def _try_load_schema(
+        self,
+        output: OutputSchema,
+        schema_id: str,
+        schema_loader: Any | None,
+    ) -> bool:
+        """Try to load a schema by name, returning True on success.
+
+        Resolution order: SchemaLoader.load_schema (file-based) first,
+        then fallback to injected schema_loader. Marks failure on output
+        if neither succeeds.
+        """
+        # Try file-based loader first
+        try:
+            loaded = SchemaLoader.load_schema(schema_id, self.schema_dir)
+        except FileNotFoundError:
+            loaded = None
+        if loaded:
+            output.json_schema = loaded
+            output.schema_fields = self.extract_fields_from_json_schema(loaded)
+            return True
+
+        # Try injected loader as fallback
+        if schema_loader:
+            try:
+                loaded = schema_loader.load_schema(schema_id)
+                output.json_schema = loaded
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)
+                return True
+            except (FileNotFoundError, KeyError, ValueError, OSError) as e:
+                logger.warning(
+                    "Schema loading failed for '%s': %s", schema_id, e, exc_info=True
+                )
+                self._mark_schema_load_failure(output, schema_id, e)
+                return False
+
+        # Neither loader found it
+        self._mark_schema_load_failure(output, schema_id)
+        return False
 
     def extract_schema(
         self,
@@ -270,30 +310,8 @@ class SchemaExtractor:
         schema_name = config.get("schema_name")
 
         if not schema_def and schema_name:
-            try:
-                loaded = SchemaLoader.load_schema(schema_name, self.schema_dir)
-            except FileNotFoundError:
-                loaded = None
-            if loaded:
-                output.json_schema = loaded
-                output.schema_fields = self.extract_fields_from_json_schema(loaded)
-                return
-
-            if schema_loader:
-                try:
-                    loaded = schema_loader.load_schema(schema_name)
-                    output.json_schema = loaded
-                    output.schema_fields = self.extract_fields_from_json_schema(loaded)
-                    return
-                except (FileNotFoundError, KeyError, ValueError, OSError) as e:
-                    logger.warning(
-                        "Schema loading failed for '%s': %s", schema_name, e, exc_info=True
-                    )
-                    self._mark_schema_load_failure(output, schema_name, e)
-                    return
-            else:
-                self._mark_schema_load_failure(output, schema_name)
-                return
+            self._try_load_schema(output, schema_name, schema_loader)
+            return
 
         if not schema_def:
             json_mode = config.get("json_mode", get_default("json_mode"))
@@ -308,25 +326,7 @@ class SchemaExtractor:
             return
 
         if isinstance(schema_def, str):
-            try:
-                loaded = SchemaLoader.load_schema(schema_def, self.schema_dir)
-            except FileNotFoundError:
-                loaded = None
-            if loaded:
-                output.json_schema = loaded
-                output.schema_fields = self.extract_fields_from_json_schema(loaded)
-            elif schema_loader:
-                try:
-                    loaded = schema_loader.load_schema(schema_def)
-                    output.json_schema = loaded
-                    output.schema_fields = self.extract_fields_from_json_schema(loaded)
-                except (FileNotFoundError, KeyError, ValueError, OSError) as e:
-                    logger.warning(
-                        "Schema loader fallback failed for '%s': %s", schema_def, e, exc_info=True
-                    )
-                    self._mark_schema_load_failure(output, schema_def, e)
-            else:
-                self._mark_schema_load_failure(output, schema_def)
+            self._try_load_schema(output, schema_def, schema_loader)
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
             output.schema_fields = self.extract_fields_from_json_schema(schema_def)
