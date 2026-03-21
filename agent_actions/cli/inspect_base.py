@@ -1,8 +1,10 @@
 """Shared base class for all inspect subcommands."""
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 
@@ -15,7 +17,9 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.models.action_schema import ActionSchema
 from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
-from agent_actions.workflow.schema_service import WorkflowSchemaService
+
+if TYPE_CHECKING:
+    from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +62,8 @@ class BaseInspectCommand:
             )
         )
 
-        # Build schema service for field resolution
-        self.schema_service = WorkflowSchemaService.from_action_configs(
-            self.agent_name,
-            workflow.action_configs,
-            project_root=project_root,
-        )
+        # Reuse schema service built during static validation
+        self.schema_service = workflow.schema_service
 
         return workflow
 

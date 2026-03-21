@@ -68,14 +68,14 @@ class AgentWorkflow:
         Validates context_scope field references, schema structures, and
         data flow — like dbt compile before dbt run. Raises on errors.
         """
-        schema_service = WorkflowSchemaService.from_action_configs(
+        self.schema_service = WorkflowSchemaService.from_action_configs(
             self.agent_name,
             self.action_configs,
             project_root=self.config.resolve_project_root(),
             with_udf_registry=True,
         )
 
-        result = schema_service.validate()
+        result = self.schema_service.validate()
         if result.errors:
             raise PreFlightValidationError(
                 result.format_report(),
