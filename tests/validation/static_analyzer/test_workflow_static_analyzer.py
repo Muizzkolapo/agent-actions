@@ -640,8 +640,8 @@ class TestContextScopeValidation:
         context_errors = [e for e in result.errors if "context_scope" in e.message]
         assert len(context_errors) == 0
 
-    def test_undeclared_dependency_in_context_scope(self):
-        """Test that undeclared dependency in context_scope is caught."""
+    def test_context_scope_infers_dependency(self):
+        """Test that context_scope references infer dependencies (no explicit depends_on needed)."""
         workflow_config = {
             "actions": [
                 {
@@ -653,7 +653,8 @@ class TestContextScopeValidation:
                 },
                 {
                     "name": "processor",
-                    # Note: depends_on does NOT include 'extractor'
+                    # depends_on does NOT include 'extractor', but context_scope
+                    # references it — the runtime infers the dependency.
                     "depends_on": [],
                     "context_scope": {
                         "observe": ["extractor.facts"],
@@ -664,10 +665,60 @@ class TestContextScopeValidation:
 
         result = analyze_workflow(workflow_config)
 
+        # context_scope references are valid implicit dependencies;
+        # no "undeclared dependency" errors should be raised.
+        context_errors = [
+            e for e in result.errors if "undeclared dependency" in e.message
+        ]
+        assert len(context_errors) == 0
+
+    def test_context_scope_inferred_dep_still_validates_fields(self):
+        """Inferred deps skip 'undeclared' errors but bad fields are still caught."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": [],
+                    "context_scope": {
+                        "observe": ["extractor.nonexistent_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
         assert not result.is_valid
-        context_errors = [e for e in result.errors if "context_scope" in e.message]
-        assert len(context_errors) >= 1
-        assert any("undeclared dependency" in e.message for e in context_errors)
+        field_errors = [e for e in result.errors if "non-existent field" in e.message]
+        assert len(field_errors) >= 1
+
+    def test_context_scope_unknown_action_caught(self):
+        """References to nonexistent actions in context_scope produce errors."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "processor",
+                    "depends_on": [],
+                    "context_scope": {
+                        "observe": ["typo_action.some_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        unknown_errors = [e for e in result.errors if "unknown action" in e.message]
+        assert len(unknown_errors) >= 1
+        assert "typo_action" in unknown_errors[0].message
 
     def test_nonexistent_field_in_context_scope(self):
         """Test that non-existent field in context_scope is caught."""
@@ -807,8 +858,13 @@ class TestContextScopeValidation:
 
         assert not result.is_valid
         context_errors = [e for e in result.errors if "context_scope" in e.message]
-        # Should have errors for: bad_field1, bad_field2, and undeclared_dep
+        # Should have errors for: bad_field1, bad_field2 (non-existent fields),
+        # and undeclared_dep (unknown action — no node in graph).
         assert len(context_errors) >= 3
+        field_errors = [e for e in context_errors if "non-existent field" in e.message]
+        assert len(field_errors) >= 2
+        unknown_errors = [e for e in context_errors if "unknown action" in e.message]
+        assert len(unknown_errors) >= 1
 
     def test_context_scope_reports_error_when_schema_load_fails(self):
         """Test that unresolvable schema_name produces a StaticTypeError, not a silent skip."""

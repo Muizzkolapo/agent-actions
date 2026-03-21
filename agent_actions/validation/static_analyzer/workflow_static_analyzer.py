@@ -165,6 +165,10 @@ class WorkflowStaticAnalyzer:
         Returns:
             List of StaticTypeError for invalid field references
         """
+        from agent_actions.prompt.context.scope_parsing import (
+            extract_action_names_from_context_scope,
+        )
+
         errors: list[StaticTypeError] = []
         actions = self.workflow_config.get("actions", [])
 
@@ -178,13 +182,16 @@ class WorkflowStaticAnalyzer:
             if not context_scope:
                 continue
 
-            # Get action's dependencies
+            # Get action's dependencies (explicit + context_scope-inferred).
+            # The runtime infers deps from context_scope refs, so validation must match.
             deps_list = action.get("depends_on") or action.get("dependencies", [])
             dependencies = set()
             if isinstance(deps_list, list):
                 for dep in deps_list:
                     if isinstance(dep, str):
                         dependencies.add(dep)
+            inferred = extract_action_names_from_context_scope(context_scope)
+            dependencies |= {ns for ns in inferred if ns not in SPECIAL_NAMESPACES}
 
             # Check observe and passthrough directives
             for directive in ["observe", "passthrough"]:
@@ -204,8 +211,9 @@ class WorkflowStaticAnalyzer:
                     dep_name = parts[0]
                     field_name = parts[1] if len(parts) > 1 else ""
 
-                    # Skip special namespaces (source, seed, loop, workflow)
-                    if dep_name in {"source", "seed", "loop", "workflow"}:
+                    # Skip special namespaces and loop (runtime namespace
+                    # not in SPECIAL_NAMESPACES but valid in context_scope)
+                    if dep_name in SPECIAL_NAMESPACES or dep_name == "loop":
                         continue
 
                     # Check if dependency is declared
@@ -232,7 +240,20 @@ class WorkflowStaticAnalyzer:
                     # Validate field exists in dependency's output schema
                     dep_node = self.graph.get_node(dep_name)
                     if not dep_node:
-                        continue  # Dependency doesn't exist - will be caught by other validation
+                        errors.append(
+                            StaticTypeError(
+                                message=f"context_scope.{directive} references unknown action '{dep_name}'",
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=field_ref,
+                                ),
+                                referenced_agent=dep_name,
+                                referenced_field=field_name,
+                                hint=f"No action named '{dep_name}' exists in this workflow. Check for typos.",
+                            )
+                        )
+                        continue
 
                     output_schema = dep_node.output_schema
                     if output_schema.is_dynamic:
