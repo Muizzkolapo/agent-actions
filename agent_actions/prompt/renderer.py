@@ -9,6 +9,7 @@ import yaml
 from pydantic import ValidationError
 from yaml import YAMLError
 
+from agent_actions.config.path_config import get_schema_path
 from agent_actions.config.types import ActionConfigMap, ActionEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
@@ -381,7 +382,12 @@ class ConfigRenderingService:
         try:
             schema_validate_instance = SchemaValidator()
             schema_validate_instance.validate(
-                {"agent_name": agent_name, "schema_dir": Path(template_dir).parent / "schema"}
+                {
+                    "agent_name": agent_name,
+                    "schema_dir": Path(template_dir).parent / get_schema_path(
+                        Path(project_root) if project_root else Path(template_dir).parent
+                    ),
+                }
             )
         except Exception as e:
             raise ConfigurationError(

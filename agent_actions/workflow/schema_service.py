@@ -46,16 +46,16 @@ class WorkflowSchemaService:
         udf_registry: dict[str, Any] | None = None,
         schema_loader: Any | None = None,
         project_root: Any | None = None,
-        schema_dir: Any | None = None,
+        workflow_name: str | None = None,
     ):
         self._config = workflow_config
-        self.workflow_name = workflow_config.get("name", "unknown")
+        self.workflow_name = workflow_name or workflow_config.get("name", "unknown")
         self._analyzer = WorkflowStaticAnalyzer(
             workflow_config,
             udf_registry=udf_registry,
             schema_loader=schema_loader,
             project_root=project_root,
-            schema_dir=schema_dir,
+            workflow_name=self.workflow_name,
         )
         self._schemas: dict[str, ActionSchema] = {}
         self._schema_lock = threading.Lock()

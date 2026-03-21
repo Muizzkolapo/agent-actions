@@ -7,6 +7,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.path_config import get_schema_path
+from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.loader import SchemaLoader
 
 from ..parser import extract_fields_for_docs
@@ -61,16 +63,35 @@ def scan_prompts(project_root: Path) -> dict[str, Any]:
 def scan_schemas(project_root: Path) -> dict[str, Any]:
     """Scan project directory for schema YAML files."""
     schemas: dict[str, Any] = {}
-    schema_dir = project_root / "schema"
+    try:
+        sp = get_schema_path(project_root)
+    except (ConfigValidationError, OSError):
+        return schemas  # No schema_path configured — no schemas to scan
+    # Collect schema files from all locations: project-level + workflow-level
+    schema_files: list[Path] = []
+    project_schema_dir = project_root / sp
+    if project_schema_dir.exists():
+        schema_files.extend(project_schema_dir.glob("*.yml"))
+        schema_files.extend(project_schema_dir.glob("*.yaml"))
 
-    if not schema_dir.exists():
+    wf_root = project_root / "agent_workflow"
+    if wf_root.exists():
+        for wf_dir in sorted(wf_root.iterdir()):
+            if not wf_dir.is_dir():
+                continue
+            wf_schema_dir = wf_dir / sp
+            if wf_schema_dir.exists():
+                schema_files.extend(wf_schema_dir.glob("*.yml"))
+                schema_files.extend(wf_schema_dir.glob("*.yaml"))
+
+    if not schema_files:
         return schemas
 
-    for yml_file in schema_dir.glob("*.yml"):
+    for yml_file in schema_files:
         schema_name = yml_file.stem
 
         try:
-            raw_schema = SchemaLoader.load_schema(schema_name, schema_dir)
+            raw_schema = SchemaLoader.load_schema(schema_name, project_root=project_root)
         except (FileNotFoundError, OSError, UnicodeDecodeError) as e:
             logger.warning("Skipping unreadable schema file %s: %s", yml_file, e)
             continue

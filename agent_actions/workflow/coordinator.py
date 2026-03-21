@@ -70,7 +70,6 @@ class AgentWorkflow:
         data flow — like dbt compile before dbt run. Raises on errors.
         """
         project_root = self.config.resolve_project_root()
-        schema_dir = project_root / "schema"
 
         workflow_config = WorkflowSchemaService.build_workflow_config(
             self.agent_name, self.action_configs
@@ -89,7 +88,7 @@ class AgentWorkflow:
             udf_registry=udf_registry,
             schema_loader=SchemaLoader(),
             project_root=project_root,
-            schema_dir=schema_dir,
+            workflow_name=self.agent_name,
         )
 
         result = schema_service.validate()

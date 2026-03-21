@@ -8,6 +8,8 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
+from agent_actions.config.path_config import get_schema_path
+from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
@@ -575,15 +577,37 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
 
 def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
     """Index all schema files."""
-    schema_dir = project_root / "schema"
-    if not schema_dir.exists():
-        # Try qanalabs/schema structure
-        schema_dir = project_root / "qanalabs" / "schema"
+    try:
+        sp = get_schema_path(project_root)
+    except (ConfigValidationError, OSError):
+        return  # No schema_path configured — no schemas to index
+    schema_dirs = [project_root / sp]
 
-    if not schema_dir.exists():
+    # Also index workflow-level schema directories
+    wf_root = project_root / "agent_workflow"
+    if wf_root.exists():
+        for wf_dir in sorted(wf_root.iterdir()):
+            if wf_dir.is_dir():
+                wf_sd = wf_dir / sp
+                if wf_sd.exists():
+                    schema_dirs.append(wf_sd)
+
+    # Fallback: qanalabs/schema structure
+    if not any(sd.exists() for sd in schema_dirs):
+        fallback = project_root / "qanalabs" / sp
+        if fallback.exists():
+            schema_dirs = [fallback]
+
+    all_schema_files = []
+    for sd in schema_dirs:
+        if sd.exists():
+            all_schema_files.extend(sd.glob("*.yml"))
+            all_schema_files.extend(sd.glob("*.yaml"))
+
+    if not all_schema_files:
         return
 
-    for schema_file in list(schema_dir.glob("*.yml")) + list(schema_dir.glob("*.yaml")):
+    for schema_file in all_schema_files:
         schema_name = schema_file.stem
         fields = _extract_schema_fields(schema_file)
         index.schemas[schema_name] = SchemaDefinition(

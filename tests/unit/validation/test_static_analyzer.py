@@ -11,21 +11,24 @@ class TestSchemaExtractorLLMAction:
 
     def test_llm_action_no_schema_returns_empty_output_schema(self, tmp_path):
         """An LLM action with no schema config returns an OutputSchema with no fields."""
-        extractor = SchemaExtractor(schema_dir=tmp_path / "schema", project_root=tmp_path)
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        extractor = SchemaExtractor(project_root=tmp_path)
         config = {"kind": "llm", "agent_type": "my_agent"}
         result = extractor.extract_schema(config)
         assert isinstance(result, OutputSchema)
 
     def test_tool_action_returns_output_schema(self, tmp_path):
         """Tool actions return an OutputSchema (may be dynamic)."""
-        extractor = SchemaExtractor(schema_dir=tmp_path / "schema", project_root=tmp_path)
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        extractor = SchemaExtractor(project_root=tmp_path)
         config = {"kind": "tool", "impl": "nonexistent_tool"}
         result = extractor.extract_schema(config)
         assert isinstance(result, OutputSchema)
 
     def test_hitl_action_returns_output_schema_with_hitl_fields(self, tmp_path):
         """HITL actions return schema with HITL-specific fields."""
-        extractor = SchemaExtractor(schema_dir=tmp_path / "schema", project_root=tmp_path)
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        extractor = SchemaExtractor(project_root=tmp_path)
         config = {"kind": "hitl"}
         result = extractor.extract_schema(config)
         assert isinstance(result, OutputSchema)
@@ -76,7 +79,8 @@ class TestSchemaExtractorExtractFieldsFromJsonSchema:
 
     def test_context_scope_observe_applied(self, tmp_path):
         """observe in context_scope adds fields to output schema."""
-        extractor = SchemaExtractor(schema_dir=tmp_path / "schema", project_root=tmp_path)
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
+        extractor = SchemaExtractor(project_root=tmp_path)
         config = {
             "kind": "llm",
             "context_scope": {"observe": ["upstream.field_a"]},

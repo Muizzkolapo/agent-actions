@@ -442,6 +442,8 @@ class TestRenderAndLoadConfig:
         config_file.write_text("placeholder")  # file must exist for the check
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
+        # get_schema_path() requires agent_actions.yml with schema_path key
+        (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
 
         mock_sv = mock_sv_cls.return_value
         mock_sv.validate.return_value = True

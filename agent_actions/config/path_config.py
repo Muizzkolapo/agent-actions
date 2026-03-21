@@ -53,3 +53,31 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
                 ) from e
 
     return {}
+
+
+def get_schema_path(project_root: Path) -> str:
+    """Return the schema folder name from project config.
+
+    Reads the ``schema_path`` key from ``agent_actions.yml``.
+
+    Raises:
+        ConfigValidationError: If no project config exists or ``schema_path``
+            is not defined.  This is a required project-level setting.
+    """
+    config = load_project_config(project_root)
+    if not config:
+        raise ConfigValidationError(
+            "schema_path_missing",
+            f"No agent_actions.yml found in {project_root}. "
+            "Project config must define 'schema_path'.",
+            context={"project_root": str(project_root), "operation": "get_schema_path"},
+        )
+    schema_path = config.get("schema_path")
+    if not schema_path:
+        raise ConfigValidationError(
+            "schema_path_missing",
+            "Required key 'schema_path' not found in agent_actions.yml. "
+            "Add 'schema_path: schema' (or your custom folder name) to your project config.",
+            context={"project_root": str(project_root), "operation": "get_schema_path"},
+        )
+    return schema_path

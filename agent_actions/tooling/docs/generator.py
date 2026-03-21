@@ -42,11 +42,10 @@ class CatalogGenerator:
         workflow_config = WorkflowSchemaService.build_workflow_config(
             workflow.get("name", "unknown"), actions
         )
-        schema_dir = self.project_path / "schema" if self.project_path else None
         return WorkflowSchemaService(
             workflow_config,
             project_root=self.project_path,
-            schema_dir=schema_dir,
+            workflow_name=workflow.get("name"),
         )
 
     def _enrich_action_with_fields(

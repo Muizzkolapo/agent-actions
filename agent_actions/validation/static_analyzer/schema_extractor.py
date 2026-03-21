@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.path_config import load_project_config
+from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.tooling.code_scanner import scan_tool_functions
@@ -21,14 +22,22 @@ class SchemaExtractor:
     def __init__(
         self,
         udf_registry: dict[str, Any] | None = None,
-        schema_dir: Path | None = None,
         project_root: Path | None = None,
+        workflow_name: str | None = None,
     ) -> None:
         """Initialize the schema extractor."""
         self.udf_registry = udf_registry or {}
-        self.schema_dir = schema_dir or Path.cwd() / "schema"
         self.project_root = project_root or Path.cwd()
+        self.workflow_name = workflow_name
         self._tool_schemas: dict[str, Any] | None = None
+
+    def _load_schema_by_name(self, schema_name: str) -> dict:
+        """Load a schema by name using multi-level resolution."""
+        return SchemaLoader.load_schema(
+            schema_name,
+            project_root=self.project_root,
+            workflow_name=self.workflow_name,
+        )
 
     def _get_tool_schemas(self) -> dict[str, Any]:
         """Lazy-load tool schemas from Python files."""
@@ -99,7 +108,7 @@ class SchemaExtractor:
         if error:
             output.load_error = f"Schema '{schema_id}' could not be loaded: {error}"
         else:
-            output.load_error = f"Schema '{schema_id}' not found in {self.schema_dir}"
+            output.load_error = f"Schema '{schema_id}' not found in {self.project_root}"
 
     def _try_load_schema(
         self,
@@ -115,8 +124,8 @@ class SchemaExtractor:
         """
         # Try file-based loader first
         try:
-            loaded = SchemaLoader.load_schema(schema_id, self.schema_dir)
-        except FileNotFoundError:
+            loaded = self._load_schema_by_name(schema_id)
+        except (FileNotFoundError, ConfigValidationError):
             loaded = None
         if loaded:
             output.json_schema = loaded
@@ -349,7 +358,7 @@ class SchemaExtractor:
 
         if not schema_def and schema_name:
             try:
-                loaded = SchemaLoader.load_schema(schema_name, self.schema_dir)
+                loaded = self._load_schema_by_name(schema_name)
             except FileNotFoundError:
                 loaded = None
             if loaded:
@@ -363,7 +372,7 @@ class SchemaExtractor:
 
         if isinstance(schema_def, str):
             try:
-                loaded = SchemaLoader.load_schema(schema_def, self.schema_dir)
+                loaded = self._load_schema_by_name(schema_def)
             except FileNotFoundError:
                 loaded = None
             if loaded:
