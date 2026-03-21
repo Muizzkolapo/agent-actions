@@ -362,23 +362,36 @@ class TestNestedDictFieldResolution:
         )
         assert field_context["action_a"] == {"field1": "val1"}
 
-    def test_filter_and_store_fields_no_false_warning_for_nested(self, caplog):
-        """warn_missing should NOT warn when root key exists for nested path."""
-        import logging
-
+    def test_filter_and_store_fields_no_false_error_for_nested(self):
+        """fail_on_missing should NOT raise when root key exists for nested path."""
         field_context = {}
         data = {"target_word_counts": {"correct_answer_words": 8}}
-        with caplog.at_level(logging.WARNING):
+        # Should not raise — the root key exists
+        _filter_and_store_fields(
+            field_context,
+            "action_a",
+            data,
+            allowed_fields=["target_word_counts.correct_answer_words"],
+            source_type="test",
+            fail_on_missing=True,
+        )
+        assert "action_a" in field_context
+
+    def test_filter_and_store_fields_raises_on_missing_field(self):
+        """fail_on_missing=True raises ConfigurationError when declared fields are absent."""
+        from agent_actions.errors import ConfigurationError
+
+        field_context = {}
+        data = {"existing": "value"}
+        with pytest.raises(ConfigurationError, match="declared fields.*missing_field"):
             _filter_and_store_fields(
                 field_context,
                 "action_a",
                 data,
-                allowed_fields=["target_word_counts.correct_answer_words"],
+                allowed_fields=["missing_field"],
                 source_type="test",
-                warn_missing=True,
+                fail_on_missing=True,
             )
-        # No warning about missing fields
-        assert "not found" not in caplog.text
 
     def test_filter_and_store_fields_multiple_nested_same_root(self):
         """Multiple nested paths sharing a root key load the root once."""

@@ -4,6 +4,7 @@ import json
 import logging
 from copy import deepcopy
 
+from agent_actions.errors import ConfigurationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events.io_events import (
     ContextFieldSkippedEvent,
@@ -131,16 +132,31 @@ def apply_context_scope(
             ns_name, field_name = parse_field_reference(field_ref)
 
             if field_name == "*":
+                # Wildcard: best-effort — namespace may be empty or absent.
+                # This is intentionally lenient: explicit field refs (dep.field)
+                # fail-fast, but wildcards (dep.*) are "give me what you have".
                 action_fields = extract_action_fields(prompt_context, ns_name)
                 if action_fields:
                     llm_context.update(action_fields)
             else:
-                # Extract value from prompt_context (after drop removed sensitive fields)
+                # Explicit field ref: fail-fast if not found
                 value = extract_field_value(prompt_context, ns_name, field_name, default=_MISSING)
 
-                if value is not _MISSING:
-                    # Add to llm_context (flat dict with field names as keys)
-                    llm_context[field_name] = value
+                if value is _MISSING:
+                    raise ConfigurationError(
+                        f"context_scope.observe field '{field_ref}' not found at runtime",
+                        context={
+                            "action": action_name,
+                            "field_ref": field_ref,
+                            "directive": "observe",
+                            "operation": "apply_context_scope",
+                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
+                            f"Check the output schema of '{ns_name}'.",
+                        },
+                    )
+
+                # Add to llm_context (flat dict with field names as keys)
+                llm_context[field_name] = value
 
                 # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
@@ -169,9 +185,21 @@ def apply_context_scope(
                 # Extract value from original field_context
                 value = extract_field_value(field_context, ns_name, field_name, default=_MISSING)
 
-                if value is not _MISSING:
-                    # Add to passthrough_fields (flat dict with field names as keys)
-                    passthrough_fields[field_name] = value
+                if value is _MISSING:
+                    raise ConfigurationError(
+                        f"context_scope.passthrough field '{field_ref}' not found at runtime",
+                        context={
+                            "action": action_name,
+                            "field_ref": field_ref,
+                            "directive": "passthrough",
+                            "operation": "apply_context_scope",
+                            "hint": f"Field '{field_name}' does not exist in '{ns_name}' output. "
+                            f"Check the output schema of '{ns_name}'.",
+                        },
+                    )
+
+                # Add to passthrough_fields (flat dict with field names as keys)
+                passthrough_fields[field_name] = value
 
         except ValueError as e:
             fire_event(

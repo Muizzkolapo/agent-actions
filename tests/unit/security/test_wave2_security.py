@@ -45,19 +45,19 @@ class TestDropObserveNoLeak:
         assert "name" in llm_context
         assert "value" in llm_context
 
-    def test_drop_then_observe_single_field_excludes_dropped(self):
-        """Explicitly observing a dropped field must return None, not the original value."""
+    def test_drop_then_observe_single_field_raises(self):
+        """Explicitly observing a dropped field must raise — not silently skip."""
+        from agent_actions.errors import ConfigurationError
         from agent_actions.prompt.context.scope_application import apply_context_scope
 
         field_context = {"dep": {"secret": "hunter2", "public": "hello"}}
 
-        prompt_context, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"drop": ["dep.secret"], "observe": ["dep.secret"]},
-            action_name="test",
-        )
-
-        assert "secret" not in llm_context
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.secret"], "observe": ["dep.secret"]},
+                action_name="test",
+            )
 
 
 class TestPathTraversalRejection:

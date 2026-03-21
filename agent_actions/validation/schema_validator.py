@@ -71,7 +71,13 @@ def _collect_all_keys(obj: Any) -> set[str]:
 
 
 class SchemaValidator(BaseValidator):
-    """Validates schema files against JSON Schema meta-schema."""
+    """Validates schema files against JSON Schema meta-schema.
+
+    Intentionally independent from SchemaLoader — this validates ``.json``
+    files against the JSON Schema specification (structural correctness).
+    SchemaLoader handles ``.yml``/``.yaml`` runtime loading with multi-level
+    resolution.  Different concerns, different file formats.
+    """
 
     JSON_SCHEMA_RESERVED_KEYWORDS: set[str] = {
         "type",

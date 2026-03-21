@@ -190,7 +190,7 @@ def _filter_and_store_fields(
     data: dict,
     allowed_fields: list[str] | None,
     source_type: str = "FIELD",
-    warn_missing: bool = False,
+    fail_on_missing: bool = False,
     metadata_collector: dict | None = None,
 ) -> None:
     """
@@ -202,7 +202,7 @@ def _filter_and_store_fields(
         data: Source data to filter
         allowed_fields: Fields to include (None = wildcard, all fields)
         source_type: Log prefix for debug messages (e.g., "INPUT SOURCE")
-        warn_missing: If True, log warning for missing fields
+        fail_on_missing: If True, raise ConfigurationError when declared fields are missing
         metadata_collector: Optional dict to record stored vs loaded field metadata.
             When provided, records {name: {stored_fields, loaded_fields, stored_count, loaded_count}}
             for downstream diagnostics (e.g. detecting fields produced by tools but not in schema).
@@ -236,7 +236,7 @@ def _filter_and_store_fields(
                 # Nested path: extract only the declared subfield
                 if nested_field_exists(data, field):
                     set_nested_value(filtered_data, field, get_nested_value(data, field))
-        if warn_missing:
+        if fail_on_missing:
             missing_fields = set()
             for field in allowed_fields:
                 if field in data:
@@ -245,12 +245,16 @@ def _filter_and_store_fields(
                     continue
                 missing_fields.add(field)
             if missing_fields:
-                logger.warning(
-                    "[%s] '%s': fields %s not found. Available: %s",
-                    source_type,
-                    name,
-                    missing_fields,
-                    list(data.keys()),
+                raise ConfigurationError(
+                    f"[{source_type}] '{name}': declared fields {sorted(missing_fields)} "
+                    f"not found. Available: {list(data.keys())}",
+                    context={
+                        "source_type": source_type,
+                        "name": name,
+                        "missing_fields": sorted(missing_fields),
+                        "available_fields": list(data.keys()),
+                        "operation": "filter_and_store_fields",
+                    },
                 )
         field_context[name] = filtered_data
         logger.debug(

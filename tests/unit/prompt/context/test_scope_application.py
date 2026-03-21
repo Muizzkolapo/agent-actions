@@ -2,6 +2,9 @@
 
 from unittest.mock import patch
 
+import pytest
+
+from agent_actions.errors import ConfigurationError
 from agent_actions.prompt.context.scope_application import apply_context_scope
 
 
@@ -91,15 +94,15 @@ class TestDropWildcard:
         # Field must NOT be removed (drop failed to parse — safe failure)
         assert prompt_context["dep"]["api_key"] == "secret"
 
-    def test_wildcard_drop_then_observe_specific_field_returns_nothing(self):
-        """After drop: ['dep.*'], observe: ['dep.name'] must return nothing — all fields gone."""
+    def test_wildcard_drop_then_observe_specific_field_raises(self):
+        """After drop: ['dep.*'], observe: ['dep.name'] must raise — all fields gone."""
         field_context = {"dep": {"api_key": "secret", "name": "test", "value": "data"}}
-        _, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
-            action_name="test_action",
-        )
-        assert "name" not in llm_context
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"drop": ["dep.*"], "observe": ["dep.name"]},
+                action_name="test_action",
+            )
 
     def test_drop_then_observe_wildcard_excludes_dropped_field(self):
         """Existing security test: drop + observe wildcard must not leak dropped field."""
@@ -167,15 +170,15 @@ class TestFalsyFieldPassthrough:
         assert "enabled" in passthrough
         assert passthrough["enabled"] is False
 
-    def test_missing_field_still_excluded(self):
-        """Fields truly absent from context must not appear in llm_context."""
+    def test_missing_field_raises_error(self):
+        """Fields truly absent from context must raise ConfigurationError."""
         field_context = {"dep": {"other": "value"}}
-        _, llm_context, _ = apply_context_scope(
-            field_context=field_context,
-            context_scope={"observe": ["dep.missing"]},
-            action_name="test_action",
-        )
-        assert "missing" not in llm_context
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"observe": ["dep.missing"]},
+                action_name="test_action",
+            )
 
     def test_observe_includes_explicit_none_value(self):
         """G-2 boundary: field whose value IS None must still appear in llm_context.
@@ -189,12 +192,36 @@ class TestFalsyFieldPassthrough:
         assert "nullable_field" in llm_context
         assert llm_context["nullable_field"] is None
 
-    def test_passthrough_nested_path_missing_field_excluded(self):
-        """G-2 nested-path: a truly missing nested field must NOT appear in passthrough."""
+    def test_passthrough_nested_path_missing_field_raises(self):
+        """G-2 nested-path: a truly missing nested field must raise ConfigurationError."""
         field_context = {"dep": {"top": {"exists": 1}}}
-        _, _, passthrough = apply_context_scope(
-            field_context=field_context,
-            context_scope={"passthrough": ["dep.top.missing"]},
-            action_name="test_action",
-        )
-        assert "missing" not in passthrough
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"passthrough": ["dep.top.missing"]},
+                action_name="test_action",
+            )
+
+
+class TestAbsentNamespace:
+    """Tests for observe/passthrough on entirely absent namespaces."""
+
+    def test_observe_absent_namespace_raises(self):
+        """Observing a field from a namespace that doesn't exist raises."""
+        field_context = {"dep": {"field1": "value"}}
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"observe": ["ghost.field"]},
+                action_name="test_action",
+            )
+
+    def test_passthrough_absent_namespace_raises(self):
+        """Passthrough from a namespace that doesn't exist raises."""
+        field_context = {"dep": {"field1": "value"}}
+        with pytest.raises(ConfigurationError, match="not found at runtime"):
+            apply_context_scope(
+                field_context=field_context,
+                context_scope={"passthrough": ["ghost.field"]},
+                action_name="test_action",
+            )

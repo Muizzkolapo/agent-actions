@@ -279,7 +279,7 @@ def build_field_context_with_history(
                         input_data,
                         allowed_fields,
                         source_type="INPUT SOURCE",
-                        warn_missing=True,
+                        fail_on_missing=True,
                         metadata_collector=metadata_collector,
                     )
 
@@ -398,7 +398,7 @@ def build_field_context_with_history(
                     historical_data,
                     allowed_fields,
                     source_type="CONTEXT SOURCE",
-                    warn_missing=True,
+                    fail_on_missing=True,
                     metadata_collector=metadata_collector,
                 )
 

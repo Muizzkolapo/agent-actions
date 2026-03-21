@@ -576,7 +576,13 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
 
 
 def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
-    """Index all schema files."""
+    """Index all schema files.
+
+    Intentionally independent from SchemaLoader — the LSP needs file
+    Location metadata (path + line numbers) for go-to-definition and
+    produces SchemaDefinition objects, not raw dicts.  SchemaLoader is
+    for runtime loading; this is for IDE navigation.
+    """
     try:
         sp = get_schema_path(project_root)
     except (ConfigValidationError, OSError):
