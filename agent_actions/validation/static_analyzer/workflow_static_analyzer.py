@@ -279,7 +279,10 @@ class WorkflowStaticAnalyzer:
                             )
                         continue
 
-                    available_fields = output_schema.schema_fields
+                    available_fields = output_schema.available_fields
+                    # "*" means observe/passthrough all — accept any field
+                    if "*" in available_fields:
+                        continue
                     if field_name not in available_fields:
                         errors.append(
                             StaticTypeError(

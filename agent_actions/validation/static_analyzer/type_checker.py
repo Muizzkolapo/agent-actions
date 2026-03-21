@@ -138,6 +138,10 @@ class StaticTypeChecker:
 
         available = output_schema.available_fields
 
+        # "*" in available means observe/passthrough all — accept any field
+        if "*" in available:
+            return
+
         if root_field not in available:
             if root_field in output_schema.dropped_fields:
                 result.add_error(
@@ -195,10 +199,12 @@ class StaticTypeChecker:
 
             referenced = set()
             for req in node.input_requirements:
-                if req.source_agent not in SPECIAL_NAMESPACES:
-                    referenced.add(req.source_agent)
+                referenced.add(req.source_agent)
 
+            # Don't flag special namespaces (source, action, etc.) as unused —
+            # they are implicit and always available
             unused = node.dependencies - referenced
+            unused -= SPECIAL_NAMESPACES
 
             for dep in unused:
                 warnings.append(
