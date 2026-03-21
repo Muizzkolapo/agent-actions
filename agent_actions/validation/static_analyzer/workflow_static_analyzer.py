@@ -236,7 +236,24 @@ class WorkflowStaticAnalyzer:
 
                     output_schema = dep_node.output_schema
                     if output_schema.is_dynamic:
-                        continue  # Can't validate dynamic schemas
+                        if output_schema.load_error:
+                            errors.append(
+                                StaticTypeError(
+                                    message=(
+                                        f"Cannot validate context_scope.{directive} "
+                                        f"field '{field_name}' — {output_schema.load_error}"
+                                    ),
+                                    location=FieldLocation(
+                                        agent_name=action_name,
+                                        config_field=f"context_scope.{directive}",
+                                        raw_reference=field_ref,
+                                    ),
+                                    referenced_agent=dep_name,
+                                    referenced_field=field_name,
+                                    hint="Fix the schema file first, then re-run validation.",
+                                )
+                            )
+                        continue
 
                     available_fields = output_schema.schema_fields
                     if field_name not in available_fields:

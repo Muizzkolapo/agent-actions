@@ -19,6 +19,7 @@ class OutputSchema:
     json_schema: dict[str, Any] | None = None
     is_dynamic: bool = False
     is_schemaless: bool = False
+    load_error: str | None = None
 
     @property
     def available_fields(self) -> set[str]:

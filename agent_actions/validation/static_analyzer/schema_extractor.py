@@ -91,6 +91,16 @@ class SchemaExtractor:
         # Default to string for complex types
         return "string"
 
+    def _mark_schema_load_failure(
+        self, output: OutputSchema, schema_id: str, error: Exception | None = None
+    ) -> None:
+        """Mark output as dynamic due to a schema loading failure."""
+        output.is_dynamic = True
+        if error:
+            output.load_error = f"Schema '{schema_id}' could not be loaded: {error}"
+        else:
+            output.load_error = f"Schema '{schema_id}' not found in {self.schema_dir}"
+
     def extract_schema(
         self,
         agent_config: dict[str, Any],
@@ -275,10 +285,15 @@ class SchemaExtractor:
                     output.json_schema = loaded
                     output.schema_fields = self.extract_fields_from_json_schema(loaded)
                     return
-                except Exception as e:
-                    logger.debug(
+                except (FileNotFoundError, KeyError, ValueError, OSError) as e:
+                    logger.warning(
                         "Schema loading failed for '%s': %s", schema_name, e, exc_info=True
                     )
+                    self._mark_schema_load_failure(output, schema_name, e)
+                    return
+            else:
+                self._mark_schema_load_failure(output, schema_name)
+                return
 
         if not schema_def:
             json_mode = config.get("json_mode", get_default("json_mode"))
@@ -305,13 +320,13 @@ class SchemaExtractor:
                     loaded = schema_loader.load_schema(schema_def)
                     output.json_schema = loaded
                     output.schema_fields = self.extract_fields_from_json_schema(loaded)
-                except Exception as e:
-                    logger.debug(
+                except (FileNotFoundError, KeyError, ValueError, OSError) as e:
+                    logger.warning(
                         "Schema loader fallback failed for '%s': %s", schema_def, e, exc_info=True
                     )
-                    output.is_dynamic = True
+                    self._mark_schema_load_failure(output, schema_def, e)
             else:
-                output.is_dynamic = True
+                self._mark_schema_load_failure(output, schema_def)
         elif isinstance(schema_def, dict):
             output.json_schema = schema_def
             output.schema_fields = self.extract_fields_from_json_schema(schema_def)

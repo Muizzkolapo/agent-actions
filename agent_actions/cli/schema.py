@@ -59,12 +59,9 @@ class SchemaCommand:
             )
         )
 
-        workflow_config = {
-            "name": self.agent_name,
-            "actions": [
-                {**config, "name": name} for name, config in workflow.action_configs.items()
-            ],
-        }
+        workflow_config = WorkflowSchemaService.build_workflow_config(
+            self.agent_name, workflow.action_configs
+        )
 
         try:
             from agent_actions.utils.udf_management.registry import UDF_REGISTRY

@@ -9,8 +9,11 @@ from uuid import uuid4
 from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.logging import get_manager
+from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.workflow.config_pipeline import load_workflow_configs, validate_schema_files
+from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.models import (
@@ -37,6 +40,7 @@ class AgentWorkflow:
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
         validate_schema_files(self.action_configs, self.config)
+        self._run_static_validation()
 
         # Storage & services
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
@@ -57,6 +61,44 @@ class AgentWorkflow:
         self.event_logger = WorkflowEventLogger(
             self.agent_name, self.execution_order, self.config, self.services
         )
+
+    # ── Static validation ─────────────────────────────────────────────
+
+    def _run_static_validation(self) -> None:
+        """Run static analysis on the workflow config before execution.
+
+        Validates context_scope field references, schema structures, and
+        data flow — like dbt compile before dbt run. Raises on errors.
+        """
+        project_root = self.config.resolve_project_root()
+        schema_dir = project_root / "schema"
+
+        workflow_config = WorkflowSchemaService.build_workflow_config(
+            self.agent_name, self.action_configs
+        )
+
+        try:
+            from agent_actions.utils.udf_management.registry import UDF_REGISTRY
+
+            udf_registry: dict | None = UDF_REGISTRY
+        except ImportError:
+            logger.debug("UDF registry unavailable — static analysis will skip tool schema checks")
+            udf_registry = None
+
+        schema_service = WorkflowSchemaService(
+            workflow_config,
+            udf_registry=udf_registry,
+            schema_loader=SchemaLoader(),
+            project_root=project_root,
+            schema_dir=schema_dir,
+        )
+
+        result = schema_service.validate()
+        if result.errors:
+            raise PreFlightValidationError(
+                result.format_report(),
+                hint="Fix the static type errors above before running the workflow.",
+            )
 
     # ── Properties ──────────────────────────────────────────────────────
 

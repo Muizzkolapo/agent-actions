@@ -810,6 +810,34 @@ class TestContextScopeValidation:
         # Should have errors for: bad_field1, bad_field2, and undeclared_dep
         assert len(context_errors) >= 3
 
+    def test_context_scope_reports_error_when_schema_load_fails(self):
+        """Test that unresolvable schema_name produces a StaticTypeError, not a silent skip."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema_name": "nonexistent_schema",
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.some_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) >= 1
+        assert any(
+            "not found" in e.message or "could not be loaded" in e.message
+            for e in context_errors
+        )
+
 
 class TestPrimaryDependencyValidation:
     """Tests for primary_dependency validation."""

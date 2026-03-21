@@ -35,6 +35,14 @@ class WorkflowRuntimeConfig:
     manager: Any = None  # ConfigManager instance
     project_root: Path | None = None
 
+    def resolve_project_root(self) -> Path:
+        """Resolve effective project root from manager, config, or cwd."""
+        return (
+            (self.manager.project_root if self.manager else None)
+            or self.project_root
+            or Path.cwd()
+        )
+
 
 @dataclass
 class WorkflowState:

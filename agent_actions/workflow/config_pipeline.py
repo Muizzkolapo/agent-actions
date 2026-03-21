@@ -81,8 +81,7 @@ def validate_schema_files(action_configs: dict, config: WorkflowRuntimeConfig) -
     Raises:
         ConfigValidationError: If any referenced schema files are missing.
     """
-    manager = config.manager
-    project_root = (manager.project_root if manager else None) or config.project_root or Path.cwd()
+    project_root = config.resolve_project_root()
     schema_dir = project_root / "schema"
 
     missing_schemas = []

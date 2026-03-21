@@ -23,6 +23,24 @@ from agent_actions.validation.static_analyzer import (
 class WorkflowSchemaService:
     """Single source of truth for workflow schema analysis."""
 
+    @staticmethod
+    def build_workflow_config(
+        name: str, action_configs: dict[str, dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Build the workflow_config dict expected by the analyzer.
+
+        Args:
+            name: Workflow/agent name.
+            action_configs: Mapping of action name → action config dict.
+        """
+        return {
+            "name": name,
+            "actions": [
+                {**config, "name": action_name}
+                for action_name, config in action_configs.items()
+            ],
+        }
+
     def __init__(
         self,
         workflow_config: dict[str, Any],
