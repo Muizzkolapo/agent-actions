@@ -3,7 +3,7 @@
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ValidationError
@@ -154,7 +154,7 @@ class SkipConditionConfig(BaseModel):
 class DefaultAgentConfig(BaseModel):
     """Default settings applied to each agent configuration."""
 
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     model_name: str | None = None
     chunk_config: dict[str, Any] | None = None
     is_operational: bool = True
@@ -175,7 +175,7 @@ class AgentConfig(BaseModel):
             "'mistral', 'cohere', 'ollama', 'tool', 'hitl', or 'agac-provider'"
         ),
     )
-    api_key: str | None = None
+    api_key: SecretStr | None = None
     code_path: str | None = None
     dependencies: list[str | dict[str, Any]] = Field(default_factory=list)
     prompt: str | None = None
