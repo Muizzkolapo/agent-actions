@@ -133,7 +133,8 @@ class StaticTypeChecker:
 
         root_field = field_path.split(".")[0]
 
-        if root_field.isdigit():
+        # "*" is a wildcard directive (observe/passthrough all), not a field name
+        if root_field == "*" or root_field.isdigit():
             return
 
         available = output_schema.available_fields
