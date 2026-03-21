@@ -14,7 +14,7 @@ from agent_actions.workflow.config_pipeline import validate_schema_files
 
 
 def _create_mock_config_and_agents(constructor_path, agent_configs):
-    """Create a mock WorkflowConfig and agent_configs dict for validate_schema_files."""
+    """Create a mock WorkflowRuntimeConfig and agent_configs dict for validate_schema_files."""
     config = MagicMock()
     config.paths.constructor_path = constructor_path
     config.manager.project_root = None

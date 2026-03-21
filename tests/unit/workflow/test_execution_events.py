@@ -19,8 +19,8 @@ from agent_actions.workflow.models import (
     ActionLogParams,
     CoreServices,
     SupportServices,
-    WorkflowConfig,
     WorkflowPaths,
+    WorkflowRuntimeConfig,
     WorkflowServices,
 )
 
@@ -42,7 +42,7 @@ def mock_services():
 @pytest.fixture
 def mock_config():
     paths = MagicMock(spec=WorkflowPaths)
-    cfg = MagicMock(spec=WorkflowConfig)
+    cfg = MagicMock(spec=WorkflowRuntimeConfig)
     cfg.paths = paths
     cfg.run_upstream = False
     cfg.run_downstream = False

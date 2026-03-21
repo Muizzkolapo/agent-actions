@@ -14,7 +14,7 @@ from agent_actions.logging import LoggerFactory
 from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.tooling.docs.run_tracker import RunTracker
 from agent_actions.validation.prompt_validator import PromptValidator
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
 from agent_actions.validation.run_validator import RunCommandArgs
@@ -80,7 +80,7 @@ class RunCommand:
         )
         click.echo("Initializing agent workflow...")
         workflow = AgentWorkflow(
-            WorkflowConfig(
+            WorkflowRuntimeConfig(
                 paths=WorkflowPaths(
                     constructor_path=str(full_path),
                     user_code_path=str(self.args.user_code) if self.args.user_code else None,

@@ -379,8 +379,13 @@ class DefaultsConfig(BaseModel):
         return v
 
 
-class WorkflowConfigV2(BaseModel):
-    """New workflow configuration format."""
+class WorkflowConfig(BaseModel):
+    """Pydantic schema for user-facing workflow YAML files.
+
+    Validates the complete workflow structure including all actions,
+    defaults, and cross-cutting invariants (duplicate names, dangling
+    dependencies, circular dependencies).
+    """
 
     name: str = Field(..., description="Workflow name")
     description: str = Field(..., description="Workflow description")
@@ -475,5 +480,5 @@ __all__ = [
     "RepromptConfig",
     "ActionConfig",
     "DefaultsConfig",
-    "WorkflowConfigV2",
+    "WorkflowConfig",
 ]

@@ -1,18 +1,16 @@
 """Wave 8 Group C regression tests — Workflow Pipeline P1 fixes."""
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_actions.errors import AgentActionsError, ConfigurationError
+from agent_actions.errors import AgentActionsError
 from agent_actions.llm.batch.core.batch_models import SubmissionResult
 from agent_actions.processing.types import ProcessingContext
 from agent_actions.workflow.config_pipeline import discover_workflow_udfs
-from agent_actions.workflow.models import WorkflowConfig, WorkflowPaths
+from agent_actions.workflow.models import WorkflowPaths, WorkflowRuntimeConfig
 from agent_actions.workflow.pipeline import BatchPipelineParams, PipelineConfig, ProcessingPipeline
 from agent_actions.workflow.pipeline_file_mode import process_file_mode_hitl
-
 
 # ---------------------------------------------------------------------------
 # C-1  ·  _handle_batch_generation — tombstone passthrough path exercises
@@ -177,7 +175,7 @@ class TestDiscoverWorkflowUDFsManagerNone:
     """C-4 — no AttributeError when config.manager is None."""
 
     def test_manager_none_does_not_raise(self, tmp_path):
-        config = WorkflowConfig(
+        config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(tmp_path),
                 user_code_path=None,
@@ -192,7 +190,7 @@ class TestDiscoverWorkflowUDFsManagerNone:
 
     def test_user_code_path_takes_priority_over_manager(self, tmp_path):
         """When user_code_path is set, manager is not accessed at all."""
-        config = WorkflowConfig(
+        config = WorkflowRuntimeConfig(
             paths=WorkflowPaths(
                 constructor_path=str(tmp_path),
                 user_code_path=str(tmp_path),

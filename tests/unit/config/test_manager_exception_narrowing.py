@@ -22,6 +22,8 @@ class TestGetUserAgentsExceptionNarrowing:
         cfg = tmp_path / "workflow.yml"
         cfg.write_text(
             "name: test_workflow\n"
+            "description: test workflow\n"
+            "version: '1.0'\n"
             "actions:\n"
             "  - name: extract\n"
             "    intent: extract data\n"

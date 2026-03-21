@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from agent_actions.config.schema import ActionConfig, ActionKind, WorkflowConfigV2
+from agent_actions.config.schema import ActionConfig, ActionKind, WorkflowConfig
 
 
 def _workflow(**overrides):
@@ -39,7 +39,7 @@ class TestToolActionValidation:
 class TestWorkflowInvariants:
     def test_duplicate_action_names_raises(self):
         with pytest.raises(ValidationError, match="Duplicate action names"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {"name": "dup", "intent": "a", "kind": "llm"},
@@ -50,7 +50,7 @@ class TestWorkflowInvariants:
 
     def test_dangling_dependency_raises(self):
         with pytest.raises(ValidationError, match="Dangling dependency"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {
@@ -64,7 +64,7 @@ class TestWorkflowInvariants:
             )
 
     def test_valid_workflow_passes(self):
-        wf = WorkflowConfigV2(
+        wf = WorkflowConfig(
             **_workflow(
                 actions=[
                     {"name": "step1", "intent": "a", "kind": "llm"},
@@ -83,7 +83,7 @@ class TestWorkflowInvariants:
 class TestCircularDependencyDetection:
     def test_self_cycle_raises(self):
         with pytest.raises(ValidationError, match=r"A -> A"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {
@@ -98,7 +98,7 @@ class TestCircularDependencyDetection:
 
     def test_two_node_cycle_shows_path(self):
         with pytest.raises(ValidationError, match=r"A -> B -> A"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {
@@ -119,7 +119,7 @@ class TestCircularDependencyDetection:
 
     def test_three_node_cycle_shows_path(self):
         with pytest.raises(ValidationError, match=r"A -> B -> C -> A"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {
@@ -146,7 +146,7 @@ class TestCircularDependencyDetection:
 
     def test_diamond_dag_no_false_positive(self):
         """Diamond shape (A->B, A->C, B->D, C->D) is valid — no cycle."""
-        wf = WorkflowConfigV2(
+        wf = WorkflowConfig(
             **_workflow(
                 actions=[
                     {"name": "A", "intent": "a", "kind": "llm"},
@@ -176,7 +176,7 @@ class TestCircularDependencyDetection:
     def test_cycle_with_acyclic_branch(self):
         """Cycle in B->C->B, but A is acyclic — cycle still detected."""
         with pytest.raises(ValidationError, match=r"B -> C -> B"):
-            WorkflowConfigV2(
+            WorkflowConfig(
                 **_workflow(
                     actions=[
                         {"name": "A", "intent": "a", "kind": "llm"},
@@ -209,5 +209,5 @@ class TestCircularDependencyDetection:
                     "dependencies": [f"n{i - 1}"],
                 }
             )
-        wf = WorkflowConfigV2(**_workflow(actions=actions))
+        wf = WorkflowConfig(**_workflow(actions=actions))
         assert len(wf.actions) == n

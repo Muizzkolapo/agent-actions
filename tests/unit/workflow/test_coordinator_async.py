@@ -8,7 +8,7 @@ from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.models import (
     CoreServices,
     SupportServices,
-    WorkflowConfig,
+    WorkflowRuntimeConfig,
     WorkflowServices,
     WorkflowState,
 )
@@ -39,7 +39,7 @@ def _build_workflow(execution_order=None, agent_configs=None, state=None):
     wf.metadata = metadata
 
     # Config
-    wf.config = MagicMock(spec=WorkflowConfig)
+    wf.config = MagicMock(spec=WorkflowRuntimeConfig)
     wf.config.run_upstream = False
     wf.config.run_downstream = False
 

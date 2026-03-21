@@ -90,47 +90,108 @@ class TestConfigValidationErrorMessages:
                 WhereClauseConfig(clause=clause)
 
 
+def _make_workflow_manager(actions, defaults=None):
+    """Create a ConfigManager with a new-format workflow config for validation tests."""
+    from agent_actions.config.manager import ConfigManager
+
+    mgr = ConfigManager("test_workflow.yml", "")
+    mgr.user_config = {
+        "name": "test_workflow",
+        "description": "test",
+        "version": "1",
+        "actions": actions,
+    }
+    if defaults:
+        mgr.user_config["defaults"] = defaults
+    return mgr
+
+
 class TestSchemaPreValidationErrors:
     """Integration tests: unknown/invalid keys raise ConfigurationError via get_user_agents()."""
 
-    def _make_manager(self, actions, defaults=None):
-        """Create a ConfigManager with a new-format workflow config."""
-        from agent_actions.config.manager import ConfigManager
-
-        mgr = ConfigManager("test_workflow.yml", "")
-        mgr.user_config = {
-            "name": "test_workflow",
-            "description": "test",
-            "version": "1",
-            "actions": actions,
-        }
-        if defaults:
-            mgr.user_config["defaults"] = defaults
-        return mgr
-
     def test_unknown_action_key_raises_via_get_user_agents(self):
         """Unknown action key raises ConfigurationError through get_user_agents()."""
-        mgr = self._make_manager(actions=[{"name": "a", "intent": "i", "bogus_key": True}])
+        mgr = _make_workflow_manager(actions=[{"name": "a", "intent": "i", "bogus_key": True}])
         with pytest.raises(ConfigurationError) as exc_info:
             mgr.get_user_agents()
-        assert exc_info.value.context["action"] == "a"
+        assert exc_info.value.context["workflow_name"] == "test_workflow"
         assert exc_info.value.__cause__ is not None
+        assert "bogus_key" in str(exc_info.value.__cause__)
 
     def test_invalid_type_raises_via_get_user_agents(self):
         """Type-invalid value raises ConfigurationError through get_user_agents()."""
-        mgr = self._make_manager(actions=[{"name": "a", "intent": "i", "temperature": "banana"}])
+        mgr = _make_workflow_manager(actions=[{"name": "a", "intent": "i", "temperature": "banana"}])
         with pytest.raises(ConfigurationError) as exc_info:
             mgr.get_user_agents()
-        assert exc_info.value.context["action"] == "a"
+        assert exc_info.value.context["workflow_name"] == "test_workflow"
         assert "temperature" in str(exc_info.value.__cause__)
 
     def test_invalid_defaults_type_raises_via_get_user_agents(self):
         """Type-invalid defaults value raises ConfigurationError through get_user_agents()."""
-        mgr = self._make_manager(
+        mgr = _make_workflow_manager(
             actions=[{"name": "a", "intent": "i"}],
             defaults={"temperature": "warm"},
         )
         with pytest.raises(ConfigurationError) as exc_info:
             mgr.get_user_agents()
-        assert exc_info.value.context["section"] == "defaults"
+        assert exc_info.value.context["workflow_name"] == "test_workflow"
         assert "temperature" in str(exc_info.value.__cause__)
+
+
+class TestWorkflowLevelValidation:
+    """Workflow-level invariants (duplicates, dangling deps, cycles) caught via get_user_agents()."""
+
+    def test_duplicate_action_names_raises(self):
+        """Duplicate action names are caught at config load time."""
+        mgr = _make_workflow_manager(
+            actions=[
+                {"name": "dup", "intent": "a", "kind": "llm"},
+                {"name": "dup", "intent": "b", "kind": "llm"},
+            ]
+        )
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert "Duplicate action names" in str(exc_info.value.__cause__)
+
+    def test_dangling_dependency_raises(self):
+        """Reference to non-existent action in dependencies is caught."""
+        mgr = _make_workflow_manager(
+            actions=[
+                {"name": "a", "intent": "do", "kind": "llm", "dependencies": ["nonexistent"]},
+            ]
+        )
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert "Dangling dependency" in str(exc_info.value.__cause__)
+
+    def test_circular_dependency_raises(self):
+        """Circular dependencies are caught at config load time."""
+        mgr = _make_workflow_manager(
+            actions=[
+                {"name": "a", "intent": "do", "kind": "llm", "dependencies": ["b"]},
+                {"name": "b", "intent": "do", "kind": "llm", "dependencies": ["a"]},
+            ]
+        )
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert "Circular dependency" in str(exc_info.value.__cause__)
+
+    def test_invalid_primary_dependency_raises(self):
+        """Reference to non-existent action in primary_dependency is caught."""
+        mgr = _make_workflow_manager(
+            actions=[
+                {"name": "a", "intent": "do", "kind": "llm", "primary_dependency": "ghost"},
+            ]
+        )
+        with pytest.raises(ConfigurationError) as exc_info:
+            mgr.get_user_agents()
+        assert "primary_dependency" in str(exc_info.value.__cause__)
+
+    def test_missing_description_raises(self):
+        """Missing required workflow fields are caught."""
+        from agent_actions.config.manager import ConfigManager
+
+        mgr = ConfigManager("test_workflow.yml", "")
+        mgr.user_config = {"name": "test_workflow", "actions": [{"name": "a", "intent": "i"}]}
+        with pytest.raises(ConfigurationError):
+            mgr.get_user_agents()

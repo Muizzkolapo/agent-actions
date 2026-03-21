@@ -14,7 +14,7 @@ from agent_actions.logging.events import (
     WorkflowFailedEvent,
     WorkflowStartEvent,
 )
-from agent_actions.workflow.models import ActionLogParams, WorkflowConfig, WorkflowServices
+from agent_actions.workflow.models import ActionLogParams, WorkflowRuntimeConfig, WorkflowServices
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class WorkflowEventLogger:
         self,
         agent_name: str,
         execution_order: list,
-        config: "WorkflowConfig",
+        config: "WorkflowRuntimeConfig",
         services: "WorkflowServices",
     ):
         self.agent_name = agent_name

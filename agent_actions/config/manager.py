@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from agent_actions.config.environment import EnvironmentConfig
 from agent_actions.config.path_config import load_project_config
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
-from agent_actions.config.schema import ActionConfig, DefaultsConfig
+from agent_actions.config.schema import WorkflowConfig
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
 from agent_actions.logging import fire_event
@@ -209,30 +209,16 @@ class ConfigManager:
             merged_defaults = {**project_defaults, **workflow_defaults}
             config_with_merged_defaults = {**self.user_config, "defaults": merged_defaults}
 
-            # Validate each action dict against ActionConfig schema
-            for action in self.user_config.get("actions") or []:
-                if not isinstance(action, dict):
-                    continue
-                try:
-                    ActionConfig.model_validate(action)
-                except ValidationError as e:
-                    action_name = action.get("name", "<unnamed>")
-                    raise ConfigurationError(
-                        f"Action '{action_name}' has invalid configuration",
-                        context={"action": action_name},
-                        cause=e,
-                    ) from e
-
-            # Validate workflow defaults (project defaults validated by DefaultAgentConfig)
-            if workflow_defaults and isinstance(workflow_defaults, dict):
-                try:
-                    DefaultsConfig.model_validate(workflow_defaults)
-                except ValidationError as e:
-                    raise ConfigurationError(
-                        "Defaults section has invalid configuration",
-                        context={"section": "defaults"},
-                        cause=e,
-                    ) from e
+            # Validate entire workflow config (actions, defaults, duplicates,
+            # dangling deps, circular deps) in one pass via Pydantic.
+            try:
+                WorkflowConfig.model_validate(self.user_config)
+            except ValidationError as e:
+                raise ConfigurationError(
+                    "Workflow configuration is invalid",
+                    context={"workflow_name": self.user_config.get("name", "unknown")},
+                    cause=e,
+                ) from e
 
             agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
             workflow_name = self.user_config.get("name", "workflow")
@@ -411,23 +397,6 @@ class ConfigManager:
 
             result[agent_type] = config_dict
         return result
-
-    def create_workflow_config(self, workflow_data: dict[str, Any]) -> Any:
-        """Create a typed workflow configuration from dictionary data."""
-        from agent_actions.workflow.models import WorkflowConfig as _WorkflowConfig
-
-        try:
-            self.workflow_config = _WorkflowConfig.model_validate(workflow_data)  # type: ignore[attr-defined]
-            return self.workflow_config
-        except ValidationError as e:
-            raise ConfigurationError(
-                "Invalid workflow configuration",
-                context={
-                    "workflow_name": workflow_data.get("name", "unknown"),
-                    "operation": "create_workflow_config",
-                },
-                cause=e,
-            ) from e
 
     def create_pipeline_config(self, pipeline_data: dict[str, Any]) -> Any:
         """Create a typed pipeline configuration from dictionary data."""

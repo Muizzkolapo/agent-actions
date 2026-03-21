@@ -21,7 +21,7 @@ Agent Actions.
 | `execution_events.py` | Module | `WorkflowEventLogger` class encapsulating all workflow/action event firing. | `logging`, `events` |
 | `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |
 | `merge.py` | Module | Shared utilities for merging JSON records by correlation key. | `workflow`, `processing` |
-| `models.py` | Module | Shared data models (WorkflowConfig, ActionConfig, ActionLogParams). | `typing`, `workflow` |
+| `models.py` | Module | Shared data models (WorkflowRuntimeConfig, WorkflowPaths, WorkflowMetadata, ActionLogParams). | `typing`, `workflow` |
 | `pipeline.py` | Module | Builds execution pipelines for run modes (batch/online) with synchronous tool/HITL handling. | `llm.batch`, `processing` |
 | `pipeline_file_mode.py` | Module | FILE-granularity tool and HITL processing handlers extracted from `ProcessingPipeline`. | `processing`, `workflow` |
 | `runner.py` | Module | `ActionRunner` class: init, folder lookup, dependency resolution, orchestration. Delegates file-processing to `runner_file_processing`. | `llm`, `workflow` |

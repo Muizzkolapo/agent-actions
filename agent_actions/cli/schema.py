@@ -14,7 +14,7 @@ from agent_actions.errors import DependencyError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.renderer import ConfigRenderingService
 from agent_actions.workflow import WorkflowSchemaService
-from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.workflow.coordinator import AgentWorkflow, WorkflowPaths, WorkflowRuntimeConfig
 
 
 class SchemaCommand:
@@ -48,7 +48,7 @@ class SchemaCommand:
         )
 
         workflow = AgentWorkflow(
-            WorkflowConfig(
+            WorkflowRuntimeConfig(
                 paths=WorkflowPaths(
                     constructor_path=str(full_path),
                     user_code_path=str(self.user_code) if self.user_code else None,

@@ -3,8 +3,8 @@
 from agent_actions.workflow.coordinator import AgentWorkflow
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.models import (
-    WorkflowConfig,
     WorkflowPaths,
+    WorkflowRuntimeConfig,
     WorkflowState,
 )
 from agent_actions.workflow.parallel.dependency import (
@@ -16,8 +16,8 @@ __all__ = [
     "AgentWorkflow",
     "ArtifactLinker",
     "WorkflowDependencyOrchestrator",
-    "WorkflowConfig",
     "WorkflowPaths",
+    "WorkflowRuntimeConfig",
     "WorkflowState",
     "WorkflowSchemaService",
 ]

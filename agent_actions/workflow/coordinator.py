@@ -16,8 +16,8 @@ from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.models import (
     ActionLogParams,
     RuntimeContext,
-    WorkflowConfig,
     WorkflowPaths,
+    WorkflowRuntimeConfig,
     WorkflowState,
 )
 from agent_actions.workflow.parallel.dependency import WorkflowDependencyOrchestrator
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class AgentWorkflow:
     """Orchestrates multi-agent workflow execution."""
 
-    def __init__(self, config: WorkflowConfig):
+    def __init__(self, config: WorkflowRuntimeConfig):
         """Initialize workflow with configuration and dependencies."""
         self.config = config
         self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
@@ -119,7 +119,7 @@ class AgentWorkflow:
     ) -> "AgentWorkflow":
         """Factory method to create child workflow instances."""
         return self.__class__(
-            WorkflowConfig(
+            WorkflowRuntimeConfig(
                 paths=WorkflowPaths(
                     constructor_path=config_path,
                     user_code_path=user_code_path,

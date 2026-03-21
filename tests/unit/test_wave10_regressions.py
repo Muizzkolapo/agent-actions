@@ -123,9 +123,9 @@ class TestScanSqliteCoalesce:
 # ---------------------------------------------------------------------------
 class TestPrimaryDependencyValidation:
     def _make_workflow(self, actions):
-        from agent_actions.config.schema import WorkflowConfigV2
+        from agent_actions.config.schema import WorkflowConfig
 
-        return WorkflowConfigV2(
+        return WorkflowConfig(
             name="test",
             description="test",
             version="1",

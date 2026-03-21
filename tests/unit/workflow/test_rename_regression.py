@@ -207,7 +207,11 @@ class TestCoordinatorUpstreamKwargs:
     def test_resolve_upstream_passes_agent_configs_kwarg(self):
         """Verify the orchestrator receives agent_configs=, not action_configs=."""
         from agent_actions.workflow.coordinator import AgentWorkflow
-        from agent_actions.workflow.models import WorkflowConfig, WorkflowPaths, WorkflowState
+        from agent_actions.workflow.models import (
+            WorkflowPaths,
+            WorkflowRuntimeConfig,
+            WorkflowState,
+        )
 
         # Build workflow bypassing __init__ (same pattern as test_coordinator_sequential)
         wf = object.__new__(AgentWorkflow)
@@ -219,7 +223,7 @@ class TestCoordinatorUpstreamKwargs:
         metadata.action_configs = {"action_a": {"model_vendor": "openai"}}
         wf.metadata = metadata
 
-        wf.config = MagicMock(spec=WorkflowConfig)
+        wf.config = MagicMock(spec=WorkflowRuntimeConfig)
         wf.config.run_upstream = True
         wf.config.paths = MagicMock(spec=WorkflowPaths)
         wf.config.paths.user_code_path = "/tmp/user_code"

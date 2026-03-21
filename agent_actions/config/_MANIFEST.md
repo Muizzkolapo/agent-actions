@@ -21,7 +21,7 @@ orchestration, prompts, and processing to concrete implementations.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `__init__.py` | Module | Direct import of `WorkflowConfigV2` from `schema`. | `configuration` |
+| `__init__.py` | Module | Direct import of `WorkflowConfig` from `schema` (backward-compat alias `WorkflowConfigV2`). | `configuration` |
 | `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `ActionConfig` and `DefaultsConfig`, cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). | `configuration`, `validation` |
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
@@ -76,7 +76,7 @@ Key Functions
 
 | Package | Why it matters |
 |---------|----------------|
-| `agent_actions/workflow` | Consumes `WorkflowConfigV2` and DI-provisioned runners. |
+| `agent_actions/workflow` | Consumes `WorkflowConfig` (schema) and DI-provisioned runners. Uses `WorkflowRuntimeConfig` for execution context. |
 | `agent_actions/validation` | Uses config models and environment settings for startup checks. |
 | `agent_actions/prompt` | Relies on resolved paths and DI wiring for prompt preparation. |
 | `agent_actions/output` | Uses path resolution to locate IO and schema artifacts. |

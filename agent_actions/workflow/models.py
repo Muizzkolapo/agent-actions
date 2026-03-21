@@ -19,8 +19,14 @@ class WorkflowPaths:
 
 
 @dataclass
-class WorkflowConfig:
-    """Configuration container for workflow initialization."""
+class WorkflowRuntimeConfig:
+    """Runtime execution context for workflow initialization.
+
+    This is NOT the user-facing config schema (see ``WorkflowConfig`` in
+    ``agent_actions.config.schema`` for that).  This dataclass holds paths,
+    feature flags, and a ``ConfigManager`` reference needed by the workflow
+    engine at execution time.
+    """
 
     paths: WorkflowPaths
     use_tools: bool

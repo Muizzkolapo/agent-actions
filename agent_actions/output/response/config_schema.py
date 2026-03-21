@@ -151,7 +151,13 @@ class SkipConditionConfig(BaseModel):
 
 
 class DefaultAgentConfig(BaseModel):
-    """Default settings applied to each agent configuration."""
+    """Default settings applied to each agent configuration (post-expansion stage).
+
+    Used in ``ConfigManager.merge_agent_configs()`` to validate project-level
+    defaults *after* ``ActionExpander`` has transformed actions into agents.
+    For pre-expansion defaults validation, see ``DefaultsConfig`` in
+    ``agent_actions.config.schema``.
+    """
 
     api_key: SecretStr | None = None
     model_name: str | None = None
@@ -162,7 +168,16 @@ class DefaultAgentConfig(BaseModel):
 
 
 class AgentConfig(BaseModel):
-    """Schema for an individual agent configuration entry."""
+    """Schema for an individual agent configuration entry (post-expansion stage).
+
+    Validates the agent dict *after* ``ActionExpander`` has transformed
+    pre-expansion ``ActionConfig`` dicts into the runtime agent shape
+    (adding ``agent_type``, ``code_path``, ``schema_name``, etc.).
+
+    Uses ``extra="allow"`` because the expander injects many fields
+    not declared here.  For pre-expansion action validation, see
+    ``ActionConfig`` in ``agent_actions.config.schema``.
+    """
 
     agent_type: str
     name: str | None = None

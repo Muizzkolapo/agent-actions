@@ -1,5 +1,5 @@
 """Workflow configuration schema definitions."""
 
-from .schema import WorkflowConfigV2
+from .schema import WorkflowConfig
 
-__all__ = ["WorkflowConfigV2"]
+__all__ = ["WorkflowConfig"]

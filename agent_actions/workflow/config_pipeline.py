@@ -14,12 +14,12 @@ from agent_actions.logging.events import (
     UDFDiscoveryStartEvent,
     WorkflowInitializationStartEvent,
 )
-from agent_actions.workflow.models import WorkflowConfig, WorkflowMetadata
+from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
 
 
-def load_workflow_configs(config: WorkflowConfig, console: Console) -> WorkflowMetadata:
+def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> WorkflowMetadata:
     """Load and process configuration files, discover UDFs, return metadata.
 
     Fires ``WorkflowInitializationStartEvent`` and creates the
@@ -75,7 +75,7 @@ def load_workflow_configs(config: WorkflowConfig, console: Console) -> WorkflowM
     )
 
 
-def validate_schema_files(action_configs: dict, config: WorkflowConfig) -> None:
+def validate_schema_files(action_configs: dict, config: WorkflowRuntimeConfig) -> None:
     """Validate that all referenced schema files exist (fail-fast).
 
     Raises:
@@ -117,7 +117,7 @@ def validate_schema_files(action_configs: dict, config: WorkflowConfig) -> None:
         )
 
 
-def discover_workflow_udfs(config: WorkflowConfig, console: Console) -> None:
+def discover_workflow_udfs(config: WorkflowRuntimeConfig, console: Console) -> None:
     """Discover user-defined functions from configured paths."""
     total_udfs = 0
     if config.paths.user_code_path:

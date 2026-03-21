@@ -19,8 +19,8 @@ from agent_actions.workflow.managers.state import ActionStateManager
 from agent_actions.workflow.models import (
     CoreServices,
     SupportServices,
-    WorkflowConfig,
     WorkflowMetadata,
+    WorkflowRuntimeConfig,
     WorkflowServices,
 )
 from agent_actions.workflow.parallel.action_executor import ActionLevelOrchestrator
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def initialize_storage_backend(
-    config: WorkflowConfig,
+    config: WorkflowRuntimeConfig,
     metadata: WorkflowMetadata,
     console: Console,
 ) -> "StorageBackend":
@@ -73,7 +73,7 @@ def initialize_storage_backend(
 
 def initialize_services(
     metadata: WorkflowMetadata,
-    config: WorkflowConfig,
+    config: WorkflowRuntimeConfig,
     storage_backend: "StorageBackend | None",
     console: Console,
 ) -> tuple[WorkflowServices, Path]:

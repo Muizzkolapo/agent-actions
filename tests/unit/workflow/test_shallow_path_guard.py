@@ -9,14 +9,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.workflow.models import (
-    WorkflowConfig,
     WorkflowMetadata,
     WorkflowPaths,
+    WorkflowRuntimeConfig,
 )
 
 
-def _make_workflow_config(constructor_path: str) -> WorkflowConfig:
-    return WorkflowConfig(
+def _make_workflow_config(constructor_path: str) -> WorkflowRuntimeConfig:
+    return WorkflowRuntimeConfig(
         paths=WorkflowPaths(
             constructor_path=constructor_path,
             user_code_path=None,
