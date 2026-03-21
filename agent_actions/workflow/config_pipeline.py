@@ -6,7 +6,6 @@ from pathlib import Path
 from rich.console import Console
 
 from agent_actions.config.manager import ConfigManager
-from agent_actions.errors.configuration import ConfigValidationError
 from agent_actions.input.loaders.udf import discover_udfs
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
@@ -73,47 +72,6 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         action_configs=action_configs,
         child_pipeline=manager.child_pipeline,
     )
-
-
-def validate_schema_files(action_configs: dict, config: WorkflowRuntimeConfig) -> None:
-    """Validate that all referenced schema files exist (fail-fast).
-
-    Raises:
-        ConfigValidationError: If any referenced schema files are missing.
-    """
-    project_root = config.resolve_project_root()
-    schema_dir = project_root / "schema"
-
-    missing_schemas = []
-
-    for action_name, action_config in action_configs.items():
-        if action_config is None:
-            continue
-
-        schema_name = action_config.get("schema_name")
-        if schema_name:
-            schema_file = schema_dir / f"{schema_name}.yml"
-            if not schema_file.exists():
-                missing_schemas.append((action_name, schema_name, schema_file))
-
-    if missing_schemas:
-        error_lines = ["Schema validation failed. The following schema files are missing:"]
-        for action_name, schema_name, schema_file in missing_schemas:
-            error_lines.append(f"  - Action '{action_name}': schema '{schema_name}.yml'")
-            error_lines.append(f"    Expected at: {schema_file}")
-
-        error_lines.append("")
-        error_lines.append("Please ensure all schema files exist in the schema/ directory.")
-
-        raise ConfigValidationError(
-            "\n".join(error_lines),
-            context={
-                "missing_schemas": [
-                    {"action": a, "schema": s, "path": str(p)} for a, s, p in missing_schemas
-                ],
-                "schema_dir": str(schema_dir),
-            },
-        )
 
 
 def discover_workflow_udfs(config: WorkflowRuntimeConfig, console: Console) -> None:

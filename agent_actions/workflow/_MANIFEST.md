@@ -16,7 +16,7 @@ Agent Actions.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `config_pipeline.py` | Module | Config loading, schema validation, and UDF discovery extracted from coordinator. | `config`, `validation` |
+| `config_pipeline.py` | Module | Config loading and UDF discovery extracted from coordinator. Schema validation is handled by `WorkflowSchemaService` via static analysis. | `config` |
 | `coordinator.py` | Module | Orchestration-only facade: delegates config, services, and events to extracted modules. Raises `ConfigurationError` when `storage_backend` is `None` after service init. | `workflow` |
 | `execution_events.py` | Module | `WorkflowEventLogger` class encapsulating all workflow/action event firing. | `logging`, `events` |
 | `executor.py` | Module | Handles running actions (LLM/tool/HITL) and interfacing with processors. | `llm`, `workflow` |

@@ -12,8 +12,7 @@ from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.logging import get_manager
 from agent_actions.output.response.loader import SchemaLoader
-from agent_actions.workflow.config_pipeline import load_workflow_configs, validate_schema_files
-from agent_actions.workflow.schema_service import WorkflowSchemaService
+from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
 from agent_actions.workflow.models import (
@@ -24,6 +23,7 @@ from agent_actions.workflow.models import (
     WorkflowState,
 )
 from agent_actions.workflow.parallel.dependency import WorkflowDependencyOrchestrator
+from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,6 @@ class AgentWorkflow:
 
         # Config pipeline (fires WorkflowInitializationStartEvent internally)
         self.metadata = load_workflow_configs(config, self.console)
-        validate_schema_files(self.action_configs, self.config)
         self._run_static_validation()
 
         # Storage & services
