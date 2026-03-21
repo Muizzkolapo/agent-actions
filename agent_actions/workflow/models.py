@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from agent_actions.config.path_config import resolve_project_root as _resolve_project_root
+
 
 @dataclass
 class WorkflowPaths:
@@ -37,11 +39,8 @@ class WorkflowRuntimeConfig:
 
     def resolve_project_root(self) -> Path:
         """Resolve effective project root from manager, config, or cwd."""
-        return (
-            (self.manager.project_root if self.manager else None)
-            or self.project_root
-            or Path.cwd()
-        )
+        explicit = (self.manager.project_root if self.manager else None) or self.project_root
+        return _resolve_project_root(explicit)
 
 
 @dataclass

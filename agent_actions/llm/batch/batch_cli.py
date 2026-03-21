@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.llm.batch.infrastructure.batch_client_resolver import BatchClientResolver
 from agent_actions.llm.batch.infrastructure.context import BatchContextManager
 from agent_actions.llm.batch.processing.preparator import BatchTaskPreparator
@@ -73,5 +74,5 @@ def retrieve(batch_id: str | None = None, project_root: Path | None = None):
         context_manager=context_manager,
         registry_manager_factory=registry_manager_factory,
     )
-    result = service.retrieve_results(args.batch_id, str(project_root or Path.cwd()))
+    result = service.retrieve_results(args.batch_id, str(resolve_project_root(project_root)))
     click.echo(result)

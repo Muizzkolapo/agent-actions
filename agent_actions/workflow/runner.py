@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from agent_actions.storage.backend import StorageBackend
     from agent_actions.workflow.managers.manifest import ManifestManager
 from agent_actions.config.di.container import ProcessorFactory
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.types import ActionConfigDict
 from agent_actions.errors import FileSystemError
 from agent_actions.input.loaders.data_source import resolve_start_node_data_source
@@ -129,7 +130,7 @@ class ActionRunner:
         Raises:
             FileSystemError: If the action folder is not found.
         """
-        search_dir: Path = project_root or self.project_root or Path.cwd()
+        search_dir: Path = resolve_project_root(project_root or self.project_root)
         folder_name = self.workflow_name if self.workflow_name else action_name
         action_folder: str | None = FileHandler.find_specific_folder(
             str(search_dir), folder_name, "agent_io"

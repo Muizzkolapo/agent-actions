@@ -10,6 +10,7 @@ import jinja2
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
@@ -75,7 +76,7 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     Returns:
         Error message string or empty string if save fails
     """
-    cache_dir = (project_root or Path.cwd()) / ".agent-actions" / "cache" / "rendered_workflows"
+    cache_dir = resolve_project_root(project_root) / ".agent-actions" / "cache" / "rendered_workflows"
     cache_dir.mkdir(parents=True, exist_ok=True)
     failed_render_path = cache_dir / f"{workflow_name}_failed.yml"
     try:

@@ -6,6 +6,8 @@ import logging
 import os
 from pathlib import Path
 
+from agent_actions.config.path_config import resolve_project_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ class FileHandler:
     @staticmethod
     def get_agent_paths(agent_name, project_root: Path | None = None):
         """Return (agent_config_dir, io_dir) for the given agent name."""
-        search_dir = project_root or Path.cwd()
+        search_dir = resolve_project_root(project_root)
         agent_config_dir = FileHandler.find_specific_folder(
             str(search_dir), agent_name, "agent_config"
         )

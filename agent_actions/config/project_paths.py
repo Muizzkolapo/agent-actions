@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.paths import PathManager, PathType
 from agent_actions.errors import (
     DirectoryError,
@@ -36,7 +37,7 @@ def find_config_file(
         return full_path
 
     if check_alternatives:
-        base = project_root or Path.cwd()
+        base = resolve_project_root(project_root)
         parent_dir = config_dir.parent
         alternatives_checked = [
             parent_dir / filename,

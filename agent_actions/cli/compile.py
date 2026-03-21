@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.config.project_paths import ProjectPathsFactory
 from agent_actions.errors import TemplateRenderingError
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
@@ -18,12 +19,13 @@ class RenderCommand:
     def __init__(self, args: RenderCommandArgs, project_root: Path | None = None):
         self.args = args
         self._project_root = project_root
+        root = resolve_project_root(project_root)
         if args.template_dir:
             td = Path(args.template_dir)
             # Resolve relative paths against project_root, not CWD
-            self.template_dir = td if td.is_absolute() else (project_root or Path.cwd()) / td
+            self.template_dir = td if td.is_absolute() else root / td
         else:
-            self.template_dir = (project_root or Path.cwd()) / "templates"
+            self.template_dir = root / "templates"
 
     def _render_template(self, agent_config_file: Path) -> str:
         try:

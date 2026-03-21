@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.tooling.docs.generator import generate_docs
 from agent_actions.tooling.docs.server import serve_docs
 
@@ -36,7 +37,7 @@ def generate(output: str, project_root: Path | None = None):
         agac docs generate
         agac docs generate --output ./custom-artefact
     """
-    project_path = project_root or Path.cwd()
+    project_path = resolve_project_root(project_root)
 
     output_dir = Path(output)
     if not output_dir.is_absolute():
@@ -110,7 +111,7 @@ def run_tests(test_suite: str, port: int, project_root: Path | None = None):
         click.echo("   Install from: https://nodejs.org/")
         raise click.Abort() from exc
 
-    project_root = project_root or Path.cwd()
+    project_root = resolve_project_root(project_root)
     test_dir = project_root
 
     test_files = {

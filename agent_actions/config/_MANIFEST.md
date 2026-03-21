@@ -25,7 +25,7 @@ orchestration, prompts, and processing to concrete implementations.
 | `schema.py` | Module | Workflow configuration schema (Pydantic models) with `extra="forbid"` on `ActionConfig` and `DefaultsConfig`, cross-validation (tool `impl` required, duplicate/dangling dep checks, circular dependency detection). | `configuration`, `validation` |
 | `environment.py` | Module | Environment settings with validation (validators raise `ValueError` for Pydantic compatibility). | `configuration`, `validation` |
 | `paths.py` | Module | `PathManager` with project-boundary-guarded `clean_path()`, scoped root cache, and fallback heuristic warning. | `paths`, `configuration` |
-| `path_config.py` | Module | Path configuration models and defaults. | `paths`, `configuration` |
+| `path_config.py` | Module | Path configuration: `load_project_config`, `resolve_project_root` (cwd fallback), `resolve_tool_paths` (tool dir resolution), `get_schema_path`. | `paths`, `configuration` |
 | `factory.py` | Module | DI-aware factory helpers for `ActionRunner`. | `di`, `configuration` |
 | `init.py` | Module | `ProjectInitializer` for scaffolding new projects (atomic `create_file`, `yaml.safe_dump`). | `configuration`, `filesystem` |
 | `interfaces.py` | Module | Loader/processor/generator interfaces and async mixins. | `configuration`, `interfaces` |
@@ -71,6 +71,8 @@ Key Functions
 | `paths.py` | `PathManager.get_agent_paths` | Method | Resolve per-agent config/io/source paths. |
 | `paths.py` | `PathManager.clean_path` | Method | Remove files/dirs with project-boundary guard. |
 | `path_config.py` | `load_project_config` | Function | Load project-level config from YAML. |
+| `path_config.py` | `resolve_project_root` | Function | Resolve project root, defaulting to `Path.cwd()`. |
+| `path_config.py` | `resolve_tool_paths` | Function | Resolve tool directory names from project config, defaulting to `["tools"]`. |
 
 ## Cross-Module Touchpoints
 

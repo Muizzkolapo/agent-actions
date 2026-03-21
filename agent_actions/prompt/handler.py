@@ -5,6 +5,7 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.utils.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class PromptLoader:
         prompt_file_name, prompt_key = prompt_name.split(".", 1)
         target_filename = f"{prompt_file_name}.md"
 
-        search_root = project_root or Path.cwd()
+        search_root = resolve_project_root(project_root)
         prompt_file_str = FileHandler.find_file_in_directory(str(search_root), target_filename)
 
         if not prompt_file_str:

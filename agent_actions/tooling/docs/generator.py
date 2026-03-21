@@ -9,9 +9,8 @@ from pathlib import Path
 from typing import Any
 
 import click
-import yaml
 
-from agent_actions.config.path_config import load_project_config
+from agent_actions.config.path_config import resolve_tool_paths
 from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -313,16 +312,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         return False
 
     # Resolve tool_path from project config
-    tool_paths: list[str] | None = None
-    try:
-        project_config = load_project_config(project_root)
-        raw = project_config.get("tool_path")
-        if isinstance(raw, list):
-            tool_paths = [str(p) for p in raw]
-        elif isinstance(raw, str):
-            tool_paths = [raw]
-    except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError) as e:
-        logger.debug("Could not resolve tool_path from project config: %s", e)
+    tool_paths = resolve_tool_paths(project_root)
 
     # Step 1b–1n: Scan all project artifacts
     prompts_data = scanner.scan_prompts(project_root)

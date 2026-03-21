@@ -45,9 +45,9 @@ class SchemaLoader:
         Schema names must be globally unique — if the same file name appears in
         more than one location a ``FileNotFoundError`` is raised.
         """
-        from agent_actions.config.path_config import get_schema_path
+        from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
-        effective_root = project_root or Path.cwd()
+        effective_root = resolve_project_root(project_root)
         sp = get_schema_path(effective_root)
         filenames = [f"{schema_name}.yml", f"{schema_name}.yaml"]
 

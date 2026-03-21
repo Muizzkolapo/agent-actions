@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.config.path_config import resolve_project_root
 from agent_actions.output.response.config_fields import get_default
 
 if TYPE_CHECKING:
@@ -259,7 +260,7 @@ class BaseBatchClient(ABC):
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
         else:
-            batch_dir = (project_root or Path.cwd()) / "batch"
+            batch_dir = resolve_project_root(project_root) / "batch"
         ensure_directory_exists(batch_dir)
         return batch_dir
 

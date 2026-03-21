@@ -8,7 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from agent_actions.config.path_config import get_schema_path
+from agent_actions.config.path_config import get_schema_path, resolve_tool_paths
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
@@ -67,28 +67,13 @@ def find_all_project_roots(workspace_folders: list[Path]) -> list[Path]:
     return sorted(roots)
 
 
-def _resolve_tool_paths(project_root: Path) -> list[str]:
-    """Resolve tool_path from project config, defaulting to ["tools"]."""
-    try:
-        from agent_actions.config.path_config import load_project_config
-
-        raw = load_project_config(project_root).get("tool_path")
-        if isinstance(raw, list):
-            return [str(p) for p in raw]
-        if isinstance(raw, str):
-            return [raw]
-    except (OSError, KeyError, TypeError, AttributeError) as e:
-        logger.debug("Could not resolve tool_path from project config: %s", e)
-    return ["tools"]
-
-
 def build_index(project_root: Path) -> ProjectIndex:
     """Build complete project index."""
     index = ProjectIndex(root=project_root)
 
     _index_workflows(index, project_root)
     _index_prompts(index, project_root)
-    tool_paths = _resolve_tool_paths(project_root)
+    tool_paths = resolve_tool_paths(project_root)
     _index_tools(index, project_root, tool_paths)
     _index_schemas(index, project_root)
 

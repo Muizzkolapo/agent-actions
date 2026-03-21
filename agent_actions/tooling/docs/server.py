@@ -8,6 +8,8 @@ from pathlib import Path
 
 import click
 
+from agent_actions.config.path_config import resolve_project_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,7 +63,7 @@ def serve_docs(
     port: int = 8000, artefact_path: str | None = None, project_root: Path | None = None
 ) -> bool:
     """Start HTTP server to serve documentation."""
-    base = project_root or Path.cwd()
+    base = resolve_project_root(project_root)
 
     # Find docs_site directory (in package)
     docs_site_dir = Path(__file__).parent / "docs_site"

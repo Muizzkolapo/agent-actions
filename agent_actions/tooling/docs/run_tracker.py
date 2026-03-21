@@ -12,6 +12,8 @@ from typing import Any
 
 import portalocker
 
+from agent_actions.config.path_config import resolve_project_root
+
 logger = logging.getLogger(__name__)
 
 from agent_actions.config.defaults import LockDefaults
@@ -91,7 +93,7 @@ class RunTracker:
 
     def __init__(self, artefact_dir: Path | None = None, project_root: Path | None = None):
         """Initialize run tracker."""
-        self.artefact_dir = artefact_dir or (project_root or Path.cwd()) / "artefact"
+        self.artefact_dir = artefact_dir or resolve_project_root(project_root) / "artefact"
         self.runs_file = self.artefact_dir / "runs.json"
 
     def record_run(self, *, config: RunConfig) -> str:

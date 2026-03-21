@@ -10,7 +10,7 @@ import yaml
 from pydantic import ValidationError
 
 from agent_actions.config.environment import EnvironmentConfig
-from agent_actions.config.path_config import load_project_config
+from agent_actions.config.path_config import load_project_config, resolve_project_root
 from agent_actions.config.paths import PathManager, ProjectRootNotFoundError
 from agent_actions.config.schema import WorkflowConfig
 from agent_actions.errors import ConfigurationError, ConfigValidationError, TemplateRenderingError
@@ -36,7 +36,7 @@ class ConfigManager:
         self.execution_order: list[str] = []
         self.child_pipeline: str | None = None
         self.tool_path: list[str] | None = None
-        self.template_dir = str((project_root or Path.cwd()) / "templates")
+        self.template_dir = str(resolve_project_root(project_root) / "templates")
         self.environment_config: EnvironmentConfig | None = None
         self.workflow_config: Any = None
         self.pipeline_config: Any = None

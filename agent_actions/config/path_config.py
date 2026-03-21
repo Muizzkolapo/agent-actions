@@ -1,5 +1,6 @@
 """Project-specific path configuration loading."""
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,8 @@ import yaml
 from agent_actions.errors import ConfigValidationError
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ConfigLoadEvent, ConfigLoadStartEvent
+
+logger = logging.getLogger(__name__)
 
 
 def load_project_config(project_root: Path) -> dict[str, Any]:
@@ -53,6 +56,47 @@ def load_project_config(project_root: Path) -> dict[str, Any]:
                 ) from e
 
     return {}
+
+
+def resolve_project_root(explicit_root: Path | None = None) -> Path:
+    """Resolve project root, defaulting to cwd when not provided.
+
+    Args:
+        explicit_root: Explicitly provided project root path.
+
+    Returns:
+        The explicit root if given, otherwise ``Path.cwd()``.
+    """
+    return explicit_root or Path.cwd()
+
+
+def resolve_tool_paths(project_root: Path) -> list[str]:
+    """Resolve tool directory names from project configuration.
+
+    Reads ``tool_path`` from ``agent_actions.yml`` and normalises it to a
+    list of directory name strings.  When no config file exists or the key
+    is absent, returns ``["tools"]`` as the conventional default.
+
+    Args:
+        project_root: Resolved project root directory.
+
+    Returns:
+        List of tool directory names (relative to *project_root*).
+    """
+    try:
+        config = load_project_config(project_root)
+    except (OSError, ConfigValidationError) as exc:
+        logger.debug("Could not load tool_path from project config, defaulting to ['tools']: %s", exc)
+        return ["tools"]
+
+    raw = config.get("tool_path")
+    if raw is None:
+        return ["tools"]
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, list):
+        return [str(p) for p in raw]
+    return [str(raw)]
 
 
 def get_schema_path(project_root: Path) -> str:
