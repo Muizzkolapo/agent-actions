@@ -219,19 +219,18 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: dict[str, Any], provider) -> dict[str, Any] | None:
         """Prepare and compile schema for provider."""
-        from agent_actions.output.response.schema import prepare_schema_unified
+        from pathlib import Path
+
+        from agent_actions.output.response.schema import ResponseSchemaCompiler
         from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
         vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
         if not vendor:
             vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
-        from pathlib import Path
-
         _pr = agent_config.get("_project_root")
-        schema, _captured_results = prepare_schema_unified(
-            agent_config, vendor, project_root=Path(_pr) if _pr else None
-        )
+        compiler = ResponseSchemaCompiler(project_root=Path(_pr) if _pr else None)
+        schema, _captured_results = compiler.compile(agent_config, vendor)
         return schema  # type: ignore[return-value]
 
     def _add_tools_to_path(self, tools_path: str | None) -> None:

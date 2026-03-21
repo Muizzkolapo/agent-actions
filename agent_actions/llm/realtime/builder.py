@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent_actions.output.response.schema import prepare_schema_unified
+from agent_actions.output.response.schema import ResponseSchemaCompiler
 from agent_actions.utils.constants import MODEL_VENDOR_KEY
 
 from .services import (
@@ -90,13 +90,11 @@ def create_dynamic_agent(
 
     # Prepare schema with dispatch support
     _pr = agent_config.get("_project_root")
-    schema, schema_results = prepare_schema_unified(
-        agent_config,
-        model_vendor,
-        tools_path=tools_path,
-        context_data=context_data,
+    compiler = ResponseSchemaCompiler(
         project_root=Path(_pr) if _pr else None,
+        tools_path=tools_path,
     )
+    schema, schema_results = compiler.compile(agent_config, model_vendor, context_data)
 
     if schema_results:
         captured_results.update(schema_results)
