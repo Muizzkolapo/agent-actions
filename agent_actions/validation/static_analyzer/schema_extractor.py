@@ -315,7 +315,7 @@ class SchemaExtractor:
         schema_loader: Any | None,
     ) -> None:
         """Extract schema from LLM action."""
-        schema_def = config.get("schema")
+        schema_def = config.get("schema") or config.get("output_schema")
         schema_name = config.get("schema_name")
 
         if not schema_def and schema_name:
@@ -353,7 +353,7 @@ class SchemaExtractor:
         output: OutputSchema,
     ) -> None:
         """Extract schema from tool/UDF action using YAML config."""
-        schema_def = config.get("schema")
+        schema_def = config.get("schema") or config.get("output_schema")
         schema_name = config.get("schema_name")
 
         if not schema_def and schema_name:

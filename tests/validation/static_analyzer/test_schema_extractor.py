@@ -29,8 +29,8 @@ class TestSchemaExtractor:
         assert "keywords" in schema.available_fields
         assert "confidence" in schema.available_fields
 
-    def test_output_schema_alias_no_longer_accepted(self):
-        """output_schema alias was removed — schema: is the single source."""
+    def test_output_schema_key_extracts_fields(self):
+        """output_schema is a valid key — extractor reads it like schema."""
         config = {
             "name": "agent",
             "output_schema": {
@@ -42,9 +42,8 @@ class TestSchemaExtractor:
         }
         schema = self.extractor.extract_schema(config)
 
-        # output_schema is ignored; agent is treated as schemaless
-        assert "output" not in schema.schema_fields
-        assert schema.is_schemaless
+        assert "output" in schema.schema_fields
+        assert not schema.is_schemaless
 
     def test_schemaless_agent(self):
         """Test agent without schema is marked schemaless."""
