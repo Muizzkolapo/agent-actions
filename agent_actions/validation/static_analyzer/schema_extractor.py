@@ -513,7 +513,12 @@ class SchemaExtractor:
         if "." not in reference:
             return reference
         parts = reference.split(".", 1)
-        return parts[1] if parts[1] else None  # None for malformed like "ns."
+        field = parts[1] if parts[1] else None  # None for malformed like "ns."
+        # "*" is a wildcard directive (observe all), not a literal field name.
+        # Returning None prevents it from entering observe/passthrough field sets.
+        if field == "*":
+            return None
+        return field
 
     def extract_from_workflow(
         self,

@@ -28,9 +28,8 @@ class OutputSchema:
         return all_fields - self.dropped_fields
 
     def has_field(self, field_name: str) -> bool:
-        """Check if field is available in output. '*' means all fields accepted."""
-        available = self.available_fields
-        return "*" in available or field_name in available
+        """Check if field is available in output."""
+        return field_name in self.available_fields
 
     def __repr__(self) -> str:
         return f"OutputSchema(fields={sorted(self.available_fields)}, dynamic={self.is_dynamic})"

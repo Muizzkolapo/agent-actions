@@ -138,10 +138,6 @@ class StaticTypeChecker:
 
         available = output_schema.available_fields
 
-        # "*" in available means observe/passthrough all — accept any field
-        if "*" in available:
-            return
-
         if root_field not in available:
             if root_field in output_schema.dropped_fields:
                 result.add_error(
