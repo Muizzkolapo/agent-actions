@@ -89,7 +89,7 @@ def collect_diagnostics(file_path: Path, index: ProjectIndex) -> list[lsp.Diagno
                             reference.location,
                             f"context_scope reference `{reference.value}` cannot be resolved because "
                             f"`{action_name}` output schema does not declare `{field}`.",
-                            lsp.DiagnosticSeverity.Warning,
+                            lsp.DiagnosticSeverity.Error,
                         )
                     )
 
