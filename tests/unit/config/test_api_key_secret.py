@@ -6,6 +6,7 @@ import pytest
 from pydantic import SecretStr
 
 from agent_actions.config.schema import ActionConfig, DefaultsConfig
+from agent_actions.output.response.config_schema import AgentConfig, DefaultAgentConfig
 
 
 class TestActionConfigApiKeySecret:
@@ -61,9 +62,7 @@ class TestBatchClientFactorySecretStr:
     def test_openai_factory_unwraps_secret_str(self):
         from agent_actions.llm.providers.batch_client_factory import _create_openai
 
-        with patch(
-            "agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient"
-        ) as mock_cls:
+        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
             mock_cls.return_value = MagicMock()
             _create_openai({"api_key": SecretStr("sk-openai-test")})
 
@@ -72,20 +71,21 @@ class TestBatchClientFactorySecretStr:
     def test_openai_factory_passes_plain_str_unchanged(self):
         from agent_actions.llm.providers.batch_client_factory import _create_openai
 
-        with patch(
-            "agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient"
-        ) as mock_cls:
+        with patch("agent_actions.llm.providers.openai.batch_client.OpenAIBatchClient") as mock_cls:
             mock_cls.return_value = MagicMock()
             _create_openai({"api_key": "sk-plain"})
 
         mock_cls.assert_called_once_with(api_key="sk-plain")
 
-    @pytest.mark.parametrize("factory_name", [
-        "_create_gemini",
-        "_create_anthropic",
-        "_create_groq",
-        "_create_mistral",
-    ])
+    @pytest.mark.parametrize(
+        "factory_name",
+        [
+            "_create_gemini",
+            "_create_anthropic",
+            "_create_groq",
+            "_create_mistral",
+        ],
+    )
     def test_optional_vendor_factories_unwrap_secret_str(self, factory_name):
         """All vendor factories must unwrap SecretStr before passing api_key to the client."""
         import agent_actions.llm.providers.batch_client_factory as factory_module
@@ -108,9 +108,7 @@ class TestBatchClientFactorySecretStr:
         key_with_secret = BatchClientResolver._build_cache_key(
             "openai", {"api_key": SecretStr("sk-abc123")}
         )
-        key_with_plain = BatchClientResolver._build_cache_key(
-            "openai", {"api_key": "sk-abc123"}
-        )
+        key_with_plain = BatchClientResolver._build_cache_key("openai", {"api_key": "sk-abc123"})
         # Both should produce the same cache key (same underlying string)
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
@@ -129,3 +127,121 @@ class TestBatchClientFactorySecretStr:
         )
         assert key_with_secret == key_with_plain
         assert key_with_secret.startswith("openai:")
+
+
+class TestAgentConfigApiKeySecret:
+    """Verify AgentConfig.api_key uses SecretStr (runtime pipeline gap fix, #1160)."""
+
+    def test_repr_does_not_expose_raw_key(self):
+        config = AgentConfig(agent_type="test", api_key="secret123")
+        assert "secret123" not in repr(config)
+        assert "**********" in repr(config)
+
+    def test_model_dump_python_preserves_secret_str(self):
+        config = AgentConfig(agent_type="test", api_key="secret123")
+        dumped = config.model_dump()
+        assert isinstance(dumped["api_key"], SecretStr)
+
+    def test_model_dump_json_returns_masked_string(self):
+        config = AgentConfig(agent_type="test", api_key="secret123")
+        dumped = config.model_dump(mode="json")
+        assert dumped["api_key"] == "**********"
+        assert "secret123" not in str(dumped)
+
+    def test_get_secret_value_returns_raw_key(self):
+        config = AgentConfig(agent_type="test", api_key="secret123")
+        assert config.api_key.get_secret_value() == "secret123"
+
+    def test_none_api_key_is_none(self):
+        config = AgentConfig(agent_type="test")
+        assert config.api_key is None
+
+    def test_plain_string_coerced_to_secret_str(self):
+        config = AgentConfig.model_validate({"agent_type": "test", "api_key": "plain"})
+        assert isinstance(config.api_key, SecretStr)
+        assert config.api_key.get_secret_value() == "plain"
+
+
+class TestDefaultAgentConfigApiKeySecret:
+    """Verify DefaultAgentConfig.api_key uses SecretStr (#1160)."""
+
+    def test_repr_does_not_expose_raw_key(self):
+        config = DefaultAgentConfig(api_key="defaults_secret")
+        assert "defaults_secret" not in repr(config)
+        assert "**********" in repr(config)
+
+    def test_model_dump_python_preserves_secret_str(self):
+        config = DefaultAgentConfig(api_key="defaults_secret")
+        dumped = config.model_dump()
+        assert isinstance(dumped["api_key"], SecretStr)
+
+    def test_model_dump_json_returns_masked_string(self):
+        config = DefaultAgentConfig(api_key="defaults_secret")
+        dumped = config.model_dump(mode="json")
+        assert dumped["api_key"] == "**********"
+
+    def test_get_secret_value_returns_raw_key(self):
+        config = DefaultAgentConfig(api_key="defaults_secret")
+        assert config.api_key.get_secret_value() == "defaults_secret"
+
+
+class TestEndToEndSecretStrPipeline:
+    """Integration: verify SecretStr flows end-to-end through the config pipeline (#1160)."""
+
+    def test_expander_output_coerced_to_secret_str_by_agent_config(self):
+        """After expander produces a plain-str api_key dict,
+        AgentConfig.model_validate() must coerce it to SecretStr."""
+        from agent_actions.output.response.expander import ActionExpander
+
+        workflow = {
+            "name": "test_wf",
+            "actions": [
+                {
+                    "name": "classify",
+                    "intent": "Classify items",
+                    "model_vendor": "openai",
+                    "model_name": "gpt-4",
+                    "api_key": "sk-secret-e2e",
+                }
+            ],
+            "defaults": {},
+        }
+        result = ActionExpander.expand_actions_to_agents(workflow)
+        agents = result["test_wf"]
+        assert len(agents) == 1
+
+        # The expander returns a raw dict with plain str api_key
+        assert agents[0]["api_key"] == "sk-secret-e2e"
+        assert isinstance(agents[0]["api_key"], str)
+
+        # AgentConfig.model_validate() must coerce to SecretStr
+        config = AgentConfig.model_validate(agents[0])
+        assert isinstance(config.api_key, SecretStr)
+        assert config.api_key.get_secret_value() == "sk-secret-e2e"
+
+        # model_dump() must preserve SecretStr
+        dumped = config.model_dump()
+        assert isinstance(dumped["api_key"], SecretStr)
+
+    def test_model_dump_roundtrip_preserves_secret_str(self):
+        """model_dump() -> model_validate() round-trip must preserve SecretStr."""
+        original = AgentConfig(agent_type="test", api_key="sk-roundtrip")
+        dumped = original.model_dump()
+        restored = AgentConfig.model_validate(dumped)
+        assert isinstance(restored.api_key, SecretStr)
+        assert restored.api_key.get_secret_value() == "sk-roundtrip"
+
+    def test_defaults_dump_flows_into_agent_config_as_secret_str(self):
+        """DefaultAgentConfig.model_dump() -> merge -> AgentConfig.model_validate()
+        must preserve SecretStr through the merge path."""
+        default_model = DefaultAgentConfig(api_key="sk-default-key")
+        default_dict = default_model.model_dump()
+
+        # Simulate the merge path from manager.py:merge_agent_configs
+        # (manager also supplies chunk_config default; we only test api_key flow)
+        agent_dict = {"agent_type": "test", "chunk_config": {}}
+        merged = {**default_dict, **agent_dict}
+
+        config = AgentConfig.model_validate(merged)
+        assert isinstance(config.api_key, SecretStr)
+        assert config.api_key.get_secret_value() == "sk-default-key"

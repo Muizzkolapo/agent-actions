@@ -17,7 +17,6 @@ class FilterScope(str, Enum):
     ACTION = "action"
 
 
-
 class WhereClauseBehavior(str, Enum):
     """Behavior when WHERE clause condition fails."""
 
