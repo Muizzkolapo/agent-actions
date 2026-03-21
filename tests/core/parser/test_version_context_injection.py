@@ -147,7 +147,6 @@ class TestVersionContextInFieldContext:
         }
 
         field_context = build_field_context_with_history(
-            contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},
             version_context=version_context,
@@ -174,7 +173,6 @@ class TestVersionContextInFieldContext:
         }
 
         field_context = build_field_context_with_history(
-            contents={},
             agent_name="test_agent",
             agent_config={"agent_type": "test"},
             version_context=version_context,

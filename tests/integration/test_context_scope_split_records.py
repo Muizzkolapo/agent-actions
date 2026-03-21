@@ -171,11 +171,9 @@ class TestContextScopeSplitRecordsEdgeCases:
 
         # Should not crash
         field_context = build_field_context_with_history(
-            contents={},
             agent_name="downstream",
             agent_config=agent_config,
             agent_indices=agent_indices_split,
-            dependency_configs=dependency_configs_split,
             current_item=current_item,
             file_path=file_path,
             context_scope=agent_config["context_scope"],
@@ -218,11 +216,9 @@ class TestContextScopeSplitRecordsEdgeCases:
         )
 
         field_context = build_field_context_with_history(
-            contents={},
             agent_name="downstream",
             agent_config=agent_config,
             agent_indices=agent_indices_split,
-            dependency_configs=dependency_configs_split,
             current_item=caller,
             file_path=file_path,
             context_scope=agent_config["context_scope"],

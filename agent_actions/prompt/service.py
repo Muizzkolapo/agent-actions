@@ -212,11 +212,9 @@ class PromptPreparationService:
 
         field_context_metadata: dict[str, Any] = {}
         field_context = build_field_context_with_history(
-            contents=request.contents if isinstance(request.contents, dict) else {},
             agent_name=request.agent_name,
             agent_config=request.agent_config,
             agent_indices=agent_indices,
-            dependency_configs=dependency_configs,
             source_content=request.source_content,
             version_context=request.version_context,
             workflow_metadata=request.workflow_metadata,

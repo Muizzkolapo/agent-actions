@@ -38,8 +38,8 @@ class AgentActionsLanguageServer(LanguageServer):
     def __init__(self):
         super().__init__("agent-actions-lsp", "v0.1.0")
         self.project_indexes: dict[Path, ProjectIndex] = {}
-        self.index: ProjectIndex | None = None  # backward compat alias (first project)
-        self.project_root: Path | None = None  # backward compat alias (first project)
+        self.index: ProjectIndex | None = None  # convenience alias for the primary project
+        self.project_root: Path | None = None  # convenience alias for the primary project root
 
 
 # Create server instance

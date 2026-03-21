@@ -89,11 +89,9 @@ class EvaluationContextProvider:
 
         context_scope = config.agent_config.get("context_scope")
         field_context = build_field_context_with_history(
-            contents=current_content,
             agent_name=config.agent_name,
             agent_config=config.agent_config,
             agent_indices=config.agent_indices,
-            dependency_configs=config.dependency_configs,
             source_content=config.source_content,
             version_context=config.version_context,
             workflow_metadata=config.workflow_metadata,

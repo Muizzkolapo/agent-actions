@@ -1,7 +1,6 @@
 """
 Schema compilation and transformation utilities for multi-vendor support.
 
-This module serves as a re-export hub for backward compatibility.
 Implementation is split across focused submodules:
 
 - schema_conversion: JSON Schema to unified format conversion, field compilation
@@ -14,7 +13,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-# Re-export all public and semi-public APIs for backward compatibility
 from agent_actions.output.response.context_data import (  # noqa: F401
     _compile_schema_for_vendor,
     _is_unified_format,

@@ -40,15 +40,6 @@ class TestSaverInit:
         )
         assert saver.storage_backend is None
 
-    def test_enable_locking_ignored(self, tmp_path):
-        """enable_locking is deprecated and should not be stored."""
-        saver = UnifiedSourceDataSaver(
-            base_directory=str(tmp_path),
-            enable_locking=False,
-            storage_backend=MagicMock(),
-        )
-        assert not hasattr(saver, "enable_locking")
-
 
 # ---------------------------------------------------------------------------
 # save_source_items — happy path

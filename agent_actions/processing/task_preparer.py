@@ -177,11 +177,9 @@ class TaskPreparer:
         from agent_actions.prompt.context.scope_builder import build_field_context_with_history
 
         field_context = build_field_context_with_history(
-            contents=content if isinstance(content, dict) else {},
             agent_name=context.agent_name,
             agent_config=context.agent_config,
             agent_indices=context.agent_indices,
-            dependency_configs=context.dependency_configs,
             source_content=source_content,
             version_context=context.version_context,
             workflow_metadata=context.workflow_metadata,

@@ -1,7 +1,6 @@
 """Batch task preparation from raw data using shared TaskPreparer logic."""
 
 import logging
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -26,30 +25,10 @@ class BatchTaskPreparator:
 
     def __init__(
         self,
-        filter_service=None,
         action_indices: dict[str, int] | None = None,
         dependency_configs: dict[str, dict] | None = None,
-        guard_handler=None,
         storage_backend: Any | None = None,
     ):
-        """Initialize task preparator.
-
-        Args:
-            filter_service: DEPRECATED - no longer used, guards handled by TaskPreparer
-            guard_handler: DEPRECATED - no longer used, guards handled by TaskPreparer
-        """
-        if filter_service is not None:
-            warnings.warn(
-                "filter_service is deprecated and ignored. Guards are now handled by TaskPreparer.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if guard_handler is not None:
-            warnings.warn(
-                "guard_handler is deprecated and ignored. Guards are now handled by TaskPreparer.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self.action_indices = action_indices or {}
         self.dependency_configs = dependency_configs or {}
         self.storage_backend = storage_backend

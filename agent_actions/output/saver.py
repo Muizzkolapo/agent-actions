@@ -26,18 +26,11 @@ class UnifiedSourceDataSaver:
         self,
         base_directory: str,
         enable_deduplication: bool = True,
-        enable_locking: bool = True,  # Deprecated, kept for API compatibility
         storage_backend: StorageBackend | None = None,
     ):
-        """Initialize unified source data saver.
-
-        Args:
-            enable_locking: Deprecated - storage backend handles concurrency (ignored)
-        """
         self.base_directory = Path(base_directory)
         self.enable_deduplication = enable_deduplication
         self.storage_backend = storage_backend
-        del enable_locking  # Explicitly unused - storage backend handles concurrency
 
     def save_source_items(self, items: dict | list[dict], relative_path: str) -> None:
         """Save source data to storage backend with optional deduplication.

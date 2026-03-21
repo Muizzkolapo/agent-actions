@@ -28,11 +28,9 @@ __all__ = [
 
 # Complex field context building with historical data requires all these parameters
 def build_field_context_with_history(
-    contents: dict,  # Legacy parameter, not used
     agent_name: str,
     agent_config: dict | None,
     agent_indices: dict[str, int] | None = None,
-    dependency_configs: dict[str, dict] | None = None,  # Legacy, not used
     source_content: Any | None = None,
     version_context: dict | None = None,
     workflow_metadata: dict | None = None,
@@ -63,11 +61,9 @@ def build_field_context_with_history(
     }
 
     Args:
-        contents: Legacy parameter (not used)
         agent_name: Name of the current action
         agent_config: Action configuration dict
         agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
-        dependency_configs: Legacy parameter (not used)
         source_content: Original input data for "source" namespace
         version_context: Loop iteration info
         workflow_metadata: Workflow metadata

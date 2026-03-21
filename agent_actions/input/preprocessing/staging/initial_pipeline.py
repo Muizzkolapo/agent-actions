@@ -86,7 +86,6 @@ def _save_source_items_helper(
     saver = UnifiedSourceDataSaver(
         base_directory=str(workflow_root),
         enable_deduplication=True,
-        enable_locking=True,
         storage_backend=storage_backend,
     )
 

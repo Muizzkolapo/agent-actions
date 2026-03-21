@@ -275,22 +275,6 @@ class TestContextMetaKeysPhase:
         assert ContextMetaKeys.FILTER_PHASE in keys
 
 
-class TestBatchTaskPreparatorBackwardCompatibility:
-    """Tests for backward compatibility of deprecated parameters."""
-
-    def test_deprecated_filter_service_emits_warning(self):
-        """filter_service parameter emits deprecation warning."""
-        mock_filter_service = MagicMock()
-        with pytest.warns(DeprecationWarning, match="filter_service is deprecated"):
-            preparator = BatchTaskPreparator(filter_service=mock_filter_service)
-        assert preparator is not None
-
-    def test_deprecated_guard_handler_emits_warning(self):
-        """guard_handler parameter emits deprecation warning."""
-        mock_guard_handler = MagicMock()
-        with pytest.warns(DeprecationWarning, match="guard_handler is deprecated"):
-            preparator = BatchTaskPreparator(guard_handler=mock_guard_handler)
-        assert preparator is not None
 
     def test_storage_backend_passed_to_context(self):
         """storage_backend is stored for use in PreparationContext."""

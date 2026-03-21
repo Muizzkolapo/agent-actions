@@ -278,7 +278,6 @@ class TestBuildFieldContextRequiresAgentIndices:
 
         with pytest.raises(ConfigurationError) as exc_info:
             build_field_context_with_history(
-                contents={},
                 agent_name="test_action",
                 agent_config=agent_config,
                 agent_indices=None,  # No agent_indices!
@@ -296,7 +295,6 @@ class TestBuildFieldContextRequiresAgentIndices:
 
         # Should not raise - no dependencies means agent_indices not required
         result = build_field_context_with_history(
-            contents={},
             agent_name="test_action",
             agent_config=agent_config,
             agent_indices=None,
