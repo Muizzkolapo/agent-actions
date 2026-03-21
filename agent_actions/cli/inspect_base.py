@@ -59,12 +59,9 @@ class BaseInspectCommand:
         )
 
         # Build schema service for field resolution
-        wf_config = WorkflowSchemaService.build_workflow_config(
-            self.agent_name, workflow.action_configs
-        )
-        self.schema_service = WorkflowSchemaService(
-            wf_config,
-            schema_dir=paths.schema_dir,
+        self.schema_service = WorkflowSchemaService.from_action_configs(
+            self.agent_name,
+            workflow.action_configs,
             project_root=project_root,
         )
 

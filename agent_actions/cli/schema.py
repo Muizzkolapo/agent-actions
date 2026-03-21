@@ -81,7 +81,6 @@ class SchemaCommand:
             udf_registry=udf_registry,
             schema_loader=schema_loader,
             project_root=paths.current_dir,
-            schema_dir=paths.schema_dir,
         )
 
         if self.json_output:

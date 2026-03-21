@@ -39,13 +39,10 @@ class CatalogGenerator:
         if not actions:
             return None
 
-        workflow_config = WorkflowSchemaService.build_workflow_config(
-            workflow.get("name", "unknown"), actions
-        )
-        return WorkflowSchemaService(
-            workflow_config,
+        return WorkflowSchemaService.from_action_configs(
+            workflow.get("name", "unknown"),
+            actions,
             project_root=self.project_path,
-            workflow_name=workflow.get("name"),
         )
 
     def _enrich_action_with_fields(

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import threading
+from pathlib import Path
 from typing import Any
 
 from agent_actions.models.action_schema import (
@@ -12,12 +14,15 @@ from agent_actions.models.action_schema import (
     FieldSource,
     UpstreamReference,
 )
+from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.validation.static_analyzer import (
     DataFlowGraph,
     DataFlowNode,
     StaticValidationResult,
     WorkflowStaticAnalyzer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class WorkflowSchemaService:
@@ -39,6 +44,43 @@ class WorkflowSchemaService:
                 {**config, "name": action_name} for action_name, config in action_configs.items()
             ],
         }
+
+    @classmethod
+    def from_action_configs(
+        cls,
+        name: str,
+        action_configs: dict[str, dict[str, Any]],
+        *,
+        project_root: Path | None = None,
+        with_udf_registry: bool = False,
+    ) -> WorkflowSchemaService:
+        """Factory: build_workflow_config + optional UDF resolution in one call.
+
+        Args:
+            name: Workflow name.
+            action_configs: Mapping of action name → action config dict.
+            project_root: Project root directory.
+            with_udf_registry: If True, attempt to import UDF_REGISTRY.
+                Fails silently if unavailable.
+        """
+        workflow_config = cls.build_workflow_config(name, action_configs)
+
+        udf_registry: dict[str, Any] | None = None
+        if with_udf_registry:
+            try:
+                from agent_actions.utils.udf_management.registry import UDF_REGISTRY
+
+                udf_registry = UDF_REGISTRY
+            except ImportError:
+                logger.debug("UDF registry unavailable — skipping tool schema checks")
+
+        return cls(
+            workflow_config,
+            udf_registry=udf_registry,
+            schema_loader=SchemaLoader(),
+            project_root=project_root,
+            workflow_name=name,
+        )
 
     def __init__(
         self,

@@ -1,5 +1,8 @@
 """Tests for the WorkflowSchemaService."""
 
+from pathlib import Path
+from unittest.mock import patch
+
 from agent_actions.models.action_schema import ActionKind, ActionSchema, FieldSource
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
@@ -473,3 +476,47 @@ class TestLookupInProperties:
         props = {"name": {"type": "string"}}
         result = self._lookup(props, [], "name")
         assert result == ("string", "", False)
+
+
+class TestFromActionConfigs:
+    """Tests for WorkflowSchemaService.from_action_configs factory."""
+
+    SAMPLE_ACTIONS = {
+        "extract": {"model_vendor": "openai", "schema": {"text": "str"}},
+        "summarize": {"model_vendor": "openai", "depends_on": ["extract"]},
+    }
+
+    def test_returns_service_instance(self):
+        service = WorkflowSchemaService.from_action_configs("wf", self.SAMPLE_ACTIONS)
+        assert isinstance(service, WorkflowSchemaService)
+
+    def test_sets_workflow_name(self):
+        service = WorkflowSchemaService.from_action_configs("my_wf", self.SAMPLE_ACTIONS)
+        assert service.workflow_name == "my_wf"
+
+    def test_passes_project_root(self, tmp_path: Path):
+        service = WorkflowSchemaService.from_action_configs(
+            "wf", self.SAMPLE_ACTIONS, project_root=tmp_path
+        )
+        # project_root is forwarded to SchemaExtractor inside the analyzer
+        assert service._analyzer.schema_extractor.project_root == tmp_path
+
+    def test_without_udf_registry_defaults_empty(self):
+        service = WorkflowSchemaService.from_action_configs("wf", self.SAMPLE_ACTIONS)
+        # When with_udf_registry=False, SchemaExtractor gets empty dict
+        assert service._analyzer.schema_extractor.udf_registry == {}
+
+    def test_with_udf_registry_graceful_on_import_error(self):
+        """ImportError when UDF registry unavailable → still constructs service."""
+        with patch.dict("sys.modules", {"agent_actions.utils.udf_management.registry": None}):
+            service = WorkflowSchemaService.from_action_configs(
+                "wf", self.SAMPLE_ACTIONS, with_udf_registry=True
+            )
+            # Graceful fallback: udf_registry=None passed, extractor stores {}
+            assert service._analyzer.schema_extractor.udf_registry == {}
+
+    def test_builds_valid_workflow_config(self):
+        service = WorkflowSchemaService.from_action_configs("wf", self.SAMPLE_ACTIONS)
+        schemas = service.get_all_schemas()
+        assert "extract" in schemas
+        assert "summarize" in schemas

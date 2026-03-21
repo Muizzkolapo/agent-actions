@@ -11,7 +11,6 @@ from rich.console import Console
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
 from agent_actions.logging import get_manager
-from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
 from agent_actions.workflow.managers.artifacts import ArtifactLinker
@@ -69,26 +68,11 @@ class AgentWorkflow:
         Validates context_scope field references, schema structures, and
         data flow — like dbt compile before dbt run. Raises on errors.
         """
-        project_root = self.config.resolve_project_root()
-
-        workflow_config = WorkflowSchemaService.build_workflow_config(
-            self.agent_name, self.action_configs
-        )
-
-        try:
-            from agent_actions.utils.udf_management.registry import UDF_REGISTRY
-
-            udf_registry: dict | None = UDF_REGISTRY
-        except ImportError:
-            logger.debug("UDF registry unavailable — static analysis will skip tool schema checks")
-            udf_registry = None
-
-        schema_service = WorkflowSchemaService(
-            workflow_config,
-            udf_registry=udf_registry,
-            schema_loader=SchemaLoader(),
-            project_root=project_root,
-            workflow_name=self.agent_name,
+        schema_service = WorkflowSchemaService.from_action_configs(
+            self.agent_name,
+            self.action_configs,
+            project_root=self.config.resolve_project_root(),
+            with_udf_registry=True,
         )
 
         result = schema_service.validate()
