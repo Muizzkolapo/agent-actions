@@ -11,6 +11,7 @@ import yaml
 from jinja2 import Environment, FileSystemLoader
 
 from agent_actions.errors import ConfigurationError, TemplateRenderingError
+from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.safe_format import safe_format_error
 
@@ -125,55 +126,6 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
 # =============================================================================
 # Schema Compilation Functions
 # =============================================================================
-
-
-def _load_named_schema(
-    schema_name: str, schema_dir: Path | None = None, project_root: Path | None = None
-) -> dict[str, Any]:
-    """
-    Load a named schema from the schema/ directory.
-
-    Args:
-        schema_name: Name of the schema (without .yml extension)
-        schema_dir: Optional schema directory. Defaults to project_root/schema.
-        project_root: Optional project root for deriving schema_dir.
-
-    Returns:
-        Schema data as dictionary
-
-    Raises:
-        ConfigurationError: If schema file not found
-    """
-    if schema_dir is None:
-        schema_dir = (project_root or Path.cwd()) / "schema"
-
-    schema_file = schema_dir / f"{schema_name}.yml"
-
-    if not schema_file.exists():
-        raise ConfigurationError(
-            f"Schema file '{schema_name}.yml' not found",
-            context={
-                "schema_name": schema_name,
-                "schema_dir": str(schema_dir),
-                "expected_path": str(schema_file),
-                "operation": "load_named_schema",
-                "hint": "Ensure the schema file exists in the schema/ directory",
-            },
-        )
-
-    with open(schema_file, encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
-    if not isinstance(raw, dict):
-        raise ConfigurationError(
-            f"Schema file '{schema_name}.yml' must contain a YAML mapping, got {type(raw).__name__}",
-            context={
-                "schema_name": schema_name,
-                "schema_dir": str(schema_dir),
-                "expected_path": str(schema_file),
-                "operation": "load_named_schema",
-            },
-        )
-    return raw
 
 
 def _expand_inline_schema(schema_dict: dict[str, str]) -> dict[str, Any]:
@@ -292,11 +244,13 @@ def _compile_action_schemas(
     schema_name = action.get("schema_name")
     if schema_name and isinstance(schema_name, str):
         try:
-            loaded_schema = _load_named_schema(schema_name, schema_dir, project_root=project_root)
+            loaded_schema = SchemaLoader.load_schema(
+                schema_name, schema_dir=schema_dir, project_root=project_root
+            )
             action["schema"] = loaded_schema
             del action["schema_name"]
             logger.debug("Inlined named schema '%s' for action '%s'", schema_name, action_name)
-        except ConfigurationError as e:
+        except FileNotFoundError as e:
             error_msg = f"Action '{action_name}': Could not load schema '{schema_name}' - {e}"
             if strict and errors is not None:
                 errors.append(error_msg)
@@ -307,10 +261,12 @@ def _compile_action_schemas(
     schema_value = action.get("schema")
     if schema_value and isinstance(schema_value, str):
         try:
-            loaded_schema = _load_named_schema(schema_value, schema_dir, project_root=project_root)
+            loaded_schema = SchemaLoader.load_schema(
+                schema_value, schema_dir=schema_dir, project_root=project_root
+            )
             action["schema"] = loaded_schema
             logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
-        except ConfigurationError as e:
+        except FileNotFoundError as e:
             error_msg = f"Action '{action_name}': Could not load schema '{schema_value}' - {e}"
             if strict and errors is not None:
                 errors.append(error_msg)

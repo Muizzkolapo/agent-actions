@@ -16,15 +16,14 @@ from agent_actions.prompt.render_workflow import (
     _compile_workflow_schemas,
     _expand_inline_schema,
     _is_inline_schema_dict,
-    _load_named_schema,
 )
 
 
-class TestLoadNamedSchema:
-    """Tests for _load_named_schema function."""
+class TestSchemaLoadingViaCompilation:
+    """Tests for schema loading through _compile_action_schemas (delegates to SchemaLoader)."""
 
-    def test_load_existing_schema(self, tmp_path):
-        """Test loading an existing schema file."""
+    def test_compile_inlines_existing_schema(self, tmp_path):
+        """Test that compilation loads and inlines an existing schema file."""
         schema_dir = tmp_path / "schema"
         schema_dir.mkdir()
 
@@ -40,20 +39,25 @@ class TestLoadNamedSchema:
         with open(schema_file, "w") as f:
             yaml.dump(schema_content, f)
 
-        result = _load_named_schema("test_schema", schema_dir)
+        action = {"name": "my_action", "schema_name": "test_schema"}
+        _compile_action_schemas(action, schema_dir=schema_dir)
 
-        assert result["name"] == "test_schema"
-        assert len(result["fields"]) == 2
+        assert action["schema"]["name"] == "test_schema"
+        assert len(action["schema"]["fields"]) == 2
+        assert "schema_name" not in action
 
-    def test_load_missing_schema_raises_error(self, tmp_path):
-        """Test that loading a missing schema raises ConfigurationError."""
+    def test_compile_missing_schema_strict_collects_error(self, tmp_path):
+        """Test that missing schema in strict mode collects an error."""
         schema_dir = tmp_path / "schema"
         schema_dir.mkdir()
 
-        with pytest.raises(ConfigurationError) as exc_info:
-            _load_named_schema("nonexistent_schema", schema_dir)
+        action = {"name": "my_action", "schema_name": "nonexistent_schema"}
+        errors: list[str] = []
+        _compile_action_schemas(action, schema_dir=schema_dir, strict=True, errors=errors)
 
-        assert "not found" in str(exc_info.value)
+        assert len(errors) == 1
+        assert "nonexistent_schema" in errors[0]
+        assert "not found" in errors[0]
 
 
 class TestExpandInlineSchema:
