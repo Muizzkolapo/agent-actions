@@ -15,6 +15,7 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
+from agent_actions.config.types import RunMode
 from .config_fields import inherit_simple_fields
 from .expander_action_types import (
     process_guard_config,
@@ -257,6 +258,12 @@ class ActionExpander:
         # regardless of inherited/default model_vendor.
         if action_kind == "hitl":
             agent["model_vendor"] = "hitl"
+
+        # Tool and HITL actions must always run online — they cannot be batched.
+        # Only inherit run_mode from defaults for LLM actions; for tool/hitl, fall
+        # back to the hardcoded default (online) unless the action explicitly overrides.
+        if action_kind in {"tool", "hitl"} and action.get("run_mode") is None:
+            agent["run_mode"] = RunMode.ONLINE
 
         # Validate configuration
         validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
