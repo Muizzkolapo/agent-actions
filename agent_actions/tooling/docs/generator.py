@@ -10,7 +10,7 @@ from typing import Any
 
 import click
 
-from agent_actions.config.path_config import resolve_tool_paths
+from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.schema_service import WorkflowSchemaService
@@ -310,7 +310,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         return False
 
     # Resolve tool_path from project config
-    tool_paths = resolve_tool_paths(project_root)
+    tool_paths = get_tool_dirs(project_root)
 
     # Step 1b–1n: Scan all project artifacts
     prompts_data = scanner.scan_prompts(project_root)

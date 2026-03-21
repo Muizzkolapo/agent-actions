@@ -8,7 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from agent_actions.config.path_config import get_schema_path, resolve_tool_paths
+from agent_actions.config.path_config import get_schema_path, get_tool_dirs
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
@@ -73,7 +73,7 @@ def build_index(project_root: Path) -> ProjectIndex:
 
     _index_workflows(index, project_root)
     _index_prompts(index, project_root)
-    tool_paths = resolve_tool_paths(project_root)
+    tool_paths = get_tool_dirs(project_root)
     _index_tools(index, project_root, tool_paths)
     _index_schemas(index, project_root)
 

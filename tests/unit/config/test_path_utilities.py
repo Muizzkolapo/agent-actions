@@ -1,9 +1,9 @@
-"""Tests for resolve_project_root and resolve_tool_paths utilities."""
+"""Tests for resolve_project_root and get_tool_dirs utilities."""
 
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_actions.config.path_config import resolve_project_root, resolve_tool_paths
+from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError
 
 
@@ -22,32 +22,32 @@ class TestResolveProjectRoot:
         assert result == Path.cwd()
 
 
-class TestResolveToolPaths:
-    """resolve_tool_paths reads tool_path from project config."""
+class TestGetToolDirs:
+    """get_tool_dirs reads tool_path from project config."""
 
     def test_returns_default_when_no_config(self, tmp_path: Path):
         """No agent_actions.yml → default ["tools"]."""
-        assert resolve_tool_paths(tmp_path) == ["tools"]
+        assert get_tool_dirs(tmp_path) == ["tools"]
 
     def test_returns_default_when_key_absent(self, tmp_path: Path):
         """Config exists but tool_path key missing → default ["tools"]."""
         (tmp_path / "agent_actions.yml").write_text("schema_path: schema\n")
-        assert resolve_tool_paths(tmp_path) == ["tools"]
+        assert get_tool_dirs(tmp_path) == ["tools"]
 
     def test_returns_string_as_list(self, tmp_path: Path):
         """tool_path: my_tools → ["my_tools"]."""
         (tmp_path / "agent_actions.yml").write_text("tool_path: my_tools\n")
-        assert resolve_tool_paths(tmp_path) == ["my_tools"]
+        assert get_tool_dirs(tmp_path) == ["my_tools"]
 
     def test_returns_list_as_list(self, tmp_path: Path):
         """tool_path: [tools, extra_tools] → ["tools", "extra_tools"]."""
         (tmp_path / "agent_actions.yml").write_text("tool_path:\n  - tools\n  - extra_tools\n")
-        assert resolve_tool_paths(tmp_path) == ["tools", "extra_tools"]
+        assert get_tool_dirs(tmp_path) == ["tools", "extra_tools"]
 
     def test_non_iterable_value_coerced_to_list(self, tmp_path: Path):
         """tool_path: 42 → ["42"] (unexpected type handled gracefully)."""
         (tmp_path / "agent_actions.yml").write_text("tool_path: 42\n")
-        assert resolve_tool_paths(tmp_path) == ["42"]
+        assert get_tool_dirs(tmp_path) == ["42"]
 
     def test_returns_default_on_os_error(self, tmp_path: Path):
         """OSError during config load → default ["tools"]."""
@@ -55,7 +55,7 @@ class TestResolveToolPaths:
             "agent_actions.config.path_config.load_project_config",
             side_effect=OSError("disk error"),
         ):
-            assert resolve_tool_paths(tmp_path) == ["tools"]
+            assert get_tool_dirs(tmp_path) == ["tools"]
 
     def test_returns_default_on_config_validation_error(self, tmp_path: Path):
         """ConfigValidationError during config load → default ["tools"]."""
@@ -63,9 +63,9 @@ class TestResolveToolPaths:
             "agent_actions.config.path_config.load_project_config",
             side_effect=ConfigValidationError("bad_config", "bad yaml"),
         ):
-            assert resolve_tool_paths(tmp_path) == ["tools"]
+            assert get_tool_dirs(tmp_path) == ["tools"]
 
     def test_returns_default_when_tool_path_is_none_explicitly(self, tmp_path: Path):
         """tool_path: null → default ["tools"]."""
         (tmp_path / "agent_actions.yml").write_text("tool_path: null\n")
-        assert resolve_tool_paths(tmp_path) == ["tools"]
+        assert get_tool_dirs(tmp_path) == ["tools"]

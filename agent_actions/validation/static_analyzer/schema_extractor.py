@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from agent_actions.config.path_config import resolve_project_root, resolve_tool_paths
+from agent_actions.config.path_config import get_tool_dirs, resolve_project_root
 from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
@@ -42,7 +42,7 @@ class SchemaExtractor:
     def _get_tool_schemas(self) -> dict[str, Any]:
         """Lazy-load tool schemas from Python files."""
         if self._tool_schemas is None:
-            tool_paths = resolve_tool_paths(self.project_root)
+            tool_paths = get_tool_dirs(self.project_root)
             self._tool_schemas = scan_tool_functions(self.project_root, tool_paths)
         return self._tool_schemas
 

@@ -70,7 +70,7 @@ def resolve_project_root(explicit_root: Path | None = None) -> Path:
     return explicit_root or Path.cwd()
 
 
-def resolve_tool_paths(project_root: Path) -> list[str]:
+def get_tool_dirs(project_root: Path) -> list[str]:
     """Resolve tool directory names from project configuration.
 
     Reads ``tool_path`` from ``agent_actions.yml`` and normalises it to a
