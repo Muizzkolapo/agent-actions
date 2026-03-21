@@ -1,6 +1,7 @@
 """Prompt formatting and loading."""
 
 from agent_actions.errors import ConfigValidationError, PromptValidationError
+from agent_actions.logging.filters import _redact_sensitive_data
 from agent_actions.prompt.handler import PromptLoader
 from agent_actions.utils.constants import PROMPT_KEY
 
@@ -39,7 +40,7 @@ class PromptFormatter:
                 f"Failed to get raw prompt: {str(e)}",
                 context={
                     "field": "raw_prompt",
-                    "agent_config": str(agent_config),
+                    "agent_config": str(_redact_sensitive_data(agent_config)),
                     "operation": "get_raw_prompt",
                 },
                 cause=e,

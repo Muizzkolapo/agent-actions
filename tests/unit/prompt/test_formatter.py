@@ -80,3 +80,27 @@ class TestGetRawPromptEmptyString:
         ):
             with pytest.raises(PromptValidationError):
                 PromptFormatter.get_raw_prompt({"prompt": "$my_workflow.My_Prompt"})
+
+    def test_error_context_redacts_api_keys(self):
+        """A-1: api_key values must not leak into PromptValidationError context."""
+        config = {
+            "prompt": "$missing_ref",
+            "api_key": "sk-ant-secret-key-value-12345",
+            "gemini_api_key": "AIzaSyActualGeminiKeyValue1234567890abc",
+            "openai_api_key": "sk-openai-secret-99999",
+            "name": "test_agent",
+        }
+        with patch(
+            "agent_actions.prompt.formatter.PromptLoader.load_prompt",
+            side_effect=FileNotFoundError("not found"),
+        ):
+            with pytest.raises(PromptValidationError) as exc_info:
+                PromptFormatter.get_raw_prompt(config)
+        ctx = exc_info.value.context["agent_config"]
+        # Sensitive values must be redacted
+        assert "sk-ant-secret-key-value-12345" not in ctx
+        assert "AIzaSyActualGeminiKeyValue1234567890abc" not in ctx
+        assert "sk-openai-secret-99999" not in ctx
+        assert "[REDACTED]" in ctx
+        # Non-sensitive values must survive
+        assert "test_agent" in ctx
