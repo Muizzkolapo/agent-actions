@@ -41,7 +41,7 @@ class WorkspaceIndex:
             config_file = config_dir / f"{workflow_name}.yml"
 
             if not config_file.exists():
-                yml_files = list(config_dir.glob("*.yml"))
+                yml_files = sorted(config_dir.glob("*.yml"))
                 if yml_files:
                     config_file = yml_files[0]
                     workflow_name = config_file.stem

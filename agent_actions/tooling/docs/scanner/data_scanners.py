@@ -1,5 +1,6 @@
 """Data-oriented scan functions: prompts, schemas, workflow DBs, runs, logs."""
 
+import itertools
 import logging
 import re
 from pathlib import Path
@@ -348,10 +349,13 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
 
     logs_data["events_path"] = str(events_path)
 
+    _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
             invocations = {}
-            for line in f:
+            line_count = 0
+            for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line_count += 1
                 line = line.strip()
                 if not line:
                     continue
@@ -401,6 +405,12 @@ def scan_logs(project_root: Path) -> dict[str, Any]:
                         }
                     )
 
+            if line_count >= _LOG_LINE_LIMIT:
+                logger.warning(
+                    "scan_logs: line limit (%d) reached for %s; some events may be omitted",
+                    _LOG_LINE_LIMIT,
+                    events_path,
+                )
             # Get recent invocations (last 10)
             logs_data["recent_invocations"] = list(invocations.values())[-10:]
 
@@ -416,9 +426,12 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
 
     action_metrics: dict[str, Any] = {}
 
+    _LOG_LINE_LIMIT = 100_000
     try:
         with open(events_path, encoding="utf-8") as f:
-            for line in f:
+            line_count = 0
+            for line in itertools.islice(f, _LOG_LINE_LIMIT):
+                line_count += 1
                 line = line.strip()
                 if not line:
                     continue
@@ -469,6 +482,14 @@ def extract_action_metrics(events_path: Path) -> dict[str, Any]:
                     tokens["completion_tokens"] = tokens.get("completion_tokens", 0) + data.get(
                         "completion_tokens", 0
                     )
+
+            if line_count >= _LOG_LINE_LIMIT:
+                logger.warning(
+                    "extract_action_metrics: line limit (%d) reached for %s; "
+                    "some events may be omitted",
+                    _LOG_LINE_LIMIT,
+                    events_path,
+                )
 
     except OSError as e:
         logger.debug("Could not read action metrics from %s: %s", events_path, e)

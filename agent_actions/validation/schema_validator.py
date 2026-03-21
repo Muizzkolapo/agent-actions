@@ -12,7 +12,6 @@ from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     DataValidationFailedEvent,
     DataValidationPassedEvent,
-    DataValidationStartedEvent,
 )
 from agent_actions.validation.base_validator import BaseValidator
 
@@ -288,13 +287,6 @@ class SchemaValidator(BaseValidator):
         """Validate schema files for a given agent in the specified directory."""
         agent_name = data.get("agent_name", "") if isinstance(data, dict) else ""
         target = f"schema:{agent_name}" if agent_name else "schema"
-
-        fire_event(
-            DataValidationStartedEvent(
-                validator_type="SchemaValidator",
-                target=target,
-            )
-        )
 
         if not self._prepare_validation(data, target=target):
             result = self._complete_validation()

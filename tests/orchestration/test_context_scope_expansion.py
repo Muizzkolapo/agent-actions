@@ -68,19 +68,19 @@ class TestContextScopeExpansion:
         # Act: Compute execution levels (triggers dependency expansion only)
         levels = orchestrator.compute_execution_levels()
 
-        # Assert: Dependencies should be expanded to version variants
-        assert agent_configs["flatten_questions"]["dependencies"] == [
-            "extract_raw_qa_1",
-            "extract_raw_qa_2",
-            "extract_raw_qa_3",
-        ]
-
         # Assert: context_scope should be normalized in-place with field prefix pattern
+        # (normalization happens before orchestrator runs, so this is unaffected)
         assert agent_configs["flatten_questions"]["context_scope"] == {
             "observe": ["extract_raw_qa_"]  # Field prefix pattern
         }
 
+        # Assert: the original agent_configs dict is NOT mutated (C-6 deepcopy regression check)
+        assert agent_configs["flatten_questions"]["dependencies"] == ["extract_raw_qa"], (
+            "compute_execution_levels must not mutate the original action_configs dict"
+        )
+
         # Assert: Execution levels should be correct
+        # (dependency expansion happens inside compute_execution_levels using a local copy)
         assert len(levels) == 2
         assert set(levels[0]) == {"extract_raw_qa_1", "extract_raw_qa_2", "extract_raw_qa_3"}
         assert levels[1] == ["flatten_questions"]

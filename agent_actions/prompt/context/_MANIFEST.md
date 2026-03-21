@@ -9,6 +9,7 @@ loaders for cataloging prompts at documentation time.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
+| `__init__.py` | Module | Package init — added in Wave 11 (G-6) to prevent `ModuleNotFoundError` on some import paths. | — |
 | `builder.py` | Module | `ContextBuilder` helpers that resolve field references into prompt context data. | `preprocessing`, `validation` |
 | ~~`scope.py`~~ | Deleted | Facade removed. Consumers import directly from the 6 `scope_*` modules. | — |
 | `scope_parsing.py` | Module | Field reference parsing and action name extraction utilities. | `preprocessing` |

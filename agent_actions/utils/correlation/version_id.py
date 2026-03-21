@@ -77,6 +77,11 @@ class VersionIdGenerator:
             cls._version_correlation_registry.clear()
 
     @classmethod
+    def clear(cls) -> None:
+        """Short-form alias for clear_version_correlation_registry()."""
+        cls.clear_version_correlation_registry()
+
+    @classmethod
     def add_version_correlation_id(
         cls, obj: dict, agent_config: dict, record_index: int | None = None
     ) -> dict:

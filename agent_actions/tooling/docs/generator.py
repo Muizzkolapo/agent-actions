@@ -2,6 +2,8 @@
 
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -352,10 +354,20 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Write catalog.json
+    # Write catalog.json (atomic write to prevent corruption on crash)
     catalog_path = output_dir / "catalog.json"
-    with open(catalog_path, "w", encoding="utf-8") as f:
-        json.dump(catalog, f, indent=2)
+    dir_path = str(output_dir)
+    fd, tmp = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(catalog, f, indent=2)
+        os.replace(tmp, str(catalog_path))
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
     # Initialize runs.json only if it doesn't exist
     # (RunTracker manages all updates to this file during workflow execution)

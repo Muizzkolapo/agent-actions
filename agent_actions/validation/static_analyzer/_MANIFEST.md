@@ -42,7 +42,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `is_special_namespace` | Method | Check if name is a special namespace (source, version, etc.). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_upstream_nodes` | Method | Get all nodes that this agent depends on. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_downstream_nodes` | Method | Get all nodes that depend on this agent. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `topological_sort` | Method | Return nodes in topological order (Kahn's algorithm). | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `topological_sort` | Method | Return nodes in topological order (Kahn's algorithm, O(n) via pre-built adjacency map). | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `build_edges_from_requirements` | Method | Build edges based on input requirements of each node. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `get_all_agent_names` | Method | Get names of all non-special nodes. | - |
 | `errors.py` | Module | Error classes for static type checking. | `errors` |

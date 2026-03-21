@@ -331,7 +331,10 @@ def _index_workflow_lines(
                     context_list_indent = line_indent
                 elif current_context_list and context_list_indent is not None:
                     item_match = re.match(r"^\s*-\s*([^\s#]+)", line)
-                    if item_match:
+                    if not item_match and line.strip() and line_indent <= context_list_indent:
+                        # A non-list-item at or before list indent means we've exited the list
+                        current_context_list = None
+                    elif item_match:
                         value = item_match.group(1).strip()
                         if current_context_list == "observe":
                             current_action.context_observe.append(value)

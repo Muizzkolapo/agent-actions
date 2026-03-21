@@ -3,6 +3,7 @@ Action-level execution orchestration module.
 """
 
 import asyncio
+import copy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -87,16 +88,17 @@ class ActionLevelOrchestrator:
         # Build mapping of version base names to their expanded variants
         version_base_map = self._build_version_base_name_map()
 
+        local_configs = copy.deepcopy(self.action_configs)
         deps_map = {}
         for action in self.execution_order:
             raw_deps = [
-                d for d in self.action_configs[action].get("dependencies", []) if isinstance(d, str)
+                d for d in local_configs[action].get("dependencies", []) if isinstance(d, str)
             ]
             # Expand any version base name references to their expanded variants
             expanded_deps = self._expand_version_dependencies(raw_deps, version_base_map)
             deps_map[action] = expanded_deps
             if expanded_deps != raw_deps:
-                self.action_configs[action]["dependencies"] = expanded_deps
+                local_configs[action]["dependencies"] = expanded_deps
 
         levels = []
         assigned: set[str] = set()

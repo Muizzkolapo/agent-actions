@@ -8,4 +8,4 @@ Handlers that emit structured run results and telemetry for CLI commands.
 
 | Name | Type | Description | Signals |
 |------|------|-------------|---------|
-| `run_results.py` | Module | Handler that records workflow run status for the docs tracker. | `tooling.docs`, `logging` |
+| `run_results.py` | Module | `RunResultsCollector`: collects workflow execution results and writes `run_results.json` atomically via `tempfile.mkstemp` + `os.replace`. | `tooling.docs`, `logging` |

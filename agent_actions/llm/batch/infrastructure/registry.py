@@ -204,37 +204,53 @@ class BatchRegistryManager:
             if not self._cache:
                 return True  # No jobs = all complete
 
-            all_terminal = True
+            # Collect entries that need a provider check (non-terminal) while holding the lock
+            if check_provider:
+                to_check = [
+                    (file_name, entry)
+                    for file_name, entry in self._cache.items()
+                    if not entry.is_terminal
+                ]
+            else:
+                to_check = []
+
+            # Fast path: no provider checks needed
+            if not check_provider:
+                return all(entry.is_terminal for entry in self._cache.values())
+
+        # Release the lock before performing network I/O
+        updates: list[tuple[str, str]] = []  # (file_name, new_status)
+        for file_name, entry in to_check:
+            try:
+                actual_status = check_provider(entry.batch_id)
+                if actual_status != entry.status:
+                    updates.append((file_name, actual_status))
+            except Exception as e:
+                # Avoid one status check failure from breaking workflow
+                logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
+                return False
+
+        # Re-acquire lock to apply updates and persist
+        with self._lock:
+            if self._cache is None:
+                raise RuntimeError(
+                    "BatchRegistryManager._cache is None after modification; "
+                    "cache was unexpectedly cleared during status checks"
+                )
             cache_modified = False
-
-            for file_name, entry in list(self._cache.items()):
-                # Optionally refresh status from provider
-                if check_provider and not entry.is_terminal:
-                    try:
-                        actual_status = check_provider(entry.batch_id)
-                        if actual_status != entry.status:
-                            updated_entry = dataclasses.replace(entry, status=actual_status)
-                            self._cache[file_name] = updated_entry
-                            cache_modified = True
-                            entry = updated_entry
-                    except Exception as e:
-                        # Avoid one status check failure from breaking workflow
-                        logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
-                        # Assume not complete on error
-                        return False
-
-                if not entry.is_terminal:
-                    all_terminal = False
+            for file_name, new_status in updates:
+                if file_name in self._cache:
+                    current = self._cache[file_name]
+                    # TOCTOU guard: skip if another thread already advanced this entry to
+                    # terminal between our lock release and re-acquire — keep the later write.
+                    if not current.is_terminal:
+                        self._cache[file_name] = dataclasses.replace(current, status=new_status)
+                        cache_modified = True
 
             if cache_modified:
-                if self._cache is None:
-                    raise RuntimeError(
-                        "BatchRegistryManager._cache is None after modification; "
-                        "cache was unexpectedly cleared during status checks"
-                    )
                 self._persist_registry(self._cache)
 
-            return all_terminal
+            return all(entry.is_terminal for entry in self._cache.values())
 
     def invalidate_cache(self) -> None:
         """Force cache reload on next access."""

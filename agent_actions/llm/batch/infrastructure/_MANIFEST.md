@@ -14,4 +14,4 @@ batch services that orchestrate runs outside online mode.
 | `batch_source_handler.py` | Module | Maps target paths back to their source location for batch processing. Delegates workflow root discovery to `utils.path_utils.derive_workflow_root`. | `file_io`, `lineage`, `utils.path_utils` |
 | `context.py` | Module | Batch context builders and metadata propagation helpers. | `logging`, `workflow` |
 | `job_manager.py` | Module | Job lifecycle controller that tracks active batch runs. | `logging`, `tooling.docs` |
-| `registry.py` | Module | Registers batch providers/tools used by the infrastructure layer. | `llm.providers`, `logging` |
+| `registry.py` | Module | `BatchRegistryManager`: thread-safe CRUD for `.batch_registry.json`. `are_all_jobs_completed()` releases the lock before network I/O to prevent thread starvation. | `llm.providers`, `logging` |

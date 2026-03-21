@@ -29,4 +29,4 @@ Agent Actions.
 | `schema_service.py` | Module | `WorkflowSchemaService` that exposes input/output schema mapping. | `schema`, `output` |
 | `service_init.py` | Module | Service assembly and storage backend initialization extracted from coordinator. | `config`, `workflow` |
 | `strategies.py` | Module | Pluggable strategies for action execution (loop/parallel). | `workflow`, `validation` |
-| `workspace_index.py` | Module | Index of files/workflow directories (used by tooling). | `tooling`, `file_io` |
+| `workspace_index.py` | Module | `WorkspaceIndex`: scans workflow dirs to build dependency graphs. Config file glob uses `sorted()` for deterministic selection. | `tooling`, `file_io` |

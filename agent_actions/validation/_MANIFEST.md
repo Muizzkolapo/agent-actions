@@ -30,6 +30,6 @@ decoders to schema validators and preflight checks.
 | `render_validator.py` | Module | `RenderCommandArgs` pydantic model. | `validation` |
 | `run_validator.py` | Module | `RunCommandArgs` and pre-flight gating. | `validation` |
 | `schema_output_validator.py` | Module | Validates output data against JSON schemas. | `validation`, `schema` |
-| `schema_validator.py` | Module | Schema validation with event firing support. | `validation` |
+| `schema_validator.py` | Module | `SchemaValidator`: validates schema files against JSON Schema meta-schema. Fires a single `ValidationStartEvent` via the base class `_prepare_validation()`; the redundant `DataValidationStartedEvent` at the top of `validate()` has been removed. | `validation` |
 | `status_validator.py` | Module | `StatusCommandArgs` definition. | `validation` |
 | `validate_udfs.py` | Module | Validates that UDFs referenced in configs exist. | `utils.udf_management`, `validation` |

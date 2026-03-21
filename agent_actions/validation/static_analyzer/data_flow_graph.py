@@ -1,5 +1,6 @@
 """Data flow graph for workflow static analysis."""
 
+import collections
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,24 +180,27 @@ class DataFlowGraph:
             ValueError: If circular dependency detected.
         """
         in_degree: dict[str, int] = {name: 0 for name in self.nodes}
+        dependents: dict[str, list[str]] = {name: [] for name in self.nodes}
 
         for node in self.nodes.values():
             for dep in node.dependencies:
                 if dep in self.nodes:
                     in_degree[node.name] += 1
+                    dependents[dep].append(node.name)
 
-        queue = [name for name, degree in in_degree.items() if degree == 0]
+        queue: collections.deque[str] = collections.deque(
+            name for name, degree in in_degree.items() if degree == 0
+        )
         result = []
 
         while queue:
-            name = queue.pop(0)
+            name = queue.popleft()
             result.append(name)
 
-            for action_name, node in self.nodes.items():
-                if name in node.dependencies:
-                    in_degree[action_name] -= 1
-                    if in_degree[action_name] == 0:
-                        queue.append(action_name)
+            for dep_name in dependents[name]:
+                in_degree[dep_name] -= 1
+                if in_degree[dep_name] == 0:
+                    queue.append(dep_name)
 
         if len(result) != len(self.nodes):
             remaining = set(self.nodes.keys()) - set(result)

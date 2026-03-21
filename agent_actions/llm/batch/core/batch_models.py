@@ -1,5 +1,6 @@
 """Data models for batch processing registry entries and task preparation."""
 
+import dataclasses
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -40,7 +41,9 @@ class BatchJobEntry:
     @classmethod
     def from_dict(cls, data: dict) -> "BatchJobEntry":
         """Create BatchJobEntry from dictionary (JSON deserialization)."""
-        return cls(**data)
+        known_fields = {f.name for f in dataclasses.fields(cls)}
+        filtered = {k: v for k, v in data.items() if k in known_fields}
+        return cls(**filtered)
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

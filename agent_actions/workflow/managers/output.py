@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -62,6 +63,8 @@ class ActionOutputManager:
         self.console = config.console or Console()
         self.storage_backend = config.storage_backend
         self.data_source_config = config.data_source_config
+        self._version_consumption_map: dict | None = None
+        self._version_consumption_lock = threading.Lock()
 
     def _load_json_files(self, json_files: list[Path], agent_output: dict[str, Any]) -> list[Any]:
         """Load data from JSON files."""
@@ -309,12 +312,15 @@ class ActionOutputManager:
             if upstream_dirs:
                 return upstream_dirs
 
-        version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-            self.execution_order, self.action_configs
-        )
+        if self._version_consumption_map is None:
+            with self._version_consumption_lock:
+                if self._version_consumption_map is None:
+                    self._version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
+                        self.execution_order, self.action_configs
+                    )
 
-        if current_agent in version_consumption_map:
-            consumption_config = version_consumption_map[current_agent]
+        if current_agent in self._version_consumption_map:
+            consumption_config = self._version_consumption_map[current_agent]
             version_sources = consumption_config["version_agents"]
             pattern = consumption_config["pattern"]
 
@@ -352,14 +358,17 @@ class ActionOutputManager:
         """Create a correlation-aware setup_directories wrapper if needed."""
         current_agent = self.execution_order[idx]
 
-        version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-            self.execution_order, self.action_configs
-        )
+        if self._version_consumption_map is None:
+            with self._version_consumption_lock:
+                if self._version_consumption_map is None:
+                    self._version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
+                        self.execution_order, self.action_configs
+                    )
 
-        if current_agent not in version_consumption_map:
+        if current_agent not in self._version_consumption_map:
             return None
 
-        consumption_config = version_consumption_map[current_agent]
+        consumption_config = self._version_consumption_map[current_agent]
         version_sources = consumption_config["version_agents"]
         pattern = consumption_config["pattern"]
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -128,8 +130,17 @@ class RunResultsCollector:
         }
 
         output_path = target_dir / "run_results.json"
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(output, f, indent=2, default=str)
+        fd, tmp = tempfile.mkstemp(dir=str(target_dir), suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(output, f, indent=2, default=str)
+            os.replace(tmp, str(output_path))
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
 
     def _handle_workflow_start(self, event: BaseEvent) -> None:
         self._metadata["workflow_name"] = event.data.get("workflow_name", "")
