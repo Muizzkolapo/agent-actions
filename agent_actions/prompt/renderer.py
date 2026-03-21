@@ -9,8 +9,9 @@ import yaml
 from pydantic import ValidationError
 from yaml import YAMLError
 
-from agent_actions.config.types import ActionConfigMap, ActionEntryDict, RunMode
+from agent_actions.config.types import ActionConfigMap, ActionEntryDict
 from agent_actions.errors import ConfigurationError, ConfigValidationError
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.error_handler import ErrorHandler
@@ -208,13 +209,13 @@ class ConfigRenderingService:
         agent_entry = {
             "agent_type": action.get("name", "unknown"),
             "name": action.get("name"),
-            "model_vendor": action.get("model_vendor", "openai"),
-            "model_name": action.get("model_name", "gpt-4"),
-            "is_operational": True,
+            "model_vendor": action.get("model_vendor", get_default("model_vendor")),
+            "model_name": action.get("model_name", get_default("model_name")),
+            "is_operational": get_default("is_operational"),
             "dependencies": [],
-            "granularity": action.get("granularity", "record"),
-            "run_mode": RunMode.ONLINE,
-            "json_mode": action.get("json_mode", True),
+            "granularity": action.get("granularity", get_default("granularity")),
+            "run_mode": get_default("run_mode"),
+            "json_mode": action.get("json_mode", get_default("json_mode")),
         }
 
         if action.get("kind") == "tool":
@@ -246,7 +247,9 @@ class ConfigRenderingService:
                 cause=e,
             ) from e
 
-    def _validate_new_format(self, config: ActionConfigMap, agent_name: str) -> list[ActionEntryDict]:
+    def _validate_new_format(
+        self, config: ActionConfigMap, agent_name: str
+    ) -> list[ActionEntryDict]:
         """Validate new format config with 'actions' key."""
         actions = config.get("actions", [])
         validated_entries = []

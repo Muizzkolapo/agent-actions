@@ -11,6 +11,7 @@ from agent_actions.llm.batch.core.batch_constants import ContextMetaKeys, Filter
 from agent_actions.llm.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm.batch.processing.reconciler import BatchResultReconciler
 from agent_actions.llm.providers.batch_base import BatchResult
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.processing.batch_context_adapter import BatchContextAdapter
 from agent_actions.processing.enrichment import EnrichmentPipeline
 from agent_actions.processing.exhausted_builder import ExhaustedRecordBuilder
@@ -29,9 +30,9 @@ class BatchProcessingContext:
     output_directory: str | None
     agent_config: dict[str, Any] | None
 
-    # Extracted configuration
+    # Extracted configuration — defaults match SIMPLE_CONFIG_FIELDS (single source of truth)
     json_mode: bool = True
-    output_field: str = "content"
+    output_field: str = "raw_response"
 
     # Reconciliation
     reconciler: BatchResultReconciler | None = None
@@ -97,11 +98,11 @@ class BatchResultProcessor:
         """Initialize processing context with configuration values."""
         context_map = context_map or {}
 
-        json_mode = True
-        output_field = "content"
+        json_mode = get_default("json_mode")
+        output_field = get_default("output_field")
         if agent_config:
-            json_mode = agent_config.get("json_mode", True)
-            output_field = agent_config.get("output_field", "content")
+            json_mode = agent_config.get("json_mode", get_default("json_mode"))
+            output_field = agent_config.get("output_field", get_default("output_field"))
 
         ctx = BatchProcessingContext(
             batch_results=batch_results,

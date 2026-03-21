@@ -18,6 +18,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from agent_actions.output.response.config_fields import get_default
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,7 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
-        output_field = agent_config.get("output_field", "raw_response")
+        output_field = agent_config.get("output_field", get_default("output_field"))
 
         # Generate text response based on prompt
         content = FakeDataGenerator.generate_text_response(prompt, attempt)

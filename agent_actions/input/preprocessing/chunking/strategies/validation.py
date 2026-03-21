@@ -3,6 +3,7 @@
 from typing import Any
 
 from agent_actions.input.preprocessing.chunking.errors import FieldChunkingValidationError
+from agent_actions.output.response.config_fields import get_default
 
 
 class ConfigValidator:
@@ -52,10 +53,10 @@ class ConfigValidator:
         """
         errors = []
 
-        chunk_size = chunk_config.get("chunk_size", 1000)
-        overlap = chunk_config.get("overlap", 200)
-        tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
-        split_method = chunk_config.get("split_method", "tiktoken")
+        chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
+        overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
+        tokenizer_model = chunk_config.get("tokenizer_model", get_default("tokenizer_model"))
+        split_method = chunk_config.get("split_method", get_default("split_method"))
 
         if chunk_size <= 0:
             errors.append("chunk_size must be positive")
@@ -115,7 +116,7 @@ class ConfigValidator:
             if "chunk_threshold" in field_rule and field_rule["chunk_threshold"] < 0:
                 errors.append(f"field_rules[{field_name}].chunk_threshold must be non-negative")
 
-            chunk_size = field_rule.get("chunk_size", 1000)
+            chunk_size = field_rule.get("chunk_size", get_default("chunk_size"))
             overlap = field_rule.get("overlap", 0)
             if overlap >= chunk_size:
                 errors.append(f"field_rules[{field_name}].overlap must be smaller than chunk_size")

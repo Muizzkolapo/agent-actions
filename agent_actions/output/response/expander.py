@@ -15,8 +15,7 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
-from agent_actions.config.types import RunMode
-from .config_fields import inherit_simple_fields
+from .config_fields import get_default, inherit_simple_fields
 from .expander_action_types import (
     process_guard_config,
     process_hitl_action,
@@ -253,7 +252,7 @@ class ActionExpander:
         # Inherit simple fields (includes is_operational from config)
         inherit_simple_fields(agent, action, defaults)
 
-        action_kind = action.get("kind", "llm")
+        action_kind = action.get("kind", get_default("kind"))
         # HITL is a non-LLM action type and should always route to the HITL client,
         # regardless of inherited/default model_vendor.
         if action_kind == "hitl":
@@ -263,7 +262,7 @@ class ActionExpander:
         # Only inherit run_mode from defaults for LLM actions; for tool/hitl, fall
         # back to the hardcoded default (online) unless the action explicitly overrides.
         if action_kind in {"tool", "hitl"} and action.get("run_mode") is None:
-            agent["run_mode"] = RunMode.ONLINE
+            agent["run_mode"] = get_default("run_mode")
 
         # Validate configuration
         validate_vendor_exists(agent["model_vendor"], action.get("name", "unknown"))
@@ -302,7 +301,9 @@ class ActionExpander:
                     action.get("name", "?"),
                 )
         else:
-            granularity = action.get("granularity", defaults.get("granularity", "record"))
+            granularity = action.get(
+                "granularity", defaults.get("granularity", get_default("granularity"))
+            )
         if granularity:
             agent["granularity"] = (
                 granularity.capitalize() if isinstance(granularity, str) else granularity

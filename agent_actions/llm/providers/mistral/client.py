@@ -33,6 +33,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -256,7 +257,7 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     "api_operation": "chat.complete",
                 },
             )
-        output_field = agent_config.get("output_field", "raw_response")
+        output_field = agent_config.get("output_field", get_default("output_field"))
 
         logger.debug(
             "Mistral non-JSON response retrieved successfully",

@@ -27,6 +27,7 @@ from agent_actions.input.preprocessing.chunking.strategies.metadata_strategies i
 )
 from agent_actions.input.preprocessing.chunking.strategies.validation import ConfigValidator
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
+from agent_actions.output.response.config_fields import get_default
 
 
 @dataclass
@@ -65,7 +66,7 @@ class FieldAnalyzer:
             chunk_fields=field_chunking.get("chunk_fields", []),
             preserve_fields=field_chunking.get("preserve_fields", []),
             chunk_threshold=field_chunking.get("chunk_threshold", 0),
-            tokenizer_model=chunk_config.get("tokenizer_model", "cl100k_base"),
+            tokenizer_model=chunk_config.get("tokenizer_model", get_default("tokenizer_model")),
             field_rules=field_chunking.get("field_rules", {}),
             auto_detect_enabled=auto_detection.get("enabled", False),
         )
@@ -159,9 +160,9 @@ class FieldChunker:
         field_chunking = chunk_config.get("field_chunking", {})
 
         self.config = ChunkerConfig(
-            chunk_size=chunk_config.get("chunk_size", 1000),
-            overlap=chunk_config.get("overlap", 200),
-            tokenizer_model=chunk_config.get("tokenizer_model", "cl100k_base"),
+            chunk_size=chunk_config.get("chunk_size", get_default("chunk_size")),
+            overlap=chunk_config.get("overlap", get_default("chunk_overlap")),
+            tokenizer_model=chunk_config.get("tokenizer_model", get_default("tokenizer_model")),
             max_chunks_per_record=field_chunking.get("max_chunks_per_record", 100),
             truncate_at=field_chunking.get("truncate_at", 50000),
             field_rules=field_chunking.get("field_rules", {}),

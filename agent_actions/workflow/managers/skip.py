@@ -12,6 +12,7 @@ from agent_actions.input.preprocessing.filtering.guard_filter import (
 )
 from agent_actions.logging.core import fire_event
 from agent_actions.logging.events import ActionSkipEvent
+from agent_actions.output.response.config_fields import get_default
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,9 @@ class GuardStrategy(SkipStrategy):
                 FilterItemRequest(
                     data=context_data,
                     condition=guard_clause,
-                    timeout=agent_config.get("max_execution_time", 5),
+                    timeout=agent_config.get(
+                        "max_execution_time", get_default("max_execution_time")
+                    ),
                 )
             )
 

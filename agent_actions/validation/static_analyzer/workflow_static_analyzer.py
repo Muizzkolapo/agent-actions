@@ -9,6 +9,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import RESERVED_AGENT_NAMES, SPECIAL_NAMESPACES
 
 from .data_flow_graph import (
@@ -326,7 +327,7 @@ class WorkflowStaticAnalyzer:
         name = action_config.get("name", "unknown")
 
         # Determine action type
-        kind = action_config.get("kind", "llm")
+        kind = action_config.get("kind", get_default("kind"))
         model_vendor = action_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":

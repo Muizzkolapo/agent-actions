@@ -20,6 +20,7 @@ from agent_actions.logging.events.data_pipeline_events import (
     RecordTransformedEvent,
 )
 from agent_actions.logging.events.llm_events import TemplateRenderingFailedEvent
+from agent_actions.output.response.config_fields import get_default
 
 from .enrichment import EnrichmentPipeline
 from .exhausted_builder import ExhaustedRecordBuilder
@@ -66,7 +67,7 @@ class RecordProcessor:
                 agent_name,
             )
 
-        granularity = agent_config.get("granularity", "record")
+        granularity = agent_config.get("granularity", get_default("granularity"))
         action_kind = (agent_config.get("kind") or "").lower()
 
         # FILE granularity only allowed for tool and HITL actions

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
@@ -192,9 +193,7 @@ class ConfigValidator(BaseValidator):
             deps.update(dep.lower() for dep in entry_ci["dependencies"] if isinstance(dep, str))
         return deps
 
-    def _validate_config_dependencies_logic(
-        self, full_config_data: dict[str, Any]
-    ) -> None:
+    def _validate_config_dependencies_logic(self, full_config_data: dict[str, Any]) -> None:
         """Validate dependencies in configuration."""
         available_agents = {name.lower() for name in full_config_data}
         for agent_name, entries in full_config_data.items():
@@ -219,7 +218,8 @@ class ConfigValidator(BaseValidator):
         active_agents = {
             name.lower()
             for name, cfg in agent_cfgs_map.items()
-            if isinstance(cfg, dict) and _ci_dict(cfg).get("is_operational", True)
+            if isinstance(cfg, dict)
+            and _ci_dict(cfg).get("is_operational", get_default("is_operational"))
         }
         all_agents = {name.lower() for name in agent_cfgs_map}
         return active_agents, all_agents
@@ -249,7 +249,7 @@ class ConfigValidator(BaseValidator):
             )
         elif dep_lc not in active_agents:
             dep_cfg_ci = _ci_dict(agent_cfgs_map.get(dep, {}))
-            if not dep_cfg_ci.get("is_operational", True):
+            if not dep_cfg_ci.get("is_operational", get_default("is_operational")):
                 self.add_error(
                     f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.",
                     field="dependencies",
@@ -266,7 +266,7 @@ class ConfigValidator(BaseValidator):
     ) -> None:
         """Validate all dependencies for a single agent."""
         cfg_ci = _ci_dict(cfg) if isinstance(cfg, dict) else {}
-        if not cfg_ci.get("is_operational", True):
+        if not cfg_ci.get("is_operational", get_default("is_operational")):
             return
         deps = cfg_ci.get("dependencies", [])
         if not isinstance(deps, list):

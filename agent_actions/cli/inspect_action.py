@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
+from agent_actions.output.response.config_fields import get_default
 
 from .inspect_base import BaseInspectCommand
 
@@ -53,7 +54,7 @@ class ActionCommand(BaseInspectCommand):
             "workflow": self.agent_name,
             "action": self.action_name,
             "type": self._get_action_type(info["input_sources"], info["context_sources"]),
-            "kind": action_config.get("kind", "llm"),
+            "kind": action_config.get("kind", get_default("kind")),
             "model": action_config.get("model_name"),
             "input_sources": info["input_sources"],
             "context_sources": info["context_sources"],
@@ -70,9 +71,9 @@ class ActionCommand(BaseInspectCommand):
         self.console.print(f"[bold cyan]Action: {self.action_name}[/bold cyan]")
         self.console.print(f"[dim]Type: {action_type}[/dim]\n")
 
-        kind = action_config.get("kind", "llm")
+        kind = action_config.get("kind", get_default("kind"))
         model = action_config.get("model_name", "default")
-        granularity = action_config.get("granularity", "record")
+        granularity = action_config.get("granularity", get_default("granularity"))
 
         config_table = Table(show_header=False, box=None, padding=(0, 2))
         config_table.add_column(style="bold")

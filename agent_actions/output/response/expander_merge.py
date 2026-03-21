@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from agent_actions.output.response.config_fields import get_default
+
 
 def merge_directive_value(existing: Any, new_value: Any) -> Any:
     """Merge two directive values based on their types."""
@@ -48,11 +50,11 @@ def process_chunk_config(
         agent["chunk_config"] = {}
         if action.get("chunk_size") or defaults.get("chunk_size"):
             agent["chunk_config"]["chunk_size"] = action.get(
-                "chunk_size", defaults.get("chunk_size", 300)
+                "chunk_size", defaults.get("chunk_size", get_default("chunk_size"))
             )
         if action.get("chunk_overlap") or defaults.get("chunk_overlap"):
             agent["chunk_config"]["chunk_overlap"] = action.get(
-                "chunk_overlap", defaults.get("chunk_overlap", 10)
+                "chunk_overlap", defaults.get("chunk_overlap", get_default("chunk_overlap"))
             )
 
 

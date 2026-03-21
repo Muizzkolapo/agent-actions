@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, cast
 from agent_actions.config.types import RunMode
 from agent_actions.errors import AgentActionsError, ConfigValidationError
 from agent_actions.input.preprocessing.transformation.string_transformer import Tokenizer
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.saver import UnifiedSourceDataSaver
 from agent_actions.output.writer import FileWriter
 from agent_actions.processing.processor import RecordProcessor
@@ -304,10 +305,10 @@ def _prepare_text_chunks_batch(
 ) -> list[dict[str, Any]]:
     """Prepare text chunks for batch mode."""
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
-    chunk_size = chunk_config.get("chunk_size", 1000)
-    chunk_overlap = chunk_config.get("overlap", 200)
-    tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
-    split_method = chunk_config.get("split_method", "tiktoken")
+    chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
+    chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
+    tokenizer_model = chunk_config.get("tokenizer_model", get_default("tokenizer_model"))
+    split_method = chunk_config.get("split_method", get_default("split_method"))
     chunks = Tokenizer.split_text_content(
         content,
         chunk_size,
@@ -492,10 +493,10 @@ def _prepare_online_data(ctx: DataPreparationContext):
 
     if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
-        chunk_size = chunk_config.get("chunk_size", 1000)
-        chunk_overlap = chunk_config.get("overlap", 200)
-        tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
-        split_method = chunk_config.get("split_method", "tiktoken")
+        chunk_size = chunk_config.get("chunk_size", get_default("chunk_size"))
+        chunk_overlap = chunk_config.get("overlap", get_default("chunk_overlap"))
+        tokenizer_model = chunk_config.get("tokenizer_model", get_default("tokenizer_model"))
+        split_method = chunk_config.get("split_method", get_default("split_method"))
         chunks = Tokenizer.split_text_content(
             ctx.content,
             chunk_size,

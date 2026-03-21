@@ -218,8 +218,8 @@ class TestBuildAgentEntryFromAction:
         entry = svc._build_agent_entry_from_action({})
 
         assert entry["agent_type"] == "unknown"
-        assert entry["model_vendor"] == "openai"
-        assert entry["model_name"] == "gpt-4"
+        assert entry["model_vendor"] is None  # Required field — no default vendor
+        assert entry["model_name"] is None  # Required field — no default model
         assert entry["granularity"] == "record"
 
     def test_tool_kind_overrides_model_fields(self):

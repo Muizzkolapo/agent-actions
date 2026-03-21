@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.path_config import load_project_config
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.loader import SchemaLoader
 from agent_actions.tooling.docs.scanner import scan_tool_functions
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA
@@ -98,7 +99,7 @@ class SchemaExtractor:
         """Extract output schema from action config."""
         output = OutputSchema()
 
-        kind = agent_config.get("kind", "llm")
+        kind = agent_config.get("kind", get_default("kind"))
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
@@ -120,7 +121,7 @@ class SchemaExtractor:
         """Extract input schema from action config."""
         input_schema = InputSchema()
 
-        kind = agent_config.get("kind", "llm")
+        kind = agent_config.get("kind", get_default("kind"))
         model_vendor = agent_config.get("model_vendor", "")
 
         if kind == "tool" or model_vendor == "tool":
@@ -280,7 +281,7 @@ class SchemaExtractor:
                     )
 
         if not schema_def:
-            json_mode = config.get("json_mode", True)
+            json_mode = config.get("json_mode", get_default("json_mode"))
             if not json_mode:
                 output.is_schemaless = True
                 output.schema_fields.add("content")

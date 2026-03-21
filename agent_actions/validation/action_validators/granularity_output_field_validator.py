@@ -1,5 +1,6 @@
 """Validator for granularity and output_field configuration."""
 
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import JSON_MODE_KEY
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
@@ -21,10 +22,12 @@ class GranularityAndOutputFieldValidator(BaseActionEntryValidator):
         errors = []
 
         if "granularity" in normalized_entry:
-            granularity_raw = normalized_entry.get("granularity", "record")
+            granularity_raw = normalized_entry.get("granularity", get_default("granularity"))
             granularity = str(granularity_raw).lower()
 
-            valid_granularity_values = ActionConfigValidationUtilities.get_valid_granularity_values()
+            valid_granularity_values = (
+                ActionConfigValidationUtilities.get_valid_granularity_values()
+            )
 
             if granularity not in valid_granularity_values:
                 valid_values_str = "' or '".join(sorted(valid_granularity_values))

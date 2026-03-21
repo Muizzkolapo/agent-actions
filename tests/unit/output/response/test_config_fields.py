@@ -1,8 +1,11 @@
 """Tests for config_fields mutable-default, deep-copy safety, and RunMode coercion."""
 
+import pytest
+
 from agent_actions.config.types import RunMode
 from agent_actions.output.response.config_fields import (
     SIMPLE_CONFIG_FIELDS,
+    get_default,
     inherit_simple_fields,
 )
 from agent_actions.output.response.expander import ActionExpander
@@ -12,6 +15,43 @@ from agent_actions.validation.action_validators.vendor_compatibility_validator i
 from agent_actions.validation.orchestration.action_entry_validation_orchestrator import (
     ActionEntryValidationContext,
 )
+
+
+class TestGetDefault:
+    """Tests for get_default() — the single source of truth accessor."""
+
+    def test_returns_known_field_value(self):
+        """get_default() returns the canonical value for a known field."""
+        assert get_default("kind") == "llm"
+        assert get_default("granularity") == "record"
+        assert get_default("json_mode") is True
+        assert get_default("is_operational") is True
+        assert get_default("run_mode") == RunMode.ONLINE
+        assert get_default("output_field") == "raw_response"
+        assert get_default("max_execution_time") == 300
+
+    def test_returns_none_for_required_fields(self):
+        """Required fields (model_vendor, model_name, api_key) default to None."""
+        assert get_default("model_vendor") is None
+        assert get_default("model_name") is None
+        assert get_default("api_key") is None
+
+    def test_returns_chunk_defaults(self):
+        """Chunk config fields return canonical defaults."""
+        assert get_default("chunk_size") == 300
+        assert get_default("chunk_overlap") == 10
+        assert get_default("tokenizer_model") == "cl100k_base"
+        assert get_default("split_method") == "tiktoken"
+
+    def test_unknown_field_raises_key_error(self):
+        """get_default() raises KeyError with descriptive message for unknown fields."""
+        with pytest.raises(KeyError, match="Unknown config field: 'nonexistent'"):
+            get_default("nonexistent")
+
+    def test_consistent_with_simple_config_fields(self):
+        """get_default() returns the same values as direct SIMPLE_CONFIG_FIELDS access."""
+        for field, expected in SIMPLE_CONFIG_FIELDS.items():
+            assert get_default(field) is expected
 
 
 class TestMutableDefaults:
@@ -108,6 +148,7 @@ class TestRunModeCoercion:
         agent: dict = {}
         inherit_simple_fields(agent, {"run_mode": RunMode.BATCH}, {})
         assert agent["run_mode"] is RunMode.BATCH
+
 
 class TestRunModeEnumContract:
     """Verify RunMode enum construction contract."""

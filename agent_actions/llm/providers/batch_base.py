@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from agent_actions.output.response.config_fields import get_default
+
 if TYPE_CHECKING:
     from agent_actions.processing.types import RecoveryMetadata
 
@@ -80,7 +82,7 @@ class BaseBatchClient(ABC):
         self._configured_model = agent_config.get("model_name", self._get_default_model())
 
         tasks = []
-        json_mode = agent_config.get("json_mode", True)
+        json_mode = agent_config.get("json_mode", get_default("json_mode"))
         schema = agent_config.get("compiled_schema") if json_mode else None
 
         for row in data:

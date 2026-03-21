@@ -1,6 +1,7 @@
 """Validator for vendor compatibility across batch and online modes."""
 
 from agent_actions.config.types import RunMode
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.action_validators.base_action_validator import (
     ActionEntryValidationResult,
     BaseActionEntryValidator,
@@ -23,7 +24,7 @@ class VendorCompatibilityValidator(BaseActionEntryValidator):
         errors = []
         warnings = []
 
-        raw_run_mode = normalized_entry.get("run_mode", RunMode.ONLINE)
+        raw_run_mode = normalized_entry.get("run_mode", get_default("run_mode"))
         run_mode = RunMode(raw_run_mode) if isinstance(raw_run_mode, str) else raw_run_mode
 
         if run_mode == RunMode.BATCH:

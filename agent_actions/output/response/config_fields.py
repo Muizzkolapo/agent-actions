@@ -47,7 +47,36 @@ SIMPLE_CONFIG_FIELDS = {
     "max_execution_time": 300,
     "where_clause": None,
     "enable_caching": True,
+    # Chunking defaults (used by expander_merge, initial_pipeline, field_chunking)
+    "chunk_size": 300,
+    "chunk_overlap": 10,
+    "tokenizer_model": "cl100k_base",
+    "split_method": "tiktoken",
 }
+
+
+def get_default(field: str) -> Any:
+    """Return the canonical default value for a config field.
+
+    This is the single source of truth for all config defaults.
+    Use this instead of hardcoding fallback values in .get() calls.
+
+    Args:
+        field: Config field name (must exist in SIMPLE_CONFIG_FIELDS).
+
+    Returns:
+        The default value for the field.
+
+    Raises:
+        KeyError: If the field is not defined in SIMPLE_CONFIG_FIELDS.
+    """
+    try:
+        return SIMPLE_CONFIG_FIELDS[field]
+    except KeyError:
+        raise KeyError(
+            f"Unknown config field: {field!r}. "
+            f"Valid fields: {', '.join(sorted(SIMPLE_CONFIG_FIELDS))}"
+        ) from None
 
 
 def inherit_simple_fields(
@@ -96,4 +125,4 @@ def inherit_simple_fields(
         agent[field] = value
 
 
-__all__ = ["SIMPLE_CONFIG_FIELDS", "inherit_simple_fields"]
+__all__ = ["SIMPLE_CONFIG_FIELDS", "get_default", "inherit_simple_fields"]

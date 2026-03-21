@@ -4,6 +4,7 @@ import importlib
 from typing import Any
 
 from agent_actions.llm.realtime.services.invocation import CLIENT_REGISTRY
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.preflight.error_formatter import (
     PreFlightErrorFormatter,
@@ -178,7 +179,7 @@ class VendorCompatibilityValidator(BaseValidator):
         if mode == "batch" and not capabilities.get("supports_batch"):
             unsupported.append(("batch", "Vendor does not support batch processing"))
 
-        json_mode = agent_config.get("json_mode", True)
+        json_mode = agent_config.get("json_mode", get_default("json_mode"))
         if json_mode and not capabilities.get("supports_json_mode"):
             unsupported.append(("json_mode", "Vendor does not support JSON mode"))
 

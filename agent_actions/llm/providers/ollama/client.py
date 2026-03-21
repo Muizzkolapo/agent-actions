@@ -32,6 +32,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -343,6 +344,6 @@ class OllamaClient(BaseClient):
         # Failure injection AFTER successful call - simulates "got nothing back"
         maybe_inject_online_failure(model)
 
-        output_field = agent_config.get("output_field", "raw_response")
+        output_field = agent_config.get("output_field", get_default("output_field"))
         response_content = {output_field: response.message.content}
         return [response_content]

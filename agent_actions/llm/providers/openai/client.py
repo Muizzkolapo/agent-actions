@@ -33,6 +33,7 @@ from agent_actions.logging.events import (
     LLMRequestEvent,
     LLMResponseEvent,
 )
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 _ERROR_MAPPING = VendorErrorMapping(
@@ -257,7 +258,7 @@ class OpenAIClient(BaseClient):
         )
 
         response_message = response.choices[0].message
-        output_field: str = agent_config.get("output_field", "raw_response")
+        output_field: str = agent_config.get("output_field", get_default("output_field"))
         content: str | None = response_message.content
         if content is None:
             fire_event(

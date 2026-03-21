@@ -6,6 +6,7 @@ from typing import Any
 from agent_actions.config.types import RunMode
 from agent_actions.errors import ConfigurationError, ConfigValidationError
 from agent_actions.guards import GuardBehavior, GuardParser, parse_guard_config
+from agent_actions.output.response.config_fields import get_default
 from agent_actions.utils.constants import HITL_OUTPUT_JSON_SCHEMA, HITL_OUTPUT_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
 
 def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: str) -> None:
     """Process tool-specific action configuration."""
-    action_kind = action.get("kind", "llm")
+    action_kind = action.get("kind", get_default("kind"))
     if action_kind != "tool":
         return
 

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any, ClassVar
 
+from agent_actions.config.schema import HitlConfig
 from agent_actions.errors import ConfigurationError
 from agent_actions.llm.providers.hitl.server import HitlServer
 
@@ -55,11 +56,14 @@ class HitlClient:
                 context={"action_name": agent_config.get("name")},
             )
 
-        # Extract config
-        port = hitl_config.get("port", 3001)
+        # Extract config — defaults sourced from HitlConfig schema (single source of truth)
+        _hitl_defaults = HitlConfig.model_fields
+        port = hitl_config.get("port", _hitl_defaults["port"].default)
         instructions = hitl_config.get("instructions", "")
-        timeout = hitl_config.get("timeout", 300)
-        require_comment_on_reject = hitl_config.get("require_comment_on_reject", True)
+        timeout = hitl_config.get("timeout", _hitl_defaults["timeout"].default)
+        require_comment_on_reject = hitl_config.get(
+            "require_comment_on_reject", _hitl_defaults["require_comment_on_reject"].default
+        )
 
         # Preserve observe field order for UI rendering (full qualified refs)
         context_scope = agent_config.get("context_scope") or {}
