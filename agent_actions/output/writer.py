@@ -109,7 +109,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                         writer.writeheader()
                         writer.writerows(data)
                     else:
-                        writer = csv.writer(file)
+                        writer = csv.writer(file)  # type: ignore[assignment]
                         writer.writerows(data)
             else:
                 raise AgentActionsError(

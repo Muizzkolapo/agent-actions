@@ -46,7 +46,7 @@ class AgentActionsFormatter:
         """Format an event for console output."""
         method_name = self._DISPATCH.get(event.event_type)
         if method_name is not None:
-            return getattr(self, method_name)(event)
+            return str(getattr(self, method_name)(event))
         return self._format_default(event)
 
     def _timestamp(self, event: BaseEvent) -> str:

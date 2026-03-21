@@ -244,7 +244,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         """Not used by Ollama (overrides retrieve_results)."""
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")
 
-    def _transform_ollama_response(self, ollama_response: dict, custom_id: str, model: str) -> dict:
+    def _transform_ollama_response(self, ollama_response: dict | object, custom_id: str, model: str) -> dict:
         """
         Transform Ollama response to OpenAI batch output format.
 

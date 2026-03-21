@@ -34,7 +34,8 @@ def retry(
                     last_exception = e
                     if attempt < max_attempts - 1:
                         time.sleep(delay * (attempt + 1))
-            raise last_exception  # Always set: loop only continues on exception
+            assert last_exception is not None  # loop only continues on exception
+            raise last_exception
 
         return wrapper
 
@@ -83,11 +84,11 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         Note: unlike the sync load_file(), this path does not retry on IOError/OSError.
         Use load_file() via asyncio.to_thread() if retry behavior is required.
         """
-        import aiofiles
+        import aiofiles  # type: ignore[import-untyped]
 
         try:
             async with aiofiles.open(file_path, encoding="utf-8") as f:
-                return await f.read()
+                return str(await f.read())
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise

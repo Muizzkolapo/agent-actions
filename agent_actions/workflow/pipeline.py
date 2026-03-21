@@ -184,7 +184,7 @@ class ProcessingPipeline:
         file_name = Path(params.batch_file_path).name
 
         result = submission_service.submit_batch_job(
-            params.pipeline_action_config,
+            cast(dict[str, Any], params.pipeline_action_config),
             file_name,
             data,
             params.batch_output_directory,

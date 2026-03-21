@@ -236,7 +236,7 @@ class ResultCollector:
                 )
 
             else:
-                logger.debug("Unhandled result status=%s", status)
+                logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
 
         fire_event(
             ResultCollectionCompleteEvent(
