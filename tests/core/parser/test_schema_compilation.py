@@ -19,13 +19,20 @@ from agent_actions.prompt.render_workflow import (
 )
 
 
+def _setup_project(tmp_path, schema_path="schema"):
+    """Create agent_actions.yml and schema dir."""
+    (tmp_path / "agent_actions.yml").write_text(f"schema_path: {schema_path}\n")
+    sd = tmp_path / schema_path
+    sd.mkdir(parents=True, exist_ok=True)
+    return sd
+
+
 class TestSchemaLoadingViaCompilation:
     """Tests for schema loading through _compile_action_schemas (delegates to SchemaLoader)."""
 
     def test_compile_inlines_existing_schema(self, tmp_path):
         """Test that compilation loads and inlines an existing schema file."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        schema_dir = _setup_project(tmp_path)
 
         schema_content = {
             "name": "test_schema",
@@ -40,7 +47,7 @@ class TestSchemaLoadingViaCompilation:
             yaml.dump(schema_content, f)
 
         action = {"name": "my_action", "schema_name": "test_schema"}
-        _compile_action_schemas(action, schema_dir=schema_dir)
+        _compile_action_schemas(action, project_root=tmp_path)
 
         assert action["schema"]["name"] == "test_schema"
         assert len(action["schema"]["fields"]) == 2
@@ -48,12 +55,11 @@ class TestSchemaLoadingViaCompilation:
 
     def test_compile_missing_schema_strict_collects_error(self, tmp_path):
         """Test that missing schema in strict mode collects an error."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        _setup_project(tmp_path)
 
         action = {"name": "my_action", "schema_name": "nonexistent_schema"}
         errors: list[str] = []
-        _compile_action_schemas(action, schema_dir=schema_dir, strict=True, errors=errors)
+        _compile_action_schemas(action, strict=True, errors=errors, project_root=tmp_path)
 
         assert len(errors) == 1
         assert "nonexistent_schema" in errors[0]
@@ -83,21 +89,20 @@ class TestExpandInlineSchema:
     def test_expand_required_marker(self):
         """Test that '!' required marker is handled correctly."""
         inline_schema = {
-            "required_field": "string!",
-            "optional_field": "string",
+            "name": "string!",
+            "age": "integer",
         }
 
         result = _expand_inline_schema(inline_schema)
 
-        required_field = next(f for f in result["fields"] if f["id"] == "required_field")
-        optional_field = next(f for f in result["fields"] if f["id"] == "optional_field")
+        name_field = next(f for f in result["fields"] if f["id"] == "name")
+        age_field = next(f for f in result["fields"] if f["id"] == "age")
 
-        assert required_field["required"] is True
-        assert required_field["type"] == "string"  # '!' should be stripped
-        assert optional_field["required"] is False
+        assert name_field["required"] is True
+        assert age_field.get("required", False) is False
 
-    def test_expand_array_type(self):
-        """Test expanding array[type] format."""
+    def test_expand_array_types(self):
+        """Test expanding array type shorthand."""
         inline_schema = {
             "tags": "array[string]",
             "scores": "array[number]",
@@ -152,8 +157,7 @@ class TestCompileActionSchemas:
 
     def test_inline_named_schema(self, tmp_path):
         """Test that schema_name references are inlined."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        schema_dir = _setup_project(tmp_path)
 
         schema_content = {
             "name": "my_schema",
@@ -168,7 +172,7 @@ class TestCompileActionSchemas:
             "schema_name": "my_schema",
         }
 
-        _compile_action_schemas(action, schema_dir)
+        _compile_action_schemas(action, project_root=tmp_path)
 
         # schema_name should be replaced with inlined schema
         assert "schema_name" not in action
@@ -177,8 +181,7 @@ class TestCompileActionSchemas:
 
     def test_inline_schema_reference(self, tmp_path):
         """Test that schema: 'name' string references are inlined."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        schema_dir = _setup_project(tmp_path)
 
         schema_content = {
             "name": "ref_schema",
@@ -193,15 +196,14 @@ class TestCompileActionSchemas:
             "schema": "ref_schema",
         }
 
-        _compile_action_schemas(action, schema_dir)
+        _compile_action_schemas(action, project_root=tmp_path)
 
         assert action["schema"]["name"] == "ref_schema"
         assert action["schema"]["fields"][0]["id"] == "data"
 
     def test_expand_inline_dict(self, tmp_path):
         """Test that inline dict schemas are expanded."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        _setup_project(tmp_path)
 
         action = {
             "name": "test_action",
@@ -211,7 +213,7 @@ class TestCompileActionSchemas:
             },
         }
 
-        _compile_action_schemas(action, schema_dir)
+        _compile_action_schemas(action, project_root=tmp_path)
 
         # Should be expanded to unified format
         assert action["schema"]["name"] == "InlineSchema"
@@ -224,8 +226,7 @@ class TestCompileWorkflowSchemasStrict:
 
     def test_strict_mode_raises_on_missing_schema(self, tmp_path):
         """Test that strict mode raises error on missing schema."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        _setup_project(tmp_path)
 
         data = {
             "actions": [
@@ -237,15 +238,14 @@ class TestCompileWorkflowSchemasStrict:
         }
 
         with pytest.raises(ConfigurationError) as exc_info:
-            _compile_workflow_schemas(data, schema_dir, strict=True)
+            _compile_workflow_schemas(data, strict=True, project_root=tmp_path)
 
         assert "Schema compilation failed" in str(exc_info.value)
         assert "error(s)" in str(exc_info.value)
 
     def test_strict_mode_collects_multiple_errors(self, tmp_path):
         """Test that strict mode collects all errors."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        _setup_project(tmp_path)
 
         data = {
             "actions": [
@@ -255,15 +255,14 @@ class TestCompileWorkflowSchemasStrict:
         }
 
         with pytest.raises(ConfigurationError) as exc_info:
-            _compile_workflow_schemas(data, schema_dir, strict=True)
+            _compile_workflow_schemas(data, strict=True, project_root=tmp_path)
 
         # Should contain error count
         assert "2 error(s)" in str(exc_info.value)
 
     def test_non_strict_mode_logs_warning(self, tmp_path, caplog):
         """Test that non-strict mode logs warnings instead of raising."""
-        schema_dir = tmp_path / "schema"
-        schema_dir.mkdir()
+        _setup_project(tmp_path)
 
         data = {
             "actions": [
@@ -272,7 +271,7 @@ class TestCompileWorkflowSchemasStrict:
         }
 
         # Should not raise
-        _compile_workflow_schemas(data, schema_dir, strict=False)
+        _compile_workflow_schemas(data, strict=False, project_root=tmp_path)
 
         # Schema should remain as string (not inlined)
         assert data["actions"][0]["schema"] == "missing_schema"

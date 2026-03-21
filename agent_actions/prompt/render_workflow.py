@@ -245,7 +245,7 @@ def _compile_action_schemas(
     if schema_name and isinstance(schema_name, str):
         try:
             loaded_schema = SchemaLoader.load_schema(
-                schema_name, schema_dir=schema_dir, project_root=project_root
+                schema_name, project_root=project_root
             )
             action["schema"] = loaded_schema
             del action["schema_name"]
@@ -262,7 +262,7 @@ def _compile_action_schemas(
     if schema_value and isinstance(schema_value, str):
         try:
             loaded_schema = SchemaLoader.load_schema(
-                schema_value, schema_dir=schema_dir, project_root=project_root
+                schema_value, project_root=project_root
             )
             action["schema"] = loaded_schema
             logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
