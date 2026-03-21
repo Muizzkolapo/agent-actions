@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+
 
 class ReferenceType(Enum):
     """Types of references that can be resolved."""
@@ -61,7 +63,7 @@ class ActionDefinition:
     impl_ref: str | None = None
     schema_ref: str | None = None
     dependencies: list[str] = field(default_factory=list)
-    kind: str = "llm"  # "llm" or "tool"
+    kind: str = DEFAULT_ACTION_KIND  # "llm" or "tool"
 
 
 @dataclass

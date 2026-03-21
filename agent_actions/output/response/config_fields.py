@@ -6,6 +6,7 @@ import copy
 from typing import Any
 
 from agent_actions.config.types import RunMode
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 # Simple config fields that follow standard inheritance pattern
 # Format: 'field_name': default_value
@@ -21,7 +22,7 @@ SIMPLE_CONFIG_FIELDS = {
     "api_key": None,
     "base_url": None,  # Optional: base URL for vendors like Ollama
     # Action type
-    "kind": "llm",  # Default: 'llm' (LLM action). Use 'tool' for UDF actions.
+    "kind": DEFAULT_ACTION_KIND,  # Default: 'llm' (LLM action). Use 'tool' for UDF actions.
     # Execution settings
     "run_mode": RunMode.ONLINE,  # Default: online mode
     "granularity": "record",  # Default: record-level processing. Use 'file' for batch processing (tool only).

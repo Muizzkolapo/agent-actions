@@ -20,6 +20,7 @@ from agent_actions.logging.events import (
     BatchSubmittedEvent,
 )
 from agent_actions.tooling.docs.run_tracker import ActionCompleteConfig
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 logger = logging.getLogger(__name__)
 
@@ -215,7 +216,7 @@ class ActionExecutor:
             elif model_vendor == "hitl" or action_kind == "hitl":
                 action_type = "hitl"
             else:
-                action_type = "llm"
+                action_type = DEFAULT_ACTION_KIND
 
             self.run_tracker.record_action_start(
                 run_id=self.run_id,

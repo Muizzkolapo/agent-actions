@@ -17,6 +17,7 @@ from agent_actions.config.path_config import resolve_project_root
 logger = logging.getLogger(__name__)
 
 from agent_actions.config.defaults import LockDefaults
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 
 def _empty_runs_data(*, extended: bool = False) -> dict[str, Any]:
@@ -309,7 +310,7 @@ class RunTracker:
                         "type": action_type,
                     }
 
-                    if action_type == "llm":
+                    if action_type == DEFAULT_ACTION_KIND:
                         action_entry["vendor"] = action_config.get("model_vendor")
                         action_entry["model"] = action_config.get("model_name")
                     elif action_type == "tool":

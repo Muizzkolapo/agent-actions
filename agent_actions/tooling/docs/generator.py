@@ -12,6 +12,7 @@ import click
 
 from agent_actions.config.path_config import resolve_tool_paths
 from agent_actions.models.action_schema import ActionSchema, FieldInfo, FieldSource
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 
 from . import scanner
@@ -252,7 +253,7 @@ class CatalogGenerator:
 
             # Count action types, schemas, and prompts
             for action in workflow["actions"].values():
-                if action.get("type") == "llm":
+                if action.get("type") == DEFAULT_ACTION_KIND:
                     catalog["stats"]["llm_actions"] += 1
                 elif action.get("type") == "tool":
                     catalog["stats"]["tool_actions"] += 1
@@ -263,7 +264,7 @@ class CatalogGenerator:
                     unique_schemas.add(schema)
 
                 # Count actions with prompts (LLM actions typically have prompts)
-                if action.get("prompt") or (action.get("type") == "llm" and action.get("intent")):
+                if action.get("prompt") or (action.get("type") == DEFAULT_ACTION_KIND and action.get("intent")):
                     actions_with_prompts += 1
 
         # Update global stats for schemas, prompts, tool functions, and runs

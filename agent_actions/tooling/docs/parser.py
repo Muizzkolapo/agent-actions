@@ -6,6 +6,8 @@ from typing import Any
 import click
 import yaml
 
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
+
 logger = logging.getLogger(__name__)
 
 
@@ -152,7 +154,7 @@ class WorkflowParser:
                 action["implementation"] = action_data.get("impl", "unknown")
             else:
                 # Default to LLM action
-                action["type"] = "llm"
+                action["type"] = DEFAULT_ACTION_KIND
                 action["provider"] = action_data.get("model_vendor", "unknown")
                 action["model"] = action_data.get("model_name", "unknown")
 

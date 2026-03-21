@@ -7,6 +7,7 @@ from typing import Any
 from agent_actions.utils.constants import (
     API_KEY_KEY,
     CHUNK_CONFIG_KEY,
+    DEFAULT_ACTION_KIND,
     JSON_MODE_KEY,
     MODEL_NAME_KEY,
     MODEL_VENDOR_KEY,
@@ -59,7 +60,7 @@ class ActionConfigValidationUtilities:
     }
 
     _ACTION_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {
-        "llm": {MODEL_NAME_KEY},
+        DEFAULT_ACTION_KIND: {MODEL_NAME_KEY},
         "function": {"code_path"},
         "tool": {MODEL_NAME_KEY},
     }

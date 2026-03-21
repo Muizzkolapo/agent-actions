@@ -10,6 +10,7 @@ from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 from agent_actions.workflow.coordinator import AgentWorkflow
 
 from .inspect_base import BaseInspectCommand
@@ -77,7 +78,7 @@ class GraphCommand(BaseInspectCommand):
             node = tree.add(f"[bold]{action_name}[/bold] [dim]({action_type})[/dim]")
 
             kind = action_config.get("kind", get_default("kind"))
-            if kind != "llm":
+            if kind != DEFAULT_ACTION_KIND:
                 node.add(f"[dim]kind: {kind}[/dim]")
 
             if info["input_sources"]:

@@ -1,5 +1,9 @@
 """Centralized configuration key constants."""
 
+# Default action kind when 'kind' is not specified in action config.
+# Corresponds to ActionKind.LLM.value from agent_actions.config.schema.
+DEFAULT_ACTION_KIND = "llm"
+
 MODEL_VENDOR_KEY = "model_vendor"
 MODEL_NAME_KEY = "model_name"
 JSON_MODE_KEY = "json_mode"
