@@ -140,7 +140,7 @@ class TestEmptyOutputDetection:
         fired_events = []
 
         with patch(
-            "agent_actions.processing.processor.fire_event",
+            "agent_actions.processing.record_processor.fire_event",
             side_effect=lambda e: fired_events.append(e),
         ):
             from agent_actions.processing.processor import RecordProcessor
@@ -178,7 +178,7 @@ class TestEmptyOutputDetection:
             )
 
             # Mock task_preparer
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -196,7 +196,7 @@ class TestEmptyOutputDetection:
     def test_empty_output_error_raises(self):
         """When on_empty=error, AgentActionsError is raised on empty output."""
         with patch(
-            "agent_actions.processing.processor.fire_event",
+            "agent_actions.processing.record_processor.fire_event",
         ):
             from agent_actions.processing.processor import RecordProcessor
             from agent_actions.processing.types import ProcessingContext
@@ -228,7 +228,7 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -246,7 +246,7 @@ class TestEmptyOutputDetection:
         fired_events = []
 
         with patch(
-            "agent_actions.processing.processor.fire_event",
+            "agent_actions.processing.record_processor.fire_event",
             side_effect=lambda e: fired_events.append(e),
         ):
             from agent_actions.processing.processor import RecordProcessor
@@ -279,7 +279,7 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None
@@ -296,7 +296,7 @@ class TestEmptyOutputDetection:
     def test_empty_output_error_propagates_through_process_batch(self):
         """EmptyOutputError must propagate through process_batch (not be swallowed)."""
         with patch(
-            "agent_actions.processing.processor.fire_event",
+            "agent_actions.processing.record_processor.fire_event",
         ):
             from agent_actions.processing.processor import RecordProcessor
             from agent_actions.processing.types import ProcessingContext
@@ -328,7 +328,7 @@ class TestEmptyOutputDetection:
                 record_index=0,
             )
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = "sg-1"
                 mock_prepared.source_snapshot = None

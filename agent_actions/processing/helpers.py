@@ -168,7 +168,7 @@ def _validate_llm_output_schema(
         logger.warning("Schema output validator not available, skipping validation")
     except SchemaValidationError:
         raise
-    except (ValueError, KeyError) as e:
+    except ValueError as e:
         if strict_mode:
             raise SchemaValidationError(
                 f"Schema validation failed unexpectedly for action '{agent_name}': {e}",

@@ -1,6 +1,7 @@
 """Abstract storage backend interface for extensible data persistence."""
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from types import TracebackType
 from typing import Any
 
@@ -13,16 +14,19 @@ DISPOSITION_EXHAUSTED = "exhausted"
 DISPOSITION_FAILED = "failed"
 DISPOSITION_UNPROCESSED = "unprocessed"
 
-VALID_DISPOSITIONS = frozenset(
-    {
-        DISPOSITION_PASSTHROUGH,
-        DISPOSITION_SKIPPED,
-        DISPOSITION_FILTERED,
-        DISPOSITION_EXHAUSTED,
-        DISPOSITION_FAILED,
-        DISPOSITION_UNPROCESSED,
-    }
-)
+
+class Disposition(str, Enum):
+    """Enumeration of valid record disposition values."""
+
+    PASSTHROUGH = DISPOSITION_PASSTHROUGH
+    SKIPPED = DISPOSITION_SKIPPED
+    FILTERED = DISPOSITION_FILTERED
+    EXHAUSTED = DISPOSITION_EXHAUSTED
+    FAILED = DISPOSITION_FAILED
+    UNPROCESSED = DISPOSITION_UNPROCESSED
+
+
+VALID_DISPOSITIONS = frozenset(d.value for d in Disposition)
 
 
 class StorageBackend(ABC):
@@ -111,7 +115,7 @@ class StorageBackend(ABC):
         self,
         action_name: str,
         record_id: str,
-        disposition: str,
+        disposition: str | Disposition,
         reason: str | None = None,
         relative_path: str | None = None,
     ) -> None:

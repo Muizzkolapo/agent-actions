@@ -1,6 +1,7 @@
 """UDF (User-Defined Function) registry for Agent Actions."""
 
 import inspect
+import sys
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -50,6 +51,9 @@ _registry_lock = threading.RLock()
 # Registry with cached compiled schemas
 UDF_REGISTRY: dict[str, dict[str, Any]] = {}
 
+# Track which module names contributed UDFs (for sys.modules cleanup on clear)
+_registered_modules: set[str] = set()
+
 
 def udf_tool(
     func: Callable | None = None,
@@ -87,6 +91,7 @@ def udf_tool(
                 "signature": inspect.signature(f),
                 "granularity": granularity,
             }
+            _registered_modules.add(f.__module__)
 
         return f
 
@@ -150,3 +155,6 @@ def clear_registry() -> None:
     """Clear the UDF registry (testing only, thread-safe)."""
     with _registry_lock:
         UDF_REGISTRY.clear()
+        for module_name in _registered_modules:
+            sys.modules.pop(module_name, None)
+        _registered_modules.clear()

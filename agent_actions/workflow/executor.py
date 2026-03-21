@@ -119,6 +119,8 @@ class ActionExecutor:
         """Initialize action executor."""
         self.deps = deps
         self.console = console or Console()
+        self.run_tracker: Any | None = None
+        self.run_id: str | None = None
 
     def __eq__(self, other):
         if not isinstance(other, ActionExecutor):
@@ -188,7 +190,7 @@ class ActionExecutor:
             )
         )
 
-        if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
+        if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=action_name,
@@ -204,7 +206,7 @@ class ActionExecutor:
 
     def _track_action_start(self, params: ActionRunParams) -> None:
         """Track action start if run_tracker is available."""
-        if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
+        if self.run_tracker is not None and self.run_id is not None:
             model_vendor = params.action_config.get("model_vendor", "")
             action_kind = params.action_config.get("kind", "")
 
@@ -263,7 +265,7 @@ class ActionExecutor:
         self.deps.state_manager.update_status(params.action_name, "completed")
         tokens = get_last_usage()
 
-        if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
+        if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=params.action_name,
@@ -292,7 +294,7 @@ class ActionExecutor:
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(params.action_name, "failed")
 
-        if hasattr(self, "run_tracker") and hasattr(self, "run_id"):
+        if self.run_tracker is not None and self.run_id is not None:
             config = ActionCompleteConfig(
                 run_id=self.run_id,
                 action_name=params.action_name,

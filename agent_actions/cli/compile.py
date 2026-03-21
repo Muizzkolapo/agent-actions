@@ -59,7 +59,9 @@ class RenderCommand:
                 cause=e,
             ) from e
 
-    def execute(self) -> None:
+    def execute(self, create_dirs: bool = False) -> None:
+        if create_dirs and not self.template_dir.exists():
+            self.template_dir.mkdir(parents=True)
         logger.info("Starting template rendering for agent: %s", self.args.agent_name)
         paths = ProjectPathsFactory.create_project_paths(
             self.args.agent_name, self.args.agent_name, project_root=self._project_root
@@ -73,12 +75,15 @@ class RenderCommand:
 
 
 def _execute_render(
-    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+    agent_name: str,
+    template_dir: str | None = None,
+    project_root: Path | None = None,
+    create_dirs: bool = False,
 ) -> None:
     """Shared implementation for render/compile commands."""
     args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
     command = RenderCommand(args, project_root=project_root)
-    command.execute()
+    command.execute(create_dirs=create_dirs)
 
 
 @click.command()
@@ -86,10 +91,11 @@ def _execute_render(
     "-a", "--agent", "agent_name", required=True, help="Name of the agent to render template for"
 )
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
+@click.option("--create-dirs", is_flag=True, default=False, help="Create template directory if it does not exist")
 @handles_user_errors("render")
 @requires_project
 def render(
-    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+    agent_name: str, template_dir: str | None = None, create_dirs: bool = False, project_root: Path | None = None
 ) -> None:
     """
     Compile and render workflow configuration.
@@ -114,16 +120,17 @@ def render(
         # Render with custom templates directory
         agac render -a my_workflow -t custom_templates
     """
-    _execute_render(agent_name, template_dir, project_root=project_root)
+    _execute_render(agent_name, template_dir, project_root=project_root, create_dirs=create_dirs)
 
 
 @click.command()
 @click.option("-a", "--agent", "agent_name", required=True, help="Name of the workflow to compile")
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
+@click.option("--create-dirs", is_flag=True, default=False, help="Create template directory if it does not exist")
 @handles_user_errors("compile")
 @requires_project
 def compile(
-    agent_name: str, template_dir: str | None = None, project_root: Path | None = None
+    agent_name: str, template_dir: str | None = None, create_dirs: bool = False, project_root: Path | None = None
 ) -> None:
     """
     Alias for 'render' - compile workflow configuration.
@@ -133,4 +140,4 @@ def compile(
     Examples:
         agac compile -a my_workflow
     """
-    _execute_render(agent_name, template_dir, project_root=project_root)
+    _execute_render(agent_name, template_dir, project_root=project_root, create_dirs=create_dirs)

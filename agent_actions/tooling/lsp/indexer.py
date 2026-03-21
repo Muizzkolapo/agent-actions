@@ -44,8 +44,7 @@ def find_project_root(start_path: Path) -> Path | None:
         if matches:
             return matches[0].parent
 
-    # Fallback: use start path as project root (LSP will work with whatever it finds)
-    return start if start.is_dir() else start.parent
+    return None
 
 
 def find_all_project_roots(workspace_folders: list[Path]) -> list[Path]:

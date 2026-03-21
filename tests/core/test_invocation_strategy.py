@@ -363,8 +363,8 @@ class TestRecordProcessorModeWiring:
 class TestDeferredResultInProcessor:
     """Regression test: batch invocations must surface as DEFERRED, not FILTERED."""
 
-    @patch("agent_actions.processing.processor.get_task_preparer")
-    @patch("agent_actions.processing.processor.fire_event")
+    @patch("agent_actions.processing.record_processor.get_task_preparer")
+    @patch("agent_actions.processing.record_processor.fire_event")
     def test_batch_invocation_returns_deferred_not_filtered(
         self, mock_fire_event, mock_get_preparer
     ):

@@ -107,24 +107,22 @@ class TestLspFindProjectRootFallback:
         result = lsp_find(tmp_path)
         assert result == proj
 
-    def test_fallback_returns_start_dir_when_no_marker(self, tmp_path):
-        """When no marker exists anywhere, fallback returns start directory."""
+    def test_fallback_returns_none_when_no_marker(self, tmp_path):
+        """When no marker exists anywhere, find_project_root returns None (T2-6)."""
         from agent_actions.tooling.lsp.indexer import find_project_root as lsp_find
 
         empty = tmp_path / "empty_dir"
         empty.mkdir()
 
         result = lsp_find(empty)
-        assert result == empty.resolve()
+        assert result is None
 
-    def test_file_path_uses_parent(self, tmp_path):
-        """When start_path is a file, fallback uses parent directory."""
+    def test_file_path_with_no_marker_returns_none(self, tmp_path):
+        """When start_path is a file with no marker anywhere, returns None (T2-6)."""
         from agent_actions.tooling.lsp.indexer import find_project_root as lsp_find
 
         some_file = tmp_path / "somefile.py"
         some_file.write_text("# code")
 
         result = lsp_find(some_file)
-        # Should be either tmp_path or its resolved form (since no marker found)
-        assert result.is_dir()
-        assert result == some_file.parent or result == some_file.parent.resolve()
+        assert result is None

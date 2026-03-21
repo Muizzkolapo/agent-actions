@@ -2,7 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from agent_actions.logging import fire_event
@@ -205,7 +205,7 @@ class EnrichmentPipeline:
 
     def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
         """Run result through all enrichers in sequence."""
-        start_time = datetime.now()
+        start_time = datetime.now(UTC)
 
         fire_event(
             EnrichmentPipelineStartedEvent(
@@ -234,7 +234,7 @@ class EnrichmentPipeline:
                     )
                     raise
         finally:
-            elapsed_time = (datetime.now() - start_time).total_seconds()
+            elapsed_time = (datetime.now(UTC) - start_time).total_seconds()
             fire_event(
                 EnrichmentPipelineCompleteEvent(
                     enricher_count=len(self.enrichers),

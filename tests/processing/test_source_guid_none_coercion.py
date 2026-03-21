@@ -48,12 +48,12 @@ class TestSourceGuidNoneCoercion:
         fired_events = []
 
         with patch(
-            "agent_actions.processing.processor.fire_event",
+            "agent_actions.processing.record_processor.fire_event",
             side_effect=lambda e: fired_events.append(e),
         ):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None  # The key scenario
                 mock_prepared.source_snapshot = None
@@ -81,10 +81,10 @@ class TestSourceGuidNoneCoercion:
 
     def test_transform_response_receives_empty_string(self):
         """_transform_response is called with source_guid='' when prepared.source_guid is None."""
-        with patch("agent_actions.processing.processor.fire_event"):
+        with patch("agent_actions.processing.record_processor.fire_event"):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None
                 mock_prepared.source_snapshot = None
@@ -100,10 +100,10 @@ class TestSourceGuidNoneCoercion:
 
     def test_processing_result_preserves_none_source_guid(self):
         """ProcessingResult.source_guid stays None — not coerced to ''."""
-        with patch("agent_actions.processing.processor.fire_event"):
+        with patch("agent_actions.processing.record_processor.fire_event"):
             processor, context = _make_processor_and_context()
 
-            with patch("agent_actions.processing.processor.get_task_preparer") as mock_tp:
+            with patch("agent_actions.processing.record_processor.get_task_preparer") as mock_tp:
                 mock_prepared = MagicMock()
                 mock_prepared.source_guid = None
                 mock_prepared.source_snapshot = None

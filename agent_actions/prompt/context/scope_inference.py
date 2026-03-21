@@ -220,9 +220,10 @@ def infer_dependencies(
             raise ConfigurationError(f"Action '{action_name}': {e}") from e
 
         logger.debug(
-            f"Action '{action_name}': Fan-in detected with dependencies {all_deps}. "
-            f"Input sources: {input_sources}. "
-            f"Context sources (lineage-matched): {fan_in_context_sources}"
+            "Action '%s': Fan-in detected with dependencies %s. "
+            "Input sources: %s. "
+            "Context sources (lineage-matched): %s",
+            action_name, all_deps, input_sources, fan_in_context_sources,
         )
     else:
         # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources

@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from agent_actions.config.defaults import StorageDefaults
-from agent_actions.storage.backend import VALID_DISPOSITIONS, StorageBackend
+from agent_actions.errors.configuration import ConfigValidationError
+from agent_actions.storage.backend import VALID_DISPOSITIONS, Disposition, StorageBackend
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +99,11 @@ class SQLiteBackend(StorageBackend):
         """
         db_path = kwargs.pop("db_path")
         workflow_name = kwargs.pop("workflow_name")
+        if kwargs:
+            raise ConfigValidationError(
+                f"Unknown kwargs for SQLiteBackend: {list(kwargs)}",
+                context={"unknown_kwargs": list(kwargs)},
+            )
         return cls(str(db_path), workflow_name)
 
     def _validate_identifier(self, name: str, field: str) -> str:
@@ -243,44 +249,41 @@ class SQLiteBackend(StorageBackend):
         """Write source data with optional deduplication by source_guid."""
         relative_path = self._validate_identifier(relative_path, "relative_path")
 
+        # Pre-filter: build rows list, warn on missing source_guid
+        rows: list[tuple[str, str, str]] = []
+        for item in data:
+            source_guid = item.get("source_guid")
+            if not source_guid:
+                logger.warning(
+                    "Skipping source item without source_guid: %s",
+                    relative_path,
+                    extra={"workflow_name": self.workflow_name},
+                )
+                continue
+            rows.append((relative_path, source_guid, json.dumps(item, ensure_ascii=False)))
+
         with self._lock:
             cursor = self.connection.cursor()
-            inserted_count = 0
-            skipped_count = 0
-
             try:
-                for item in data:
-                    source_guid = item.get("source_guid")
-                    if not source_guid:
-                        logger.warning(
-                            "Skipping source item without source_guid: %s",
-                            relative_path,
-                            extra={"workflow_name": self.workflow_name},
-                        )
-                        continue
-
-                    data_json = json.dumps(item, ensure_ascii=False)
-
-                    sql = (
-                        self._INSERT_SOURCE_IGNORE_SQL
-                        if enable_deduplication
-                        else self._INSERT_SOURCE_REPLACE_SQL
-                    )
-                    cursor.execute(sql, (relative_path, source_guid, data_json))
-                    # rowcount=0 only when IGNORE skips a duplicate
-                    if cursor.rowcount > 0:
-                        inserted_count += 1
-                    elif enable_deduplication:
-                        skipped_count += 1
+                sql = (
+                    self._INSERT_SOURCE_IGNORE_SQL
+                    if enable_deduplication
+                    else self._INSERT_SOURCE_REPLACE_SQL
+                )
+                cursor.executemany(sql, rows)
+                # cursor.rowcount is aggregated across all executemany() iterations by
+                # Python's sqlite3 driver; SELECT changes() only reflects the last row.
+                inserted_count: int = cursor.rowcount if cursor.rowcount >= 0 else 0
 
                 self.connection.commit()
 
-                if inserted_count == 0 and len(data) > 0 and skipped_count == 0:
+                if len(data) > 0 and len(rows) == 0:
                     raise ValueError(
                         f"All {len(data)} source records were dropped for "
                         f"'{relative_path}' (missing source_guid); 0 inserted"
                     )
 
+                skipped_count = len(rows) - inserted_count if enable_deduplication else 0
                 dedup_detail = f", {skipped_count} skipped (dedup)" if skipped_count > 0 else ""
                 logger.debug(
                     "Wrote source data to %s: %d inserted%s",
@@ -474,7 +477,7 @@ class SQLiteBackend(StorageBackend):
         self,
         action_name: str,
         record_id: str,
-        disposition: str,
+        disposition: str | Disposition,
         reason: str | None = None,
         relative_path: str | None = None,
     ) -> None:
