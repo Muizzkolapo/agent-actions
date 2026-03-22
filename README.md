@@ -52,13 +52,7 @@ Read the [Installation Guide](https://muizzkolapo.github.io/docs.agent-actions/i
 
 Write a YAML file describing your actions, their dependencies, and which LLM to use. Agent Actions builds a DAG, resolves execution order, runs independent actions in parallel, and writes structured output.
 
-```
-                  extract_features
-                   /            \
-          generate_seo    sentiment_analysis
-                   \            /
-                  aggregate_results
-```
+![Project Screenshot](assets/images/home_page_sampleflow.svg)
 
 - **Actions** are individual LLM calls with an intent, model, and output schema.
 - **Dependencies** declare data flow — an action can `observe` fields from upstream actions.
