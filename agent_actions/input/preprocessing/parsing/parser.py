@@ -111,10 +111,26 @@ class WhereClauseParser:
         """Build the pyparsing grammar for WHERE clauses."""
         tokens = self._build_basic_tokens()
 
-        field_name = Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-        field_name.set_parse_action(lambda t: FieldNode(field_path=t[0]))
-
         string_literal, number, boolean, null = self._build_literals()
+
+        # Reserved keywords must not be matched as field names.
+        # Using ~reserved_words ensures field_name fails on keywords regardless
+        # of its position in the operand alternation.
+        reserved_words = (
+            CaselessKeyword("TRUE")
+            | CaselessKeyword("FALSE")
+            | CaselessKeyword("NULL")
+            | CaselessKeyword("AND")
+            | CaselessKeyword("OR")
+            | CaselessKeyword("NOT")
+            | CaselessKeyword("IN")
+            | CaselessKeyword("IS")
+            | CaselessKeyword("LIKE")
+            | CaselessKeyword("BETWEEN")
+            | CaselessKeyword("CONTAINS")
+        )
+        field_name = ~reserved_words + Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
+        field_name.set_parse_action(lambda t: FieldNode(field_path=t[0]))
 
         array_element = Forward()
         array_element <<= string_literal | number | boolean | null
@@ -138,7 +154,7 @@ class WhereClauseParser:
         function_call.set_parse_action(self._parse_function)
 
         operand = (
-            function_call | field_name | array_literal | string_literal | number | boolean | null
+            function_call | boolean | null | array_literal | string_literal | number | field_name
         )
 
         comparison_ops = self._build_comparison_operators()

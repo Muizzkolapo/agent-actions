@@ -7,7 +7,9 @@ the evaluate_node() recursive evaluator.
 
 import pytest
 
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
+    MissingFieldError,
     ComparisonNode,
     ComparisonOperator,
     FieldNode,
@@ -303,3 +305,59 @@ class TestMissingFieldError:
         node = FunctionNode("LENGTH", [FieldNode("name")])
         result = evaluate_node(node, data, functions={"LENGTH": custom_length})
         assert result == 50  # len("hello") * 10
+
+
+class TestParserBooleanLiterals:
+    """Regression tests for GitHub issue #1221 — lowercase boolean literals in guard conditions.
+
+    Before the fix, 'true'/'false' were parsed as FieldNode (field references) rather than
+    LiteralNode because 'field_name' appeared before 'boolean' in the operand alternation.
+    This caused a MissingFieldError at runtime ('true' not found in data) and a silent G002.
+    """
+
+    @pytest.fixture
+    def parser(self):
+        return WhereClauseParser()
+
+    @pytest.mark.parametrize(
+        "literal,expected_bool",
+        [
+            ("true", True), ("True", True), ("TRUE", True),
+            ("false", False), ("False", False), ("FALSE", False),
+        ],
+    )
+    def test_boolean_literals_parse_correctly(self, parser, literal, expected_bool):
+        """Boolean literals in any case must parse as LiteralNode, not FieldNode."""
+        result = parser.parse(f"passes_filter == {literal}")
+        assert result.success, f"Expected successful parse, got: {result.error}"
+        assert result.ast.evaluate({"passes_filter": expected_bool}) is True
+        assert result.ast.evaluate({"passes_filter": not expected_bool}) is False
+
+    def test_lowercase_true_does_not_raise_missing_field_error(self, parser):
+        """Evaluating 'field == true' must NOT raise MissingFieldError for 'true'."""
+        result = parser.parse("passes_filter == true")
+        assert result.success
+        assert result.ast.evaluate({"passes_filter": True}) is True  # correct value, not just no-raise
+
+    @pytest.mark.parametrize("keyword", ["null", "and", "or", "not", "in", "is", "like", "between", "contains"])
+    def test_reserved_words_do_not_parse_as_field_names(self, parser, keyword):
+        """Reserved SQL keywords must not be accepted as field names regardless of case."""
+        # A condition using the keyword as a bare operand should not yield a FieldNode.
+        # We verify indirectly: the parse either succeeds (keyword is a valid literal/op)
+        # or fails (invalid syntax) — but must NOT succeed and then raise MissingFieldError
+        # when evaluated against data that lacks a field named after the keyword.
+        result = parser.parse(f"score > 0 AND {keyword.upper()} IS NULL")
+        # The important invariant: no MissingFieldError for the keyword token itself.
+        if result.success:
+            try:
+                result.ast.evaluate({"score": 5})
+            except MissingFieldError as e:
+                pytest.fail(f"Reserved word '{keyword}' was treated as a field reference: {e}")
+
+    @pytest.mark.parametrize("field", ["true_count", "nothing", "is_active", "not_valid", "inner", "android"])
+    def test_reserved_word_prefix_fields_still_parse(self, parser, field):
+        """Field names that begin with or contain reserved words must still be valid identifiers."""
+        result = parser.parse(f"{field} == 1")
+        assert result.success, f"Field name '{field}' should parse successfully, got: {result.error}"
+        assert result.ast.evaluate({field: 1}) is True
+        assert result.ast.evaluate({field: 2}) is False

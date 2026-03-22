@@ -24,8 +24,45 @@ from agent_actions.workflow.models import (
 from agent_actions.workflow.parallel.dependency import WorkflowDependencyOrchestrator
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
 logger = logging.getLogger(__name__)
+
+
+def validate_guard_conditions(action_configs: dict) -> list[str]:
+    """Parse all guard conditions and return error messages for any that are invalid.
+
+    Runs after config expansion, so guard dicts already use 'clause' (not 'condition').
+    Catches syntax errors (e.g. unbalanced parens, unknown operators) before any LLM
+    calls are made.
+
+    Args:
+        action_configs: Mapping of action name → expanded agent config dict.
+
+    Returns:
+        List of human-readable error strings, one per invalid guard clause.
+        Empty list means all guards are syntactically valid.
+    """
+    errors: list[str] = []
+    parser = WhereClauseParser()
+
+    for action_name, config in action_configs.items():
+        guard = config.get("guard")
+        if not guard or not isinstance(guard, dict):
+            continue
+        clause = guard.get("clause")
+        if not clause:
+            continue
+
+        parse_result = parser.parse_cached(clause)
+        if not parse_result.success:
+            error = parse_result.error
+            detail = error.message if error else "parse failed"
+            errors.append(
+                f"Action '{action_name}': invalid guard condition '{clause}': {detail}"
+            )
+
+    return errors
 
 
 class AgentWorkflow:
@@ -81,6 +118,16 @@ class AgentWorkflow:
                 result.format_report(),
                 hint="Fix the static type errors above before running the workflow.",
             )
+
+        guard_errors = self._validate_guard_conditions()
+        if guard_errors:
+            raise PreFlightValidationError(
+                "\n".join(guard_errors),
+                hint="Fix the guard condition syntax errors above before running the workflow.",
+            )
+
+    def _validate_guard_conditions(self) -> list[str]:
+        return validate_guard_conditions(self.action_configs)
 
     # ── Properties ──────────────────────────────────────────────────────
 
