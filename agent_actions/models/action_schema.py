@@ -6,14 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-
-class ActionKind(Enum):
-    """Type of action in the workflow."""
-
-    LLM = "llm"
-    TOOL = "tool"
-    SOURCE = "source"
-    HITL = "hitl"
+from agent_actions.config.schema import ActionKind  # noqa: F401 — canonical enum, re-exported
 
 
 class FieldSource(Enum):

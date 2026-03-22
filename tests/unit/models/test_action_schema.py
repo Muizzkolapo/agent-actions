@@ -28,11 +28,22 @@ class TestActionKind:
     def test_hitl_value(self):
         assert ActionKind.HITL.value == "hitl"
 
+    def test_seed_value(self):
+        assert ActionKind.SEED.value == "seed"
+
     def test_member_count(self):
-        assert len(ActionKind) == 4
+        assert len(ActionKind) == 5
 
     def test_construct_from_value(self):
         assert ActionKind("llm") is ActionKind.LLM
+
+    def test_case_insensitive_lookup(self):
+        assert ActionKind("LLM") is ActionKind.LLM
+        assert ActionKind("Tool") is ActionKind.TOOL
+
+    def test_is_str_enum(self):
+        assert isinstance(ActionKind.LLM, str)
+        assert ActionKind.LLM == "llm"
 
     def test_members_are_unique(self):
         values = [m.value for m in ActionKind]
