@@ -25,10 +25,16 @@ logger = logging.getLogger(__name__)
 class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
-    def __init__(self, workflows_data: dict[str, dict], project_path: str | None = None):
+    def __init__(
+        self,
+        workflows_data: dict[str, dict],
+        project_path: str | None = None,
+        tool_schemas: dict[str, Any] | None = None,
+    ):
         self.workflows_data = workflows_data
         self.parser = WorkflowParser()
         self.project_path = Path(project_path) if project_path else None
+        self._tool_schemas = tool_schemas
 
     def _build_schema_service(self, workflow: dict[str, Any]) -> WorkflowSchemaService | None:
         """Build a WorkflowSchemaService for a parsed workflow.
@@ -43,6 +49,7 @@ class CatalogGenerator:
             workflow.get("name", "unknown"),
             actions,
             project_root=self.project_path,
+            tool_schemas=self._tool_schemas,
         )
 
     def _enrich_action_with_fields(
@@ -312,10 +319,13 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Resolve tool_path from project config
     tool_paths = get_tool_dirs(project_root)
 
+    # Scan tool functions once — reused by both the catalog data and each
+    # WorkflowSchemaService (avoids N redundant AST parses for N workflows).
+    tool_functions_data = scanner.scan_tool_functions(project_root, tool_paths)
+
     # Step 1b–1n: Scan all project artifacts
     prompts_data = scanner.scan_prompts(project_root)
     schemas_data = scanner.scan_schemas(project_root)
-    tool_functions_data = scanner.scan_tool_functions(project_root, tool_paths)
     runs_data = scanner.scan_runs(project_root)
     logs_data = scanner.scan_logs(project_root)
     vendors_data = scanner.scan_vendors(project_root)
@@ -328,7 +338,9 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     readmes_data = scanner.scan_readmes(project_root)
 
     # Step 2: Generate catalog
-    catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
+    catalog_gen = CatalogGenerator(
+        workflows_data, project_path=project_path, tool_schemas=tool_functions_data
+    )
     catalog = catalog_gen.generate(
         prompts_data=prompts_data,
         schemas_data=schemas_data,

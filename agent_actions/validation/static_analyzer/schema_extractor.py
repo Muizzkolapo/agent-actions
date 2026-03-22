@@ -24,12 +24,18 @@ class SchemaExtractor:
         udf_registry: dict[str, Any] | None = None,
         project_root: Path | None = None,
         workflow_name: str | None = None,
+        tool_schemas: dict[str, Any] | None = None,
     ) -> None:
-        """Initialize the schema extractor."""
+        """Initialize the schema extractor.
+
+        Args:
+            tool_schemas: Pre-scanned tool function schemas. When provided,
+                skips the per-instance ``scan_tool_functions`` call.
+        """
         self.udf_registry = udf_registry or {}
         self.project_root = resolve_project_root(project_root)
         self.workflow_name = workflow_name
-        self._tool_schemas: dict[str, Any] | None = None
+        self._tool_schemas: dict[str, Any] | None = tool_schemas
 
     def _load_schema_by_name(self, schema_name: str) -> dict:
         """Load a schema by name using multi-level resolution."""

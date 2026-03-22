@@ -520,3 +520,27 @@ class TestFromActionConfigs:
         schemas = service.get_all_schemas()
         assert "extract" in schemas
         assert "summarize" in schemas
+
+    def test_passes_tool_schemas(self):
+        """Pre-scanned tool_schemas reach SchemaExtractor, skipping lazy scan."""
+        fake_tools = {"my_func": {"name": "my_func", "input_schema": {}}}
+        service = WorkflowSchemaService.from_action_configs(
+            "wf", self.SAMPLE_ACTIONS, tool_schemas=fake_tools
+        )
+        extractor = service._analyzer.schema_extractor
+        # Pre-populated — _get_tool_schemas returns injected data without scanning
+        assert extractor._tool_schemas is fake_tools
+        assert extractor._get_tool_schemas() is fake_tools
+
+    def test_tool_schemas_none_preserves_lazy_load(self):
+        """Omitting tool_schemas keeps lazy-load behavior (cache starts None)."""
+        service = WorkflowSchemaService.from_action_configs("wf", self.SAMPLE_ACTIONS)
+        assert service._analyzer.schema_extractor._tool_schemas is None
+
+    def test_tool_schemas_empty_dict_skips_scan(self):
+        """Empty dict is a valid pre-scan result — should not trigger lazy scan."""
+        service = WorkflowSchemaService.from_action_configs(
+            "wf", self.SAMPLE_ACTIONS, tool_schemas={}
+        )
+        extractor = service._analyzer.schema_extractor
+        assert extractor._get_tool_schemas() == {}

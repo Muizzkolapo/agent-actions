@@ -65,6 +65,7 @@ class WorkflowStaticAnalyzer:
         source_schema: dict[str, Any] | None = None,
         project_root: Any | None = None,
         workflow_name: str | None = None,
+        tool_schemas: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the analyzer.
 
@@ -75,12 +76,14 @@ class WorkflowStaticAnalyzer:
             source_schema: Schema for source/input data (optional)
             project_root: Project root for scanning tool functions
             workflow_name: Workflow name for multi-level schema resolution
+            tool_schemas: Pre-scanned tool function schemas (avoids redundant scans)
         """
         self.workflow_config = workflow_config
         self.schema_extractor = SchemaExtractor(
             udf_registry,
             project_root=project_root,
             workflow_name=workflow_name,
+            tool_schemas=tool_schemas,
         )
         self.reference_extractor = ReferenceExtractor()
         self.schema_loader = schema_loader

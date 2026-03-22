@@ -53,6 +53,7 @@ class WorkflowSchemaService:
         *,
         project_root: Path | None = None,
         with_udf_registry: bool = False,
+        tool_schemas: dict[str, Any] | None = None,
     ) -> WorkflowSchemaService:
         """Factory: build_workflow_config + optional UDF resolution in one call.
 
@@ -62,6 +63,8 @@ class WorkflowSchemaService:
             project_root: Project root directory.
             with_udf_registry: If True, attempt to import UDF_REGISTRY.
                 Fails silently if unavailable.
+            tool_schemas: Pre-scanned tool function schemas. When provided,
+                avoids redundant ``scan_tool_functions`` calls.
         """
         workflow_config = cls.build_workflow_config(name, action_configs)
 
@@ -80,6 +83,7 @@ class WorkflowSchemaService:
             schema_loader=SchemaLoader(),
             project_root=project_root,
             workflow_name=name,
+            tool_schemas=tool_schemas,
         )
 
     def __init__(
@@ -89,6 +93,7 @@ class WorkflowSchemaService:
         schema_loader: Any | None = None,
         project_root: Any | None = None,
         workflow_name: str | None = None,
+        tool_schemas: dict[str, Any] | None = None,
     ):
         self._config = workflow_config
         self.workflow_name = workflow_name or workflow_config.get("name", "unknown")
@@ -98,6 +103,7 @@ class WorkflowSchemaService:
             schema_loader=schema_loader,
             project_root=project_root,
             workflow_name=self.workflow_name,
+            tool_schemas=tool_schemas,
         )
         self._schemas: dict[str, ActionSchema] = {}
         self._schema_lock = threading.Lock()
