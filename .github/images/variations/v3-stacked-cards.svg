@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480">
+  <!--
+    VARIATION 3: Stacked cards with connecting vertical line
+    Three cards stacked vertically with a timeline/spine on the left,
+    resembling a pipeline or changelog layout.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="35%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="rgba(148,163,184,0.05)"/>
+      <stop offset="100%" stop-color="rgba(148,163,184,0)"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="800" height="480" fill="url(#bg)"/>
+  <rect width="800" height="480" fill="url(#glow)"/>
+
+  <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M 64 0 L 0 0 0 64" fill="none" stroke="rgba(255,255,255,0.015)" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="480" fill="url(#grid)"/>
+
+  <!-- ===== VERTICAL SPINE ===== -->
+  <line x1="140" y1="55" x2="140" y2="380" stroke="#94a3b8" stroke-width="1" stroke-opacity="0.15" stroke-dasharray="3,5"/>
+
+  <!-- Spine dots -->
+  <circle cx="140" cy="75" r="6" fill="#86efac" fill-opacity="0.2" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.6"/>
+  <circle cx="140" cy="75" r="2.5" fill="#86efac" opacity="0.8"/>
+
+  <circle cx="140" cy="195" r="6" fill="#93c5fd" fill-opacity="0.2" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.6"/>
+  <circle cx="140" cy="195" r="2.5" fill="#93c5fd" opacity="0.8"/>
+
+  <circle cx="140" cy="315" r="6" fill="#c4b5fd" fill-opacity="0.2" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.6"/>
+  <circle cx="140" cy="315" r="2.5" fill="#c4b5fd" opacity="0.8"/>
+
+  <!-- ===== DEFINE CARD ===== -->
+  <g transform="translate(175, 35)">
+    <rect x="0" y="0" width="440" height="80" rx="12"
+          fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.3"/>
+    <!-- Left accent bar -->
+    <rect x="0" y="0" width="4" height="80" rx="2" fill="#86efac" fill-opacity="0.5"/>
+
+    <g transform="translate(20, 14)">
+      <rect x="0" y="0" width="16" height="20" rx="2" fill="none" stroke="#86efac" stroke-width="1.3" stroke-opacity="0.6"/>
+      <line x1="4" y1="6" x2="12" y2="6" stroke="#86efac" stroke-width="1" stroke-opacity="0.4"/>
+      <line x1="4" y1="10" x2="10" y2="10" stroke="#86efac" stroke-width="1" stroke-opacity="0.4"/>
+      <line x1="4" y1="14" x2="8" y2="14" stroke="#86efac" stroke-width="1" stroke-opacity="0.4"/>
+    </g>
+    <text x="46" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#86efac" letter-spacing="-0.3">Define</text>
+    <text x="115" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#86efac" fill-opacity="0.4">—</text>
+    <text x="135" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#86efac" fill-opacity="0.45">Declarative YAML workflows</text>
+
+    <!-- Tags -->
+    <g transform="translate(20, 46)">
+      <rect x="0" y="0" width="52" height="22" rx="11" fill="#86efac" fill-opacity="0.08" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="26" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#86efac" fill-opacity="0.6">YAML</text>
+    </g>
+    <g transform="translate(60, 46)">
+      <rect x="0" y="0" width="70" height="22" rx="11" fill="#86efac" fill-opacity="0.08" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="35" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#86efac" fill-opacity="0.6">prompts</text>
+    </g>
+    <g transform="translate(138, 46)">
+      <rect x="0" y="0" width="70" height="22" rx="11" fill="#86efac" fill-opacity="0.08" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="35" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#86efac" fill-opacity="0.6">schemas</text>
+    </g>
+    <g transform="translate(216, 46)">
+      <rect x="0" y="0" width="50" height="22" rx="11" fill="#86efac" fill-opacity="0.08" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="25" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#86efac" fill-opacity="0.6">UDFs</text>
+    </g>
+  </g>
+
+  <!-- ===== VALIDATE CARD ===== -->
+  <g transform="translate(175, 155)">
+    <rect x="0" y="0" width="440" height="80" rx="12"
+          fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.3"/>
+    <rect x="0" y="0" width="4" height="80" rx="2" fill="#93c5fd" fill-opacity="0.5"/>
+
+    <g transform="translate(20, 14)">
+      <path d="M8,1 L15,4 L15,11 Q15,18 8,21 Q1,18 1,11 L1,4 Z" fill="none" stroke="#93c5fd" stroke-width="1.3" stroke-opacity="0.6"/>
+      <polyline points="5,11 7.5,14 12,8" fill="none" stroke="#93c5fd" stroke-width="1.3" stroke-opacity="0.6"/>
+    </g>
+    <text x="46" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#93c5fd" letter-spacing="-0.3">Validate</text>
+    <text x="135" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#93c5fd" fill-opacity="0.4">—</text>
+    <text x="155" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#93c5fd" fill-opacity="0.45">Pre-flight static analysis</text>
+
+    <g transform="translate(20, 46)">
+      <rect x="0" y="0" width="50" height="22" rx="11" fill="#93c5fd" fill-opacity="0.08" stroke="#93c5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="25" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#93c5fd" fill-opacity="0.6">deps</text>
+    </g>
+    <g transform="translate(78, 46)">
+      <rect x="0" y="0" width="75" height="22" rx="11" fill="#93c5fd" fill-opacity="0.08" stroke="#93c5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="37" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#93c5fd" fill-opacity="0.6">field refs</text>
+    </g>
+    <g transform="translate(161, 46)">
+      <rect x="0" y="0" width="80" height="22" rx="11" fill="#93c5fd" fill-opacity="0.08" stroke="#93c5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="40" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#93c5fd" fill-opacity="0.6">templates</text>
+    </g>
+    <g transform="translate(249, 46)">
+      <rect x="0" y="0" width="70" height="22" rx="11" fill="#93c5fd" fill-opacity="0.08" stroke="#93c5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="35" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#93c5fd" fill-opacity="0.6">guards</text>
+    </g>
+  </g>
+
+  <!-- ===== EXECUTE CARD ===== -->
+  <g transform="translate(175, 275)">
+    <rect x="0" y="0" width="440" height="80" rx="12"
+          fill="#c4b5fd" fill-opacity="0.06" stroke="#c4b5fd" stroke-width="1" stroke-opacity="0.3"/>
+    <rect x="0" y="0" width="4" height="80" rx="2" fill="#c4b5fd" fill-opacity="0.5"/>
+
+    <g transform="translate(20, 14)">
+      <polygon points="0,0 16,10 0,20" fill="none" stroke="#c4b5fd" stroke-width="1.3" stroke-opacity="0.6"/>
+    </g>
+    <text x="46" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#c4b5fd" letter-spacing="-0.3">Execute</text>
+    <text x="130" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#c4b5fd" fill-opacity="0.4">—</text>
+    <text x="150" y="28" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="14" fill="#c4b5fd" fill-opacity="0.45">DAG-based orchestration</text>
+
+    <g transform="translate(20, 46)">
+      <rect x="0" y="0" width="70" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="35" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">parallel</text>
+    </g>
+    <g transform="translate(98, 46)">
+      <rect x="0" y="0" width="55" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="27" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">batch</text>
+    </g>
+    <g transform="translate(161, 46)">
+      <rect x="0" y="0" width="85" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="42" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">reprompt</text>
+    </g>
+    <g transform="translate(254, 46)">
+      <rect x="0" y="0" width="95" height="22" rx="11" fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <text x="47" y="15" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.6">multi-vendor</text>
+    </g>
+  </g>
+
+  <!-- ===== LOGO (right side) ===== -->
+  <g transform="translate(660, 160) scale(0.8)">
+    <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+    <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+    <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+    <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+  </g>
+
+  <!-- ===== SCALE BADGES ===== -->
+  <text x="400" y="410" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="11" fill="#71717a" letter-spacing="2.5">WORKS AT ANY SCALE</text>
+
+  <g transform="translate(155, 428)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#86efac" fill-opacity="0.8">Online</text>
+  </g>
+  <g transform="translate(315, 428)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#93c5fd" fill-opacity="0.8">Batch</text>
+  </g>
+  <g transform="translate(475, 428)">
+    <rect x="0" y="0" width="160" height="36" rx="18" fill="#fbbf24" fill-opacity="0.06" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="80" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#fbbf24" fill-opacity="0.8">Multi-vendor</text>
+  </g>
+</svg>

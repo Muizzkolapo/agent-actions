@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <!--
+    VARIATION 2: Concentric rings / orbital
+    Logo at center with three orbital arcs, each labeled with a phase.
+    Phases sit on the ring like satellites.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="45%" r="40%">
+      <stop offset="0%" stop-color="rgba(148,163,184,0.08)"/>
+      <stop offset="100%" stop-color="rgba(148,163,184,0)"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="800" height="520" fill="url(#bg)"/>
+  <rect width="800" height="520" fill="url(#glow)"/>
+
+  <!-- Subtle grid -->
+  <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M 64 0 L 0 0 0 64" fill="none" stroke="rgba(255,255,255,0.015)" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="520" fill="url(#grid)"/>
+
+  <!-- ===== ORBITAL RING ===== -->
+  <!-- Single dashed orbit ring -->
+  <ellipse cx="400" cy="210" rx="260" ry="150" fill="none" stroke="#94a3b8" stroke-width="1" stroke-opacity="0.12" stroke-dasharray="4,6"/>
+
+  <!-- Directional arc segments (colored, showing flow) -->
+  <!-- Top arc: Define zone (green) -->
+  <path d="M 260,100 A 260,150 0 0,1 540,100"
+        fill="none" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.25" stroke-dasharray="6,4"/>
+
+  <!-- Right arc: Validate zone (blue) -->
+  <path d="M 540,100 A 260,150 0 0,1 540,320"
+        fill="none" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.25" stroke-dasharray="6,4"/>
+
+  <!-- Bottom-left arc: Execute zone (purple) -->
+  <path d="M 540,320 A 260,150 0 0,1 260,100"
+        fill="none" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.25" stroke-dasharray="6,4"/>
+
+  <!-- ===== CENTER LOGO ===== -->
+  <g transform="translate(367, 175) scale(0.7)">
+    <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+    <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+    <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+    <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+  </g>
+
+  <!-- ===== DEFINE NODE (top center, on ring) ===== -->
+  <g transform="translate(305, 42)">
+    <rect x="0" y="0" width="190" height="72" rx="12"
+          fill="#86efac" fill-opacity="0.1" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(14, 12)">
+      <rect x="0" y="0" width="14" height="18" rx="2" fill="none" stroke="#86efac" stroke-width="1.2" stroke-opacity="0.7"/>
+      <line x1="3" y1="5" x2="11" y2="5" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.5"/>
+      <line x1="3" y1="9" x2="9" y2="9" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.5"/>
+      <line x1="3" y1="13" x2="7" y2="13" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.5"/>
+    </g>
+    <text x="36" y="26" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#86efac" letter-spacing="-0.3">Define</text>
+    <text x="14" y="52" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#86efac" fill-opacity="0.55">YAML · prompts · schemas</text>
+  </g>
+
+  <!-- ===== VALIDATE NODE (right, on ring) ===== -->
+  <g transform="translate(570, 170)">
+    <rect x="0" y="0" width="190" height="72" rx="12"
+          fill="#93c5fd" fill-opacity="0.1" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(14, 12)">
+      <path d="M7,1 L13,3.5 L13,9.5 Q13,15.5 7,18 Q1,15.5 1,9.5 L1,3.5 Z" fill="none" stroke="#93c5fd" stroke-width="1.2" stroke-opacity="0.7"/>
+      <polyline points="4,9.5 6.5,12 11,7" fill="none" stroke="#93c5fd" stroke-width="1.2" stroke-opacity="0.7"/>
+    </g>
+    <text x="36" y="26" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#93c5fd" letter-spacing="-0.3">Validate</text>
+    <text x="14" y="52" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#93c5fd" fill-opacity="0.55">static analysis · deps · refs</text>
+  </g>
+
+  <!-- ===== EXECUTE NODE (bottom-left, on ring) ===== -->
+  <g transform="translate(40, 280)">
+    <rect x="0" y="0" width="200" height="72" rx="12"
+          fill="#c4b5fd" fill-opacity="0.1" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(14, 12)">
+      <polygon points="0,0 14,9 0,18" fill="none" stroke="#c4b5fd" stroke-width="1.2" stroke-opacity="0.7"/>
+    </g>
+    <text x="36" y="26" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#c4b5fd" letter-spacing="-0.3">Execute</text>
+    <text x="14" y="52" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#c4b5fd" fill-opacity="0.55">DAG orchestration · parallel · batch</text>
+  </g>
+
+  <!-- ===== Small directional dots on orbit ===== -->
+  <!-- Between Define and Validate -->
+  <circle cx="570" cy="115" r="3" fill="#93c5fd" opacity="0.4"/>
+  <circle cx="555" cy="108" r="2" fill="#93c5fd" opacity="0.25"/>
+
+  <!-- Between Validate and Execute -->
+  <circle cx="500" cy="330" r="3" fill="#c4b5fd" opacity="0.4"/>
+  <circle cx="515" cy="325" r="2" fill="#c4b5fd" opacity="0.25"/>
+
+  <!-- Between Execute and Define -->
+  <circle cx="205" cy="125" r="3" fill="#86efac" opacity="0.4"/>
+  <circle cx="218" cy="118" r="2" fill="#86efac" opacity="0.25"/>
+
+  <!-- ===== WORKS AT ANY SCALE ===== -->
+  <text x="400" y="410" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="11" fill="#71717a" letter-spacing="2.5">WORKS AT ANY SCALE</text>
+
+  <g transform="translate(155, 428)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#86efac" fill-opacity="0.8">Online</text>
+  </g>
+  <g transform="translate(315, 428)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#93c5fd" fill-opacity="0.8">Batch</text>
+  </g>
+  <g transform="translate(475, 428)">
+    <rect x="0" y="0" width="160" height="36" rx="18" fill="#fbbf24" fill-opacity="0.06" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="80" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#fbbf24" fill-opacity="0.8">Multi-vendor</text>
+  </g>
+
+  <rect x="365" y="488" width="70" height="2" rx="1" fill="#94a3b8" opacity="0.2"/>
+</svg>
