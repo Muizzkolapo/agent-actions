@@ -23,7 +23,6 @@ class SchemaExtractor:
         self,
         udf_registry: dict[str, Any] | None = None,
         project_root: Path | None = None,
-        workflow_name: str | None = None,
         tool_schemas: dict[str, Any] | None = None,
     ) -> None:
         """Initialize the schema extractor.
@@ -34,7 +33,6 @@ class SchemaExtractor:
         """
         self.udf_registry = udf_registry or {}
         self.project_root = resolve_project_root(project_root)
-        self.workflow_name = workflow_name
         self._tool_schemas: dict[str, Any] | None = tool_schemas
 
     def _load_schema_by_name(self, schema_name: str) -> dict:
@@ -42,7 +40,6 @@ class SchemaExtractor:
         return SchemaLoader.load_schema(
             schema_name,
             project_root=self.project_root,
-            workflow_name=self.workflow_name,
         )
 
     def _get_tool_schemas(self) -> dict[str, Any]:
@@ -138,9 +135,7 @@ class SchemaExtractor:
                 output.schema_fields = self.extract_fields_from_json_schema(loaded)
                 return True
             except (FileNotFoundError, KeyError, ValueError, OSError) as e:
-                logger.warning(
-                    "Schema loading failed for '%s': %s", schema_id, e, exc_info=True
-                )
+                logger.warning("Schema loading failed for '%s': %s", schema_id, e, exc_info=True)
                 self._mark_schema_load_failure(output, schema_id, e)
                 return False
 

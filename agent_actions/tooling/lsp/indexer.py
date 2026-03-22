@@ -8,7 +8,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from agent_actions.config.path_config import get_schema_path, get_tool_dirs
+from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
@@ -466,12 +466,10 @@ def _populate_versions_summary(action_meta: ActionMetadata, action_data: dict) -
 
 
 def _index_prompts(index: ProjectIndex, project_root: Path) -> None:
-    """Index all prompts in prompt store."""
-    prompt_dir = project_root / "prompt_store"
-    if not prompt_dir.exists():
-        return
+    """Index all prompts using PromptLoader's discovery logic."""
+    from agent_actions.prompt.handler import PromptLoader
 
-    for md_file in prompt_dir.glob("*.md"):
+    for md_file in PromptLoader.discover_prompt_files(project_root):
         file_stem = md_file.stem
         try:
             content = md_file.read_text()
@@ -499,12 +497,12 @@ def _index_prompts(index: ProjectIndex, project_root: Path) -> None:
 
 
 def _index_tools(index: ProjectIndex, project_root: Path, tool_paths: list[str]) -> None:
-    """Index all UDF tool functions."""
+    """Index all UDF tool functions using the shared discovery filter."""
+    from agent_actions.input.loaders.udf import discover_tool_files
+
     for rel_path in tool_paths:
         tools_dir = project_root / rel_path
-        if not tools_dir.exists():
-            continue
-        for py_file in tools_dir.rglob("*.py"):
+        for py_file in discover_tool_files(tools_dir):
             _index_python_file(index, py_file)
 
 
@@ -561,45 +559,21 @@ def _index_python_file(index: ProjectIndex, py_file: Path) -> None:
 
 
 def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
-    """Index all schema files.
+    """Index all schema files using SchemaLoader's discovery logic.
 
-    Intentionally independent from SchemaLoader — the LSP needs file
-    Location metadata (path + line numbers) for go-to-definition and
-    produces SchemaDefinition objects, not raw dicts.  SchemaLoader is
-    for runtime loading; this is for IDE navigation.
+    Reuses ``SchemaLoader.discover_schema_files()`` so that directory
+    traversal, recursive search, and uniqueness rules stay in one place.
+    The LSP adds its own metadata (Location, extracted fields) on top.
     """
+    from agent_actions.output.response.loader import SchemaLoader
+
     try:
-        sp = get_schema_path(project_root)
-    except (ConfigValidationError, OSError):
-        return  # No schema_path configured — no schemas to index
-    schema_dirs = [project_root / sp]
-
-    # Also index workflow-level schema directories
-    wf_root = project_root / "agent_workflow"
-    if wf_root.exists():
-        for wf_dir in sorted(wf_root.iterdir()):
-            if wf_dir.is_dir():
-                wf_sd = wf_dir / sp
-                if wf_sd.exists():
-                    schema_dirs.append(wf_sd)
-
-    # Fallback: qanalabs/schema structure
-    if not any(sd.exists() for sd in schema_dirs):
-        fallback = project_root / "qanalabs" / sp
-        if fallback.exists():
-            schema_dirs = [fallback]
-
-    all_schema_files = []
-    for sd in schema_dirs:
-        if sd.exists():
-            all_schema_files.extend(sd.glob("*.yml"))
-            all_schema_files.extend(sd.glob("*.yaml"))
-
-    if not all_schema_files:
+        all_schemas = SchemaLoader.discover_schema_files(project_root)
+    except (ConfigValidationError, OSError) as e:
+        logger.warning("LSP indexer: could not discover schemas: %s", e)
         return
 
-    for schema_file in all_schema_files:
-        schema_name = schema_file.stem
+    for schema_name, schema_file in all_schemas.items():
         fields = _extract_schema_fields(schema_file)
         index.schemas[schema_name] = SchemaDefinition(
             name=schema_name,

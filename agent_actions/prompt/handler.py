@@ -6,6 +6,7 @@ from collections import Counter
 from pathlib import Path
 
 from agent_actions.config.path_config import resolve_project_root
+from agent_actions.config.paths import PathType
 from agent_actions.utils.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,19 @@ PROMPT_PATTERN = re.compile(r"\{prompt\s+([\w.]+)\}")
 
 class PromptLoader:
     """Loads and validates prompts from markdown content."""
+
+    @staticmethod
+    def discover_prompt_files(project_root: Path | None = None) -> list[Path]:
+        """Discover all prompt markdown files under ``prompt_store/``.
+
+        Searches recursively so that prompts organised in subdirectories are
+        found.  Returns a sorted list of ``.md`` file paths.
+        """
+        search_root = resolve_project_root(project_root)
+        prompt_dir = search_root / PathType.PROMPT_STORE.value
+        if not prompt_dir.exists():
+            return []
+        return sorted(prompt_dir.rglob("*.md"))
 
     @staticmethod
     def extract_prompt(content: str, prompt_name: str) -> str:

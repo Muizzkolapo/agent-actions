@@ -7,9 +7,9 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from agent_actions.config.path_config import get_schema_path
 from agent_actions.errors import ConfigValidationError
 from agent_actions.output.response.loader import SchemaLoader
+from agent_actions.prompt.handler import PromptLoader
 
 from ..parser import extract_fields_for_docs
 
@@ -19,17 +19,11 @@ logger = logging.getLogger(__name__)
 def scan_prompts(project_root: Path) -> dict[str, Any]:
     """Scan project directory for prompt files in prompt_store/."""
     prompts: dict[str, Any] = {}
-    prompt_store_dir = project_root / "prompt_store"
-
-    if not prompt_store_dir.exists():
-        return prompts
 
     # Pattern to match {prompt name} ... {end_prompt} — unified with prompt.handler.PROMPT_PATTERN
-    prompt_pattern = re.compile(
-        r"\{prompt\s+([\w.]+)\}(.*?)\{end_prompt\}", re.DOTALL
-    )
+    prompt_pattern = re.compile(r"\{prompt\s+([\w.]+)\}(.*?)\{end_prompt\}", re.DOTALL)
 
-    for md_file in prompt_store_dir.glob("*.md"):
+    for md_file in PromptLoader.discover_prompt_files(project_root):
         try:
             content = md_file.read_text()
         except (OSError, UnicodeDecodeError) as e:
@@ -64,32 +58,11 @@ def scan_schemas(project_root: Path) -> dict[str, Any]:
     """Scan project directory for schema YAML files."""
     schemas: dict[str, Any] = {}
     try:
-        sp = get_schema_path(project_root)
+        all_schema_files = SchemaLoader.discover_schema_files(project_root)
     except (ConfigValidationError, OSError):
         return schemas  # No schema_path configured — no schemas to scan
-    # Collect schema files from all locations: project-level + workflow-level
-    schema_files: list[Path] = []
-    project_schema_dir = project_root / sp
-    if project_schema_dir.exists():
-        schema_files.extend(project_schema_dir.glob("*.yml"))
-        schema_files.extend(project_schema_dir.glob("*.yaml"))
 
-    wf_root = project_root / "agent_workflow"
-    if wf_root.exists():
-        for wf_dir in sorted(wf_root.iterdir()):
-            if not wf_dir.is_dir():
-                continue
-            wf_schema_dir = wf_dir / sp
-            if wf_schema_dir.exists():
-                schema_files.extend(wf_schema_dir.glob("*.yml"))
-                schema_files.extend(wf_schema_dir.glob("*.yaml"))
-
-    if not schema_files:
-        return schemas
-
-    for yml_file in schema_files:
-        schema_name = yml_file.stem
-
+    for schema_name, yml_file in all_schema_files.items():
         try:
             raw_schema = SchemaLoader.load_schema(schema_name, project_root=project_root)
         except (FileNotFoundError, OSError, UnicodeDecodeError) as e:

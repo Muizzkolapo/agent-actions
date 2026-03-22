@@ -56,8 +56,8 @@ class TestSchemaLoaderLoadSchema:
         assert isinstance(result, dict)
         assert result["name"] == "NestedSchema"
 
-    def test_multiple_matches_raises_file_not_found(self, tmp_path):
-        """Multiple files with same name cause FileNotFoundError with disambiguation hint."""
+    def test_multiple_matches_uses_first_found(self, tmp_path):
+        """Multiple files with same name: first found wins (warns, does not raise)."""
         _write_project_config(tmp_path)
         schema_dir = tmp_path / "schema"
         sub1 = schema_dir / "sub1"
@@ -66,8 +66,8 @@ class TestSchemaLoaderLoadSchema:
         sub2.mkdir(parents=True)
         (sub1 / "Dup.yml").write_text("name: Dup1\n")
         (sub2 / "Dup.yml").write_text("name: Dup2\n")
-        with pytest.raises(FileNotFoundError, match="multiple"):
-            SchemaLoader.load_schema("Dup", project_root=tmp_path)
+        result = SchemaLoader.load_schema("Dup", project_root=tmp_path)
+        assert result["name"] == "Dup1"  # first alphabetically
 
 
 class TestSchemaLoaderConstructSchemaFromDict:

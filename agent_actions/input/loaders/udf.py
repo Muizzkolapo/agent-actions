@@ -9,6 +9,22 @@ from agent_actions.errors import DuplicateFunctionError, UDFLoadError
 from agent_actions.utils.udf_management.registry import UDF_REGISTRY, get_udf
 
 
+def discover_tool_files(tool_dir: Path) -> list[Path]:
+    """Discover Python files eligible for UDF registration.
+
+    Searches *tool_dir* recursively for ``*.py`` files, excluding private
+    (``_``-prefixed) and test (``test_``-prefixed) modules.  Returns a
+    sorted list of paths.
+    """
+    if not tool_dir.exists() or not tool_dir.is_dir():
+        return []
+    return sorted(
+        f
+        for f in tool_dir.rglob("*.py")
+        if not f.name.startswith("_") and not f.name.startswith("test_")
+    )
+
+
 def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
     """Discover and register all UDFs in the user code directory.
 
@@ -34,10 +50,7 @@ def discover_udfs(user_code_path: Path) -> dict[str, dict[str, Any]]:
             context=error_context,
         )
 
-    python_files = list(user_code_path.rglob("*.py"))
-    python_files = [
-        f for f in python_files if not f.name.startswith("_") and not f.name.startswith("test_")
-    ]
+    python_files = discover_tool_files(user_code_path)
 
     for py_file in python_files:
         try:

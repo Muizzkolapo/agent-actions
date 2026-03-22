@@ -82,7 +82,6 @@ class WorkflowStaticAnalyzer:
         self.schema_extractor = SchemaExtractor(
             udf_registry,
             project_root=project_root,
-            workflow_name=workflow_name,
             tool_schemas=tool_schemas,
         )
         self.reference_extractor = ReferenceExtractor()
@@ -331,7 +330,6 @@ class WorkflowStaticAnalyzer:
             if schema and isinstance(schema, dict):
                 schema_errors = validator.validate_schema(schema, action_name, "schema")
                 errors.extend(schema_errors)
-
 
         return errors
 

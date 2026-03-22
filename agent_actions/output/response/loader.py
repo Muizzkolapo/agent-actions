@@ -26,87 +26,96 @@ class SchemaLoader:
     """Loads, validates, and constructs schemas from YAML files or inline definitions."""
 
     @staticmethod
-    def load_schema(
-        schema_name: str,
+    def discover_schema_files(
         project_root: Path | None = None,
-        workflow_name: str | None = None,
-    ) -> dict:
-        """Load raw schema YAML by name using multi-level resolution.
+    ) -> dict[str, Path]:
+        """Discover all schema files across project and workflow directories.
 
-        Resolution order:
+        Searches recursively through:
 
-        1. Project-level: ``{project_root}/{schema_path}/{schema_name}.yml``
-           (flat match, then rglob in subdirectories)
-        2. Current workflow: ``{project_root}/agent_workflow/{workflow_name}/{schema_path}/``
-           (only when *workflow_name* is given)
-        3. All workflows: ``{project_root}/agent_workflow/*/{schema_path}/``
+        1. Project-level: ``{project_root}/{schema_path}/``
+        2. All workflows: ``{project_root}/agent_workflow/*/{schema_path}/``
 
         ``schema_path`` is read from ``agent_actions.yml`` (required config key).
-        Schema names must be globally unique — if the same file name appears in
-        more than one location a ``FileNotFoundError`` is raised.
+
+        Returns a dict mapping ``schema_name`` (file stem) to its ``Path``.
+        When a schema name appears in multiple locations the first occurrence
+        wins and a warning is logged.  Callers that need strict uniqueness
+        (e.g. :meth:`load_schema`) enforce it themselves.
         """
         from agent_actions.config.path_config import get_schema_path, resolve_project_root
 
         effective_root = resolve_project_root(project_root)
         sp = get_schema_path(effective_root)
-        filenames = [f"{schema_name}.yml", f"{schema_name}.yaml"]
 
-        candidates: list[Path] = []
-        seen: set[Path] = set()
-
-        def _add_candidate(path: Path) -> None:
-            resolved = path.resolve()
-            if resolved not in seen:
-                seen.add(resolved)
-                candidates.append(path)
-
-        def _search_dir(search_dir: Path) -> None:
-            for fname in filenames:
-                flat = search_dir / fname
-                if flat.exists():
-                    _add_candidate(flat)
-                for match in sorted(search_dir.rglob(fname)):
-                    _add_candidate(match)
-
-        # Step 1: Project-level schema folder
+        # Collect search directories
+        search_dirs: list[Path] = []
         project_schema_dir = effective_root / sp
         if project_schema_dir.exists():
-            _search_dir(project_schema_dir)
-
-        # Step 2: Current workflow's schema folder
-        if workflow_name:
-            wf_schema_dir = effective_root / "agent_workflow" / workflow_name / sp
-            if wf_schema_dir.exists():
-                _search_dir(wf_schema_dir)
-
-        # Step 3: Search ALL workflow schema folders
+            search_dirs.append(project_schema_dir)
         wf_root = effective_root / "agent_workflow"
         if wf_root.exists():
             for wf_dir in sorted(wf_root.iterdir()):
-                if not wf_dir.is_dir():
-                    continue
-                wf_sp = wf_dir / sp
-                if wf_sp.exists():
-                    _search_dir(wf_sp)
+                if wf_dir.is_dir():
+                    wf_sp = wf_dir / sp
+                    if wf_sp.exists():
+                        search_dirs.append(wf_sp)
 
-        # Enforce global uniqueness
-        if len(candidates) > 1:
-            match_paths = "\n  ".join(str(c) for c in candidates)
-            raise FileNotFoundError(
-                f"Schema '{schema_name}.yml' found in multiple locations "
-                f"(names must be globally unique):\n  {match_paths}\n"
-                f"Move the schema to a single location or use a unique name."
-            )
+        # Discover all schema files, deduplicating by resolved path.
+        # First occurrence wins; duplicates are logged but not fatal.
+        result: dict[str, Path] = {}
+        seen: set[Path] = set()
 
-        if not candidates:
+        for search_dir in search_dirs:
+            for ext in ("*.yml", "*.yaml"):
+                for match in sorted(search_dir.rglob(ext)):
+                    resolved = match.resolve()
+                    if resolved in seen:
+                        continue
+                    seen.add(resolved)
+                    name = match.stem
+                    if name in result:
+                        logger.warning(
+                            "Schema '%s' found in multiple locations "
+                            "(names must be globally unique): %s and %s",
+                            name,
+                            result[name],
+                            match,
+                        )
+                    else:
+                        result[name] = match
+
+        return result
+
+    @staticmethod
+    def load_schema(
+        schema_name: str,
+        project_root: Path | None = None,
+    ) -> dict:
+        """Load raw schema YAML by name using multi-level resolution.
+
+        Delegates to :meth:`discover_schema_files` and looks up the
+        requested *schema_name*.  Raises ``FileNotFoundError`` if the
+        schema is not found.  Duplicate names are logged as warnings
+        by ``discover_schema_files``; the first occurrence is used.
+        """
+        from agent_actions.config.path_config import get_schema_path, resolve_project_root
+
+        all_schemas = SchemaLoader.discover_schema_files(project_root)
+
+        if schema_name not in all_schemas:
+            effective_root = resolve_project_root(project_root)
+            sp = get_schema_path(effective_root)
+            project_schema_dir = effective_root / sp
+            wf_root = effective_root / "agent_workflow"
             raise FileNotFoundError(
                 f"Schema file '{schema_name}.yml' not found. "
                 f"Searched project-level ({project_schema_dir}) "
-                f"and workflow schema directories under {wf_root if wf_root.exists() else effective_root}."
+                f"and workflow schema directories under "
+                f"{wf_root if wf_root.exists() else effective_root}."
             )
 
-        schema_file = candidates[0]
-        return SchemaLoader._read_schema_file(schema_name, schema_file)
+        return SchemaLoader._read_schema_file(schema_name, all_schemas[schema_name])
 
     @staticmethod
     def _read_schema_file(schema_name: str, schema_file: Path) -> dict:
