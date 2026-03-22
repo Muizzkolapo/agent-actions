@@ -1,32 +1,6 @@
 """Validate BISAC classification codes."""
 
-from typing import TypedDict
-
 from agent_actions import udf_tool
-
-
-class ValidateBisacInput(TypedDict, total=False):
-    """Input schema for validate_bisac_codes.
-
-    Source: node_0_classify_genre output
-    Destination: node_1_validate_bisac output
-    """
-
-    # Book metadata
-    isbn: str
-    title: str
-    authors: list[str]
-    publisher: str
-    publish_year: int
-    page_count: int
-    description: str
-
-    # Classification from LLM
-    primary_bisac_code: str
-    primary_bisac_name: str
-    secondary_bisac_codes: list[str]
-    classification_reasoning: str
-
 
 # Valid BISAC code prefixes for technical/computing books
 VALID_BISAC_PREFIXES = [
@@ -39,34 +13,9 @@ VALID_BISAC_PREFIXES = [
 ]
 
 
-class ValidateBisacOutput(TypedDict, total=False):
-    """Output schema for validate_bisac_codes."""
-
-    # Passthrough metadata
-    isbn: str
-    title: str
-    authors: list[str]
-    publisher: str
-    publish_year: int
-    page_count: int
-    description: str
-
-    bisac_valid: bool
-    bisac_codes: list[str]
-    bisac_names: list[str]
-    validation_notes: str
-
-
 @udf_tool()
 def validate_bisac_codes(data: dict) -> dict:
-    """Validate BISAC codes and normalize format.
-
-    Args:
-        data: Input data containing BISAC classification
-
-    Returns:
-        Validated and normalized BISAC data (only output fields)
-    """
+    """Validate BISAC codes and normalize format."""
     primary_code = data.get("primary_bisac_code", "")
     primary_name = data.get("primary_bisac_name", "")
     secondary_codes = data.get("secondary_bisac_codes", [])
@@ -105,15 +54,7 @@ def validate_bisac_codes(data: dict) -> dict:
         all_names = ["Programming / General"]
         validation_notes.append("Defaulted to COM051000 (Programming / General)")
 
-    # Return only the output fields defined in ValidateBisacOutput
     return {
-        "isbn": data.get("isbn", ""),
-        "title": data.get("title", ""),
-        "authors": data.get("authors", []),
-        "publisher": data.get("publisher", ""),
-        "publish_year": data.get("publish_year", 0),
-        "page_count": data.get("page_count", 0),
-        "description": data.get("description", ""),
         "bisac_valid": len(validation_notes) == 0,
         "bisac_codes": all_codes,
         "bisac_names": all_names if all_names else [primary_name] if primary_name else ["Unknown"],

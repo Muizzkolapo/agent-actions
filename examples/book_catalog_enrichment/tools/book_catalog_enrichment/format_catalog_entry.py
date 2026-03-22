@@ -1,127 +1,16 @@
 """Format the final enriched catalog entry."""
 
-from typing import Any, TypedDict
-
 from agent_actions import udf_tool
-
-
-class FormatCatalogInput(TypedDict, total=False):
-    """Input schema for format_catalog_entry.
-
-    Source: node_7_score_quality output
-    Destination: node_8_format_entry output
-    """
-
-    # Original book metadata
-    isbn: str
-    title: str
-    authors: list[str]
-    publisher: str
-    publish_year: int
-    page_count: int
-    description: str
-
-    # Enriched data - Classification
-    bisac_codes: list[str]
-    bisac_names: list[str]
-
-    # Enriched data - Marketing
-    marketing_description: str
-    hook_sentence: str
-    key_benefits: list[str]
-    target_audience: str
-
-    # Enriched data - SEO
-    primary_keywords: list[str]
-    long_tail_keywords: list[str]
-    meta_title: str
-    meta_description: str
-
-    # Enriched data - Recommendations
-    similar_books: list[dict[str, str]]
-    reading_path: str
-
-    # Enriched data - Reading Level
-    reading_level: str
-    years_experience_needed: str
-    prerequisites: list[str]
-    estimated_reading_time: str
-
-    # Quality scores
-    overall_score: int
-    dimension_scores: dict[str, int]
-    improvement_suggestions: list[str]
-    ready_for_publication: bool
-
-
-class CatalogEntryOutput(TypedDict, total=False):
-    """Output schema - the final catalog entry."""
-
-    # Identifiers
-    isbn: str
-    catalog_id: str
-
-    # Core metadata
-    title: str
-    authors: list[str]
-    publisher: str
-    publish_year: int
-    page_count: int
-
-    # Classification
-    primary_category: str
-    categories: list[str]
-    bisac_codes: list[str]
-
-    # Marketing content
-    short_description: str
-    full_description: str
-    key_selling_points: list[str]
-    target_audience: str
-
-    # SEO
-    seo_keywords: list[str]
-    meta_title: str
-    meta_description: str
-
-    # Recommendations
-    similar_titles: list[dict[str, Any]]
-    reading_path: str
-
-    # Reading info
-    difficulty_level: str
-    experience_required: str
-    prerequisites: list[str]
-    reading_time_hours: str
-
-    # Quality
-    quality_score: float
-    publication_ready: bool
-
-    # Metadata
-    enrichment_version: str
-    enriched_fields: list[str]
 
 
 @udf_tool()
 def format_catalog_entry(data: dict) -> dict:
-    """Format all enriched data into a clean catalog entry.
-
-    Args:
-        data: All enriched book data
-
-    Returns:
-        Formatted catalog entry ready for publication
-    """
-    # Track which fields were enriched
+    """Consolidate all enriched data into a clean catalog entry."""
     enriched_fields = []
 
-    # Build the catalog entry
     entry = {
-        # Identifiers
         "isbn": data.get("isbn", ""),
         "catalog_id": f"CAT-{data.get('isbn', 'UNKNOWN')[-6:]}",
-        # Core metadata (passed through)
         "title": data.get("title", ""),
         "authors": data.get("authors", []),
         "publisher": data.get("publisher", ""),
@@ -160,7 +49,7 @@ def format_catalog_entry(data: dict) -> dict:
 
     # Recommendations
     similar = data.get("similar_books", [])
-    entry["similar_titles"] = similar[:5] if similar else []  # Max 5
+    entry["similar_titles"] = similar[:5] if similar else []
     entry["reading_path"] = data.get("reading_path", "")
     if similar:
         enriched_fields.append("recommendations")

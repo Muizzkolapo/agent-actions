@@ -67,6 +67,26 @@ fields:
     description: "Similar titles"
     items:
       type: object
+      properties:
+        isbn:
+          type: string
+          description: "ISBN of the similar book"
+        title:
+          type: string
+          description: "Title of the similar book"
+        authors:
+          type: array
+          items:
+            type: string
+          description: "Authors of the similar book"
+        relationship:
+          type: string
+          description: "Why this book complements the current book"
+      required:
+        - isbn
+        - title
+        - authors
+        - relationship
   - id: reading_path
     type: string
     description: "Suggested reading path"

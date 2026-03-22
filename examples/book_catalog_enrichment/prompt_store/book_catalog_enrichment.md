@@ -44,12 +44,12 @@ You are a professional book marketing copywriter who creates compelling product 
 
 ## INPUT
 Book metadata:
-- Title: {{validate_bisac.title}}
-- Authors: {{validate_bisac.authors}}
-- Publisher: {{validate_bisac.publisher}}
-- Year: {{validate_bisac.publish_year}}
-- Pages: {{validate_bisac.page_count}}
-- Raw Description: {{validate_bisac.description}}
+- Title: {{source.title}}
+- Authors: {{source.authors}}
+- Publisher: {{source.publisher}}
+- Year: {{source.publish_year}}
+- Pages: {{source.page_count}}
+- Raw Description: {{source.description}}
 - Genre Classification: {{validate_bisac.bisac_names}}
 
 ## TASK

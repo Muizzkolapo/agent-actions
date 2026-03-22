@@ -1,0 +1,20 @@
+name: validate_bisac
+description: Schema for BISAC validation output
+fields:
+  - id: bisac_valid
+    type: boolean
+    description: "Whether BISAC codes passed validation"
+  - id: bisac_codes
+    type: array
+    items:
+      type: string
+    description: "Normalized BISAC codes"
+  - id: bisac_names
+    type: array
+    items:
+      type: string
+    description: "Human-readable BISAC category names"
+  - id: validation_notes
+    type: string
+    description: "Validation notes or warnings"
+additionalProperties: false

@@ -69,13 +69,13 @@ actions:
       observe:
         - validate_bisac.*
       passthrough:
-        - validate_bisac.isbn
-        - validate_bisac.title
-        - validate_bisac.authors
-        - validate_bisac.publisher
-        - validate_bisac.publish_year
-        - validate_bisac.page_count
-        - validate_bisac.description
+        - source.isbn
+        - source.title
+        - source.authors
+        - source.publisher
+        - source.publish_year
+        - source.page_count
+        - source.description
     # Reprompt: Validate marketing description quality
     reprompt:
       validation: check_description_word_count  # Must have at least 50 words
@@ -236,4 +236,22 @@ actions:
     granularity: Record
     context_scope:
       observe:
+        - format_entry.*
+
+  # ============================================================================
+  # STEP 11: SELECT USER VIEWS
+  # ============================================================================
+  - name: select_for_users
+    dependencies: [filter_quality]
+    kind: tool
+    impl: select_for_users
+    intent: "Build SEO, management, and developer views from the enriched entry"
+    schema: select_for_users
+    granularity: Record
+    guard:
+      condition: 'passes_filter'
+      on_false: filter
+    context_scope:
+      observe:
+        - filter_quality.*
         - format_entry.*

@@ -1,280 +1,267 @@
-# Book Catalog Enrichment Pipeline
+# book_catalog_enrichment
 
-Enrich book catalog entries with BISAC classification, marketing descriptions, SEO keywords, recommendations, and quality scoring.
+## What This Workflow Does and Why It Exists
 
-## Overview
+Publishers, digital bookstores, and library systems routinely receive books with only the minimum metadata a vendor bothered to include: an ISBN, a title, some author names, and a one-line description. That is not enough to sell a book.
 
-This workflow demonstrates a production-ready catalog enrichment pipeline that combines LLM-powered content generation with grounded retrieval to prevent hallucination in recommendations.
+To publish a book in a modern catalog you need:
 
-## Workflow Diagram
+- A BISAC category code so retailers and libraries can shelve and surface it correctly
+- A 150–250 word marketing description with a hook sentence, clear benefits, and a target audience
+- SEO keywords, a meta title, and a meta description for discoverability
+- A reading level assessment — difficulty, prerequisites, and estimated reading time — so the right reader finds it
+- Similar title recommendations so browsers keep buying
+- A quality gate that prevents half-enriched records from going live
+- Separate, clean data views tailored to what SEO teams, product managers, and engineers each actually need
+
+Doing this manually for thousands of books is slow and produces inconsistent results. This workflow automates the full enrichment pipeline end-to-end.
+
+---
+
+## Design Decisions
+
+### 1. Each concern gets its own specialist
+
+Rather than one large prompt that tries to do everything, each enrichment task is a separate LLM action with a focused prompt and schema. Classification doesn't know about SEO. The description writer doesn't know about reading level. This keeps prompts short, makes each action independently testable, and means you can swap models per action based on cost/quality tradeoffs.
+
+### 2. Validation is built in, not bolted on
+
+After every LLM step that produces a structured output, a deterministic tool action validates it. `validate_bisac` checks that codes are exactly 9 characters in the right prefix set. `validate_description` checks word count, benefit count, and scans for placeholder text. Both trigger automatic reprompting if the output fails — the LLM retries up to 3 times before the framework accepts the best available result.
+
+### 3. Recommendations are grounded, not hallucinated
+
+A naive prompt would ask the LLM to "suggest similar books" and get plausible-sounding but invented titles. Instead the pipeline uses a three-step grounded retrieval pattern:
+
+```
+LLM generates search criteria → Tool searches real seed catalog → LLM ranks from real candidates only
+```
+
+The ranking prompt explicitly forbids inventing titles. Every recommendation is a real book from `seed_data/book_catalog.json` — your catalog, not the model's training data.
+
+### 4. Independent branches run in parallel
+
+After the description is written, three enrichment tasks have no dependency on each other: SEO generation, search criteria generation, and reading level assessment. They run concurrently. `score_quality` waits for all three branches before proceeding.
+
+### 5. Quality gates before output
+
+A quality filter marks each record `passes_filter: true/false` based on minimum thresholds (score ≥ 3.0, ≥ 3 enriched fields, marked publication-ready). Records that fail are dropped before the final output step — you never get a half-enriched entry in production output.
+
+### 6. Output is shaped per consumer
+
+The final tool action builds three views from each enriched record — one for the SEO team, one for product management, one for engineering integrations. No consumer has to filter out fields they don't need or know the internal field names of the pipeline.
+
+---
+
+## Pipeline
 
 ```
                     ┌─────────────────────────┐
-                    │     classify_genre      │
-                    │        (LLM)            │
-                    │  [reprompt: BISAC check]│
+                    │     classify_genre      │  LLM
+                    │  [reprompt: BISAC fmt]  │
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │     validate_bisac      │
-                    │        (Tool)           │
+                    │     validate_bisac      │  Tool
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │    write_description    │
-                    │        (LLM)            │
-                    │ [reprompt: word count]  │
+                    │    write_description    │  LLM
+                    │  [reprompt: word count] │
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │   validate_description  │
-                    │        (Tool)           │
+                    │   validate_description  │  Tool
                     └───────────┬─────────────┘
                                 │
          ┌──────────────────────┼──────────────────────┐
          │                      │                      │
 ┌────────┴────────┐   ┌────────┴────────┐   ┌────────┴────────┐
-│  generate_seo   │   │generate_search_ │   │assess_reading_  │
-│     (LLM)       │   │    criteria     │   │     level       │
-└────────┬────────┘   │     (LLM)       │   │     (LLM)       │
-         │            └────────┬────────┘   └────────┬────────┘
+│  generate_seo   │   │ generate_search │   │ assess_reading_ │  LLM × 3
+│                 │   │    _criteria    │   │     level       │  (parallel)
+└────────┬────────┘   └────────┬────────┘   └────────┬────────┘
          │                     │                     │
          │            ┌────────┴────────┐            │
-         │            │retrieve_candidates│           │
-         │            │     (Tool)       │            │
-         │            │[grounded search] │            │
+         │            │retrieve_candid- │  Tool       │
+         │            │     ates        │             │
+         │            │[seed catalog]   │            │
          │            └────────┬────────┘            │
          │                     │                     │
          │            ┌────────┴────────┐            │
-         │            │generate_recommend-│           │
-         │            │     ations       │            │
-         │            │     (LLM)        │            │
-         │            │[from candidates] │            │
+         │            │  generate_reco- │  LLM        │
+         │            │  mmendations    │             │
+         │            │[from real books]│            │
          │            └────────┬────────┘            │
          │                     │                     │
          └──────────────────────┼──────────────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │     score_quality       │
-                    │        (LLM)            │
-                    │   [merge all branches]  │
+                    │     score_quality       │  LLM  [merge all branches]
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │      format_entry       │
-                    │        (Tool)           │
+                    │      format_entry       │  Tool
                     └───────────┬─────────────┘
                                 │
                     ┌───────────┴─────────────┐
-                    │     filter_quality      │
-                    │        (Tool)           │
+                    │     filter_quality      │  Tool
+                    └───────────┬─────────────┘
+                                │  guard: passes_filter
+                    ┌───────────┴─────────────┐
+                    │    select_for_users     │  Tool
+                    │  seo / mgmt / dev views │
                     └─────────────────────────┘
 ```
 
-## Key Patterns Demonstrated
+## Actions
 
-### 1. Reprompt Validation
-Automatic retry when LLM output fails validation:
+| # | Name | Type | What it produces |
+|---|------|------|-----------------|
+| 1 | `classify_genre` | LLM | Primary + secondary BISAC codes |
+| 2 | `validate_bisac` | Tool | Normalized, validated BISAC codes |
+| 3 | `write_description` | LLM | 150–250 word marketing description, hook sentence, benefits |
+| 4 | `validate_description` | Tool | Validation result and issue list |
+| 5 | `generate_seo` | LLM | Primary/long-tail keywords, meta title, meta description |
+| 6a | `generate_search_criteria` | LLM | Genre + keyword search parameters |
+| 6b | `retrieve_candidates` | Tool | Real candidate books from seed catalog |
+| 6c | `generate_recommendations` | LLM | Top 5 ranked from real candidates only |
+| 7 | `assess_reading_level` | LLM | Difficulty, prerequisites, reading time |
+| 8 | `score_quality` | LLM | 1–5 quality score across 4 dimensions |
+| 9 | `format_entry` | Tool | Single consolidated catalog record |
+| 10 | `filter_quality` | Tool | `passes_filter` boolean + reason |
+| 11 | `select_for_users` | Tool | SEO, management, and developer views |
+
+---
+
+## Key Patterns
+
+### Reprompt Validation
+
 ```yaml
 reprompt:
-  validation: "check_valid_bisac"  # UDF that validates output
+  validation: "check_valid_bisac"
   max_attempts: 3
   on_exhausted: "return_last"
 ```
 
-### 2. Grounded Retrieval (Prevents Hallucination)
-Three-step pattern ensuring recommendations come from real catalog data:
+Registered `@reprompt_validation` UDFs run against the LLM output before it is accepted. If validation fails, the framework reprompts with the failure reason. Used on `classify_genre` (BISAC format) and `write_description` (minimum word count).
+
+### Grounded Retrieval
+
 ```
 LLM generates search criteria → Tool retrieves REAL books → LLM ranks from candidates only
 ```
 
-```yaml
-# Step 1: LLM generates what to search for
-- name: generate_search_criteria
-  schema: search_criteria
-  prompt: $book_catalog_enrichment.Generate_Search_Criteria
+The ranking prompt contains an explicit rule: *"DO NOT invent or hallucinate book titles — use exact titles from candidates."* Every recommendation traces back to a real entry in `seed_data/book_catalog.json`.
 
-# Step 2: Tool searches actual catalog (abstraction layer)
-- name: retrieve_candidates
-  kind: tool
-  impl: search_book_catalog  # Can swap backend (vector/SQL/JSON)
+### Passthrough for Data Lineage
 
-# Step 3: LLM ranks ONLY from retrieved candidates
-- name: generate_recommendations
-  prompt: "...ONLY recommend books from the candidate list..."
-```
+Source fields travel forward through the pipeline so deep actions can still read the original `isbn`, `title`, etc.:
 
-### 3. Parallel Branch Processing
-Multiple enrichments run concurrently, then merge:
-```yaml
-# These run in parallel (no dependency between them)
-- name: generate_seo
-  dependencies: [write_description]
-
-- name: generate_search_criteria
-  dependencies: [write_description]
-
-- name: assess_reading_level
-  dependencies: [write_description]
-```
-
-### 4. Passthrough for Data Lineage
-Preserve source fields through the pipeline:
 ```yaml
 context_scope:
-  observe:
-    - validate_bisac.*
   passthrough:
-    - validate_bisac.isbn
-    - validate_bisac.title
-    - validate_bisac.authors
+    - source.isbn
+    - source.title
+    - source.authors
+    - source.publisher
+    - source.publish_year
+    - source.page_count
+    - source.description
 ```
 
-### 5. Quality Scoring with Merge
-Final scoring action merges all parallel branches:
+Downstream actions access these as `write_description.isbn`, `write_description.title`, etc.
+
+### Quality Gate
+
 ```yaml
-- name: score_quality
-  dependencies: [generate_recommendations]  # Waits for slowest branch
-  context_scope:
-    observe:
-      - generate_recommendations.*
-      - generate_seo.*
-      - assess_reading_level.*
-      - write_description.*
+guard:
+  condition: 'passes_filter'
+  on_false: filter
 ```
 
-## Data Flow
+Only records that pass the quality thresholds (score ≥ 3.0, ≥ 3 enriched fields, marked publication-ready) reach `select_for_users`.
 
-```
-agent_io/
-├── staging/          # Place book catalog JSON here
-│   └── books_sample.json
-├── source/           # Auto-generated with metadata
-└── target/           # Output from each action
-    ├── classify_genre/
-    ├── validate_bisac/
-    ├── write_description/
-    ├── validate_description/
-    ├── generate_seo/
-    ├── generate_search_criteria/
-    ├── retrieve_candidates/
-    ├── generate_recommendations/
-    ├── assess_reading_level/
-    ├── score_quality/
-    ├── format_entry/
-    └── filter_quality/
-```
+---
 
-## Input Format
+## Inputs
 
-Place book data in `agent_io/staging/`:
+**Main input** (`agent_io/staging/`) — the books to enrich. Drop your catalog extract here. Each record flows through all 11 actions.
 
 ```json
 [
   {
-    "isbn": "978-0134685991",
+    "isbn": "9780134685991",
     "title": "Effective Java",
     "authors": ["Joshua Bloch"],
-    "publisher": "Addison-Wesley",
+    "publisher": "Addison-Wesley Professional",
     "publish_year": 2018,
-    "page_count": 416,
-    "description": "The definitive guide to Java platform best practices..."
+    "page_count": 412,
+    "description": "Best practices for the Java platform."
   }
 ]
 ```
 
-## Output
+**Side input** (`seed_data/book_catalog.json`) — a read-only reference catalog used exclusively by `retrieve_candidates` for grounded recommendation lookups. Never written to. Ships with ~80 curated technical books. Extend it with data from [Open Library](https://openlibrary.org/developers/api), [Google Books API](https://developers.google.com/books), or [ISBNdb](https://isbndb.com).
 
-The final `filter_quality` produces enriched catalog entries:
+Required side input format:
+```json
+{
+  "isbn": "978-...",
+  "title": "...",
+  "authors": ["..."],
+  "genres": ["COM051000"],
+  "description": "...",
+  "keywords": ["..."]
+}
+```
+
+**Output** — per-action results in `agent_io/target/<action_name>/`. Final consumer output is `target/select_for_users/`.
+
+### select_for_users output shape
 
 ```json
 {
-  "isbn": "978-0134685991",
+  "isbn": "9780134685991",
   "title": "Effective Java",
-  "authors": ["Joshua Bloch"],
-
-  "classification": {
-    "bisac_codes": ["COM051010"],
-    "bisac_names": ["Programming / Object-Oriented"]
+  "seo_view": {
+    "meta_title": "Effective Java: Best Practices for the Java Platform",
+    "meta_description": "Master Java development...",
+    "seo_keywords": ["effective java", "java best practices"],
+    "target_audience": "Intermediate to senior Java developers",
+    "marketing_description": "...",
+    "hook_sentence": "Write Java code that lasts.",
+    "key_selling_points": ["78 best-practice items", "Covers modern Java"]
   },
-
-  "marketing": {
-    "description": "Master Java with this essential guide...",
-    "hook_sentence": "Write better Java code today.",
-    "key_benefits": ["Best practices", "Modern patterns"],
-    "target_audience": "Intermediate Java developers"
+  "management_view": {
+    "catalog_id": "CAT-685991",
+    "quality_score": 4.2,
+    "publication_ready": true,
+    "primary_category": "Programming / General",
+    "enriched_fields": ["classification", "marketing_description", "seo_keywords", "recommendations", "reading_level"],
+    "filter_reason": "Passed all quality checks"
   },
-
-  "seo": {
-    "primary_keywords": ["java programming", "effective java"],
-    "meta_title": "Effective Java - Best Practices Guide",
-    "meta_description": "..."
-  },
-
-  "recommendations": {
-    "similar_books": [
-      {"isbn": "978-...", "title": "Clean Code", "relationship": "Complements with code quality focus"}
-    ],
-    "reading_path": "Read Effective Java first, then Clean Code"
-  },
-
-  "reading_level": {
-    "level": "Intermediate",
+  "developer_view": {
+    "bisac_codes": ["COM051280", "COM051000"],
+    "difficulty_level": "Intermediate",
+    "experience_required": "2-4 years",
     "prerequisites": ["Basic Java syntax", "OOP concepts"],
-    "estimated_reading_time": "20 hours"
-  },
-
-  "quality": {
-    "overall_score": 4.5,
-    "ready_for_publication": true
+    "reading_time_hours": "20 hours",
+    "similar_titles": [{"isbn": "...", "title": "Clean Code"}],
+    "reading_path": "Read Effective Java first, then Clean Code for style."
   }
 }
 ```
 
-## Seed Data
-
-Reference data in `seed_data/`:
-- `book_catalog.json` - Full catalog for grounded retrieval searches
-
-## Running the Workflow
-
-```bash
-# Run the pipeline
-agac run -a book_catalog_enrichment
-```
-
-## Tools
-
-| Tool | Purpose |
-|------|---------|
-| `validate_bisac_codes` | Validate and normalize BISAC classification |
-| `validate_description` | Check marketing description quality |
-| `search_book_catalog` | Grounded retrieval from catalog (swappable backend) |
-| `format_catalog_entry` | Structure final enriched entry |
-| `filter_by_quality` | Filter entries below quality threshold |
-
-## Reprompt Validations
-
-Defined in `tools/reprompt_validations.py`:
-
-| Validation | Purpose |
-|------------|---------|
-| `check_valid_bisac` | Validates BISAC codes against known list |
-| `check_description_word_count` | Ensures marketing description has 50+ words |
+---
 
 ## Customization
 
-- **BISAC validation**: Update valid codes in `validate_bisac_codes.py`
-- **Quality thresholds**: Modify `filter_by_quality.py`
-- **Search backend**: Swap `search_book_catalog.py` implementation (vector/SQL/API)
-- **Reprompt attempts**: Adjust `max_attempts` in workflow YAML
-
-## Why Grounded Retrieval?
-
-Without grounding, LLMs will hallucinate book recommendations - inventing titles, authors, and ISBNs that don't exist. The grounded retrieval pattern:
-
-1. **Generates search criteria** - LLM describes what similar books would look like
-2. **Retrieves real candidates** - Tool searches actual catalog database
-3. **Ranks from candidates only** - LLM selects from verified real books
-
-This ensures every recommended book actually exists in your catalog.
+| What | Where |
+|------|-------|
+| BISAC valid prefixes | `tools/book_catalog_enrichment/validate_bisac_codes.py` |
+| Quality filter thresholds | `tools/book_catalog_enrichment/filter_by_quality.py` |
+| Reprompt attempts | `max_attempts` in `agent_config/book_catalog_enrichment.yml` |
+| Search backend (vector DB / SQL) | `tools/book_catalog_enrichment/search_book_catalog.py` |
+| User view field selection | `tools/book_catalog_enrichment/select_for_users.py` |
+| Prompts | `prompt_store/book_catalog_enrichment.md` |
+| Models per action | `model_name` / `model_vendor` in `agent_config/book_catalog_enrichment.yml` |

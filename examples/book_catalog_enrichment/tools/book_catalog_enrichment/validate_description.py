@@ -1,55 +1,16 @@
 """Validate marketing description quality and length."""
 
-from typing import TypedDict
-
 from agent_actions import udf_tool
 
-
-class ValidateDescriptionInput(TypedDict, total=False):
-    """Input schema for validate_description.
-
-    Source: node_2_write_description output
-    Destination: node_3_validate_description output
-    """
-
-    # Book metadata
-    isbn: str
-    title: str
-    authors: list[str]
-
-    # Description from LLM
-    marketing_description: str
-    hook_sentence: str
-    key_benefits: list[str]
-    target_audience: str
-
-
-# Constraints
 MIN_DESCRIPTION_WORDS = 100
 MAX_DESCRIPTION_WORDS = 300
 MIN_BENEFITS = 3
 MAX_BENEFITS = 7
 
 
-class ValidateDescriptionOutput(TypedDict, total=False):
-    """Output schema for validate_description."""
-
-    description_valid: bool
-    word_count: int
-    benefit_count: int
-    validation_issues: list[str]
-
-
 @udf_tool()
 def validate_description(data: dict) -> dict:
-    """Validate marketing description meets quality standards.
-
-    Args:
-        data: Input data containing marketing description
-
-    Returns:
-        Validation results (only output fields)
-    """
+    """Validate marketing description meets quality standards."""
     description = data.get("marketing_description", "")
     hook = data.get("hook_sentence", "")
     benefits = data.get("key_benefits", [])
@@ -95,7 +56,6 @@ def validate_description(data: dict) -> dict:
         if phrase in description_lower:
             issues.append(f"Contains placeholder text: '{phrase}'")
 
-    # Return only the output fields defined in ValidateDescriptionOutput
     return {
         "description_valid": len(issues) == 0,
         "word_count": word_count,
