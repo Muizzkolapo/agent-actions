@@ -7,7 +7,16 @@ from lsprotocol import types as lsp
 
 from agent_actions.tooling.lsp.indexer import build_index
 from agent_actions.tooling.lsp.models import ActionMetadata, Location, ProjectIndex
-from agent_actions.tooling.lsp.server import _index_for_file, did_save, server
+from agent_actions.tooling.lsp.server import (
+    _build_watchers_for_project,
+    _index_for_file,
+    _register_file_watchers,
+    _republish_diagnostics_for_projects,
+    did_change_watched_files,
+    did_save,
+    initialized,
+    server,
+)
 
 
 def _reset_server():
@@ -392,3 +401,602 @@ class TestMultiProjectIntegration:
         assert server.project_indexes[proj_b] is rebuilt_b
         assert server.project_indexes[proj_a] is idx_a
         mock_build_index.assert_called_once_with(proj_b)
+
+
+# ---------------------------------------------------------------------------
+# did_change_watched_files
+# ---------------------------------------------------------------------------
+
+
+def _file_event(path: Path, change_type: int = lsp.FileChangeType.Changed) -> lsp.FileEvent:
+    """Create a FileEvent for testing."""
+    return lsp.FileEvent(uri=path.as_uri(), type=change_type)
+
+
+class TestDidChangeWatchedFiles:
+    """Tests for did_change_watched_files() handler."""
+
+    def setup_method(self):
+        _reset_server()
+
+    def teardown_method(self):
+        _reset_server()
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_schema_change_triggers_reindex(self, mock_build_index, mock_repub, tmp_path: Path):
+        """External schema file change triggers reindex for the correct project."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+        server.project_root = root
+        server.index = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        schema_file = root / "schema" / "new_schema.yml"
+        schema_file.parent.mkdir(parents=True)
+        schema_file.touch()
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(schema_file, lsp.FileChangeType.Created)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(root)
+        assert server.project_indexes[root] is new_idx
+        assert server.index is new_idx
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_tool_creation_triggers_reindex(self, mock_build_index, mock_repub, tmp_path: Path):
+        """External tool file creation triggers reindex."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        tool_file = root / "tools" / "new_tool.py"
+        tool_file.parent.mkdir(parents=True)
+        tool_file.touch()
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(tool_file, lsp.FileChangeType.Created)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(root)
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_file_deletion_triggers_reindex(self, mock_build_index, mock_repub, tmp_path: Path):
+        """External file deletion triggers reindex."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        workflow_file = root / "agent_workflow" / "wf" / "agent_config" / "old.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(workflow_file, lsp.FileChangeType.Deleted)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(root)
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_batch_changes_deduplicate_rebuild(self, mock_build_index, mock_repub, tmp_path: Path):
+        """Multiple changes to the same project trigger only one rebuild."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        file_a = root / "schema" / "a.yml"
+        file_b = root / "schema" / "b.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[
+                _file_event(file_a, lsp.FileChangeType.Created),
+                _file_event(file_b, lsp.FileChangeType.Changed),
+            ]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(root)
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_multi_project_isolation(self, mock_build_index, mock_repub, tmp_path: Path):
+        """Change in project B does not rebuild project A."""
+        proj_a = tmp_path / "proj_a"
+        proj_b = tmp_path / "proj_b"
+        idx_a = _make_project(proj_a)
+        idx_b = _make_project(proj_b)
+        server.project_indexes[proj_a] = idx_a
+        server.project_indexes[proj_b] = idx_b
+        server.project_root = proj_a
+        server.index = idx_a
+
+        new_idx_b = ProjectIndex(root=proj_b)
+        mock_build_index.return_value = new_idx_b
+
+        file_b = proj_b / "tools" / "tool.py"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(file_b, lsp.FileChangeType.Changed)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(proj_b)
+        assert server.project_indexes[proj_a] is idx_a  # unchanged
+        assert server.index is idx_a  # primary alias unchanged
+
+    @patch("agent_actions.tooling.lsp.server._register_file_watchers")
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_new_agent_actions_yml_registers_project(
+        self, mock_build_index, mock_repub, mock_reg, tmp_path: Path
+    ):
+        """Creating a new agent_actions.yml registers the project."""
+        new_root = tmp_path / "new_proj"
+        new_root.mkdir()
+        yml = new_root / "agent_actions.yml"
+        yml.touch()
+
+        new_idx = ProjectIndex(root=new_root)
+        mock_build_index.return_value = new_idx
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml, lsp.FileChangeType.Created)]
+        )
+        did_change_watched_files(params)
+
+        assert new_root in server.project_indexes
+        assert server.project_indexes[new_root] is new_idx
+        assert server.project_root == new_root
+        assert server.index is new_idx
+
+    @patch("agent_actions.tooling.lsp.server._clear_diagnostics_for_root")
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_agent_actions_yml_deleted_removes_project(
+        self, mock_build_index, mock_repub, mock_clear, tmp_path: Path
+    ):
+        """Deleting agent_actions.yml removes the project from indexes."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+        server.project_root = root
+        server.index = idx
+
+        yml = root / "agent_actions.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml, lsp.FileChangeType.Deleted)]
+        )
+        did_change_watched_files(params)
+
+        assert root not in server.project_indexes
+        assert server.project_root is None
+        assert server.index is None
+        mock_build_index.assert_not_called()
+
+    @patch("agent_actions.tooling.lsp.server._clear_diagnostics_for_root")
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_agent_actions_yml_deleted_falls_back_to_next_project(
+        self, mock_build_index, mock_repub, mock_clear, tmp_path: Path
+    ):
+        """Deleting primary project's config falls back to the next project."""
+        proj_a = tmp_path / "proj_a"
+        proj_b = tmp_path / "proj_b"
+        idx_a = _make_project(proj_a)
+        idx_b = _make_project(proj_b)
+        server.project_indexes[proj_a] = idx_a
+        server.project_indexes[proj_b] = idx_b
+        server.project_root = proj_a
+        server.index = idx_a
+
+        yml_a = proj_a / "agent_actions.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml_a, lsp.FileChangeType.Deleted)]
+        )
+        did_change_watched_files(params)
+
+        assert proj_a not in server.project_indexes
+        assert server.project_root == proj_b
+        assert server.index is idx_b
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_file_outside_all_projects_is_noop(self, mock_build_index, mock_repub, tmp_path: Path):
+        """External change to a file outside all projects triggers no rebuild."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        outside = tmp_path / "unrelated" / "file.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(outside, lsp.FileChangeType.Changed)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_not_called()
+        assert server.project_indexes[root] is idx
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_diagnostics_republished_for_affected_projects(
+        self, mock_build_index, mock_repub, tmp_path: Path
+    ):
+        """After reindex, diagnostics are republished for affected projects."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        schema_file = root / "schema" / "s.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(schema_file, lsp.FileChangeType.Created)]
+        )
+        did_change_watched_files(params)
+
+        mock_repub.assert_called_once()
+        called_roots = mock_repub.call_args[0][0]
+        assert root in called_roots
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_alias_updated_when_primary_project_rebuilt(
+        self, mock_build_index, mock_repub, tmp_path: Path
+    ):
+        """server.index is updated when the primary project is rebuilt via watcher."""
+        root = tmp_path / "proj"
+        old_idx = _make_project(root)
+        server.project_indexes[root] = old_idx
+        server.project_root = root
+        server.index = old_idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        tool_file = root / "tools" / "t.py"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(tool_file, lsp.FileChangeType.Changed)]
+        )
+        did_change_watched_files(params)
+
+        assert server.project_indexes[root] is new_idx
+        assert server.index is new_idx
+
+
+# ---------------------------------------------------------------------------
+# _build_watchers_for_project
+# ---------------------------------------------------------------------------
+
+
+def _extract_patterns(watchers: list[lsp.FileSystemWatcher]) -> list[str]:
+    """Extract glob pattern strings from a list of FileSystemWatchers."""
+    patterns = []
+    for w in watchers:
+        gp = w.glob_pattern
+        if isinstance(gp, lsp.RelativePattern):
+            patterns.append(gp.pattern)
+        else:
+            patterns.append(gp)
+    return patterns
+
+
+class TestBuildWatchersForProject:
+    """Tests for _build_watchers_for_project()."""
+
+    def test_core_patterns_always_present(self, tmp_path: Path):
+        """Core patterns (agent_actions.yml, workflows, prompts) are always included."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "agent_actions.yml").write_text("schema_path: schema\n")
+
+        patterns = _extract_patterns(_build_watchers_for_project(root))
+
+        assert "agent_actions.yml" in patterns
+        assert "agent_workflow/*/agent_config/*.yml" in patterns
+        assert "prompt_store/*.md" in patterns
+
+    def test_tool_dir_pattern_from_config(self, tmp_path: Path):
+        """Tool directory patterns are derived from config."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "agent_actions.yml").write_text("schema_path: schema\ntool_path: custom_tools\n")
+
+        patterns = _extract_patterns(_build_watchers_for_project(root))
+
+        assert "custom_tools/**/*.py" in patterns
+
+    def test_schema_patterns_from_config(self, tmp_path: Path):
+        """Schema directory patterns are derived from config."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "agent_actions.yml").write_text("schema_path: my_schemas\n")
+
+        patterns = _extract_patterns(_build_watchers_for_project(root))
+
+        assert "my_schemas/**/*.yml" in patterns
+        assert "my_schemas/**/*.yaml" in patterns
+
+    def test_fallback_when_config_missing(self, tmp_path: Path):
+        """When config is missing, defaults to 'tools' and skips schema patterns."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        # No agent_actions.yml -> config loading will fail
+
+        patterns = _extract_patterns(_build_watchers_for_project(root))
+
+        # Core patterns still present
+        assert "agent_actions.yml" in patterns
+        # Default tool dir
+        assert "tools/**/*.py" in patterns
+
+
+# ---------------------------------------------------------------------------
+# Additional did_change_watched_files branch coverage
+# ---------------------------------------------------------------------------
+
+
+class TestDidChangeWatchedFilesBranches:
+    """Cover untested branches in did_change_watched_files()."""
+
+    def setup_method(self):
+        _reset_server()
+
+    def teardown_method(self):
+        _reset_server()
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_delete_untracked_project_is_noop(self, mock_build_index, mock_repub, tmp_path: Path):
+        """Deleting an agent_actions.yml for a non-tracked project is a silent no-op."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        yml = root / "agent_actions.yml"
+        yml.touch()
+
+        # No project registered — deletion should not crash
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml, lsp.FileChangeType.Deleted)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_not_called()
+        assert not server.project_indexes
+
+    @patch("agent_actions.tooling.lsp.server._clear_diagnostics_for_root")
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_delete_non_primary_project(
+        self, mock_build_index, mock_repub, mock_clear, tmp_path: Path
+    ):
+        """Deleting a non-primary project leaves primary unchanged."""
+        proj_a = tmp_path / "proj_a"
+        proj_b = tmp_path / "proj_b"
+        idx_a = _make_project(proj_a)
+        idx_b = _make_project(proj_b)
+        server.project_indexes[proj_a] = idx_a
+        server.project_indexes[proj_b] = idx_b
+        server.project_root = proj_a
+        server.index = idx_a
+
+        yml_b = proj_b / "agent_actions.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml_b, lsp.FileChangeType.Deleted)]
+        )
+        did_change_watched_files(params)
+
+        assert proj_b not in server.project_indexes
+        assert server.project_root == proj_a
+        assert server.index is idx_a
+        mock_clear.assert_called_once_with(proj_b)
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_changed_tracked_project_triggers_reindex(
+        self, mock_build_index, mock_repub, tmp_path: Path
+    ):
+        """Changed agent_actions.yml on an already-tracked project triggers reindex."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+        server.project_root = root
+        server.index = idx
+
+        new_idx = ProjectIndex(root=root)
+        mock_build_index.return_value = new_idx
+
+        yml = root / "agent_actions.yml"
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml, lsp.FileChangeType.Changed)]
+        )
+        did_change_watched_files(params)
+
+        mock_build_index.assert_called_once_with(root)
+        assert server.project_indexes[root] is new_idx
+
+    @patch("agent_actions.tooling.lsp.server._register_file_watchers")
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_new_project_when_primary_exists(
+        self, mock_build_index, mock_repub, mock_reg, tmp_path: Path
+    ):
+        """Registering a new project when primary already exists doesn't change aliases."""
+        existing = tmp_path / "existing"
+        existing_idx = _make_project(existing)
+        server.project_indexes[existing] = existing_idx
+        server.project_root = existing
+        server.index = existing_idx
+
+        new_root = tmp_path / "new_proj"
+        new_root.mkdir()
+        yml = new_root / "agent_actions.yml"
+        yml.touch()
+
+        new_idx = ProjectIndex(root=new_root)
+        mock_build_index.return_value = new_idx
+
+        params = lsp.DidChangeWatchedFilesParams(
+            changes=[_file_event(yml, lsp.FileChangeType.Created)]
+        )
+        did_change_watched_files(params)
+
+        assert new_root in server.project_indexes
+        # Primary alias unchanged — existing project stays primary
+        assert server.project_root == existing
+        assert server.index is existing_idx
+        mock_reg.assert_called_once()
+
+    @patch("agent_actions.tooling.lsp.server._republish_diagnostics_for_projects")
+    @patch("agent_actions.tooling.lsp.server.build_index")
+    def test_empty_changes_is_noop(self, mock_build_index, mock_repub, tmp_path: Path):
+        """Empty changes list triggers no rebuild."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        params = lsp.DidChangeWatchedFilesParams(changes=[])
+        did_change_watched_files(params)
+
+        mock_build_index.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _republish_diagnostics_for_projects
+# ---------------------------------------------------------------------------
+
+
+class TestRepublishDiagnostics:
+    """Tests for _republish_diagnostics_for_projects()."""
+
+    def setup_method(self):
+        _reset_server()
+
+    def teardown_method(self):
+        _reset_server()
+
+    @patch("agent_actions.tooling.lsp.server._publish_diagnostics")
+    def test_empty_roots_is_noop(self, mock_pub):
+        """Empty roots set does not call _publish_diagnostics."""
+        _republish_diagnostics_for_projects(set())
+        mock_pub.assert_not_called()
+
+    @patch("agent_actions.tooling.lsp.server._publish_diagnostics")
+    def test_publishes_for_matching_project(self, mock_pub, tmp_path: Path):
+        """Publishes diagnostics for open documents in the affected project."""
+        root = tmp_path / "proj"
+        idx = _make_project(root)
+        server.project_indexes[root] = idx
+
+        doc_uri = (root / "agent_workflow" / "wf" / "agent_config" / "w.yml").as_uri()
+        mock_workspace = MagicMock()
+        mock_workspace.text_documents = {doc_uri: MagicMock()}
+        with patch.object(
+            type(server), "workspace", new_callable=lambda: property(lambda self: mock_workspace)
+        ):
+            _republish_diagnostics_for_projects({root})
+
+        mock_pub.assert_called_once_with(doc_uri)
+
+    @patch("agent_actions.tooling.lsp.server._publish_diagnostics")
+    def test_skips_documents_in_other_projects(self, mock_pub, tmp_path: Path):
+        """Does not republish diagnostics for documents outside affected projects."""
+        proj_a = tmp_path / "proj_a"
+        proj_b = tmp_path / "proj_b"
+        idx_a = _make_project(proj_a)
+        idx_b = _make_project(proj_b)
+        server.project_indexes[proj_a] = idx_a
+        server.project_indexes[proj_b] = idx_b
+
+        doc_uri_b = (proj_b / "workflow.yml").as_uri()
+        mock_workspace = MagicMock()
+        mock_workspace.text_documents = {doc_uri_b: MagicMock()}
+        with patch.object(
+            type(server), "workspace", new_callable=lambda: property(lambda self: mock_workspace)
+        ):
+            _republish_diagnostics_for_projects({proj_a})
+
+        mock_pub.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# initialized and _register_file_watchers
+# ---------------------------------------------------------------------------
+
+
+class TestInitializedAndRegistration:
+    """Tests for initialized() and _register_file_watchers()."""
+
+    def setup_method(self):
+        _reset_server()
+
+    def teardown_method(self):
+        _reset_server()
+
+    @patch("agent_actions.tooling.lsp.server._register_file_watchers")
+    def test_initialized_calls_register(self, mock_reg):
+        """initialized() handler calls _register_file_watchers."""
+        params = MagicMock(spec=lsp.InitializedParams)
+        initialized(params)
+        mock_reg.assert_called_once()
+
+    @patch("agent_actions.tooling.lsp.server.server.client_register_capability")
+    def test_register_sends_correct_params(self, mock_cap, tmp_path: Path):
+        """_register_file_watchers sends RegistrationParams to client."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "agent_actions.yml").write_text("schema_path: schema\n")
+        idx = ProjectIndex(root=root)
+        server.project_indexes[root] = idx
+
+        _register_file_watchers()
+
+        mock_cap.assert_called_once()
+        reg_params = mock_cap.call_args[0][0]
+        assert isinstance(reg_params, lsp.RegistrationParams)
+        assert len(reg_params.registrations) == 1
+
+    @patch("agent_actions.tooling.lsp.server.server.client_register_capability")
+    def test_register_failure_is_nonfatal(self, mock_cap, tmp_path: Path):
+        """Registration failure is logged but does not crash."""
+        root = tmp_path / "proj"
+        root.mkdir()
+        (root / "agent_actions.yml").write_text("schema_path: schema\n")
+        idx = ProjectIndex(root=root)
+        server.project_indexes[root] = idx
+
+        mock_cap.side_effect = RuntimeError("client does not support")
+
+        # Should not raise
+        _register_file_watchers()
+
+    def test_register_with_no_projects_is_noop(self):
+        """No projects → no registration call."""
+        with patch(
+            "agent_actions.tooling.lsp.server.server.client_register_capability"
+        ) as mock_cap:
+            _register_file_watchers()
+            mock_cap.assert_not_called()

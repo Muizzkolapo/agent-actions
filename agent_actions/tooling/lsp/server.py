@@ -6,6 +6,8 @@ from pathlib import Path
 from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
+from agent_actions.config.path_config import get_schema_path, get_tool_dirs
+
 from .completions import (
     build_context_scope_completions,
     build_guard_completions,
@@ -64,6 +66,13 @@ def _index_for_file(file_path: Path) -> ProjectIndex | None:
         except ValueError:
             continue
     return server.project_indexes[best_root] if best_root else None
+
+
+def _reindex_project(root: Path) -> None:
+    """Rebuild a project's index and sync the backward-compat alias."""
+    server.project_indexes[root] = build_index(root)
+    if server.project_root == root:
+        server.index = server.project_indexes[root]
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +137,12 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
             version="0.1.0",
         ),
     )
+
+
+@server.feature(lsp.INITIALIZED)
+def initialized(params: lsp.InitializedParams):
+    """Register file watchers after client initialization."""
+    _register_file_watchers()
 
 
 @server.feature(lsp.TEXT_DOCUMENT_DEFINITION)
@@ -349,18 +364,13 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
                 server.index = idx
             logger.info("Registered new project at %s", new_root)
         else:
-            server.project_indexes[new_root] = build_index(new_root)
-            if server.project_root == new_root:
-                server.index = server.project_indexes[new_root]
+            _reindex_project(new_root)
             logger.info("Reindexed project at %s", new_root)
     else:
         file_idx = _index_for_file(file_path)
         if file_idx:
-            root = file_idx.root
-            server.project_indexes[root] = build_index(root)
-            if server.project_root == root:
-                server.index = server.project_indexes[root]
-            logger.info("Reindexed project at %s after save", root)
+            _reindex_project(file_idx.root)
+            logger.info("Reindexed project at %s after save", file_idx.root)
 
     _publish_diagnostics(params.text_document.uri)
 
@@ -369,6 +379,54 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
 def did_open(params: lsp.DidOpenTextDocumentParams):
     """Handle file open - publish diagnostics."""
     _publish_diagnostics(params.text_document.uri)
+
+
+@server.feature(lsp.WORKSPACE_DID_CHANGE_WATCHED_FILES)
+def did_change_watched_files(params: lsp.DidChangeWatchedFilesParams):
+    """Handle external file changes — reindex affected projects."""
+    affected_roots: set[Path] = set()
+
+    for event in params.changes:
+        file_path = uri_to_path(event.uri)
+
+        if file_path.name == "agent_actions.yml":
+            root = file_path.parent.resolve()
+            if event.type == lsp.FileChangeType.Deleted:
+                if root in server.project_indexes:
+                    del server.project_indexes[root]
+                    _clear_diagnostics_for_root(root)
+                    if server.project_root == root:
+                        if server.project_indexes:
+                            first = next(iter(server.project_indexes))
+                            server.project_root = first
+                            server.index = server.project_indexes[first]
+                        else:
+                            server.project_root = None
+                            server.index = None
+                    logger.info("Removed project at %s", root)
+                continue
+            # Created or Changed
+            if root not in server.project_indexes:
+                idx = build_index(root)
+                server.project_indexes[root] = idx
+                if not server.project_root:
+                    server.project_root = root
+                    server.index = idx
+                logger.info("Registered new project at %s via watcher", root)
+                _register_file_watchers()
+            else:
+                affected_roots.add(root)
+            continue
+
+        file_idx = _index_for_file(file_path)
+        if file_idx:
+            affected_roots.add(file_idx.root)
+
+    for root in affected_roots:
+        _reindex_project(root)
+        logger.info("Reindexed project at %s after watched file change", root)
+
+    _republish_diagnostics_for_projects(affected_roots)
 
 
 @server.feature(lsp.TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT)
@@ -504,6 +562,114 @@ def _publish_diagnostics(uri: str) -> None:
         get_text_document=server.workspace.get_text_document,
         publish_fn=server.text_document_publish_diagnostics,
     )
+
+
+def _republish_diagnostics_for_projects(roots: set[Path]) -> None:
+    """Republish diagnostics for all open documents in the given projects."""
+    if not roots:
+        return
+    for uri in list(server.workspace.text_documents):
+        file_path = uri_to_path(uri)
+        idx = _index_for_file(file_path)
+        if idx and idx.root in roots:
+            _publish_diagnostics(uri)
+
+
+def _clear_diagnostics_for_root(root: Path) -> None:
+    """Clear diagnostics for all open documents that belonged to a removed project."""
+    for uri in list(server.workspace.text_documents):
+        file_path = uri_to_path(uri)
+        try:
+            file_path.resolve().relative_to(root)
+        except ValueError:
+            continue
+        server.text_document_publish_diagnostics(
+            lsp.PublishDiagnosticsParams(uri=uri, diagnostics=[])
+        )
+
+
+def _register_file_watchers() -> None:
+    """Dynamically register file system watchers for all indexed projects."""
+    watchers: list[lsp.FileSystemWatcher] = []
+    for root in server.project_indexes:
+        watchers.extend(_build_watchers_for_project(root))
+    if not watchers:
+        return
+
+    registration = lsp.Registration(
+        id="agent-actions-file-watchers",
+        method=lsp.WORKSPACE_DID_CHANGE_WATCHED_FILES,
+        register_options=lsp.DidChangeWatchedFilesRegistrationOptions(
+            watchers=watchers,
+        ),
+    )
+    try:
+        server.client_register_capability(
+            lsp.RegistrationParams(registrations=[registration]),
+        )
+        logger.info("Registered %d file watchers", len(watchers))
+    except Exception:
+        logger.debug("Dynamic file watcher registration not available", exc_info=True)
+
+
+def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
+    """Build file system watchers for a single project."""
+    kind = lsp.WatchKind.Create | lsp.WatchKind.Change | lsp.WatchKind.Delete
+    watchers: list[lsp.FileSystemWatcher] = []
+    root_uri = root.as_uri()
+
+    # Core patterns (always watched)
+    for pattern in (
+        "agent_actions.yml",
+        "agent_workflow/*/agent_config/*.yml",
+        "prompt_store/*.md",
+    ):
+        watchers.append(
+            lsp.FileSystemWatcher(
+                glob_pattern=lsp.RelativePattern(base_uri=root_uri, pattern=pattern),
+                kind=kind,
+            )
+        )
+
+    # Tool directories (from config, default: ["tools"])
+    try:
+        tool_dirs = get_tool_dirs(root)
+    except Exception:
+        tool_dirs = ["tools"]
+    for td in tool_dirs:
+        watchers.append(
+            lsp.FileSystemWatcher(
+                glob_pattern=lsp.RelativePattern(base_uri=root_uri, pattern=f"{td}/**/*.py"),
+                kind=kind,
+            )
+        )
+
+    # Schema directories (from config)
+    try:
+        schema_path = get_schema_path(root)
+    except Exception:
+        schema_path = None
+    if schema_path:
+        for ext in ("yml", "yaml"):
+            watchers.append(
+                lsp.FileSystemWatcher(
+                    glob_pattern=lsp.RelativePattern(
+                        base_uri=root_uri, pattern=f"{schema_path}/**/*.{ext}"
+                    ),
+                    kind=kind,
+                )
+            )
+            watchers.append(
+                lsp.FileSystemWatcher(
+                    glob_pattern=lsp.RelativePattern(
+                        base_uri=root_uri,
+                        pattern=f"agent_workflow/*/{schema_path}/**/*.{ext}",
+                    ),
+                    kind=kind,
+                )
+            )
+
+    return watchers
 
 
 # ---------------------------------------------------------------------------
