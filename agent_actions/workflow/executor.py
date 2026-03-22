@@ -128,6 +128,17 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
+    def verify_completion_status(self, action_name: str) -> bool:
+        """Return True if the action has valid output and should be skipped.
+
+        Resets to 'pending' (and returns False) if the action is marked
+        completed but has no output in the storage backend.  Called from
+        the level executor before filtering pending actions so that stale
+        'completed' upstreams are re-run before their dependents need them.
+        """
+        should_skip, _ = self._verify_completion_status(action_name)
+        return should_skip
+
     def _verify_completion_status(
         self, action_name: str
     ) -> tuple[bool, ActionExecutionResult | None]:
@@ -170,7 +181,11 @@ class ActionExecutor:
         )
 
     def _handle_action_skip(
-        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
     ) -> ActionExecutionResult:
         """Handle action skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(action_idx, action_name)
@@ -290,7 +305,9 @@ class ActionExecutor:
             ),
         )
 
-    def _handle_run_failure(self, params: ActionRunParams, error: Exception) -> ActionExecutionResult:
+    def _handle_run_failure(
+        self, params: ActionRunParams, error: Exception
+    ) -> ActionExecutionResult:
         """Handle action run failure."""
         duration = (datetime.now() - params.start_time).total_seconds()
         self.deps.state_manager.update_status(params.action_name, "failed")
@@ -309,7 +326,9 @@ class ActionExecutor:
             success=False, status="failed", error=error, metrics=ExecutionMetrics(duration=duration)
         )
 
-    def _cleanup_correlation(self, params: ActionRunParams, original_setup: Callable | None) -> None:
+    def _cleanup_correlation(
+        self, params: ActionRunParams, original_setup: Callable | None
+    ) -> None:
         """Restore original setup_directories after correlation setup."""
         if original_setup:
             try:
@@ -325,7 +344,12 @@ class ActionExecutor:
                 )
 
     def execute_action_sync(
-        self, action_name: str, *, action_idx: int, action_config: ActionConfigDict, is_last_action: bool
+        self,
+        action_name: str,
+        *,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        is_last_action: bool,
     ) -> ActionExecutionResult:
         """Execute a single action synchronously."""
         start_time = datetime.now()
@@ -350,6 +374,7 @@ class ActionExecutor:
                         f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
                     )
                 return result
+            current_status = self.deps.state_manager.get_status(action_name)
 
         if current_status == "batch_submitted":
             return self._handle_batch_check(action_name, action_idx, action_config, start_time)
@@ -369,7 +394,12 @@ class ActionExecutor:
         )
 
     async def execute_action_async(
-        self, action_name: str, *, action_idx: int, action_config: ActionConfigDict, is_last_action: bool
+        self,
+        action_name: str,
+        *,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        is_last_action: bool,
     ) -> ActionExecutionResult:
         """Execute a single action asynchronously."""
         start_time = datetime.now()
@@ -394,6 +424,7 @@ class ActionExecutor:
                         f"Action '{action_name}' marked completed but _verify_completion_status returned no result"
                     )
                 return result
+            current_status = self.deps.state_manager.get_status(action_name)
 
         if current_status == "batch_submitted":
             return await self._handle_batch_check_async(
@@ -415,7 +446,11 @@ class ActionExecutor:
         )
 
     def _handle_batch_check(
-        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
     ) -> ActionExecutionResult:
         """Handle batch job status checking (synchronous)."""
         self.deps.state_manager.update_status(action_name, "checking_batch")
@@ -479,7 +514,11 @@ class ActionExecutor:
         )
 
     async def _handle_batch_check_async(
-        self, action_name: str, action_idx: int, action_config: ActionConfigDict, start_time: datetime
+        self,
+        action_name: str,
+        action_idx: int,
+        action_config: ActionConfigDict,
+        start_time: datetime,
     ) -> ActionExecutionResult:
         """Handle batch job status checking (asynchronous)."""
         self.deps.state_manager.update_status(action_name, "checking_batch")
@@ -614,4 +653,3 @@ class ActionExecutor:
             str | None,
             self.deps.batch_manager.check_batch_submission(action_name, action_idx, agent_io_path),
         )
-

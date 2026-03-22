@@ -87,7 +87,9 @@ class SQLiteBackend(StorageBackend):
         self.db_path = Path(db_path)
         self.workflow_name = workflow_name
         self._connection: sqlite3.Connection | None = None
-        self._lock = threading.RLock()  # Serialize write operations; RLock allows re-entry from connection property
+        self._lock = (
+            threading.RLock()
+        )  # Serialize write operations; RLock allows re-entry from connection property
 
     @classmethod
     def create(cls, **kwargs) -> "SQLiteBackend":
@@ -227,12 +229,13 @@ class SQLiteBackend(StorageBackend):
         """
         action_name = self._validate_identifier(action_name, "action_name")
         relative_path = self._validate_identifier(relative_path, "relative_path")
-        cursor = self.connection.cursor()
-        cursor.execute(
-            "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
-            (action_name, relative_path),
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
+                (action_name, relative_path),
+            )
+            row = cursor.fetchone()
 
         if row is None:
             raise FileNotFoundError(f"No target data found for {action_name}/{relative_path}")
@@ -312,12 +315,13 @@ class SQLiteBackend(StorageBackend):
             FileNotFoundError: If no data exists for the given path.
         """
         relative_path = self._validate_identifier(relative_path, "relative_path")
-        cursor = self.connection.cursor()
-        cursor.execute(
-            "SELECT data FROM source_data WHERE relative_path = ? ORDER BY id",
-            (relative_path,),
-        )
-        rows = cursor.fetchall()
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT data FROM source_data WHERE relative_path = ? ORDER BY id",
+                (relative_path,),
+            )
+            rows = cursor.fetchall()
 
         if not rows:
             raise FileNotFoundError(f"No source data found for {relative_path}")
@@ -327,18 +331,20 @@ class SQLiteBackend(StorageBackend):
     def list_target_files(self, action_name: str) -> list[str]:
         """List all target file paths for a specific node."""
         action_name = self._validate_identifier(action_name, "action_name")
-        cursor = self.connection.cursor()
-        cursor.execute(
-            "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? ORDER BY relative_path",
-            (action_name,),
-        )
-        return [row["relative_path"] for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(
+                "SELECT DISTINCT relative_path FROM target_data WHERE action_name = ? ORDER BY relative_path",
+                (action_name,),
+            )
+            return [row["relative_path"] for row in cursor.fetchall()]
 
     def list_source_files(self) -> list[str]:
         """List all source file paths."""
-        cursor = self.connection.cursor()
-        cursor.execute("SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path")
-        return [row["relative_path"] for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT DISTINCT relative_path FROM source_data ORDER BY relative_path")
+            return [row["relative_path"] for row in cursor.fetchall()]
 
     def preview_target(
         self,
@@ -355,72 +361,73 @@ class SQLiteBackend(StorageBackend):
         limit = min(max(1, limit), 1000)
         offset = max(0, offset)
 
-        cursor = self.connection.cursor()
-
-        cursor.execute(
-            """
-            SELECT relative_path,
-                   COALESCE(record_count, json_array_length(data)) as record_count
-            FROM target_data
-            WHERE action_name = ?
-            ORDER BY relative_path
-            """,
-            (action_name,),
-        )
-        file_metadata = cursor.fetchall()
-
-        files = [row["relative_path"] for row in file_metadata]
-
-        if relative_path:
-            if relative_path not in files:
-                return {
-                    "records": [],
-                    "total_count": 0,
-                    "action_name": action_name,
-                    "files": files,
-                    "error": f"File '{relative_path}' not found for node '{action_name}'",
-                }
-            file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
-
-        total_count = sum(row["record_count"] for row in file_metadata)
-
-        paginated_records: list[dict[str, Any]] = []
-        skipped = 0
-        collected = 0
-
-        for row in file_metadata:
-            if collected >= limit:
-                break
-
-            file_path = row["relative_path"]
-            file_record_count = row["record_count"]
-
-            if skipped + file_record_count <= offset:
-                skipped += file_record_count
-                continue
+        with self._lock:
+            cursor = self.connection.cursor()
 
             cursor.execute(
-                "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
-                (action_name, file_path),
+                """
+                SELECT relative_path,
+                       COALESCE(record_count, json_array_length(data)) as record_count
+                FROM target_data
+                WHERE action_name = ?
+                ORDER BY relative_path
+                """,
+                (action_name,),
             )
-            data_row = cursor.fetchone()
-            if not data_row:
-                continue
+            file_metadata = cursor.fetchall()
 
-            records = json.loads(data_row["data"])
-            for record in records:
-                if skipped < offset:
-                    skipped += 1
+            files = [row["relative_path"] for row in file_metadata]
+
+            if relative_path:
+                if relative_path not in files:
+                    return {
+                        "records": [],
+                        "total_count": 0,
+                        "action_name": action_name,
+                        "files": files,
+                        "error": f"File '{relative_path}' not found for node '{action_name}'",
+                    }
+                file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
+
+            total_count = sum(row["record_count"] for row in file_metadata)
+
+            paginated_records: list[dict[str, Any]] = []
+            skipped = 0
+            collected = 0
+
+            for row in file_metadata:
+                if collected >= limit:
+                    break
+
+                file_path = row["relative_path"]
+                file_record_count = row["record_count"]
+
+                if skipped + file_record_count <= offset:
+                    skipped += file_record_count
                     continue
 
-                if collected < limit:
-                    if isinstance(record, dict):
-                        paginated_records.append({**record, "_file": file_path})
+                cursor.execute(
+                    "SELECT data FROM target_data WHERE action_name = ? AND relative_path = ?",
+                    (action_name, file_path),
+                )
+                data_row = cursor.fetchone()
+                if not data_row:
+                    continue
+
+                records = json.loads(data_row["data"])
+                for record in records:
+                    if skipped < offset:
+                        skipped += 1
+                        continue
+
+                    if collected < limit:
+                        if isinstance(record, dict):
+                            paginated_records.append({**record, "_file": file_path})
+                        else:
+                            paginated_records.append({"_file": file_path, "_value": record})
+                        collected += 1
                     else:
-                        paginated_records.append({"_file": file_path, "_value": record})
-                    collected += 1
-                else:
-                    break
+                        break
 
         return {
             "records": paginated_records,
@@ -433,28 +440,29 @@ class SQLiteBackend(StorageBackend):
 
     def get_storage_stats(self) -> dict[str, Any]:
         """Get storage statistics (record counts, DB size, per-node breakdown)."""
-        cursor = self.connection.cursor()
+        with self._lock:
+            cursor = self.connection.cursor()
 
-        cursor.execute("SELECT COUNT(*) as count FROM source_data")
-        source_count = cursor.fetchone()["count"]
+            cursor.execute("SELECT COUNT(*) as count FROM source_data")
+            source_count = cursor.fetchone()["count"]
 
-        cursor.execute(
-            """
-            SELECT action_name, COALESCE(SUM(record_count), 0) as count
-            FROM target_data
-            GROUP BY action_name
-            ORDER BY action_name
-            """
-        )
-        nodes = {row["action_name"]: row["count"] for row in cursor.fetchall()}
+            cursor.execute(
+                """
+                SELECT action_name, COALESCE(SUM(record_count), 0) as count
+                FROM target_data
+                GROUP BY action_name
+                ORDER BY action_name
+                """
+            )
+            nodes = {row["action_name"]: row["count"] for row in cursor.fetchall()}
 
-        cursor.execute("SELECT COALESCE(SUM(record_count), 0) as count FROM target_data")
-        target_count = cursor.fetchone()["count"]
+            cursor.execute("SELECT COALESCE(SUM(record_count), 0) as count FROM target_data")
+            target_count = cursor.fetchone()["count"]
+
+            cursor.execute("SELECT COUNT(*) as count FROM record_disposition")
+            disposition_count = cursor.fetchone()["count"]
 
         db_size = self.db_path.stat().st_size if self.db_path.exists() else 0
-
-        cursor.execute("SELECT COUNT(*) as count FROM record_disposition")
-        disposition_count = cursor.fetchone()["count"]
 
         return {
             "db_path": str(self.db_path),
@@ -468,9 +476,10 @@ class SQLiteBackend(StorageBackend):
 
     # ------------------------------------------------------------------
     # Record disposition tracking
-    # All callers (reads and writes) access self.connection, which now
-    # briefly acquires self._lock (RLock). Write methods additionally
-    # hold the lock for the full operation duration.
+    # Read methods (get_disposition, has_disposition) hold self._lock
+    # for the full cursor execute/fetch pair.  Write methods
+    # (set_disposition, clear_disposition) hold it through the
+    # commit/rollback as well.
     # ------------------------------------------------------------------
 
     def set_disposition(
@@ -549,9 +558,10 @@ class SQLiteBackend(StorageBackend):
 
         query += " ORDER BY id"
 
-        cursor = self.connection.cursor()
-        cursor.execute(query, params)
-        return [dict(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
 
     def has_disposition(
         self,
@@ -572,9 +582,10 @@ class SQLiteBackend(StorageBackend):
 
         query += " LIMIT 1"
 
-        cursor = self.connection.cursor()
-        cursor.execute(query, params)
-        return cursor.fetchone() is not None
+        with self._lock:
+            cursor = self.connection.cursor()
+            cursor.execute(query, params)
+            return cursor.fetchone() is not None
 
     def clear_disposition(
         self,

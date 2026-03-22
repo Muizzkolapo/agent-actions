@@ -10,6 +10,7 @@ from rich.console import Console
 
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.logging import get_manager
 from agent_actions.workflow.config_pipeline import load_workflow_configs
 from agent_actions.workflow.execution_events import WorkflowEventLogger
@@ -24,7 +25,6 @@ from agent_actions.workflow.models import (
 from agent_actions.workflow.parallel.dependency import WorkflowDependencyOrchestrator
 from agent_actions.workflow.schema_service import WorkflowSchemaService
 from agent_actions.workflow.service_init import initialize_services, initialize_storage_backend
-from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +58,7 @@ def validate_guard_conditions(action_configs: dict) -> list[str]:
         if not parse_result.success:
             error = parse_result.error
             detail = error.message if error else "parse failed"
-            errors.append(
-                f"Action '{action_name}': invalid guard condition '{clause}': {detail}"
-            )
+            errors.append(f"Action '{action_name}': invalid guard condition '{clause}': {detail}")
 
     return errors
 
@@ -379,8 +377,10 @@ class AgentWorkflow:
         self.event_logger.fire_action_start(idx, action_name, total_actions, action_config)
 
         if self.services.core.state_manager.is_completed(action_name):
-            self.event_logger.log_action_skip(idx, action_name, total_actions)
-            return False
+            if self.services.core.action_executor.verify_completion_status(action_name):
+                self.event_logger.log_action_skip(idx, action_name, total_actions)
+                return False
+            # verify_completion_status reset the action to "pending" — fall through to re-run
 
         is_last = idx == len(self.execution_order) - 1
         result = self.services.core.action_executor.execute_action_sync(

@@ -168,7 +168,10 @@ class ActionLevelOrchestrator:
         total_actions = len(self.execution_order)
 
         result = await action_executor.execute_action_async(
-            action_name, action_idx=original_idx, action_config=action_config, is_last_action=is_last
+            action_name,
+            action_idx=original_idx,
+            action_config=action_config,
+            is_last_action=is_last,
         )
 
         self._fire_action_result_event(action_name, original_idx, total_actions, result)
@@ -297,7 +300,18 @@ class ActionLevelOrchestrator:
         """
         start_time = datetime.now()
 
-        # Filter to pending actions only
+        # Verify that every "completed" action in this level still has its output
+        # in the storage backend.  If the DB was cleared or the backend was swapped
+        # since the last run, _verify_completion_status resets the action to
+        # "pending" so it re-runs before its downstream dependents need the data.
+        # Without this, the completed-action early-return in execute_action_async
+        # is unreachable (get_pending_actions filters them out first), making the
+        # verification logic dead code and causing downstream "not found" failures.
+        for action_name in params.level_actions:
+            if params.state_manager.is_completed(action_name):
+                params.action_executor.verify_completion_status(action_name)
+
+        # Filter to pending actions only (verification above may have reset some)
         pending_actions = params.state_manager.get_pending_actions(params.level_actions)
 
         if not pending_actions:
