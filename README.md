@@ -16,7 +16,17 @@
   <a href="https://github.com/Muizzkolapo/agent-actions/actions"><img src="https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Define LLM workflows in YAML. Run them with one command. Agent Actions handles dependency resolution, parallel execution, batch processing, and multi-vendor LLM support.
+**Define** LLM workflows in YAML. **Validate** before any API call. **Execute** with DAG-based orchestration.
+
+Agent Actions turns declarative YAML configs into production-ready LLM pipelines — with dependency resolution, parallel execution, batch processing, schema validation, and multi-vendor support out of the box.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/images/lifecycle-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset=".github/images/lifecycle-light.svg">
+    <img alt="Agent Actions lifecycle: Define → Validate → Execute" src=".github/images/lifecycle-light.svg" width="680">
+  </picture>
+</p>
 
 ```yaml
 actions:
@@ -51,8 +61,6 @@ Read the [Installation Guide](https://muizzkolapo.github.io/docs.agent-actions/i
 ## How it works
 
 Write a YAML file describing your actions, their dependencies, and which LLM to use. Agent Actions builds a DAG, resolves execution order, runs independent actions in parallel, and writes structured output.
-
-![Project Screenshot](assets/images/home_page_sampleflow.svg)
 
 - **Actions** are individual LLM calls with an intent, model, and output schema.
 - **Dependencies** declare data flow — an action can `observe` fields from upstream actions.
