@@ -57,6 +57,27 @@ guard:
 | `BETWEEN` | `score BETWEEN 50 AND 100` |
 | `IS NULL` | `description IS NULL` |
 
+### Boolean Values
+
+Boolean keywords are case-insensitive, matching SQL convention:
+
+```yaml
+guard:
+  clause: 'passes_filter == true'   # valid
+  clause: 'passes_filter == True'   # valid
+  clause: 'passes_filter == TRUE'   # valid
+```
+
+Prefer explicit comparison over a bare field reference for boolean fields. A bare reference evaluates using Python truthiness — this fails silently when the upstream action stores `"false"` as a string (which is truthy) rather than a Python `bool`:
+
+```yaml
+# Fragile — string "false" is truthy, so the guard never filters
+clause: 'passes_filter'
+
+# Explicit — correct regardless of whether the value is a bool or a string
+clause: 'passes_filter == true'
+```
+
 ### Built-in Functions
 
 ```yaml
@@ -146,6 +167,21 @@ actions:
 ### Upstream failures are short-circuited
 
 When an upstream action fails for some records (e.g., batch API errors), those records are marked with `_unprocessed: true` and automatically skipped by all downstream actions — no context loading, prompt rendering, or LLM calls are wasted. These records are preserved in the output for lineage traceability.
+
+## Error Handling
+
+By default, if a guard condition fails to evaluate (missing field, parse error), the record is passed through rather than rejected. Set `passthrough_on_error: false` to apply the configured `on_false` behavior instead:
+
+```yaml
+guard:
+  condition: 'passes_filter == true'
+  on_false: filter
+  passthrough_on_error: false   # filter the record if evaluation fails
+```
+
+:::tip
+When a guard silently lets records through unexpectedly, check `target/errors.json` for `G002` events — these indicate evaluation failures that were swallowed by `passthrough_on_error: true`.
+:::
 
 ## Limitations
 
