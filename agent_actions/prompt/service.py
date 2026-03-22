@@ -347,7 +347,7 @@ class PromptPreparationService:
                 cause=e,
             ) from e
         except Exception as e:
-            logger.debug("Error rendering prompt template: %s", e)
+            logger.warning("Error rendering prompt template: %s", e, exc_info=True)
 
             namespace_context: dict[str, list[str]] = {}
             available_refs = []
@@ -473,10 +473,10 @@ class PromptPreparationService:
             logger.debug("[SEED_DATA_LOAD] Seed data keys: %s", list(static_data.keys()))
             return static_data
         except StaticDataLoadError as e:
-            logger.error("Failed to load static data: %s", e)
+            logger.exception("Failed to load static data: %s", e)
             raise
         except Exception as e:
-            logger.error("Unexpected error loading static data: %s", e)
+            logger.exception("Unexpected error loading static data: %s", e)
             raise StaticDataLoadError(
                 f"Failed to load static data: {str(e)}",
                 context={
@@ -577,7 +577,7 @@ class PromptPreparationService:
             )
 
         except Exception as e:
-            logger.debug("Error during seed data resolution: %s", e)
+            logger.warning("Error during seed data resolution: %s", e, exc_info=True)
             # Fall through to error raising
 
         # Not found - raise error

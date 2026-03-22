@@ -88,7 +88,7 @@ class CLI:
                 signal.signal(signal.SIGBREAK, self._handle_termination)
             self.logger.debug("Signal handlers registered successfully")
         except (AttributeError, ValueError) as e:
-            self.logger.warning("Failed to register signal handlers: %s", str(e))
+            self.logger.warning("Failed to register signal handlers: %s", e, exc_info=True)
 
     def _handle_termination(self, signum: int, _frame) -> None:
         signal_name = signal.Signals(signum).name
@@ -135,7 +135,7 @@ class CLI:
             self.logger.info("Operation aborted by user")
             return 130
         except click.UsageError as e:
-            self.logger.error("Usage error: %s", str(e))
+            self.logger.warning("Usage error: %s", e)
             click.echo(f"Error: {str(e)}", err=True)
             return 2
         except click.ClickException as e:

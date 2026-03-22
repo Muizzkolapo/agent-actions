@@ -81,4 +81,4 @@ class AgentManager:
         """Clean a specific directory for an agent."""
         if directory.exists():
             shutil.rmtree(directory)
-            logger.info(f"Cleaned directory {directory} for agent {agent}")
+            logger.info("Cleaned directory %s for agent %s", directory, agent)

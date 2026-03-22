@@ -138,6 +138,7 @@ class VersionOutputCorrelator:
                         version_agent,
                         relative_path,
                         e,
+                        exc_info=True,
                     )
 
             logger.debug(
@@ -153,6 +154,7 @@ class VersionOutputCorrelator:
                 "Failed to list target files from storage backend for %s: %s",
                 version_agent,
                 e,
+                exc_info=True,
             )
             return [], set()
 

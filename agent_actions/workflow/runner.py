@@ -255,10 +255,13 @@ class ActionRunner:
 
         # Log resolution
         if len(resolved_dirs) == 1:
-            logger.info(f"Action '{agent_name}': Using '{dependencies[0]}' as input source")
+            logger.info("Action '%s': Using '%s' as input source", agent_name, dependencies[0])
         else:
             logger.info(
-                f"Action '{agent_name}': Merging {len(resolved_dirs)} input sources: {dependencies}"
+                "Action '%s': Merging %d input sources: %s",
+                agent_name,
+                len(resolved_dirs),
+                dependencies,
             )
 
         return resolved_dirs
@@ -467,4 +470,3 @@ class ActionRunner:
             )
         )
         return output_folder
-

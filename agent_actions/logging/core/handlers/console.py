@@ -46,6 +46,11 @@ class ConsoleEventHandler:
         if level_order.index(event.level) < level_order.index(self.min_level):
             return False
 
+        # WARN and ERROR always shown regardless of category — errors from
+        # any module (llm, processing, prompt, etc.) must be visible.
+        if event.level in (EventLevel.WARN, EventLevel.ERROR):
+            return True
+
         if self.categories is not None and event.category not in self.categories:
             return False
 

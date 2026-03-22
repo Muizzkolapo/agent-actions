@@ -217,7 +217,9 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
     return files_processed_count
 
 
-def process_from_storage_backend(runner: ActionRunner, params: FileProcessParams) -> tuple[int, int]:
+def process_from_storage_backend(
+    runner: ActionRunner, params: FileProcessParams
+) -> tuple[int, int]:
     """Process data from storage backend instead of filesystem.
 
     Returns:
@@ -244,10 +246,11 @@ def process_from_storage_backend(runner: ActionRunner, params: FileProcessParams
         try:
             target_files = runner.storage_backend.list_target_files(action_name)
         except Exception as e:
-            logger.debug(
+            logger.warning(
                 "Could not list target files from backend for %s: %s",
                 action_name,
                 e,
+                exc_info=True,
             )
             continue
 
@@ -263,6 +266,7 @@ def process_from_storage_backend(runner: ActionRunner, params: FileProcessParams
                     action_name,
                     relative_path,
                     e,
+                    exc_info=True,
                 )
 
     files_found = len(data_by_path)

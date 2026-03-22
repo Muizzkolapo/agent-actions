@@ -214,7 +214,11 @@ class ActionOutputManager:
                 result[relative_path] = self.storage_backend.read_target(action_name, relative_path)
             except Exception as e:
                 logger.warning(
-                    "Failed to read backend entry %s/%s: %s", action_name, relative_path, e
+                    "Failed to read backend entry %s/%s: %s",
+                    action_name,
+                    relative_path,
+                    e,
+                    exc_info=True,
                 )
         return result
 
@@ -236,7 +240,7 @@ class ActionOutputManager:
                     data = [data]
                 results.append((item, data))
             except (OSError, json.JSONDecodeError) as e:
-                logger.warning("Could not read %s: %s", src, e)
+                logger.warning("Could not read %s: %s", src, e, exc_info=True)
         return results
 
     def _load_outputs_from_backend(self, action_name: str) -> tuple[list[Any], list[str]]:
@@ -256,7 +260,11 @@ class ActionOutputManager:
                     outputs.append(data)  # type: ignore[unreachable]
             except Exception as e:
                 logger.warning(
-                    "Failed to read backend target %s/%s: %s", action_name, relative_path, e
+                    "Failed to read backend target %s/%s: %s",
+                    action_name,
+                    relative_path,
+                    e,
+                    exc_info=True,
                 )
         return outputs, list(target_files)
 
@@ -315,8 +323,10 @@ class ActionOutputManager:
         if self._version_consumption_map is None:
             with self._version_consumption_lock:
                 if self._version_consumption_map is None:
-                    self._version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-                        self.execution_order, self.action_configs
+                    self._version_consumption_map = (
+                        self.version_correlator.detect_explicit_version_consumption(
+                            self.execution_order, self.action_configs
+                        )
                     )
 
         if current_agent in self._version_consumption_map:
@@ -361,8 +371,10 @@ class ActionOutputManager:
         if self._version_consumption_map is None:
             with self._version_consumption_lock:
                 if self._version_consumption_map is None:
-                    self._version_consumption_map = self.version_correlator.detect_explicit_version_consumption(
-                        self.execution_order, self.action_configs
+                    self._version_consumption_map = (
+                        self.version_correlator.detect_explicit_version_consumption(
+                            self.execution_order, self.action_configs
+                        )
                     )
 
         if current_agent not in self._version_consumption_map:

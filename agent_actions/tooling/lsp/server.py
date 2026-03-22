@@ -83,7 +83,7 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
         for root in roots:
             idx = build_index(root)
             server.project_indexes[root] = idx
-            logger.info(f"Indexed project at {root}")
+            logger.info("Indexed project at %s", root)
 
         # Backward-compat: first project or single-folder fallback
         if server.project_indexes:
@@ -96,7 +96,7 @@ def initialize(params: lsp.InitializeParams) -> lsp.InitializeResult:
                 server.project_root = fallback_root
                 server.index = build_index(fallback_root)
                 server.project_indexes[fallback_root] = server.index
-                logger.info(f"Indexed project at {fallback_root}")
+                logger.info("Indexed project at %s", fallback_root)
 
     return lsp.InitializeResult(
         capabilities=lsp.ServerCapabilities(
@@ -347,12 +347,12 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
             if not server.project_root:
                 server.project_root = new_root
                 server.index = idx
-            logger.info(f"Registered new project at {new_root}")
+            logger.info("Registered new project at %s", new_root)
         else:
             server.project_indexes[new_root] = build_index(new_root)
             if server.project_root == new_root:
                 server.index = server.project_indexes[new_root]
-            logger.info(f"Reindexed project at {new_root}")
+            logger.info("Reindexed project at %s", new_root)
     else:
         file_idx = _index_for_file(file_path)
         if file_idx:
@@ -360,7 +360,7 @@ def did_save(params: lsp.DidSaveTextDocumentParams):
             server.project_indexes[root] = build_index(root)
             if server.project_root == root:
                 server.index = server.project_indexes[root]
-            logger.info(f"Reindexed project at {root} after save")
+            logger.info("Reindexed project at %s after save", root)
 
     _publish_diagnostics(params.text_document.uri)
 
@@ -380,9 +380,7 @@ def document_highlight(params: lsp.DocumentHighlightParams) -> list[lsp.Document
         return []
 
     references = index.references_by_file.get(file_path, [])
-    target = find_reference_at_position(
-        references, params.position.line, params.position.character
-    )
+    target = find_reference_at_position(references, params.position.line, params.position.character)
     if not target:
         return []
 

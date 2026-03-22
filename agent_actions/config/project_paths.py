@@ -153,7 +153,7 @@ class ProjectPathsFactory:
         except ValidationError:
             raise
         except Exception as e:
-            logger.error("Failed to get agent paths for %s: %s", agent_name, str(e))
+            logger.exception("Failed to get agent paths for %s: %s", agent_name, e)
             raise ValidationError(
                 "Failed to get agent paths",
                 context={"agent_name": agent_name, "operation": "get_agent_paths"},
@@ -211,7 +211,7 @@ class ProjectPathsFactory:
             logger.debug("All project paths created successfully")
             return paths
         except Exception as e:
-            logger.error("Failed to create project paths for agent %s: %s", agent_name, str(e))
+            logger.exception("Failed to create project paths for agent %s: %s", agent_name, e)
             if isinstance(e, (DirectoryError, ValidationError, FileLoadError)):
                 raise
             raise ValidationError(

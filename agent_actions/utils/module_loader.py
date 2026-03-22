@@ -106,6 +106,7 @@ def load_module_from_path(
                                     module_name,
                                     module_path_obj,
                                     e,
+                                    exc_info=True,
                                 )
                                 module = None
                                 path_load_failed = True
@@ -131,7 +132,9 @@ def load_module_from_path(
                 # be located.  Clean up but allow fallback_import to try a
                 # normal import (the module may be importable via sys.path).
                 sys.modules.pop(f"agent_actions._udfs.{module_name}", None)
-                logger.warning("Failed to load module %s from path: %s", module_name, e)
+                logger.warning(
+                    "Failed to load module %s from path: %s", module_name, e, exc_info=True
+                )
                 module = None
 
         # Skip fallback when path-based load raised to avoid silently replacing
@@ -140,7 +143,7 @@ def load_module_from_path(
                 module = importlib.import_module(module_name)
                 logger.debug("Loaded module via standard import: %s", module_name)
             except ImportError as e:
-                logger.warning("Could not import module %s: %s", module_name, e)
+                logger.warning("Could not import module %s: %s", module_name, e, exc_info=True)
                 module = None
 
         if cache and (module is not None or cache_failures):

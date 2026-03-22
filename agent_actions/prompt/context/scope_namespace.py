@@ -300,7 +300,7 @@ def _extract_allowed_fields_per_dependency(
     """
     if not context_scope:
         if dependencies:
-            logger.error(f"Action '{action_name}' has dependencies but no context_scope defined.")
+            logger.error("Action '%s' has dependencies but no context_scope defined.", action_name)
             raise ConfigurationError(
                 f"Action '{action_name}' has dependencies but no context_scope defined. "
                 f"All dependencies must have explicit field declarations.\n\n"
