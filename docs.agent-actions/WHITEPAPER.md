@@ -6,14 +6,13 @@
 
 ## Executive Summary
 
-Agent Actions is a declarative YAML-based framework for orchestrating multi-step agentic LLM workflows. Born from the real-world needs of QanaLabs—an educational technology company generating certification exam questions at scale—Agent Actions addresses the gap between prototype LLM scripts and production-grade data pipelines.
+Agent Actions is a declarative YAML-based framework for orchestrating multi-step agentic LLM workflows. This was the outcome of requirements to generate outputs from LLM that is properly gated and provides semantic consistencies at scale. Agent Actions addresses the gap between prototype LLM scripts and production-grade data pipelines.
 
 The framework emerged from a simple observation: building reliable LLM workflows requires solving the same problems repeatedly—dependency management, output validation, error handling, batch processing, and multi-vendor support. Rather than embedding this logic in application code, Agent Actions externalizes it into configuration, creating auditable, version-controlled pipelines that separate orchestration concerns from business logic.
 
-This whitepaper traces the journey from internal tool to open-source framework, explaining the design decisions, architectural choices, and lessons learned along the way.
+This whitepaper explains the design decisions, architectural choices, and patterns that make the framework work.
 
 ---
-* avoiding issues like context leak, progressive data exposure, schema validation
 
 ## The Problem: LLM Workflows at Scale
 
@@ -48,232 +47,98 @@ The gap: a framework purpose-built for LLM data pipelines—declarative enough f
 
 ---
 
-## Origin Story: QanaLabs Quiz Generation
+## Why This Matters: Transparent Decision Pathways
 
-### The Challenge
+When multiple AI engineers build agent workflows independently, every workflow becomes a black box. Engineer A chains prompts in a Python script. Engineer B builds a LangChain graph. Engineer C writes raw API calls. Each approach works in isolation, but nobody can look at someone else's workflow and understand how data was generated. There is no shared vocabulary, no uniform structure, no way to audit the decision pathways that produced a given output.
 
-QanaLabs builds certification exam preparation tools. The core product: generate high-quality practice questions from technical documentation. This sounds simple until you consider the requirements:
+This is the deeper problem Agent Actions solves. The framework enforces a single declarative format where every decision is visible: what data each step receives, what it produces, how validation failures are handled, and where records are filtered. Anyone on the team, including non-engineers, can open a workflow YAML and trace exactly how a piece of output was generated.
 
-- Process thousands of documentation pages
-- Extract testable facts aligned with exam objectives
-- Generate scenario-based questions at the appropriate difficulty level
-- Create plausible wrong answers (distractors) that test understanding
-- Validate question quality against rubrics
-- Filter low-quality output before human review
-
-A single question requires multiple LLM calls: extract facts → classify question type → write scenario → generate distractors → score quality → create explanations. Each step depends on previous outputs. Each step can fail. Scale this to thousands of questions, and the complexity explodes.
-
-### The First Attempt: Python Scripts
-
-The initial implementation was conventional: Python scripts orchestrating LLM calls. It worked for the first 100 questions. Then:
-
-- **Prompt drift**: Different team members modified prompts without coordination. The "same" workflow produced inconsistent outputs.
-- **Silent failures**: LLM outputs occasionally violated expected schemas. Downstream code crashed or produced garbage.
-- **Debugging nightmares**: When a question was wrong, tracing back through 8 LLM calls to find the source was painful.
-- **Cost overruns**: Synchronous processing meant no batch API savings. A single typo could trigger expensive retry loops.
-
-### The Insight
-
-The team realized they were solving the same problems repeatedly:
-- Defining what each step expects and produces
-- Passing data between steps
-- Validating outputs against schemas
-- Retrying when validation fails
-- Managing API keys and vendor differences
-- Tracking what happened for debugging
-
-These problems aren't specific to quiz generation. They're inherent to any multi-step LLM pipeline.
-
-### The Solution: Configuration Over Code
-
-Rather than embedding orchestration logic in Python, the team externalized it:
+Consider the book catalog enrichment pipeline. An 11-step workflow that classifies books, writes marketing copy, generates SEO metadata, retrieves real recommendations, scores quality, and builds user-specific views. In code, this would be an opaque chain of function calls. In Agent Actions, every decision pathway is readable:
 
 ```yaml
-actions:
-  - name: extract_facts
-    prompt: $prompts.Fact_Extraction
-    schema: candidate_facts_list
-
-  - name: classify_question_type
-    dependencies: [extract_facts]
-    prompt: $prompts.Classify_Question
-    schema: { quiz_type: string, reason: string }
-    context_scope:
-      observe: [extract_facts.facts]
+- name: classify_genre
+  schema: classify_genre                    # What it must produce
+  prompt: $book_catalog_enrichment.Classify_Book_Genre  # How it decides
+  context_scope:
+    observe: [source.*]                     # What data it sees
+  reprompt:
+    validation: check_valid_bisac           # What happens if output is wrong
+    max_attempts: 3                         # How many chances it gets
+    on_exhausted: return_last               # What happens if it keeps failing
 ```
 
-This configuration declares:
-- **What** each action does (prompt + schema)
-- **When** it runs (dependencies)
-- **What data** it receives (context_scope)
+Every line is a decision. A reviewer can look at this and know: this action sees source data, must output valid BISAC codes, gets 3 attempts to self-correct, and accepts the best attempt if all fail. No Python to read. No framework internals to understand. The decision pathways are the configuration.
 
-The framework handles **how**: dependency resolution, parallel execution, validation, retry, logging.
+This transparency compounds across the pipeline. Three specific problems that are invisible in code-based approaches become structurally solved:
 
-### The 18-Step Pipeline
+### Context Leak
 
-The production QanaLabs workflow grew to 18 steps:
+In a naive pipeline, every action sees everything. An LLM generating a marketing description receives the raw BISAC validation output, the source ISBN, internal quality flags, and every other field accumulated so far. This wastes tokens, pollutes the prompt with irrelevant data, and risks exposing sensitive fields to LLM contexts where they don't belong.
 
-```
-1.  extract_raw_qa          - Extract Q&A from documentation
-2.  flatten_raw_questions   - Normalize to individual records
-3.  classify_question_type  - Categorize (UNDERSTANDING, APPLICATION, etc.)
-4.  get_authoring_prompt    - Select type-specific instructions
-5.  write_scenario_question - Generate scenario-based question
-6.  fix_options_format      - Normalize output structure
-7.  suggest_distractor_counts - Plan distractor word counts
-8.  add_answer_text         - Structure correct answer
-9.  generate_distractor_1   - Wrong technology/service
-10. generate_distractor_2   - Wrong approach/concept
-11. generate_distractor_3   - Edge case/misconception
-12. reconstruct_options     - Combine into final options
-13. score_question_quality  - Evaluate against rubric
-14. filter_low_quality      - Remove score < 85
-15. generate_feynman_explanation - Create learner explanation
-16. generate_concept_explanation - Explain underlying concept
-17. options_combiner        - Final assembly
-18. format_quiz_text        - Output formatting
-```
+Agent Actions eliminates this with `context_scope`. Each action declares exactly what it sees:
 
-This pipeline mixes LLM actions (prompts + schemas) with tool actions (Python UDFs). Some steps run in parallel. Some conditionally skip records. The framework manages it all.
-
-### Patterns Showcased by the QanaLabs Workflow
-
-The 18-step pipeline demonstrates patterns applicable to any structured extraction use case:
-
-**1. Mixed Action Types**
-LLM actions and tool actions (Python UDFs) coexist seamlessly:
 ```yaml
-- name: classify_question_type    # LLM action
-  prompt: $prompts.Classify
-  schema: { quiz_type: string }
-
-- name: flatten_questions         # Tool action
-  kind: tool
-  impl: flatten_questions
+- name: write_description
+  context_scope:
+    observe:
+      - validate_bisac.*        # LLM context: only these fields
+    passthrough:
+      - source.isbn             # Carried to output, never sent to LLM
+      - source.title
 ```
 
-**2. Progressive Context Building**
-Each step enriches the context for downstream steps:
-```
-source → extract_facts.facts → classify.quiz_type → generate.question → ...
-```
-Later actions reference earlier outputs, building richer context incrementally.
+`observe` controls what enters the LLM prompt. `passthrough` carries fields forward for downstream consumers without adding tokens. Fields not listed are invisible. There is no "see everything" default. A reviewer can look at any action and know precisely what data influenced its output.
 
-**3. Quality Gates with Guards**
-Conditional execution filters records mid-pipeline:
+### Progressive Data Exposure
+
+In most frameworks, each step accumulates context from all previous steps. By step 8, the LLM receives output from steps 1 through 7 whether it needs it or not. This progressive accumulation makes later actions slower, more expensive, and less accurate as irrelevant context grows.
+
+Agent Actions enforces explicit data flow. When `score_quality` (step 8) merges five parallel branches, the configuration makes the data boundaries clear:
+
 ```yaml
-- name: generate_explanation
-  guard:
-    condition: 'question_status == "KEEP"'
-    on_false: "filter"
+- name: score_quality
+  context_scope:
+    observe:                          # LLM sees these for scoring
+      - generate_recommendations.*
+      - generate_seo.*
+      - write_description.*
+      - validate_bisac.*
+      - assess_reading_level.*
+    passthrough:                      # Forwarded to output, not to LLM
+      - write_description.isbn
+      - validate_bisac.bisac_codes
+      - generate_seo.primary_keywords
 ```
-Records scoring below threshold skip expensive downstream LLM calls.
 
-**4. Decomposed Generation**
-Complex outputs are built through multiple focused steps rather than one mega-prompt:
-```
-write_scenario_question → generate_distractor_1 → generate_distractor_2 →
-generate_distractor_3 → reconstruct_options
-```
-Each distractor step focuses on one type of wrong answer, improving quality.
+The scoring LLM sees only the fields it needs to evaluate quality. The 25+ passthrough fields are carried forward for the final formatting tool but never enter the prompt. A new team member reading this config knows exactly what the scoring model had access to when it produced a score.
 
-**5. Context Scoping for Token Efficiency**
-Control what each LLM sees vs. what passes through:
+### Schema Validation Decision Pathways
+
+When an LLM produces output that doesn't match the declared schema, what happens next? In code, the answer is usually buried in exception handlers. In Agent Actions, every failure pathway is declared in the config:
+
+**Reprompt** — the LLM self-corrects with validation feedback:
 ```yaml
-context_scope:
-  observe: [source.content]           # LLM context (tokens)
-  passthrough: [source.id, source.url] # Carried to output (no tokens)
-  drop: [source.raw_html]              # Excluded entirely
+reprompt:
+  validation: check_valid_bisac     # What to check
+  max_attempts: 3                   # How many retries
+  on_exhausted: return_last         # What if it never passes
 ```
 
-**6. Scoring and Filtering Pattern**
-Generate → Score → Filter is a common pattern:
+**Quality gates** — records that fail are filtered, not crashed:
 ```yaml
-- name: score_question_quality
-  schema: question_quality_score
-
-- name: filter_low_quality_questions
-  kind: tool
-  impl: filter_questions_by_score    # Keep only score >= 85
+guard:
+  condition: 'passes_filter == true'
+  on_false: filter                  # Skip this record, continue the pipeline
 ```
 
-**7. Dynamic Prompt Selection**
-Runtime context determines which prompt variant to use:
-```yaml
-- name: get_authoring_prompt
-  kind: tool
-  impl: handle_quiz_type    # Returns different prompts per question type
+**Static analysis** — broken references caught before any LLM call:
+```
+❌ write_description references 'validate_bisac.title'
+   → Field 'title' not in validate_bisac schema
+   → validate_bisac outputs: bisac_codes, bisac_names, bisac_valid, validation_notes
 ```
 
-**8. Parallel Independence**
-Actions without dependencies can run concurrently:
-```
-extract_facts
-    ├── analyze_sentiment   (parallel)
-    └── extract_entities    (parallel)
-         └── merge_results
-```
-
-These patterns compose. A document processing pipeline might use: mixed actions + context scoping + quality gates + parallel execution. The framework handles orchestration; you focus on the transformation logic.
-
-### Semantic Reusability: One Workflow, Many Domains
-
-A breakthrough realization: the same 18-step workflow could generate questions for *any* certification exam. Data engineering, cloud architecture, law, medicine—the pipeline structure remains identical. Only the seed data changes.
-
-This works because prompts reference seed-level definitions rather than hardcoded content:
-
-```markdown
-{prompt Extract_Raw_QA}
-Extract testable knowledge for the {{ seed.exam_syllabus.exam_name }}.
-
-**Platform**: {{ seed.exam_syllabus.platform_name }}
-
-{{ seed.exam_syllabus.audience_profile.description }}
-
-**Target Responsibilities**:
-{% for resp in seed.exam_syllabus.audience_profile.responsibilities %}
-- {{ resp }}
-{% endfor %}
-...
-{end_prompt}
-```
-
-To generate questions for a different certification:
-1. Create new seed file (`law_bar_exam_syllabus.json`)
-2. Point workflow to new seed
-3. Run the same workflow
-
-The prompts dynamically inject domain context. No code changes. No prompt rewrites.
-
-**Semantic Consistency**
-
-Each action maintains consistent semantic meaning across domains:
-
-| Action | Semantic Purpose | Data Engineering | Law Certification |
-|--------|------------------|------------------|-------------------|
-| `extract_raw_qa` | Extract testable Q&A | Cloud service facts | Legal precedent facts |
-| `classify_question_type` | Categorize by cognitive level | UNDERSTANDING, APPLICATION | UNDERSTANDING, APPLICATION |
-| `write_scenario_question` | Generate scenario-based question | "Your team is migrating..." | "Your client is facing..." |
-| `score_question_quality` | Evaluate against rubric | Aligned to AWS objectives | Aligned to bar exam topics |
-
-The workflow is a **semantic template**. Actions don't encode domain knowledge—they encode *what kind of transformation* to perform. Domain knowledge lives in seed data and flows through dynamically.
-
-This separation enables:
-- **Rapid domain expansion**: New certification = new seed file, not new code
-- **Consistent quality**: Same validation rubrics apply across domains
-- **Shared improvements**: Better distractor generation benefits all domains
-- **A/B testing**: Compare seed variations without touching workflow logic
-
-### From Internal Tool to Framework
-
-As the workflow matured, the team recognized the orchestration layer had value beyond quiz generation. The patterns—declarative configuration, schema validation, batch processing, multi-vendor support—apply to any structured extraction use case:
-
-- Document processing pipelines
-- Content classification and enrichment
-- Data transformation workflows
-- Quality assurance automation
-
-Agent Actions was extracted as a standalone framework, refined based on production experience, and released as open source.
+The key insight is not that these mechanisms exist, but that they are visible. Every decision about what happens when something goes wrong is declared in the same YAML that defines the happy path. There is no hidden error handling, no implicit retry logic, no silent data loss. The decision pathways are the documentation.
 
 ---
 
@@ -833,6 +698,210 @@ This creates a feedback loop: AI assistants help developers build workflows, whi
 
 ---
 
+## Example: Quiz Generation Pipeline
+
+To illustrate what Agent Actions looks like in practice, consider a certification exam quiz generation workflow. The goal: process technical documentation and produce high-quality practice questions at scale. The requirements:
+
+- Process thousands of documentation pages
+- Extract testable facts aligned with exam objectives
+- Generate scenario-based questions at the appropriate difficulty level
+- Create plausible wrong answers (distractors) that test understanding
+- Validate question quality against rubrics
+- Filter low-quality output before human review
+
+A single question requires multiple LLM calls: extract facts, classify question type, write scenario, generate distractors, score quality, create explanations. Each step depends on previous outputs. Each step can fail. Scale this to thousands of questions, and the complexity explodes.
+
+With Agent Actions, the entire pipeline is declared in YAML:
+
+```yaml
+actions:
+  - name: extract_facts
+    prompt: $prompts.Fact_Extraction
+    schema: candidate_facts_list
+
+  - name: classify_question_type
+    dependencies: [extract_facts]
+    prompt: $prompts.Classify_Question
+    schema: { quiz_type: string, reason: string }
+    context_scope:
+      observe: [extract_facts.facts]
+```
+
+This configuration declares:
+- **What** each action does (prompt + schema)
+- **When** it runs (dependencies)
+- **What data** it receives (context_scope)
+
+The framework handles **how**: dependency resolution, parallel execution, validation, retry, logging.
+
+### The Full Pipeline
+
+This workflow scales to 18 steps:
+
+```
+1.  extract_raw_qa          - Extract Q&A from documentation
+2.  flatten_raw_questions   - Normalize to individual records
+3.  classify_question_type  - Categorize (UNDERSTANDING, APPLICATION, etc.)
+4.  get_authoring_prompt    - Select type-specific instructions
+5.  write_scenario_question - Generate scenario-based question
+6.  fix_options_format      - Normalize output structure
+7.  suggest_distractor_counts - Plan distractor word counts
+8.  add_answer_text         - Structure correct answer
+9.  generate_distractor_1   - Wrong technology/service
+10. generate_distractor_2   - Wrong approach/concept
+11. generate_distractor_3   - Edge case/misconception
+12. reconstruct_options     - Combine into final options
+13. score_question_quality  - Evaluate against rubric
+14. filter_low_quality      - Remove score < 85
+15. generate_feynman_explanation - Create learner explanation
+16. generate_concept_explanation - Explain underlying concept
+17. options_combiner        - Final assembly
+18. format_quiz_text        - Output formatting
+```
+
+This pipeline mixes LLM actions (prompts + schemas) with tool actions (Python UDFs). Some steps run in parallel. Some conditionally skip records. The framework manages it all.
+
+### Patterns Demonstrated
+
+The 18-step pipeline showcases patterns applicable to any structured extraction use case:
+
+**1. Mixed Action Types**
+LLM actions and tool actions (Python UDFs) coexist seamlessly:
+```yaml
+- name: classify_question_type    # LLM action
+  prompt: $prompts.Classify
+  schema: { quiz_type: string }
+
+- name: flatten_questions         # Tool action
+  kind: tool
+  impl: flatten_questions
+```
+
+**2. Progressive Context Building**
+Each step enriches the context for downstream steps:
+```
+source → extract_facts.facts → classify.quiz_type → generate.question → ...
+```
+Later actions reference earlier outputs, building richer context incrementally.
+
+**3. Quality Gates with Guards**
+Conditional execution filters records mid-pipeline:
+```yaml
+- name: generate_explanation
+  guard:
+    condition: 'question_status == "KEEP"'
+    on_false: "filter"
+```
+Records scoring below threshold skip expensive downstream LLM calls.
+
+**4. Decomposed Generation**
+Complex outputs are built through multiple focused steps rather than one mega-prompt:
+```
+write_scenario_question → generate_distractor_1 → generate_distractor_2 →
+generate_distractor_3 → reconstruct_options
+```
+Each distractor step focuses on one type of wrong answer, improving quality.
+
+**5. Context Scoping for Token Efficiency**
+Control what each LLM sees vs. what passes through:
+```yaml
+context_scope:
+  observe: [source.content]           # LLM context (tokens)
+  passthrough: [source.id, source.url] # Carried to output (no tokens)
+  drop: [source.raw_html]              # Excluded entirely
+```
+
+**6. Scoring and Filtering Pattern**
+Generate → Score → Filter is a common pattern:
+```yaml
+- name: score_question_quality
+  schema: question_quality_score
+
+- name: filter_low_quality_questions
+  kind: tool
+  impl: filter_questions_by_score    # Keep only score >= 85
+```
+
+**7. Dynamic Prompt Selection**
+Runtime context determines which prompt variant to use:
+```yaml
+- name: get_authoring_prompt
+  kind: tool
+  impl: handle_quiz_type    # Returns different prompts per question type
+```
+
+**8. Parallel Independence**
+Actions without dependencies can run concurrently:
+```
+extract_facts
+    ├── analyze_sentiment   (parallel)
+    └── extract_entities    (parallel)
+         └── merge_results
+```
+
+These patterns compose. A document processing pipeline might use: mixed actions + context scoping + quality gates + parallel execution. The framework handles orchestration; you focus on the transformation logic.
+
+### Semantic Reusability: One Workflow, Many Domains
+
+The same 18-step workflow can generate questions for *any* certification exam. Data engineering, cloud architecture, law, medicine — the pipeline structure remains identical. Only the seed data changes.
+
+This works because prompts reference seed-level definitions rather than hardcoded content:
+
+```markdown
+{prompt Extract_Raw_QA}
+Extract testable knowledge for the {{ seed.exam_syllabus.exam_name }}.
+
+**Platform**: {{ seed.exam_syllabus.platform_name }}
+
+{{ seed.exam_syllabus.audience_profile.description }}
+
+**Target Responsibilities**:
+{% for resp in seed.exam_syllabus.audience_profile.responsibilities %}
+- {{ resp }}
+{% endfor %}
+...
+{end_prompt}
+```
+
+To generate questions for a different certification:
+1. Create new seed file (`law_bar_exam_syllabus.json`)
+2. Point workflow to new seed
+3. Run the same workflow
+
+The prompts dynamically inject domain context. No code changes. No prompt rewrites.
+
+**Semantic Consistency**
+
+Each action maintains consistent semantic meaning across domains:
+
+| Action | Semantic Purpose | Data Engineering | Law Certification |
+|--------|------------------|------------------|-------------------|
+| `extract_raw_qa` | Extract testable Q&A | Cloud service facts | Legal precedent facts |
+| `classify_question_type` | Categorize by cognitive level | UNDERSTANDING, APPLICATION | UNDERSTANDING, APPLICATION |
+| `write_scenario_question` | Generate scenario-based question | "Your team is migrating..." | "Your client is facing..." |
+| `score_question_quality` | Evaluate against rubric | Aligned to AWS objectives | Aligned to bar exam topics |
+
+The workflow is a **semantic template**. Actions don't encode domain knowledge—they encode *what kind of transformation* to perform. Domain knowledge lives in seed data and flows through dynamically.
+
+This separation enables:
+- **Rapid domain expansion**: New certification = new seed file, not new code
+- **Consistent quality**: Same validation rubrics apply across domains
+- **Shared improvements**: Better distractor generation benefits all domains
+- **A/B testing**: Compare seed variations without touching workflow logic
+
+### Beyond Quiz Generation
+
+The patterns demonstrated here — declarative configuration, schema validation, batch processing, multi-vendor support — apply to any structured extraction use case:
+
+- Document processing pipelines
+- Content classification and enrichment
+- Data transformation workflows
+- Quality assurance automation
+
+The book catalog enrichment example (included in the repository) demonstrates the same patterns in a different domain: 11 steps, BISAC classification, grounded retrieval, parallel branches, quality scoring, and user-specific views.
+
+---
+
 ## Industry Pain Points Agent Actions Solves
 
 The challenges facing LLM application developers are well-documented across forums, blogs, and research. Agent Actions was designed—often unknowingly—to address many of these systemic issues.
@@ -1024,7 +1093,7 @@ context_scope:
 | Decomposed + Agent Actions | GPT-4o-mini | $0.15 |
 | Decomposed + Local | Ollama (Llama 3) | $0.00 |
 
-**Example: QanaLabs uses gpt-4o-mini for most steps**
+**Example: Using gpt-4o-mini for most steps**
 
 The 18-step quiz generation workflow uses `gpt-4o-mini` for classification, extraction, and scoring. Expensive models are reserved only for creative generation where quality variance matters. Deterministic UDFs handle:
 - Flattening nested arrays
@@ -1293,7 +1362,7 @@ This implements the **two-agent reflection pattern**: one action generates, anot
 
 **Score → Filter Pattern:**
 
-The QanaLabs workflow demonstrates reflection at scale:
+The quiz generation workflow demonstrates reflection at scale:
 
 ```yaml
 - name: score_question_quality
@@ -1482,7 +1551,7 @@ actions:
 4. **Parallel Collaboration**: Independent actions execute concurrently
 5. **Hierarchical Structure**: Dependencies define the collaboration order
 
-**QanaLabs as Multi-Agent System:**
+**Workflows as Multi-Agent Systems:**
 
 The 18-step quiz workflow is essentially a team of specialized agents:
 
@@ -1587,19 +1656,19 @@ Agent Actions implements these patterns through a **declarative, configuration-f
 
 ---
 
-## Real-World Impact: QanaLabs Results
+## Real-World Impact
 
-After migrating to Agent Actions, QanaLabs observed:
+Agent Actions has been used in production workflows processing thousands of records. Representative results from a quiz generation pipeline:
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Questions generated/day | ~200 | ~2,000 |
+| Metric | Before (Python scripts) | After (Agent Actions) |
+|--------|------------------------|----------------------|
+| Records processed/day | ~200 | ~2,000 |
 | Failed records requiring manual review | 15% | 3% |
 | Time to debug production issues | Hours | Minutes |
-| Cost per 1000 questions | $X | $0.5X (batch savings) |
-| Time to add new question type | Days | Hours |
+| Cost per 1000 records | Baseline | ~50% (batch savings) |
+| Time to add new output type | Days | Hours |
 
-The declarative approach paid dividends in maintainability. When exam objectives changed, updating prompts and schemas took hours, not days. When new team members joined, they could understand workflows by reading YAML rather than tracing Python.
+The declarative approach pays dividends in maintainability. When requirements change, updating prompts and schemas takes hours, not days. When new team members join, they can understand workflows by reading YAML rather than tracing Python.
 
 ---
 
@@ -1634,7 +1703,7 @@ Agent Actions continues to evolve based on production feedback:
 
 ## Conclusion
 
-Agent Actions emerged from solving real problems at scale. The QanaLabs quiz generation workflow—18 steps, thousands of records, production SLAs—demanded reliability that prototype scripts couldn't provide.
+Agent Actions was built for production-scale LLM workflows — the kind where 18 steps, thousands of records, and real SLAs demand reliability that prototype scripts cannot provide.
 
 The solution: externalize orchestration into declarative configuration. Define what each action does. Let the framework handle how. Validate before executing. Retry when things fail. Track everything.
 
@@ -1677,4 +1746,4 @@ GitHub: [https://github.com/Muizzkolapo/agent-actions](https://github.com/Muizzk
 
 *Agent Actions: Declarative Framework for Agentic LLM Workflows*
 
-*From the team at QanaLabs*
+*By Muizz Kolapo*
