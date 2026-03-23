@@ -467,6 +467,31 @@ class TestValidateMethod:
         assert result is True
         assert len(validator.get_warnings()) == 0
 
+    def test_fields_format_schema_skips_json_schema_checks(self, validator, tmp_path):
+        """Fields-format schemas are valid and skip JSON Schema meta-validation."""
+        schema_content = (
+            "name: score_quality\n"
+            "fields:\n"
+            "  - id: score\n"
+            "    type: number\n"
+            "    description: Quality score\n"
+        )
+        (tmp_path / "score.yml").write_text(schema_content)
+        result = validator.validate(
+            {"agent_name": "test", "schema_dir": tmp_path}
+        )
+        assert result is True
+        assert not validator.has_errors()
+
+    def test_json_schema_format_still_validated(self, validator, tmp_path):
+        """JSON Schema format schemas still go through meta-validation."""
+        bad_schema = {"type": "object", "properties": "not_a_dict"}
+        (tmp_path / "bad.json").write_text(json.dumps(bad_schema))
+        result = validator.validate(
+            {"agent_name": "test", "schema_dir": tmp_path}
+        )
+        assert result is False
+
     def test_invalid_yaml_schema_reports_error(self, validator, tmp_path):
         (tmp_path / "bad.yml").write_text(":\n  :\n    - ][")
         result = validator.validate(

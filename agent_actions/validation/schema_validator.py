@@ -163,6 +163,14 @@ class SchemaValidator(BaseValidator):
                 field=schema_name,
             )
             return
+        # Fields-format schemas (name/fields/id) are compiled to JSON Schema
+        # at runtime by SchemaLoader.  Skip JSON Schema meta-validation here.
+        if self._is_fields_format(schema_data):
+            logger.debug(
+                "Schema '%s' uses fields format; skipping JSON Schema checks.",
+                file_path.name,
+            )
+            return
         if not self._is_valid_json_schema_structure(schema_data):
             self.add_error(
                 f"{display_name} (file: {file_path.name}) does not appear to be "
@@ -231,6 +239,20 @@ class SchemaValidator(BaseValidator):
             "oneOf",
         }
         return bool(set(schema_data.keys()) & schema_keywords)
+
+    @staticmethod
+    def _is_fields_format(schema_data: Any) -> bool:
+        """Return True if the schema uses the internal fields format.
+
+        Fields-format schemas have a ``fields`` list and are compiled to
+        JSON Schema at runtime by :class:`SchemaLoader`.  They should not
+        be validated against the JSON Schema meta-schema directly.
+        """
+        return (
+            isinstance(schema_data, dict)
+            and "fields" in schema_data
+            and isinstance(schema_data.get("fields"), list)
+        )
 
     @staticmethod
     def _validate_against_meta_schema_static(schema_data: dict[str, Any]) -> None:
