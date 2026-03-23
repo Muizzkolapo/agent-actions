@@ -180,8 +180,13 @@ Execute actions in parallel or sequential versions:
   versions: { range: [1, 3], mode: parallel }
 
 - name: synthesize
-  dependencies: [research_1, research_2, research_3]  # Merged
+  dependencies: [research]
+  version_consumption:
+    source: research
+    pattern: merge    # Combines all version outputs
 ```
+
+> **Warning:** After expansion, versioned actions produce `research_1`, `research_2`, `research_3`. Listing base names like `dependencies: [research]` fails validation unless you use `version_consumption`. Either use `version_consumption` (preferred) or list every expanded name explicitly: `dependencies: [research_1, research_2, research_3]`.
 
 **Fan-in** - different actions converging:
 ```yaml
@@ -301,6 +306,8 @@ guard:
 ```yaml
 schema: my_schema        # References schema/my_schema.yml - gets inlined during render
 ```
+
+> Schema names are global -- reference by name only, never with a folder prefix. Use `schema: extract_claims`, not `schema: review_analyzer/extract_claims`.
 
 **Inline Schemas:**
 ```yaml

@@ -54,12 +54,14 @@ Process one record at a time:
 ```python
 @udf_tool()
 def filter_questions_by_score(data: dict) -> dict:
-    score = data.get('syllabus_alignment_score', 0)
+    content = data.get('content', data)
+    score = content.get('syllabus_alignment_score', 0)
+    result = content.copy()
     if score >= 85:
-        data['question_status'] = "KEEP"
+        result['question_status'] = "KEEP"
     else:
-        data['question_status'] = "FILTER"
-    return data
+        result['question_status'] = "FILTER"
+    return result
 ```
 
 ```yaml
@@ -77,7 +79,7 @@ Process all records at once:
 from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
-def run_dedup(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def run_dedup(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen = set()
     unique = []
     for record in data:
@@ -113,7 +115,7 @@ lineage.
 from agent_actions import FileUDFResult
 
 @udf_tool(granularity=Granularity.FILE)
-def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
+def dedup_with_lineage(data: list[dict]) -> FileUDFResult:
     seen = {}
     outputs = []
 
@@ -135,126 +137,34 @@ def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
 
 ## Nested TypedDicts for Complex Output
 
-When your UDF returns nested objects, **always use nested TypedDicts** instead of `Dict[str, Any]`. The framework converts `Dict[str, Any]` incorrectly to `additionalProperties: {type: string}`, causing schema validation errors.
-
-### Problem: Dict[str, Any]
+When your UDF returns nested objects, use nested `TypedDict` classes instead of `dict[str, Any]`. The framework converts `dict[str, Any]` to `additionalProperties: {type: string}`, causing schema validation errors.
 
 ```python
-# BAD - Will cause schema validation errors
+# BAD - schema validation errors (all values forced to string)
 class MyOutput(TypedDict, total=False):
-    results: List[Dict[str, Any]]      # Converted to additionalProperties: {type: 'string'}
-    metadata: Dict[str, Any]           # All values must be strings!
-```
+    results: list[dict[str, Any]]
+    metadata: dict[str, Any]
 
-### Solution: Nested TypedDicts
-
-```python
-# GOOD - Explicit types for nested structures
+# GOOD - explicit nested types preserve int/float/etc.
 class SearchMetadata(TypedDict, total=False):
-    """Metadata about the search operation."""
-    total_count: int           # int type preserved
-    results_returned: int      # int type preserved
-    search_method: str
-    filters_applied: List[str]
-
-class MatchingItem(TypedDict, total=False):
-    """A single matching item."""
-    id: str
-    title: str
-    score: float               # float type preserved
-    tags: List[str]
-
-class MyOutput(TypedDict, total=False):
-    """Output schema with proper nested types."""
-    results: List[MatchingItem]
-    metadata: SearchMetadata
-```
-
-### Complete Example
-
-```python
-from typing import TypedDict, List
-from agent_actions import udf_tool
-
-class OperationMetadata(TypedDict, total=False):
-    total_processed: int
-    matches_found: int
+    total_count: int
     method: str
 
-class ResultItem(TypedDict, total=False):
+class MatchingItem(TypedDict, total=False):
     id: str
-    name: str
     score: float
 
-class SearchInput(TypedDict, total=False):
-    query: str
-    filters: List[str]
-
-@udf_tool()
-def search_items(data: dict) -> dict:
-    return {
-        "results": [
-            {"id": "123", "name": "Item A", "score": 0.95}
-        ],
-        "metadata": {
-            "total_processed": 100,      # int works correctly
-            "matches_found": 15,          # int works correctly
-            "method": "fuzzy_match"
-        }
-    }
+class MyOutput(TypedDict, total=False):
+    results: list[MatchingItem]
+    metadata: SearchMetadata
 ```
 
 ## Best Practices
 
-### 1. Use Descriptive Type Names
-
-```python
-# Good
-class QuestionQualityInput(TypedDict):
-    score: int
-    question: str
-
-# Avoid
-class Input1(TypedDict):
-    x: int
-```
-
-### 2. Document Expected Input
-
-```python
-@udf_tool()
-def my_function(data: dict) -> dict:
-    """
-    Process data for downstream consumption.
-
-    Expected input fields:
-        - score: Quality score (0-100)
-        - text: Content to process
-
-    Output:
-        - status: "KEEP" or "FILTER"
-        - reason: Explanation
-    """
-```
-
-### 3. Handle Missing Fields
-
-```python
-@udf_tool()
-def safe_function(data: dict) -> dict:
-    score = data.get('score', 0)  # Use .get() with defaults
-    text = data.get('text', '')
-    return {'result': f"{score}: {text}"}
-```
-
-### 4. Return Complete Records
-
-```python
-@udf_tool()
-def augment_data(data: dict) -> dict:
-    data['new_field'] = 'computed_value'  # Add, don't replace
-    return data
-```
+- **Use `.get()` with defaults** for all field access: `data.get('score', 0)` prevents `KeyError` on missing fields.
+- **Document expected input/output** in the docstring so downstream consumers know what fields to expect.
+- **Use descriptive TypedDict names** (`QuestionQualityInput`, not `Input1`) when using typed schemas.
+- **Return complete records** -- prefer `content.copy()` + add fields over building from scratch, so downstream actions retain all upstream data.
 
 ## Error Handling
 

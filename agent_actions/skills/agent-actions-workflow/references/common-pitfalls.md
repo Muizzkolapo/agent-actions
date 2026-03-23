@@ -147,15 +147,25 @@ context_scope:
     - filter_quality.*  # Wildcard captures ALL versions
 ```
 
-## 10. Schema Files in Nested Directory
+## 10. Schema Files in Nested Directory / Schema References with Folder Prefix
 
 **Error:** `Schema file not found`
 
-**Cause:** Framework only looks in `schema/`, not recursively.
+**Cause:** Framework only looks in `schema/`, not recursively. Schema names are globally unique.
 
-**Wrong:** `schema/my_workflow/my_schema.yml`
+**Wrong file path:** `schema/my_workflow/my_schema.yml`
 
-**Correct:** `schema/my_schema.yml`
+**Correct file path:** `schema/my_schema.yml`
+
+**Wrong reference in YAML:**
+```yaml
+schema: review_analyzer/extract_claims   # Folder prefix not allowed!
+```
+
+**Correct reference in YAML:**
+```yaml
+schema: extract_claims                   # Name only - globally unique
+```
 
 ## 11. Legacy Workflow Format
 
@@ -180,11 +190,11 @@ actions:
 
 ## 12. Missing Return Type in UDF
 
-**Always return `List[Dict[str, Any]]`:**
+**Always return `list[dict[str, Any]]`:**
 
 ```python
 @udf_tool()
-def my_udf(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def my_udf(data: dict[str, Any]) -> list[dict[str, Any]]:
     # ...
     return [result]  # List!
 ```

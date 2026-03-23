@@ -83,7 +83,14 @@ Forward fields to output **without** including in LLM context.
 
 ## Seed Data
 
-Load static reference data:
+Static reference data loaded via `seed_data:` in the workflow config and accessed via the `seed.` prefix in templates.
+
+**Config key vs reference prefix:**
+
+| Where | Syntax | Example |
+|-------|--------|---------|
+| Workflow YAML config | `seed_data:` | `seed_data: { syllabus: $file:syllabus.json }` |
+| Prompt templates | `seed.` | `{{ seed.syllabus.exam_name }}` |
 
 ```yaml
 defaults:
@@ -98,8 +105,20 @@ actions:
       Extract facts from: {{ source.page_content }}
 ```
 
-Seed data is **prompt-only**. It is available under the `seed` namespace for
-template rendering, but it is not injected into LLM/tool context by default.
+Seed data is **auto-available in prompts** without listing it in `observe`. It is available under the `seed` namespace for template rendering, but it is not injected into LLM/tool context by default.
+
+When you need seed data inside a **UDF tool action**, you must explicitly list it in `observe`:
+
+```yaml
+- name: enrich_data
+  kind: tool
+  impl: enrich_with_syllabus
+  context_scope:
+    observe:
+      - seed.exam_syllabus    # Required for UDF tools only
+```
+
+> **Common mistake:** Using `seed_data.` as the reference prefix. The config key is `seed_data:` but the reference prefix is `seed.` -- writing `{{ seed_data.exam_syllabus }}` in a prompt will not resolve.
 
 | Syntax | Description |
 |--------|-------------|

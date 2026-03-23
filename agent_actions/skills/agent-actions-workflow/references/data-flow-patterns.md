@@ -353,7 +353,7 @@ fields:
 **2. Retrieval Tool:**
 ```python
 class SearchCatalogOutput(TypedDict, total=False):
-    results: List[ResultItem]  # Use nested TypedDict, NOT Dict[str, Any]
+    results: list[ResultItem]  # Use nested TypedDict, NOT dict[str, Any]
     metadata: SearchMetadata
 
 @udf_tool()

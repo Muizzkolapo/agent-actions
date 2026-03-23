@@ -186,7 +186,7 @@ Write workflows that consume from multiple different upstream workflows by detec
 
 ```python
 @udf_tool()
-def format_options(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def format_options(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Format options differently based on input type."""
     content = data.get('content', data)
     options = content.get('options', [])
@@ -247,7 +247,7 @@ Run same action multiple times in parallel, then consume all results:
 **UDF to process merged results:**
 ```python
 @udf_tool()
-def combine_parallel_results(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def combine_parallel_results(data: dict[str, Any]) -> list[dict[str, Any]]:
     content = data.get('content', data)
     results = []
 
@@ -315,7 +315,7 @@ actions:
 
 ```python
 @udf_tool(granularity=Granularity.FILE)
-def chunk_document(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def chunk_document(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     chunks = []
     for record in data:
         source_guid = record.get("source_guid")

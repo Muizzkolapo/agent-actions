@@ -415,11 +415,11 @@ context_scope:
 **CRITICAL: Always handle content wrapper and return a list.**
 
 ```python
-from typing import Any, Dict, List
+from typing import Any
 from agent_actions import udf_tool
 
 @udf_tool()
-def my_function(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def my_function(data: dict[str, Any]) -> list[dict[str, Any]]:
     # STEP 1: Handle content wrapper (REQUIRED)
     if 'content' in data:
         content = data['content']
@@ -525,8 +525,10 @@ See: **[Dynamic Content Injection](references/dynamic-content-injection.md)**
 | Missing passthrough | Add `passthrough: [upstream.*]` to forward fields |
 | Using `loop:` keyword | Use `versions:` (not `loop:`) |
 | Using `loop_consumption:` | Use `version_consumption:` |
-| ~~Version vars in prompt store~~ | ~~Fixed: Now works with both inline and prompt store references~~ |
 | Schema without `name` field | Add `name:`, `description:`, `fields:` structure |
+| `seed_data.` in observe/prompts | Config key is `seed_data:`, reference prefix is `seed.` |
+| Schema with folder prefix | Use `schema: name` not `schema: workflow_name/name` |
+| Depend on base versioned name | Use `version_consumption` or list all expanded variants |
 | Referencing non-existent fields | Check actual output with `cat agent_io/target/<action>/*.json` |
 | Wrong field namespace after passthrough | Fields become `current_action.field`, not `original_action.field` |
 
