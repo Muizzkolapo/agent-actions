@@ -406,10 +406,15 @@ class WorkflowConfig(BaseModel):
         if duplicates:
             raise ValueError(f"Duplicate action names: {sorted(duplicates)}")
 
-        all_deps = set()
+        # Version base names (e.g. "score_quality") are valid dependency targets
+        # even though only their expanded variants exist as concrete actions.
+        base_names: set[str] = set()
+        all_deps: set[str] = set()
         for action in self.actions:
             all_deps.update(action.dependencies)
-        dangling = all_deps - seen
+            if action.version_context and "base_name" in action.version_context:
+                base_names.add(action.version_context["base_name"])
+        dangling = all_deps - seen - base_names
         if dangling:
             raise ValueError(
                 f"Dangling dependency references (not defined as actions): {sorted(dangling)}"
