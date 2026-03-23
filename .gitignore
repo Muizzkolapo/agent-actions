@@ -82,6 +82,12 @@ agent_actions/extract_*/
 agent_actions/flatten_*/
 **/combined_scraped.json
 
+# IDE / editor files
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
 # Docusaurus / Documentation site
 docs.agent-actions/node_modules/
 docs.agent-actions/build/

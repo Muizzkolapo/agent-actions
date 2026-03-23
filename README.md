@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://muizzkolapo.github.io/docs.agent-actions">
+  <a href="https://muizzkolapo.github.io/runagac">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-text-dark.svg">
       <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-text-light.svg">
