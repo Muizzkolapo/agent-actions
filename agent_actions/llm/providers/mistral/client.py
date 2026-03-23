@@ -11,14 +11,12 @@ consistent retry handling across all providers.
 import logging
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 from mistralai import Mistral
 from mistralai import models as mistral_models
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -34,6 +32,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -83,10 +82,10 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             client = Mistral(api_key=api_key)
-            context_data_str = StringProcessor.process_as_string(context_data)
-            prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            <|begin_of_output_schema|> : {schema} : <|end_of_output_schema|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            "
-            prompt_dedent = dedent(prompt)
-            messages = [{"role": "user", "content": prompt_dedent}]
+            envelope = MessageBuilder.build(
+                "mistral", prompt_config, context_data, schema=schema, json_mode=True
+            )
+            messages = envelope.to_dicts()
             json_kwargs = {
                 "model": model_name,
                 "response_format": {"type": "json_object"},
@@ -173,10 +172,8 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             client = Mistral(api_key=api_key)
-            context_data_str = StringProcessor.process_as_string(context_data)
-            prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            "
-            prompt_dedent = dedent(prompt)
-            messages = [{"role": "user", "content": prompt_dedent}]
+            envelope = MessageBuilder.build("mistral", prompt_config, context_data, json_mode=False)
+            messages = envelope.to_dicts()
             non_json_kwargs = {
                 "model": model_name,
                 "messages": messages,

@@ -21,6 +21,7 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.ollama.failure_injection import (
     should_fail_batch_record,
 )
+from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
@@ -53,12 +54,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         Format task as OpenAI-compatible JSONL (for consistency).
         """
         model_name = batch_task.model_config.get("model_name", "llama2")
+        envelope = MessageBuilder.build_for_batch(
+            "ollama", batch_task.prompt, batch_task.user_content, schema=schema
+        )
         body = {
             "model": model_name,
-            "messages": [
-                {"role": "system", "content": batch_task.prompt},
-                {"role": "user", "content": batch_task.user_content},
-            ],
+            "messages": envelope.to_dicts(),
         }
 
         # Add optional parameters
@@ -244,7 +245,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         """Not used by Ollama (overrides retrieve_results)."""
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")
 
-    def _transform_ollama_response(self, ollama_response: dict | object, custom_id: str, model: str) -> dict:
+    def _transform_ollama_response(
+        self, ollama_response: dict | object, custom_id: str, model: str
+    ) -> dict:
         """
         Transform Ollama response to OpenAI batch output format.
 
@@ -286,7 +289,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         if isinstance(ollama_response, dict):
             _msg = ollama_response.get("message", {})
             role = _msg.get("role") if isinstance(_msg, dict) else getattr(_msg, "role", None)
-            content = _msg.get("content") if isinstance(_msg, dict) else getattr(_msg, "content", None)
+            content = (
+                _msg.get("content") if isinstance(_msg, dict) else getattr(_msg, "content", None)
+            )
         else:
             _msg = getattr(ollama_response, "message", None)
             role = getattr(_msg, "role", None) if _msg else None
@@ -315,28 +320,35 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                                 "role": role,
                                 "content": content,
                             },
-                            "finish_reason": "stop" if (
-                                ollama_response.get("done") if isinstance(ollama_response, dict)
+                            "finish_reason": "stop"
+                            if (
+                                ollama_response.get("done")
+                                if isinstance(ollama_response, dict)
                                 else getattr(ollama_response, "done", False)
-                            ) else "length",
+                            )
+                            else "length",
                         }
                     ],
                     "usage": {
                         "prompt_tokens": (
-                            ollama_response.get("prompt_eval_count", 0) if isinstance(ollama_response, dict)
+                            ollama_response.get("prompt_eval_count", 0)
+                            if isinstance(ollama_response, dict)
                             else getattr(ollama_response, "prompt_eval_count", None) or 0
                         ),
                         "completion_tokens": (
-                            ollama_response.get("eval_count", 0) if isinstance(ollama_response, dict)
+                            ollama_response.get("eval_count", 0)
+                            if isinstance(ollama_response, dict)
                             else getattr(ollama_response, "eval_count", None) or 0
                         ),
                         "total_tokens": (
                             (
-                                ollama_response.get("prompt_eval_count", 0) if isinstance(ollama_response, dict)
+                                ollama_response.get("prompt_eval_count", 0)
+                                if isinstance(ollama_response, dict)
                                 else getattr(ollama_response, "prompt_eval_count", None) or 0
                             )
                             + (
-                                ollama_response.get("eval_count", 0) if isinstance(ollama_response, dict)
+                                ollama_response.get("eval_count", 0)
+                                if isinstance(ollama_response, dict)
                                 else getattr(ollama_response, "eval_count", None) or 0
                             )
                         ),

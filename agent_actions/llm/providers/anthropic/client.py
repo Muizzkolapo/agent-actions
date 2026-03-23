@@ -10,13 +10,11 @@ consistent retry handling across all providers.
 
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 import anthropic
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -28,6 +26,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 _ERROR_MAPPING = VendorErrorMapping(
@@ -139,9 +138,11 @@ class AnthropicClient(BaseClient):
         """
         model_name: str = agent_config[MODEL_NAME_KEY]
         client = anthropic.Anthropic(api_key=api_key)
-        context_data_str: str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
-        prompt_dedent: str = dedent(prompt)
+        json_mode = schema is not None
+        envelope = MessageBuilder.build(
+            "anthropic", prompt_config, context_data, schema=schema, json_mode=json_mode
+        )
+        prompt_dedent: str = envelope.messages[0].content
 
         api_args = AnthropicClient._build_api_args(model_name, prompt_dedent, schema, agent_config)
 

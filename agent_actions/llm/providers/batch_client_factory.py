@@ -70,7 +70,9 @@ def _create_openai(config: dict[str, Any]) -> BaseBatchClient:
     from .openai.batch_client import OpenAIBatchClient
 
     _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv("OPENAI_API_KEY")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "OPENAI_API_KEY"
+    )
     return OpenAIBatchClient(api_key=api_key)
 
 
@@ -78,7 +80,9 @@ def _create_gemini(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".gemini.batch_client", "GeminiBatchClient")
     cls = _require_class(cls, available, "gemini", "google-genai")
     _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv("GEMINI_API_KEY")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "GEMINI_API_KEY"
+    )
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
@@ -93,7 +97,9 @@ def _create_anthropic(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".anthropic.batch_client", "AnthropicBatchClient")
     cls = _require_class(cls, available, "anthropic", "anthropic")
     _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv("ANTHROPIC_API_KEY")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "ANTHROPIC_API_KEY"
+    )
     return cls(  # type: ignore[no-any-return]
         api_key=api_key,
         version=config.get("anthropic_version"),
@@ -105,7 +111,9 @@ def _create_groq(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".groq.batch_client", "GroqBatchClient")
     cls = _require_class(cls, available, "groq", "groq")
     _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv("GROQ_API_KEY")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "GROQ_API_KEY"
+    )
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 
@@ -113,7 +121,9 @@ def _create_mistral(config: dict[str, Any]) -> BaseBatchClient:
     cls, available = _try_import(".mistral.batch_client", "MistralBatchClient")
     cls = _require_class(cls, available, "mistral", "mistralai")
     _raw = config.get("api_key")
-    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv("MISTRAL_API_KEY")
+    api_key = (_raw.get_secret_value() if isinstance(_raw, SecretStr) else _raw) or os.getenv(
+        "MISTRAL_API_KEY"
+    )
     return cls(api_key=api_key)  # type: ignore[no-any-return]
 
 

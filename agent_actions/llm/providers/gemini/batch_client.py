@@ -18,6 +18,8 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None  # type: ignore[assignment]
     types = None  # type: ignore[assignment]
+from agent_actions.prompt.message_builder import MessageBuilder
+
 from ..batch_base import BaseBatchClient, BatchTask
 
 
@@ -67,7 +69,10 @@ class GeminiBatchClient(BaseBatchClient):
             }
         }
         """
-        combined_text = f"{batch_task.prompt}\n\n{batch_task.user_content}"
+        envelope = MessageBuilder.build_for_batch(
+            "gemini", batch_task.prompt, batch_task.user_content, schema=schema
+        )
+        combined_text = envelope.messages[0].content
         generation_config = {}
         if "temperature" in batch_task.model_config:
             generation_config["temperature"] = batch_task.model_config["temperature"]

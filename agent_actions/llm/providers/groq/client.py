@@ -14,14 +14,12 @@ as Groq's json_object mode can produce malformed output.
 import logging
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 import groq
 from groq import Groq
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.input.preprocessing.transformation.transformer import DataTransformer
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
@@ -35,6 +33,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -74,9 +73,9 @@ class GroqClient(BaseClient, JSONResponseMixin):
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         client = Groq(api_key=api_key)
         model_name = agent_config[MODEL_NAME_KEY]
-        context_data_str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n            <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n\n            <|begin_of_text|>:: {context_data_str} :<|end_of_text|>\n        "
-        prompt_dedent = dedent(prompt)
+        envelope = MessageBuilder.build(
+            "groq", prompt_config, context_data, schema=schema, json_mode=True
+        )
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
@@ -91,7 +90,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
         )
 
         json_completion_kwargs: dict[str, Any] = {
-            "messages": [{"role": "system", "content": prompt_dedent}],
+            "messages": envelope.to_dicts(),
             "model": model_name,
             "response_format": {"type": "json_object"},
             **extract_generation_params(
@@ -166,14 +165,12 @@ class GroqClient(BaseClient, JSONResponseMixin):
     def call_non_json(api_key, agent_config, prompt_config, context_data):
         client = Groq(api_key=api_key)
         model_name = agent_config[MODEL_NAME_KEY]
-        context_data_str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n                Instructions: {prompt_config}\n                Input Text: {str(context_data_str)}\n                \n                Please provide a direct response without any JSON formatting.\n                Begin your response here:\n            "
-        prompt_dedent = dedent(prompt).strip()
+        envelope = MessageBuilder.build("groq", prompt_config, context_data, json_mode=False)
         params = extract_generation_params(agent_config)
         params.setdefault("temperature", 0.7)
         params.setdefault("max_tokens", 1000)
         completion_kwargs = {
-            "messages": [{"role": "system", "content": prompt_dedent}],
+            "messages": envelope.to_dicts(),
             "model": model_name,
             **params,
         }

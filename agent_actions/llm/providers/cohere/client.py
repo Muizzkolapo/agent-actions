@@ -11,14 +11,12 @@ consistent retry handling across all providers.
 import logging
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 import cohere
 from cohere.core import api_error as cohere_errors
 
 from agent_actions.errors import ConfigurationError, NetworkError, RateLimitError, VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -34,6 +32,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -71,33 +70,21 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
 
-        # Validate schema and build schema_instruction before firing LLMRequestEvent
+        # Validate schema before firing LLMRequestEvent
         # so a validation error doesn't orphan the request event in the log.
         if schema is not None:
             if not schema:
                 raise ConfigurationError("Schema must not be empty")
-            if "properties" in schema:
-                schema_fields = schema["properties"].keys()
-            elif schema.get("type") == "object":
-                # JSON Schema structure with type:object but no properties key
-                raise ConfigurationError(
-                    f"Schema is a JSON Schema object but missing 'properties' key (got: {list(schema.keys())})"
-                )
-            else:
-                # Legacy raw field dict: {"field_name": {"type": ...}, ...}
-                # Validate values are dicts to reject schemas like {type:array, items:{...}}
+            if "properties" not in schema:
+                if schema.get("type") == "object":
+                    raise ConfigurationError(
+                        f"Schema is a JSON Schema object but missing 'properties' key (got: {list(schema.keys())})"
+                    )
                 if not all(isinstance(v, dict) for v in schema.values()):
                     raise ConfigurationError(
                         f"Schema is neither a JSON Schema nor a valid field dict "
                         f"(keys: {list(schema.keys())})"
                     )
-                schema_fields = schema.keys()
-            fields_str = ", ".join([f"'{field}'" for field in schema_fields])
-            schema_instruction = f"<|begin_of_output_schema|> : GENERATE JSON with the fields {fields_str} : <|end_of_output_schema|>"
-        else:
-            schema_instruction = (
-                "<|begin_of_output_schema|> : GENERATE JSON : <|end_of_output_schema|>"
-            )
 
         # Fire LLM request event
         fire_event(
@@ -110,11 +97,11 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
 
         start_time = datetime.now()
         try:
-            context_data_str = StringProcessor.process_as_string(context_data)
             co = cohere.ClientV2(api_key=api_key)
-            prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            {schema_instruction}\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
-            prompt_dedent = dedent(prompt)
-            messages = [{"role": "user", "content": prompt_dedent}]
+            envelope = MessageBuilder.build(
+                "cohere", prompt_config, context_data, schema=schema, json_mode=True
+            )
+            messages = envelope.to_dicts()
             chat_kwargs = {
                 "model": model_name,
                 "messages": messages,
@@ -210,9 +197,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         start_time = datetime.now()
         try:
             co = cohere.ClientV2(api_key=api_key)
-            context_data_str = StringProcessor.process_as_string(context_data)
-            prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
-            messages = [{"role": "user", "content": dedent(prompt)}]
+            envelope = MessageBuilder.build("cohere", prompt_config, context_data, json_mode=False)
+            messages = envelope.to_dicts()
             non_json_kwargs = {
                 "model": model_name,
                 "messages": messages,

@@ -12,7 +12,6 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
@@ -22,7 +21,6 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
 from agent_actions.errors import VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -34,6 +32,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 _ERROR_MAPPING = VendorErrorMapping(
@@ -76,11 +75,10 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, Any]]:
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
-        context_data_str: str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            RULES: ALWAYS READ INPUT AS STRING\n        "
-        messages: list[ChatCompletionSystemMessageParam] = [
-            {"role": "system", "content": dedent(prompt)}
-        ]
+        envelope = MessageBuilder.build(
+            "openai", prompt_config, context_data, schema=schema, json_mode=True
+        )
+        messages: list[ChatCompletionSystemMessageParam] = envelope.to_dicts()
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
@@ -197,11 +195,8 @@ class OpenAIClient(BaseClient):
     ) -> list[dict[str, str]]:
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
-        context_data_str: str = StringProcessor.process_as_string(context_data)
-        prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
-        messages: list[ChatCompletionUserMessageParam] = [
-            {"role": "user", "content": dedent(prompt)}
-        ]
+        envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
+        messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())

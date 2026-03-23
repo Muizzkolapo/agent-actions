@@ -33,6 +33,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -67,14 +68,6 @@ class OllamaClient(BaseClient):
         "required_fields": ["model_name"],
         "optional_fields": ["base_url", "temperature", "max_tokens"],
     }
-
-    @staticmethod
-    def _prep_messages(prompt_config: str, context_data: str) -> list[dict[str, str]]:
-        """Prepare messages with system and user roles."""
-        return [
-            {"role": "system", "content": prompt_config},
-            {"role": "user", "content": context_data},
-        ]
 
     @staticmethod
     def _get_client(agent_config: dict[str, Any]) -> Client:
@@ -130,12 +123,10 @@ class OllamaClient(BaseClient):
             List with single response dict containing parsed JSON fields
         """
         model = agent_config[MODEL_NAME_KEY]
-        ctx_str = (
-            json.dumps(context_data, ensure_ascii=False)
-            if not isinstance(context_data, str)
-            else context_data
+        envelope = MessageBuilder.build(
+            "ollama", prompt_config, context_data, schema=schema, json_mode=True
         )
-        messages = OllamaClient._prep_messages(prompt_config, ctx_str)
+        messages = envelope.to_dicts()
 
         # Extract schema for Ollama's format parameter
         logger.debug("Schema received by Ollama client: type=%s, value=%s", type(schema), schema)
@@ -268,12 +259,8 @@ class OllamaClient(BaseClient):
             List with single response dict containing output_field
         """
         model = agent_config[MODEL_NAME_KEY]
-        ctx_str = (
-            json.dumps(context_data, ensure_ascii=False)
-            if not isinstance(context_data, str)
-            else context_data
-        )
-        messages = OllamaClient._prep_messages(prompt_config, ctx_str)
+        envelope = MessageBuilder.build("ollama", prompt_config, context_data, json_mode=False)
+        messages = envelope.to_dicts()
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())

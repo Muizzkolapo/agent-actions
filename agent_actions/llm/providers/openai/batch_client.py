@@ -8,6 +8,8 @@ from typing import Any
 
 from openai import OpenAI
 
+from agent_actions.prompt.message_builder import MessageBuilder
+
 from ..batch_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
@@ -46,12 +48,12 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", "gpt-4o-mini")
+        envelope = MessageBuilder.build_for_batch(
+            "openai", batch_task.prompt, batch_task.user_content, schema=schema
+        )
         body = {
             "model": model_name,
-            "messages": [
-                {"role": "system", "content": batch_task.prompt},
-                {"role": "user", "content": batch_task.user_content},
-            ],
+            "messages": envelope.to_dicts(),
         }
         default_temp_only_models = ["gpt-5-mini", "gpt-5-nano", "gpt-5"]
         if "temperature" in batch_task.model_config:

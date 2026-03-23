@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.prompt.message_builder import MessageBuilder
+
 from ..batch_base import BaseBatchClient, BatchResult, BatchTask
 
 logger = logging.getLogger(__name__)
@@ -98,13 +100,17 @@ class AnthropicBatchClient(BaseBatchClient):
             }
         }
         """
-        messages = [{"role": "user", "content": batch_task.user_content}]
+        envelope = MessageBuilder.build_for_batch(
+            "anthropic", batch_task.prompt, batch_task.user_content, schema=schema
+        )
+        # Anthropic batch: system is a top-level param, user content is the message
         params = {
             "model": batch_task.model_config.get("model_name", "claude-3-5-sonnet-20241022"),
-            "messages": messages,
+            "messages": envelope.to_dicts(role="user"),
         }
-        if batch_task.prompt:
-            params["system"] = batch_task.prompt
+        system_dicts = envelope.to_dicts(role="system")
+        if system_dicts and system_dicts[0]["content"]:
+            params["system"] = system_dicts[0]["content"]
         self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
         self._add_optional_param(
             params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096

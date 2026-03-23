@@ -11,7 +11,6 @@ consistent retry handling across all providers.
 import logging
 import uuid
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, ClassVar
 
 from google import genai
@@ -19,7 +18,6 @@ from google.genai import errors as genai_errors
 from google.genai import types
 
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
-from agent_actions.input.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
@@ -35,6 +33,7 @@ from agent_actions.logging.events import (
     LLMResponseEvent,
 )
 from agent_actions.output.response.config_fields import get_default
+from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -98,11 +97,11 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 response_mime_type="application/json",
                 **gen_params,
             )
-            context_data_str = StringProcessor.process_as_string(context_data)
-            prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
-            prompt_dedent = dedent(prompt)
+            envelope = MessageBuilder.build(
+                "gemini", prompt_config, context_data, schema=schema, json_mode=True
+            )
             response_temp = client.models.generate_content(
-                model=model_name, contents=prompt_dedent, config=config
+                model=model_name, contents=envelope.prompt_body, config=config
             )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
@@ -185,11 +184,9 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 stop_as_list=True,
             )
             config = types.GenerateContentConfig(**gen_params) if gen_params else None
-            context_data_str = StringProcessor.process_as_string(context_data)
-            prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
-            prompt_dedent = dedent(prompt)
+            envelope = MessageBuilder.build("gemini", prompt_config, context_data, json_mode=False)
             response_temp = client.models.generate_content(
-                model=model_name, contents=prompt_dedent, config=config
+                model=model_name, contents=envelope.prompt_body, config=config
             )
         except (RateLimitError, NetworkError, VendorAPIError):
             raise

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+from agent_actions.prompt.message_builder import MessageBuilder
+
 from ..batch_base import BaseBatchClient, BatchTask
 
 logger = logging.getLogger(__name__)
@@ -84,12 +86,12 @@ class MistralBatchClient(BaseBatchClient):
         }
         """
         model_name = batch_task.model_config.get("model_name", self._get_default_model())
+        envelope = MessageBuilder.build_for_batch(
+            "mistral", batch_task.prompt, batch_task.user_content, schema=schema
+        )
         body: dict[str, Any] = {
             "model": model_name,
-            "messages": [
-                {"role": "system", "content": batch_task.prompt},
-                {"role": "user", "content": batch_task.user_content},
-            ],
+            "messages": envelope.to_dicts(),
         }
 
         # Add optional parameters
