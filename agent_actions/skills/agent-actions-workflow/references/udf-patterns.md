@@ -2,7 +2,19 @@
 
 Python UDF patterns for agent-actions workflows.
 
-## Basic Template
+## Record vs File: What Your UDF Receives
+
+The framework passes different data structures depending on granularity:
+
+| | Record (default) | File |
+|---|---|---|
+| **Input** | `dict` — business fields only, already unwrapped | `list[dict]` — each item has `{"content": {...}, "source_guid": "..."}` |
+| **Content wrapper** | Stripped by framework | Preserved — you must unwrap each item |
+| **Return type** | `list[dict]` (or `dict` with passthrough) | `FileUDFResult` |
+
+## Record Template
+
+In Record mode, the framework unwraps the content before calling your function. The `.get("content", data)` is a safety net but the data is already flat:
 
 ```python
 from typing import Any
@@ -10,12 +22,10 @@ from agent_actions import udf_tool
 
 @udf_tool()
 def my_function(data: dict[str, Any]) -> list[dict[str, Any]]:
-    """Process data and return modified records."""
-    content = data.get('content', data)
-
+    """Process one record at a time."""
+    content = data.get("content", data)  # Safety net — usually already unwrapped
     result = content.copy()
-    result['computed_field'] = some_calculation(content)
-
+    result["computed_field"] = some_calculation(content)
     return [result]
 ```
 
@@ -64,7 +74,7 @@ def process_merged(data: dict[str, Any]) -> list[dict[str, Any]]:
 
 ## FILE Granularity
 
-Process all records at once. Use `FileUDFResult` for lineage tracking:
+Receives ALL records at once as a list. Unlike Record mode, the content wrapper is **preserved** — you must unwrap each item with `.get("content", record)`. Preserve `source_guid` for lineage:
 
 ```python
 from agent_actions import udf_tool, FileUDFResult
@@ -72,18 +82,18 @@ from agent_actions.config.schema import Granularity
 
 @udf_tool(granularity=Granularity.FILE)
 def run_dedup(data: list[dict]) -> FileUDFResult:
-    """Deduplicate records. FILE granularity receives list of all records."""
+    """FILE mode: each item still has {"content": {...}, "source_guid": "..."}."""
     seen = {}
     outputs = []
 
     for record in data:
-        content = record.get('content', record)
-        fact = content.get('fact', '')
+        content = record.get("content", record)  # ← Required here: wrapper preserved
+        fact = content.get("fact", "")
         if fact not in seen:
             seen[fact] = True
             outputs.append({
                 **content,
-                'source_guid': record.get('source_guid'),
+                "source_guid": record.get("source_guid"),
             })
 
     return FileUDFResult(outputs=outputs, input_count=len(data))
