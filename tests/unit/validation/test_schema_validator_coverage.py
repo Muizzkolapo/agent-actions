@@ -451,6 +451,22 @@ class TestValidateMethod:
         )
         assert result is True
 
+    def test_validates_schemas_in_subdirectory(self, validator, tmp_path):
+        """Schemas in a nested subdirectory are discovered via rglob."""
+        sub = tmp_path / "agent_name"
+        sub.mkdir()
+        schema = {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        }
+        (sub / "out.yml").write_text(yaml.dump(schema))
+        result = validator.validate(
+            {"agent_name": "test", "schema_dir": tmp_path}
+        )
+        assert result is True
+        assert len(validator.get_warnings()) == 0
+
     def test_invalid_yaml_schema_reports_error(self, validator, tmp_path):
         (tmp_path / "bad.yml").write_text(":\n  :\n    - ][")
         result = validator.validate(
