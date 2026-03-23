@@ -451,6 +451,10 @@ class WorkflowConfig(BaseModel):
                 if dep is None:
                     color[node] = BLACK
                     stack.pop()
+                elif dep not in color:
+                    # Versioned base name (e.g. "score_quality") — already
+                    # validated by the dangling-dep check above; skip in DFS.
+                    continue
                 elif color[dep] == GRAY:
                     # Reconstruct cycle path from stack
                     cycle = [n for n, _ in stack]
