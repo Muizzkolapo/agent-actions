@@ -79,6 +79,11 @@ def contains_dangerous_pattern(
     return None
 
 
+# Supported schema file extensions (suffix form for filtering, glob form for discovery).
+SCHEMA_SUFFIXES = (".yml", ".yaml", ".json")
+SCHEMA_FILE_GLOBS = tuple(f"*{s}" for s in SCHEMA_SUFFIXES)
+
+
 # Special namespaces that are always available without explicit dependency declarations.
 # These namespaces provide built-in data (source input, version iteration, workflow metadata, etc.)
 # and don't require being listed in an action's "dependencies" field.

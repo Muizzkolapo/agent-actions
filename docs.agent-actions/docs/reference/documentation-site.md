@@ -32,7 +32,7 @@ Scans your project and generates documentation data. Think of this as taking a s
 **What it scans:**
 - Agentic workflows in `artefact/rendered_workflows/` and `*/agent_config/`
 - Prompts in `prompt_store/*.md` files
-- Schemas in `schema/*.yml` files
+- Schemas in `schema/` files (`.yml`, `.yaml`, `.json`)
 
 **Output:**
 - `artefact/catalog.json` — Agentic workflow catalog

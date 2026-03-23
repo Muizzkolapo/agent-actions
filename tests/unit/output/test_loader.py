@@ -18,7 +18,7 @@ class TestSchemaLoaderLoadSchema:
         _write_project_config(tmp_path)
         schema_dir = tmp_path / "schema"
         schema_dir.mkdir()
-        with pytest.raises(FileNotFoundError, match="MySchema.yml"):
+        with pytest.raises(FileNotFoundError, match="MySchema"):
             SchemaLoader.load_schema("MySchema", project_root=tmp_path)
 
     def test_nonexistent_directory_raises_file_not_found(self, tmp_path):

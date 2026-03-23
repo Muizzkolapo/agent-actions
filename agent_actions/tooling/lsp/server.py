@@ -650,7 +650,7 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
     except Exception:
         schema_path = None
     if schema_path:
-        for ext in ("yml", "yaml"):
+        for ext in ("yml", "yaml", "json"):
             watchers.append(
                 lsp.FileSystemWatcher(
                     glob_pattern=lsp.RelativePattern(

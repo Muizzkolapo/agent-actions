@@ -1,5 +1,7 @@
 """Tests for SchemaLoader schema search behavior."""
 
+import json
+
 import pytest
 
 from agent_actions.output.response.loader import SchemaLoader
@@ -65,3 +67,23 @@ class TestLoadSchemaRecursive:
 
         result = SchemaLoader.load_schema("priority", project_root=tmp_path)
         assert result["name"] == "flat_version"
+
+    def test_json_schema_found(self, tmp_path):
+        """JSON schema files are discovered and loaded correctly."""
+        schema_dir = _setup_project(tmp_path)
+        schema = {"name": "json_schema", "fields": []}
+        (schema_dir / "my_schema.json").write_text(json.dumps(schema))
+
+        result = SchemaLoader.load_schema("my_schema", project_root=tmp_path)
+        assert result["name"] == "json_schema"
+
+    def test_json_and_yml_same_stem_uses_first(self, tmp_path):
+        """When both .yml and .json exist for same stem, first alphabetically wins."""
+        schema_dir = _setup_project(tmp_path)
+        (schema_dir / "dup.yml").write_text("name: yml_version\nfields: []\n")
+        schema = {"name": "json_version", "fields": []}
+        (schema_dir / "dup.json").write_text(json.dumps(schema))
+
+        result = SchemaLoader.load_schema("dup", project_root=tmp_path)
+        # sorted() puts .json before .yml alphabetically, so json wins
+        assert result["name"] == "json_version"

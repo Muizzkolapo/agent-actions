@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+import yaml
 
 from agent_actions.validation.schema_validator import (
     SchemaValidator,
@@ -221,7 +222,7 @@ class TestProcessSchemaFile:
         f.write_text("{not json!!}")
         validator._process_schema_file(f, "bad.json", "agent1")
         assert validator.has_errors()
-        assert any("invalid json" in e.lower() for e in validator.get_errors())
+        assert any("invalid schema" in e.lower() for e in validator.get_errors())
 
     def test_valid_schema_file_no_structural_errors(self, validator, tmp_path):
         """Verify a well-formed schema produces no JSON-parse or meta-schema errors."""
@@ -436,6 +437,40 @@ class TestValidateMethod:
             }
         )
         assert result is True
+
+    @pytest.mark.parametrize("ext", [".yml", ".yaml"])
+    def test_validates_yaml_files_in_dir(self, validator, tmp_path, ext):
+        schema = {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        }
+        (tmp_path / f"out{ext}").write_text(yaml.dump(schema))
+        result = validator.validate(
+            {"agent_name": "test", "schema_dir": tmp_path}
+        )
+        assert result is True
+
+    def test_invalid_yaml_schema_reports_error(self, validator, tmp_path):
+        (tmp_path / "bad.yml").write_text(":\n  :\n    - ][")
+        result = validator.validate(
+            {
+                "agent_name": "test",
+                "schema_dir": tmp_path,
+                "schema_files": ["bad.yml"],
+            }
+        )
+        assert result is False
+
+    def test_no_schema_files_warns(self, validator, tmp_path):
+        """Empty dir with no .json, .yml, or .yaml files emits warning."""
+        result = validator.validate(
+            {"agent_name": "test", "schema_dir": tmp_path}
+        )
+        assert result is True
+        warnings = validator.get_warnings()
+        assert len(warnings) > 0
+        assert "No schema files" in str(warnings[0])
 
 
 # ---------------------------------------------------------------------------

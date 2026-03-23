@@ -26,14 +26,14 @@ Agent Actions supports multiple schema definition approaches:
 
 | Format | Location | Use Case |
 |--------|----------|----------|
-| External YAML | `schema/` directory | Reusable, complex schemas |
+| External YAML/JSON | `schema/` directory | Reusable, complex schemas |
 | Inline Object | Workflow YAML | Simple, one-off schemas |
 | Shorthand | Workflow YAML | Very simple type definitions |
 | Dynamic Dispatch | `dispatch_task()` | Runtime schema selection |
 
-## External Schemas (YAML Files)
+## External Schemas (YAML and JSON Files)
 
-Store reusable schemas in the `schema/` directory at the **project root**. Unlike prompts (which can be workflow-level), schemas are always project-level—shared across all workflows.
+Store reusable schemas in the `schema/` directory at the **project root**. Schema files can use `.yml`, `.yaml`, or `.json` extensions. Unlike prompts (which can be workflow-level), schemas are always project-level—shared across all workflows.
 
 ### Directory Structure
 
@@ -41,8 +41,9 @@ Store reusable schemas in the `schema/` directory at the **project root**. Unlik
 project/
 ├── agent_actions.yml
 ├── schema/                          # Project-level only (shared)
-│   ├── candidate_facts_list.yml
+│   ├── candidate_facts_list.yml     # YAML format
 │   ├── question_quality_score.yml
+│   ├── product_data.json            # JSON format works too
 │   └── cluster_validation.yml
 └── agent_workflow/
     ├── quiz_generation/             # Workflow uses project schemas
@@ -117,7 +118,7 @@ fields:
 actions:
   - name: extract_facts
     prompt: $prompts.extract_facts
-    schema: candidate_facts_list  # References schema/candidate_facts_list.yml
+    schema: candidate_facts_list  # References schema/candidate_facts_list.yml (or .yaml/.json)
 
   - name: score_quality
     prompt: $prompts.score_quality
@@ -125,7 +126,7 @@ actions:
 ```
 
 :::tip Schema Compilation
-During the render step, schema references are **inlined** into the workflow. This means `schema: candidate_facts_list` gets replaced with the actual schema content from `schema/candidate_facts_list.yml`. Use `agac render -a workflow_name` to see the compiled output with all schemas inlined.
+During the render step, schema references are **inlined** into the workflow. This means `schema: candidate_facts_list` gets replaced with the actual schema content from the matching file (`candidate_facts_list.yml`, `.yaml`, or `.json`). Use `agac render -a workflow_name` to see the compiled output with all schemas inlined.
 :::
 
 ## Inline Schemas
@@ -193,7 +194,7 @@ def select_question_schema(input_data: dict) -> str:
     question_type = input_data.get("question_type", "").upper()
 
     if question_type == "MULTIPLE_CHOICE":
-        return "mc_question_schema"  # References schema/mc_question_schema.yml
+        return "mc_question_schema"  # References schema/mc_question_schema.yml (or .yaml/.json)
     elif question_type == "TRUE_FALSE":
         return "tf_question_schema"
     else:
@@ -565,11 +566,12 @@ Enable validation details:
 List available schemas:
 
 ```bash
-ls schema/*.yml
+ls schema/*.yml schema/*.yaml schema/*.json
 ```
 
 Validate a schema file:
 
 ```bash
 agac schema --validate schema/my_schema.yml
+agac schema --validate schema/my_schema.json
 ```

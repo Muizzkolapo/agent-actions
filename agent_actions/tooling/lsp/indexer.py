@@ -11,6 +11,7 @@ from ruamel.yaml import YAML
 from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
+from agent_actions.utils.file_utils import load_structured_file
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
 from .models import (
@@ -585,8 +586,7 @@ def _index_schemas(index: ProjectIndex, project_root: Path) -> None:
 def _extract_schema_fields(schema_file: Path) -> list[str]:
     """Extract schema fields for diagnostics and completions."""
     try:
-        yaml = YAML(typ="safe")
-        data = yaml.load(schema_file.read_text())
+        data = load_structured_file(schema_file)
     except Exception as e:
         logger.debug("Could not extract schema fields from %s: %s", schema_file, e)
         return []

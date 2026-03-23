@@ -21,7 +21,7 @@ agac render -a <workflow-name> [options]
 The render step performs full compilation:
 - **Jinja2 template expansion** - Macros and variables are resolved
 - **Prompt resolution** - `$prompt_name` references are loaded from prompt store
-- **Schema inlining** - `schema_name: foo` loads `schema/foo.yml` and inlines it
+- **Schema inlining** - `schema_name: foo` loads `schema/foo.yml` (or `.yaml`/`.json`) and inlines it
 - **Inline schema expansion** - Shorthand `{field: type}` expands to unified format
 - **Version expansion** - `versions: {range: [1,3]}` expands to multiple actions
 

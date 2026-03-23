@@ -7,12 +7,15 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema  # type: ignore[import-untyped]
+import yaml
 
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     DataValidationFailedEvent,
     DataValidationPassedEvent,
 )
+from agent_actions.utils.constants import SCHEMA_FILE_GLOBS
+from agent_actions.utils.file_utils import load_structured_file
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -73,10 +76,10 @@ def _collect_all_keys(obj: Any) -> set[str]:
 class SchemaValidator(BaseValidator):
     """Validates schema files against JSON Schema meta-schema.
 
-    Intentionally independent from SchemaLoader — this validates ``.json``
-    files against the JSON Schema specification (structural correctness).
-    SchemaLoader handles ``.yml``/``.yaml`` runtime loading with multi-level
-    resolution.  Different concerns, different file formats.
+    Intentionally independent from SchemaLoader — this validates schema files
+    (``.json``, ``.yml``, ``.yaml``) against the JSON Schema specification
+    (structural correctness).  SchemaLoader handles runtime loading with
+    multi-level resolution.
     """
 
     JSON_SCHEMA_RESERVED_KEYWORDS: set[str] = {
@@ -147,11 +150,10 @@ class SchemaValidator(BaseValidator):
             )
             return
         try:
-            with open(file_path, encoding="utf-8") as f:
-                schema_data = json.load(f)
-        except json.JSONDecodeError as e:
+            schema_data = load_structured_file(file_path)
+        except (json.JSONDecodeError, yaml.YAMLError) as e:
             self.add_error(
-                f"Invalid JSON in {display_name} (file: {file_path.name}): {e}.",
+                f"Invalid schema in {display_name} (file: {file_path.name}): {e}.",
                 field=schema_name,
             )
             return
@@ -367,10 +369,17 @@ class SchemaValidator(BaseValidator):
         if schema_files_to_validate:
             files_to_process = [schema_dir / fname for fname in schema_files_to_validate]
         else:
-            files_to_process = list(schema_dir.glob("*.json"))
+            # Validate every schema file independently (no stem-based
+            # deduplication).  SchemaLoader handles name-collision warnings
+            # at runtime; the validator checks structural correctness of
+            # each file regardless.
+            files_to_process = sorted(
+                p for ext in SCHEMA_FILE_GLOBS for p in schema_dir.glob(ext)
+            )
             if not files_to_process:
                 self.add_warning(
-                    f"No .json schema files found in {schema_dir} for agent '{agent_name}'.",
+                    f"No schema files ({', '.join(SCHEMA_FILE_GLOBS)}) found in "
+                    f"{schema_dir} for agent '{agent_name}'.",
                     field="schema_files",
                 )
                 result = self._complete_validation()

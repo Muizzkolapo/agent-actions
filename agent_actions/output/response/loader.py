@@ -6,8 +6,6 @@ import ast
 import json
 from pathlib import Path
 
-import yaml
-
 from agent_actions.errors import (
     SchemaValidationError,
 )
@@ -18,12 +16,14 @@ from agent_actions.logging.events import (
     SchemaLoadedEvent,
     SchemaLoadingStartedEvent,
 )
+from agent_actions.utils.constants import SCHEMA_SUFFIXES
+from agent_actions.utils.file_utils import load_structured_file
 
 logger = LoggerFactory.get_logger(__name__)
 
 
 class SchemaLoader:
-    """Loads, validates, and constructs schemas from YAML files or inline definitions."""
+    """Loads, validates, and constructs schemas from YAML/JSON files or inline definitions."""
 
     @staticmethod
     def discover_schema_files(
@@ -67,23 +67,24 @@ class SchemaLoader:
         seen: set[Path] = set()
 
         for search_dir in search_dirs:
-            for ext in ("*.yml", "*.yaml"):
-                for match in sorted(search_dir.rglob(ext)):
-                    resolved = match.resolve()
-                    if resolved in seen:
-                        continue
-                    seen.add(resolved)
-                    name = match.stem
-                    if name in result:
-                        logger.warning(
-                            "Schema '%s' found in multiple locations "
-                            "(names must be globally unique): %s and %s",
-                            name,
-                            result[name],
-                            match,
-                        )
-                    else:
-                        result[name] = match
+            for match in sorted(search_dir.rglob("*")):
+                if match.suffix not in SCHEMA_SUFFIXES:
+                    continue
+                resolved = match.resolve()
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                name = match.stem
+                if name in result:
+                    logger.warning(
+                        "Schema '%s' found in multiple locations "
+                        "(names must be globally unique): %s and %s",
+                        name,
+                        result[name],
+                        match,
+                    )
+                else:
+                    result[name] = match
 
         return result
 
@@ -92,8 +93,9 @@ class SchemaLoader:
         schema_name: str,
         project_root: Path | None = None,
     ) -> dict:
-        """Load raw schema YAML by name using multi-level resolution.
+        """Load raw schema by name using multi-level resolution.
 
+        Supports ``.yml``, ``.yaml``, and ``.json`` schema files.
         Delegates to :meth:`discover_schema_files` and looks up the
         requested *schema_name*.  Raises ``FileNotFoundError`` if the
         schema is not found.  Duplicate names are logged as warnings
@@ -109,7 +111,7 @@ class SchemaLoader:
             project_schema_dir = effective_root / sp
             wf_root = effective_root / "agent_workflow"
             raise FileNotFoundError(
-                f"Schema file '{schema_name}.yml' not found. "
+                f"Schema file '{schema_name}' not found. "
                 f"Searched project-level ({project_schema_dir}) "
                 f"and workflow schema directories under "
                 f"{wf_root if wf_root.exists() else effective_root}."
@@ -119,7 +121,7 @@ class SchemaLoader:
 
     @staticmethod
     def _read_schema_file(schema_name: str, schema_file: Path) -> dict:
-        """Read and parse a schema YAML file, firing observability events."""
+        """Read and parse a schema file (YAML or JSON), firing observability events."""
         fire_event(
             SchemaLoadingStartedEvent(
                 schema_name=schema_name,
@@ -127,8 +129,7 @@ class SchemaLoader:
             )
         )
 
-        with open(schema_file, encoding="utf-8") as f:
-            schema_data = yaml.safe_load(f)
+        schema_data = load_structured_file(schema_file)
 
         field_count = len(schema_data.get("fields", [])) if isinstance(schema_data, dict) else 0
 
