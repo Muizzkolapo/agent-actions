@@ -1,0 +1,312 @@
+[
+  {
+    "ticket_id": "T001",
+    "subject": "Problem with Engagement Metrics",
+    "body": "Noticed a decrease in brand engagement metrics. Recent changes in our marketing strategies might be the cause. We have reviewed the adjusted campaigns and observed some improvements, but we need more details.",
+    "answer": "<name>, we are looking into the issue with engagement metrics. To better understand the situation, could you please provide details on the recent marketing strategy changes and the adjustments made to the campaigns? This will help us identify the root cause and provide a suitable solution. If you are available, let's schedule a call at a convenient time to discuss further. Please let me know a suitable time to reach you at <tel_num>. We are here to assist in resolving the issue with engagement metrics <acc_num>.",
+    "type": "Problem",
+    "queue": "Technical Support",
+    "priority": "medium",
+    "tags": [
+      "Feedback",
+      "Performance",
+      "Feature"
+    ]
+  },
+  {
+    "ticket_id": "T002",
+    "subject": "Digital Campaigns Halted on Various Devices",
+    "body": "Facing technical difficulties with marketing campaigns. Attempts to troubleshoot and restart have not resolved the problem.",
+    "answer": "Investigating issues with digital campaigns. Kindly share the specific error messages encountered and identify the devices impacted. Arrange a call at your convenience to troubleshoot the account <acc_num>.",
+    "type": "Incident",
+    "queue": "Technical Support",
+    "priority": "high",
+    "tags": [
+      "Performance",
+      "Disruption",
+      "Outage",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T003",
+    "subject": "Technical Support for Data Analytics Tools",
+    "body": "The data analytics tools are not functioning properly, which is disrupting our investment optimization processes. Restarting the applications and reconnecting the integrations did not resolve the issue.",
+    "answer": "<name> understands that the data analytics tools are malfunctioning and disrupting the investment optimization processes. We apologize for the inconvenience caused. Since restarting the applications and reconnecting the integrations did not resolve the issue, we would like to investigate further. Could you please provide any error messages you are receiving? We will need your account number <acc_num> to look into the issue. Would it be possible to discuss this further over the phone at your convenience?",
+    "type": "Problem",
+    "queue": "Technical Support",
+    "priority": "high",
+    "tags": [
+      "Technical Support",
+      "Data Analytics",
+      "Integration Issue",
+      "Optimization",
+      "Software"
+    ]
+  },
+  {
+    "ticket_id": "T004",
+    "subject": "Support Required for Cyber Attack Incidents",
+    "body": "We have encountered unauthorized access attempts on our medical data systems, which could compromise patient privacy. It seems that the problem may be due to heightened cyber threats in the healthcare sector. Despite updating our security measures and scanning for vulnerabilities, the access attempts continue. We need your help to resolve this issue.",
+    "answer": "To assist with the cyber attack issue, please provide details on the unauthorized access attempts and the security protocols that have been updated so far. We would appreciate it if you could schedule a call at a convenient time for further discussion. The number <tel_num> would be suitable for reaching out.",
+    "type": "Incident",
+    "queue": "Technical Support",
+    "priority": "high",
+    "tags": [
+      "Security",
+      "Virus",
+      "IT",
+      "Tech Support",
+      "Outage"
+    ]
+  },
+  {
+    "ticket_id": "T005",
+    "subject": "Concern about Billing Statement",
+    "body": "Observed an unanticipated charge on the billing statement for the recent month. This might have resulted from an incorrect selection of the subscription tier.",
+    "answer": "Dear [name], thank you for reaching out regarding the billing statement issue. We apologize for the inconvenience caused by the unexpected charge. To investigate further, could you please provide us with the details, including your account number, related to the incorrect subscription tier selection mentioned? We will need this information to proceed. To schedule a convenient call, please let us know a suitable time that works for you, and we can reach you at [tel_num]. We will review your account and take the necessary steps to correct the charge.",
+    "type": "Problem",
+    "queue": "Billing and Payments",
+    "priority": "medium",
+    "tags": [
+      "Billing",
+      "Refund",
+      "Payment",
+      "Account"
+    ]
+  },
+  {
+    "ticket_id": "T006",
+    "subject": "Query on Securing Medical Data with McAfee Total Protection",
+    "body": "Hello Customer Support, I am reaching out to inquire about securing medical data using McAfee Total Protection for our hospital's IT system. I would greatly appreciate any guidance on how to implement and manage security measures. Specifically, I am interested in learning about data encryption, access controls, and threat detection. Could you please provide any relevant documentation or resources to help me understand the process better? I look forward to hearing from you soon. Thank you for your assistance.",
+    "answer": "Thank you for your inquiry regarding securing medical data with McAfee Total Protection for your hospital's IT system. To implement and manage security measures, I recommend reviewing the provided documentation on data encryption, access controls, and threat detection. For personalized guidance, I would be available for a call at your convenience, and you can reach me at <tel_num>. I will also provide additional resources to ensure you understand the process and can effectively secure your medical data with McAfee Total Protection.",
+    "type": "Request",
+    "queue": "Billing and Payments",
+    "priority": "medium",
+    "tags": [
+      "Security",
+      "Documentation",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T007",
+    "subject": "Medical Information Security",
+    "body": "Is it possible to provide details on secure solutions for healthcare providers to protect medical data?",
+    "answer": "We can offer secure solutions to help healthcare providers protect medical data. These solutions include encryption and access controls. We would be happy to discuss and provide more information. Please let us know a convenient time to call and discuss your specific needs.",
+    "type": "Request",
+    "queue": "Billing and Payments",
+    "priority": "low",
+    "tags": [
+      "Security",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T008",
+    "subject": "Occasional LED Monitor Failure Suspected from GPU Overload",
+    "body": "I have been encountering sporadic LED monitor failures that might be related to GPU overload. Despite rebooting my CPU and closing OBS Studio, the problem continues. These outages are unpredictable and happen at random intervals, causing significant inconvenience. I have confirmed that my graphics drivers are current. Could you offer guidance on how to resolve this issue?",
+    "answer": "We will look into this matter further. Please share your system specifications and the frequency of these outages to help us better understand and address the issue.",
+    "type": "Incident",
+    "queue": "Product Support",
+    "priority": "low",
+    "tags": [
+      "Technical",
+      "Hardware",
+      "Crash",
+      "Outage",
+      "Resolution"
+    ]
+  },
+  {
+    "ticket_id": "T009",
+    "subject": "Problem with Data Synchronization Between Platforms",
+    "body": "A financial organization is facing difficulties in synchronizing data across Airtable, Notion, and Adobe applications. Potential causes include conflicts in integration. Despite efforts to refresh connections and update the software, the problem persists, impacting the efficiency of investment analytics processes.",
+    "answer": "We are investigating the data synchronization problem across multiple platforms affecting the financial organization. To better understand the situation, could you provide details about the suspected integration conflicts causing the issue? Additionally, it would be helpful to know the specific steps already taken to resolve the problem. If needed, we can arrange a call at a convenient time to discuss and explore possible solutions to restore the efficiency of your investment analytics workflow. Please let us know a suitable time.",
+    "type": "Problem",
+    "queue": "Product Support",
+    "priority": "medium",
+    "tags": [
+      "Bug",
+      "Performance",
+      "Disruption",
+      "Recovery",
+      "IT"
+    ]
+  },
+  {
+    "ticket_id": "T010",
+    "subject": "Occasional Project Updates Crashes Noted Lately",
+    "body": "A user has reported occasional crashes during project updates. This might be related to recent code modifications and increased server load. Efforts to replicate the issue in a controlled environment were not successful. Please investigate the matter and provide a solution as soon as possible.",
+    "answer": "Received an email about occasional crashes during project updates. To better understand the issue, could you please provide details on the crashes, including exact error messages and the specific steps that led to the crashes? Additionally, it would be helpful to know the approximate time frame in which the crashes occurred and the number of users affected. Once we review the recent code changes and server load, we will determine the cause and provide a solution as soon as possible.",
+    "type": "Incident",
+    "queue": "Product Support",
+    "priority": "medium",
+    "tags": [
+      "Bug",
+      "Crash",
+      "Performance",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T011",
+    "subject": "Support Required for RapidMiner Integration",
+    "body": "Could you please provide detailed instructions for integrating the RapidMiner SaaS project management solution? I need a step-by-step guide on how to connect the RapidMiner platform, including the necessary API keys and credentials. Additionally, I would appreciate information on how to configure the integration to meet specific project needs. Could you also provide any documentation or resources that outline the integration process? I look forward to your response to successfully integrate RapidMiner.",
+    "answer": "For assistance, please contact us at <tel_num>",
+    "type": "Request",
+    "queue": "IT Support",
+    "priority": "medium",
+    "tags": [
+      "IT",
+      "Tech Support",
+      "Documentation",
+      "Feature"
+    ]
+  },
+  {
+    "ticket_id": "T012",
+    "subject": "Internet Disconnection Occurred During Today's Meeting",
+    "body": "The internet connection was lost during the meeting, which might be related to a problem with the router.",
+    "answer": "I regret the disruption. Could you provide your account number and suggest a convenient time for us to contact you to diagnose and resolve the router and internet connectivity issues?",
+    "type": "Problem",
+    "queue": "IT Support",
+    "priority": "medium",
+    "tags": [
+      "Disruption",
+      "Network",
+      "Account",
+      "Feedback",
+      "Incident"
+    ]
+  },
+  {
+    "ticket_id": "T013",
+    "subject": "Problem with Project Management Software as a Service",
+    "body": "The Project Management SaaS has encountered a crash. An incompatible update to Apache Hadoop might be the cause.",
+    "answer": "We are investigating the problem with your Project Management SaaS and will reach out to you soon for additional support.",
+    "type": "Problem",
+    "queue": "IT Support",
+    "priority": "high",
+    "tags": [
+      "Technical",
+      "Crash",
+      "Software",
+      "SaaS",
+      "Investigation"
+    ]
+  },
+  {
+    "ticket_id": "T014",
+    "subject": "Guidance on Securing Medical Data Solutions",
+    "body": "Could you please provide guidance on securing medical data hospital solutions? It is crucial to protect patient information and ensure confidentiality. I would greatly appreciate any tips or practices that could be offered. Thank you for your time and assistance, as this matter is important to us. We look forward to hearing from you soon.",
+    "answer": "Dear [Name], we appreciate your interest in securing medical data hospital solutions. To protect patient information and ensure confidentiality, we recommend implementing robust access controls, encrypting sensitive data, and regularly updating software systems. Additionally, our solutions offer advanced features such as audit trails and secure data storage. For specific guidance, we would be happy to discuss your particular needs and provide tailored advice. We would like to arrange a call at your convenience to discuss further.",
+    "type": "Request",
+    "queue": "Customer Service",
+    "priority": "high",
+    "tags": [
+      "Security",
+      "Documentation",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T015",
+    "subject": "Inquiry on Data Analytics Services Support",
+    "body": "Is it possible to get detailed information on data analytics services that optimize investment strategies? This would be very helpful for making informed decisions. Thank you for your assistance.",
+    "answer": "Details on data analytics services will be provided via phone for your convenience.",
+    "type": "Request",
+    "queue": "Customer Service",
+    "priority": "high",
+    "tags": [
+      "Feedback",
+      "Sales",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T016",
+    "subject": "Unforeseen Disappearance of Campaign Metrics from Dashboard",
+    "body": "Greetings Customer Support, I am reaching out to address a recent occurrence. Our campaign metrics vanished unexpectedly during the night without any apparent reason, and we are currently unable to access them through our dashboard. We suspect a potential system error or synchronization issue. We have already reviewed our dashboard settings and attempted to refresh the page, but the problem still exists. Could you please look into this and offer a resolution at your earliest convenience? We appreciate your swift response to this matter.",
+    "answer": "Dear [name], thank you for bringing to our attention the issue with your campaign metrics disappearing from the dashboard. I will look into this further. Could you confirm your [account_number] and when the metrics were last visible? I may need to contact you for additional details, and [telephone_number] is a suitable contact for you today at a convenient time. I will quickly resolve this and keep you updated on the progress or next steps.",
+    "type": "Incident",
+    "queue": "Customer Service",
+    "priority": "low",
+    "tags": [
+      "Technical",
+      "Bug",
+      "Dashboard",
+      "Account",
+      "Resolution"
+    ]
+  },
+  {
+    "ticket_id": "T017",
+    "subject": "Customer Support,<br>I am writing to bring to your attention an issue reported b",
+    "body": "Customer Support,<br>I am writing to bring to your attention an issue reported by one of our customers. The customer is experiencing difficulties with returns and exchanges for several products related to investment optimization.<br>The problem seems to have arisen due to outdated software and discrepancies in the inventory. The team has already taken initial steps to resolve the issue by checking product codes and attempting system reboots, but unfortunately, these efforts have not yielded a resolution.<br>I would greatly",
+    "answer": "investigate the issue and provide a detailed explanation and course of action to resolve it.",
+    "type": "Incident",
+    "queue": "Returns and Exchanges",
+    "priority": "low",
+    "tags": [
+      "Return",
+      "Replacement",
+      "Product",
+      "Bug",
+      "Documentation"
+    ]
+  },
+  {
+    "ticket_id": "T018",
+    "subject": "An error has arisen while integrating the Mailchimp project management tool",
+    "body": "An error has arisen while integrating the Mailchimp project management tool.",
+    "answer": "We apologize for the issue with integrating the Mailchimp project management tool. Please provide details about the error so we can assist you.",
+    "type": "Incident",
+    "queue": "Returns and Exchanges",
+    "priority": "medium",
+    "tags": [
+      "Bug",
+      "Performance",
+      "IT",
+      "Tech Support"
+    ]
+  },
+  {
+    "ticket_id": "T019",
+    "subject": "Query Regarding Encryption and Access Controls for Medical Data",
+    "body": "Hello Customer Support, I am contacting you to seek information on the encryption methods and access controls applied to medical data across all devices and platforms utilized. I am keen to learn more about the protective measures in place for sensitive data. Could you furnish me with comprehensive information on these safeguards? Specifically, I am interested in the encryption types and the access control mechanisms in operation.",
+    "answer": "Hello <name>, thank you for your inquiry concerning the security protocols we employ to safeguard sensitive medical information. We are committed to data protection and have put in place stringent encryption and access controls across all our devices and platforms. We use industry-standard encryption protocols to maintain the confidentiality and integrity of medical data. I would be glad to offer you more detailed information on the encryption methods and access controls. Please inform me if you prefer a call at your convenience to discuss this further.",
+    "type": "Change",
+    "queue": "Sales and Pre-Sales",
+    "priority": "medium",
+    "tags": [
+      "Technical",
+      "Security",
+      "Encryption",
+      "Access Controls",
+      "Medical Data"
+    ]
+  },
+  {
+    "ticket_id": "T020",
+    "subject": "Enhance Server Capacity for SaaS Platform",
+    "body": "There is a need to enhance the server capacity to improve performance during peak usage for the scalable SaaS project management platform.",
+    "answer": "We have received your request to improve the server capacity for the SaaS project management platform. To better understand your requirements, we would like to know the current usage patterns and expected growth. Could you please provide information on the peak usage periods and the current server specifications? This will help us recommend the best course of action to enhance server capacity and improve performance.",
+    "type": "Change",
+    "queue": "Service Outages and Maintenance",
+    "priority": "high",
+    "tags": [
+      "Performance",
+      "Maintenance",
+      "Feature",
+      "IT",
+      "Tech Support"
+    ]
+  }
+]

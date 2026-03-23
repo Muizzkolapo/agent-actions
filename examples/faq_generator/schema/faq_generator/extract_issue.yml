@@ -1,0 +1,22 @@
+name: extract_issue
+description: Core problem extraction from support ticket
+fields:
+  - id: core_problem
+    type: string
+    description: "The customer's actual problem distilled to one clear sentence"
+  - id: resolution_summary
+    type: string
+    description: "How support resolved it (from the answer field)"
+  - id: product_area
+    type: string
+    description: "Which product/feature area is affected"
+  - id: is_resolved
+    type: boolean
+    description: "Whether the ticket contains a resolution"
+  - id: key_symptoms
+    type: array
+    description: "Specific symptoms or error descriptions mentioned"
+required:
+  - core_problem
+  - resolution_summary
+  - product_area
