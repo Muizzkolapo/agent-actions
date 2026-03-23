@@ -1,0 +1,33 @@
+name: generate_description
+description: Structured product description generated from raw specs and image context
+fields:
+  - id: product_title
+    type: string
+    description: "Marketplace-ready product title including brand and key feature"
+  - id: short_description
+    type: string
+    description: "Concise one-paragraph product description (50-100 words)"
+  - id: key_features
+    type: array
+    description: "Top 5 features translated from raw specs into benefit-oriented language"
+    items:
+      type: string
+  - id: target_use_cases
+    type: array
+    description: "Primary use cases this product is designed for"
+    items:
+      type: string
+  - id: search_keywords
+    type: array
+    description: "Initial search keywords derived from specs and category"
+    items:
+      type: string
+  - id: specs_summary
+    type: string
+    description: "Human-readable summary of the most important technical specifications"
+required:
+  - product_title
+  - short_description
+  - key_features
+  - search_keywords
+additionalProperties: false

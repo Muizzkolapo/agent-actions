@@ -1,0 +1,40 @@
+name: validate_compliance
+description: Marketplace compliance validation results per field
+fields:
+  - id: compliance_passed
+    type: boolean
+    description: "Whether all fields pass marketplace rules"
+  - id: field_results
+    type: array
+    description: "Per-field validation results"
+    items:
+      type: object
+      properties:
+        field_name:
+          type: string
+          description: "Name of the validated field"
+        passed:
+          type: boolean
+          description: "Whether this field passes validation"
+        actual_length:
+          type: integer
+          description: "Actual character or item count"
+        max_allowed:
+          type: integer
+          description: "Maximum allowed by marketplace rules"
+        message:
+          type: string
+          description: "Human-readable validation message"
+  - id: violations
+    type: array
+    description: "List of specific rule violations found"
+    items:
+      type: string
+  - id: summary
+    type: string
+    description: "Overall compliance summary"
+required:
+  - compliance_passed
+  - field_results
+  - summary
+additionalProperties: false

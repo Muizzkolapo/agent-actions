@@ -1,0 +1,37 @@
+{
+  "title": {
+    "max_chars": 200,
+    "required": true,
+    "rules": "Must include brand name and primary product type. No promotional language or special characters."
+  },
+  "description": {
+    "max_chars": 2000,
+    "required": true,
+    "rules": "Must describe the product factually. No competitor mentions by name. No time-sensitive claims."
+  },
+  "bullet_points": {
+    "max_count": 5,
+    "max_chars_per_bullet": 250,
+    "required": true,
+    "rules": "Each bullet must start with a capitalized keyword. No HTML or special formatting."
+  },
+  "search_keywords": {
+    "max_count": 10,
+    "max_chars_per_keyword": 50,
+    "required": true,
+    "rules": "No brand names of competitors. No misleading terms. Single words or short phrases only."
+  },
+  "required_fields": [
+    "listing_title",
+    "listing_description",
+    "bullet_points",
+    "search_keywords",
+    "product_category"
+  ],
+  "prohibited_content": [
+    "competitor brand names in description",
+    "unsubstantiated superlatives (best, #1, top-rated) without qualification",
+    "pricing or discount language in title or bullets",
+    "contact information or external URLs"
+  ]
+}

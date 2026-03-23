@@ -1,0 +1,113 @@
+{
+  "legal": {
+    "en_es": {
+      "force majeure": "fuerza mayor",
+      "indemnify": "indemnizar",
+      "hereinafter": "en lo sucesivo",
+      "injunctive relief": "medida cautelar",
+      "hold harmless": "eximir de responsabilidad",
+      "consequential damages": "danos consecuentes",
+      "irrevocable license": "licencia irrevocable",
+      "non-breaching party": "parte no incumplidora"
+    },
+    "en_fr": {
+      "force majeure": "force majeure",
+      "indemnify": "indemniser",
+      "hereinafter": "ci-apres",
+      "injunctive relief": "injonction",
+      "hold harmless": "garantir contre",
+      "consequential damages": "dommages consecutifs",
+      "irrevocable license": "licence irrevocable",
+      "non-breaching party": "partie non defaillante"
+    },
+    "en_de": {
+      "force majeure": "hohere Gewalt",
+      "indemnify": "schadlos halten",
+      "hereinafter": "im Folgenden"
+    },
+    "en_ja": {
+      "force majeure": "不可抗力",
+      "indemnify": "補償する",
+      "hereinafter": "以下"
+    }
+  },
+  "medical": {
+    "en_es": {
+      "contraindicated": "contraindicado",
+      "prognosis": "pronostico",
+      "comorbidity": "comorbilidad",
+      "anaphylactic reaction": "reaccion anafilactica"
+    },
+    "en_fr": {
+      "contraindicated": "contre-indique",
+      "prognosis": "pronostic",
+      "comorbidity": "comorbidite",
+      "anaphylactic reaction": "reaction anaphylactique",
+      "renal function": "fonction renale"
+    },
+    "en_de": {
+      "contraindicated": "kontraindiziert",
+      "prognosis": "Prognose",
+      "comorbidity": "Komorbiditat"
+    },
+    "en_ja": {
+      "contraindicated": "禁忌",
+      "prognosis": "予後",
+      "comorbidity": "併存疾患",
+      "anaphylactic reaction": "アナフィラキシー反応",
+      "intubation": "挿管",
+      "epinephrine": "エピネフリン"
+    }
+  },
+  "marketing": {
+    "style_notes": {
+      "en_de": "Prefer formal Sie over informal du for brand voice. Adapt English idioms to culturally equivalent German expressions rather than literal translation.",
+      "en_ja": "Use polite desu/masu form. English superlatives should be toned down for Japanese market expectations. Adapt idioms to Japanese equivalents.",
+      "en_es": "Use usted for formal brand voice, tu for casual brands. Localize currency and measurement references.",
+      "en_fr": "Use vous for formal brand voice. Maintain elegance in phrasing — French marketing favors understated sophistication over exclamation marks."
+    },
+    "term_preferences": {
+      "free trial": {
+        "es": "prueba gratuita",
+        "fr": "essai gratuit",
+        "de": "kostenlose Testversion",
+        "ja": "無料トライアル"
+      },
+      "no strings attached": {
+        "es": "sin compromiso",
+        "fr": "sans engagement",
+        "de": "ohne Verpflichtung",
+        "ja": "条件なし"
+      }
+    }
+  },
+  "technical": {
+    "preserve_as_is": [
+      "Kubernetes",
+      "CI/CD",
+      "API",
+      "SDK",
+      "REST",
+      "gRPC",
+      "Docker",
+      "YAML",
+      "JSON"
+    ],
+    "en_de": {
+      "auto-scaling": "automatische Skalierung",
+      "zero-downtime deployment": "unterbrechungsfreies Deployment",
+      "service mesh": "Service-Mesh",
+      "canary release": "Canary-Release",
+      "static analysis": "statische Analyse"
+    },
+    "en_ja": {
+      "auto-scaling": "オートスケーリング",
+      "zero-downtime deployment": "ゼロダウンタイムデプロイ",
+      "service mesh": "サービスメッシュ",
+      "cloud-native": "クラウドネイティブ"
+    }
+  },
+  "casual": {
+    "notes": "Casual text should be translated with equivalent informality in the target language. Preserve slang energy — don't formalize."
+  }
+}

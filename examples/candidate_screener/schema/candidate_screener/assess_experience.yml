@@ -1,0 +1,38 @@
+name: assess_experience
+description: Schema for professional experience depth assessment
+fields:
+  - id: experience_score
+    type: number
+    description: "Overall experience relevance score (1-10 scale)"
+  - id: years_relevant
+    type: number
+    description: "Years of experience directly relevant to the target role"
+  - id: seniority_match
+    type: string
+    description: "How well candidate's seniority matches role level: under-leveled, appropriate, over-leveled"
+  - id: role_progression
+    type: string
+    description: "Assessment of career trajectory: stagnant, steady, accelerating, exceptional"
+  - id: domain_relevance
+    type: string
+    description: "How relevant the candidate's industry/domain experience is: low, moderate, high, exact-match"
+  - id: leadership_evidence
+    type: array
+    items:
+      type: string
+    description: "Concrete examples of leadership, mentorship, or team influence"
+  - id: impact_evidence
+    type: array
+    items:
+      type: string
+    description: "Quantifiable impact examples from previous roles"
+  - id: experience_reasoning
+    type: string
+    description: "Detailed reasoning for the experience score"
+required:
+  - experience_score
+  - years_relevant
+  - seniority_match
+  - role_progression
+  - experience_reasoning
+additionalProperties: false

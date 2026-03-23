@@ -1,0 +1,63 @@
+{
+  "roles": {
+    "senior_software_engineer": {
+      "must_have": [
+        "Python or Java",
+        "3+ years production experience",
+        "System design knowledge"
+      ],
+      "nice_to_have": [
+        "Cloud platforms (AWS, GCP, Azure)",
+        "Leadership or mentoring experience",
+        "Distributed systems experience",
+        "CI/CD and DevOps practices"
+      ],
+      "team_size": 8,
+      "level": "senior",
+      "description": "Senior engineer to design and build scalable backend services"
+    },
+    "data_scientist": {
+      "must_have": [
+        "Python and ML frameworks (PyTorch, TensorFlow, or scikit-learn)",
+        "2+ years building production ML models",
+        "Statistical modeling and experiment design"
+      ],
+      "nice_to_have": [
+        "NLP or computer vision specialization",
+        "MLOps and model deployment experience",
+        "Published research or open-source contributions",
+        "Experience with large-scale data processing (Spark, Beam)"
+      ],
+      "team_size": 5,
+      "level": "mid-senior",
+      "description": "Data scientist to build and deploy ML models for product features"
+    },
+    "product_manager": {
+      "must_have": [
+        "2+ years product management experience",
+        "Data-driven decision making",
+        "Cross-functional collaboration skills"
+      ],
+      "nice_to_have": [
+        "Technical background (CS degree or engineering experience)",
+        "B2B SaaS experience",
+        "User research and discovery skills",
+        "Go-to-market strategy experience"
+      ],
+      "team_size": 10,
+      "level": "mid-senior",
+      "description": "Product manager to drive product strategy and execution"
+    }
+  },
+  "scoring_weights": {
+    "skills": 0.40,
+    "experience": 0.35,
+    "culture_fit": 0.25
+  },
+  "scoring_scale": {
+    "min": 1,
+    "max": 10,
+    "passing_threshold": 6,
+    "strong_threshold": 8
+  }
+}

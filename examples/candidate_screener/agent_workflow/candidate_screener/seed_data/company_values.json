@@ -1,0 +1,35 @@
+{
+  "company_name": "Nexus Technologies",
+  "values": [
+    {
+      "name": "Ownership Mindset",
+      "description": "We take end-to-end responsibility for our work. We don't say 'that's not my job' — we see problems through to resolution and proactively identify what needs doing.",
+      "signals": ["Takes initiative beyond assigned tasks", "Follows through on commitments", "Proposes solutions rather than just raising problems"]
+    },
+    {
+      "name": "Intellectual Curiosity",
+      "description": "We ask 'why' and dig deeper. We value learning, experimentation, and the humility to admit when we don't know something.",
+      "signals": ["Continuous learning demonstrated", "Asks thoughtful questions", "Experiments with new approaches", "Shares knowledge with others"]
+    },
+    {
+      "name": "Transparent Communication",
+      "description": "We communicate openly, directly, and respectfully. We share context generously and give feedback that helps people grow.",
+      "signals": ["Clear and direct communication style", "Shares context proactively", "Gives and receives feedback well", "Writes clearly and concisely"]
+    },
+    {
+      "name": "Collaborative Excellence",
+      "description": "We believe the best work happens when diverse perspectives come together. We actively seek input, share credit, and lift each other up.",
+      "signals": ["Seeks diverse perspectives", "Mentors and supports teammates", "Cross-functional collaboration", "Shares credit and celebrates others"]
+    },
+    {
+      "name": "Impact Over Activity",
+      "description": "We measure ourselves by outcomes, not hours worked or lines of code written. We focus on the highest-leverage work and are willing to kill our darlings.",
+      "signals": ["Prioritizes high-impact work", "Measures results not effort", "Willing to change direction based on data", "Focuses on customer outcomes"]
+    },
+    {
+      "name": "Bias for Action",
+      "description": "We move quickly and learn by doing. We prefer reversible decisions made at 70% confidence over perfect decisions made too late.",
+      "signals": ["Moves quickly on decisions", "Comfortable with ambiguity", "Iterates rapidly", "Balances speed with quality"]
+    }
+  ]
+}

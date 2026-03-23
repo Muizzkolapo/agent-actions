@@ -1,0 +1,54 @@
+name: combine_scores
+description: Schema for weighted composite score from all assessment dimensions
+fields:
+  - id: skills_score
+    type: number
+    description: "Skills assessment score (1-10)"
+  - id: experience_score
+    type: number
+    description: "Experience assessment score (1-10)"
+  - id: culture_score
+    type: number
+    description: "Culture fit assessment score (1-10)"
+  - id: composite_score
+    type: number
+    description: "Weighted composite score (1-10)"
+  - id: score_breakdown
+    type: object
+    properties:
+      skills_weighted:
+        type: number
+        description: "Skills score after weight applied"
+      experience_weighted:
+        type: number
+        description: "Experience score after weight applied"
+      culture_weighted:
+        type: number
+        description: "Culture score after weight applied"
+    description: "Breakdown of weighted score components"
+  - id: weights_used
+    type: object
+    properties:
+      skills:
+        type: number
+      experience:
+        type: number
+      culture_fit:
+        type: number
+    description: "Scoring weights applied"
+  - id: recommendation_tier
+    type: string
+    description: "Tier classification: strong_hire, hire, borderline, no_hire"
+  - id: candidate_name
+    type: string
+    description: "Candidate name (passthrough)"
+  - id: role_applied
+    type: string
+    description: "Role applied for (passthrough)"
+required:
+  - skills_score
+  - experience_score
+  - culture_score
+  - composite_score
+  - recommendation_tier
+additionalProperties: false

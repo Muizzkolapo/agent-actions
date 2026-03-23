@@ -1,0 +1,65 @@
+{
+  "risk_levels": {
+    "high": {
+      "description": "Clauses that pose significant legal or financial exposure requiring immediate legal review",
+      "indicators": [
+        "Unlimited liability or liability exceeding 12 months of fees",
+        "Automatic renewal with periods longer than 12 months",
+        "Non-compete clauses exceeding 2 years in duration",
+        "Unilateral termination rights favoring only one party",
+        "Penalty clauses with fixed monetary amounts",
+        "Broad indemnification obligations without carve-outs",
+        "Waiver of jury trial rights",
+        "Exclusive IP ownership by the service provider for custom work",
+        "Non-refundable fees exceeding 10% of total contract value",
+        "Data breach liability exclusions for the responsible party",
+        "Early termination fees exceeding 50% of remaining contract value"
+      ]
+    },
+    "medium": {
+      "description": "Clauses with unusual terms that warrant attention but are negotiable",
+      "indicators": [
+        "Vague or ambiguous scope of work definitions",
+        "Payment terms shorter than 30 days",
+        "Broad IP assignment clauses covering feedback and suggestions",
+        "Annual fee escalation exceeding CPI by more than 3%",
+        "Confidentiality obligations exceeding 5 years",
+        "Limited warranty periods under 12 months",
+        "Three-party agreements with shared liability structures",
+        "Joint ownership of custom deliverables",
+        "Suspension rights for overdue payments with short notice periods",
+        "Acceptance periods shorter than 30 days"
+      ]
+    },
+    "low": {
+      "description": "Standard contract terms consistent with industry norms",
+      "indicators": [
+        "Mutual termination rights with reasonable notice (60-90 days)",
+        "Payment terms of 30 days or more",
+        "Standard confidentiality obligations (2-3 years post-termination)",
+        "Liability caps tied to 12 months of fees paid",
+        "Mutual indemnification with reasonable carve-outs",
+        "Clear scope of work with defined change order processes",
+        "Standard IP retention by each party for pre-existing IP",
+        "Binding arbitration in a neutral forum",
+        "Annual renewal with 90+ days notice for non-renewal",
+        "Transition assistance included upon termination"
+      ]
+    }
+  },
+  "obligation_categories": [
+    "payment",
+    "delivery",
+    "reporting",
+    "compliance",
+    "notification",
+    "cooperation",
+    "insurance",
+    "staffing"
+  ],
+  "scoring_guidance": {
+    "high_risk_threshold": "Any single high-risk indicator triggers high-risk classification for that clause",
+    "overall_risk_calculation": "Contract overall risk = highest individual clause risk level. If 3+ medium-risk clauses exist, elevate to high risk.",
+    "deadline_sensitivity": "Flag any deadline shorter than 10 business days as potentially aggressive"
+  }
+}

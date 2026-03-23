@@ -1,0 +1,17 @@
+name: split_into_clauses
+description: Schema for individual contract clauses extracted by the clause splitter tool
+fields:
+  - id: clause_number
+    type: integer
+    description: "Sequential clause number (1-based)"
+  - id: clause_title
+    type: string
+    description: "Title or heading of the clause (e.g., 'DEFINITIONS', 'PAYMENT TERMS')"
+  - id: clause_text
+    type: string
+    description: "Full text content of the clause including all sub-sections"
+required:
+  - clause_number
+  - clause_title
+  - clause_text
+additionalProperties: false

@@ -1,0 +1,40 @@
+name: fetch_competitor_prices
+description: Competitor pricing data for competitive positioning
+fields:
+  - id: competitor_prices
+    type: array
+    description: "List of competitor products with pricing"
+    items:
+      type: object
+      properties:
+        competitor_name:
+          type: string
+          description: "Competitor brand or store name"
+        product_name:
+          type: string
+          description: "Competitor product name"
+        price:
+          type: number
+          description: "Competitor price in USD"
+        source:
+          type: string
+          description: "Where this price was found"
+  - id: price_position
+    type: string
+    description: "How our price compares: below_average, average, above_average, or premium"
+  - id: average_competitor_price
+    type: number
+    description: "Mean competitor price for this category"
+  - id: price_range
+    type: object
+    description: "Min and max competitor prices found"
+    properties:
+      min:
+        type: number
+      max:
+        type: number
+required:
+  - competitor_prices
+  - price_position
+  - average_competitor_price
+additionalProperties: false

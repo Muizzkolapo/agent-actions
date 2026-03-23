@@ -1,0 +1,25 @@
+name: back_translate
+description: Back-translation of the selected translation to the source language
+fields:
+  - id: back_translated_text
+    type: string
+    description: "The translation rendered back into the source language"
+  - id: back_translation_notes
+    type: array
+    description: "Observations about ambiguities or reconstruction challenges encountered"
+    items:
+      type: string
+  - id: uncertain_segments
+    type: array
+    description: "Parts of the translation where the back-translator was unsure of the intended meaning"
+    items:
+      type: object
+      properties:
+        segment:
+          type: string
+          description: "The segment in the translated text"
+        uncertainty:
+          type: string
+          description: "What was unclear and how it was resolved"
+required:
+  - back_translated_text

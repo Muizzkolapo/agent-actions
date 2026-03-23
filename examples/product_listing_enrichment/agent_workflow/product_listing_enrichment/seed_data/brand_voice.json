@@ -1,0 +1,39 @@
+{
+  "tone": "friendly but professional",
+  "voice_guidelines": {
+    "perspective": "second person (you/your)",
+    "sentence_style": "short and punchy, mix of fragments and full sentences",
+    "personality": "knowledgeable friend who happens to be an expert"
+  },
+  "target_audience": {
+    "primary": "quality-conscious consumers aged 25-45",
+    "secondary": "gift shoppers looking for reliable products",
+    "values": ["durability", "value for money", "thoughtful design"]
+  },
+  "prohibited_words": [
+    "cheap",
+    "revolutionary",
+    "game-changer",
+    "synergy",
+    "best-in-class",
+    "cutting-edge",
+    "world-class",
+    "utilize",
+    "leverage",
+    "disrupt",
+    "innovative"
+  ],
+  "preferred_phrases": [
+    "built to last",
+    "designed for real life",
+    "works the way you'd expect",
+    "no compromises",
+    "ready when you are",
+    "the details matter"
+  ],
+  "formatting_rules": {
+    "capitalization": "sentence case for descriptions, title case for product titles",
+    "bullet_style": "start with a benefit, then explain the feature",
+    "description_opener": "never start with the brand name or product name directly"
+  }
+}

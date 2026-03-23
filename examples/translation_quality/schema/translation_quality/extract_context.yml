@@ -1,0 +1,53 @@
+name: extract_context
+description: Extracted domain, tone, key terms, and translation challenges from source text
+fields:
+  - id: detected_domain
+    type: string
+    description: "Detected domain of the text (legal, medical, marketing, technical, casual)"
+  - id: detected_tone
+    type: string
+    description: "Tone of the source text (formal, informal, persuasive, clinical, conversational)"
+  - id: key_terms
+    type: array
+    description: "Domain-specific terms that require careful translation"
+    items:
+      type: object
+      properties:
+        term:
+          type: string
+          description: "The term in the source language"
+        importance:
+          type: string
+          description: "Why this term matters: critical (mistranslation changes meaning), important (domain-specific), or standard"
+        glossary_match:
+          type: string
+          description: "Preferred translation from glossary if available, otherwise null"
+  - id: cultural_references
+    type: array
+    description: "Idioms, metaphors, or culturally specific references that need adaptation"
+    items:
+      type: object
+      properties:
+        reference:
+          type: string
+          description: "The cultural reference or idiom"
+        explanation:
+          type: string
+          description: "What it means in context"
+        adaptation_note:
+          type: string
+          description: "Suggestion for handling in the target language"
+  - id: translation_challenges
+    type: array
+    description: "Specific challenges for translating this text"
+    items:
+      type: string
+  - id: sentence_count
+    type: number
+    description: "Number of sentences in the source text"
+required:
+  - detected_domain
+  - detected_tone
+  - key_terms
+  - translation_challenges
+  - sentence_count

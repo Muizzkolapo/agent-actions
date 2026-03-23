@@ -1,0 +1,58 @@
+[
+  {
+    "text_id": "T001",
+    "source_language": "en",
+    "target_language": "es",
+    "text": "The tenant shall indemnify and hold harmless the landlord against any claims arising from the tenant's use of the premises. Force majeure events, including but not limited to acts of God, shall excuse performance under this agreement.",
+    "domain": "legal"
+  },
+  {
+    "text_id": "T002",
+    "source_language": "en",
+    "target_language": "fr",
+    "text": "The patient presents with comorbidities including Type 2 diabetes and hypertension. Metformin is contraindicated given the patient's renal function. Prognosis remains guarded pending further imaging.",
+    "domain": "medical"
+  },
+  {
+    "text_id": "T003",
+    "source_language": "en",
+    "target_language": "de",
+    "text": "Our cloud-native platform leverages Kubernetes orchestration with auto-scaling pods and a service mesh for zero-downtime deployments. The CI/CD pipeline integrates static analysis and canary releases.",
+    "domain": "technical"
+  },
+  {
+    "text_id": "T004",
+    "source_language": "en",
+    "target_language": "ja",
+    "text": "Unlock your inner glow with our new skincare line. Because you deserve to feel like a million bucks every single morning. Try it free for 30 days — no strings attached!",
+    "domain": "marketing"
+  },
+  {
+    "text_id": "T005",
+    "source_language": "en",
+    "target_language": "es",
+    "text": "Hey, just wanted to let you know the party's been moved to Saturday. It's gonna be a blast — we're doing a potluck so bring whatever. Don't forget the sunscreen, it's supposed to be scorching!",
+    "domain": "casual"
+  },
+  {
+    "text_id": "T006",
+    "source_language": "en",
+    "target_language": "fr",
+    "text": "The hereinafter referred to party of the first part grants an irrevocable license to the party of the second part. Any breach shall entitle the non-breaching party to seek injunctive relief and consequential damages.",
+    "domain": "legal"
+  },
+  {
+    "text_id": "T007",
+    "source_language": "en",
+    "target_language": "de",
+    "text": "Ready to take the bull by the horns? Our new productivity suite hits different. It's the bee's knees for remote teams who need to keep their ducks in a row. Start your free trial today!",
+    "domain": "marketing"
+  },
+  {
+    "text_id": "T008",
+    "source_language": "en",
+    "target_language": "ja",
+    "text": "Administer 0.5mg of epinephrine intramuscularly. The patient's anaphylactic reaction is secondary to a documented penicillin allergy. Monitor vitals q5min and prepare for possible intubation if airway compromise develops.",
+    "domain": "medical"
+  }
+]

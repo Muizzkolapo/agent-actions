@@ -1,0 +1,160 @@
+[
+  {
+    "product_id": "PLE-001",
+    "product_name": "SoundWave Pro ANC Headphones",
+    "product_category": "electronics",
+    "brand": "SoundWave",
+    "current_price": 149.99,
+    "raw_specs": {
+      "driver_size": "40mm",
+      "frequency_response": "20Hz-40kHz",
+      "battery_life": "35 hours",
+      "charging_time": "2 hours",
+      "weight": "250g",
+      "bluetooth_version": "5.3",
+      "noise_cancellation": "hybrid ANC with 3 modes",
+      "codec_support": ["AAC", "SBC", "LDAC"],
+      "microphones": "6-mic array for calls",
+      "foldable": true,
+      "materials": "protein leather ear cushions, aluminum hinges, soft-touch plastic"
+    },
+    "product_images_description": "Product shown in matte black finish on a wooden desk next to a laptop. Close-up of ear cushion showing memory foam. Side profile highlighting slim foldable design. Lifestyle shot of person wearing headphones on a subway commute."
+  },
+  {
+    "product_id": "PLE-002",
+    "product_name": "ChefElite 12-Cup Food Processor",
+    "product_category": "kitchen",
+    "brand": "ChefElite",
+    "current_price": 89.99,
+    "raw_specs": {
+      "capacity": "12 cups",
+      "motor_power": "600W",
+      "speeds": "2 speeds plus pulse",
+      "blades": ["S-blade", "shredding disc", "slicing disc", "dough blade"],
+      "bowl_material": "BPA-free Tritan plastic",
+      "dimensions": "9.5 x 7.5 x 14.5 inches",
+      "weight": "8.2 lbs",
+      "dishwasher_safe": true,
+      "cord_length": "36 inches",
+      "feed_tube": "extra-wide 3.5-inch"
+    },
+    "product_images_description": "Overhead shot of food processor surrounded by sliced vegetables. Unit shown with all blade attachments laid out. Close-up of the extra-wide feed tube. Kitchen counter scene with a family preparing a meal together."
+  },
+  {
+    "product_id": "PLE-003",
+    "product_name": "TrailMaster 55L Expedition Backpack",
+    "product_category": "outdoor_gear",
+    "brand": "TrailMaster",
+    "current_price": 179.99,
+    "raw_specs": {
+      "capacity": "55 liters",
+      "weight": "3.8 lbs",
+      "frame_type": "internal aluminum stay",
+      "back_panel": "tensioned mesh ventilation",
+      "hip_belt": "padded with zippered pockets",
+      "material": "210D ripstop nylon with DWR coating",
+      "rain_cover": "integrated, stows in bottom compartment",
+      "compartments": ["top lid", "main body with front zip access", "sleeping bag bottom", "2 side stretch pockets", "front shove-it pocket"],
+      "hydration_compatible": true,
+      "torso_range": "16-21 inches adjustable",
+      "max_load": "45 lbs recommended"
+    },
+    "product_images_description": "Backpack shown fully loaded on a rocky mountain trail at sunrise. Detail shot of the ventilated back panel. Flat lay of all compartments open with gear organized inside. Hiker wearing the pack crossing a stream."
+  },
+  {
+    "product_id": "PLE-004",
+    "product_name": "ErgoDesk Pro Standing Desk Converter",
+    "product_category": "home_office",
+    "brand": "ErgoDesk",
+    "current_price": 249.99,
+    "raw_specs": {
+      "desktop_size": "35 x 23 inches",
+      "height_range": "6.5 to 20 inches above desk",
+      "weight_capacity": "33 lbs",
+      "lift_mechanism": "gas spring assisted",
+      "keyboard_tray": "removable, full-size",
+      "weight": "37 lbs",
+      "material": "bamboo desktop with steel frame",
+      "monitor_support": "fits dual 27-inch monitors",
+      "cable_management": "integrated channel underneath",
+      "assembly_required": false
+    },
+    "product_images_description": "Standing desk converter on a modern home office desk with dual monitors. Side view showing the gas spring lift at full height. Person working comfortably at standing height. Close-up of the bamboo surface texture."
+  },
+  {
+    "product_id": "PLE-005",
+    "product_name": "PureStream UV Water Purifier Bottle",
+    "product_category": "outdoor_gear",
+    "brand": "PureStream",
+    "current_price": 59.99,
+    "raw_specs": {
+      "capacity": "24 oz",
+      "purification": "UV-C LED",
+      "cycle_time": "60 seconds",
+      "battery": "rechargeable lithium-ion",
+      "charges_per_cycle": "up to 80 purification cycles",
+      "material": "double-wall stainless steel",
+      "weight": "13.5 oz"
+    },
+    "product_images_description": "Bottle on a mossy rock beside a mountain stream. UV light visible through translucent cap during purification cycle. Size comparison next to a standard Nalgene bottle."
+  },
+  {
+    "product_id": "PLE-006",
+    "product_name": "SmartBrew Precision Pour-Over Coffee System",
+    "product_category": "kitchen",
+    "brand": "SmartBrew",
+    "current_price": 129.99,
+    "raw_specs": {
+      "water_capacity": "1 liter",
+      "temperature_control": "precise to 1 degree F, range 175-212F",
+      "gooseneck_spout": true,
+      "built_in_scale": "0.1g precision",
+      "timer": "integrated brew timer with auto-start",
+      "display": "OLED touchscreen",
+      "material": "stainless steel body, borosilicate glass carafe",
+      "power": "1200W for rapid heating",
+      "dimensions": "6 x 9 x 11 inches",
+      "weight": "3.2 lbs",
+      "presets": ["light roast", "medium roast", "dark roast", "cold brew heat", "tea"],
+      "connectivity": "Bluetooth for recipe sync"
+    },
+    "product_images_description": "Kettle pouring water in a precise stream over a dripper with bloom visible. OLED screen showing temperature and timer. Full system on a kitchen counter with carafe. Coffee enthusiast adjusting settings on the touch display."
+  },
+  {
+    "product_id": "PLE-007",
+    "product_name": "LumoPanel LED Desk Lamp",
+    "product_category": "home_office",
+    "brand": "LumoPanel",
+    "current_price": 69.99,
+    "raw_specs": {
+      "light_output": "1000 lumens",
+      "color_temperature": "2700K-6500K adjustable",
+      "brightness_levels": 10,
+      "arm_reach": "24 inches",
+      "power": "12W LED",
+      "features": ["USB-A charging port"],
+      "dimming": "smooth stepless",
+      "weight": "2.1 lbs"
+    },
+    "product_images_description": "Lamp on a tidy desk illuminating a notebook. Comparison showing warm and cool light settings. Arm extended to full reach over a wide workspace."
+  },
+  {
+    "product_id": "PLE-008",
+    "product_name": "ThermoForge Cast Iron Dutch Oven 6Qt",
+    "product_category": "kitchen",
+    "brand": "ThermoForge",
+    "current_price": 64.99,
+    "raw_specs": {
+      "capacity": "6 quarts",
+      "material": "enameled cast iron",
+      "weight": "12.5 lbs",
+      "oven_safe_to": "500F",
+      "lid_design": "self-basting condensation ridges",
+      "handles": "wide loop handles with heat distribution",
+      "compatible_cooktops": ["gas", "electric", "induction", "ceramic", "campfire"],
+      "colors_available": ["french blue", "cherry red", "matte black", "sage green"],
+      "dimensions": "12.5 x 10 x 6 inches"
+    },
+    "product_images_description": "Dutch oven in cherry red on a rustic wooden table with a freshly baked loaf of bread inside. All four color options arranged together. Overhead shot of a bubbling beef stew. Close-up of the enameled interior surface."
+  }
+]

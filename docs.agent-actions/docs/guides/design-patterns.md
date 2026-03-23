@@ -25,14 +25,14 @@ The simplest pattern: actions execute in a predefined linear order where each ou
 
 ```mermaid
 flowchart LR
-    A[extract_info] --> B[analyze_sentiment] --> C[create_summary] --> D[generate_insights]
+    A[extract_requirements] --> B[rewrite_for_inclusivity] --> C[generate_interview_questions] --> D[format_posting]
 
     classDef default rx:8,ry:8
 ```
 
 ```yaml
-name: content_analysis
-description: "Multi-step content analysis pipeline"
+name: job_posting_optimizer
+description: "Optimize job postings for clarity, inclusivity, and hiring effectiveness"
 
 defaults:
   model_vendor: openai
@@ -40,78 +40,71 @@ defaults:
   json_mode: true
 
 actions:
-  - name: extract_info
+  - name: extract_requirements
     prompt: |
-      Analyze the following text and extract key information.
+      Analyze this job posting and extract structured requirements.
 
-      Text: {{ source.raw_text }}
+      Posting: {{ source.raw_posting }}
 
-      Identify named entities, key phrases, and main topics.
+      Separate must-have qualifications from nice-to-haves.
+      Identify the core responsibilities and team context.
     schema:
-      entities:
+      role_title: string
+      must_have_skills: array
+      nice_to_have_skills: array
+      responsibilities: array
+      team_context: string
+      years_experience_mentioned: number
+
+  - name: rewrite_for_inclusivity
+    dependencies: [extract_requirements]
+    prompt: |
+      Rewrite this job posting to be more inclusive and welcoming.
+
+      Original posting: {{ source.raw_posting }}
+      Must-have skills: {{ extract_requirements.must_have_skills | join(', ') }}
+      Nice-to-haves: {{ extract_requirements.nice_to_have_skills | join(', ') }}
+
+      Remove gendered language, unnecessary jargon, and inflated requirements.
+      Replace "rockstar/ninja/guru" with clear role descriptions.
+      If years of experience exceed what the role needs, flag it.
+    schema:
+      rewritten_posting: string
+      changes_made: array
+      inclusivity_score: number
+
+  - name: generate_interview_questions
+    dependencies: [rewrite_for_inclusivity]
+    prompt: |
+      Generate structured interview questions for this role.
+
+      Role: {{ extract_requirements.role_title }}
+      Key skills: {{ extract_requirements.must_have_skills | join(', ') }}
+      Responsibilities: {{ extract_requirements.responsibilities | join(', ') }}
+
+      Create 5 behavioral and 3 technical questions.
+      Each question should map to a specific requirement.
+    schema:
+      behavioral_questions:
         type: array
         items: string
-      key_phrases:
-        type: array
-        items: string
-      topics:
-        type: array
-        items: string
-
-  - name: analyze_sentiment
-    dependencies: [extract_info]
-    prompt: |
-      Based on the text and extracted information, analyze the sentiment.
-
-      Original Text: {{ source.raw_text }}
-      Entities: {{ extract_info.entities | join(', ') }}
-      Topics: {{ extract_info.topics | join(', ') }}
-
-      Provide sentiment analysis with a score from -1.0 to 1.0.
-    schema:
-      sentiment:
-        type: string
-        enum: [positive, negative, neutral]
-      sentiment_score:
-        type: number
-        minimum: -1.0
-        maximum: 1.0
-
-  - name: create_summary
-    dependencies: [analyze_sentiment]
-    prompt: |
-      Create a summary incorporating the extracted entities and sentiment.
-
-      Original Text: {{ source.raw_text }}
-      Key Entities: {{ extract_info.entities | join(', ') }}
-      Sentiment: {{ analyze_sentiment.sentiment }}
-
-      Provide a concise summary (100-150 words).
-    schema:
-      summary: string
-      word_count: integer
-
-  - name: generate_insights
-    dependencies: [create_summary]
-    prompt: |
-      Generate actionable insights based on the analysis.
-
-      Topics: {{ extract_info.topics | join(', ') }}
-      Sentiment: {{ analyze_sentiment.sentiment }} ({{ analyze_sentiment.sentiment_score }})
-      Summary: {{ create_summary.summary }}
-
-      Provide 3-5 key insights and 2-3 recommendations.
-    schema:
-      insights:
+        minItems: 5
+      technical_questions:
         type: array
         items: string
         minItems: 3
-        maxItems: 5
-      recommendations:
-        type: array
-        items: string
-        minItems: 2
-        maxItems: 3
+      skill_mapping: object
+
+  - name: format_posting
+    dependencies: [generate_interview_questions]
+    kind: tool
+    impl: format_job_package
+    intent: "Package optimized posting with interview kit"
+    context_scope:
+      observe:
+        - rewrite_for_inclusivity.*
+        - generate_interview_questions.*
+        - extract_requirements.*
 ```
 
 **Advantages:**
@@ -123,7 +116,7 @@ actions:
 - No parallelization—each step waits for the previous
 - Cannot skip unnecessary steps
 
-**Use cases:** ETL pipelines, document processing, data enrichment
+**Use cases:** Document processing, content optimization, data enrichment pipelines
 
 ---
 
@@ -133,10 +126,10 @@ Multiple actions execute simultaneously when they share a dependency but don't d
 
 ```mermaid
 flowchart LR
-    A[extract_incident_details] --> B[classify_severity]
-    A --> C[assess_customer_impact]
-    A --> D[assess_system_impact]
-    B --> E[assign_response_team]
+    A[parse_resume] --> B[assess_skills]
+    A --> C[assess_experience]
+    A --> D[assess_culture_fit]
+    B --> E[combine_scores]
     C --> E
     D --> E
 
@@ -144,8 +137,8 @@ flowchart LR
 ```
 
 ```yaml
-name: incident_triage
-description: "Automated incident triage with parallel assessment"
+name: candidate_screener
+description: "Screen candidates with parallel independent assessment"
 
 defaults:
   json_mode: true
@@ -153,80 +146,87 @@ defaults:
   model_name: gpt-4o-mini
   context_scope:
     seed_data:
-      team_roster: $file:team_roster.json
-      service_catalog: $file:service_catalog.json
+      role_requirements: $file:role_requirements.json
+      company_values: $file:company_values.json
 
 actions:
-  - name: extract_incident_details
-    intent: "Extract structured information from raw incident report"
+  - name: parse_resume
+    intent: "Extract structured information from resume"
     schema:
-      title: string
-      description: string
-      affected_systems: array
-      error_messages: array
-      impact_signals: array
-    prompt: $prompts.extract_incident_details
+      candidate_name: string
+      skills: array
+      experience_years: number
+      education: array
+      previous_roles: array
+      notable_achievements: array
+    prompt: $prompts.parse_resume
     context_scope:
       observe:
-        - source.incident_report
-        - source.monitoring_data
-        - seed.service_catalog
+        - source.resume_text
+        - source.cover_letter
 
-  # These three run in parallel - all depend on extract_incident_details
-  - name: classify_severity
-    dependencies: [extract_incident_details]
-    intent: "Classify incident severity"
+  # These three run in parallel — all depend on parse_resume
+  - name: assess_skills
+    dependencies: [parse_resume]
+    intent: "Evaluate technical skill match against role requirements"
     schema:
-      severity: string
-      confidence: number
+      skill_match_score: number
+      matched_skills: array
+      missing_skills: array
       reasoning: string
-    prompt: $prompts.classify_severity
+    prompt: $prompts.assess_skills
     context_scope:
       observe:
-        - extract_incident_details.*
-        - source.incident_report
+        - parse_resume.skills
+        - parse_resume.previous_roles
+        - seed.role_requirements
 
-  - name: assess_customer_impact
-    dependencies: [extract_incident_details]
-    intent: "Assess impact on customers and revenue"
+  - name: assess_experience
+    dependencies: [parse_resume]
+    intent: "Evaluate depth and relevance of work experience"
     schema:
-      customer_impact_level: string
-      affected_customer_count_estimate: string
-      revenue_impact_estimate: string
-      customer_facing: boolean
-    prompt: $prompts.assess_customer_impact
+      experience_score: number
+      relevant_experience_years: number
+      leadership_signals: array
+      reasoning: string
+    prompt: $prompts.assess_experience
     context_scope:
       observe:
-        - extract_incident_details.*
+        - parse_resume.previous_roles
+        - parse_resume.notable_achievements
+        - parse_resume.experience_years
+        - seed.role_requirements
 
-  - name: assess_system_impact
-    dependencies: [extract_incident_details]
-    intent: "Assess technical system impact"
+  - name: assess_culture_fit
+    dependencies: [parse_resume]
+    intent: "Evaluate alignment with company values and team dynamics"
     schema:
-      system_impact_level: string
-      affected_services: array
-      degradation_percentage: string
-      cascading_failure_risk: string
-    prompt: $prompts.assess_system_impact
+      culture_score: number
+      alignment_signals: array
+      concerns: array
+      reasoning: string
+    prompt: $prompts.assess_culture_fit
     context_scope:
       observe:
-        - extract_incident_details.*
+        - parse_resume.notable_achievements
+        - parse_resume.previous_roles
+        - source.cover_letter
+        - seed.company_values
 
   # Fan-in: merge results from all parallel branches
-  # Since these are different actions, the first (classify_severity) is primary input
-  # assess_customer_impact and assess_system_impact are loaded via historical context
-  - name: assign_response_team
-    dependencies: [classify_severity, assess_customer_impact, assess_system_impact]
+  - name: combine_scores
+    dependencies: [assess_skills, assess_experience, assess_culture_fit]
     kind: tool
-    impl: assign_team_based_on_impact
-    intent: "Assign response team based on severity and impact"
+    impl: calculate_composite_score
+    intent: "Compute weighted composite score from parallel assessments"
     context_scope:
       observe:
-        - classify_severity.*
-        - assess_customer_impact.*
-        - assess_system_impact.*
-        - seed.team_roster
-        - seed.service_catalog
+        - assess_skills.*
+        - assess_experience.*
+        - assess_culture_fit.*
+      passthrough:
+        - parse_resume.candidate_name
+        - parse_resume.skills
 ```
 
 :::tip Fan-in Pattern
@@ -241,7 +241,7 @@ When multiple different actions feed into one action, the system uses **fan-in**
 - Higher resource utilization
 - Synthesis logic can be complex when results conflict
 
-**Use cases:** Multi-aspect analysis, incident triage, feature extraction
+**Use cases:** Multi-aspect evaluation, document analysis, feature extraction
 
 ---
 
@@ -251,13 +251,13 @@ Split large inputs into chunks, process each in parallel, then aggregate results
 
 ```mermaid
 flowchart TD
-    DOC[document] --> C1[chunk_1]
-    DOC --> C2[chunk_2]
-    DOC --> C3[chunk_3]
-    C1 --> P1[process]
-    C2 --> P2[process]
-    C3 --> P3[process]
-    P1 --> AGG[aggregate]
+    DOC[contract] --> C1[clause_1]
+    DOC --> C2[clause_2]
+    DOC --> C3[clause_3]
+    C1 --> P1[analyze_risk]
+    C2 --> P2[analyze_risk]
+    C3 --> P3[analyze_risk]
+    P1 --> AGG[aggregate_risk_summary]
     P2 --> AGG
     P3 --> AGG
 
@@ -267,8 +267,8 @@ flowchart TD
 ```
 
 ```yaml
-name: document_analysis
-description: "Large document analysis with chunking"
+name: contract_reviewer
+description: "Analyze contract clauses for risk and obligations"
 
 defaults:
   json_mode: true
@@ -276,43 +276,49 @@ defaults:
   model_name: gpt-4o-mini
 
 actions:
-  - name: chunk_document
+  - name: split_into_clauses
     kind: tool
-    impl: chunk_document
-    intent: "Split document into manageable chunks"
+    impl: split_contract_by_clause
+    intent: "Split contract into individual clauses for analysis"
 
-  - name: analyze_chunk
-    dependencies: [chunk_document]
+  - name: analyze_clause
+    dependencies: [split_into_clauses]
     prompt: |
-      Analyze this document section:
+      Analyze this contract clause for risk, obligations, and deadlines.
 
-      {{ chunk_document.content }}
+      Clause: {{ split_into_clauses.clause_text }}
+      Clause number: {{ split_into_clauses.clause_number }}
 
-      Extract key points, entities, and themes.
+      Identify:
+      - Risk level (high/medium/low) and why
+      - Obligations for each party
+      - Any deadlines or time-sensitive terms
+      - Unusual or non-standard language
     schema:
-      key_points: array
-      entities: array
-      themes: array
-      sentiment: string
+      risk_level: string
+      risk_reasoning: string
+      obligations: array
+      deadlines: array
+      unusual_terms: array
 
-  - name: aggregate_analysis
-    dependencies: [analyze_chunk]
+  - name: aggregate_risk_summary
+    dependencies: [analyze_clause]
     kind: tool
-    impl: aggregate_chunk_analyses
-    intent: "Combine chunk analyses into unified report"
+    impl: aggregate_clause_analyses
+    intent: "Combine clause analyses into unified risk report"
 ```
 
-The `root_target_id` field preserves document identity through all splits, enabling the aggregate action to collect all chunks belonging to the same source.
+The `root_target_id` field preserves document identity through all splits, enabling the aggregate action to collect all clauses belonging to the same contract.
 
 **Advantages:**
 - Handles arbitrarily large inputs
-- Parallel chunk processing reduces latency
+- Parallel clause processing reduces latency
 
 **Limitations:**
-- Chunk boundaries can split important context
-- Aggregation must reconcile potentially conflicting analyses
+- Clause boundaries can split important cross-references
+- Aggregation must reconcile clauses that interact with each other
 
-**Use cases:** Large document analysis, batch processing, distributed computation
+**Use cases:** Contract review, legal document analysis, research paper summarization
 
 See [Granularity](../reference/execution/granularity) for record and file modes.
 
@@ -324,16 +330,17 @@ Route data to different handlers based on content. Guards evaluate conditions an
 
 ```mermaid
 flowchart TB
-    A[classify_severity] --> B{severity?}
-    B -->|SEV1/SEV2| C[generate_executive_summary]
-    B -->|SEV3+| D[standard_response]
+    A[classify_order] --> B{status?}
+    B -->|in_stock| C[fulfill_order]
+    B -->|out_of_stock| D[create_backorder]
+    B -->|cancelled| E[process_refund]
 
     classDef default rx:8,ry:8
 ```
 
 ```yaml
-name: incident_response
-description: "Route incidents based on severity"
+name: order_processor
+description: "Route orders to appropriate handlers based on status"
 
 defaults:
   json_mode: true
@@ -341,39 +348,67 @@ defaults:
   model_name: gpt-4o-mini
 
 actions:
-  - name: classify_severity
-    prompt: $prompts.classify_severity
-    schema:
-      final_severity: string
-      confidence: number
-      reasoning: string
+  - name: classify_order
+    prompt: |
+      Analyze this order and determine its processing path.
 
-  # Only runs for SEV1 or SEV2 incidents
-  - name: generate_executive_summary
-    dependencies: [classify_severity]
-    intent: "Generate executive summary for high-severity incidents"
-    guard:
-      condition: 'final_severity == "SEV1" or final_severity == "SEV2"'
-      on_false: "filter"
+      Order details: {{ source.order_details }}
+      Customer message: {{ source.customer_message }}
+      Inventory status: {{ source.inventory_status }}
+
+      Determine if this order should be fulfilled, backordered, or refunded.
     schema:
-      executive_summary: string
-      business_impact_summary: string
-      key_stakeholders: array
-    prompt: $prompts.executive_summary
+      order_status: string
+      reasoning: string
+      priority: string
+
+  # Only runs for in-stock orders
+  - name: fulfill_order
+    dependencies: [classify_order]
+    guard:
+      condition: 'order_status == "in_stock"'
+      on_false: "filter"
+    intent: "Generate fulfillment instructions for in-stock orders"
+    prompt: $prompts.fulfill_order
+    schema:
+      shipping_method: string
+      estimated_delivery: string
+      confirmation_message: string
     context_scope:
       observe:
-        - classify_severity.*
+        - classify_order.*
+        - source.order_details
+        - source.shipping_address
 
-  # Only runs for lower severity incidents
-  - name: standard_response
-    dependencies: [classify_severity]
+  # Only runs for out-of-stock orders
+  - name: create_backorder
+    dependencies: [classify_order]
     guard:
-      condition: 'final_severity not in ["SEV1", "SEV2"]'
+      condition: 'order_status == "out_of_stock"'
       on_false: "filter"
-    prompt: $prompts.standard_response
+    intent: "Create backorder with estimated restock timeline"
+    prompt: $prompts.create_backorder
     schema:
-      response_plan: string
-      estimated_resolution_time: string
+      backorder_message: string
+      estimated_restock: string
+      alternatives_suggested: array
+    context_scope:
+      observe:
+        - classify_order.*
+        - source.order_details
+
+  # Only runs for cancelled orders
+  - name: process_refund
+    dependencies: [classify_order]
+    guard:
+      condition: 'order_status == "cancelled"'
+      on_false: "filter"
+    intent: "Process refund and generate confirmation"
+    prompt: $prompts.process_refund
+    schema:
+      refund_amount: string
+      refund_method: string
+      confirmation_message: string
 ```
 
 **Advantages:**
@@ -384,7 +419,7 @@ actions:
 - Guard conditions must be deterministic
 - Complex routing logic can be hard to debug
 
-**Use cases:** Priority-based processing, content-type routing, A/B workflows
+**Use cases:** Order processing, content-type routing, priority-based handling
 
 See [Guards](../reference/execution/guards) for complete documentation.
 
@@ -396,7 +431,7 @@ A generator creates output; a critic evaluates it against criteria. This pattern
 
 ```mermaid
 flowchart LR
-    A[generate_draft] --> B[critique]
+    A[draft_copy] --> B[critique_against_guidelines]
     B --> C{approved?}
     C -->|yes| D[finalize]
     C -->|no| E[revise]
@@ -405,80 +440,116 @@ flowchart LR
 ```
 
 ```yaml
-name: content_review
-description: "Generate and review content with quality checks"
+name: marketing_copy_editor
+description: "Generate and review marketing copy against brand guidelines"
 
 defaults:
   json_mode: true
   model_vendor: openai
   model_name: gpt-4o-mini
+  context_scope:
+    seed_data:
+      brand_guidelines: $file:brand_guidelines.json
 
 actions:
-  - name: generate_draft
+  - name: draft_copy
     prompt: |
-      Generate a professional response for:
-      {{ source.request }}
+      Write marketing copy for this campaign:
+
+      Product: {{ source.product_name }}
+      Target audience: {{ source.target_audience }}
+      Campaign goal: {{ source.campaign_goal }}
+      Channel: {{ source.channel }}
+
+      Write compelling copy appropriate for the channel.
     schema:
-      content: string
+      headline: string
+      body_copy: string
+      call_to_action: string
       tone: string
-      key_points: array
 
-  - name: critique
-    dependencies: [generate_draft]
+  - name: critique_against_guidelines
+    dependencies: [draft_copy]
     prompt: |
-      Review this draft against these criteria:
-      - Accuracy: Are all facts correct?
-      - Completeness: Are all requirements addressed?
-      - Clarity: Is the language clear and professional?
-      - Tone: Is it appropriate for the audience?
+      Review this marketing copy against our brand guidelines.
 
-      Draft: {{ generate_draft.content }}
+      Copy:
+      Headline: {{ draft_copy.headline }}
+      Body: {{ draft_copy.body_copy }}
+      CTA: {{ draft_copy.call_to_action }}
 
-      Provide detailed feedback and an approval decision.
+      Brand guidelines:
+      {{ seed.brand_guidelines | tojson }}
+
+      Check for:
+      - Voice and tone alignment
+      - Prohibited words or phrases
+      - Claims that need legal review
+      - Accessibility of language
+      - Channel-appropriate length
+
+      Provide an approval decision with specific feedback.
     schema:
       approved: boolean
       feedback: string
       issues: array
-      quality_score: number
+      brand_alignment_score: number
+    context_scope:
+      observe:
+        - draft_copy.*
+        - seed.brand_guidelines
+        - source.channel
 
   - name: finalize
-    dependencies: [critique]
+    dependencies: [critique_against_guidelines]
     guard:
       condition: 'approved == true'
       on_false: "filter"
     prompt: |
-      Finalize this approved content:
-      {{ generate_draft.content }}
+      Polish this approved marketing copy for publication.
 
-      Apply any minor polish while preserving the substance.
+      {{ draft_copy.headline }}
+      {{ draft_copy.body_copy }}
+      {{ draft_copy.call_to_action }}
+
+      Apply minor polish only — the substance has been approved.
     schema:
-      final_content: string
+      final_headline: string
+      final_body: string
+      final_cta: string
 
   - name: revise
-    dependencies: [critique]
+    dependencies: [critique_against_guidelines]
     guard:
       condition: 'approved == false'
       on_false: "filter"
     prompt: |
-      Revise this content based on the feedback:
+      Revise this marketing copy based on the critique.
 
-      Original: {{ generate_draft.content }}
-      Feedback: {{ critique.feedback }}
-      Issues: {{ critique.issues | join(', ') }}
+      Original headline: {{ draft_copy.headline }}
+      Original body: {{ draft_copy.body_copy }}
+      Original CTA: {{ draft_copy.call_to_action }}
+
+      Feedback: {{ critique_against_guidelines.feedback }}
+      Issues: {{ critique_against_guidelines.issues | join(', ') }}
+
+      Address every issue while maintaining the campaign goal.
     schema:
-      revised_content: string
+      revised_headline: string
+      revised_body: string
+      revised_cta: string
       changes_made: array
 ```
 
 **Advantages:**
-- Catches errors before they reach users
+- Catches errors before they reach customers
 - Provides audit trail of quality checks
 
 **Limitations:**
 - Increases latency and cost
 - Critic may have blind spots similar to generator
 
-**Use cases:** Content generation, code review, compliance checking
+**Use cases:** Marketing copy, legal drafts, compliance-sensitive content
 
 ---
 
@@ -488,23 +559,23 @@ Repeatedly improve output until quality thresholds are met. Use reprompting for 
 
 ```yaml
 actions:
-  - name: generate_analysis
-    prompt: $prompts.generate
+  - name: generate_translation
+    prompt: $prompts.translate
     schema:
-      analysis: string
+      translated_text: string
       confidence: number
-      supporting_evidence: array
+      difficult_phrases: array
     reprompt:
       enabled: true
       max_attempts: 3
       strategy: validation_feedback
 ```
 
-For multi-stage refinement with parallel hypothesis generation, use versioned actions:
+For multi-stage refinement with parallel strategy generation, use versioned actions:
 
 ```yaml
-name: root_cause_analysis
-description: "Root cause analysis with parallel hypothesis generation"
+name: translation_quality
+description: "Multi-strategy translation with quality validation"
 
 defaults:
   json_mode: true
@@ -512,73 +583,86 @@ defaults:
   model_name: gpt-4o-mini
   context_scope:
     seed_data:
-      system_topology: $file:system_topology.json
-      historical_incidents: $file:historical_incidents.json
-      causal_patterns: $file:causal_patterns.json
+      glossary: $file:domain_glossary.json
 
 actions:
-  - name: extract_anomaly_signals
-    intent: "Extract anomaly signals from monitoring data"
+  - name: extract_context
+    intent: "Identify domain, tone, and key terms before translation"
     schema:
-      anomaly_type: string
-      affected_components: array
-      observed_symptoms: array
-      metric_deviations: array
-    prompt: $prompts.extract_anomaly_signals
+      source_language: string
+      target_language: string
+      domain: string
+      tone: string
+      key_terms: array
+      cultural_references: array
+    prompt: $prompts.extract_translation_context
     context_scope:
       observe:
-        - source.monitoring_data
-        - source.alerts
-        - seed.system_topology
+        - source.text
+        - source.target_language
+        - seed.glossary
 
-  # Parallel hypothesis generation with different strategies
-  - name: generate_hypotheses
-    dependencies: [extract_anomaly_signals]
-    intent: "Generate causal hypotheses using different reasoning strategies"
+  # Parallel translation strategies
+  - name: translate
+    dependencies: [extract_context]
+    intent: "Translate using different strategies for comparison"
     versions:
-      param: reasoning_strategy
-      range: ["data_driven", "topology_driven", "pattern_matching"]
+      param: strategy
+      range: ["literal", "idiomatic", "domain_adapted"]
       mode: parallel
     schema:
-      hypotheses: array
-      reasoning_path: string
-      supporting_evidence: array
-    prompt: $prompts.generate_hypotheses
+      translated_text: string
+      strategy_used: string
+      difficult_passages: array
+      confidence: number
+    prompt: $prompts.translate_with_strategy
     context_scope:
       observe:
-        - extract_anomaly_signals.*
-        - seed.system_topology
-        - seed.historical_incidents
+        - source.text
+        - extract_context.*
+        - seed.glossary
 
-  - name: rank_hypotheses
-    dependencies: [generate_hypotheses]
+  - name: select_best_translation
+    dependencies: [translate]
     kind: tool
-    impl: rank_causal_hypotheses
-    intent: "Aggregate and rank hypotheses by evidence strength"
+    impl: compare_translations
+    intent: "Score and select the best translation from parallel attempts"
     version_consumption:
-      source: generate_hypotheses
+      source: translate
       pattern: merge
     context_scope:
       observe:
-        - generate_hypotheses_data_driven.*
-        - generate_hypotheses_topology_driven.*
-        - generate_hypotheses_pattern_matching.*
-        - seed.causal_patterns
+        - translate_literal.*
+        - translate_idiomatic.*
+        - translate_domain_adapted.*
 
-  - name: validate_hypotheses
-    dependencies: [rank_hypotheses]
-    intent: "Validate top hypotheses against available evidence"
+  - name: back_translate
+    dependencies: [select_best_translation]
+    intent: "Translate back to source language for quality validation"
     schema:
-      validated_hypotheses: array
-      evidence_analysis: string
-      confidence_scores: object
-      contradicting_evidence: array
-    prompt: $prompts.validate_hypotheses
+      back_translated_text: string
+      semantic_drift_detected: boolean
+      drift_passages: array
+    prompt: $prompts.back_translate
     context_scope:
       observe:
-        - rank_hypotheses.top_hypotheses
-        - extract_anomaly_signals.*
-        - seed.historical_incidents
+        - select_best_translation.best_translation
+        - extract_context.source_language
+
+  - name: validate_quality
+    dependencies: [back_translate]
+    intent: "Compare back-translation against original to detect meaning loss"
+    schema:
+      quality_score: number
+      meaning_preserved: boolean
+      issues: array
+      final_translation: string
+    prompt: $prompts.validate_translation_quality
+    context_scope:
+      observe:
+        - source.text
+        - select_best_translation.best_translation
+        - back_translate.*
 ```
 
 **Advantages:**
@@ -589,7 +673,7 @@ actions:
 - Each cycle increases latency and cost
 - Requires well-defined exit conditions
 
-**Use cases:** Complex generation, root cause analysis, quality-critical outputs
+**Use cases:** Translation, content localization, quality-critical text generation
 
 See [Reprompting](../reference/validation/reprompting) for automatic refinement.
 
@@ -601,17 +685,17 @@ A central action analyzes requests and dispatches to specialized handlers. Use g
 
 ```mermaid
 flowchart TB
-    A[classify_request] --> B{route}
-    B --> C[technical_support]
-    B --> D[billing_inquiry]
-    B --> E[general_question]
+    A[detect_document_type] --> B{type?}
+    B --> C[extract_invoice]
+    B --> D[analyze_contract]
+    B --> E[respond_to_letter]
 
     classDef default rx:8,ry:8
 ```
 
 ```yaml
-name: customer_service
-description: "Route customer requests to specialized handlers"
+name: document_processor
+description: "Route documents to specialized handlers by type"
 
 defaults:
   json_mode: true
@@ -619,85 +703,92 @@ defaults:
   model_name: gpt-4o-mini
   context_scope:
     seed_data:
-      knowledge_base: $file:knowledge_base.json
-      product_catalog: $file:product_catalog.json
+      vendor_catalog: $file:vendor_catalog.json
+      contract_templates: $file:contract_templates.json
 
 actions:
-  - name: classify_request
-    intent: "Classify incoming customer request"
+  - name: detect_document_type
+    intent: "Classify incoming document type"
     prompt: |
-      Analyze this customer request and determine the best handler:
+      Analyze this document and determine its type.
 
-      Request: {{ source.customer_message }}
+      Document: {{ source.document_text }}
 
       Categories:
-      - technical_support: Product issues, bugs, how-to questions
-      - billing_inquiry: Payment, subscription, refunds
-      - general_question: Other inquiries
+      - invoice: Bills, purchase orders, payment requests
+      - contract: Agreements, terms, legal documents
+      - letter: Correspondence, inquiries, complaints
     schema:
-      category: string
+      document_type: string
       confidence: number
-      extracted_intent: string
       key_entities: array
+      summary: string
 
-  - name: technical_support
-    dependencies: [classify_request]
+  - name: extract_invoice
+    dependencies: [detect_document_type]
     guard:
-      condition: 'category == "technical_support"'
+      condition: 'document_type == "invoice"'
       on_false: "filter"
-    intent: "Handle technical support requests"
-    prompt: $prompts.technical_support
+    intent: "Extract structured data from invoices"
+    prompt: $prompts.extract_invoice
     context_scope:
       observe:
-        - classify_request.*
-        - source.customer_message
-        - seed.knowledge_base
-        - seed.product_catalog
+        - detect_document_type.*
+        - source.document_text
+        - seed.vendor_catalog
     schema:
-      response: string
-      troubleshooting_steps: array
-      relevant_docs: array
+      vendor_name: string
+      invoice_number: string
+      line_items: array
+      total_amount: number
+      due_date: string
+      payment_terms: string
 
-  - name: billing_inquiry
-    dependencies: [classify_request]
+  - name: analyze_contract
+    dependencies: [detect_document_type]
     guard:
-      condition: 'category == "billing_inquiry"'
+      condition: 'document_type == "contract"'
       on_false: "filter"
-    intent: "Handle billing and subscription questions"
-    prompt: $prompts.billing_inquiry
+    intent: "Analyze contract terms and flag key obligations"
+    prompt: $prompts.analyze_contract
     context_scope:
       observe:
-        - classify_request.*
-        - source.customer_message
+        - detect_document_type.*
+        - source.document_text
+        - seed.contract_templates
     schema:
-      response: string
-      account_actions: array
+      parties: array
+      key_terms: array
+      obligations: array
+      risk_flags: array
+      expiration_date: string
 
-  - name: general_question
-    dependencies: [classify_request]
+  - name: respond_to_letter
+    dependencies: [detect_document_type]
     guard:
-      condition: 'category == "general_question"'
+      condition: 'document_type == "letter"'
       on_false: "filter"
-    intent: "Handle general inquiries"
-    prompt: $prompts.general_question
+    intent: "Draft appropriate response to correspondence"
+    prompt: $prompts.respond_to_letter
     context_scope:
       observe:
-        - classify_request.*
-        - source.customer_message
-        - seed.knowledge_base
+        - detect_document_type.*
+        - source.document_text
     schema:
-      response: string
+      response_draft: string
+      response_tone: string
+      action_items: array
 ```
 
 **Advantages:**
 - Flexible routing based on content
-- Specialized handlers for each domain
+- Specialized handlers for each document type
 
 **Limitations:**
 - Coordinator adds latency
 - Routing errors cascade to wrong handlers
 
-**Use cases:** Customer service, request triage, multi-domain assistants
+**Use cases:** Document processing, email triage, multi-format data ingestion
 
 See [Dispatch Tool](../reference/prompts/dispatch) for advanced routing.
 
@@ -709,7 +800,7 @@ Mix deterministic tools with LLM reasoning. Tools handle API calls, calculations
 
 ```mermaid
 flowchart LR
-    A["assess_data_quality<br/><small>LLM</small>"] --> B["validate_threshold<br/><small>Tool</small>"] --> C["recommend_features<br/><small>LLM</small>"] --> D["apply_transforms<br/><small>Tool</small>"]
+    A["generate_description<br/><small>LLM</small>"] --> B["fetch_pricing<br/><small>Tool</small>"] --> C["write_marketing_copy<br/><small>LLM</small>"] --> D["format_listing<br/><small>Tool</small>"]
 
     class B,D tool
     class A,C llm
@@ -719,8 +810,8 @@ flowchart LR
 ```
 
 ```yaml
-name: ml_pipeline
-description: "ML pipeline with quality gates and feature engineering"
+name: product_listing_enrichment
+description: "Enrich product listings with AI descriptions and real market data"
 
 defaults:
   json_mode: true
@@ -728,77 +819,83 @@ defaults:
   model_name: gpt-4o-mini
   context_scope:
     seed_data:
-      feature_definitions: $file:feature_definitions.json
-      deployment_config: $file:deployment_config.json
+      brand_voice: $file:brand_voice.json
+      marketplace_rules: $file:marketplace_rules.json
 
 actions:
-  # LLM: Assess data quality
-  - name: assess_data_quality
-    intent: "Assess data quality and identify issues"
+  # LLM: Understand product specs and generate description
+  - name: generate_description
+    intent: "Generate product description from raw specs"
     schema:
-      quality_score: number
-      completeness: number
-      detected_issues: array
-      recommendations: array
-    prompt: $prompts.assess_data_quality
+      product_title: string
+      description: string
+      key_features: array
+      target_buyer: string
+      search_keywords: array
+    prompt: $prompts.generate_description
     context_scope:
       observe:
-        - source.training_data
-        - seed.feature_definitions
+        - source.product_specs
+        - source.product_images_description
+        - seed.brand_voice
 
-  # Tool: Validate quality threshold (deterministic check)
-  - name: data_quality_check
-    dependencies: [assess_data_quality]
+  # Tool: Fetch real competitive pricing (deterministic, no hallucination)
+  - name: fetch_pricing
+    dependencies: [generate_description]
     kind: tool
-    impl: validate_data_quality_threshold
-    intent: "Validate data meets quality threshold"
-    guard:
-      condition: 'quality_score >= 0.7'
-      on_false: "filter"
+    impl: fetch_competitor_prices
+    intent: "Look up current competitor pricing for similar products"
     context_scope:
       observe:
-        - assess_data_quality.*
+        - generate_description.search_keywords
+        - generate_description.product_title
+        - source.product_category
 
-  # LLM: Recommend feature engineering
-  - name: recommend_features
-    dependencies: [data_quality_check]
-    intent: "Recommend feature engineering transformations"
+  # LLM: Write marketing copy informed by real market position
+  - name: write_marketing_copy
+    dependencies: [fetch_pricing]
+    intent: "Write compelling marketing copy with competitive positioning"
     schema:
-      recommended_features: array
-      transformation_pipeline: array
-      encoding_strategies: object
-    prompt: $prompts.recommend_features
+      headline: string
+      selling_points: array
+      price_positioning: string
+      comparison_angle: string
+    prompt: $prompts.write_marketing_copy
     context_scope:
       observe:
-        - assess_data_quality.data_profile
-        - source.training_data
-        - seed.feature_definitions
+        - generate_description.*
+        - fetch_pricing.competitor_prices
+        - fetch_pricing.price_range
+        - seed.brand_voice
+      drop:
+        - source.product_specs    # Already distilled into description
 
-  # Tool: Apply transformations (deterministic execution)
-  - name: execute_feature_engineering
-    dependencies: [recommend_features]
+  # Tool: Format for marketplace requirements (deterministic)
+  - name: format_listing
+    dependencies: [write_marketing_copy]
     kind: tool
-    impl: apply_feature_transformations
-    intent: "Apply recommended feature transformations"
+    impl: format_for_marketplace
+    intent: "Format listing to meet marketplace character limits and requirements"
     context_scope:
       observe:
-        - recommend_features.transformation_pipeline
-        - recommend_features.encoding_strategies
-        - source.training_data
+        - write_marketing_copy.*
+        - generate_description.*
+        - fetch_pricing.*
+        - seed.marketplace_rules
       passthrough:
-        - assess_data_quality.*
-        - recommend_features.*
+        - source.product_id
+        - source.product_category
 ```
 
 **Advantages:**
 - Guaranteed correctness for deterministic operations
-- LLM focuses on what it does best
+- LLM focuses on what it does best (language), tools handle data
 
 **Limitations:**
 - Tools must be stateless
 - Error handling spans two paradigms
 
-**Use cases:** ML pipelines, API integration, data validation, report generation
+**Use cases:** E-commerce enrichment, API integration, data validation, report generation
 
 See [Custom Tools](./custom-tools) for building tools.
 
@@ -817,7 +914,7 @@ See [Custom Tools](./custom-tools) for building tools.
 | Flexible request handling | Coordinator |
 | Mix AI with deterministic logic | Tool + LLM Hybrid |
 
-Most real workflows combine multiple patterns. An incident triage system might use Parallel for multi-aspect assessment, Conditional Routing for severity-based escalation, and Tool + LLM Hybrid for team assignment.
+Most real workflows combine multiple patterns. A product review analyzer might use Parallel for multi-scorer consensus, Conditional Routing for quality-based filtering, and Tool + LLM Hybrid for deterministic aggregation alongside AI-generated responses.
 
 ---
 
