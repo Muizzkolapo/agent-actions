@@ -22,11 +22,17 @@ class GenericErrorFormatter(ErrorFormatter):
         if agent:
             title += f" for agent '{agent}'"
 
+        # Include the exception type so the user can search/report it.
+        root_type = type(root).__name__
+        details = f"{root_type}: {message}" if message else root_type
+
         return UserError(
             category="Error",
             title=title,
-            details=message,
-            fix="Check your configuration and try again",
+            details=details,
+            fix="Check your configuration and try again. "
+            "Run with --verbose for the full traceback, "
+            "or check logs/events.json for details.",
             context=context,
             docs_url="https://docs.agent-actions.com/troubleshooting",
         )
