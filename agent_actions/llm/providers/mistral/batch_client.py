@@ -10,11 +10,12 @@ from typing import Any
 from agent_actions.prompt.message_builder import MessageBuilder
 
 from ..batch_base import BaseBatchClient, BatchTask
+from ..mixins import OpenAICompatibleResponseMixin
 
 logger = logging.getLogger(__name__)
 
 
-class MistralBatchClient(BaseBatchClient):
+class MistralBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """
     Mistral Batch API implementation of the BaseBatchClient interface.
 
@@ -199,20 +200,28 @@ class MistralBatchClient(BaseBatchClient):
             return result_content.encode("utf-8")
         return result_content  # type: ignore[return-value]
 
-    # Response extraction methods - Mistral uses similar format to OpenAI
+    # -- Mistral-specific overrides for response paths that differ from
+    # the standard OpenAI-compatible format (body fallback at top level).
+
+    def _resolve_response_data(self, raw_response: dict[str, Any]) -> dict[str, Any]:
+        """Resolve response data with Mistral's body-key fallback."""
+        return raw_response.get("response", raw_response.get("body", raw_response))
+
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
-        """Extract error from Mistral response."""
+        """Extract error from Mistral response, with body fallback."""
         if raw_response.get("error"):
             return str(raw_response["error"])
-        response_data = raw_response.get("response", raw_response.get("body", {}))
+        response_data = self._resolve_response_data(raw_response)
         if "error" in response_data:
             return str(response_data["error"])
+        status_code = response_data.get("status_code")
+        if status_code and status_code != 200:
+            return f"HTTP {status_code}"
         return None
 
     def _extract_content_from_response(self, raw_response: dict[str, Any]) -> Any:
-        """Extract content from Mistral response."""
-        # Try response.body.choices path (batch format)
-        response_data = raw_response.get("response", raw_response)
+        """Extract content from Mistral response, with body fallback."""
+        response_data = self._resolve_response_data(raw_response)
         response_body = response_data.get("body", response_data)
         if "choices" in response_body and response_body["choices"]:
             choice = response_body["choices"][0]
@@ -221,8 +230,8 @@ class MistralBatchClient(BaseBatchClient):
         return None
 
     def _extract_metadata_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any]:
-        """Extract metadata from Mistral response."""
-        response_data = raw_response.get("response", raw_response)
+        """Extract metadata from Mistral response, preserving id field."""
+        response_data = self._resolve_response_data(raw_response)
         response_body = response_data.get("body", response_data)
         choices = response_body.get("choices", [{}])
         return {
@@ -232,7 +241,7 @@ class MistralBatchClient(BaseBatchClient):
         }
 
     def _extract_usage_from_response(self, raw_response: dict[str, Any]) -> dict[str, Any] | None:
-        """Extract usage from Mistral response."""
-        response_data = raw_response.get("response", raw_response)
+        """Extract usage from Mistral response, with body fallback."""
+        response_data = self._resolve_response_data(raw_response)
         response_body = response_data.get("body", response_data)
         return response_body.get("usage")  # type: ignore[no-any-return]

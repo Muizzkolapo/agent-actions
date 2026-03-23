@@ -16,9 +16,8 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +132,7 @@ class AgacClient(BaseClient):
         # Fire LLM request event (mock provider)
         fire_event(
             LLMRequestEvent(
-                provider="agac",
+                provider="agac-fake-provider",
                 model="agac-mock",
                 request_id=request_id,
             )
@@ -174,17 +173,8 @@ class AgacClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Fire LLM response event (mock provider - no real tokens)
-        fire_event(
-            LLMResponseEvent(
-                provider="agac",
-                model="agac-mock",
-                prompt_tokens=0,
-                completion_tokens=0,
-                total_tokens=0,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            None, "agac-fake-provider", "agac-mock", latency_ms, request_id
         )
 
         return [fake_data]
@@ -218,7 +208,7 @@ class AgacClient(BaseClient):
         # Fire LLM request event (mock provider)
         fire_event(
             LLMRequestEvent(
-                provider="agac",
+                provider="agac-fake-provider",
                 model="agac-mock",
                 request_id=request_id,
             )
@@ -233,28 +223,17 @@ class AgacClient(BaseClient):
             len(prompt),
         )
 
-        output_field = agent_config.get("output_field", get_default("output_field"))
-
         # Generate text response based on prompt
         content = FakeDataGenerator.generate_text_response(prompt, attempt)
 
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Fire LLM response event (mock provider - no real tokens)
-        fire_event(
-            LLMResponseEvent(
-                provider="agac",
-                model="agac-mock",
-                prompt_tokens=0,
-                completion_tokens=0,
-                total_tokens=0,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            None, "agac-fake-provider", "agac-mock", latency_ms, request_id
         )
 
-        return [{output_field: content}]
+        return ResponseBuilder.wrap_non_json(content, agent_config)
 
     @classmethod
     def invoke(

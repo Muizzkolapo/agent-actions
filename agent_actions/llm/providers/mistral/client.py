@@ -24,14 +24,12 @@ from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
     JSONResponseMixin,
 )
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -114,33 +112,8 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage
-        prompt_tokens = (chat_response.usage.prompt_tokens if chat_response.usage else 0) or 0
-        completion_tokens = (
-            chat_response.usage.completion_tokens if chat_response.usage else 0
-        ) or 0
-        total_tokens = (chat_response.usage.total_tokens if chat_response.usage else 0) or 0
-
-        if chat_response.usage:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="mistral",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            chat_response, "mistral", model_name, latency_ms, request_id
         )
 
         response_content = chat_response.choices[0].message.content
@@ -215,33 +188,8 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage
-        prompt_tokens = (chat_response.usage.prompt_tokens if chat_response.usage else 0) or 0
-        completion_tokens = (
-            chat_response.usage.completion_tokens if chat_response.usage else 0
-        ) or 0
-        total_tokens = (chat_response.usage.total_tokens if chat_response.usage else 0) or 0
-
-        if chat_response.usage:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="mistral",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            chat_response, "mistral", model_name, latency_ms, request_id
         )
 
         response_output = chat_response.choices[0].message.content
@@ -254,8 +202,6 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     "api_operation": "chat.complete",
                 },
             )
-        output_field = agent_config.get("output_field", get_default("output_field"))
-
         logger.debug(
             "Mistral non-JSON response retrieved successfully",
             extra={
@@ -265,4 +211,4 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "request_id": request_id,
             },
         )
-        return [{output_field: response_output}]
+        return ResponseBuilder.wrap_non_json(response_output, agent_config)

@@ -24,4 +24,5 @@ Normalize outputs (for docs, CLI, and exporters) with consistent metadata.
 | `vendor_compilation.py` | Module | Vendor-specific schema compilation: `compile_unified_schema` for OpenAI, Anthropic, Gemini, Ollama, etc. | `validation`, `schema_conversion` |
 | `dispatch_injection.py` | Module | Dispatch/injection logic: `_inject_functions_into_schema`, `_resolve_dispatch_in_schema`. | `prompt` |
 | `context_data.py` | Module | Context data handling and schema loading helpers: `_prepare_context_data_str`, `_load_inline_schema`, `_load_named_schema`, `_unwrap_nested_schema`, `_compile_schema_for_vendor`. | `schema_loader`, `vendor_compilation`, `dispatch_injection` |
+| `response_builder.py` | Module | `ResponseBuilder` — unified output-field wrapping and usage extraction for all LLM providers. `UsageResult`, `ProviderResponseConfig`, `PROVIDER_RESPONSE_CONFIGS` registry. | `llm`, `output` |
 | `schema.py` | Module | `ResponseSchemaCompiler` service class. Compiles action response schemas into vendor-specific LLM formats. Delegates to `schema_conversion`, `vendor_compilation`, `dispatch_injection`, `context_data`. | `validation`, `schema_loader` |

@@ -25,14 +25,12 @@ from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
 from agent_actions.llm.providers.mixins import JSONResponseMixin
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -128,32 +126,7 @@ class GroqClient(BaseClient, JSONResponseMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage (OpenAI-compatible format)
-        prompt_tokens = llm.usage.prompt_tokens if llm.usage else 0
-        completion_tokens = llm.usage.completion_tokens if llm.usage else 0
-        total_tokens = llm.usage.total_tokens if llm.usage else 0
-
-        if llm.usage:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="groq",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
-        )
+        ResponseBuilder.record_usage_and_event(llm, "groq", model_name, latency_ms, request_id)
 
         response_temp = llm.choices[0].message.content
         response_data = GroqClient.parse_json_response(
@@ -196,37 +169,11 @@ class GroqClient(BaseClient, JSONResponseMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage (OpenAI-compatible format)
-        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
-        completion_tokens = response.usage.completion_tokens if response.usage else 0
-        total_tokens = response.usage.total_tokens if response.usage else 0
-
-        if response.usage:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="groq",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
-        )
+        ResponseBuilder.record_usage_and_event(response, "groq", model_name, latency_ms, request_id)
 
         try:
             response_content = response.choices[0].message.content
-            output_field = agent_config.get("output_field", get_default("output_field"))
-            return [{output_field: response_content}]
+            return ResponseBuilder.wrap_non_json(response_content, agent_config)
         except (AttributeError, IndexError, TypeError) as e:
             fire_event(
                 LLMErrorEvent(

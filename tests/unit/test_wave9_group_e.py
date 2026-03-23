@@ -173,6 +173,12 @@ class TestBatchClientResolverNoDoubleWrap:
 class TestGeminiNonJsonResponseTextGuard:
     """E-5 — response_temp.text=None doesn't propagate as None to the output."""
 
+    # Patch targets:
+    # - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
+    # - fire_event (LLMRequestEvent/LLMErrorEvent) still in gemini.client
+    _RB = "agent_actions.output.response.response_builder"
+    _GC = "agent_actions.llm.providers.gemini.client"
+
     def _make_mock_response(self, text):
         mock_response = MagicMock()
         mock_response.text = text
@@ -189,11 +195,12 @@ class TestGeminiNonJsonResponseTextGuard:
 
         with (
             patch(
-                "agent_actions.llm.providers.gemini.client._build_client",
+                f"{self._GC}._build_client",
                 return_value=mock_client,
             ),
-            patch("agent_actions.llm.providers.gemini.client.fire_event"),
-            patch("agent_actions.llm.providers.gemini.client.set_last_usage"),
+            patch(f"{self._GC}.fire_event"),
+            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.fire_event"),
         ):
             return GeminiClient.call_non_json(
                 "fake-api-key",
@@ -230,11 +237,12 @@ class TestGeminiNonJsonResponseTextGuard:
 
         with (
             patch(
-                "agent_actions.llm.providers.gemini.client._build_client",
+                f"{self._GC}._build_client",
                 return_value=mock_client,
             ),
-            patch("agent_actions.llm.providers.gemini.client.fire_event"),
-            patch("agent_actions.llm.providers.gemini.client.set_last_usage"),
+            patch(f"{self._GC}.fire_event"),
+            patch(f"{self._RB}.set_last_usage"),
+            patch(f"{self._RB}.fire_event"),
             patch.object(GeminiClient, "parse_json_response", side_effect=capture_parse),
         ):
             GeminiClient.call_json(

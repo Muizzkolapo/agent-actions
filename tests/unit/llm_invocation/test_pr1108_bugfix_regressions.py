@@ -11,7 +11,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from agent_actions.errors import ExternalServiceError
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.processing.types import RecoveryMetadata, RetryMetadata
+
+# Patch targets:
+# - set_last_usage and fire_event (LLMResponseEvent) now live in response_builder
+# - fire_event (LLMRequestEvent/LLMErrorEvent) still in each provider client
+_RB = "agent_actions.output.response.response_builder"
 
 # =============================================================================
 # 1. _create_exhausted_item() — action_name propagation
@@ -192,7 +198,9 @@ class TestCohereNullableTokens:
     def test_none_input_tokens_defaults_to_zero(self):
         """When tokens.input_tokens is None, prompt_tokens defaults to 0.
 
-        Exercises the `tokens.input_tokens or 0` coercion in call_json().
+        Exercises the ``or 0`` coercion in ResponseBuilder._extract_cohere().
+        Because all tokens are zero, ``set_last_usage`` is intentionally
+        skipped; we verify the coercion via ``extract_usage`` directly.
         """
         mock_response = MagicMock()
         mock_response.message.content = [MagicMock(text='{"result": "ok"}')]
@@ -201,7 +209,8 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch("agent_actions.llm.providers.cohere.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
             mock_cohere.ClientV2.return_value.chat.return_value = mock_response
@@ -216,9 +225,13 @@ class TestCohereNullableTokens:
                 schema={"properties": {"result": {"type": "string"}}},
             )
 
-        usage_dict = mock_usage.call_args[0][0]
-        assert usage_dict["input_tokens"] == 0
-        assert usage_dict["output_tokens"] == 0
+        # All tokens are zero after coercion — set_last_usage is skipped
+        mock_usage.assert_not_called()
+
+        # Verify the or-0 coercion via extract_usage directly
+        usage = ResponseBuilder.extract_usage(mock_response, "cohere")
+        assert usage.prompt_tokens == 0
+        assert usage.completion_tokens == 0
 
     def test_valid_tokens_pass_through(self):
         """When tokens have valid int values, they pass through unchanged."""
@@ -229,7 +242,8 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch("agent_actions.llm.providers.cohere.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
             mock_cohere.ClientV2.return_value.chat.return_value = mock_response
@@ -248,7 +262,6 @@ class TestCohereNullableTokens:
         assert usage_dict["input_tokens"] == 100
         assert usage_dict["output_tokens"] == 50
 
-
     def test_none_usage_object_skips_set_last_usage(self):
         """When response.usage is None (no usage attr), set_last_usage is not called."""
         mock_response = MagicMock(spec=[])  # no attributes by default
@@ -258,7 +271,8 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch("agent_actions.llm.providers.cohere.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
             mock_cohere.ClientV2.return_value.chat.return_value = mock_response
@@ -276,7 +290,11 @@ class TestCohereNullableTokens:
         mock_usage.assert_not_called()
 
     def test_none_input_tokens_defaults_to_zero_call_non_json(self):
-        """call_non_json: None token values default to 0 via `or 0`."""
+        """call_non_json: None token values default to 0 via ``or 0``.
+
+        Same as call_json — coercion verified via ``extract_usage``;
+        ``set_last_usage`` is skipped for all-zero usage.
+        """
         mock_response = MagicMock()
         mock_response.message.content = [MagicMock(text="plain text response")]
         mock_response.usage.tokens.input_tokens = None
@@ -284,7 +302,8 @@ class TestCohereNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.cohere.client.cohere") as mock_cohere,
-            patch("agent_actions.llm.providers.cohere.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.cohere.client.fire_event"),
         ):
             mock_cohere.ClientV2.return_value.chat.return_value = mock_response
@@ -298,16 +317,25 @@ class TestCohereNullableTokens:
                 context_data="test data",
             )
 
-        usage_dict = mock_usage.call_args[0][0]
-        assert usage_dict["input_tokens"] == 0
-        assert usage_dict["output_tokens"] == 0
+        # All tokens are zero after coercion — set_last_usage is skipped
+        mock_usage.assert_not_called()
+
+        # Verify the or-0 coercion via extract_usage directly
+        usage = ResponseBuilder.extract_usage(mock_response, "cohere")
+        assert usage.prompt_tokens == 0
+        assert usage.completion_tokens == 0
 
 
 class TestMistralNullableTokens:
     """Mistral client token extraction handles None token values via or 0."""
 
     def test_none_usage_tokens_default_to_zero(self):
-        """When usage token fields are None, they default to 0."""
+        """When usage token fields are None, they default to 0.
+
+        The ``or 0`` coercion in ResponseBuilder._extract_openai_compat()
+        converts None to 0.  Because all tokens are zero, ``set_last_usage``
+        is intentionally skipped; we verify the coercion via ``extract_usage``.
+        """
         mock_response = MagicMock()
         mock_choice = MagicMock()
         mock_choice.message.content = '{"result": "ok"}'
@@ -319,7 +347,8 @@ class TestMistralNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch("agent_actions.llm.providers.mistral.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.mistral.client.fire_event"),
         ):
             mock_mistral.return_value.chat.complete.return_value = mock_response
@@ -334,10 +363,14 @@ class TestMistralNullableTokens:
                 schema={"properties": {"result": {"type": "string"}}},
             )
 
-        usage_dict = mock_usage.call_args[0][0]
-        assert usage_dict["input_tokens"] == 0
-        assert usage_dict["output_tokens"] == 0
-        assert usage_dict["total_tokens"] == 0
+        # All tokens are zero after coercion — set_last_usage is skipped
+        mock_usage.assert_not_called()
+
+        # Verify the or-0 coercion via extract_usage directly
+        usage = ResponseBuilder.extract_usage(mock_response, "mistral")
+        assert usage.prompt_tokens == 0
+        assert usage.completion_tokens == 0
+        assert usage.total_tokens == 0
 
     def test_none_usage_object_defaults_to_zero(self):
         """When usage object itself is None, token values default to 0."""
@@ -350,7 +383,8 @@ class TestMistralNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch("agent_actions.llm.providers.mistral.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.mistral.client.fire_event"),
         ):
             mock_mistral.return_value.chat.complete.return_value = mock_response
@@ -370,7 +404,11 @@ class TestMistralNullableTokens:
         mock_usage.assert_not_called()
 
     def test_none_usage_tokens_default_to_zero_call_non_json(self):
-        """call_non_json: None token fields default to 0."""
+        """call_non_json: None token fields default to 0.
+
+        Same as call_json — coercion verified via ``extract_usage``;
+        ``set_last_usage`` is skipped for all-zero usage.
+        """
         mock_response = MagicMock()
         mock_choice = MagicMock()
         mock_choice.message.content = "plain text response"
@@ -382,7 +420,8 @@ class TestMistralNullableTokens:
 
         with (
             patch("agent_actions.llm.providers.mistral.client.Mistral") as mock_mistral,
-            patch("agent_actions.llm.providers.mistral.client.set_last_usage") as mock_usage,
+            patch(f"{_RB}.set_last_usage") as mock_usage,
+            patch(f"{_RB}.fire_event"),
             patch("agent_actions.llm.providers.mistral.client.fire_event"),
         ):
             mock_mistral.return_value.chat.complete.return_value = mock_response
@@ -396,7 +435,11 @@ class TestMistralNullableTokens:
                 context_data="test data",
             )
 
-        usage_dict = mock_usage.call_args[0][0]
-        assert usage_dict["input_tokens"] == 0
-        assert usage_dict["output_tokens"] == 0
-        assert usage_dict["total_tokens"] == 0
+        # All tokens are zero after coercion — set_last_usage is skipped
+        mock_usage.assert_not_called()
+
+        # Verify the or-0 coercion via extract_usage directly
+        usage = ResponseBuilder.extract_usage(mock_response, "mistral")
+        assert usage.prompt_tokens == 0
+        assert usage.completion_tokens == 0
+        assert usage.total_tokens == 0

@@ -532,10 +532,11 @@ class TestAnthropicSharedCallApi:
 class TestOllamaTokenCounts:
     """Ollama extracts token counts from response attributes."""
 
+    @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
-    def test_call_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire):
+    def test_call_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire, mock_rb_fire):
         from agent_actions.llm.providers.ollama.client import OllamaClient
         from agent_actions.logging.events import LLMResponseEvent
 
@@ -551,8 +552,9 @@ class TestOllamaTokenCounts:
         config = {"model_name": "llama3"}
         OllamaClient.call_json(None, config, "prompt", "data")
 
+        # LLMResponseEvent now fires from ResponseBuilder
         response_events = [
-            call for call in mock_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
+            call for call in mock_rb_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
         ]
         assert len(response_events) >= 1
         event = response_events[0][0][0]
@@ -560,10 +562,11 @@ class TestOllamaTokenCounts:
         assert event.completion_tokens == 25
         assert event.total_tokens == 75
 
+    @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
-    def test_call_non_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire):
+    def test_call_non_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire, mock_rb_fire):
         from agent_actions.llm.providers.ollama.client import OllamaClient
         from agent_actions.logging.events import LLMResponseEvent
 
@@ -579,8 +582,9 @@ class TestOllamaTokenCounts:
         config = {"model_name": "llama3"}
         OllamaClient.call_non_json(None, config, "prompt", "data")
 
+        # LLMResponseEvent now fires from ResponseBuilder
         response_events = [
-            call for call in mock_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
+            call for call in mock_rb_fire.call_args_list if isinstance(call[0][0], LLMResponseEvent)
         ]
         assert len(response_events) >= 1
         event = response_events[0][0][0]
@@ -1037,12 +1041,13 @@ class TestCallJsonDictWrapping:
 class TestOllamaSetLastUsage:
     """Ollama calls set_last_usage() when token counts are available."""
 
-    @patch("agent_actions.llm.providers.ollama.client.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
     def test_call_json_calls_set_last_usage(
-        self, mock_get_client, mock_inject, mock_fire, mock_set_usage
+        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaClient
 
@@ -1061,12 +1066,13 @@ class TestOllamaSetLastUsage:
             {"input_tokens": 50, "output_tokens": 25, "total_tokens": 75}
         )
 
-    @patch("agent_actions.llm.providers.ollama.client.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
     def test_call_non_json_calls_set_last_usage(
-        self, mock_get_client, mock_inject, mock_fire, mock_set_usage
+        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaClient
 
@@ -1085,12 +1091,13 @@ class TestOllamaSetLastUsage:
             {"input_tokens": 30, "output_tokens": 15, "total_tokens": 45}
         )
 
-    @patch("agent_actions.llm.providers.ollama.client.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.set_last_usage")
+    @patch("agent_actions.output.response.response_builder.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
     def test_zero_tokens_skips_set_last_usage(
-        self, mock_get_client, mock_inject, mock_fire, mock_set_usage
+        self, mock_get_client, mock_inject, mock_fire, _mock_rb_fire, mock_set_usage
     ):
         from agent_actions.llm.providers.ollama.client import OllamaClient
 

@@ -18,14 +18,12 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -84,18 +82,6 @@ class AnthropicClient(BaseClient):
         if schema is not None:
             api_args["tools"] = schema
         return api_args
-
-    @staticmethod
-    def _extract_and_store_usage(response: Any) -> None:
-        """Extract token usage from response and store in thread-local."""
-        if not response.usage:
-            return
-        usage_data = {
-            "input_tokens": response.usage.input_tokens,
-            "output_tokens": response.usage.output_tokens,
-            "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
-        }
-        set_last_usage(usage_data)
 
     @staticmethod
     def _extract_response_content(
@@ -164,22 +150,8 @@ class AnthropicClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        input_tokens = response.usage.input_tokens if response.usage else 0
-        output_tokens = response.usage.output_tokens if response.usage else 0
-        total_tokens = input_tokens + output_tokens
-
-        AnthropicClient._extract_and_store_usage(response)
-
-        fire_event(
-            LLMResponseEvent(
-                provider="anthropic",
-                model=model_name,
-                prompt_tokens=input_tokens,
-                completion_tokens=output_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            response, "anthropic", model_name, latency_ms, request_id
         )
 
         return response, model_name, request_id
@@ -245,5 +217,4 @@ class AnthropicClient(BaseClient):
                 },
             )
 
-        output_field: str = agent_config.get("output_field", get_default("output_field"))
-        return [{output_field: content}]
+        return ResponseBuilder.wrap_non_json(content, agent_config)

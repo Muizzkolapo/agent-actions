@@ -24,14 +24,12 @@ from agent_actions.errors import VendorAPIError
 from agent_actions.llm.providers.client_base import BaseClient
 from agent_actions.llm.providers.error_wrapper import VendorErrorMapping, wrap_vendor_error
 from agent_actions.llm.providers.generation_params import extract_generation_params
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -109,30 +107,8 @@ class OpenAIClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage and store in thread-local
-        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
-        completion_tokens = response.usage.completion_tokens if response.usage else 0
-        total_tokens = response.usage.total_tokens if response.usage else 0
-
-        if response.usage:
-            usage_data = {
-                "input_tokens": prompt_tokens,
-                "output_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
-            set_last_usage(usage_data)
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="openai",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            response, "openai", model_name, latency_ms, request_id
         )
 
         response_message = response.choices[0].message
@@ -226,34 +202,11 @@ class OpenAIClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage and store in thread-local
-        prompt_tokens = response.usage.prompt_tokens if response.usage else 0
-        completion_tokens = response.usage.completion_tokens if response.usage else 0
-        total_tokens = response.usage.total_tokens if response.usage else 0
-
-        if response.usage:
-            usage_data = {
-                "input_tokens": prompt_tokens,
-                "output_tokens": completion_tokens,
-                "total_tokens": total_tokens,
-            }
-            set_last_usage(usage_data)
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="openai",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            response, "openai", model_name, latency_ms, request_id
         )
 
         response_message = response.choices[0].message
-        output_field: str = agent_config.get("output_field", get_default("output_field"))
         content: str | None = response_message.content
         if content is None:
             fire_event(
@@ -271,8 +224,7 @@ class OpenAIClient(BaseClient):
                     "model_name": model_name,
                     "vendor": "openai",
                     "api_operation": "chat.completions.create",
-                    "output_field": output_field,
+                    "output_field": agent_config.get("output_field", "raw_response"),
                 },
             )
-        response_content: dict[str, str] = {output_field: content}
-        return [response_content]
+        return ResponseBuilder.wrap_non_json(content, agent_config)

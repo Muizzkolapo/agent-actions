@@ -24,14 +24,12 @@ from agent_actions.llm.providers.mixins import (
     GenericErrorHandlerMixin,
     JSONResponseMixin,
 )
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMErrorEvent,
     LLMRequestEvent,
-    LLMResponseEvent,
 )
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -132,34 +130,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage (Cohere v2 uses usage.tokens)
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
-        if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
-            tokens = response.usage.tokens
-            prompt_tokens = tokens.input_tokens or 0  # type: ignore[union-attr, assignment]
-            completion_tokens = tokens.output_tokens or 0  # type: ignore[union-attr, assignment]
-            total_tokens = prompt_tokens + completion_tokens
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="cohere",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            response, "cohere", model_name, latency_ms, request_id
         )
 
         # Guard against empty or missing content in Cohere v2 response
@@ -242,34 +214,8 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token usage (Cohere v2 uses usage.tokens)
-        prompt_tokens = 0
-        completion_tokens = 0
-        total_tokens = 0
-        if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
-            tokens = response.usage.tokens
-            prompt_tokens = tokens.input_tokens or 0  # type: ignore[union-attr, assignment]
-            completion_tokens = tokens.output_tokens or 0  # type: ignore[union-attr, assignment]
-            total_tokens = prompt_tokens + completion_tokens
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="cohere",
-                model=model_name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
+        ResponseBuilder.record_usage_and_event(
+            response, "cohere", model_name, latency_ms, request_id
         )
 
         # Guard against empty or missing content in Cohere v2 response
@@ -289,5 +235,4 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 "request_id": request_id,
             },
         )
-        output_field = agent_config.get("output_field", get_default("output_field"))
-        return [{output_field: response_message}]
+        return ResponseBuilder.wrap_non_json(response_message, agent_config)

@@ -25,14 +25,12 @@ from agent_actions.llm.providers.generation_params import extract_generation_par
 from agent_actions.llm.providers.ollama.failure_injection import (
     maybe_inject_online_failure,
 )
-from agent_actions.llm.providers.usage_tracker import set_last_usage
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import (
     LLMRequestEvent,
-    LLMResponseEvent,
 )
 from agent_actions.logging.events.llm_events import LLMJSONParseErrorEvent
-from agent_actions.output.response.config_fields import get_default
+from agent_actions.output.response.response_builder import ResponseBuilder
 from agent_actions.prompt.message_builder import MessageBuilder
 from agent_actions.utils.constants import MODEL_NAME_KEY
 
@@ -177,33 +175,7 @@ class OllamaClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token counts from Ollama response
-        # Ollama SDK declares these as Optional[int] = None; attribute exists but may be None
-        prompt_tokens = getattr(response, "prompt_eval_count", None) or 0
-        completion_tokens = getattr(response, "eval_count", None) or 0
-        total_tokens = prompt_tokens + completion_tokens
-
-        if total_tokens > 0:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="ollama",
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
-        )
+        ResponseBuilder.record_usage_and_event(response, "ollama", model, latency_ms, request_id)
 
         # Failure injection AFTER successful call - simulates "got nothing back"
         maybe_inject_online_failure(model)
@@ -300,37 +272,9 @@ class OllamaClient(BaseClient):
         duration = (datetime.now() - start_time).total_seconds()
         latency_ms = duration * 1000
 
-        # Extract token counts from Ollama response
-        # Ollama SDK declares these as Optional[int] = None; attribute exists but may be None
-        prompt_tokens = getattr(response, "prompt_eval_count", None) or 0
-        completion_tokens = getattr(response, "eval_count", None) or 0
-        total_tokens = prompt_tokens + completion_tokens
-
-        if total_tokens > 0:
-            set_last_usage(
-                {
-                    "input_tokens": prompt_tokens,
-                    "output_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                }
-            )
-
-        # Fire LLM response event
-        fire_event(
-            LLMResponseEvent(
-                provider="ollama",
-                model=model,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_ms=latency_ms,
-                request_id=request_id,
-            )
-        )
+        ResponseBuilder.record_usage_and_event(response, "ollama", model, latency_ms, request_id)
 
         # Failure injection AFTER successful call - simulates "got nothing back"
         maybe_inject_online_failure(model)
 
-        output_field = agent_config.get("output_field", get_default("output_field"))
-        response_content = {output_field: response.message.content}
-        return [response_content]
+        return ResponseBuilder.wrap_non_json(response.message.content, agent_config)
