@@ -1,0 +1,35 @@
+name: aggregate_scores
+description: Aggregated consensus score from multiple independent quality scorers
+fields:
+  - id: consensus_score
+    type: number
+    description: "Weighted consensus quality score (1-10)"
+  - id: score_spread
+    type: number
+    description: "Difference between highest and lowest scorer"
+  - id: is_split_decision
+    type: boolean
+    description: "Whether scorers disagreed significantly (spread > 2)"
+  - id: strengths
+    type: array
+    description: "Consensus strengths identified across scorers"
+    items:
+      type: string
+  - id: weaknesses
+    type: array
+    description: "Consensus weaknesses identified across scorers"
+    items:
+      type: string
+  - id: red_flags
+    type: array
+    description: "Combined red flags from all scorers"
+    items:
+      type: string
+  - id: vote_summary
+    type: string
+    description: "Summary of individual scorer assessments"
+required:
+  - consensus_score
+  - score_spread
+  - is_split_decision
+  - vote_summary

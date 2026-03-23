@@ -1,0 +1,62 @@
+name: format_output
+description: Final packaged review analysis output
+fields:
+  - id: review_id
+    type: string
+    description: "Original review identifier"
+  - id: product_name
+    type: string
+    description: "Product being reviewed"
+  - id: product_category
+    type: string
+    description: "Product category"
+  - id: reviewer_name
+    type: string
+    description: "Name of the reviewer"
+  - id: review_date
+    type: string
+    description: "Date of the review"
+  - id: analysis
+    type: object
+    description: "Review analysis results"
+    properties:
+      quality_score:
+        type: number
+      is_split_decision:
+        type: boolean
+      claims_extracted:
+        type: number
+      aspects_covered:
+        type: array
+        items:
+          type: string
+      sentiment:
+        type: string
+      red_flags:
+        type: array
+        items:
+          type: string
+  - id: merchant_response
+    type: object
+    description: "Generated merchant response (null if review was filtered)"
+    properties:
+      response_text:
+        type: string
+      response_tone:
+        type: string
+  - id: product_insights
+    type: object
+    description: "Actionable product feedback (null if review was filtered)"
+    properties:
+      feedback_items:
+        type: array
+      improvement_priority:
+        type: string
+      positive_differentiators:
+        type: array
+        items:
+          type: string
+required:
+  - review_id
+  - product_name
+  - analysis

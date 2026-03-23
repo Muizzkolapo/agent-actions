@@ -1,0 +1,46 @@
+{
+  "scoring_criteria": {
+    "helpfulness": {
+      "description": "How useful is this review to a potential buyer making a purchase decision?",
+      "weight": 0.35,
+      "indicators": {
+        "high": "Specific details about usage duration, measurable outcomes, comparisons to alternatives, practical tips",
+        "medium": "General impressions with some specifics, mentions pros and cons",
+        "low": "Vague opinions, no actionable information, pure emotion without substance"
+      }
+    },
+    "specificity": {
+      "description": "Does the review contain concrete, verifiable details rather than generic statements?",
+      "weight": 0.30,
+      "indicators": {
+        "high": "Exact measurements, timeframes, model comparisons, specific use cases described",
+        "medium": "Some details but mixed with generic statements",
+        "low": "All generic praise or complaints, no specific evidence"
+      }
+    },
+    "authenticity": {
+      "description": "Does this appear to be a genuine review from a real user with actual experience?",
+      "weight": 0.35,
+      "indicators": {
+        "high": "Balanced perspective, mentions both positives and negatives, describes real usage scenarios",
+        "medium": "Mostly one-sided but contains some authentic details",
+        "low": "Suspiciously perfect or entirely negative, generic language, no evidence of actual use"
+      }
+    }
+  },
+  "quality_threshold": 6,
+  "score_range": {
+    "min": 1,
+    "max": 10
+  },
+  "product_feedback_categories": [
+    "Build Quality / Durability",
+    "Performance / Core Function",
+    "Ease of Use / Setup",
+    "Design / Aesthetics",
+    "Value for Money",
+    "Software / App Experience",
+    "Customer Service",
+    "Accessories / Ecosystem"
+  ]
+}

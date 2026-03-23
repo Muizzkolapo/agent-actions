@@ -1,0 +1,29 @@
+name: score_quality
+description: Independent quality score for a product review based on rubric criteria
+fields:
+  - id: helpfulness_score
+    type: number
+    description: "How useful this review is to potential buyers (1-10)"
+  - id: specificity_score
+    type: number
+    description: "How concrete and verifiable the review's claims are (1-10)"
+  - id: authenticity_score
+    type: number
+    description: "How genuine and trustworthy the review appears (1-10)"
+  - id: overall_score
+    type: number
+    description: "Weighted overall quality score (1-10)"
+  - id: scoring_reasoning
+    type: string
+    description: "Brief explanation of the scores assigned"
+  - id: red_flags
+    type: array
+    description: "Any authenticity red flags detected (empty if none)"
+    items:
+      type: string
+required:
+  - helpfulness_score
+  - specificity_score
+  - authenticity_score
+  - overall_score
+  - scoring_reasoning

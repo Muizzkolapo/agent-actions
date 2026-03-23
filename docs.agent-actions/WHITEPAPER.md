@@ -6,7 +6,9 @@
 
 ## Executive Summary
 
-Agent Actions is a declarative YAML-based framework for orchestrating multi-step agentic LLM workflows. This was the outcome of requirements to generate outputs from LLM that is properly gated and provides semantic consistencies at scale. Agent Actions addresses the gap between prototype LLM scripts and production-grade data pipelines.
+Agent Actions is a declarative context engineering framework for orchestrating multi-step agentic LLM workflows. This was the outcome of requirements to generate outputs from LLM that is properly gated and provides semantic consistencies at scale. Agent Actions addresses the gap between prototype LLM scripts and production-grade data pipelines.
+
+At its core, Agent Actions treats every action as a self-contained, configurable AI unit—with its own model, its own context window, its own schema, and its own pre-check gate—running as a batch pipeline over your data. The framework controls *what each LLM step thinks about*, not just what it connects to. This is context engineering: the discipline of ensuring every LLM call receives exactly the right information, from the right model, at the right cost, with the right validation—declared in configuration, not buried in code.
 
 The framework emerged from a simple observation: building reliable LLM workflows requires solving the same problems repeatedly—dependency management, output validation, error handling, batch processing, and multi-vendor support. Rather than embedding this logic in application code, Agent Actions externalizes it into configuration, creating auditable, version-controlled pipelines that separate orchestration concerns from business logic.
 
@@ -139,6 +141,191 @@ guard:
 ```
 
 The key insight is not that these mechanisms exist, but that they are visible. Every decision about what happens when something goes wrong is declared in the same YAML that defines the happy path. There is no hidden error handling, no implicit retry logic, no silent data loss. The decision pathways are the documentation.
+
+---
+
+## Agent Actions as a Context Engineering Framework
+
+Tools like n8n, Make, and Zapier connect APIs. LangChain provides Python abstractions for LLM calls. Agent Actions does something different: it controls **what each LLM step thinks about**. Every action is a self-contained AI unit with its own model, context window, schema, and pre-check gate. The framework orchestrates not just the *sequence* of operations, but the *information environment* of each one.
+
+This is context engineering—and it's the difference between an LLM pipeline that works and one that works *well*.
+
+### What This Means in Practice
+
+1. **Every action picks its own model.** Step 1 uses `gpt-4o-mini` because it's just extraction. Step 4 uses `claude-sonnet` because it needs reasoning. Step 2 uses Gemini because it's cheap and you're running 3 of them in parallel. n8n treats the LLM as a black box you call—Agent Actions treats model selection as a **per-step cost/quality decision**.
+
+2. **Guards are pre-check gates, not post-hoc branching.** Before the LLM even runs, the guard evaluates: does this record meet the condition? No? Skip it. Don't burn tokens. Don't burn latency. This is **cost control at the record level**. n8n's if/else runs *after* the work is done and routes the *output*. Agent Actions prevents the work from happening.
+
+3. **Context scope is progressive disclosure.** Each step sees *exactly* what it needs—no more. Step 2's reviewers see qualifications but not each other. Step 4 sees the score but not the raw text. This isn't just cleaner prompts—it's smaller prompts, which means **less tokens, less cost, less confusion, better output**. Every field you exclude is money saved and quality gained.
+
+4. **Batch-native, not loop-bolted.** You point it at a folder of 500 records. It processes them. Granularity controls whether the LLM sees one record, one file, or the whole batch. n8n loops over items one at a time—Agent Actions was built for batch from day one.
+
+5. **Declarative means auditable.** The YAML *is* the pipeline. You can diff it, review it, version it. You can read it and know: what model runs where, what context each step sees, what gets filtered, what flows through. n8n's equivalent is a visual graph where the logic hides inside each node's configuration panel.
+
+6. **Schema enforcement + reprompt.** Every LLM output is validated against a schema. If it doesn't match, reprompt automatically—up to N attempts. n8n gets whatever JSON the LLM felt like returning and hopes for the best.
+
+Put together: **you're not wiring API calls—you're declaring a quality-controlled, cost-optimized, multi-model AI pipeline where every record flows through gates, context windows, and validation before anything reaches the output.** That's what n8n can't do.
+
+The sections below demonstrate each of these capabilities in detail.
+
+### Every Action Picks Its Own Model
+
+In a typical workflow tool, you configure one LLM and every step uses it. Agent Actions treats model selection as a **per-step cost and quality decision**:
+
+```yaml
+actions:
+  - name: extract_fields
+    model_vendor: groq
+    model_name: llama-3.3-70b-versatile    # Fast, cheap extraction
+
+  - name: score_quality
+    model_vendor: openai
+    model_name: gpt-4o-mini                # Good enough for scoring
+    versions:
+      range: [1, 2, 3]
+      mode: parallel                       # 3 independent scorers
+
+  - name: generate_response
+    model_vendor: anthropic
+    model_name: claude-sonnet-4-20250514   # Best reasoning for generation
+```
+
+Three vendors, three cost profiles, one pipeline. The extraction step doesn't need Claude. The generation step doesn't need to be cheap. Each action uses the model that matches its cognitive demand. Workflow tools that treat the LLM as a single black box cannot make this trade-off.
+
+### Guards Are Pre-Check Gates, Not Post-Hoc Branches
+
+Most workflow tools evaluate conditions *after* work is done and route the *output*. Agent Actions evaluates guards *before* the LLM runs:
+
+```yaml
+- name: generate_detailed_analysis
+  guard:
+    condition: 'consensus_score >= 7'
+    on_false: "filter"
+```
+
+Record scores 5? The LLM never fires. No tokens burned. No latency spent. Record scores 8? Proceeds. This is **cost control at the record level**—across a batch of 10,000 records, guards can eliminate thousands of unnecessary LLM calls before they happen.
+
+In n8n, an if/else node routes to different *branches*. Agent Actions guards filter *records within the stream*. One record passes, another gets dropped—same action definition. Fundamentally different model.
+
+### Context Scope Is Progressive Disclosure
+
+Each action sees *exactly* what it needs—no more, no less:
+
+```yaml
+- name: score_application
+  versions:
+    range: [1, 2, 3]
+    mode: parallel
+  context_scope:
+    observe:
+      - extract_qualifications.*     # Each scorer sees qualifications
+      - seed_data.rubric             # Each scorer sees the rubric
+    drop:
+      - source.raw_text              # Don't waste tokens on raw input
+```
+
+Three parallel scorers run independently. None can see the others' ratings—not because of a technical limitation, but because `context_scope` declares it. This isn't just a cleaner prompt. It's:
+
+- **Fewer tokens** → lower cost per call
+- **Less noise** → better LLM output quality
+- **No cross-contamination** → independent judgments stay independent
+
+In n8n, every node receives the complete JSON payload from upstream. There is no mechanism to say "this node should see fields A and B but not C." You'd need custom JavaScript in every node to strip context—and even then, you're doing it imperatively, not declaratively.
+
+The `passthrough` directive completes the picture: fields that downstream steps need but the current LLM should never see flow through untouched, without consuming tokens:
+
+```yaml
+context_scope:
+  observe:
+    - extract_qualifications.*     # LLM sees this (tokens spent)
+  passthrough:
+    - source.applicant_email       # Forwarded to output (zero tokens)
+    - source.role_applied          # Forwarded to output (zero tokens)
+  drop:
+    - source.raw_resume            # Gone entirely
+```
+
+Three distinct data channels in one declaration: what the LLM thinks about, what flows through silently, and what gets excluded entirely. This is context engineering.
+
+### Batch-Native, Not Loop-Bolted
+
+Point Agent Actions at a folder of 10,000 records. It processes them. One config flag switches between real-time and batch execution:
+
+```yaml
+defaults:
+  run_mode: batch    # 50% cost savings via provider batch APIs
+```
+
+Granularity controls whether the LLM sees one record, one file, or the whole batch:
+
+```yaml
+- name: extract_claims
+  granularity: Record     # One LLM call per record
+
+- name: summarize_file
+  granularity: File       # One LLM call per input file
+
+- name: generate_report
+  granularity: Batch      # One LLM call across all records
+```
+
+n8n loops over items one at a time with event triggers. Agent Actions was built for batch from day one—retry chains track failed records across attempts, and the framework handles JSONL preparation, upload, polling, and result retrieval automatically.
+
+### Declarative Consensus in Two Lines
+
+Running multiple independent LLM evaluations and merging results is a foundational quality pattern. In Agent Actions:
+
+```yaml
+- name: classify_severity
+  versions:
+    param: classifier_id
+    range: [1, 2, 3]
+    mode: parallel
+
+- name: aggregate_severity
+  kind: tool
+  impl: aggregate_votes
+  version_consumption:
+    source: classify_severity
+    pattern: merge
+```
+
+Two lines declare three parallel classifiers. Two lines merge them. In n8n, this requires duplicating three HTTP nodes, wiring each to the same input, building a custom JavaScript merge node, and repeating the pattern every time you want consensus. Agent Actions makes it a reusable, declarative primitive.
+
+### Schema Enforcement on Every Output
+
+Every LLM action validates its output against a declared schema. When output violates the schema, the framework can automatically reprompt with the validation error:
+
+```yaml
+- name: extract_entities
+  schema: entities_schema
+  reprompt:
+    validation: check_entity_format
+    max_attempts: 3
+    on_exhausted: return_last
+```
+
+This isn't "hope the LLM returns JSON." It's validated, typed, every step. n8n gets whatever the LLM returns and passes it downstream. Agent Actions catches malformed output before it cascades.
+
+### The Compound Effect
+
+Any one of these features is useful in isolation. Together, they create something qualitatively different from a workflow automation tool:
+
+| Capability | What It Controls | n8n Equivalent |
+|---|---|---|
+| Multi-vendor per action | Cost/quality per step | Not possible—single LLM config |
+| `context_scope.observe` | What the LLM thinks about | Not possible—nodes see everything |
+| `context_scope.passthrough` | What flows through without tokens | Manual field mapping at every node |
+| `context_scope.drop` | What gets excluded entirely | Custom JS in every node |
+| `guard` | Whether the LLM fires at all | If/else routes outputs, doesn't prevent execution |
+| `versions` + `merge` | Parallel consensus | 3 duplicate HTTP nodes + custom JS merge |
+| `schema` + `reprompt` | Output validation with self-correction | No equivalent |
+| `run_mode: batch` | Batch API integration | Not supported for LLM calls |
+| `granularity` | Record vs file vs batch processing | Loops over items one at a time |
+
+A 25-line YAML workflow in Agent Actions controls model selection, context isolation, pre-execution filtering, parallel consensus, schema validation, and batch processing. The n8n equivalent would be 15+ nodes with custom JavaScript in at least three of them—and you'd still lack context isolation, pre-check gates, and batch API support.
+
+**Agent Actions is not a workflow automation tool that happens to call LLMs. It's a context engineering framework that happens to be declarative.**
 
 ---
 
@@ -1625,7 +1812,11 @@ Agent Actions implements these patterns through a **declarative, configuration-f
 |--------|--------------|-----------|-----|---------------|
 | **Configuration** | YAML (declarative) | Python (imperative) | Visual (nodes) | Python |
 | **Primary audience** | Developers, data teams | Developers | No-code users | Developers |
-| **LLM focus** | Purpose-built | Core feature | One of many integrations | Manual |
+| **LLM focus** | Purpose-built context engineering | Core feature | One of many integrations | Manual |
+| **Model per step** | Any vendor/model per action | Configurable per chain | Single LLM config | Manual |
+| **Context isolation** | `observe`/`drop`/`passthrough` per action | Manual per chain step | Not possible | Manual |
+| **Pre-check gates** | Guards prevent LLM execution | Runtime conditions | Post-execution if/else | Manual |
+| **Parallel consensus** | `versions` + `merge` (declarative) | Manual implementation | Duplicate nodes + custom JS | Manual |
 | **Schema validation** | Built-in with reprompt | Via Instructor/plugins | Limited | Manual |
 | **Batch processing** | Native with retry chains | Manual implementation | Event-driven | Manual |
 | **Static analysis** | Pre-flight validation | Runtime errors | Runtime errors | Runtime errors |
