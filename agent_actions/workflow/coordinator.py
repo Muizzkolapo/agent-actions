@@ -322,6 +322,14 @@ class AgentWorkflow:
             except Exception as e:
                 duration = (datetime.now() - workflow_start).total_seconds()
                 self.state.failed = True
+                # Enrich BEFORE firing the error event so the formatter
+                # has full context when it renders the user-facing message.
+                if not hasattr(e, "context") or not isinstance(e.context, dict):
+                    e.context = {}  # type: ignore[union-attr]
+                e.context.update({  # type: ignore[union-attr]
+                    "workflow": self.metadata.agent_name,
+                    "operation": "async_workflow_execution",
+                })
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 
@@ -366,6 +374,14 @@ class AgentWorkflow:
             except Exception as e:
                 duration = (datetime.now() - workflow_start).total_seconds()
                 self.state.failed = True
+                # Enrich BEFORE firing the error event so the formatter
+                # has full context when it renders the user-facing message.
+                if not hasattr(e, "context") or not isinstance(e.context, dict):
+                    e.context = {}  # type: ignore[union-attr]
+                e.context.update({  # type: ignore[union-attr]
+                    "workflow": self.metadata.agent_name,
+                    "operation": "sequential_workflow_execution",
+                })
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 

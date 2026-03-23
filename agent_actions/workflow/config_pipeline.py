@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -16,6 +17,27 @@ from agent_actions.logging.events import (
 from agent_actions.workflow.models import WorkflowMetadata, WorkflowRuntimeConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -> Any:
+    """Call *fn* and enrich any exception with the failing stage name.
+
+    Uses ``pipeline_stage`` instead of ``operation`` so inner handlers
+    (e.g. ``_load_single_config`` setting ``operation: template_rendering``)
+    are not overwritten.
+    """
+    try:
+        return fn(*args)
+    except Exception as e:
+        agent = getattr(manager, "agent_name", "unknown")
+        logger.debug("Config stage '%s' failed for agent '%s': %s", stage, agent, e)
+        if not hasattr(e, "context") or not isinstance(e.context, dict):
+            e.context = {}  # type: ignore[union-attr]
+        e.context.update({  # type: ignore[union-attr]
+            "agent": agent,
+            "pipeline_stage": stage,
+        })
+        raise
 
 
 def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> WorkflowMetadata:
@@ -38,16 +60,18 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
         )
 
     manager = config.manager
-    manager.load_configs()
-    manager.validate_agent_name()
-    manager.check_child_pipeline()
+    _run_config_stage(manager.load_configs, "load_configs", manager)
+    _run_config_stage(manager.validate_agent_name, "validate_agent_name", manager)
+    _run_config_stage(manager.check_child_pipeline, "check_child_pipeline", manager)
 
     # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
     discover_workflow_udfs(config, console)
 
-    user_agents = manager.get_user_agents()
-    manager.merge_agent_configs(user_agents)
-    manager.determine_execution_order()
+    user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
+    _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
+    _run_config_stage(
+        manager.determine_execution_order, "determine_execution_order", manager
+    )
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()

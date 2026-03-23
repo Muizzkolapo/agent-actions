@@ -64,24 +64,30 @@ class ConfigManager:
             loaded: dict[str, Any] = yaml.safe_load(config_data)
             fire_event(ConfigLoadEvent(config_file=str(config_path), config_type=config_type))
             return loaded
-        except (TemplateRenderingError, ConfigurationError) as e:
+        except TemplateRenderingError as e:
+            config_name = Path(config_path).name
             raise ConfigurationError(
-                f"Error rendering or loading {config_type} config",
+                f"Jinja2 template error in {config_type} config '{config_name}': {e}",
                 context={
                     "config_path": str(config_path),
-                    "operation": f"load_{config_type}_config",
+                    "operation": "template_rendering",
                 },
                 cause=e,
             ) from e
+        except ConfigurationError:
+            raise
         except yaml.YAMLError as e:
+            config_name = Path(config_path).name
             raise ConfigurationError(
-                f"Error parsing YAML for {config_type} config",
+                f"Invalid YAML in {config_type} config '{config_name}': {e}",
                 context={"config_path": str(config_path), "operation": "parse_yaml"},
                 cause=e,
             ) from e
         except Exception as e:
+            config_name = Path(config_path).name
             raise ConfigurationError(
-                f"Unexpected error loading {config_type} config",
+                f"Failed to load {config_type} config '{config_name}': "
+                f"{type(e).__name__}: {e}",
                 context={
                     "config_path": str(config_path),
                     "operation": f"load_{config_type}_config",

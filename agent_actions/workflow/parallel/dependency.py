@@ -147,7 +147,10 @@ class WorkflowDependencyOrchestrator:
 
         except Exception as e:
             logger.debug("Failed to execute upstream workflow %s: %s", upstream_name, e)
-            raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
+            raise RuntimeError(
+                f"Recursive execution failed for upstream workflow '{upstream_name}': "
+                f"{type(e).__name__}: {e}"
+            ) from e
 
     def _check_workflow_complete(self, workflow_name: str) -> bool:
         """Check if a workflow is already complete by reading its status file."""
