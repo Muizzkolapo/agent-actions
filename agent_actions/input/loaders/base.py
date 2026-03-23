@@ -46,6 +46,18 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+@retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
+def read_file_with_retry(file_path: str) -> str:
+    """Read a file's content with automatic retry on I/O errors.
+
+    Extracted as a module-level function so that callers that cannot
+    inherit ``BaseLoader`` (e.g. ``BatchDataLoader``) can still reuse
+    the retry-wrapped file reading logic.
+    """
+    with open(file_path, encoding="utf-8") as f:
+        return f.read()
+
+
 class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     """Abstract base class for all content loaders with async support."""
 
@@ -65,15 +77,8 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
 
     def load_file(self, file_path: str) -> str:
         """Safely load a file's content with retry logic."""
-
-        @retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
-        def _load_file() -> str:
-            with open(file_path, encoding="utf-8") as f:
-                return f.read()
-
         try:
-            result: str = _load_file()
-            return result
+            return read_file_with_retry(file_path)
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise
