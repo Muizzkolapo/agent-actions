@@ -33,6 +33,7 @@ class ActionConfigValidationUtilities:
     }
 
     _OPTIONAL_ACTION_KEYS: set[str] = {
+        "name",
         "description",
         "version",
         "author",
@@ -40,6 +41,7 @@ class ActionConfigValidationUtilities:
         "imports",
         "config",
         "granularity",
+        "run_mode",
         MODEL_VENDOR_KEY,
         JSON_MODE_KEY,
         "prompt_debug",
@@ -52,11 +54,19 @@ class ActionConfigValidationUtilities:
         "conditional_clause",
         "is_operational",
         "ephemeral",
+        "enabled",
         "add_dispatch",
         "output_field",
         "context_scope",
         "reprompt",
         "constraints",
+        "kind",
+        "impl",
+        "intent",
+        "guard",
+        "versions",
+        "version_consumption",
+        "retry",
     }
 
     _ACTION_TYPE_SPECIFIC_KEYS: dict[str, set[str]] = {

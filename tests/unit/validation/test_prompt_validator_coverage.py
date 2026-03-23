@@ -34,10 +34,10 @@ class TestFindPromptSections:
 
 
 class TestFindPromptIds:
-    """Test prompt ID extraction from code blocks."""
+    """Test prompt ID extraction from {prompt ID} tokens."""
 
     def test_finds_ids(self):
-        content = "```prompt:analyze\nDo something\n```\n```prompt:summarize\nDo more\n```"
+        content = "{prompt analyze}\nDo something\n{end_prompt}\n{prompt summarize}\nDo more\n{end_prompt}"
         ids = PromptValidator._find_prompt_ids_in_content(content)
         assert ids == ["analyze", "summarize"]
 
@@ -161,24 +161,24 @@ class TestValidatePromptFormatLogic:
         assert "no prompt ids" in result.lower()
 
     def test_valid_format(self, validator):
-        content = "# My Prompt\n```prompt:analyze\nDo analysis\n```"
+        content = "{prompt analyze}\nDo analysis\n{end_prompt}"
         result = validator._validate_prompt_format_logic(content, "file.md")
         assert result is None
 
     def test_unclosed_prompt_block(self, validator):
-        content = "# My Prompt\n```prompt:analyze\nDo analysis without closing"
+        content = "{prompt analyze}\nDo analysis without closing"
         result = validator._validate_prompt_format_logic(content, "file.md")
         assert result is not None
         assert "unclosed" in result.lower()
 
     def test_empty_prompt_content(self, validator):
-        content = "# My Prompt\n```prompt:analyze\n```"
+        content = "{prompt analyze}\n{end_prompt}"
         result = validator._validate_prompt_format_logic(content, "file.md")
         assert result is not None
         assert "empty" in result.lower()
 
     def test_no_heading_start_with_sections(self, validator):
-        content = "Some intro text\n# Section\n```prompt:analyze\nDo it\n```"
+        content = "Some intro text\n# Section\n{prompt analyze}\nDo it\n{end_prompt}"
         result = validator._validate_prompt_format_logic(content, "file.md")
         assert result is not None
         assert "does not start with a markdown heading" in result.lower()
@@ -194,7 +194,7 @@ class TestValidateSinglePromptFile:
 
     def test_valid_prompt_file(self, validator, tmp_path):
         f = tmp_path / "prompt.md"
-        f.write_text("# My Prompt\n```prompt:analyze\nDo analysis\n```")
+        f.write_text("# My Prompt\n{prompt analyze}\nDo analysis\n{end_prompt}")
         all_ids: set[str] = set()
         count = validator._validate_single_prompt_file(f, all_ids)
         assert count == 1
@@ -216,7 +216,7 @@ class TestValidateSinglePromptFile:
     def test_file_with_duplicate_ids(self, validator, tmp_path):
         f = tmp_path / "dup.md"
         f.write_text(
-            "# Prompt\n```prompt:analyze\nDo A\n```\n```prompt:analyze\nDo B\n```"
+            "{prompt analyze}\nDo A\n{end_prompt}\n{prompt analyze}\nDo B\n{end_prompt}"
         )
         count = validator._validate_single_prompt_file(f, set())
         assert count == 0
@@ -254,10 +254,10 @@ class TestValidateMethod:
 
     def test_directory_with_valid_prompts(self, validator, tmp_path):
         (tmp_path / "prompt1.md").write_text(
-            "# Prompt 1\n```prompt:first\nContent\n```"
+            "# Prompt 1\n{prompt first}\nContent\n{end_prompt}"
         )
         (tmp_path / "prompt2.md").write_text(
-            "# Prompt 2\n```prompt:second\nContent\n```"
+            "# Prompt 2\n{prompt second}\nContent\n{end_prompt}"
         )
         result = validator.validate(tmp_path)
         assert result is True
@@ -265,10 +265,10 @@ class TestValidateMethod:
 
     def test_cross_file_duplicates(self, validator, tmp_path):
         (tmp_path / "a.md").write_text(
-            "# Prompt A\n```prompt:shared\nContent A\n```"
+            "# Prompt A\n{prompt shared}\nContent A\n{end_prompt}"
         )
         (tmp_path / "b.md").write_text(
-            "# Prompt B\n```prompt:shared\nContent B\n```"
+            "# Prompt B\n{prompt shared}\nContent B\n{end_prompt}"
         )
         result = validator.validate(tmp_path)
         assert result is False

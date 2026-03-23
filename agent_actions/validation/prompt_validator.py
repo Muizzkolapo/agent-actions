@@ -9,6 +9,7 @@ from typing import Any
 from agent_actions.config.defaults import PromptDefaults
 from agent_actions.logging import fire_event
 from agent_actions.logging.events import ValidationStartEvent
+from agent_actions.prompt.handler import PromptLoader
 from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,6 @@ class PromptValidator(BaseValidator):
     """Validates all prompt files in a given directory."""
 
     _PROMPT_SECTION_PATTERN = re.compile("^#+\\s+(.+?)$", re.MULTILINE)
-    _PROMPT_ID_PATTERN = re.compile("^```prompt:(\\w+)$", re.MULTILINE)
     _MAX_PROMPT_SIZE = PromptDefaults.MAX_PROMPT_SIZE_BYTES
 
     @staticmethod
@@ -29,9 +29,13 @@ class PromptValidator(BaseValidator):
 
     @staticmethod
     def _find_prompt_ids_in_content(content: str) -> list[str]:
-        """Find all prompt IDs in the content."""
-        pattern = PromptValidator._PROMPT_ID_PATTERN
-        return [match.group(1) for match in pattern.finditer(content)]
+        """Find all prompt IDs in the content.
+
+        Delegates to :meth:`PromptLoader.get_all_prompt_names` so the
+        validator uses the same ``{prompt ID}`` pattern as the runtime
+        loader — a single source of truth for prompt ID extraction.
+        """
+        return PromptLoader.get_all_prompt_names(content)
 
     @staticmethod
     def _find_duplicate_ids_in_list(ids: list[str]) -> set[str]:
@@ -125,22 +129,29 @@ class PromptValidator(BaseValidator):
         return 0 if has_errors else file_prompts_count
 
     def _validate_prompt_format_logic(self, content: str, file_name: str) -> str | None:
-        """Return an error message if prompt format is invalid, None otherwise."""
+        """Return an error message if prompt format is invalid, None otherwise.
+
+        Uses the same ``{prompt ID}``/``{end_prompt}`` token pair as
+        :class:`PromptLoader` to detect unclosed or empty blocks.
+        """
         sections = self._find_prompt_sections_in_content(content)
         prompt_ids = self._find_prompt_ids_in_content(content)
         if not prompt_ids and sections:
             return f"No prompt IDs found in file '{file_name}' despite sections being present."
         if not prompt_ids and not sections:
             return None
-        if not content.strip().startswith("#") and sections:
+        if not content.strip().startswith("{") and not content.strip().startswith("#") and sections:
             return (
                 f"File '{file_name}' does not start with a markdown heading "
                 f"but contains prompt sections."
             )
-        for match in self._PROMPT_ID_PATTERN.finditer(content):
+        from agent_actions.prompt.handler import PROMPT_PATTERN
+
+        end_token = "{end_prompt}"
+        for match in PROMPT_PATTERN.finditer(content):
             prompt_id = match.group(1)
             block_start_index = match.end()
-            block_end_index = content.find("```", block_start_index)
+            block_end_index = content.find(end_token, block_start_index)
             if block_end_index == -1:
                 return f"Unclosed prompt block for ID '{prompt_id}' in file '{file_name}'."
             block_content = content[block_start_index:block_end_index].strip()
