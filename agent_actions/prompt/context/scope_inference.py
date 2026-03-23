@@ -217,7 +217,11 @@ def infer_dependencies(
                 all_deps, primary_dep
             )
         except ValueError as e:
-            raise ConfigurationError(f"Action '{action_name}': {e}") from e
+            raise ConfigurationError(
+                f"Action '{action_name}': {e}",
+                context={"action": action_name, "operation": "resolve_fan_in_sources"},
+                cause=e,
+            ) from e
 
         logger.debug(
             "Action '%s': Fan-in detected with dependencies %s. "

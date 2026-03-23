@@ -79,7 +79,8 @@ class AgentWorkflow:
         self.storage_backend = initialize_storage_backend(config, self.metadata, self.console)
         if self.storage_backend is None:
             raise ConfigurationError(
-                "storage_backend could not be initialized — check storage configuration."
+                "storage_backend could not be initialized — check storage configuration.",
+                context={"component": "WorkflowCoordinator", "operation": "initialize_storage"},
             )
         self.services, self._agent_folder = initialize_services(
             self.metadata, config, self.storage_backend, self.console

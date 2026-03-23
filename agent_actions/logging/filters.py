@@ -7,6 +7,8 @@ import re
 from re import Pattern
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 
 def _redact_sensitive_data(
     data: Any,
@@ -89,9 +91,8 @@ class RedactingFilter(logging.Filter):
                 else:
                     replacement = "***"
                 self._compiled_patterns.append((compiled, replacement))
-            except re.error:
-                # Skip invalid patterns
-                pass
+            except re.error as e:
+                logger.warning("Skipping invalid redaction pattern %r: %s", pattern, e)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(patterns={len(self._compiled_patterns)})"

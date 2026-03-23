@@ -26,7 +26,9 @@ class PromptFormatter:
         """
         raw_prompt = agent_config.get(PROMPT_KEY)
         if agent_config.get("kind") not in ("tool", "hitl", "seed", "source") and isinstance(raw_prompt, str) and not raw_prompt.strip():
-            raise ConfigValidationError("prompt cannot be an empty string")
+            raise ConfigValidationError(
+                f"prompt cannot be an empty string for action '{agent_config.get('agent_type', 'unknown')}'"
+            )
         try:
             if PROMPT_KEY not in agent_config:
                 return "Process the following content: {content}"

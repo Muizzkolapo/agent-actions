@@ -276,9 +276,9 @@ class ActionConfig(BaseModel):
     def validate_kind_requirements(self):
         """Ensure kind-specific fields are present."""
         if self.kind == ActionKind.HITL and self.hitl is None:
-            raise ValueError("HITL actions require 'hitl' configuration block")
+            raise ValueError(f"HITL action '{self.name}' requires 'hitl' configuration block")
         if self.kind == ActionKind.TOOL and not self.impl:
-            raise ValueError("Tool actions require 'impl' (implementation path)")
+            raise ValueError(f"Tool action '{self.name}' requires 'impl' (implementation path)")
         return self
 
     @field_validator("guard")

@@ -234,6 +234,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         raise ConfigurationError(
             f"API response is not valid JSON: {e}",
             context={"url": config.url, "operation": "fetch_api_data"},
+            cause=e,
         ) from e
     except Exception as e:
         if isinstance(e, (ConfigurationError, FileSystemError)):
@@ -241,6 +242,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
         raise ConfigurationError(
             f"Failed to fetch API data source: {e}",
             context={"url": config.url, "operation": "fetch_api_data"},
+            cause=e,
         ) from e
 
 

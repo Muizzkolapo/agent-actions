@@ -29,7 +29,9 @@ class InvocationStrategyFactory:
         """
         if mode == ProcessingMode.BATCH:
             if provider is None:
-                raise ValueError("BatchProvider required for BATCH mode")
+                raise ValueError(
+                    f"BatchProvider required for BATCH mode (action: '{agent_config.get('agent_type', 'unknown')}')"
+                )
             return BatchStrategy(provider)
 
         return InvocationStrategyFactory._create_online_strategy(agent_config)

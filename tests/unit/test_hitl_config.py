@@ -94,7 +94,7 @@ def test_action_config_with_hitl():
 
 def test_action_config_hitl_missing_config():
     """Test that HITL action without hitl config raises error."""
-    with pytest.raises(ValidationError, match="HITL actions require 'hitl' configuration"):
+    with pytest.raises(ValidationError, match="HITL action.*requires 'hitl' configuration"):
         ActionConfig(
             name="review_data",
             intent="Human review",

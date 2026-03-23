@@ -15,13 +15,21 @@ def get_bundled_skills_path() -> Path:
     return Path(__file__).parent.parent / "skills"
 
 
+_TOOL_SKILL_PATHS: dict[str, str] = {
+    "claude": ".claude/skills",
+    "codex": ".codex/skills",
+}
+
+
 def get_target_path(tool: str, project_root: Path) -> Path:
     """Return the target installation path for the given tool."""
-    if tool == "claude":
-        return project_root / ".claude" / "skills"
-    if tool == "codex":
-        return project_root / ".codex" / "skills"
-    raise ConfigurationError(f"Unknown tool: {tool}")
+    rel = _TOOL_SKILL_PATHS.get(tool)
+    if rel is not None:
+        return project_root / rel
+    raise ConfigurationError(
+        f"Unknown tool: {tool}",
+        context={"tool": tool, "supported_tools": list(_TOOL_SKILL_PATHS)},
+    )
 
 
 @click.group(name="skills")

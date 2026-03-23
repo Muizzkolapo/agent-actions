@@ -359,7 +359,13 @@ class ActionOutputManager:
         if idx <= 0:
             raise ConfigurationError(
                 f"Action at idx={idx} has declared dependencies that could not be resolved "
-                f"and has no upstream agent to fall back to."
+                f"and has no upstream agent to fall back to.",
+                context={
+                    "agent": current_agent,
+                    "idx": idx,
+                    "execution_order": self.execution_order,
+                    "operation": "resolve_input_dirs",
+                },
             )
         prev_agent = self.execution_order[idx - 1]
         return [str(self.agent_folder / "target" / prev_agent)]

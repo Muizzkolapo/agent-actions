@@ -198,6 +198,7 @@ class ConfigRenderingService:
                     "operation": "parse_yaml",
                     "rendered_content": raw,
                 },
+                cause=exc,
             ) from exc
         if not data:
             raise ConfigurationError(

@@ -105,7 +105,9 @@ class PromptLoader:
             ValueError: If the prompt file or prompt format is invalid.
         """
         if "." not in prompt_name:
-            raise ValueError("Invalid prompt format. Expected 'filename.prompt_key'.")
+            raise ValueError(
+                f"Invalid prompt format: '{prompt_name}'. Expected 'filename.prompt_key' (with a dot separator)."
+            )
 
         prompt_file_name, prompt_key = prompt_name.split(".", 1)
         target_filename = f"{prompt_file_name}.md"

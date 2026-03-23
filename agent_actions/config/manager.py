@@ -208,7 +208,10 @@ class ConfigManager:
             except (yaml.YAMLError, OSError, ConfigValidationError) as e:
                 raise ConfigurationError(
                     "Failed to load project defaults",
-                    context={"operation": "load_project_defaults"},
+                    context={
+                        "config_path": str(self.constructor_path),
+                        "operation": "load_project_defaults",
+                    },
                     cause=e,
                 ) from e
             # Validate entire workflow config (actions, defaults, duplicates,
@@ -218,7 +221,10 @@ class ConfigManager:
             except ValidationError as e:
                 raise ConfigurationError(
                     "Workflow configuration is invalid",
-                    context={"workflow_name": self.user_config.get("name", "unknown")},
+                    context={
+                        "config_path": str(self.constructor_path),
+                        "workflow_name": self.user_config.get("name", "unknown"),
+                    },
                     cause=e,
                 ) from e
 

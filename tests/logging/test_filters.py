@@ -134,6 +134,36 @@ class TestRedactingFilter:
         assert "johndoe" in record.msg
         assert "john@example.com" in record.msg
 
+    def test_invalid_regex_pattern_logs_warning(self):
+        """Test that an invalid regex pattern emits a warning instead of silently skipping."""
+        import agent_actions.logging.filters as filters_mod
+
+        warnings: list[str] = []
+        original_warning = filters_mod.logger.warning
+
+        def capture_warning(msg, *args):
+            warnings.append(msg % args)
+
+        filters_mod.logger.warning = capture_warning  # type: ignore[assignment]
+        try:
+            invalid_patterns = [r"[invalid(", r"secret=[^\s]+"]
+            filter_instance = RedactingFilter(patterns=invalid_patterns)
+        finally:
+            filters_mod.logger.warning = original_warning  # type: ignore[assignment]
+
+        # Invalid pattern should produce a warning
+        assert any("Skipping invalid redaction pattern" in msg for msg in warnings)
+        assert any("[invalid(" in msg for msg in warnings)
+
+        # Valid pattern should still work
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="test.py",
+            lineno=1, msg="secret=mysecret", args=(), exc_info=None,
+        )
+        filter_instance.filter(record)
+        assert "mysecret" not in record.msg
+        assert "***" in record.msg
+
     def test_custom_patterns(self):
         """Test using custom redaction patterns."""
         custom_patterns = [r"email=[^\s]+"]
