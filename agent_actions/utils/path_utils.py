@@ -53,6 +53,18 @@ def reset_path_manager() -> None:
         _global_path_manager = None
 
 
+def resolve_relative_to(path: str | Path, base: Path) -> Path:
+    """Resolve *path* against *base* only when it is relative.
+
+    If *path* is already absolute it is returned as-is; otherwise
+    ``base / path`` is returned.  This avoids the common bug where
+    ``Path.__truediv__`` silently discards the left operand when the
+    right operand is absolute, producing doubled or wrong paths.
+    """
+    p = Path(path)
+    return p if p.is_absolute() else base / p
+
+
 def ensure_directory_exists(path: str | Path, is_file: bool = False) -> Path:
     """Ensure a directory exists, creating it if necessary."""
     return get_path_manager().ensure_path_exists(Path(path), is_file=is_file)

@@ -16,6 +16,7 @@ from agent_actions.output.response.config_fields import get_default
 from agent_actions.output.response.config_schema import AgentConfig
 from agent_actions.prompt.render_workflow import render_pipeline_with_templates
 from agent_actions.utils.error_handler import ErrorHandler
+from agent_actions.utils.path_utils import resolve_relative_to
 from agent_actions.utils.error_wrap import as_validation_error
 from agent_actions.utils.project_root import find_project_root
 from agent_actions.validation.config_validator import ConfigValidator
@@ -381,12 +382,13 @@ class ConfigRenderingService:
         config = self._safe_load_yaml(rendered_template, cfg_path)
         try:
             schema_validate_instance = SchemaValidator()
+            schema_path = get_schema_path(
+                Path(project_root) if project_root else Path(template_dir).parent
+            )
             schema_validate_instance.validate(
                 {
                     "agent_name": agent_name,
-                    "schema_dir": Path(template_dir).parent / get_schema_path(
-                        Path(project_root) if project_root else Path(template_dir).parent
-                    ),
+                    "schema_dir": resolve_relative_to(schema_path, Path(template_dir).parent),
                 }
             )
         except Exception as e:

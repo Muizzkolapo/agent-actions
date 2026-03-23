@@ -12,6 +12,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from agent_actions.utils.path_utils import resolve_relative_to
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,7 @@ def scan_tool_functions(project_root: Path, tool_paths: list[str] | None = None)
     tool_functions = {}
 
     resolved_paths = tool_paths if tool_paths is not None else ["tools"]
-    tool_dirs = [project_root / p for p in resolved_paths]
+    tool_dirs = [resolve_relative_to(p, project_root) for p in resolved_paths]
 
     for user_code_dir in tool_dirs:
         if not user_code_dir.exists():

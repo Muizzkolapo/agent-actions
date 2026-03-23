@@ -12,6 +12,7 @@ from agent_actions.config.path_config import get_tool_dirs
 from agent_actions.errors import ConfigValidationError
 from agent_actions.prompt.handler import PROMPT_PATTERN as _PROMPT_PATTERN
 from agent_actions.utils.file_utils import load_structured_file
+from agent_actions.utils.path_utils import resolve_relative_to
 from agent_actions.utils.project_root import find_project_root as _find_project_root_canonical
 
 from .models import (
@@ -502,7 +503,7 @@ def _index_tools(index: ProjectIndex, project_root: Path, tool_paths: list[str])
     from agent_actions.input.loaders.udf import discover_tool_files
 
     for rel_path in tool_paths:
-        tools_dir = project_root / rel_path
+        tools_dir = resolve_relative_to(rel_path, project_root)
         for py_file in discover_tool_files(tools_dir):
             _index_python_file(index, py_file)
 

@@ -18,6 +18,7 @@ from agent_actions.logging.events import (
 )
 from agent_actions.utils.constants import SCHEMA_SUFFIXES
 from agent_actions.utils.file_utils import load_structured_file
+from agent_actions.utils.path_utils import resolve_relative_to
 
 logger = LoggerFactory.get_logger(__name__)
 
@@ -50,7 +51,7 @@ class SchemaLoader:
 
         # Collect search directories
         search_dirs: list[Path] = []
-        project_schema_dir = effective_root / sp
+        project_schema_dir = resolve_relative_to(sp, effective_root)
         if project_schema_dir.exists():
             search_dirs.append(project_schema_dir)
         wf_root = effective_root / "agent_workflow"
@@ -108,7 +109,7 @@ class SchemaLoader:
         if schema_name not in all_schemas:
             effective_root = resolve_project_root(project_root)
             sp = get_schema_path(effective_root)
-            project_schema_dir = effective_root / sp
+            project_schema_dir = resolve_relative_to(sp, effective_root)
             wf_root = effective_root / "agent_workflow"
             raise FileNotFoundError(
                 f"Schema file '{schema_name}' not found. "
