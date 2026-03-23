@@ -200,14 +200,25 @@ class ProjectPathsFactory:
                 path = getattr(paths, dir_name)
                 if dir_name == "schema_dir":
                     factory.path_manager.validate_standard_path(PathType.SCHEMA, path)
-                path_validator.validate(path)
+                path_validator.validate(
+                    {"operation": "validate_directory", "path": path, "path_name": dir_name}
+                )
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
                 path = getattr(paths, dir_name)
                 if auto_create:
                     factory.path_manager.ensure_path_exists(path)
                 if path.exists():
-                    path_validator.validate(path)
-            path_validator.validate(paths.default_config_path)
+                    path_validator.validate(
+                        {"operation": "validate_directory", "path": path, "path_name": dir_name}
+                    )
+            path_validator.validate(
+                {
+                    "operation": "validate_file",
+                    "path": paths.default_config_path,
+                    "path_name": "default_config",
+                    "required": False,
+                }
+            )
             logger.debug("All project paths created successfully")
             return paths
         except Exception as e:
