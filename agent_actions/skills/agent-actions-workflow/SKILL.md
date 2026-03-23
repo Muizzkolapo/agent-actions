@@ -540,7 +540,7 @@ For comprehensive documentation, see:
 - **[Workflow Patterns](references/workflow-patterns.md)** - Diamond, ensemble, conditional merge patterns
 - **[UDF Patterns](references/udf-patterns.md)** - Field forwarding, validation aggregation, version consumption
 - **[UDF Decorator](references/udf-decorator.md)** - @udf_tool() API, granularity options, input/output contracts
-- **[Context Scope Guide](references/context-scope-guide.md)** - observe, drop, passthrough, seed_data directives
+- **[Context Scope Guide](references/context-scope-guide.md)** - observe, drop, passthrough, seed_path directives
 - **[Dynamic Content Injection](references/dynamic-content-injection.md)** - Randomized prompts, computed values, tool action injection
 - **[Data Flow Patterns](references/data-flow-patterns.md)** - Directory structure, metadata fields, content wrapper format
 - **[Prompt Patterns](references/prompt-patterns.md)** - Prompt store syntax, Jinja2 templates, field references

@@ -145,7 +145,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   context_scope:
-    seed_data:
+    seed_path:
       role_requirements: $file:role_requirements.json
       company_values: $file:company_values.json
 
@@ -448,7 +448,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   context_scope:
-    seed_data:
+    seed_path:
       brand_guidelines: $file:brand_guidelines.json
 
 actions:
@@ -582,7 +582,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   context_scope:
-    seed_data:
+    seed_path:
       glossary: $file:domain_glossary.json
 
 actions:
@@ -702,7 +702,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   context_scope:
-    seed_data:
+    seed_path:
       vendor_catalog: $file:vendor_catalog.json
       contract_templates: $file:contract_templates.json
 
@@ -818,7 +818,7 @@ defaults:
   model_vendor: openai
   model_name: gpt-4o-mini
   context_scope:
-    seed_data:
+    seed_path:
       brand_voice: $file:brand_voice.json
       marketplace_rules: $file:marketplace_rules.json
 

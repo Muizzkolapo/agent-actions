@@ -26,7 +26,7 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       risk_criteria: $file:risk_criteria.json
 
 actions:

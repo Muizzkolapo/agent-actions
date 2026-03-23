@@ -34,7 +34,7 @@ defaults:
   is_operational: true
   prompt_debug: false
   context_scope:
-    seed_data:
+    seed_path:
       brand_voice: $file:brand_voice.json
       marketplace_rules: $file:marketplace_rules.json
   retry:

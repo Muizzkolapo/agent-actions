@@ -21,7 +21,7 @@ def deep_merge_context_scope(
     Deep merge context_scope directives from defaults and action levels.
 
     Action-level directives are merged with (not replace) defaults directives.
-    This allows actions to define drop/observe while inheriting seed_data from defaults.
+    This allows actions to define drop/observe while inheriting seed_path from defaults.
     """
     if not defaults_scope:
         return action_scope or {}

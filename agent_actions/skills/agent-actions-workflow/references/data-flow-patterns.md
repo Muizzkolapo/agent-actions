@@ -385,7 +385,7 @@ Select the TOP 5 most relevant items from these candidates.
 ```yaml
 defaults:
   context_scope:
-    seed_data:
+    seed_path:
       catalog: $file:catalog.json
 ```
 

@@ -73,12 +73,12 @@ The `passthrough` directive forwards fields directly to the action output **with
 
 ## Seed Data
 
-Static reference data can be loaded via `seed_data`. See [Seed Data](./seed-data.md) for details.
+Static reference data can be loaded via `seed_path`. See [Seed Data](./seed-data.md) for details.
 
 ```yaml
 defaults:
   context_scope:
-    seed_data:
+    seed_path:
       exam_syllabus: $file:syllabus.json
 ```
 

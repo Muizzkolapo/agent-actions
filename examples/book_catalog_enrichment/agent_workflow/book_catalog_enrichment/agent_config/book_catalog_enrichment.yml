@@ -19,7 +19,7 @@ defaults:
   is_operational: true
   prompt_debug: false  # Enable to see reprompt feedback in action
   context_scope:
-    seed_data:
+    seed_path:
       book_catalog: $file:book_catalog.json
   retry:
     enabled: true

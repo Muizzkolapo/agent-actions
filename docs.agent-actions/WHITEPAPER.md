@@ -219,7 +219,7 @@ Each action sees *exactly* what it needs—no more, no less:
   context_scope:
     observe:
       - extract_qualifications.*     # Each scorer sees qualifications
-      - seed_data.rubric             # Each scorer sees the rubric
+      - seed.rubric                   # Each scorer sees the rubric
     drop:
       - source.raw_text              # Don't waste tokens on raw input
 ```

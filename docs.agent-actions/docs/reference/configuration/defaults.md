@@ -127,7 +127,7 @@ Here's where it gets interesting. The `context_scope` in defaults applies to all
 ```yaml
 defaults:
   context_scope:
-    seed_data:
+    seed_path:
       syllabus: $file:exam_syllabus.json
       rubric: $file:grading_rubric.yaml
 
@@ -143,7 +143,7 @@ actions:
     context_scope:
       observe:
         - extract_facts.facts  # Add action-specific scope
-    # seed_data is merged with defaults
+    # seed_path is merged with defaults
 ```
 
 ### Context Scope Merging
@@ -153,7 +153,7 @@ You might wonder what happens when an action defines its own context_scope. Acti
 ```yaml
 defaults:
   context_scope:
-    seed_data:
+    seed_path:
       config: $file:config.json
 
 actions:
@@ -163,7 +163,7 @@ actions:
         - upstream.field
       passthrough:
         - source.id
-    # Result: seed_data from defaults + observe/passthrough from action
+    # Result: seed_path from defaults + observe/passthrough from action
 ```
 
 ## Overriding Patterns

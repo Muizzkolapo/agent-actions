@@ -197,7 +197,7 @@ Define in workflow defaults:
 ```yaml
 defaults:
   context_scope:
-    seed_data:
+    seed_path:
       exam_syllabus: $file:syllabus.json
 ```
 

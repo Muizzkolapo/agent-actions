@@ -25,7 +25,7 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       role_requirements: $file:role_requirements.json
       company_values: $file:company_values.json
 

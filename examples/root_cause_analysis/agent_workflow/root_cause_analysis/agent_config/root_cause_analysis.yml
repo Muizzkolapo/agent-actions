@@ -24,7 +24,7 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       system_topology: $file:system_topology.json
       historical_incidents: $file:historical_incidents.json
       causal_patterns: $file:causal_patterns.json

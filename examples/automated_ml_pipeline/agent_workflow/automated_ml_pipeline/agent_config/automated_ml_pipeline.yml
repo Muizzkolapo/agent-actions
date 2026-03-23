@@ -24,7 +24,7 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       feature_definitions: $file:feature_definitions.json
       model_registry: $file:model_registry.json
       deployment_config: $file:deployment_config.json

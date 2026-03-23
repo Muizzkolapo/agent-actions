@@ -45,7 +45,7 @@ defaults:
   granularity: record
   run_mode: online
   context_scope:
-    seed_data:
+    seed_path:
       reference: $file:data.json
 
 actions:

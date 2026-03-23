@@ -3,7 +3,7 @@ Tests for the context_scope_normalizer module.
 
 Verifies that:
 1. List directives (observe, passthrough, drop, drops) have loop references expanded
-2. Dict directives (seed_data) are preserved as-is (never expanded)
+2. Dict directives (seed_path) are preserved as-is (never expanded)
 3. normalize_all_agent_configs normalizes context_scope in-place
 """
 
@@ -34,9 +34,9 @@ class TestDirectiveRegistry:
         assert DIRECTIVE_REGISTRY["drops"]["expand_versions"] is True
 
     def test_dict_directives_are_not_expanded(self):
-        """Verify that dict directives like seed_data have expand_versions=False."""
-        assert DIRECTIVE_REGISTRY["seed_data"]["type"] == "dict"
-        assert DIRECTIVE_REGISTRY["seed_data"]["expand_versions"] is False
+        """Verify that dict directives like seed_path have expand_versions=False."""
+        assert DIRECTIVE_REGISTRY["seed_path"]["type"] == "dict"
+        assert DIRECTIVE_REGISTRY["seed_path"]["expand_versions"] is False
 
 
 class TestNormalizeContextScope:
@@ -51,17 +51,16 @@ class TestNormalizeContextScope:
 
         assert result["observe"] == ["loop_action_"]
 
-    def test_preserves_seed_data_dict(self):
-        """Test that seed_data dict directive is preserved as-is."""
+    def test_preserves_seed_path_dict(self):
+        """Test that seed_path dict directive is preserved as-is."""
         context_scope = {
-            "seed_data": {"exam_syllabus": "syllabus.json", "grading_rubric": "rubric.json"}
+            "seed_path": {"exam_syllabus": "syllabus.json", "grading_rubric": "rubric.json"}
         }
         version_base_map = {"loop_action": ["loop_action_1", "loop_action_2"]}
 
         result = normalize_context_scope(context_scope, version_base_map)
 
-        # seed_data should be preserved exactly
-        assert result["seed_data"] == {
+        assert result["seed_path"] == {
             "exam_syllabus": "syllabus.json",
             "grading_rubric": "rubric.json",
         }
@@ -69,7 +68,7 @@ class TestNormalizeContextScope:
     def test_handles_mixed_directives(self):
         """Test normalization with both list and dict directives."""
         context_scope = {
-            "seed_data": {"exam_syllabus": "syllabus.json"},
+            "seed_path": {"exam_syllabus": "syllabus.json"},
             "observe": ["loop_action.*", "other_action.field1"],
             "passthrough": ["loop_action.*"],
             "drop": ["unwanted_field"],
@@ -78,8 +77,8 @@ class TestNormalizeContextScope:
 
         result = normalize_context_scope(context_scope, version_base_map)
 
-        # seed_data preserved
-        assert result["seed_data"] == {"exam_syllabus": "syllabus.json"}
+        # seed_path preserved
+        assert result["seed_path"] == {"exam_syllabus": "syllabus.json"}
         # List directives expanded
         assert result["observe"] == ["loop_action_", "other_action.field1"]
         assert result["passthrough"] == ["loop_action_"]
@@ -198,7 +197,7 @@ class TestNormalizeAllAgentConfigs:
                 "version_number": 1,
             },
             "consumer": {
-                "context_scope": {"observe": ["loop.*"], "seed_data": {"key": "value.json"}}
+                "context_scope": {"observe": ["loop.*"], "seed_path": {"key": "value.json"}}
             },
         }
         execution_order = ["loop_1", "consumer"]
@@ -208,7 +207,7 @@ class TestNormalizeAllAgentConfigs:
         # context_scope should be overwritten with expanded form
         assert agent_configs["consumer"]["context_scope"] == {
             "observe": ["loop_"],  # Expanded
-            "seed_data": {"key": "value.json"},  # Preserved
+            "seed_path": {"key": "value.json"},  # Preserved
         }
 
         # No separate expanded key
@@ -241,15 +240,15 @@ class TestNormalizeAllAgentConfigs:
         assert agent_configs["consumer"]["context_scope"]["observe"] == ["loop_"]
 
 
-class TestSeedDataPreservation:
-    """Test that seed_data is correctly preserved during normalization.
+class TestSeedPathPreservation:
+    """Test that seed_path is correctly preserved during normalization.
 
-    This is the core fix for the RFC - ensuring seed_data from defaults
-    is not destroyed when actions define their own context_scope.
+    Ensures seed_path from defaults is not destroyed when actions define
+    their own context_scope.
     """
 
-    def test_seed_data_not_destroyed_by_loop_expansion(self):
-        """Verify seed_data survives when context_scope has loop references."""
+    def test_seed_path_not_destroyed_by_loop_expansion(self):
+        """Verify seed_path survives when context_scope has loop references."""
         agent_configs = {
             "extract_1": {
                 "is_versioned_agent": True,
@@ -263,7 +262,7 @@ class TestSeedDataPreservation:
             },
             "consumer": {
                 "context_scope": {
-                    "seed_data": {
+                    "seed_path": {
                         "exam_syllabus": "syllabus.json",
                         "grading_rubric": "rubric.json",
                     },
@@ -275,8 +274,8 @@ class TestSeedDataPreservation:
 
         normalize_all_agent_configs(agent_configs, execution_order)
 
-        # seed_data must survive in normalized context_scope
-        assert agent_configs["consumer"]["context_scope"]["seed_data"] == {
+        # seed_path must survive in normalized context_scope
+        assert agent_configs["consumer"]["context_scope"]["seed_path"] == {
             "exam_syllabus": "syllabus.json",
             "grading_rubric": "rubric.json",
         }

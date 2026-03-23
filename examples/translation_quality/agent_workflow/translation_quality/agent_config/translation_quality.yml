@@ -34,7 +34,7 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: true
   context_scope:
-    seed_data:
+    seed_path:
       glossary: $file:domain_glossary.json
 
   data_source:

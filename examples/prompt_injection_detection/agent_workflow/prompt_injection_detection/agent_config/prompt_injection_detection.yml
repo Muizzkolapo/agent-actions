@@ -17,7 +17,7 @@ defaults:
   model_name: gpt-4o-mini
   api_key: OPENAI_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       attack_patterns: $file:attack_patterns.json
       legitimate_corpus_stats: $file:legitimate_corpus_stats.json
       topic_reference_distribution: $file:topic_reference_distribution.json

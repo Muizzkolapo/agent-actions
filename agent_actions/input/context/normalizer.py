@@ -13,8 +13,11 @@ DIRECTIVE_REGISTRY = {
     "drop": {"type": "list", "expand_versions": True},
     "drops": {"type": "list", "expand_versions": True},
     # Dict directives - preserve as-is (never expand)
-    "seed_data": {"type": "dict", "expand_versions": False},
+    "seed_path": {"type": "dict", "expand_versions": False},
 }
+
+# Config keys that users confuse with the runtime 'seed' namespace in references.
+SEED_CONFIG_KEYS = frozenset({"seed_data", "seed_path"})
 
 
 def normalize_context_scope(

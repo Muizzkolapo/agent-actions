@@ -36,7 +36,7 @@ defaults:
   api_key: OPENAI_API_KEY
   is_operational: true
   context_scope:
-    seed_data:
+    seed_path:
       existing_faqs: $file:existing_faqs.json
 
   data_source:

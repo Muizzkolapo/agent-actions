@@ -23,7 +23,7 @@ defaults:
   model_name: claude-sonnet-4-20250514
   api_key: ANTHROPIC_API_KEY
   context_scope:
-    seed_data:
+    seed_path:
       codebase_index: $file:codebase_index.json
       response_templates: $file:response_templates.json
       team_routing: $file:team_routing.json

@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from agent_actions.errors import ConfigurationError
+from agent_actions.input.context.normalizer import SEED_CONFIG_KEYS
 from agent_actions.utils.constants import (
     DEFAULT_ACTION_KIND,
     RESERVED_AGENT_NAMES,
@@ -112,7 +113,11 @@ class WorkflowStaticAnalyzer:
         for error in self._check_context_scope_fields():
             result.add_error(error)
 
-        # Step 2d: Validate schema structures (pre-flight check)
+        # Step 2d: Catch seed_data/seed_path misuse in context_scope references
+        for error in self._check_seed_reference_misuse():
+            result.add_error(error)
+
+        # Step 2e: Validate schema structures (pre-flight check)
         for error in self._check_schema_structures():
             result.add_error(error)
 
@@ -298,6 +303,57 @@ class WorkflowStaticAnalyzer:
                                 referenced_field=field_name,
                                 available_fields=available_fields,
                                 hint=f"Check the output schema of '{dep_name}' for available fields.",
+                            )
+                        )
+
+        return errors
+
+    def _check_seed_reference_misuse(self) -> list[StaticTypeError]:
+        """Catch common misuse of seed_data/seed_path in context_scope references.
+
+        Users sometimes write ``seed_data.field`` or ``seed_path.field`` in
+        observe/drop/passthrough when they should write ``seed.field``.
+        """
+        errors: list[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_name = action.get("name", "unknown")
+            context_scope = action.get("context_scope", {})
+            if not context_scope:
+                continue
+
+            for directive in ["observe", "drop", "passthrough", "drops"]:
+                field_refs = context_scope.get(directive, [])
+                if not isinstance(field_refs, list):
+                    continue
+
+                for field_ref in field_refs:
+                    if not isinstance(field_ref, str) or "." not in field_ref:
+                        continue
+
+                    namespace, field_name = field_ref.split(".", 1)
+                    if namespace in SEED_CONFIG_KEYS:
+                        correct_ref = f"seed.{field_name}"
+                        errors.append(
+                            StaticTypeError(
+                                message=(
+                                    f"context_scope.{directive} references "
+                                    f"'{field_ref}' — use '{correct_ref}' instead. "
+                                    f"'{namespace}' is a config key for declaring file paths; "
+                                    f"use the 'seed' namespace for runtime references."
+                                ),
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=field_ref,
+                                ),
+                                referenced_agent=namespace,
+                                referenced_field=field_name,
+                                hint=f"Replace '{field_ref}' with '{correct_ref}'.",
                             )
                         )
 
