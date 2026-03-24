@@ -500,10 +500,10 @@ class TestValidateAndRepromptPassedFlag:
                 return_value=(validation_func, "Please fix your response."),
             ),
             patch(
-                "agent_actions.llm.batch.services.retry._import_validation_module",
+                "agent_actions.llm.batch.services.reprompt_ops.import_validation_module",
             ),
             patch(
-                "agent_actions.llm.batch.services.retry.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
                 return_value=BatchStatus.COMPLETED,
             ),
             patch(
@@ -572,10 +572,10 @@ class TestValidateAndRepromptPassedFlag:
                 return_value=(validation_func, "Please fix."),
             ),
             patch(
-                "agent_actions.llm.batch.services.retry._import_validation_module",
+                "agent_actions.llm.batch.services.reprompt_ops.import_validation_module",
             ),
             patch(
-                "agent_actions.llm.batch.services.retry.wait_for_batch_completion",
+                "agent_actions.llm.batch.services.reprompt_ops.wait_for_batch_completion",
                 return_value=BatchStatus.COMPLETED,
             ),
             patch(

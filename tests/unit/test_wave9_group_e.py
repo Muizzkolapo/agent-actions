@@ -271,7 +271,7 @@ class TestImportValidationModuleRaisesOnImportError:
         from agent_actions.llm.batch.services.retry import _import_validation_module
 
         with patch(
-            "agent_actions.llm.batch.services.retry.load_module_from_path",
+            "agent_actions.llm.batch.services.retry_polling.load_module_from_path",
             side_effect=ImportError("No module named 'my_validator'"),
         ):
             with pytest.raises(ConfigurationError, match="my_validator"):
@@ -282,8 +282,121 @@ class TestImportValidationModuleRaisesOnImportError:
         from agent_actions.llm.batch.services.retry import _import_validation_module
 
         with patch(
-            "agent_actions.llm.batch.services.retry.load_module_from_path",
+            "agent_actions.llm.batch.services.retry_polling.load_module_from_path",
             side_effect=RuntimeError("disk error"),
         ):
             # Should not raise — other exceptions are downgraded to warning
             _import_validation_module("my_validator", None)
+
+
+# ---------------------------------------------------------------------------
+# E-7  ·  retry.py — backward-compat re-export of wait_for_batch_completion
+# ---------------------------------------------------------------------------
+
+
+class TestBackwardCompatReExports:
+    """E-7 — Ensure facade re-exports don't silently break."""
+
+    def test_wait_for_batch_completion_importable_from_retry(self):
+        """wait_for_batch_completion should be importable from the facade."""
+        from agent_actions.llm.batch.services.retry import wait_for_batch_completion  # noqa: F401
+
+        # Must be the same function object as the canonical location
+        from agent_actions.llm.batch.services.retry_polling import (
+            wait_for_batch_completion as canonical,
+        )
+
+        assert wait_for_batch_completion is canonical
+
+    def test_serialize_deserialize_importable_from_retry(self):
+        """serialize/deserialize_results should be importable from the facade."""
+        from agent_actions.llm.batch.services.retry import (  # noqa: F401
+            deserialize_results,
+            serialize_results,
+        )
+        from agent_actions.llm.batch.services.retry_serialization import (
+            deserialize_results as canonical_de,
+        )
+        from agent_actions.llm.batch.services.retry_serialization import (
+            serialize_results as canonical_se,
+        )
+
+        assert serialize_results is canonical_se
+        assert deserialize_results is canonical_de
+
+
+# ---------------------------------------------------------------------------
+# E-8  ·  retry_serialization — RepromptMetadata round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestSerializationRepromptRoundTrip:
+    """E-8 — Verify serialize → deserialize with RepromptMetadata preserves data."""
+
+    def test_reprompt_metadata_round_trip(self):
+        from agent_actions.llm.batch.services.retry_serialization import (
+            deserialize_results,
+            serialize_results,
+        )
+        from agent_actions.llm.providers.batch_base import BatchResult
+        from agent_actions.processing.types import RecoveryMetadata, RepromptMetadata
+
+        original = BatchResult(
+            custom_id="rec-1",
+            content="some content",
+            success=True,
+        )
+        original.recovery_metadata = RecoveryMetadata(
+            reprompt=RepromptMetadata(attempts=2, passed=False, validation="check_format"),
+        )
+
+        serialized = serialize_results([original])
+        deserialized = deserialize_results(serialized)
+
+        assert len(deserialized) == 1
+        result = deserialized[0]
+        assert result.custom_id == "rec-1"
+        assert result.content == "some content"
+        assert result.success is True
+        assert result.recovery_metadata is not None
+        assert result.recovery_metadata.retry is None
+        assert result.recovery_metadata.reprompt is not None
+        assert result.recovery_metadata.reprompt.attempts == 2
+        assert result.recovery_metadata.reprompt.passed is False
+        assert result.recovery_metadata.reprompt.validation == "check_format"
+
+    def test_both_retry_and_reprompt_round_trip(self):
+        from agent_actions.llm.batch.services.retry_serialization import (
+            deserialize_results,
+            serialize_results,
+        )
+        from agent_actions.llm.providers.batch_base import BatchResult
+        from agent_actions.processing.types import (
+            RecoveryMetadata,
+            RepromptMetadata,
+            RetryMetadata,
+        )
+
+        original = BatchResult(
+            custom_id="rec-2",
+            content="result",
+            success=True,
+        )
+        original.recovery_metadata = RecoveryMetadata(
+            retry=RetryMetadata(
+                attempts=3, failures=2, succeeded=True, reason="missing"
+            ),
+            reprompt=RepromptMetadata(attempts=1, passed=True, validation="my_udf"),
+        )
+
+        serialized = serialize_results([original])
+        deserialized = deserialize_results(serialized)
+
+        result = deserialized[0]
+        assert result.recovery_metadata.retry.attempts == 3
+        assert result.recovery_metadata.retry.failures == 2
+        assert result.recovery_metadata.retry.succeeded is True
+        assert result.recovery_metadata.retry.reason == "missing"
+        assert result.recovery_metadata.reprompt.attempts == 1
+        assert result.recovery_metadata.reprompt.passed is True
+        assert result.recovery_metadata.reprompt.validation == "my_udf"
