@@ -32,8 +32,8 @@ def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -
         agent = getattr(manager, "agent_name", "unknown")
         logger.debug("Config stage '%s' failed for agent '%s': %s", stage, agent, e)
         if not hasattr(e, "context") or not isinstance(e.context, dict):
-            e.context = {}  # type: ignore[union-attr]
-        e.context.update({  # type: ignore[union-attr]
+            e.context = {}  # type: ignore[attr-defined]
+        e.context.update({  # type: ignore[attr-defined]
             "agent": agent,
             "pipeline_stage": stage,
         })

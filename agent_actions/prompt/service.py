@@ -203,7 +203,6 @@ class PromptPreparationService:
         logger.debug("Preparing prompt for agent '%s' in %s mode", request.agent_name, request.mode)
 
         agent_indices = request.agent_indices or {}
-        dependency_configs = request.dependency_configs or {}
 
         raw_prompt = PromptFormatter.get_raw_prompt(request.agent_config)
         logger.debug("Loaded raw prompt (length: %d)", len(raw_prompt))

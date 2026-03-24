@@ -249,6 +249,8 @@ class TaskPreparer:
         return IDGenerator.generate_target_id()
 
 
+# Per-process singleton; assumes one workflow per process.
+# Use reset_task_preparer() in tests.
 _task_preparer: TaskPreparer | None = None
 _task_preparer_lock = threading.Lock()
 

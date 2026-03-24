@@ -7,6 +7,7 @@ from lsprotocol import types as lsp
 from pygls.lsp.server import LanguageServer
 
 from agent_actions.config.path_config import get_schema_path, get_tool_dirs
+from agent_actions.errors import ConfigValidationError
 
 from .completions import (
     build_context_scope_completions,
@@ -608,7 +609,7 @@ def _register_file_watchers() -> None:
             lsp.RegistrationParams(registrations=[registration]),
         )
         logger.info("Registered %d file watchers", len(watchers))
-    except Exception:
+    except Exception:  # Protocol boundary — client may not support dynamic registration
         logger.debug("Dynamic file watcher registration not available", exc_info=True)
 
 
@@ -634,7 +635,7 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
     # Tool directories (from config, default: ["tools"])
     try:
         tool_dirs = get_tool_dirs(root)
-    except Exception:
+    except (ConfigValidationError, OSError):
         tool_dirs = ["tools"]
     for td in tool_dirs:
         watchers.append(
@@ -647,7 +648,7 @@ def _build_watchers_for_project(root: Path) -> list[lsp.FileSystemWatcher]:
     # Schema directories (from config)
     try:
         schema_path = get_schema_path(root)
-    except Exception:
+    except (ConfigValidationError, OSError):
         schema_path = None
     if schema_path:
         for ext in ("yml", "yaml", "json"):

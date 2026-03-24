@@ -48,7 +48,8 @@ class FileUDFResult:
 # Thread safety
 _registry_lock = threading.RLock()
 
-# Registry with cached compiled schemas
+# Process-wide registry with cached compiled schemas.
+# Assumes one workflow per process; concurrent workflows would share state.
 UDF_REGISTRY: dict[str, dict[str, Any]] = {}
 
 # Track which module names contributed UDFs (for sys.modules cleanup on clear)

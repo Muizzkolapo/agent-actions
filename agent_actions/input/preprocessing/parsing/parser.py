@@ -94,16 +94,16 @@ class WhereClauseParser:
     def _build_literals(self):
         """Build literal parsers (string, number, boolean, null)."""
         string_literal = QuotedString('"', esc_char="\\") | QuotedString("'", esc_char="\\")
-        string_literal.set_parse_action(lambda t: LiteralNode(t[0]))
+        string_literal.add_parse_action(lambda t: LiteralNode(t[0]))
 
         number = pyparsing_common.number()
-        number.set_parse_action(lambda t: LiteralNode(t[0]))
+        number.add_parse_action(lambda t: LiteralNode(t[0]))
 
         boolean = CaselessKeyword("TRUE") | CaselessKeyword("FALSE")
-        boolean.set_parse_action(lambda t: LiteralNode(t[0].upper() == "TRUE"))
+        boolean.add_parse_action(lambda t: LiteralNode(t[0].upper() == "TRUE"))
 
         null = CaselessKeyword("NULL")
-        null.set_parse_action(lambda t: LiteralNode(None))
+        null.add_parse_action(lambda t: LiteralNode(None))
 
         return string_literal, number, boolean, null
 
@@ -130,7 +130,7 @@ class WhereClauseParser:
             | CaselessKeyword("CONTAINS")
         )
         field_name = ~reserved_words + Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-        field_name.set_parse_action(lambda t: FieldNode(field_path=t[0]))
+        field_name.add_parse_action(lambda t: FieldNode(field_path=t[0]))
 
         array_element = Forward()
         array_element <<= string_literal | number | boolean | null
@@ -140,7 +140,7 @@ class WhereClauseParser:
             + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
             + tokens["rbracket"]
         )
-        array_literal.set_parse_action(self._parse_array)
+        array_literal.add_parse_action(self._parse_array)
 
         function_name = Word(alphas.upper(), alphanums + "_")
         function_args = Forward()
@@ -151,7 +151,7 @@ class WhereClauseParser:
         )
 
         function_call = function_name + function_args
-        function_call.set_parse_action(self._parse_function)
+        function_call.add_parse_action(self._parse_function)
 
         operand = (
             function_call | boolean | null | array_literal | string_literal | number | field_name
@@ -192,7 +192,7 @@ class WhereClauseParser:
                 op_literal = op_literal + CaselessKeyword(word)
         else:
             op_literal = Literal(symbol)
-        op_literal.set_parse_action(lambda t, name=name: name)
+        op_literal.add_parse_action(lambda t, name=name: name)
         return op_literal
 
     def _build_comparison_operators(self):
@@ -357,7 +357,7 @@ class WhereClauseParser:
                 "WhereClauseParser._grammar is None; "
                 "_build_grammar() must complete before parsing"
             )
-        parsed = self._grammar.parseString(where_clause, parseAll=True)
+        parsed = self._grammar.parse_string(where_clause, parse_all=True)
 
         if not parsed:
             return ParseResult(

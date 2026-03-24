@@ -326,20 +326,12 @@ class AgentWorkflow:
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
                 if not hasattr(e, "context") or not isinstance(e.context, dict):
-                    e.context = {}  # type: ignore[union-attr]
-                e.context.update({  # type: ignore[union-attr]
+                    e.context = {}  # type: ignore[attr-defined]
+                e.context.update({  # type: ignore[attr-defined]
                     "workflow": self.metadata.agent_name,
                     "operation": "async_workflow_execution",
                 })
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
-                # Enrich with workflow context so the error formatter can
-                # tell the user which workflow and stage failed.
-                if not hasattr(e, "context"):
-                    e.context = {}  # type: ignore[union-attr]
-                e.context.update({  # type: ignore[union-attr]
-                    "workflow": self.metadata.agent_name,
-                    "operation": "async_workflow_execution",
-                })
                 raise
 
     def run(self):
@@ -386,18 +378,12 @@ class AgentWorkflow:
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
                 if not hasattr(e, "context") or not isinstance(e.context, dict):
-                    e.context = {}  # type: ignore[union-attr]
-                e.context.update({  # type: ignore[union-attr]
+                    e.context = {}  # type: ignore[attr-defined]
+                e.context.update({  # type: ignore[attr-defined]
                     "workflow": self.metadata.agent_name,
                     "operation": "sequential_workflow_execution",
                 })
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
-                if not hasattr(e, "context"):
-                    e.context = {}  # type: ignore[union-attr]
-                e.context.update({  # type: ignore[union-attr]
-                    "workflow": self.metadata.agent_name,
-                    "operation": "sequential_workflow_execution",
-                })
                 raise
 
     def _run_single_action(self, idx: int, action_name: str, total_actions: int) -> bool:

@@ -211,7 +211,8 @@ class GuardFilter:
         self.executor.shutdown(wait=True)
 
 
-# Thread-safe singleton
+# Per-process singleton; assumes one workflow per process.
+# Cleaned up via atexit. Use reset_global_guard_filter() in tests.
 _GLOBAL_GUARD_FILTER: GuardFilter | None = None
 _GUARD_FILTER_LOCK = threading.Lock()
 
