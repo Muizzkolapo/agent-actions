@@ -202,6 +202,17 @@ class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     "api_operation": "chat.complete",
                 },
             )
+        if not isinstance(response_output, str):
+            content_type = type(response_output).__name__
+            raise VendorAPIError(
+                f"Mistral API returned non-string content: {content_type}",
+                context={
+                    "model_name": model_name,
+                    "vendor": "mistral",
+                    "api_operation": "chat.complete",
+                    "content_type": content_type,
+                },
+            )
         logger.debug(
             "Mistral non-JSON response retrieved successfully",
             extra={

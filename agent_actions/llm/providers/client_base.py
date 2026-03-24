@@ -126,7 +126,7 @@ class BaseClient(ABC):
     def call_json(
         api_key: str | None,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
@@ -136,7 +136,7 @@ class BaseClient(ABC):
         Args:
             api_key: API key for vendor authentication
             agent_config: Agent configuration dict
-            prompt_config: Prompt configuration dict
+            prompt_config: Formatted prompt string
             context_data: Context data for the prompt
             schema: Optional JSON schema for structured output
 
@@ -149,7 +149,7 @@ class BaseClient(ABC):
     def call_non_json(
         api_key: str | None,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
     ) -> list[dict[str, str]]:
         """
@@ -158,7 +158,7 @@ class BaseClient(ABC):
         Args:
             api_key: API key for vendor authentication
             agent_config: Agent configuration dict
-            prompt_config: Prompt configuration dict
+            prompt_config: Formatted prompt string
             context_data: Context data for the prompt
 
         Returns:
@@ -169,7 +169,7 @@ class BaseClient(ABC):
     def invoke(
         cls,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:

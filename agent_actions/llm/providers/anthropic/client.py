@@ -112,7 +112,7 @@ class AnthropicClient(BaseClient):
     def _call_api(
         api_key: str | None,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
         mode: str,
@@ -160,7 +160,7 @@ class AnthropicClient(BaseClient):
     def call_json(
         api_key: str | None,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
         schema: dict[str, Any] | None,
     ) -> list[dict[str, Any]]:
@@ -186,7 +186,7 @@ class AnthropicClient(BaseClient):
     def call_non_json(
         api_key: str | None,
         agent_config: dict[str, Any],
-        prompt_config: dict[str, Any],
+        prompt_config: str,
         context_data: dict[str, Any],
     ) -> list[dict[str, str]]:
         """Plain-text (non-JSON) mode for Claude."""

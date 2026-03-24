@@ -35,6 +35,7 @@ class BatchDataLoader(IDataLoader):
             content = read_file_with_retry(file_path)
             if suffix == ".jsonl":
                 return [json.loads(line) for line in io.StringIO(content) if line.strip()]
-            return json.loads(content)
+            data = json.loads(content)
+            return data if isinstance(data, list) else [data]
         except json.JSONDecodeError as e:
             raise ValueError(f"Error decoding JSON from {file_path}: {e}") from e
