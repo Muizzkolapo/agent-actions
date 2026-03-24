@@ -15,6 +15,7 @@ Implementation details are split across focused submodules:
 import logging
 from typing import Any
 
+from agent_actions.config.types import RunMode
 from agent_actions.utils.constants import DEFAULT_ACTION_KIND
 
 from .config_fields import get_default, inherit_simple_fields
@@ -95,7 +96,7 @@ class ActionExpander:
         return process_guard_config(agent, action)
 
     @staticmethod
-    def _process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: str) -> None:
+    def _process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode) -> None:
         return process_tool_action(agent, action, run_mode)
 
     @staticmethod

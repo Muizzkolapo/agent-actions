@@ -50,7 +50,7 @@ def process_guard_config(agent: dict[str, Any], action: dict[str, Any]) -> None:
             }
 
 
-def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: str) -> None:
+def process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode) -> None:
     """Process tool-specific action configuration."""
     action_kind = action.get("kind", DEFAULT_ACTION_KIND)
     if action_kind != "tool":
