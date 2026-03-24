@@ -407,20 +407,58 @@ export class WorkflowModel implements vscode.Disposable {
             readAgentStatus(statusUri),
         ]);
 
+        // Build a map of base names → versioned action names so downstream
+        // dependencies that reference the base name (e.g. "score_quality")
+        // are expanded to all versioned names (e.g. ["score_quality_1", "score_quality_2", "score_quality_3"]).
+        const versionedNames = new Map<string, string[]>();
+        const allActionNames = new Set(parsedConfig.actions.map((a) => a.name));
+        for (const action of parsedConfig.actions) {
+            if (action.baseName) {
+                const bucket = versionedNames.get(action.baseName) ?? [];
+                bucket.push(action.name);
+                versionedNames.set(action.baseName, bucket);
+            }
+        }
+
+        /** Resolve dependencies: expand base names to versioned names */
+        const resolveDeps = (deps: string[]): string[] => {
+            const resolved: string[] = [];
+            for (const dep of deps) {
+                if (allActionNames.has(dep)) {
+                    // Exact match — keep as-is
+                    resolved.push(dep);
+                } else if (versionedNames.has(dep)) {
+                    // Base name of a versioned action — expand
+                    resolved.push(...versionedNames.get(dep)!);
+                } else {
+                    // Unknown dep — keep as-is (may come from manifest)
+                    resolved.push(dep);
+                }
+            }
+            return resolved;
+        };
+
+        // Resolve dependencies on parsed actions before topo-sort so
+        // execution order and level computation see the real graph.
+        const resolvedActions = parsedConfig.actions.map((a) => ({
+            ...a,
+            dependencies: resolveDeps(a.dependencies),
+        }));
+
         // Compute execution order (prefer manifest, fall back to computed)
         const executionOrder = manifest?.execution_order?.length
             ? manifest.execution_order
-            : topoSort(parsedConfig.actions);
+            : topoSort(resolvedActions);
 
         // Compute levels
-        const computedLevels = computeLevels(parsedConfig.actions);
+        const computedLevels = computeLevels(resolvedActions);
 
         // Build action infos
-        const actions: ActionInfo[] = parsedConfig.actions.map((actionConfig) => {
+        const actions: ActionInfo[] = resolvedActions.map((actionConfig) => {
             const manifestAction = manifest?.actions?.[actionConfig.name];
             const level = manifestAction?.level ?? computedLevels.get(actionConfig.name) ?? 0;
             const index = executionOrder.indexOf(actionConfig.name);
-            const actionIndex = index >= 0 ? index + 1 : parsedConfig.actions.indexOf(actionConfig) + 1;
+            const actionIndex = index >= 0 ? index + 1 : resolvedActions.indexOf(actionConfig) + 1;
             const outputDir = manifestAction?.output_dir ?? actionConfig.name;
             const folderPath = path.join(agentIoPath, 'target', outputDir);
             const status = resolveActionStatus(manifest, agentStatus, actionConfig.name);
