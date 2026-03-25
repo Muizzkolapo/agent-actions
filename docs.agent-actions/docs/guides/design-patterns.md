@@ -914,7 +914,75 @@ See [Custom Tools](./custom-tools) for building tools.
 | Flexible request handling | Coordinator |
 | Mix AI with deterministic logic | Tool + LLM Hybrid |
 
-Most real workflows combine multiple patterns. A product review analyzer might use Parallel for multi-scorer consensus, Conditional Routing for quality-based filtering, and Tool + LLM Hybrid for deterministic aggregation alongside AI-generated responses.
+Most real agentic workflows combine multiple patterns. A product review analyzer might use Parallel for multi-scorer consensus, Conditional Routing for quality-based filtering, and Tool + LLM Hybrid for deterministic aggregation alongside AI-generated responses.
+
+---
+
+## Production Example: Vote-Aggregate-Guard Pipeline
+
+This pattern from a production quiz generation system shows how to combine versioned parallel execution, tool-based aggregation, and guard filtering into a quality gate pipeline.
+
+```mermaid
+flowchart LR
+    A[extract_qa] -->|"3 parallel"| B[vote_quality]
+    B --> C["aggregate_votes (tool)"]
+    C --> D{"guard: filter == 'keep'"}
+    D -->|pass| E[generate_answer]
+    D -->|filter| F[dropped]
+```
+
+**Step 1: Parallel voting** — Three independent LLM voters assess quality:
+
+```yaml
+- name: vote_quality
+  dependencies: [extract_qa]
+  versions:
+    param: voter_id
+    range: [1, 2, 3]
+    mode: parallel
+  prompt: $my_workflow.Vote_Quality
+  schema: quality_vote
+```
+
+**Step 2: Aggregate votes** — A tool counts votes and determines the verdict:
+
+```yaml
+- name: aggregate_votes
+  kind: tool
+  impl: aggregate_votes
+  dependencies: [vote_quality]
+  version_consumption:
+    source: vote_quality
+    pattern: merge
+  schema: aggregate_result
+```
+
+```python
+@udf_tool()
+def aggregate_votes(data: dict[str, Any]) -> dict[str, Any]:
+    """Majority vote across 3 parallel voters."""
+    keep_count = sum(
+        1 for i in range(1, 4)
+        if data.get(f"vote_quality_{i}", {}).get("verdict") == "keep"
+    )
+    return {
+        "filter": "keep" if keep_count >= 2 else "filter",
+        "vote_summary": {"keep": keep_count, "filter": 3 - keep_count},
+    }
+```
+
+**Step 3: Guard gate** — Only records that passed voting continue:
+
+```yaml
+- name: generate_answer
+  dependencies: [aggregate_votes]
+  guard:
+    condition: 'filter == "keep"'
+    on_false: filter
+  prompt: $my_workflow.Generate_Answer
+```
+
+This pattern scales to any quality gate: use it for content moderation, fact-checking, or multi-reviewer approval pipelines. The key insight is that each voter runs independently (no shared context between versions), the tool performs deterministic aggregation, and the guard enforces the decision.
 
 ---
 

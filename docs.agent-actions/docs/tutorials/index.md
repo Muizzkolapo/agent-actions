@@ -41,8 +41,7 @@ my_workflow/
 ├── agent_actions.yml      # Project configuration (API keys, defaults)
 ├── agent_workflow/        # Workflow definitions
 ├── prompt_store/          # Prompt templates (optional)
-├── schema/                # JSON schemas for validation
-├── templates/             # Jinja2 templates (optional)
+├── schema/                # Output schemas for validation
 └── tools/                 # Custom Python functions
 ```
 
@@ -167,11 +166,16 @@ actions:
 
 ```yaml
 default_agent_config:
-  api_key: YOUR_API_KEY_ENV_VAR  # e.g., OPENAI_API_KEY, ANTHROPIC_API_KEY
-  model_vendor: openai           # openai, anthropic, gemini, groq, mistral, ollama
+  api_key: OPENAI_API_KEY        # Environment variable name for your API key
+  model_vendor: openai           # openai, anthropic, google, groq, mistral, ollama
   model_name: gpt-4o-mini        # Any model supported by your provider
 
+schema_path: schema
 tool_path: ["tools"]
+
+output_storage:
+  backend: sqlite
+  db_path: ./agent_io/outputs.db
 ```
 
 Use whichever provider you have an API key for. For example, with Anthropic:

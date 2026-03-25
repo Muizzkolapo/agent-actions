@@ -87,12 +87,12 @@ actions:
 
     # Override vendor, model, and API key
     model_vendor: anthropic
-    model_name: claude-3-5-sonnet-20241022
+    model_name: claude-sonnet-4-20250514
     api_key: ${ANTHROPIC_API_KEY}
 
     # This action uses:
     # - model_vendor: anthropic (OVERRIDDEN)
-    # - model_name: claude-3-5-sonnet-20241022 (OVERRIDDEN)
+    # - model_name: claude-sonnet-4-20250514 (OVERRIDDEN)
     # - api_key: ${ANTHROPIC_API_KEY} (OVERRIDDEN)
     # - temperature: 0.8 (from workflow)
     # - max_tokens: 2000 (from workflow)
@@ -114,7 +114,7 @@ actions:
 
     # Override everything
     model_vendor: gemini
-    model_name: gemini-1.5-pro
+    model_name: gemini-2.0-flash
     api_key: ${GEMINI_API_KEY}
     temperature: 0.5
     max_tokens: 4000
@@ -122,7 +122,7 @@ actions:
 
     # This action uses:
     # - model_vendor: gemini (OVERRIDDEN)
-    # - model_name: gemini-1.5-pro (OVERRIDDEN)
+    # - model_name: gemini-2.0-flash (OVERRIDDEN)
     # - api_key: ${GEMINI_API_KEY} (OVERRIDDEN)
     # - temperature: 0.5 (OVERRIDDEN)
     # - max_tokens: 4000 (OVERRIDDEN)
@@ -159,7 +159,7 @@ actions:
 # ============================================================================
 # Assume agent_actions.yml contains:
 #   model_vendor: anthropic
-#   model_name: claude-3-5-sonnet-20241022
+#   model_name: claude-sonnet-4-20250514
 #   api_key: ${ANTHROPIC_API_KEY}
 #   temperature: 0.7
 #
@@ -188,7 +188,7 @@ actions:
 #
 # action_with_different_vendor:
 #   ✓ model_vendor: anthropic (action overrides workflow)
-#   ✓ model_name: claude-3-5-sonnet-20241022 (action overrides workflow)
+#   ✓ model_name: claude-sonnet-4-20250514 (action overrides workflow)
 #   ✓ api_key: ${ANTHROPIC_API_KEY} (action overrides workflow)
 #   ✓ temperature: 0.8 (from workflow)
 #   ✓ max_tokens: 2000 (from workflow)
@@ -242,7 +242,7 @@ actions:
 #
 # Create agent_actions.yml with:
 #   model_vendor: anthropic
-#   model_name: claude-3-5-sonnet-20241022
+#   model_name: claude-sonnet-4-20250514
 #   api_key: ${ANTHROPIC_API_KEY}
 #   temperature: 0.7
 #

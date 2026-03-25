@@ -50,22 +50,13 @@ class ContextScopeDict(TypedDict, total=False):
 class GuardConfigDict(TypedDict, total=False):
     """Guard condition for conditional action execution.
 
-    Supports two formats:
-    - New format: clause/scope/behavior (e.g., {"clause": "...", "behavior": "skip"})
-    - Legacy format: field/operator/value (e.g., {"field": "x", "operator": ">", "value": 0.8})
+    Primary format: condition/on_false (e.g., {"condition": "score >= 85", "on_false": "filter"})
     """
 
-    # New format
-    clause: str
-    scope: str  # "item" | "action"
-    behavior: str  # "skip" | "filter"
+    condition: str
+    on_false: str  # "skip" | "filter"
     passthrough_on_error: bool
     passthrough_on_empty: bool
-
-    # Legacy format
-    field: str
-    operator: str
-    value: Any
 
 
 class WhereClauseDict(TypedDict, total=False):

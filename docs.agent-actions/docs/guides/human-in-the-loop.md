@@ -23,11 +23,12 @@ actions:
       instructions: "Review the extracted data for accuracy"
       timeout: 300  # Optional: seconds before timeout (default: 300)
       require_comment_on_reject: true  # Optional: require comment when rejecting
-    observe:
-      - extract_data.*  # Data to review
+    context_scope:
+      observe:
+        - extract_data.*  # Data to review
 ```
 
-When the workflow reaches this action:
+When the agentic workflow reaches this action:
 1. A browser UI opens at `http://localhost:3001`
 2. Workflow pauses and waits for your decision
 3. You review each record and approve/reject
@@ -143,8 +144,9 @@ Each record is reviewed individually and gets its own decision:
   dependencies: [extract_data]
   hitl:
     instructions: "Approve or reject each record"
-  observe:
-    - extract_data.*
+  context_scope:
+    observe:
+      - extract_data.*
 ```
 
 **Output**: Each input record gets `hitl_status`, `user_comment`, and `timestamp` fields added.
@@ -179,8 +181,9 @@ Review the entire dataset once and apply a single decision to all records:
   dependencies: [extract_data]
   hitl:
     instructions: "Review the full dataset and approve or reject"
-  observe:
-    - extract_data.*
+  context_scope:
+    observe:
+      - extract_data.*
 ```
 
 **Output**: Each record gets the **file-level decision**, but you can still provide per-record feedback in the UI if needed. The `hitl_status` applies to all records, but individual records can have their own `user_comment`.
@@ -293,8 +296,9 @@ actions:
     intent: "Human reviews AI summary"
     hitl:
       instructions: "Review the generated summary for accuracy and tone"
-    observe:
-      - generate_summary.summary
+    context_scope:
+      observe:
+        - generate_summary.summary
 
   - name: publish_summary
     dependencies: [review_summary]
@@ -321,8 +325,9 @@ actions:
     hitl:
       instructions: "Approve valid candidates, reject false positives"
       require_comment_on_reject: true
-    observe:
-      - extract_candidates.*
+    context_scope:
+      observe:
+        - extract_candidates.*
 
   - name: process_approved_only
     dependencies: [review_candidates]
@@ -345,8 +350,9 @@ actions:
     dependencies: [stage_1_transformation]
     hitl:
       instructions: "Verify stage 1 output before continuing to stage 2"
-    observe:
-      - stage_1_transformation.*
+    context_scope:
+      observe:
+        - stage_1_transformation.*
 
   - name: stage_2_enrichment
     dependencies: [checkpoint_review]

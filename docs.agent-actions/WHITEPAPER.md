@@ -398,7 +398,7 @@ model_name: gpt-4o
 
 # Tomorrow
 model_vendor: anthropic
-model_name: claude-3-5-sonnet
+model_name: claude-sonnet-4-20250514
 ```
 
 Schema compilation handles vendor-specific formats automatically.
@@ -814,7 +814,7 @@ actions:
 
   - name: quality_generation
     model_vendor: anthropic
-    model_name: claude-3-5-sonnet
+    model_name: claude-sonnet-4-20250514
 
   - name: fast_validation
     model_vendor: openai
@@ -1439,7 +1439,7 @@ actions:
 
   - name: quality_generation
     model_vendor: anthropic         # High quality
-    model_name: claude-3-5-sonnet
+    model_name: claude-sonnet-4-20250514
 ```
 
 ---
@@ -1706,7 +1706,7 @@ actions:
   - name: fact_extractor
     prompt: $prompts.Extract_Facts
     model_vendor: anthropic
-    model_name: claude-3-haiku
+    model_name: claude-haiku-4-5-20251001
 
   # "Classifier" agent - categorizes content
   - name: content_classifier
@@ -1727,7 +1727,7 @@ actions:
     dependencies: [content_writer]
     prompt: $prompts.Validate_Quality
     model_vendor: anthropic
-    model_name: claude-3-haiku
+    model_name: claude-haiku-4-5-20251001
 ```
 
 **Multi-Agent Characteristics Supported:**

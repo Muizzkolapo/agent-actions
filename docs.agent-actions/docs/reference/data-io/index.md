@@ -20,15 +20,15 @@ agent_workflow/
     │   ├── staging/           # Input data (starting point)
     │   ├── source/            # Metadata tracking staging files (JSON mode)
     │   ├── target/            # Output data (JSON mode)
-    │   └── my_workflow.db     # SQLite database (database mode)
+    │   └── outputs.db          # SQLite database (database mode)
     └── seed_data/             # Static reference data
 ```
 
 :::tip Storage Backend
 Agent Actions supports two storage modes for source and target data:
 
-- **JSON mode** (default): Individual JSON files in `source/` and `target/` directories
-- **SQLite mode**: All data in a single `{workflow}.db` database file
+- **SQLite mode** (default): All data in a single `outputs.db` database file, configured via `output_storage` in `agent_actions.yml`
+- **JSON mode**: Individual JSON files in `source/` and `target/` directories
 
 SQLite mode offers better query performance, built-in deduplication, and atomic writes. Staging data always remains as JSON files regardless of mode.
 :::
@@ -120,7 +120,7 @@ The database contains two main tables:
 You can inspect workflow data directly using SQLite:
 
 ```bash
-sqlite3 my_workflow/agent_io/my_workflow.db
+sqlite3 my_workflow/agent_io/outputs.db
 
 -- List all actions with output
 SELECT DISTINCT action_name FROM target_data;

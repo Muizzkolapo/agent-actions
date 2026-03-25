@@ -93,7 +93,16 @@ This renders as:
 
 ## Version Consumption
 
-Downstream actions consume outputs from all version iterations:
+Downstream actions consume outputs from all version iterations. The `version_consumption` block controls how versioned outputs are collected.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source` | string | Name of the upstream versioned action to consume |
+| `pattern` | string | `merge` — combine all version outputs into one record (fan-in); `match` — pair each version output 1:1 with the consumer |
+
+### merge (Fan-In)
+
+The most common pattern. All version outputs are collected into a single record, keyed by version name (e.g., `extract_raw_qa_1`, `extract_raw_qa_2`). Use this for aggregation, voting, and consensus:
 
 ```yaml
 - name: extract_raw_qa

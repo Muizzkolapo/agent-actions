@@ -14,7 +14,7 @@ Let's explore what `agac` can do for you.
 
 These flags work with all commands and help you understand what's happening inside your agentic workflows:
 
-### `--version` / `-V`
+### `--version`
 
 Display the Agent Actions version.
 
@@ -22,7 +22,23 @@ Display the Agent Actions version.
 agac --version
 ```
 
-### `--quiet` / `-q`
+### `--debug`
+
+Enable debug mode with verbose logging and source file/line references.
+
+```bash
+agac run -a my_workflow --debug
+```
+
+### `-v` / `--verbose`
+
+Enable verbose output.
+
+```bash
+agac run -a my_workflow --verbose
+```
+
+### `-q` / `--quiet`
 
 Suppress non-essential output. Useful for scripts and CI/CD pipelines where you only want to see errors.
 
@@ -30,7 +46,7 @@ Suppress non-essential output. Useful for scripts and CI/CD pipelines where you 
 agac run -a my_workflow --quiet
 ```
 
-### `-h` / `--help`
+### `--help`
 
 Show help message and available commands.
 
@@ -121,7 +137,8 @@ Here's what each command does - organized by what you're trying to accomplish:
 | [`preview`](./preview) | Preview data stored in the SQLite storage backend |
 | [`list-udfs`](./tools#list-udfs) | List discovered tools |
 | [`validate-udfs`](./tools#validate-udfs) | Validate tool references |
-| [`render`](./utilities#render) | Render Jinja2 templates (useful for debugging) |
+| [`render`](./utilities#render) | Compile and render workflow configuration |
+| [`compile`](./utilities#render) | Alias for `render` |
 
 **Project management:**
 

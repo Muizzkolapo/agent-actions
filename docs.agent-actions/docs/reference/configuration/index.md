@@ -32,18 +32,25 @@ default_agent_config:
   model_name: gpt-4o-mini
   model_vendor: openai
 
+schema_path: schema
 tool_path: ["tools"]
 
 chunk_config:
   chunk_size: 4000
   overlap: 500
+
+output_storage:
+  backend: sqlite
+  db_path: ./agent_io/outputs.db
 ```
 
 | Field | Description |
 |-------|-------------|
 | `default_agent_config` | Default settings inherited by all actions |
+| `schema_path` | Directory containing output schemas (default: `schema`) |
 | `tool_path` | Directories to scan for custom tools |
 | `chunk_config` | Text chunking for large inputs |
+| `output_storage` | Storage backend config: `backend` (`sqlite`), `db_path` (database file location) |
 
 ## Agentic Workflow Configuration
 
@@ -95,8 +102,8 @@ actions:
 
     # Conditional
     guard:
-      clause: "source.content != ''"
-      behavior: filter
+      condition: "source.content != ''"
+      on_false: filter
 ```
 
 ### Core Action Fields
@@ -109,8 +116,7 @@ actions:
 | `dependencies` | list | Upstream actions to wait for |
 | `prompt` | string | Inline prompt or `$store.template` reference |
 | `schema` | string | Output validation schema |
-| `drops` | list | Fields to exclude from LLM prompt and final output |
-| `observe` | list | Fields to pass-through from input to output (visible to LLM but not regenerated) |
+| `context_scope` | object | Control data visibility: `observe`, `drop`, `passthrough`, `seed_path` — see [Context Scope](../context/context-scope.md) |
 | `data_source` | object/string | Optional input source configuration for start-node actions (defaults to `staging/`) |
 
 ### Model Fields
@@ -184,10 +190,10 @@ Tool actions support both `Record` and `File` granularity. File granularity allo
 | Vendor | `model_vendor` | Batch API | Example Models |
 |--------|----------------|-----------|----------------|
 | OpenAI | `openai` | ✅ | gpt-4o, gpt-4o-mini |
-| Anthropic | `anthropic` | ✅ | claude-3-5-sonnet |
-| Google | `google` | ✅ | gemini-1.5-pro |
-| Groq | `groq` | ✅ | llama-3.1-70b |
-| Mistral | `mistral` | ✅ | mistral-large |
+| Anthropic | `anthropic` | ✅ | claude-sonnet-4-20250514 |
+| Google | `google` | ✅ | gemini-2.0-flash |
+| Groq | `groq` | ✅ | llama-3.3-70b-versatile |
+| Mistral | `mistral` | ✅ | mistral-large-latest |
 | Cohere | `cohere` | ❌ | command-r-plus |
 | Ollama | `ollama` | ❌ | llama3, mistral |
 

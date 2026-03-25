@@ -25,7 +25,7 @@ The execution layer orchestrates LLM calls, data transformations, and validated 
 | Immediate responses | `run_mode: online` |
 | Per-item transformations | `granularity: record` |
 | Aggregation/exports | `granularity: file` |
-| Conditional execution | `guard: { clause: "...", behavior: filter }` |
+| Conditional execution | `guard: { condition: "...", on_false: filter }` |
 | Handle transient failures | `retry: { max_attempts: 3, on_exhausted: return_last }` |
 
 ## Schema Analysis

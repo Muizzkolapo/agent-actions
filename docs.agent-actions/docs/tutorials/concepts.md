@@ -84,7 +84,7 @@ actions:
 | **model_vendor** | Which provider to use (inherited from defaults if not specified) |
 | **model_name** | Which model to use (inherited from defaults if not specified) |
 | **run_mode** | `online` or `batch` processing (inherited from defaults if not specified) |
-| **granularity** | `Record` or `Batch` level processing (inherited from defaults if not specified) |
+| **granularity** | `Record` (per-item) or `File` (all items at once) processing (inherited from defaults if not specified) |
 
 **Configuration inheritance:** Agent Actions uses a hierarchical config system. Settings cascade from `agent_actions.yml` → workflow `defaults` → individual actions. You only need to specify fields at the action level if you want to override the inherited values.
 
@@ -118,8 +118,9 @@ actions:
     dependencies: [validate_report]
     hitl:
       instructions: "Review the compliance report for accuracy"
-    observe:
-      - validate_report.*
+    context_scope:
+      observe:
+        - validate_report.*
 
   - name: publish_report
     kind: tool  # Publish if approved
@@ -195,7 +196,7 @@ The `{{ action_name.field }}` syntax pulls data from completed upstream actions.
 
 ## Schema Validation
 
-**What happens when an LLM returns malformed JSON?** Every action output is validated against a JSON Schema. If validation fails, Agent Actions automatically reprompts until the output conforms.
+**What happens when an LLM returns malformed JSON?** Every action output is validated against a JSON Schema. If you configure `reprompt` on an action, Agent Actions automatically retries until the output conforms.
 
 ```json
 {
@@ -213,6 +214,23 @@ The `{{ action_name.field }}` syntax pulls data from completed upstream actions.
   },
   "required": ["sentiment", "confidence"]
 }
+```
+
+Schemas can also be defined in YAML using the `fields` shorthand, which is more concise:
+
+```yaml
+# schema/my_workflow/sentiment_result.yml
+name: sentiment_result
+fields:
+  - id: sentiment
+    type: string
+    description: "Detected sentiment"
+  - id: confidence
+    type: number
+    description: "Confidence score 0-1"
+required:
+  - sentiment
+  - confidence
 ```
 
 This means downstream actions always receive well-structured data. However, schema validation catches structural errors but cannot verify semantic correctness—a response might match your schema but still contain incorrect information.

@@ -52,12 +52,12 @@ api_key: ${OPENAI_API_KEY}
 
 # Example: Using Anthropic Claude
 # model_vendor: anthropic
-# model_name: claude-3-5-sonnet-20241022
+# model_name: claude-sonnet-4-20250514
 # api_key: ${ANTHROPIC_API_KEY}
 
 # Example: Using Google Gemini
 # model_vendor: gemini
-# model_name: gemini-1.5-pro
+# model_name: gemini-2.0-flash
 # api_key: ${GEMINI_API_KEY}
 
 # Example: Using Groq
@@ -90,7 +90,7 @@ api_key: ${OPENAI_API_KEY}
 # To use a different vendor for a specific workflow, override in the workflow file:
 # workflows/summarize.yml:
 #   model_vendor: anthropic
-#   model_name: claude-3-5-sonnet-20241022
+#   model_name: claude-sonnet-4-20250514
 #   api_key: ${ANTHROPIC_API_KEY}
 #   actions:
 #     - name: summarize_text
@@ -156,14 +156,13 @@ api_key: ${OPENAI_API_KEY}
 # ============================================================================
 # CONDITIONAL EXECUTION
 # ============================================================================
-# Use WHERE clauses to filter or skip items:
+# Use guards to filter or skip items:
 #
 # actions:
 #   - name: process_important
-#     where_clause:
-#       clause: priority == "high"
-#       scope: item
-#       behavior: filter        # or 'skip' to pass through
+#     guard:
+#       condition: 'priority == "high"'
+#       on_false: filter        # or 'skip' to pass through
 #     # ... rest of action config
 
 # ============================================================================

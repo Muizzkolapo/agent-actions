@@ -53,7 +53,7 @@ actions:
 
     # Optional: Override model settings for this specific action
     # model_vendor: anthropic
-    # model_name: claude-3-5-sonnet-20241022
+    # model_name: claude-sonnet-4-20250514
     # temperature: 0.5
 
 # ============================================================================

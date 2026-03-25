@@ -21,7 +21,7 @@ prompt: |
 
 ```yaml
 guard:
-  clause: "extract_facts.count > 0"
+  condition: "extract_facts.count > 0"
 context_scope:
   observe:
     - extract_facts.candidate_facts_list
@@ -117,8 +117,8 @@ actions:
 - name: canonicalize_facts
   dependencies: fact_extractor
   guard:
-    clause: "candidate_facts_list != []"
-    behavior: filter
+    condition: "candidate_facts_list != []"
+    on_false: filter
 ```
 
 ### Jinja2 Loops

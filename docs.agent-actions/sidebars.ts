@@ -31,6 +31,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'guides/design-patterns',
         'guides/custom-tools',
+        'guides/human-in-the-loop',
         'guides/editor-setup',
         'guides/troubleshooting',
       ],
@@ -61,6 +62,7 @@ const sidebars: SidebarsConfig = {
             'reference/cli/batch',
             'reference/cli/inspect',
             'reference/cli/utilities',
+            'reference/cli/preview',
             'reference/cli/tools',
             'reference/cli/schema',
             'reference/cli/skills',
@@ -180,6 +182,7 @@ const sidebars: SidebarsConfig = {
           },
           items: [
             'reference/architecture/internal-defaults',
+            'reference/architecture/logging',
           ],
         },
         'reference/inspect',

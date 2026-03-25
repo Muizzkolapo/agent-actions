@@ -46,8 +46,7 @@ actions:
 | `json_mode` | boolean | Enable JSON output mode |
 | `granularity` | string | `record` or `file` processing |
 | `run_mode` | string | `batch` or `online` execution |
-| `drops` | list | Default fields to exclude from LLM prompt and output |
-| `observe` | list | Default fields to pass-through from input to output |
+| `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed_path` |
 | `temperature` | float | LLM temperature (0.0-2.0) |
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
@@ -75,7 +74,7 @@ actions:
 
   - name: score_question_quality
     model_vendor: anthropic
-    model_name: claude-3-5-sonnet-20241022
+    model_name: claude-sonnet-4-20250514
     # Overrides model settings, inherits everything else
 ```
 
@@ -192,7 +191,7 @@ defaults:
 actions:
   - name: interactive_task
     model_vendor: anthropic
-    model_name: claude-3-5-sonnet-20241022
+    model_name: claude-sonnet-4-20250514
     run_mode: online
     # Overrides all three
 ```

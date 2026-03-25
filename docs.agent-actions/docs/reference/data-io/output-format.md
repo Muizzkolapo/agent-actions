@@ -88,7 +88,7 @@ Records fall into two categories based on whether the action's LLM/tool actually
 |----------------|---------|---------|
 | `_unprocessed` absent | **Processed** — action ran normally | LLM/tool output |
 | `_unprocessed: true` | **Unprocessed** — upstream action failed (API error, missing batch result) | Original upstream content, preserved for lineage |
-| `metadata.reason` present | **Skipped** — guard evaluated to false (`behavior: skip`) | Original content, forwarded unchanged |
+| `metadata.reason` present | **Skipped** — guard evaluated to false (`on_false: skip`) | Original content, forwarded unchanged |
 
 ### System Fields
 

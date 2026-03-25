@@ -36,6 +36,7 @@ This is helpful when:
 |--------|-------------|
 | `-a, --agent TEXT` | Agentic workflow name to render (required) |
 | `-t, --template-dir TEXT` | Directory containing templates (default: `./templates`) |
+| `--create-dirs` | Create template directory if it does not exist |
 
 **Examples:**
 ```bash
@@ -148,6 +149,7 @@ agac docs <subcommand> [options]
 |------------|-------------|
 | `generate` | Generate documentation data files |
 | `serve` | Start HTTP server to view documentation |
+| `test` | Run Playwright tests to verify documentation site |
 
 ### docs generate
 

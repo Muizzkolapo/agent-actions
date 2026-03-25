@@ -268,6 +268,21 @@ $(graph) MyWorkflow: 5/10 | [6] process_results
 | Go to Action | `Cmd+Shift+A` | `Ctrl+Shift+A` | Quick-pick to jump to any action |
 | Refresh Workflow | `Cmd+Shift+R` | `Ctrl+Shift+R` | Manually refresh workflow state |
 
+### Command Palette
+
+All commands are also available via the Command Palette (`Cmd+Shift+P` / `Ctrl+Shift+P`):
+
+| Command | Description |
+|---------|-------------|
+| Agent Actions: Show Workflow DAG | Open visual DAG panel |
+| Agent Actions: Go to Action... | Quick-pick to jump to any action |
+| Agent Actions: Refresh Workflow | Manually refresh workflow state |
+| Agent Actions: Preview Data | Open data preview for selected action |
+| Agent Actions: Open Action Config | Navigate to action's YAML definition |
+| Agent Actions: Show Workflow Navigator | Focus the sidebar tree view |
+| Agent Actions: Open Documentation | Open the Agent Actions docs site |
+| Agent Actions: Open Settings | Jump to Agent Actions settings |
+
 ### Settings
 
 Configure the Workflow Navigator in VS Code settings:
@@ -277,11 +292,14 @@ Configure the Workflow Navigator in VS Code settings:
   "agentActions.pythonPath": "",
   "agentActions.modulePath": "",
   "agentActions.showStatusBar": true,
+  "agentActions.autoRevealSidebar": false,
   "agentActions.showCodeLens": true,
   "agentActions.showFileDecorations": true,
   "agentActions.dagLayout": "vertical",
   "agentActions.refreshInterval": 0,
-  "agentActions.previewCacheTTL": 5000
+  "agentActions.logLevel": "info",
+  "agentActions.previewCacheTTL": 5000,
+  "agentActions.previewPageSize": 50
 }
 ```
 
@@ -290,11 +308,14 @@ Configure the Workflow Navigator in VS Code settings:
 | `pythonPath` | `""` | Python interpreter path. Empty = auto-detect from Python extension. |
 | `modulePath` | `""` | Path to agent-actions module directory. Required for data preview in monorepos. |
 | `showStatusBar` | `true` | Show workflow progress in status bar. |
+| `autoRevealSidebar` | `false` | Automatically reveal Agent Actions sidebar when opening a project with workflows. |
 | `showCodeLens` | `true` | Show action links (Preview Output, Status) in YAML files. |
 | `showFileDecorations` | `true` | Show execution order badges on action folders. |
 | `dagLayout` | `"vertical"` | DAG direction: `"vertical"` (top-down) or `"horizontal"` (left-right). |
 | `refreshInterval` | `0` | Polling interval in ms. `0` = rely on file watchers only. Set to `2000` for 2-second polling. |
+| `logLevel` | `"info"` | Log verbosity in the Output panel: `debug`, `info`, `warn`, `error`. |
 | `previewCacheTTL` | `5000` | Cache duration in ms for data preview. `0` = disable caching. |
+| `previewPageSize` | `50` | Number of rows per page in data preview. |
 
 ### Data Sources
 

@@ -25,6 +25,10 @@ actions:
     run_mode: online  # Override per-action
 ```
 
+:::info
+`run_mode` accepts the string values `batch` and `online` (case-insensitive). These map to the `RunMode` enum internally.
+:::
+
 ## Online Mode
 
 Requests process synchronously with immediate responses.

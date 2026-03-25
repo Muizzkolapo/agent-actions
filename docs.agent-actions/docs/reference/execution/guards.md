@@ -12,19 +12,19 @@ Guards evaluate conditions and decide whether an action should run for each reco
 ```yaml
 - name: my_action
   guard:
-    clause: "expression"
-    behavior: "skip" | "filter"
+    condition: "expression"
+    on_false: "skip" | "filter"
 ```
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `clause` | string | Required | Expression evaluated against upstream data |
-| `behavior` | string | `filter` | Action when clause is false |
+| `condition` | string | Required | Expression evaluated against upstream data |
+| `on_false` | string | `filter` | Action when condition is false |
 | `passthrough_on_error` | boolean | `true` | Pass record through if evaluation fails |
 
-## Behavior Options
+## on_false Options
 
-| Behavior | Description |
+| Value | Description |
 |----------|-------------|
 | `skip` | Action skipped, record continues to downstream actions |
 | `filter` | Record removed from workflow entirely |
@@ -35,9 +35,9 @@ Guards evaluate conditions and decide whether an action should run for each reco
 
 ```yaml
 guard:
-  clause: "score > 85"
-  clause: "status == 'approved'"
-  clause: "facts != []"
+  condition: "score > 85"
+  condition: "status == 'approved'"
+  condition: "facts != []"
 ```
 
 | Operator | Description |
@@ -63,27 +63,27 @@ Boolean keywords are case-insensitive, matching SQL convention:
 
 ```yaml
 guard:
-  clause: 'passes_filter == true'   # valid
-  clause: 'passes_filter == True'   # valid
-  clause: 'passes_filter == TRUE'   # valid
+  condition: 'passes_filter == true'   # valid
+  condition: 'passes_filter == True'   # valid
+  condition: 'passes_filter == TRUE'   # valid
 ```
 
 Prefer explicit comparison over a bare field reference for boolean fields. A bare reference evaluates using Python truthiness — this fails silently when the upstream action stores `"false"` as a string (which is truthy) rather than a Python `bool`:
 
 ```yaml
 # Fragile — string "false" is truthy, so the guard never filters
-clause: 'passes_filter'
+condition: 'passes_filter'
 
 # Explicit — correct regardless of whether the value is a bool or a string
-clause: 'passes_filter == true'
+condition: 'passes_filter == true'
 ```
 
 ### Built-in Functions
 
 ```yaml
 guard:
-  clause: 'len(items) > 0'
-  clause: 'max(scores) >= 85'
+  condition: 'len(items) > 0'
+  condition: 'max(scores) >= 85'
 ```
 
 Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
@@ -96,8 +96,8 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 - name: canonicalize_facts
   dependencies: fact_extractor
   guard:
-    clause: 'candidate_facts_list != []'
-    behavior: "filter"
+    condition: 'candidate_facts_list != []'
+    on_false: "filter"
 ```
 
 ### Skip Optional Processing
@@ -105,8 +105,8 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ```yaml
 - name: enhance_summary
   guard:
-    clause: 'needs_enhancement == true'
-    behavior: "skip"
+    condition: 'needs_enhancement == true'
+    on_false: "skip"
 ```
 
 ### Quality Gate
@@ -114,8 +114,8 @@ Supported: `len()`, `str()`, `int()`, `float()`, `abs()`, `min()`, `max()`
 ```yaml
 - name: generate_final_output
   guard:
-    clause: 'quality_score >= 85'
-    behavior: "filter"
+    condition: 'quality_score >= 85'
+    on_false: "filter"
 ```
 
 ## Context Access
@@ -134,29 +134,29 @@ Guards can access:
     observe:
       - group_by_similarity.num_similar_facts
   guard:
-    clause: 'num_similar_facts != 1'
-    behavior: "skip"
+    condition: 'num_similar_facts != 1'
+    on_false: "skip"
 ```
 
 ## Downstream Behavior
 
 How guard results affect downstream actions in a multi-action workflow:
 
-| Behavior | Output record | Downstream actions |
+| on_false | Output record | Downstream actions |
 |----------|--------------|-------------------|
 | `skip` | Original content preserved, `metadata.reason: "guard_skip"` | **Process normally** — each action evaluates its own guard independently |
 | `filter` | Record excluded from output | **Never sees it** — record is removed from the pipeline |
 
 ### Skipped records flow downstream
 
-When Action A skips a record (`behavior: skip`), Action B still receives it and can process it with its own LLM call. Each action's guard is independent:
+When Action A skips a record (`on_false: skip`), Action B still receives it and can process it with its own LLM call. Each action's guard is independent:
 
 ```yaml
 actions:
   - name: extract_facts
     guard:
-      clause: 'status == "active"'
-      behavior: "skip"       # Inactive records pass through with original content
+      condition: 'status == "active"'
+      on_false: "skip"       # Inactive records pass through with original content
 
   - name: generate_summary
     dependencies: extract_facts

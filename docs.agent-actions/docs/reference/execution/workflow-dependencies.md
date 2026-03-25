@@ -79,11 +79,7 @@ Different actions converging - all available matched by lineage:
       - analyze_topics.*
 ```
 
-The first dependency determines execution count. Use `primary_dependency` to override:
-
-```yaml
-primary_dependency: analyze_entities  # analyze_entities determines execution count
-```
+The first dependency determines execution count — order your `dependencies` list so the action that controls record count appears first.
 
 ### Aggregation
 
@@ -124,41 +120,103 @@ Actions referenced in `context_scope` but not in `dependencies` are automaticall
 
 ## Cross-Workflow Dependencies
 
+When a single workflow isn't enough, you can chain workflows together. A downstream workflow declares a dependency on an upstream workflow's output — Agent Actions handles the artifact linking automatically.
+
+### How It Works
+
+```mermaid
+flowchart LR
+    subgraph "Workflow A (upstream)"
+        A1[extract] --> A2[validate]
+    end
+
+    subgraph "Workflow B (downstream)"
+        B1[enrich] --> B2[publish]
+    end
+
+    A2 -->|".upstream_manifest.json"| B1
+```
+
+When you run with `--upstream` or `--downstream`, Agent Actions:
+1. Scans all workflows in `agent_workflow/` to build a dependency graph
+2. Resolves execution order using topological sort
+3. Runs workflows in dependency order
+4. Writes `.upstream_manifest.json` in the downstream workflow's `agent_io/` directory, pointing to the upstream workflow's latest output
+5. The downstream workflow reads from the upstream output as its input
+
+### Declaring Cross-Workflow Dependencies
+
+Reference another workflow in your action's `dependencies` list using the `workflow` key:
+
+```yaml
+# Workflow B: depends on Workflow A's output
+actions:
+  - name: enrich_data
+    dependencies:
+      - workflow: data_preparation        # All terminal outputs from Workflow A
+    prompt: |
+      Enrich this validated data...
+```
+
+To depend on a specific action's output:
+
 ```yaml
 actions:
-  - name: process_upstream_output
+  - name: enrich_data
     dependencies:
-      - workflow: upstream_workflow
-        action: final_action
+      - workflow: data_preparation
+        action: validated_output          # Only this action's output
+    prompt: |
+      Enrich: {{ validated_output.content }}
 ```
 
-### All Outputs from Workflow
+### Project Layout
 
-```yaml
-dependencies:
-  - workflow: data_preparation
-  # Receives outputs from all terminal actions
+Cross-workflow dependencies require workflows to live under the same `agent_workflow/` root:
+
+```
+agent_workflow/
+├── data_preparation/          # Workflow A (upstream)
+│   ├── agent_config/
+│   │   └── data_preparation.yml
+│   └── agent_io/
+│       ├── staging/           # A's input
+│       └── target/            # A's output
+│
+└── content_generation/        # Workflow B (downstream)
+    ├── agent_config/
+    │   └── content_generation.yml
+    └── agent_io/
+        ├── .upstream_manifest.json  # Auto-generated link to A's output
+        ├── staging/
+        └── target/
 ```
 
-### Specific Action
+### The Upstream Manifest
 
-```yaml
-dependencies:
-  - workflow: data_preparation
-    action: validated_output
+When Agent Actions links workflows, it writes `.upstream_manifest.json` into the downstream workflow's `agent_io/` directory:
+
+```json
+{
+  "upstream_workflow": "data_preparation",
+  "upstream_path": "/project/agent_workflow/data_preparation/agent_io/target/validated_output",
+  "files": ["batch_001.json", "batch_002.json"]
+}
 ```
+
+The downstream workflow reads this manifest to locate its input data instead of looking in `staging/`.
 
 ## CLI Execution
 
 ```bash
-# Run upstream workflows first
-agac run -a my_workflow --upstream
+# Run upstream workflows first, then this workflow
+agac run -a content_generation --upstream
 
-# Run downstream workflows after
-agac run -a my_workflow --downstream
+# Run this workflow, then all downstream workflows
+agac run -a data_preparation --downstream
 
-# Full chain execution
-agac run -a my_workflow --upstream --downstream
+# Full chain: upstream → this → downstream
+agac run -a middle_workflow --upstream --downstream
 ```
 
 | Command | What Executes |
@@ -168,14 +226,18 @@ agac run -a my_workflow --upstream --downstream
 | `agac run -a B --downstream` | B → C |
 | `agac run -a B --upstream --downstream` | A → B → C |
 
+:::info Topological Ordering
+When multiple workflows have interdependencies, Agent Actions performs a topological sort to determine the correct execution order. Circular dependencies are detected and reported as errors.
+:::
+
 ## Field References
 
-Reference upstream workflow outputs in prompts:
+Reference upstream workflow outputs in prompts just like any other action:
 
 ```yaml
 - name: enhance_content
   dependencies:
-    - workflow: qanalabs_quiz_gen
+    - workflow: quiz_generation
       action: format_quiz_text
   prompt: |
     Enhance: {{ format_quiz_text.question }}
@@ -184,5 +246,6 @@ Reference upstream workflow outputs in prompts:
 ## See Also
 
 - [run Command](../cli/run) - `--upstream` and `--downstream` flags
+- [Artifacts](./artifacts) - `.upstream_manifest.json` format
 - [Field References](../context/field-references) - Referencing upstream outputs
 - [Guards](./guards) - Conditional execution

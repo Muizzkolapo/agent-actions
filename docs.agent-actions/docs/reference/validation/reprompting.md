@@ -58,6 +58,31 @@ defaults:
 | `critique_after_attempt` | integer | 2 | Start critique after this attempt |
 | `on_exhausted` | string | `return_last` | Behavior when attempts exhausted |
 
+### Custom Validation Functions
+
+Use `validation` to specify a Python function that checks the LLM response beyond schema validation. The function must be decorated with `@reprompt_validation`:
+
+```yaml
+actions:
+  - name: classify_genre
+    reprompt:
+      validation: "check_valid_bisac"    # UDF function name
+      max_attempts: 3
+      on_exhausted: "return_last"
+```
+
+```python
+from agent_actions import reprompt_validation
+
+@reprompt_validation("BISAC code must be a valid category from the standard list")
+def check_valid_bisac(response) -> bool:
+    """Return True if valid, False triggers reprompt with the decorator's message."""
+    codes = response.get("bisac_codes", [])
+    return all(code.startswith(("FIC", "NON", "JUV", "YAF")) for code in codes)
+```
+
+When the validation function returns `False`, Agent Actions reprompts with the error message from the `@reprompt_validation` decorator, giving the LLM specific guidance on what to fix.
+
 ### Exhaustion Behavior
 
 When a record exhausts all reprompt attempts, `on_exhausted` determines what happens:

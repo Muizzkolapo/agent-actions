@@ -16,11 +16,11 @@ Tools currently support Python only. Support for Docker containers and other run
 
 **`tools/validators.py`**:
 ```python
-from typing import Dict, Any
+from typing import Any
 from agent_actions import udf_tool
 
 @udf_tool()
-def validate_product_price(data: Dict[str, Any]) -> Dict[str, Any]:
+def validate_product_price(data: dict[str, Any]) -> dict[str, Any]:
     """Ensure product price is positive and reasonable."""
     price = data.get('price', 0)
     if price <= 0:
@@ -41,11 +41,11 @@ Agent Actions discovers tools automatically—no module paths needed.
 ## Tool Signature
 
 ```python
-from typing import Dict, Any
+from typing import Any
 from agent_actions import udf_tool
 
 @udf_tool()
-def my_tool(data: Dict[str, Any]) -> Dict[str, Any]:
+def my_tool(data: dict[str, Any]) -> dict[str, Any]:
     """
     Args:
         data: Input dict from upstream action (defined by context_scope)
@@ -65,7 +65,7 @@ def my_tool(data: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 @udf_tool()
-def validate_email(data: Dict[str, Any]) -> Dict[str, Any]:
+def validate_email(data: dict[str, Any]) -> dict[str, Any]:
     import re
     email = data.get('email', '')
     if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
@@ -77,7 +77,7 @@ def validate_email(data: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 @udf_tool()
-def enrich_customer_data(data: Dict[str, Any]) -> Dict[str, Any]:
+def enrich_customer_data(data: dict[str, Any]) -> dict[str, Any]:
     ltv = data.get('lifetime_value', 0)
     if ltv > 10000:
         data['tier'] = 'platinum'
@@ -92,7 +92,7 @@ def enrich_customer_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 @udf_tool()
-def fetch_product_details(data: Dict[str, Any]) -> Dict[str, Any]:
+def fetch_product_details(data: dict[str, Any]) -> dict[str, Any]:
     import requests
     product_id = data.get('product_id')
     response = requests.get(f"https://api.example.com/products/{product_id}")
@@ -105,7 +105,7 @@ def fetch_product_details(data: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 @udf_tool()
-def calculate_order_totals(data: Dict[str, Any]) -> Dict[str, Any]:
+def calculate_order_totals(data: dict[str, Any]) -> dict[str, Any]:
     items = data.get('items', [])
     subtotal = sum(item['price'] * item['quantity'] for item in items)
     data['subtotal'] = subtotal
