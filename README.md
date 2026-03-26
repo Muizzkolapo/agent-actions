@@ -13,93 +13,92 @@
   <a href="https://pypi.org/project/agent-actions/"><img src="https://img.shields.io/pypi/v/agent-actions" alt="PyPI"></a>
   <a href="https://pypistats.org/packages/agent-actions"><img src="https://img.shields.io/pypi/dm/agent-actions" alt="Downloads"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python"></a>
-  <a href="https://github.com/Muizzkolapo/agent-actions/actions"><img src="https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-**Define** LLM workflows in YAML. **Validate** before any API call. **Execute** with DAG-based orchestration.
-
-Agent Actions turns declarative YAML configs into production-ready LLM pipelines — with dependency resolution, parallel execution, batch processing, schema validation, and multi-vendor support out of the box.
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset=".github/images/lifecycle-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset=".github/images/lifecycle-light.svg">
-    <img alt="Agent Actions lifecycle: Define → Validate → Execute" src=".github/images/lifecycle-light.svg" width="680">
-  </picture>
-</p>
+Declarative LLM orchestration. Define workflows in YAML — each action gets its own model, context window, schema, and pre-check gate. The framework handles DAG resolution, parallel execution, batch processing, and output validation.
 
 ```yaml
 actions:
   - name: extract_features
-    intent: Extract key product features and target audience
-    model_vendor: anthropic
-    model_name: claude-3-haiku
+    intent: "Extract key product features from listing"
+    model_vendor: anthropic              # Each action picks its own model
+    model_name: claude-sonnet-4-20250514
 
-  - name: generate_seo
-    intent: Write an SEO-optimized product description
+  - name: generate_description
     dependencies: [extract_features]
-    observe: [extract_features.features]
-    model_vendor: openai
+    model_vendor: openai                 # Mix vendors in one pipeline
     model_name: gpt-4o-mini
+    context_scope:
+      observe:
+        - extract_features.features      # See only what it needs
+      drop:
+        - source.raw_html                # Don't waste tokens on noise
 ```
+
+## Install
 
 ```bash
 pip install agent-actions
-agac run -a my_workflow
 ```
 
-## Get started
+## Quick start
 
 ```bash
-agac init my-project && cd my-project    # scaffold a project
-agac validate-udfs                       # check tool references
-agac run                                 # execute the workflow
+agac init my-project && cd my-project   # scaffold a project
+agac run -a my_workflow                  # execute
 ```
 
-Read the [Installation Guide](https://muizzkolapo.github.io/docs.agent-actions/installation) or jump to the [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration).
+## Why not just write Python?
 
-## How it works
+You will, until you have 15 steps, 3 models, batch retry, and a teammate asks what your pipeline does.
 
-Write a YAML file describing your actions, their dependencies, and which LLM to use. Agent Actions builds a DAG, resolves execution order, runs independent actions in parallel, and writes structured output.
+| Capability | Agent Actions | Python script | n8n / Make |
+|---|---|---|---|
+| Per-step model selection | YAML field | Manual wiring | Per-node config |
+| Context isolation per step | `observe` / `drop` | You build it | Not available |
+| Pre-check guards (skip before LLM call) | `guard:` | If-statements | Post-hoc branching |
+| Parallel consensus (3 voters + merge) | 2 lines of YAML | Custom code | Many nodes + JS |
+| Schema validation + auto-reprompt | Built in | DIY | Not available |
+| Batch processing (1000s of records) | Built in | For-loops | Loop nodes |
+| The YAML *is* the documentation | Yes | No | Visual graph |
 
-- **Actions** are individual LLM calls with an intent, model, and output schema.
-- **Dependencies** declare data flow — an action can `observe` fields from upstream actions.
-- **Execution** is automatic: the framework figures out what can run in parallel.
-- **Validation** catches broken configs, missing deps, and bad templates before any LLM call.
+## Examples
+
+| Example | Pattern | Key Features |
+|---|---|---|
+| [Review Analyzer](examples/review_analyzer) | Parallel consensus | 3 independent scorers, vote aggregation, guard on quality threshold |
+| [Candidate Screener](examples/candidate_screener) | Parallel fan-in | Skills/experience/culture assessed independently, weighted composite |
+| [Contract Reviewer](examples/contract_reviewer) | Map-reduce | Split clauses, analyze each, aggregate risk summary |
+| [Translation Quality](examples/translation_quality) | Iterative refinement | 3 parallel strategies, back-translation validation loop |
+| [Product Listing Enrichment](examples/product_listing_enrichment) | Tool + LLM hybrid | LLM generates copy, tool fetches pricing, LLM optimizes |
+| [FAQ Generator](examples/faq_generator) | Coordinator routing | Classify ticket type, route to specialized handlers |
+| [Support Resolution](examples/support_resolution) | Field-by-field (non-JSON) | `json_mode: false`, Ollama, one field per action |
 
 ## Providers
 
-| Provider | Batch API | Provider | Batch API |
-|----------|-----------|----------|-----------|
+| Provider | Batch | Provider | Batch |
+|----------|-------|----------|-------|
 | OpenAI | Yes | Groq | Yes |
 | Anthropic | Yes | Mistral | Yes |
 | Google Gemini | Yes | Cohere | Online only |
 | Ollama (local) | Online only | | |
 
-Switch providers by changing `model_vendor` — no code changes needed.
+Switch providers per-action by changing `model_vendor`.
 
 ## Key capabilities
 
-**Pre-flight validation** — `agac run` automatically validates schemas, dependencies, templates, and credentials before any LLM call. Use `agac validate-udfs` to check tool references independently.
-
-**Batch processing** — Route thousands of records through provider batch APIs for bulk enrichment, classification, and extraction.
-
-**User-defined functions** — Drop Python functions into your project to pre-process inputs, post-process outputs, or add custom tool logic. [Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/custom-tools)
-
-**Reprompting** — Define output schemas and let the framework auto-retry when LLM responses don't match. [Guide](https://muizzkolapo.github.io/docs.agent-actions/reference/validation/reprompting)
-
-**Observability** — Every run produces `run_results.json` with per-action status, timing, and token counts. Structured event logs for debugging and analytics. [Architecture](https://muizzkolapo.github.io/docs.agent-actions/reference/architecture/logging)
-
-**Interactive docs** — `agac docs serve` generates a visual dashboard of your workflow DAG, action details, and schemas. [Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/docs-site)
+- **Pre-flight validation** — schemas, dependencies, templates, and credentials checked before any LLM call
+- **Batch processing** — route thousands of records through provider batch APIs
+- **User-defined functions** — Python tools for pre/post-processing and custom logic
+- **Reprompting** — auto-retry when LLM output doesn't match schema
+- **Observability** — per-action timing, token counts, and structured event logs
+- **Interactive docs** — `agac docs serve` generates a visual workflow dashboard
 
 ## Documentation
 
-| | |
-|---|---|
-| [docs.agent-actions](https://muizzkolapo.github.io/docs.agent-actions) | Guides, tutorials, conceptual overviews |
-| [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) | Full YAML schema docs |
-| [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) | All commands and options |
-| [API Reference](https://muizzkolapo.github.io/docs.agent-actions/api/logging) | Internal API docs |
+- [Full docs](https://muizzkolapo.github.io/docs.agent-actions) — guides, tutorials, reference
+- [Configuration](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) — YAML schema reference
+- [CLI](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) — all commands and options
 
 ## Contributing
 
@@ -109,7 +108,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for details. Report bugs or request features via [GitHub Issues](https://github.com/Muizzkolapo/agent-actions/issues). Questions and ideas welcome in [Discussions](https://github.com/Muizzkolapo/agent-actions/discussions).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report bugs via [Issues](https://github.com/Muizzkolapo/agent-actions/issues).
 
 ## License
 
