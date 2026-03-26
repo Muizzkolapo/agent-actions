@@ -738,6 +738,67 @@ actions:
     model_name: gpt-4o-mini
 ```
 
+### Field-by-Field Construction: When JSON Isn't an Option
+
+Most local models can't reliably produce structured JSON. Ask Llama 3 for a JSON object with six fields and you'll get malformed output half the time. But ask it one question and it answers correctly almost every time.
+
+Agent Actions exploits this with `json_mode: false`. Instead of asking the model for a complete JSON object, each action produces a single field. The framework accumulates fields across steps and assembles the final record.
+
+```yaml
+defaults:
+  json_mode: false
+  model_vendor: ollama
+  model_name: llama3              # No API key needed
+
+actions:
+  - name: classify_severity
+    schema: { severity: string }
+    prompt: "Rate this support ticket: critical, high, medium, or low. One word."
+
+  - name: identify_category
+    schema: { category: string }
+    prompt: "What category is this ticket? (billing, technical, account, other). One word."
+
+  - name: extract_key_issue
+    schema: { key_issue: string }
+    prompt: "What is the customer's main problem? One sentence."
+
+  - name: suggest_resolution
+    dependencies: [classify_severity, identify_category, extract_key_issue]
+    schema: { resolution: string }
+    prompt: "Given severity, category, and issue — suggest a resolution. Keep it brief."
+```
+
+Four actions, four questions, four reliable answers. By the end, the record contains `{severity, category, key_issue, resolution}` — structured output from a model that can't produce JSON.
+
+This pattern has real consequences:
+
+**Any model works.** Ollama, Groq free tier, self-hosted models behind a firewall, fine-tuned models that only output plain text. If it can answer a question in natural language, it can power a pipeline.
+
+**Reliability goes up.** One question at a time means fewer failure modes. A model that fails 5% of the time on a six-field JSON object might fail 0.5% per single-field question. Across a pipeline, that compounds into much higher overall success rates.
+
+**Guards still work.** The `draft_response` step in a support triage pipeline can be guarded on severity — skip the expensive response draft for low-priority tickets, even in non-JSON mode.
+
+```yaml
+  - name: draft_response
+    dependencies: [classify_severity]
+    guard:
+      condition: 'severity in ["critical", "high"]'
+      on_false: skip                # Don't draft responses for low-severity tickets
+    schema: { response_draft: string }
+    prompt: "Draft a response addressing the customer's issue."
+```
+
+**Per-action model override still works.** Run most steps on a local model but override one step to use a paid API when you need it:
+
+```yaml
+  - name: draft_response
+    model_vendor: openai            # Override just this step
+    model_name: gpt-4o-mini         # Better writing, still cheap
+```
+
+The support resolution example in the repository demonstrates this end-to-end: 6 actions, 6 single-field schemas, one simple UDF, all running on Ollama with no API key. It processes support tickets from raw text to triaged output with a suggested response — entirely locally.
+
 ### Global Access
 
 API costs that seem reasonable in Silicon Valley are prohibitive in Lagos, Nairobi, Dhaka, and Bogota. The numbers tell the story:
