@@ -17,6 +17,9 @@
 
 Declarative LLM orchestration. Define workflows in YAML — each action gets its own model, context window, schema, and pre-check gate. The framework handles DAG resolution, parallel execution, batch processing, and output validation.
 
+> [!WARNING]
+> **Experimental** — Under active development. Expect breaking changes. [Open an issue](https://github.com/Muizzkolapo/agent-actions/issues) with feedback.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/images/lifecycle-dark.svg">
