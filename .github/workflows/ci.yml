@@ -7,9 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  # Linting and style checks
   check:
-    name: Lint & Style Check
+    name: Lint & Type Check
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -23,35 +22,36 @@ jobs:
       - name: Install go-task
         run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
-      - name: Run ruff linter
-        run: task lint:ruff
+      - name: Lint
+        run: task lint
 
-      - name: Run ruff format check
-        run: uv run ruff format --check agent_actions tests
+      - name: Format check
+        run: task format:check
 
-      - name: Run mypy type check
+      - name: Type check
         run: task mypy
 
-  # Dead code analysis (warning only)
-  dead-code:
-    name: Dead Code Analysis
+  changelog:
+    name: Changelog Entry
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    continue-on-error: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: ./.github/actions/setup-python
+      - name: Check for changelog entry
+        run: |
+          if ls .changes/unreleased/*.yaml 1>/dev/null 2>&1; then
+            echo "Changelog entry found:"
+            ls .changes/unreleased/*.yaml
+          else
+            echo "::warning::No changelog entry found. Run 'task changelog:new' to create one."
+          fi
 
-      - name: Run dead code analysis
-        run: uv run python .claude/helpers/dead_code_analyzer.py agent_actions --brief
-
-  # Unit tests
   test:
-    name: Unit Tests
+    name: Tests
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -63,13 +63,9 @@ jobs:
       - name: Setup Python
         uses: ./.github/actions/setup-python
 
-      - name: Install go-task
-        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+      - name: Run tests
+        run: uv run pytest
 
-      - name: Run unit tests
-        run: task test:unit
-
-  # Build verification
   build:
     name: Build Package
     runs-on: ubuntu-24.04
@@ -83,22 +79,19 @@ jobs:
       - name: Setup Python
         uses: ./.github/actions/setup-python
 
-      - name: Install go-task
-        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+      - name: Build
+        run: uv build
 
-      - name: Build package
-        run: task build
-
-      - name: Verify py.typed marker included
+      - name: Verify py.typed marker
         run: unzip -l dist/agent_actions-*.whl | grep py.typed
 
-      - name: Verify console entrypoints from built wheel
+      - name: Verify entrypoints
         run: |
           uv pip install --force-reinstall dist/*.whl
           uv run agac --help > /dev/null
           uv run agac-lsp --help > /dev/null
 
-      - name: Upload build artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: dist

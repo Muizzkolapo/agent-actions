@@ -2,233 +2,68 @@ version: '3'
 
 vars:
   PACKAGE: agent_actions
-  DIST_DIR: dist
-  BUILD_DIR: build
 
 tasks:
-  # Development tasks
+  # Setup
   dev:
-    desc: Install package in development mode with all dev dependencies
+    desc: Install in dev mode
     cmds:
       - uv sync --dev
 
-  dev:install:
-    desc: Install editable package to dev_env with dev dependencies
-    cmds:
-      - uv pip install -e ".[dev]"
-      - echo "Package installed in editable mode"
-
-  # Production tasks
-  prod:
-    desc: Install production dependencies only
-    cmds:
-      - uv sync --no-dev --active
-
-  prod:install:
-    desc: Install package (non-editable, production mode)
-    cmds:
-      - echo "Uninstalling any existing editable install..."
-      - uv pip uninstall agent-actions || echo "No existing install found"
-      - echo "Installing package in non-editable mode..."
-      - uv pip install .
-      - echo "Package installed (non-editable)"
-      - uv pip show agent-actions
-
-  # Build tasks
-  build:
-    desc: Build the package distribution
-    deps: [clean]
-    cmds:
-      - uv build
-
-  # Clean tasks
-  clean:
-    desc: Remove build artifacts and cache files
-    cmds:
-      - rm -rf {{.DIST_DIR}} {{.BUILD_DIR}} *.egg-info
-      - find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-      - find . -type f -name "*.pyc" -delete
-
-  uninstall:
-    desc: Uninstall the package
-    cmds:
-      - uv pip uninstall {{.PACKAGE}} || echo "Package {{.PACKAGE}} is not installed"
-
-  # Restart workflow
-  restart:
-    desc: Complete restart - uninstall, clean, and rebuild
-    cmds:
-      - task: uninstall
-      - task: clean
-      - task: build
-
-  # Testing tasks
-  test:
-    desc: Run tests with pytest
-    cmds:
-      - uv run pytest
-
-  test:coverage:
-    desc: Run tests with coverage report
-    cmds:
-      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
-
-  test:verbose:
-    desc: Run tests with verbose output
-    cmds:
-      - uv run pytest -v --tb=short
-
-  test:fast:
-    desc: Run tests in parallel for faster execution
-    cmds:
-      - uv run pytest -n auto
-
-  test:failed:
-    desc: Run only previously failed tests
-    cmds:
-      - uv run pytest --lf
-
-  test:stream:
-    desc: Run tests for specific work stream
-    vars:
-      STREAM: '{{default "" .STREAM}}'
-    cmds:
-      - |
-        if [ -z "{{.STREAM}}" ]; then
-          echo "Usage: task test:stream STREAM=<stream_name>"
-          echo "Available streams: cli, core, tasks, agents, utilities, unit, integration"
-        else
-          uv run pytest tests/{{.STREAM}}/
-        fi
-
-  test:unit:
-    desc: Run only unit tests (exclude integration)
-    cmds:
-      - uv run pytest -m "not integration"
-
-  test:integration:
-    desc: Run only integration tests
-    cmds:
-      - uv run pytest -m integration
-
-  test:watch:
-    desc: Run tests in watch mode (auto-rerun on file changes)
-    cmds:
-      - uv run pytest-watch
-
-  test:report:
-    desc: Run tests with HTML coverage report
-    cmds:
-      - uv run pytest --cov={{.PACKAGE}} --cov-report=html --cov-report=term
-      - echo "Coverage report generated at htmlcov/index.html"
-
-  test:all:
-    desc: Run complete test suite with full reporting
-    cmds:
-      - uv run pytest -v --cov={{.PACKAGE}} --cov-report=term-missing --cov-report=html --tb=short
-
-  test:parallel:
-    desc: Run test streams in parallel (simulates multi-engineer workflow)
-    cmds:
-      - echo "Running test streams in parallel..."
-      - |
-        uv run pytest tests/test_cli/ tests/cli/ & \
-        uv run pytest tests/tasks/ & \
-        uv run pytest tests/agents/ & \
-        uv run pytest tests/unit/ & \
-        wait
-      - echo "All parallel test streams completed"
-
-  test:quick:
-    desc: Quick smoke test of critical paths
-    cmds:
-      - uv run pytest tests/test_cli/test_command_registration.py::TestCommandErrorHandling::test_run_missing_agent_argument -v
-      - uv run pytest tests/tasks/test_result_reconciler.py -v
-      - uv run pytest tests/core/test_parser.py -v
-
-  # Linting and type checking
+  # Quality
   lint:
-    desc: Run linting with ruff
+    desc: Lint with ruff
     cmds:
       - uv run ruff check {{.PACKAGE}}
-
-  mypy:
-    desc: Run type checking with mypy
-    cmds:
-      - uv run mypy {{.PACKAGE}}
-
-  lint:ruff:
-    desc: Run ruff linter (logging rules)
-    cmds:
-      - uv run ruff check {{.PACKAGE}}
-
-  lint:ruff:fix:
-    desc: Run ruff with auto-fix
-    cmds:
-      - uv run ruff check --fix {{.PACKAGE}}
-
-  # Note: lint:logging task removed - script not available
-  # lint:logging:
-  #   desc: Check logging format patterns with AST checker
-  #   cmds:
-  #     - uv run python scripts/check_logging_format.py {{.PACKAGE}}
-
-  check:
-    desc: Run all checks (lint, ruff, and type check)
-    deps: [lint, lint:ruff, mypy]
-
-  # CI-specific tasks
-  install:
-    desc: Install dependencies (for CI compatibility)
-    cmds:
-      - uv sync --dev
 
   format:
-    desc: Format code with ruff
+    desc: Format with ruff
     cmds:
       - uv run ruff format {{.PACKAGE}} tests
 
   format:check:
-    desc: Check code formatting without making changes
+    desc: Check formatting
     cmds:
       - uv run ruff format --check {{.PACKAGE}} tests
 
-  # Code analysis tasks
-  analyze:dead-code:
-    desc: Run dead code analysis (multi-tool with confidence scoring)
+  mypy:
+    desc: Type check
     cmds:
-      - uv run python .claude/helpers/dead_code_analyzer.py {{.PACKAGE}}
+      - uv run mypy {{.PACKAGE}}
 
-  analyze:dead-code:brief:
-    desc: Run dead code analysis (summary only)
+  check:
+    desc: Run all checks (lint + types + format)
     cmds:
-      - uv run python .claude/helpers/dead_code_analyzer.py {{.PACKAGE}} --brief
+      - task: lint
+      - task: mypy
+      - task: format:check
 
-  # Utility tasks
-  deps:tree:
-    desc: Show dependency tree
+  # Testing
+  test:
+    desc: Run tests
     cmds:
-      - uv pip tree
+      - uv run pytest
 
-  deps:outdated:
-    desc: Show outdated dependencies
+  test:coverage:
+    desc: Run tests with coverage
     cmds:
-      - uv pip list --outdated
+      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
 
-  # Agent-specific tasks
-  agent:run:
-    desc: Run the agent CLI
+  test:fast:
+    desc: Run tests in parallel
     cmds:
-      - uv run agac {{.CLI_ARGS}}
+      - uv run pytest -n auto
 
-  agent:help:
-    desc: Show agent CLI help
+  # Build
+  build:
+    desc: Build package
     cmds:
-      - uv run agac --help
+      - rm -rf dist build *.egg-info
+      - uv build
 
-  # Changelog tasks (requires changie: https://changie.dev)
+  # Changelog (requires changie: https://changie.dev)
   changelog:new:
-    desc: Create a new changelog entry
+    desc: Create a changelog entry (run before every PR)
     cmds:
       - changie new
 
@@ -242,18 +77,25 @@ tasks:
     cmds:
       - changie merge
 
-  # Pre-commit hooks
+  changelog:check:
+    desc: Verify unreleased changelog entries exist
+    cmds:
+      - |
+        if [ -z "$(ls .changes/unreleased/*.yaml 2>/dev/null)" ]; then
+          echo "No unreleased changelog entries found."
+          echo "Run 'task changelog:new' to create one."
+          exit 1
+        fi
+        echo "Found changelog entries:"
+        ls .changes/unreleased/*.yaml
+
+  # Hooks
   hooks:install:
     desc: Install pre-commit hooks
     cmds:
       - uv run pre-commit install
 
-  hooks:run:
-    desc: Run all pre-commit hooks on all files
-    cmds:
-      - uv run pre-commit run --all-files
-
-  # Default task
+  # Default
   default:
     desc: Show available tasks
     cmds:
