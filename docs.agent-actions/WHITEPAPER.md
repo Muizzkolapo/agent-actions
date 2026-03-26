@@ -6,13 +6,13 @@
 
 ## Executive Summary
 
-Agent Actions is a declarative context engineering framework for orchestrating multi-step agentic LLM workflows. It grew out of a need to generate LLM outputs that are properly gated and semantically consistent at scale. Agent Actions fills the gap between prototype LLM scripts and production-grade data pipelines.
+Agent Actions is a declarative context engineering framework for multi-step LLM workflows. It grew out of a recurring frustration: building reliable LLM pipelines means solving the same problems over and over — dependency management, output validation, error handling, batch processing, multi-vendor support — and embedding all of that in application code makes it invisible, fragile, and hard to audit.
 
-Every action is a self-contained, configurable AI unit with its own model, context window, schema, and pre-check gate, running as a batch pipeline over your data. The framework controls *what each LLM step thinks about*, not just what it connects to. Context engineering means ensuring every LLM call receives the right information, from the right model, at the right cost, with the right validation. Declared in configuration, not buried in code.
+Every action is a self-contained AI unit with its own model, context window, schema, and pre-check gate. The framework controls *what each LLM step thinks about*, not just what it connects to. The right information, from the right model, at the right cost, with the right validation. Declared in configuration, not buried in code.
 
-The framework started from a simple observation: building reliable LLM workflows means solving the same problems over and over. Dependency management, output validation, error handling, batch processing, multi-vendor support. Rather than embedding this logic in application code, Agent Actions pulls it out into configuration, producing auditable, version-controlled pipelines that separate orchestration from business logic.
+Agent Actions sits in the gap between prototype scripts and production-grade data pipelines. It's open source, it runs with any model provider (including free local models through Ollama), and it's designed so that engineering skill matters more than API budget.
 
-This whitepaper explains the design decisions, architectural choices, and patterns that make the framework work.
+This paper covers the design decisions, architecture, and patterns behind the framework.
 
 ---
 
@@ -35,7 +35,7 @@ When a production workflow fails at 3 AM, teams need answers: Which record faile
 LLM calls are expensive. Batch APIs offer 50% cost savings but require different integration patterns. Most prototype code is synchronous—retrofitting batch support means rewriting core logic.
 
 **5. Vendor Lock-in**
-Today's best model is tomorrow's legacy system. Teams building on a single vendor's API face migration costs when better options emerge. Abstraction layers add complexity.
+Models move fast. What's flagship today is deprecated within a year. Teams building on a single vendor's API face migration costs when better options emerge. Abstraction layers add complexity.
 
 ### Existing Solutions Fall Short
 
@@ -81,13 +81,13 @@ Every line is a decision. A reviewer can look at this and know: this action sees
 
 ### Problems This Solves Structurally
 
-This transparency compounds across the pipeline. Three problems that stay invisible in code-based approaches get solved structurally:
+This transparency compounds across the pipeline. Problems that stay invisible in code-based approaches get solved structurally:
 
-**Context Leak.** In a naive pipeline, every action sees everything—wasting tokens, polluting prompts with irrelevant data, and risking exposure of sensitive fields. Agent Actions eliminates this with `context_scope`, where each action declares exactly what it observes, what passes through untouched, and what gets excluded entirely (see *Core Capabilities > Context Scoping*).
+**Context leak.** In a naive pipeline, every action sees everything. Wasted tokens, polluted prompts, sensitive fields leaking into LLM calls. Agent Actions fixes this with `context_scope`: each action declares exactly what it observes, what passes through untouched, and what gets dropped (see *Core Capabilities > Context Scoping*).
 
-**Progressive Data Exposure.** In most frameworks, each step accumulates context from all previous steps. By step 8, the LLM receives output from steps 1 through 7 whether it needs it or not. Agent Actions enforces explicit data flow—each action declares precisely which upstream fields it needs.
+**Progressive data exposure.** In most frameworks, each step accumulates context from all previous steps. By step 8, the LLM is receiving output from steps 1 through 7 whether it needs it or not. Agent Actions enforces explicit data flow. Each action declares which upstream fields it needs. Nothing else gets through.
 
-**Invisible Error Handling.** When an LLM produces invalid output, what happens next? In code, the answer is buried in exception handlers. In Agent Actions, every failure pathway is declared in the same YAML that defines the happy path—reprompt logic, quality gates, and static analysis errors are all visible in configuration. Broken references are caught before any LLM call:
+**Invisible error handling.** When an LLM produces invalid output, what happens next? In code, the answer is buried in exception handlers. In Agent Actions, every failure pathway is declared in the same YAML that defines the happy path. Reprompt logic, quality gates, static analysis errors — all visible in configuration. Broken references get caught before any LLM call:
 
 ```text
 ❌ write_description references 'validate_bisac.title'
@@ -97,7 +97,7 @@ This transparency compounds across the pipeline. Three problems that stay invisi
 
 No hidden error handling. No implicit retry logic. No silent data loss.
 
-### Six Capabilities at a Glance
+### Capabilities at a Glance
 
 1. **Every action picks its own model.** Step 1 uses `gpt-4o-mini` for extraction. Step 4 uses `claude-sonnet` for reasoning. Step 2 uses Gemini for cheap parallel scoring. Model selection is a **per-step cost/quality decision**.
 
@@ -111,20 +111,20 @@ No hidden error handling. No implicit retry logic. No silent data loss.
 
 6. **Schema enforcement + reprompt.** Every LLM output is validated against a schema. If it doesn't match, reprompt automatically—up to N attempts.
 
-**Put together: you're not wiring API calls—you're declaring a quality-controlled, cost-optimized, multi-model AI pipeline where every record flows through gates, context windows, and validation before anything reaches the output.**
+Put together: you're not wiring API calls. You're declaring a multi-model pipeline where every record flows through gates, context windows, and validation before anything reaches the output.
 
 ### Design Principles
 
 These opinions come from production use:
 
-- **Configuration Over Code**: Workflow logic belongs in YAML, not Python. This enables auditability, version control, reproducibility, and separation of concerns. Python is available for custom logic (UDFs) but shouldn't be required for standard workflows.
-- **Schema-First Validation**: Every LLM output matches a declared schema—catching problems early, enabling automatic retry, and documenting the data contract.
-- **Explicit Data Flow**: How data moves between actions is visible. No implicit globals, no hidden state, every field reference is traceable.
-- **Fail Fast, Fail Informatively**: Static analysis catches typos, missing references, and configuration errors before expensive LLM calls.
-- **Batch by Default**: The framework makes batch the easy path—same workflow, same config, different execution mode.
-- **Vendor Agnosticism**: Provider switching requires changing one line. Schema compilation handles vendor-specific formats automatically.
-- **Semantic Reusability**: Workflows are domain-agnostic templates. Actions define *what kind of transformation* to perform, not *what domain content* to process. Domain knowledge flows through seed data, not hardcoded prompts. One workflow serves many use cases.
-- **Semantic Consistency**: Each action maintains consistent semantic meaning across runs—`extract_facts` always extracts facts, `classify_type` always classifies types. The *what* of each action is invariant; the *content* varies based on input and seed data. This predictability enables reliable pipelines and meaningful static analysis.
+- **Configuration over code.** Workflow logic belongs in YAML, not Python. This makes pipelines auditable, version-controlled, and reproducible. Python is available for custom logic (UDFs) but shouldn't be required for standard workflows.
+- **Schema-first validation.** Every LLM output matches a declared schema. Problems get caught early, retries happen automatically, and the data contract is documented in the schema itself.
+- **Explicit data flow.** How data moves between actions is visible. No implicit globals, no hidden state. Every field reference is traceable.
+- **Fail fast, fail loud.** Static analysis catches typos, missing references, and configuration errors before expensive LLM calls.
+- **Batch by default.** Same workflow, same config, different execution mode. The framework makes batch the easy path.
+- **Vendor agnosticism.** Switching providers requires changing one line. Schema compilation handles vendor-specific formats automatically.
+- **Semantic reusability.** Workflows are domain-agnostic templates. Actions define *what kind of transformation* to perform, not *what domain content* to process. Domain knowledge flows through seed data, not hardcoded prompts.
+- **Semantic consistency.** `extract_facts` always extracts facts. `classify_type` always classifies types. The *what* of each action is invariant; the *content* varies based on input and seed data.
 
 ---
 
@@ -270,9 +270,9 @@ context_scope:
     - source.raw_html
 ```
 
-This enables:
-- Token optimization (exclude verbose fields from context)
-- Data privacy (keep sensitive fields from LLM)
+This gives you:
+- Token savings (exclude verbose fields from context)
+- Data privacy (keep sensitive fields away from the LLM)
 - Output assembly (carry IDs through without reprocessing)
 
 ### Guards
@@ -414,7 +414,7 @@ Same workflow, multiple providers:
 actions:
   - name: cheap_extraction
     model_vendor: groq
-    model_name: llama-3.1-8b-instant
+    model_name: llama-4-scout
 
   - name: quality_generation
     model_vendor: anthropic
@@ -670,13 +670,25 @@ The book catalog enrichment example (included in the repository) demonstrates th
 
 ## Design Skill Over Model Size
 
-Most teams default to throwing the biggest model at every problem. GPT-4 for classification. GPT-4 for formatting. GPT-4 for a yes/no check. It works, but it's lazy engineering, and it's expensive. The real skill in building LLM workflows isn't picking the most powerful model. It's decomposing problems so that small, cheap, open-source models can do the work reliably.
+Most teams default to throwing the biggest model at every problem. Flagship model for classification. Flagship model for formatting. Flagship model for a yes/no check. It works, but it's lazy engineering, and it's expensive. The real skill in building LLM workflows isn't picking the most powerful model. It's decomposing problems so that small, cheap, open-source models can do the work reliably.
+
+Open-source models have made this easier than ever. Qwen 3's 4B parameter model rivals the previous generation's 72B model on focused tasks. Llama 4 Scout runs 17B active parameters with a 10M token context window. Mistral Small 3.1 at 24B outperforms last year's flagship-tier models on many benchmarks. These models are free, they run on commodity hardware, and with proper task decomposition, they produce output that matches or beats monolithic calls to expensive APIs.
 
 Agent Actions is built around this idea. Task decomposition isn't a workaround for budget constraints. It's better engineering.
 
 ### Why Decomposition Outperforms Big Models
 
-A single GPT-4 call doing classification + generation + validation in one prompt is fighting itself. The model has to hold too many objectives at once. Break that into three focused steps and something happens: a small model classifying into 4 categories outperforms a large model juggling five tasks simultaneously. The small model has one job. It does it well.
+A single frontier model doing classification + generation + validation in one prompt is fighting itself. The model holds too many objectives at once. Break that into three focused steps and something shifts: a small model classifying into 4 categories outperforms a large model juggling five tasks simultaneously. The small model has one job. It does it well.
+
+This isn't just intuition. The research backs it up:
+
+- **DSPy** (Khattab et al., Stanford/NeurIPS 2023): Decomposed pipelines using 770M and 13B parameter models match expert-prompted GPT-3.5, outperforming standard prompting by 25–65%.
+- **ACONIC** (arXiv 2510.07772): Decomposition yields 10–40 percentage point gains on combinatorial and database tasks vs. monolithic approaches.
+- **ADaPT** (Allen AI): Improves GPT-3.5 by up to 28–33% absolute over monolithic ReAct on multiple benchmarks.
+- **Google Research** (EMNLP 2025, "Small Models, Big Results"): Two-stage decomposition with small multimodal LLMs achieves results comparable to much larger models.
+- **Select-Then-Decompose** (arXiv 2510.17922): Achieves near-optimal performance using only 24.77% of average token cost.
+
+Andrew Ng said it directly: "An agentic workflow in which the LLM is prompted to focus on one thing at a time can give better performance."
 
 This is the same principle that makes Unix pipes powerful. Small tools that do one thing, composed into pipelines. Agent Actions applies that to LLM workflows.
 
@@ -684,7 +696,7 @@ This is the same principle that makes Unix pipes powerful. Small tools that do o
 # Small model classifies (one job, high accuracy)
 - name: classify_type
   model_vendor: ollama
-  model_name: llama3.1:8b       # Free, runs on your laptop
+  model_name: qwen3:8b          # Free, runs on your laptop
   schema: { type: string }
 
 # Python handles the logic (free, deterministic, never hallucinates)
@@ -695,10 +707,10 @@ This is the same principle that makes Unix pipes powerful. Small tools that do o
 # Small model generates with tight instructions (focused task)
 - name: generate_content
   model_vendor: groq
-  model_name: llama-3.1-8b     # Fast, cheap
+  model_name: llama-4-scout     # Fast, cheap
 ```
 
-Three things make this work:
+Why this works:
 
 1. **Each action does one thing.** Focused prompts with focused schemas. A small model doesn't need to be smart. It needs to be focused.
 
@@ -708,13 +720,13 @@ Three things make this work:
 
 4. **Guards kill waste early.** Bad records get filtered before they reach expensive downstream steps. Across 10,000 records, this can eliminate thousands of unnecessary LLM calls.
 
-| Approach | Model | Cost per 1M tokens |
-|----------|-------|-------------------|
-| Monolithic prompt | GPT-4o | $5.00 |
-| Decomposed pipeline | GPT-4o-mini | $0.15 |
-| Decomposed + open-source | Ollama (Llama 3) | $0.00 |
+| Approach | Model tier | Typical cost per 1M input tokens |
+|----------|-----------|----------------------------------|
+| Monolithic prompt | Flagship (e.g. GPT-4o, Claude Sonnet) | $2.50–$5.00 |
+| Decomposed pipeline | Budget (e.g. GPT-4o-mini, Haiku) | $0.10–$0.25 |
+| Decomposed + open-source | Local (Ollama, Groq free tier) | $0.00 |
 
-That's not a small difference. That's 33x cheaper with a commercial small model, or free with an open-source one running locally. And in many cases, the decomposed pipeline produces *better* output because each step has cleaner context and a tighter objective.
+That's an order of magnitude cheaper with a commercial small model — often 10–20x — or free with an open-source one running locally. And in many cases, the decomposed pipeline produces *better* output because each step has cleaner context and a tighter objective.
 
 ### The Engineering Skill Argument
 
@@ -722,13 +734,13 @@ Here's what this really means. When your pipeline depends on GPT-4 for everythin
 
 When your pipeline is decomposed into focused steps with small models, your competitive advantage is your *design*. How you break down the problem. Which steps are LLM vs. deterministic. How tight your prompts are. How smart your guard conditions are. That's engineering. And it rewards skill, not spending.
 
-The best pipelines we've seen use large models for *zero* steps. They run entirely on open-source models (Llama, Mistral, Qwen) through Ollama or Groq, with careful decomposition making up for what the models lack in raw reasoning power. The YAML is identical to a pipeline using GPT-4. Only the `model_vendor` and `model_name` lines change.
+The best pipelines we've seen use large models for *zero* steps. They run entirely on open-source models — Llama 4, Qwen 3, Mistral Small — through Ollama or Groq, with careful decomposition making up for what the models lack in raw reasoning power. The YAML is identical to a pipeline using a flagship model. Only the `model_vendor` and `model_name` lines change.
 
 ```yaml
 # This entire pipeline runs for free on a laptop
 defaults:
   model_vendor: ollama
-  model_name: llama3.1:8b
+  model_name: qwen3:8b
 ```
 
 Or use a **hybrid approach** — open-source models for volume, paid APIs only where you genuinely need them:
@@ -737,7 +749,7 @@ Or use a **hybrid approach** — open-source models for volume, paid APIs only w
 actions:
   - name: bulk_extraction
     model_vendor: ollama           # Free, local — handles 100% of records
-    model_name: mistral:7b
+    model_name: mistral-small:24b
 
   - name: final_polish
     model_vendor: openai           # Paid, but guards mean only 5% of records reach here
@@ -746,11 +758,25 @@ actions:
 
 ### Global Access
 
-API costs that seem reasonable in Silicon Valley are prohibitive in Lagos, Nairobi, Dhaka, and Bogota. A single GPT-4 pipeline processing 10,000 records can cost more than a month's salary for a developer in many countries. That prices out talented engineers from building with AI entirely.
+API costs that seem reasonable in Silicon Valley are prohibitive in Lagos, Nairobi, Dhaka, and Bogota. The numbers tell the story:
 
-Agent Actions breaks this barrier. The framework runs the same workflows with open-source models on commodity hardware. A developer in Lagos with a laptop and Ollama can build the same production-grade pipeline that a well-funded team in San Francisco builds with paid APIs. The workflow YAML is identical. The prompts are identical. The schemas are identical. The validation is identical. Only the vendor line is different.
+| Country | Avg. monthly dev salary (USD) | 10K-record flagship job ($75) as % of salary |
+|---------|-------------------------------|----------------------------------------------|
+| Nigeria | ~$300 | 25% |
+| Bangladesh | ~$300 | 25% |
+| Kenya | ~$800 | 9.4% |
+| Colombia | ~$2,000 | 3.8% |
+| USA | ~$8,000 | 0.9% |
 
-This isn't charity. It's the natural outcome of good engineering. When you decompose problems properly and use the right model for each step, you don't *need* expensive models. The skill is in the decomposition, not the model selection. And skill doesn't cost money.
+*Sources: WorldSalaries, PayScale, Mywage.org, regional salary surveys.*
+
+A single flagship-model pipeline processing 10,000 records costs a Nigerian developer roughly a quarter of their monthly salary — a 25x relative cost disparity compared to US developers. That prices talented engineers out of building with AI entirely.
+
+This isn't a niche concern. UNIDO, GSMA, and UNCTAD have all documented how AI pricing constitutes a disproportionate barrier in the Global South. The GSMA reports that in Kenya, a single GPU represents 75% of GDP per capita. PwC's "Sizing the Prize" projects that China, North America, and Europe will capture 84% of AI's $15.7 trillion economic contribution by 2030 — leaving most of the world behind.
+
+Agent Actions breaks this. The framework runs the same workflows with open-source models on commodity hardware. A developer in Lagos with a laptop and Ollama builds the same pipeline that a well-funded team in San Francisco builds with paid APIs. Same YAML. Same prompts. Same schemas. Same validation. Only the vendor line changes.
+
+This isn't charity. It's what happens when you decompose problems properly. You stop needing expensive models. The skill is in the decomposition, not the model. And skill doesn't cost money.
 
 A startup in Nigeria competing against one in New York doesn't need to match their API budget. They need to match their engineering. With Agent Actions, they can.
 
@@ -764,17 +790,17 @@ A startup in Nigeria competing against one in New York doesn't need to match the
 
 ### Environmental Impact
 
-The shift from large to small models isn't just about cost. It's about sustainability:
+The shift from large to small models isn't just about cost:
 
-| Model Size | Relative Energy | CO2 per 1M tokens* |
-|------------|-----------------|-------------------|
-| GPT-4 class | 10x baseline | ~50g CO2 |
-| GPT-4o-mini class | 1x baseline | ~5g CO2 |
+| Model tier | Relative energy | Estimated CO2 per 1M tokens* |
+|------------|-----------------|-------------------------------|
+| Flagship (>100B params) | 8–60x baseline | ~30–160g CO2 |
+| Budget (<30B params) | 1x baseline | ~3–10g CO2 |
 | Local (Ollama) | Varies | Near-zero marginal |
 
-*Estimates based on model size ratios and industry benchmarks. Actual figures vary by provider infrastructure, data center location, and energy mix.
+*Ranges reflect published estimates from Luccioni et al. (FAccT 2024), Epoch AI (2025), and DitchCarbon. Actual figures vary widely by provider infrastructure, data center location, energy mix, and hardware generation. No peer-reviewed, definitive per-token CO2 figure exists for any specific model.
 
-Processing 1 million documents: ~50kg CO2 with monolithic GPT-4 vs. ~5kg CO2 with decomposed small models. At scale, better engineering is also greener engineering.
+At scale, the difference adds up. Processing a million documents with a flagship model produces roughly 10–50x the carbon footprint of the same workload decomposed across smaller models. Better engineering is also greener engineering.
 
 ---
 
@@ -784,7 +810,7 @@ Andrew Ng identified [four design patterns for AI agentic workflows](https://x.c
 
 ### 1. Reflection Pattern
 
-AI systems evaluate and refine their own outputs. Agent Actions does this through **schema validation and reprompting**. When output violates the schema, the framework captures the validation error, includes it in the retry prompt, and gives the LLM a chance to self-correct (see *Core Capabilities > Schema Validation*).
+AI systems that can evaluate and refine their own outputs. Agent Actions does this through schema validation and reprompting. When output violates the schema, the framework captures the validation error, includes it in the retry prompt, and gives the LLM a chance to self-correct (see *Core Capabilities > Schema Validation*).
 
 For deeper reflection, create dedicated evaluation actions:
 
@@ -818,15 +844,15 @@ For deeper reflection, create dedicated evaluation actions:
   schema: draft_schema
 ```
 
-This implements the **two-agent reflection pattern**: one action generates, another critiques, and a third improves based on feedback. The quiz pipeline's Score → Filter pattern is another form of quality-based reflection at scale.
+One action generates, another critiques, a third improves based on feedback. The quiz pipeline's Score → Filter pattern is another form of this at scale.
 
 ### 2. Tool Use Pattern
 
-AI expands its capabilities by integrating with external resources. UDFs make this a **first-class feature** (see *Core Capabilities > User-Defined Functions*).
+AI gets more useful when it can call out to external resources. UDFs make this a first-class feature (see *Core Capabilities > User-Defined Functions*).
 
 What's different here: Tool Use in Agent Actions is **deterministic**. The model doesn't decide which tool to call. The workflow **declares** tool usage explicitly. You know exactly when tools execute.
 
-**Hybrid LLM + Tool Pipelines** follow the central principle: **LLM for language, tools for logic**:
+Hybrid LLM + tool pipelines follow a simple rule: **LLM for language, tools for logic**:
 
 ```yaml
 actions:
@@ -849,7 +875,7 @@ actions:
 
 ### 3. Planning Pattern
 
-Break complex tasks into smaller steps with clear sequencing. Agent Actions **is a planning framework**. The workflow YAML *is* the plan:
+Break complex tasks into smaller steps with clear sequencing. The workflow YAML *is* the plan:
 
 ```yaml
 actions:
@@ -892,7 +918,7 @@ actions:
     dependencies: [fact_extractor]
     prompt: $prompts.Classify_Content
     model_vendor: groq
-    model_name: llama-3.1-8b
+    model_name: llama-4-scout
 
   # "Writer" agent - generates final content
   - name: content_writer
@@ -909,7 +935,7 @@ actions:
     model_name: claude-haiku-4-5-20251001
 ```
 
-Each action has a focused responsibility, uses a model optimized for its task, and communicates through explicit context scoping. Independent actions execute concurrently. Dependencies define the collaboration order.
+Each action has a focused responsibility and uses the model best suited for its task. Independent actions execute concurrently. Dependencies define the collaboration order.
 
 | Aspect | Agent Actions | Conversational Multi-Agent Frameworks |
 |--------|--------------|---------------------------------------|
@@ -919,7 +945,7 @@ Each action has a focused responsibility, uses a model optimized for its task, a
 | Predictability | High (static plan) | Variable (emergent) |
 | Best for | Structured pipelines | Open-ended collaboration |
 
-The multi-agent approach here is **choreographed**, not **conversational**. Agents don't negotiate or debate. They execute defined roles in sequence. You trade flexibility for reliability, which is the right trade-off for production data pipelines.
+The multi-agent approach here is choreographed, not conversational. Agents don't negotiate or debate. They execute defined roles in sequence. That trades flexibility for reliability, which is the right trade-off for production data pipelines.
 
 ### Pattern Summary
 
@@ -944,12 +970,12 @@ Beyond Ng's four core patterns, the agentic AI literature discusses additional a
 
 ## Industry Adoption
 
-The problems LLM application developers face keep showing up in forums, blogs, and research papers. Agent Actions addresses many of them directly.
+The same problems keep showing up in forums, blogs, and research papers. Agent Actions addresses them directly.
 
 ### "Death by Abstraction"
 
 > "Five layers of abstraction just to change a minute detail" — Hacker News
-> "Frameworks that wrap 2 lines of code with 2 thousand lines of code" — Hacker News (paraphrased)
+Developers regularly report replacing entire framework abstractions with 80–100 lines of direct API calls — a common refrain in engineering forums.
 
 Agent Actions' YAML configuration is flat and explicit—what you write is what executes. Errors map directly to configuration lines, not framework internals.
 
@@ -958,12 +984,12 @@ Agent Actions' YAML configuration is flat and explicit—what you write is what 
 > "Asking even a top-notch LLM to output well-formed JSON simply fails sometimes" — Hacker News
 > "A malformed JSON response is obvious. A perfectly structured response that subtly misunderstands your requirements is a time bomb."
 
-Schema validation is mandatory, with automatic reprompting on failure (see *Core Capabilities > Schema Validation*).
+Provider-level structured output modes (introduced 2024–2025) solved syntactic JSON compliance. But semantic accuracy failures — correct format, wrong values — still occur at roughly 1–5% of calls. Schema validation with reprompting catches both (see *Core Capabilities > Schema Validation*).
 
 ### Prompt Sprawl and Version Chaos
 
 > "One SaaS company had 47 copies of their 'standard summarization prompt' across their codebase." — V2 Solutions
-> "Making changes requires redeploying your entire application"
+When prompts live inside application code, every change requires a full redeploy.
 
 Centralized prompt store with git-tracked Markdown files:
 
@@ -983,19 +1009,19 @@ Single config flag: `run_mode: batch`. The framework handles everything else (se
 
 ### Cascading Errors in Multi-Step Pipelines
 
-> "73% of task failures stem from cascading errors, where a single root-cause error triggers multiple downstream failures" — arXiv research
+> "A single root-cause error propagates through subsequent decisions, making cascading failures the key bottleneck to agent robustness" — Zhu et al., "Where LLM Agents Fail" (arXiv 2509.25370)
 
 Static analysis catches errors *before* execution. Guards filter records mid-pipeline. Full logging of each action's input/output for debugging.
 
 ### Hidden Costs and Opaque LLM Calls
 
-> "RAG systems using heavy abstraction layers can cost 2-3x more than direct API implementations" — community benchmarks
+Heavy abstraction layers add overhead — extra tokens for framework prompts, redundant context injection, and opaque retry logic that inflates costs beyond what the actual task requires.
 
 Every LLM call is explicit in configuration. Context scoping controls what gets sent (see *Core Capabilities > Context Scoping*).
 
 ### Non-Deterministic Debugging
 
-> "Traditional monitoring tools fail to address prompt-completion correlation"
+Standard monitoring tools weren't built for prompt-completion correlation. When an LLM pipeline fails, the root cause could be in the prompt, the context, the schema, or the model itself — and traditional APM tools can't distinguish between them.
 
 Full input/output logging, rendered prompt capture, and `prompt_debug: true` for template expansion (see *Core Capabilities > Debugging*).
 
@@ -1022,13 +1048,13 @@ Action: validate_facts
 
 ### Vendor Lock-in Anxiety
 
-> "Today's best model is tomorrow's legacy system"
+Models move fast. What's flagship today is deprecated within a year.
 
 Multi-vendor support with one-line provider switching (see *Core Capabilities > Multi-Vendor Support*).
 
 ### Collaboration Bottlenecks
 
-> "Non-technical domain experts often lack the technical skills to modify prompts directly in the codebase"
+Domain experts increasingly own prompts in production, but most frameworks still require them to edit Python or navigate framework internals to make changes.
 
 Prompts in Markdown, YAML config readable without Python knowledge, git-based collaboration with clear diffs.
 
@@ -1061,7 +1087,7 @@ Prompts in Markdown, YAML config readable without Python knowledge, git-based co
 
 ## Real-World Impact
 
-Agent Actions has been running in production workflows processing thousands of records. Here are representative results from a quiz generation pipeline:
+Agent Actions has been running in production processing thousands of records. Results from a quiz generation pipeline:
 
 | Metric | Before (Python scripts) | After (Agent Actions) |
 |--------|------------------------|----------------------|
@@ -1071,19 +1097,19 @@ Agent Actions has been running in production workflows processing thousands of r
 | Cost per 1000 records | Baseline | ~50% (batch savings) |
 | Time to add new output type | Days | Hours |
 
-The declarative approach pays off most in maintainability. Requirements change? Updating prompts and schemas takes hours, not days. New team member? They can understand workflows by reading YAML instead of tracing Python.
+The declarative approach pays off most in maintainability. Requirements change — update prompts and schemas in hours, not days. New team member onboarding? They read the YAML. No Python archaeology required.
 
 ---
 
 ## Conclusion
 
-Agent Actions was built for production-scale LLM workflows. The kind where 18 steps, thousands of records, and real SLAs demand reliability that prototype scripts can't provide.
+Agent Actions was built for production-scale LLM workflows — 18 steps, thousands of records, real SLAs, the kind of work where prototype scripts fall apart.
 
-Pull orchestration out into declarative configuration. Define what each action does. Let the framework handle how. Validate before executing. Retry when things fail. Track everything.
+The approach: pull orchestration into declarative configuration. Define what each action does. Let the framework handle how. Validate before executing. Retry when things fail. Track everything.
 
-But here's what matters more: workflows should be semantic templates, not domain-specific scripts. The same 18-step quiz generation pipeline that produces AWS certification questions can produce bar exam questions with zero code changes. Swap the seed data, run the same workflow. `extract_facts` always extracts facts. `validate_quality` always validates quality. The domain knowledge flows through dynamically.
+But here's what matters more than any single feature: workflows should be semantic templates, not domain-specific scripts. The same 18-step quiz pipeline that produces AWS certification questions can produce bar exam questions with zero code changes. Swap the seed data, run the same workflow. `extract_facts` always extracts facts. `validate_quality` always validates quality. Domain knowledge flows through dynamically.
 
-This separation of *transformation logic* from *domain content* enables:
+That separation of *transformation logic* from *domain content* means:
 - Build once, deploy across domains
 - Improvements benefit all use cases
 - Predictable behavior enables static analysis
