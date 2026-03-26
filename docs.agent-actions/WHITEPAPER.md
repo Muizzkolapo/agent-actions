@@ -500,171 +500,153 @@ This creates a feedback loop: AI assistants help developers build workflows, whi
 
 ---
 
-## Example: Quiz Generation Pipeline
+## Example: Contract Review Pipeline
 
-To illustrate what Agent Actions looks like in practice, consider a certification exam quiz generation workflow. The goal: process technical documentation and produce high-quality practice questions at scale. The requirements:
+To show what Agent Actions looks like in practice, consider an automated contract review workflow. The goal: take raw contracts, break them into clauses, assess legal risk at every level, and produce an executive summary a business stakeholder can act on. The requirements:
 
-- Process thousands of documentation pages
-- Extract testable facts aligned with exam objectives
-- Generate scenario-based questions at the appropriate difficulty level
-- Create plausible wrong answers (distractors) that test understanding
-- Validate question quality against rubrics
-- Filter low-quality output before human review
+- Process contracts of varying length and format
+- Split each contract into individual clauses
+- Assess risk per clause against configurable criteria
+- Deep-dive on high-risk clauses only (don't waste compute on low-risk ones)
+- Aggregate clause-level analyses into a contract-level risk report
+- Generate a plain-language executive summary with a clear verdict
 
-A single question needs multiple LLM calls: extract facts, classify question type, write scenario, generate distractors, score quality, create explanations. Each step depends on previous outputs. Each step can fail. Scale that to thousands of questions and the complexity gets out of hand fast.
+A single contract needs multiple steps: split into clauses, analyze each one for risk, flag the dangerous ones for deeper review, aggregate everything, then summarize. Each step depends on previous outputs. Each step can fail. Scale that to hundreds of contracts and the complexity gets out of hand fast.
 
 With Agent Actions, the entire pipeline is declared in YAML:
 
 ```yaml
 actions:
-  - name: extract_facts
-    prompt: $prompts.Fact_Extraction
-    schema: candidate_facts_list
+  - name: split_into_clauses
+    kind: tool
+    impl: split_contract_by_clause    # Regex-based, deterministic
 
-  - name: classify_question_type
-    dependencies: [extract_facts]
-    prompt: $prompts.Classify_Question
-    schema: { quiz_type: string, reason: string }
+  - name: analyze_clause
+    dependencies: [split_into_clauses]
+    prompt: $contract_reviewer.Analyze_Clause
+    schema: analyze_clause
     context_scope:
-      observe: [extract_facts.facts]
+      observe: [split_into_clauses.clause_text, seed_data.risk_criteria]
 ```
 
 This configuration declares:
-- **What** each action does (prompt + schema)
+- **What** each action does (prompt + schema, or tool implementation)
 - **When** it runs (dependencies)
 - **What data** it receives (context_scope)
 
-The framework handles **how**: dependency resolution, parallel execution, validation, retry, logging.
+The framework handles the rest: dependency resolution, parallel execution, validation, retry, logging.
 
 ### The Full Pipeline
 
-This workflow scales to 18 steps:
+Five steps, two models, two UDFs:
 
 ```
-1.  extract_raw_qa          - Extract Q&A from documentation
-2.  flatten_raw_questions   - Normalize to individual records
-3.  classify_question_type  - Categorize (UNDERSTANDING, APPLICATION, etc.)
-4.  get_authoring_prompt    - Select type-specific instructions
-5.  write_scenario_question - Generate scenario-based question
-6.  fix_options_format      - Normalize output structure
-7.  suggest_distractor_counts - Plan distractor word counts
-8.  add_answer_text         - Structure correct answer
-9.  generate_distractor_1   - Wrong technology/service
-10. generate_distractor_2   - Wrong approach/concept
-11. generate_distractor_3   - Edge case/misconception
-12. reconstruct_options     - Combine into final options
-13. score_question_quality  - Evaluate against rubric
-14. filter_low_quality      - Remove score < 85
-15. generate_feynman_explanation - Create learner explanation
-16. generate_concept_explanation - Explain underlying concept
-17. options_combiner        - Final assembly
-18. format_quiz_text        - Output formatting
+1. split_into_clauses         - UDF: regex-based clause extraction (free, deterministic)
+2. analyze_clause             - LLM: per-clause risk assessment (Anthropic Claude Sonnet)
+3. flag_high_risk             - LLM: deep-dive on high-risk clauses only (guarded)
+4. aggregate_risk_summary     - UDF: combine clause analyses into contract report
+5. generate_executive_summary - LLM: plain-language summary (OpenAI GPT-4o-mini)
 ```
 
-This pipeline mixes LLM actions (prompts + schemas) with tool actions (Python UDFs). Some steps run in parallel. Some conditionally skip records. The framework manages it all.
+The pipeline mixes LLM actions with tool actions. The guard on step 3 means low-risk clauses skip the expensive deep-dive entirely. Step 4 aggregates at the file level, waiting for all clauses before producing the contract report.
 
 ### Patterns Demonstrated
 
-**Mixed Action Types:** LLM actions and tool actions coexist in the same pipeline:
+**Mixed action types.** LLM actions and tool actions coexist in the same pipeline:
 ```yaml
-- name: classify_question_type    # LLM action
-  prompt: $prompts.Classify
-  schema: { quiz_type: string }
+- name: analyze_clause              # LLM action
+  prompt: $contract_reviewer.Analyze_Clause
+  schema: analyze_clause
 
-- name: flatten_questions         # Tool action
+- name: split_into_clauses          # Tool action (no LLM, no cost)
   kind: tool
-  impl: flatten_questions
+  impl: split_contract_by_clause
 ```
 
-**Quality Gates with Guards:** Conditional execution filters records mid-pipeline:
+**Guards as cost control.** Only high-risk clauses get the expensive deep-dive:
 ```yaml
-- name: generate_explanation
+- name: flag_high_risk
   guard:
-    condition: 'question_status == "KEEP"'
+    condition: 'risk_level == "high"'
     on_false: "filter"
 ```
+Out of 50 clauses, maybe 5 are high-risk. The guard kills 90% of unnecessary LLM calls on that step.
 
-**Decomposed Generation:** Complex outputs are built through multiple focused steps rather than one mega-prompt:
-```
-write_scenario_question → generate_distractor_1 → generate_distractor_2 →
-generate_distractor_3 → reconstruct_options
-```
-
-**Scoring and Filtering:** Generate → Score → Filter is a common pattern:
+**Multi-model per pipeline.** Claude Sonnet for legal analysis (needs reasoning). GPT-4o-mini for the executive summary (just needs clear writing, much cheaper):
 ```yaml
-- name: score_question_quality
-  schema: question_quality_score
+- name: analyze_clause
+  model_vendor: anthropic
+  model_name: claude-sonnet-4-20250514
 
-- name: filter_low_quality_questions
-  kind: tool
-  impl: filter_questions_by_score    # Keep only score >= 85
+- name: generate_executive_summary
+  model_vendor: openai
+  model_name: gpt-4o-mini
 ```
 
-**Dynamic Prompt Selection:** Runtime context determines which prompt variant to use:
+**Map-reduce with granularity control.** Split one contract into many clauses (map), analyze each, then aggregate back to one report per contract (reduce):
 ```yaml
-- name: get_authoring_prompt
+- name: aggregate_risk_summary
   kind: tool
-  impl: handle_quiz_type    # Returns different prompts per question type
+  impl: aggregate_clause_analyses
+  granularity: file                  # Receives ALL clauses for one contract
 ```
 
-**Parallel Independence:** Actions without dependencies run concurrently:
-```
-extract_facts
-    ├── analyze_sentiment   (parallel)
-    └── extract_entities    (parallel)
-         └── merge_results
+**Context scoping.** The executive summary only sees the aggregated risk report. It doesn't see individual clause analyses, the raw contract text, or the deep-dive results. Smaller context, better output:
+```yaml
+- name: generate_executive_summary
+  context_scope:
+    observe: [aggregate_risk_summary.*]
+    drop: [analyze_clause.*, flag_high_risk.*, split_into_clauses.*]
 ```
 
 These patterns compose. The framework handles orchestration; you focus on the transformation logic.
 
 ### Semantic Reusability: One Workflow, Many Domains
 
-The same 18-step workflow can generate questions for *any* certification exam. Data engineering, cloud architecture, law, medicine — the pipeline structure remains identical. Only the seed data changes.
+The same pipeline structure reviews *any* type of contract. Employment agreements, vendor contracts, NDAs, lease agreements. The pipeline doesn't change. Only the seed data does.
 
 This works because prompts reference seed-level definitions rather than hardcoded content:
 
 ```markdown
-{prompt Extract_Raw_QA}
-Extract testable knowledge for the {{ seed.exam_syllabus.exam_name }}.
+{prompt Analyze_Clause}
+You are a {{ seed.risk_criteria.reviewer_role }}.
 
-**Platform**: {{ seed.exam_syllabus.platform_name }}
-
-{{ seed.exam_syllabus.audience_profile.description }}
-
-**Target Responsibilities**:
-{% for resp in seed.exam_syllabus.audience_profile.responsibilities %}
-- {{ resp }}
+Analyze this clause against the following risk criteria:
+{% for criterion in seed.risk_criteria.indicators %}
+- {{ criterion.name }}: {{ criterion.description }}
 {% endfor %}
-...
+
+Clause {{ split_into_clauses.clause_number }}: {{ split_into_clauses.clause_title }}
+{{ split_into_clauses.clause_text }}
 {end_prompt}
 ```
 
-To generate questions for a different certification:
-1. Create new seed file (`law_bar_exam_syllabus.json`)
+To review a different type of contract:
+1. Create new seed file (`employment_risk_criteria.json`)
 2. Point workflow to new seed
 3. Run the same workflow
 
-The prompts dynamically inject domain context. No code changes. No prompt rewrites.
+No code changes. No prompt rewrites.
 
-| Action | Semantic Purpose | Data Engineering | Law Certification |
-|--------|------------------|------------------|-------------------|
-| `extract_raw_qa` | Extract testable Q&A | Cloud service facts | Legal precedent facts |
-| `classify_question_type` | Categorize by cognitive level | UNDERSTANDING, APPLICATION | UNDERSTANDING, APPLICATION |
-| `write_scenario_question` | Generate scenario-based question | "Your team is migrating..." | "Your client is facing..." |
-| `score_question_quality` | Evaluate against rubric | Aligned to AWS objectives | Aligned to bar exam topics |
+| Action | Semantic Purpose | Vendor Contract | Employment Agreement |
+|--------|------------------|-----------------|---------------------|
+| `split_into_clauses` | Parse into reviewable units | SLA terms, liability caps | Non-compete, benefits |
+| `analyze_clause` | Assess risk per unit | Vendor lock-in, penalties | IP assignment, termination |
+| `flag_high_risk` | Deep-dive dangerous clauses | Unlimited liability | Non-compete scope |
+| `generate_executive_summary` | Business-ready verdict | "Negotiate SLA terms..." | "Flag non-compete for legal..." |
 
-The workflow is a **semantic template**. Actions don't encode domain knowledge—they encode *what kind of transformation* to perform. Domain knowledge lives in seed data and flows through dynamically.
+The workflow is a semantic template. Actions encode *what kind of transformation* to perform. Domain knowledge lives in seed data and flows through dynamically.
 
-### Beyond Quiz Generation
+### Beyond Contract Review
 
-The patterns demonstrated here apply to any structured extraction use case:
+The patterns here apply to any document processing use case:
 
-- Document processing pipelines
 - Content classification and enrichment
+- Compliance checking and audit pipelines
 - Data transformation workflows
 - Quality assurance automation
 
-The book catalog enrichment example (included in the repository) demonstrates the same patterns in a different domain: 11 steps, BISAC classification, grounded retrieval, parallel branches, quality scoring, and user-specific views.
+The repository includes additional examples: book catalog enrichment (11 steps, classification, grounded retrieval, parallel branches), incident triage, candidate screening, and more.
 
 ---
 
@@ -844,7 +826,7 @@ For deeper reflection, create dedicated evaluation actions:
   schema: draft_schema
 ```
 
-One action generates, another critiques, a third improves based on feedback. The quiz pipeline's Score → Filter pattern is another form of this at scale.
+One action generates, another critiques, a third improves based on feedback. The contract pipeline's Analyze → Flag High Risk pattern is another form of this: only clauses that fail the risk check get the expensive deep-dive.
 
 ### 2. Tool Use Pattern
 
@@ -1087,7 +1069,7 @@ Prompts in Markdown, YAML config readable without Python knowledge, git-based co
 
 ## Real-World Impact
 
-Agent Actions has been running in production processing thousands of records. Results from a quiz generation pipeline:
+Agent Actions has been running in production processing thousands of records. Results from a document processing pipeline:
 
 | Metric | Before (Python scripts) | After (Agent Actions) |
 |--------|------------------------|----------------------|
@@ -1103,11 +1085,11 @@ The declarative approach pays off most in maintainability. Requirements change �
 
 ## Conclusion
 
-Agent Actions was built for production-scale LLM workflows — 18 steps, thousands of records, real SLAs, the kind of work where prototype scripts fall apart.
+Agent Actions was built for production-scale LLM workflows. Multi-step pipelines, thousands of records, real SLAs. The kind of work where prototype scripts fall apart.
 
 The approach: pull orchestration into declarative configuration. Define what each action does. Let the framework handle how. Validate before executing. Retry when things fail. Track everything.
 
-But here's what matters more than any single feature: workflows should be semantic templates, not domain-specific scripts. The same 18-step quiz pipeline that produces AWS certification questions can produce bar exam questions with zero code changes. Swap the seed data, run the same workflow. `extract_facts` always extracts facts. `validate_quality` always validates quality. Domain knowledge flows through dynamically.
+But here's what matters more than any single feature: workflows should be semantic templates, not domain-specific scripts. The same contract review pipeline that analyzes vendor agreements can analyze employment contracts with zero code changes. Swap the seed data, run the same workflow. `analyze_clause` always analyzes clauses. `flag_high_risk` always flags risk. Domain knowledge flows through dynamically.
 
 That separation of *transformation logic* from *domain content* means:
 - Build once, deploy across domains
