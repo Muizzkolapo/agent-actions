@@ -43,7 +43,8 @@ actions:
 |-------|------|-------------|
 | `model_vendor` | string | LLM provider (openai, anthropic, etc.) |
 | `model_name` | string | Model identifier |
-| `json_mode` | boolean | Enable JSON output mode |
+| `json_mode` | boolean | Enable JSON output mode (see [Non-JSON Mode](../../guides/non-json-mode.md)) |
+| `output_field` | string | Field name for plain-text output when `json_mode: false` (default: `raw_response`) |
 | `granularity` | string | `record` or `file` processing |
 | `run_mode` | string | `batch` or `online` execution |
 | `context_scope` | object | Default context visibility: `observe`, `drop`, `passthrough`, `seed_path` |
