@@ -52,5 +52,5 @@ class AuthenticationErrorFormatter(ErrorFormatter):
             details="Your API key is invalid, expired, or not set",
             fix=fix_msg,
             context=context,
-            docs_url="https://docs.agent-actions.com/setup/authentication",
+            docs_url="https://docs.runagac.com/setup/authentication",
         )

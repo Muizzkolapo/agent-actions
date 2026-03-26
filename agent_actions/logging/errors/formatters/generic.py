@@ -34,5 +34,5 @@ class GenericErrorFormatter(ErrorFormatter):
             "Run with --verbose for the full traceback, "
             "or check logs/events.json for details.",
             context=context,
-            docs_url="https://docs.agent-actions.com/troubleshooting",
+            docs_url="https://docs.runagac.com/troubleshooting",
         )

@@ -60,7 +60,7 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
             details="\n".join(details_parts),
             fix=fix,
             context={"file_path": yaml_context["file_path"]} if yaml_context["file_path"] else None,
-            docs_url="https://docs.agent-actions.com/troubleshooting/yaml-errors",
+            docs_url="https://docs.runagac.com/troubleshooting/yaml-errors",
         )
 
     def _extract_yaml_context(self, context: dict[str, Any]) -> dict[str, Any]:

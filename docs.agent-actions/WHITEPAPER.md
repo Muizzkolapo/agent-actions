@@ -1181,7 +1181,7 @@ agac schema -a sample_workflow
 agac run -a sample_workflow
 ```
 
-Documentation: [https://muizzkolapo.github.io/docs.agent-actions](https://muizzkolapo.github.io/docs.agent-actions)
+Documentation: [https://docs.runagac.com](https://docs.runagac.com)
 
 GitHub: [https://github.com/Muizzkolapo/agent-actions](https://github.com/Muizzkolapo/agent-actions)
 

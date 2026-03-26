@@ -56,7 +56,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/Muizzkolapo/agent-actions"
-Documentation = "https://muizzkolapo.github.io/docs.agent-actions"
+Documentation = "https://docs.runagac.com"
 Repository = "https://github.com/Muizzkolapo/agent-actions"
 Issues = "https://github.com/Muizzkolapo/agent-actions/issues"
 

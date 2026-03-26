@@ -27,10 +27,9 @@ const config: Config = {
   ],
 
   // Set the production url of your site here
-  url: 'https://muizzkolapo.github.io',
-  // Set the /<baseUrl>/ pathname under which your site is served
-  // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/runagac/',
+  url: 'https://docs.runagac.com',
+  // Custom domain — baseUrl is root when using a custom domain
+  baseUrl: '/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.

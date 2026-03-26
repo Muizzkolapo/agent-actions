@@ -44,7 +44,7 @@ class FileErrorFormatter(ErrorFormatter):
                         "agac run --agent <existing-agent>"
                     ),
                     context=context,
-                    docs_url="https://docs.agent-actions.com/agents/create",
+                    docs_url="https://docs.runagac.com/agents/create",
                 )
 
             return UserError(

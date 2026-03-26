@@ -37,7 +37,7 @@ class ModelErrorFormatter(ErrorFormatter):
             details=f"Model '{model}' is not available for provider '{provider}'",
             fix=fix_msg,
             context={**context, "model": model, "provider": provider},
-            docs_url=f"https://docs.agent-actions.com/models/{provider}",
+            docs_url=f"https://docs.runagac.com/models/{provider}",
         )
 
     def _extract_model_name(self, message: str, context: dict) -> str:

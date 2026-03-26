@@ -58,7 +58,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
                 "function_name": function_name,
                 "similar_functions": similar[:3] if similar else None,
             },
-            docs_url="https://docs.agent-actions.com/user-defined-functions",
+            docs_url="https://docs.runagac.com/user-defined-functions",
         )
 
     def _find_similar_functions(self, target: str, available: list[str]) -> list[str]:

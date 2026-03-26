@@ -55,7 +55,7 @@ class TemplateErrorFormatter(ErrorFormatter):
                 "template_line": context.get("template_line"),
                 "mode": context.get("mode"),
             },
-            docs_url="https://docs.agent-actions.com/config/prompting",
+            docs_url="https://docs.runagac.com/config/prompting",
         )
 
     def _format_variable_diagnostic(

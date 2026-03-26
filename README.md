@@ -104,9 +104,9 @@ Switch providers per-action by changing `model_vendor`.
 
 ## Documentation
 
-- [Full docs](https://muizzkolapo.github.io/docs.agent-actions) — guides, tutorials, reference
-- [Configuration](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration) — YAML schema reference
-- [CLI](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) — all commands and options
+- [Full docs](https://docs.runagac.com) — guides, tutorials, reference
+- [Configuration](https://docs.runagac.com/reference/configuration) — YAML schema reference
+- [CLI](https://docs.runagac.com/reference/cli) — all commands and options
 
 ## Contributing
 

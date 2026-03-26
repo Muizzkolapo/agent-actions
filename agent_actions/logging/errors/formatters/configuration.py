@@ -52,7 +52,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
                 details="The configuration format is invalid",
                 fix="Check your YAML/JSON syntax and required fields",
                 context=context,
-                docs_url="https://docs.agent-actions.com/config/schema",
+                docs_url="https://docs.runagac.com/config/schema",
             )
 
         agent = context.get("agent", "unknown")
@@ -62,7 +62,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             details=message,
             fix="Check your agent configuration file for errors",
             context=context,
-            docs_url="https://docs.agent-actions.com/config",
+            docs_url="https://docs.runagac.com/config",
         )
 
     def _format_missing_required_fields_error(self, _message: str, context: dict) -> UserError:
@@ -128,7 +128,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             details=details,
             fix="\n".join(fix_parts),
             context={"action": action_name, "missing_fields": missing_display},
-            docs_url="https://docs.agent-actions.com/core-concepts/configuration-hierarchy",
+            docs_url="https://docs.runagac.com/core-concepts/configuration-hierarchy",
         )
 
     def _format_missing_env_var_error(self, _message: str, context: dict) -> UserError:
