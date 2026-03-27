@@ -219,18 +219,14 @@ class TestInitSubcommands:
     def test_init_example_defaults_name_to_example(self, tmp_path: Path) -> None:
         runner = CliRunner()
         with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
-            result = runner.invoke(
-                init, ["example", "contract_reviewer", "-o", str(tmp_path)]
-            )
+            result = runner.invoke(init, ["example", "contract_reviewer", "-o", str(tmp_path)])
         assert result.exit_code == 0, result.output
         assert (tmp_path / "contract_reviewer" / "agent_actions.yml").exists()
 
     def test_init_example_unknown(self, tmp_path: Path) -> None:
         runner = CliRunner()
         with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
-            result = runner.invoke(
-                init, ["example", "nonexistent", "-o", str(tmp_path)]
-            )
+            result = runner.invoke(init, ["example", "nonexistent", "-o", str(tmp_path)])
         assert result.exit_code != 0
 
     def test_init_default_scaffolding(self, tmp_path: Path) -> None:
