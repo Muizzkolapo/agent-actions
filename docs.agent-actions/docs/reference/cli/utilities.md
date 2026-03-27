@@ -57,6 +57,8 @@ Starting a new Agent Actions project from scratch? The `init` command creates a 
 
 ```bash
 agac init <project-name> [options]
+agac init list
+agac init example <name> [project-name]
 ```
 
 This creates:
@@ -72,13 +74,17 @@ my-project/
 
 Think of this like `npm init` or `git init` - it gives you a working starting point with sensible defaults.
 
-**Options:**
+**Subcommands:**
+| Subcommand | Description |
+|------------|-------------|
+| `list` | List available example projects from GitHub |
+| `example <name> [project-name]` | Scaffold from a GitHub example |
+
+**Options (for `agac init <project-name>`):**
 | Option | Description |
 |--------|-------------|
 | `-o, --output-dir` | Directory to create the project in (default: current directory) |
 | `-t, --template` | Template to use for project initialization (default: `default`) |
-| `-e, --example` | Scaffold from a built-in example (fetched from GitHub) |
-| `--list-examples` | List available example names and exit |
 | `-f, --force` | Force project creation even if directory exists |
 
 **Examples:**
@@ -90,20 +96,23 @@ agac init my_project
 agac init my_project -o ~/projects
 
 # Use a specific template
-agac init my_project -t advanced
-
-# Scaffold from a built-in example
-agac init my_project --example contract_reviewer
+agac init my_project -t minimal
 
 # See all available examples
-agac init --list-examples
+agac init list
+
+# Scaffold from a GitHub example
+agac init example contract_reviewer
+
+# Scaffold from an example with a custom project name
+agac init example contract_reviewer my_project
 
 # Force overwrite existing files
 agac init my_project -f
 ```
 
 :::tip Start from an Example
-Use `--example` to scaffold a fully working project you can run immediately. Examples are fetched from GitHub so the package stays lightweight. Available examples: `book_catalog_enrichment`, `contract_reviewer`, `incident_triage`, `product_listing_enrichment`, `review_analyzer`.
+Use `agac init list` to see available examples, then `agac init example <name>` to scaffold a fully working project you can run immediately. Examples are fetched from GitHub so the package stays lightweight.
 :::
 
 ## clean
