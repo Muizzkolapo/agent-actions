@@ -15,6 +15,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -68,8 +69,6 @@ agac-lsp = "agent_actions.tooling.lsp.server:main"
 dev = [
     "pytest>=7.4.0,<10",
     "pytest-cov>=4.1.0,<7",
-    "pytest>=7.4.0,<9",
-    "pytest-cov>=4.1.0,<8",
     "mypy>=1.8.0,<2",
     "types-PyYAML>=6.0.12,<7",
     "pandas-stubs>=2.0.3,<3",
@@ -86,12 +85,20 @@ nlp = [
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "docs.agent-actions/",
+    "examples/",
+    "tests/",
+    ".github/",
+    ".claude/",
+    "batch/",
+    "MagicMock/",
+    "tasks/",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["agent_actions"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"agent_actions/tooling/docs/docs_site" = "agent_actions/tooling/docs/docs_site"
-"agent_actions/skills" = "agent_actions/skills"
 
 [tool.uv]
 dev-dependencies = [
