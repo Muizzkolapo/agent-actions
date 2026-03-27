@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://muizzkolapo.github.io/runagac">
+  <a href="https://docs.runagac.com">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset=".github/images/logo-text-dark.svg">
       <source media="(prefers-color-scheme: light)" srcset=".github/images/logo-text-light.svg">
@@ -78,12 +78,10 @@ You will, until you have 15 steps, 3 models, batch retry, and a teammate asks wh
 | Example | Pattern | Key Features |
 |---|---|---|
 | [Review Analyzer](examples/review_analyzer) | Parallel consensus | 3 independent scorers, vote aggregation, guard on quality threshold |
-| [Candidate Screener](examples/candidate_screener) | Parallel fan-in | Skills/experience/culture assessed independently, weighted composite |
 | [Contract Reviewer](examples/contract_reviewer) | Map-reduce | Split clauses, analyze each, aggregate risk summary |
-| [Translation Quality](examples/translation_quality) | Iterative refinement | 3 parallel strategies, back-translation validation loop |
 | [Product Listing Enrichment](examples/product_listing_enrichment) | Tool + LLM hybrid | LLM generates copy, tool fetches pricing, LLM optimizes |
-| [FAQ Generator](examples/faq_generator) | Coordinator routing | Classify ticket type, route to specialized handlers |
-| [Support Resolution](examples/support_resolution) | Field-by-field (non-JSON) | `json_mode: false`, Ollama, one field per action |
+| [Book Catalog Enrichment](examples/book_catalog_enrichment) | Multi-step enrichment | BISAC classification, marketing copy, SEO metadata, reading level |
+| [Incident Triage](examples/incident_triage) | Parallel consensus | Severity classification, impact assessment, team assignment, response plan |
 
 ## Providers
 
@@ -108,8 +106,8 @@ Switch providers per-action by changing `model_vendor`.
 ## Documentation
 
 - [Full docs](https://docs.runagac.com) — guides, tutorials, reference
-- [Configuration](https://docs.runagac.com/reference/configuration) — YAML schema reference
-- [CLI](https://docs.runagac.com/reference/cli) — all commands and options
+- [Configuration](https://docs.runagac.com/docs/reference/configuration/) — YAML schema reference
+- [CLI](https://docs.runagac.com/docs/reference/cli/) — all commands and options
 
 ## Contributing
 
