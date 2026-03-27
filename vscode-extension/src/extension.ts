@@ -1,11 +1,6 @@
+import * as fs from "fs";
 import * as path from "path";
-import {
-  workspace,
-  ExtensionContext,
-  window,
-  commands,
-  Uri,
-} from "vscode";
+import { workspace, ExtensionContext, window, commands } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -15,9 +10,33 @@ import {
 
 let client: LanguageClient | undefined;
 
-export function activate(context: ExtensionContext) {
+function findAgacLsp(): string {
   const config = workspace.getConfiguration("agentActions");
-  const serverPath: string = config.get("serverPath") || "agac-lsp";
+  const configured: string = config.get("serverPath") || "";
+  if (configured && configured !== "agac-lsp") {
+    return configured;
+  }
+
+  // Search venv locations relative to workspace root
+  const workspaceFolders = workspace.workspaceFolders;
+  if (workspaceFolders) {
+    const root = workspaceFolders[0].uri.fsPath;
+    const venvNames = [".venv", "venv", ".env", "env", ".env_agac"];
+    const binDir = process.platform === "win32" ? "Scripts" : "bin";
+    for (const venv of venvNames) {
+      const candidate = path.join(root, venv, binDir, "agac-lsp");
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  // Fall back to system PATH
+  return "agac-lsp";
+}
+
+export function activate(context: ExtensionContext) {
+  const serverPath = findAgacLsp();
 
   const serverOptions: ServerOptions = {
     command: serverPath,
@@ -44,11 +63,10 @@ export function activate(context: ExtensionContext) {
   client.start().catch((err) => {
     window.showErrorMessage(
       `Agent Actions LSP failed to start: ${err.message}\n` +
-        `Make sure 'agac-lsp' is installed: pip install agent-actions`
+        `Make sure agent-actions is installed: pip install agent-actions`
     );
   });
 
-  // Command: restart LSP server
   context.subscriptions.push(
     commands.registerCommand("agentActions.restartServer", async () => {
       if (client) {
