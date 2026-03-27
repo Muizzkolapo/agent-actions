@@ -1,0 +1,102 @@
+version: '3'
+
+vars:
+  PACKAGE: agent_actions
+
+tasks:
+  # Setup
+  dev:
+    desc: Install in dev mode
+    cmds:
+      - uv sync --dev
+
+  # Quality
+  lint:
+    desc: Lint with ruff
+    cmds:
+      - uv run ruff check {{.PACKAGE}}
+
+  format:
+    desc: Format with ruff
+    cmds:
+      - uv run ruff format {{.PACKAGE}} tests
+
+  format:check:
+    desc: Check formatting
+    cmds:
+      - uv run ruff format --check {{.PACKAGE}} tests
+
+  mypy:
+    desc: Type check
+    cmds:
+      - uv run mypy {{.PACKAGE}}
+
+  check:
+    desc: Run all checks (lint + types + format)
+    cmds:
+      - task: lint
+      - task: mypy
+      - task: format:check
+
+  # Testing
+  test:
+    desc: Run tests
+    cmds:
+      - uv run pytest
+
+  test:coverage:
+    desc: Run tests with coverage
+    cmds:
+      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
+
+  test:fast:
+    desc: Run tests in parallel
+    cmds:
+      - uv run pytest -n auto
+
+  # Build
+  build:
+    desc: Build package
+    cmds:
+      - rm -rf dist build *.egg-info
+      - uv build
+
+  # Changelog (requires changie: https://changie.dev)
+  changelog:new:
+    desc: Create a changelog entry (run before every PR)
+    cmds:
+      - changie new
+
+  changelog:batch:
+    desc: Batch unreleased changes into a version
+    cmds:
+      - changie batch {{.CLI_ARGS}}
+
+  changelog:merge:
+    desc: Merge all versions into CHANGELOG.md
+    cmds:
+      - changie merge
+
+  changelog:check:
+    desc: Verify unreleased changelog entries exist
+    cmds:
+      - |
+        if [ -z "$(ls .changes/unreleased/*.yaml 2>/dev/null)" ]; then
+          echo "No unreleased changelog entries found."
+          echo "Run 'task changelog:new' to create one."
+          exit 1
+        fi
+        echo "Found changelog entries:"
+        ls .changes/unreleased/*.yaml
+
+  # Hooks
+  hooks:install:
+    desc: Install pre-commit hooks
+    cmds:
+      - uv run pre-commit install
+
+  # Default
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
