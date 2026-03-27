@@ -92,7 +92,7 @@ exclude = [
     "tests/",
     ".github/",
     ".claude/",
-    "batch/",
+    "/batch/",
     "MagicMock/",
     "tasks/",
 ]
