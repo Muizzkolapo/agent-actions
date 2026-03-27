@@ -43,3 +43,4 @@ node_modules/
 # Test artifacts
 MagicMock/
 batch/
+.docusaurus/

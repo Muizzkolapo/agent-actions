@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -47,7 +47,11 @@
         },
         "agentActions.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Trace LSP communication for debugging."
         }
