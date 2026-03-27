@@ -137,7 +137,7 @@ flowchart LR
 ```
 
 ```yaml
-name: candidate_screener
+name: applicant_screener
 description: "Screen candidates with parallel independent assessment"
 
 defaults:
@@ -574,7 +574,7 @@ actions:
 For multi-stage refinement with parallel strategy generation, use versioned actions:
 
 ```yaml
-name: translation_quality
+name: translation_pipeline
 description: "Multi-strategy translation with quality validation"
 
 defaults:
