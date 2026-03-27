@@ -75,9 +75,7 @@ class TestCompiledSchema:
     """When schema is in compiled format, it should pass through."""
 
     def test_fields_based_compiled_schema(self, validator):
-        ctx = _make_context(
-            {"schema": {"fields": [{"name": "x", "type": "string"}]}}
-        )
+        ctx = _make_context({"schema": {"fields": [{"name": "x", "type": "string"}]}})
         result = validator.validate(ctx)
         assert result.errors == []
 
@@ -224,16 +222,12 @@ class TestComplexArrayObjectType:
         assert result.errors == []
 
     def test_valid_complex_type_python_literal(self, validator):
-        ctx = _make_context(
-            {"schema": {"items": "array[object:{'name': 'string'}]"}}
-        )
+        ctx = _make_context({"schema": {"items": "array[object:{'name': 'string'}]"}})
         result = validator.validate(ctx)
         assert result.errors == []
 
     def test_invalid_complex_type_bad_json(self, validator):
-        ctx = _make_context(
-            {"schema": {"items": "array[object:not_valid_json]"}}
-        )
+        ctx = _make_context({"schema": {"items": "array[object:not_valid_json]"}})
         result = validator.validate(ctx)
         assert len(result.errors) == 1
 
@@ -278,8 +272,6 @@ class TestCaseInsensitiveKeys:
         assert result.errors == []
 
     def test_uppercase_schema_name_key(self, validator):
-        ctx = _make_context(
-            {"Schema": {"name": "string"}, "Schema_Name": "my_schema"}
-        )
+        ctx = _make_context({"Schema": {"name": "string"}, "Schema_Name": "my_schema"})
         result = validator.validate(ctx)
         assert len(result.warnings) == 1

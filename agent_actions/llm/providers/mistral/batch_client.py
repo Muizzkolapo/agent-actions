@@ -151,7 +151,7 @@ class MistralBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from Mistral API."""
         batch_job = self.client.batch.jobs.get(job_id=batch_id)
-        return batch_job.status
+        return str(batch_job.status)
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Mistral status to standard format."""
@@ -198,14 +198,15 @@ class MistralBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         # Ensure we return bytes
         if isinstance(result_content, str):
             return result_content.encode("utf-8")
-        return result_content  # type: ignore[return-value]
+        return result_content  # type: ignore[return-value, no-any-return]
 
     # -- Mistral-specific overrides for response paths that differ from
     # the standard OpenAI-compatible format (body fallback at top level).
 
     def _resolve_response_data(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Resolve response data with Mistral's body-key fallback."""
-        return raw_response.get("response", raw_response.get("body", raw_response))
+        result = raw_response.get("response", raw_response.get("body", raw_response))
+        return result  # type: ignore[return-value, no-any-return]
 
     def _extract_error_from_response(self, raw_response: dict[str, Any]) -> str | None:
         """Extract error from Mistral response, with body fallback."""

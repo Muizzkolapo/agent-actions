@@ -136,7 +136,7 @@ def format_exception_context(context: Any, max_list_items: int = 10) -> str:
             items = []
             for key, value in context.items():
                 safe_key = safe_format_error(key)
-                if isinstance(value, (list, tuple)) and len(value) > max_list_items:
+                if isinstance(value, list | tuple) and len(value) > max_list_items:
                     shown = list(value[:max_list_items])
                     remaining = len(value) - max_list_items
                     safe_value = f"{shown} (+{remaining} more)"

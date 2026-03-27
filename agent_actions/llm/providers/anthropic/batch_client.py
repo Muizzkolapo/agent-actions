@@ -319,7 +319,7 @@ class AnthropicBatchClient(BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from Anthropic API."""
         batch_info = self.client.messages.batches.retrieve(batch_id)
-        return batch_info.processing_status
+        return str(batch_info.processing_status)
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Anthropic status to standard format."""

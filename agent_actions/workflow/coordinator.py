@@ -325,12 +325,14 @@ class AgentWorkflow:
                 self.state.failed = True
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
-                if not hasattr(e, "context") or not isinstance(e.context, dict):
+                if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
                     e.context = {}  # type: ignore[attr-defined]
-                e.context.update({  # type: ignore[attr-defined]
-                    "workflow": self.metadata.agent_name,
-                    "operation": "async_workflow_execution",
-                })
+                e.context.update(  # type: ignore[attr-defined]
+                    {
+                        "workflow": self.metadata.agent_name,
+                        "operation": "async_workflow_execution",
+                    }
+                )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 
@@ -377,12 +379,14 @@ class AgentWorkflow:
                 self.state.failed = True
                 # Enrich BEFORE firing the error event so the formatter
                 # has full context when it renders the user-facing message.
-                if not hasattr(e, "context") or not isinstance(e.context, dict):
+                if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
                     e.context = {}  # type: ignore[attr-defined]
-                e.context.update({  # type: ignore[attr-defined]
-                    "workflow": self.metadata.agent_name,
-                    "operation": "sequential_workflow_execution",
-                })
+                e.context.update(  # type: ignore[attr-defined]
+                    {
+                        "workflow": self.metadata.agent_name,
+                        "operation": "sequential_workflow_execution",
+                    }
+                )
                 self.event_logger.handle_workflow_error(e, elapsed_time=duration)
                 raise
 

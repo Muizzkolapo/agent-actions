@@ -16,6 +16,7 @@ from agent_actions.output.writer import FileWriter
 # Construction
 # ---------------------------------------------------------------------------
 
+
 class TestFileWriterInit:
     """Tests for FileWriter initialization."""
 
@@ -48,6 +49,7 @@ class TestFileWriterInit:
 # ---------------------------------------------------------------------------
 # JSON write_staging
 # ---------------------------------------------------------------------------
+
 
 class TestWriteStagingJSON:
     """Tests for write_staging with JSON files."""
@@ -114,6 +116,7 @@ class TestWriteStagingJSON:
 # CSV write_staging
 # ---------------------------------------------------------------------------
 
+
 class TestWriteStagingCSV:
     """Tests for write_staging with CSV files."""
 
@@ -155,6 +158,7 @@ class TestWriteStagingCSV:
 # TXT write_staging
 # ---------------------------------------------------------------------------
 
+
 class TestWriteStagingTXT:
     """Tests for write_staging with TXT files."""
 
@@ -180,6 +184,7 @@ class TestWriteStagingTXT:
 # Unsupported file type
 # ---------------------------------------------------------------------------
 
+
 class TestUnsupportedFileType:
     """Tests for unsupported file types in write_staging."""
 
@@ -197,6 +202,7 @@ class TestUnsupportedFileType:
 # ---------------------------------------------------------------------------
 # Event firing
 # ---------------------------------------------------------------------------
+
 
 class TestWriterEvents:
     """Tests for event firing during writes."""
@@ -223,6 +229,7 @@ class TestWriterEvents:
 # ---------------------------------------------------------------------------
 # write_target
 # ---------------------------------------------------------------------------
+
 
 class TestWriteTarget:
     """Tests for write_target via storage backend."""
@@ -262,6 +269,7 @@ class TestWriteTarget:
 # write_source
 # ---------------------------------------------------------------------------
 
+
 class TestWriteSource:
     """Tests for write_source (JSON atomic write)."""
 
@@ -297,6 +305,7 @@ class TestWriteSource:
 # ---------------------------------------------------------------------------
 # Error handling in _execute_write
 # ---------------------------------------------------------------------------
+
 
 class TestExecuteWriteErrors:
     """Tests for error handling in _execute_write."""

@@ -56,7 +56,7 @@ class ToolClient:
                 return data
 
         if isinstance(data, dict):
-            return strip(data)
+            return strip(data)  # type: ignore[return-value, no-any-return]
 
         return data  # type: ignore[unreachable]
 

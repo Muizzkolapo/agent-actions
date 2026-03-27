@@ -9,18 +9,19 @@ cleanup block. These tests verify that when the write fails:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from agent_actions.logging.events.handlers.run_results import RunResultsCollector as RunResultsHandler
-
+from agent_actions.logging.events.handlers.run_results import (
+    RunResultsCollector as RunResultsHandler,
+)
 
 # ---------------------------------------------------------------------------
 # RunResultsHandler.flush() — atomic write exception path (I-7)
 # ---------------------------------------------------------------------------
+
 
 class TestRunResultsAtomicWrite:
     def _make_handler(self, tmp_path: Path) -> RunResultsHandler:
@@ -40,7 +41,7 @@ class TestRunResultsAtomicWrite:
         handler = self._make_handler(tmp_path)
         (tmp_path / "target").mkdir(parents=True, exist_ok=True)
 
-        original_dump = json.dump
+        _original_dump = json.dump
 
         def boom(*args, **kwargs):
             raise TypeError("unserializable sentinel")

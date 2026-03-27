@@ -48,8 +48,8 @@ class TestGetUserAgentsExceptionNarrowing:
                 return_value={"test_workflow": [{"agent_type": "extract"}]},
             ),
         ):
-            mock_pm_cls.return_value.get_project_root.side_effect = (
-                ProjectRootNotFoundError("no root")
+            mock_pm_cls.return_value.get_project_root.side_effect = ProjectRootNotFoundError(
+                "no root"
             )
             # Should not raise — falls back to empty project_defaults
             result = cm.get_user_agents()

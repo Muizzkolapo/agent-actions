@@ -132,7 +132,7 @@ class SchemaExtractor:
             try:
                 loaded = schema_loader.load_schema(schema_id)
                 output.json_schema = loaded
-                output.schema_fields = self.extract_fields_from_json_schema(loaded)
+                output.schema_fields = self.extract_fields_from_json_schema(loaded)  # type: ignore[arg-type]
                 return True
             except (FileNotFoundError, KeyError, ValueError, OSError) as e:
                 logger.warning("Schema loading failed for '%s': %s", schema_id, e, exc_info=True)

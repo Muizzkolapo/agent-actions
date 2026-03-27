@@ -48,14 +48,16 @@ def aggregate_quality_scores(data: dict[str, Any]) -> dict[str, Any]:
             + authenticity * CRITERIA_WEIGHTS["authenticity"]
         )
 
-        scores.append({
-            "scorer_id": i,
-            "helpfulness": helpfulness,
-            "specificity": specificity,
-            "authenticity": authenticity,
-            "overall": round(weighted, 2),
-            "reasoning": scorer_data.get("scoring_reasoning", ""),
-        })
+        scores.append(
+            {
+                "scorer_id": i,
+                "helpfulness": helpfulness,
+                "specificity": specificity,
+                "authenticity": authenticity,
+                "overall": round(weighted, 2),
+                "reasoning": scorer_data.get("scoring_reasoning", ""),
+            }
+        )
 
         all_reasoning.append(
             f"Scorer {i} ({weighted:.1f}/10): {scorer_data.get('scoring_reasoning', 'No reasoning')}"

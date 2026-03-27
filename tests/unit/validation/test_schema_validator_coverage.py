@@ -206,9 +206,7 @@ class TestProcessSchemaFile:
     """Test individual schema file processing."""
 
     def test_file_not_found(self, validator, tmp_path):
-        validator._process_schema_file(
-            tmp_path / "missing.json", "missing.json", "agent1"
-        )
+        validator._process_schema_file(tmp_path / "missing.json", "missing.json", "agent1")
         assert validator.has_errors()
         assert any("not found" in e for e in validator.get_errors())
 
@@ -370,9 +368,7 @@ class TestValidateMethod:
         assert any("schema_dir" in e for e in validator.get_errors())
 
     def test_schema_dir_not_a_path(self, validator):
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": "/some/string/path"}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": "/some/string/path"})
         assert result is False
 
     def test_schema_files_invalid_type(self, validator):
@@ -397,15 +393,11 @@ class TestValidateMethod:
     def test_schema_dir_is_file(self, validator, tmp_path):
         f = tmp_path / "file.txt"
         f.write_text("hi")
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": f}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": f})
         assert result is False
 
     def test_no_json_files_in_dir(self, validator, tmp_path):
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True  # passes with warning
         assert len(validator.get_warnings()) > 0
 
@@ -418,9 +410,7 @@ class TestValidateMethod:
             "required": ["title"],
         }
         (tmp_path / "out.json").write_text(json.dumps(schema))
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True
 
     def test_validates_specific_schema_files(self, validator, tmp_path):
@@ -446,9 +436,7 @@ class TestValidateMethod:
             "required": ["title"],
         }
         (tmp_path / f"out{ext}").write_text(yaml.dump(schema))
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True
 
     def test_validates_schemas_in_subdirectory(self, validator, tmp_path):
@@ -461,9 +449,7 @@ class TestValidateMethod:
             "required": ["title"],
         }
         (sub / "out.yml").write_text(yaml.dump(schema))
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True
         assert len(validator.get_warnings()) == 0
 
@@ -477,9 +463,7 @@ class TestValidateMethod:
             "    description: Quality score\n"
         )
         (tmp_path / "score.yml").write_text(schema_content)
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True
         assert not validator.has_errors()
 
@@ -487,9 +471,7 @@ class TestValidateMethod:
         """JSON Schema format schemas still go through meta-validation."""
         bad_schema = {"type": "object", "properties": "not_a_dict"}
         (tmp_path / "bad.json").write_text(json.dumps(bad_schema))
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is False
 
     def test_invalid_yaml_schema_reports_error(self, validator, tmp_path):
@@ -505,9 +487,7 @@ class TestValidateMethod:
 
     def test_no_schema_files_warns(self, validator, tmp_path):
         """Empty dir with no .json, .yml, or .yaml files emits warning."""
-        result = validator.validate(
-            {"agent_name": "test", "schema_dir": tmp_path}
-        )
+        result = validator.validate({"agent_name": "test", "schema_dir": tmp_path})
         assert result is True
         warnings = validator.get_warnings()
         assert len(warnings) > 0
@@ -538,9 +518,7 @@ class TestCollectAllKeysPropertySkipping:
 
     def test_defs_field_names_not_collected(self):
         schema = {
-            "$defs": {
-                "Address": {"type": "object", "properties": {"street": {"type": "string"}}}
-            }
+            "$defs": {"Address": {"type": "object", "properties": {"street": {"type": "string"}}}}
         }
         keys = _collect_all_keys(schema)
         assert "Address" not in keys
@@ -548,11 +526,7 @@ class TestCollectAllKeysPropertySkipping:
         assert "$defs" in keys
 
     def test_definitions_field_names_not_collected(self):
-        schema = {
-            "definitions": {
-                "MyType": {"type": "string", "description": "a custom type"}
-            }
-        }
+        schema = {"definitions": {"MyType": {"type": "string", "description": "a custom type"}}}
         keys = _collect_all_keys(schema)
         assert "MyType" not in keys
         assert "definitions" in keys

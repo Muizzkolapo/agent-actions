@@ -256,9 +256,7 @@ class TestHandleExecutionError:
 
     def test_raises_agent_execution_error(self):
         cause = RuntimeError("timeout")
-        with pytest.raises(
-            AgentExecutionError, match="Execution of.*run.*failed for.*agent_x"
-        ):
+        with pytest.raises(AgentExecutionError, match="Execution of.*run.*failed for.*agent_x"):
             ErrorHandler.handle_execution_error(cause, "run", "agent_x")
 
     def test_message_includes_operation_and_target(self):

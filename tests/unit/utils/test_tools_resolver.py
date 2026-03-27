@@ -1,7 +1,5 @@
 """Regression tests for A-2: path traversal prevention in tools_resolver."""
 
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 

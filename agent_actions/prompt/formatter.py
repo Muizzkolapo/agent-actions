@@ -25,7 +25,11 @@ class PromptFormatter:
             PromptValidationError: If prompt retrieval or loading fails
         """
         raw_prompt = agent_config.get(PROMPT_KEY)
-        if agent_config.get("kind") not in ("tool", "hitl", "seed", "source") and isinstance(raw_prompt, str) and not raw_prompt.strip():
+        if (
+            agent_config.get("kind") not in ("tool", "hitl", "seed", "source")
+            and isinstance(raw_prompt, str)
+            and not raw_prompt.strip()
+        ):
             raise ConfigValidationError(
                 f"prompt cannot be an empty string for action '{agent_config.get('agent_type', 'unknown')}'"
             )

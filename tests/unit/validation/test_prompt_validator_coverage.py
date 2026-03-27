@@ -1,6 +1,5 @@
 """Tests for PromptValidator to improve coverage."""
 
-
 import pytest
 
 from agent_actions.validation.prompt_validator import PromptValidator
@@ -119,25 +118,19 @@ class TestCheckPromptIdDuplicates:
 
     def test_no_duplicates(self, validator):
         all_seen: set[str] = set()
-        dups, cross = validator._check_prompt_id_duplicates(
-            "file.md", ["id1", "id2"], all_seen
-        )
+        dups, cross = validator._check_prompt_id_duplicates("file.md", ["id1", "id2"], all_seen)
         assert dups == set()
         assert cross == []
 
     def test_within_file_duplicates(self, validator):
         all_seen: set[str] = set()
-        dups, cross = validator._check_prompt_id_duplicates(
-            "file.md", ["id1", "id1"], all_seen
-        )
+        dups, cross = validator._check_prompt_id_duplicates("file.md", ["id1", "id1"], all_seen)
         assert "id1" in dups
         assert validator.has_errors()
 
     def test_cross_file_duplicates(self, validator):
         all_seen: set[str] = {"id1"}
-        dups, cross = validator._check_prompt_id_duplicates(
-            "file2.md", ["id1"], all_seen
-        )
+        dups, cross = validator._check_prompt_id_duplicates("file2.md", ["id1"], all_seen)
         assert cross == ["id1"]
         assert validator.has_errors()
 
@@ -215,9 +208,7 @@ class TestValidateSinglePromptFile:
 
     def test_file_with_duplicate_ids(self, validator, tmp_path):
         f = tmp_path / "dup.md"
-        f.write_text(
-            "{prompt analyze}\nDo A\n{end_prompt}\n{prompt analyze}\nDo B\n{end_prompt}"
-        )
+        f.write_text("{prompt analyze}\nDo A\n{end_prompt}\n{prompt analyze}\nDo B\n{end_prompt}")
         count = validator._validate_single_prompt_file(f, set())
         assert count == 0
         assert validator.has_errors()
@@ -253,23 +244,15 @@ class TestValidateMethod:
         assert len(validator.get_warnings()) > 0
 
     def test_directory_with_valid_prompts(self, validator, tmp_path):
-        (tmp_path / "prompt1.md").write_text(
-            "# Prompt 1\n{prompt first}\nContent\n{end_prompt}"
-        )
-        (tmp_path / "prompt2.md").write_text(
-            "# Prompt 2\n{prompt second}\nContent\n{end_prompt}"
-        )
+        (tmp_path / "prompt1.md").write_text("# Prompt 1\n{prompt first}\nContent\n{end_prompt}")
+        (tmp_path / "prompt2.md").write_text("# Prompt 2\n{prompt second}\nContent\n{end_prompt}")
         result = validator.validate(tmp_path)
         assert result is True
         assert not validator.has_errors()
 
     def test_cross_file_duplicates(self, validator, tmp_path):
-        (tmp_path / "a.md").write_text(
-            "# Prompt A\n{prompt shared}\nContent A\n{end_prompt}"
-        )
-        (tmp_path / "b.md").write_text(
-            "# Prompt B\n{prompt shared}\nContent B\n{end_prompt}"
-        )
+        (tmp_path / "a.md").write_text("# Prompt A\n{prompt shared}\nContent A\n{end_prompt}")
+        (tmp_path / "b.md").write_text("# Prompt B\n{prompt shared}\nContent B\n{end_prompt}")
         result = validator.validate(tmp_path)
         assert result is False
         assert any("duplicate" in e.lower() for e in validator.get_errors())

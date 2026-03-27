@@ -346,7 +346,7 @@ class ConfigValidator(BaseValidator):
             return self._complete_validation()
 
         proj_dir = data.get("project_dir")
-        project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
+        project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, str | Path) else None
         operation_map = {
             "validate_agent_config_file_meta": self._validate_agent_config_file_meta_operation,
             "validate_agent_entries": self._validate_agent_entries_operation,

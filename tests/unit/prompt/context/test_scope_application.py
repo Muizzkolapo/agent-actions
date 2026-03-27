@@ -106,9 +106,7 @@ class TestDropWildcard:
 
     def test_drop_then_observe_wildcard_excludes_dropped_field(self):
         """Existing security test: drop + observe wildcard must not leak dropped field."""
-        field_context = {
-            "dep": {"api_key": "sk-secret-123", "name": "test", "value": "safe_data"}
-        }
+        field_context = {"dep": {"api_key": "sk-secret-123", "name": "test", "value": "safe_data"}}
         context_scope = {
             "drop": ["dep.api_key"],
             "observe": ["dep.*"],

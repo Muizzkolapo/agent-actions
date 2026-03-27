@@ -249,7 +249,7 @@ def _format_literal_value(value: Any) -> str:
         return f'"{value}"'
     if isinstance(value, bool):
         return "TRUE" if value else "FALSE"
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, list | tuple):
         items = [_format_literal_value(item) for item in value]
         return f"[{', '.join(items)}]"
     return str(value)

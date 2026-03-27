@@ -19,6 +19,7 @@ def reset_vendor_cache():
     yield
     VendorCompatibilityValidator.clear_cache()
 
+
 EXPECTED_CAPABILITY_KEYS = {
     "supports_json_mode",
     "supports_batch",

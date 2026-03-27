@@ -108,12 +108,14 @@ def fetch_competitor_prices(data: dict[str, Any]) -> dict[str, Any]:
         }
         product_type = category_labels.get(category, "Comparable Product")
 
-        competitor_prices.append({
-            "competitor_name": brand_name,
-            "product_name": f"{brand_name} {product_type}",
-            "price": comp_price,
-            "source": store_name,
-        })
+        competitor_prices.append(
+            {
+                "competitor_name": brand_name,
+                "product_name": f"{brand_name} {product_type}",
+                "price": comp_price,
+                "source": store_name,
+            }
+        )
 
     # Calculate market position
     avg_price = round(sum(prices_seen) / len(prices_seen), 2) if prices_seen else current_price

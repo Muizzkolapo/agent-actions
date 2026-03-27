@@ -7,7 +7,7 @@ Fan-in from: generate_description, write_marketing_copy,
 validate_compliance, optimize_seo, fetch_competitor_prices, and source.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from agent_actions import udf_tool
@@ -52,14 +52,8 @@ def format_marketplace_listing(data: dict[str, Any]) -> dict[str, Any]:
         competitor_data = {}
 
     # Use SEO-optimized title/bullets if available, otherwise fall back to copy
-    final_title = (
-        seo_data.get("optimized_title")
-        or write_copy.get("listing_title", "")
-    )
-    final_bullets = (
-        seo_data.get("optimized_bullets")
-        or write_copy.get("bullet_points", [])
-    )
+    final_title = seo_data.get("optimized_title") or write_copy.get("listing_title", "")
+    final_bullets = seo_data.get("optimized_bullets") or write_copy.get("bullet_points", [])
 
     # Build the listing object
     listing = {
@@ -102,5 +96,5 @@ def format_marketplace_listing(data: dict[str, Any]) -> dict[str, Any]:
         "competitive_intel": competitive_intel,
         "compliance": compliance,
         "enrichment_version": PIPELINE_VERSION,
-        "enriched_at": datetime.now(timezone.utc).isoformat(),
+        "enriched_at": datetime.now(UTC).isoformat(),
     }

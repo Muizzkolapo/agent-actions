@@ -101,9 +101,7 @@ class TestValidateFilePaths:
 
     def test_directory_when_file_expected(self, validator, tmp_path):
         """A directory path should fail when path_type is 'file'."""
-        result = validator.validate(
-            {"paths": [str(tmp_path)], "path_type": "file"}
-        )
+        result = validator.validate({"paths": [str(tmp_path)], "path_type": "file"})
         assert result is False
         assert any("not a file" in e for e in validator.get_errors())
 
@@ -111,9 +109,7 @@ class TestValidateFilePaths:
         """A file path should fail when path_type is 'directory'."""
         f = tmp_path / "file.txt"
         f.write_text("data")
-        result = validator.validate(
-            {"paths": [str(f)], "path_type": "directory"}
-        )
+        result = validator.validate({"paths": [str(f)], "path_type": "directory"})
         assert result is False
         assert any("not a directory" in e for e in validator.get_errors())
 
@@ -127,9 +123,7 @@ class TestValidateFilePaths:
         """Mix of valid and invalid paths should fail overall."""
         valid = tmp_path / "good.txt"
         valid.write_text("ok")
-        result = validator.validate(
-            {"paths": [str(valid), "/no/exist.txt"], "path_type": "file"}
-        )
+        result = validator.validate({"paths": [str(valid), "/no/exist.txt"], "path_type": "file"})
         assert result is False
 
 
@@ -146,26 +140,20 @@ class TestPathTypes:
         """All file-like path types should accept a real file."""
         f = tmp_path / "test.txt"
         f.write_text("ok")
-        result = validator.validate(
-            {"paths": [str(f)], "path_type": path_type}
-        )
+        result = validator.validate({"paths": [str(f)], "path_type": path_type})
         assert result is True
 
     @pytest.mark.parametrize("path_type", ["file", "input", "schema", "prompt"])
     def test_file_like_path_types_reject_dir(self, validator, tmp_path, path_type):
         """All file-like path types should reject a directory."""
-        result = validator.validate(
-            {"paths": [str(tmp_path)], "path_type": path_type}
-        )
+        result = validator.validate({"paths": [str(tmp_path)], "path_type": path_type})
         assert result is False
         assert any("not a file" in e for e in validator.get_errors())
 
     @pytest.mark.parametrize("path_type", ["directory", "output"])
     def test_directory_like_path_types_valid(self, validator, tmp_path, path_type):
         """Directory-like path types should accept a real directory."""
-        result = validator.validate(
-            {"paths": [str(tmp_path)], "path_type": path_type}
-        )
+        result = validator.validate({"paths": [str(tmp_path)], "path_type": path_type})
         assert result is True
 
     @pytest.mark.parametrize("path_type", ["directory", "output"])
@@ -173,9 +161,7 @@ class TestPathTypes:
         """Directory-like path types should reject a file."""
         f = tmp_path / "file.txt"
         f.write_text("data")
-        result = validator.validate(
-            {"paths": [str(f)], "path_type": path_type}
-        )
+        result = validator.validate({"paths": [str(f)], "path_type": path_type})
         assert result is False
         assert any("not a directory" in e for e in validator.get_errors())
 
@@ -234,6 +220,7 @@ class TestPermissionChecks:
         f = tmp_path / "nowrite.txt"
         f.write_text("locked")
         with patch("agent_actions.validation.preflight.path_validator.os.access") as mock_access:
+
             def side_effect(path, mode):
                 if mode == os.W_OK:
                     return False
@@ -255,7 +242,9 @@ class TestPermissionChecks:
         """When both read and write checks fail, both errors are recorded."""
         f = tmp_path / "locked.txt"
         f.write_text("locked")
-        with patch("agent_actions.validation.preflight.path_validator.os.access", return_value=False):
+        with patch(
+            "agent_actions.validation.preflight.path_validator.os.access", return_value=False
+        ):
             result = validator.validate(
                 {
                     "paths": [str(f)],
@@ -291,7 +280,9 @@ class TestIssuesTracking:
         """Permission failures should create a permission-related issue."""
         f = tmp_path / "noperm.txt"
         f.write_text("x")
-        with patch("agent_actions.validation.preflight.path_validator.os.access", return_value=False):
+        with patch(
+            "agent_actions.validation.preflight.path_validator.os.access", return_value=False
+        ):
             validator.validate(
                 {
                     "paths": [str(f)],
@@ -341,9 +332,7 @@ class TestValidatePaths:
         assert result is False
 
     def test_agent_name_passed_through(self, validator):
-        validator.validate_paths(
-            ["/nonexistent"], path_type="file", agent_name="test_agent"
-        )
+        validator.validate_paths(["/nonexistent"], path_type="file", agent_name="test_agent")
         issues = validator.get_issues()
         assert any(i.agent_name == "test_agent" for i in issues)
 
@@ -439,9 +428,7 @@ class TestValidateAgentPaths:
 
     def test_agent_name_propagated(self, validator):
         """Agent name should be propagated to validation calls."""
-        validator.validate_agent_paths(
-            {"input_file": "/no/file"}, agent_name="agent_x"
-        )
+        validator.validate_agent_paths({"input_file": "/no/file"}, agent_name="agent_x")
         issues = validator.get_issues()
         assert any(i.agent_name == "agent_x" for i in issues)
 

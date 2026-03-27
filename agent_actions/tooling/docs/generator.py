@@ -268,7 +268,9 @@ class CatalogGenerator:
                     unique_schemas.add(schema)
 
                 # Count actions with prompts (LLM actions typically have prompts)
-                if action.get("prompt") or (action.get("type") == DEFAULT_ACTION_KIND and action.get("intent")):
+                if action.get("prompt") or (
+                    action.get("type") == DEFAULT_ACTION_KIND and action.get("intent")
+                ):
                     actions_with_prompts += 1
 
         # Update global stats for schemas, prompts, tool functions, and runs

@@ -93,11 +93,19 @@ def _execute_render(
     "-a", "--agent", "agent_name", required=True, help="Name of the agent to render template for"
 )
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
-@click.option("--create-dirs", is_flag=True, default=False, help="Create template directory if it does not exist")
+@click.option(
+    "--create-dirs",
+    is_flag=True,
+    default=False,
+    help="Create template directory if it does not exist",
+)
 @handles_user_errors("render")
 @requires_project
 def render(
-    agent_name: str, template_dir: str | None = None, create_dirs: bool = False, project_root: Path | None = None
+    agent_name: str,
+    template_dir: str | None = None,
+    create_dirs: bool = False,
+    project_root: Path | None = None,
 ) -> None:
     """
     Compile and render workflow configuration.
@@ -128,11 +136,19 @@ def render(
 @click.command()
 @click.option("-a", "--agent", "agent_name", required=True, help="Name of the workflow to compile")
 @click.option("-t", "--template-dir", help="Directory containing templates (default: ./templates)")
-@click.option("--create-dirs", is_flag=True, default=False, help="Create template directory if it does not exist")
+@click.option(
+    "--create-dirs",
+    is_flag=True,
+    default=False,
+    help="Create template directory if it does not exist",
+)
 @handles_user_errors("compile")
 @requires_project
 def compile(
-    agent_name: str, template_dir: str | None = None, create_dirs: bool = False, project_root: Path | None = None
+    agent_name: str,
+    template_dir: str | None = None,
+    create_dirs: bool = False,
+    project_root: Path | None = None,
 ) -> None:
     """
     Alias for 'render' - compile workflow configuration.

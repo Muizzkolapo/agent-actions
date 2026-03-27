@@ -121,7 +121,7 @@ def inherit_simple_fields(
         if field == "run_mode" and isinstance(value, str) and not isinstance(value, RunMode):
             value = RunMode(value)
         # Deep-copy mutable values to prevent cross-agent state leakage
-        if isinstance(value, (list, dict)):
+        if isinstance(value, list | dict):
             value = copy.deepcopy(value)
         agent[field] = value
 

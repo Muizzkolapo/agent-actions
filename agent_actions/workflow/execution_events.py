@@ -64,7 +64,9 @@ class WorkflowEventLogger:
             },
         )
 
-    def fire_action_start(self, idx: int, action_name: str, total_actions: int, action_config: dict):
+    def fire_action_start(
+        self, idx: int, action_name: str, total_actions: int, action_config: dict
+    ):
         """Fire an ActionStartEvent."""
         fire_event(
             ActionStartEvent(

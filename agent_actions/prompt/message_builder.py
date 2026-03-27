@@ -298,7 +298,7 @@ class MessageBuilder:
                 return context_data
             return json.dumps(context_data, ensure_ascii=False)
 
-        return StringProcessor.process_as_string(context_data)
+        return str(StringProcessor.process_as_string(context_data))
 
     @staticmethod
     def _assemble_body(

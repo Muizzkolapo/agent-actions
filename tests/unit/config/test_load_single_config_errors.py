@@ -70,9 +70,7 @@ class TestLoadSingleConfigErrors:
             "agent_actions.prompt.render_workflow.render_pipeline_with_templates",
             side_effect=RuntimeError("disk full"),
         ):
-            with pytest.raises(
-                ConfigurationError, match=r"RuntimeError.*disk full"
-            ) as exc_info:
+            with pytest.raises(ConfigurationError, match=r"RuntimeError.*disk full") as exc_info:
                 manager._load_single_config(config_path, "workflow")
 
         assert "workflow.yml" in str(exc_info.value)

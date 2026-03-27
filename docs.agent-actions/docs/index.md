@@ -35,13 +35,13 @@ See [Installation](./installation.md) for configuration options or [Troubleshoot
 
 ## What to build
 
-**[Incident triage](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/incident-management)** — Classify severity, assess impact, assign teams, generate response plans. Parallel evaluators with consensus aggregation.
+**[Incident triage](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/incident_triage)** — Classify severity, assess impact, assign teams, generate response plans. Parallel evaluators with consensus aggregation.
 
-**[ML pipelines](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/ml-pipeline)** — Data quality checks → feature engineering → parallel model training → evaluation → conditional deployment.
+**[Contract review](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/contract_reviewer)** — Split contracts into clauses, analyze each for risk in parallel, aggregate findings into a unified report, and produce an executive summary.
 
-**[Root cause analysis](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/examples/root-cause-analysis)** — Multi-level causal reasoning from symptoms to root causes. Hypothesis generation, validation, and remediation planning.
+**[Review analysis](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/review_analyzer)** — Multi-model pipeline for product reviews — extract claims, score quality via parallel consensus, draft merchant responses, and surface product insights.
 
-**[Catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/docs.agent-actions/samples/agent_workflow/book_catalog_enrichment)** — Take raw book/product data, enrich with classifications, marketing copy, SEO keywords, and recommendations.
+**[Catalog enrichment](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/book_catalog_enrichment)** — Take raw book/product data, enrich with classifications, marketing copy, SEO keywords, and recommendations.
 
 ## What Agent Actions does for you
 

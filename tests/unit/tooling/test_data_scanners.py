@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from agent_actions.tooling.docs.scanner.data_scanners import extract_action_metrics, scan_logs
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_events(path: Path, count: int, event_type: str = "CLIArgumentParsingEvent") -> None:
     """Write `count` minimal JSONL event lines to `path`."""
@@ -37,6 +35,7 @@ def _action_event(action_name: str) -> dict:
 # ---------------------------------------------------------------------------
 # scan_logs
 # ---------------------------------------------------------------------------
+
 
 class TestScanLogsLineCap:
     def test_scan_logs_returns_data_within_limit(self, tmp_path):
@@ -88,6 +87,7 @@ class TestScanLogsLineCap:
 # ---------------------------------------------------------------------------
 # extract_action_metrics
 # ---------------------------------------------------------------------------
+
 
 class TestExtractActionMetricsLineCap:
     def test_returns_metrics_for_known_events(self, tmp_path):

@@ -33,7 +33,7 @@ class OptionalFieldTypeValidator(BaseActionEntryValidator):
     def _validate_version_field(self, context, errors: list) -> None:
         """Validate version field type."""
         if "version" in context.normalized_entry:
-            if not isinstance(context.normalized_entry["version"], (str, int, float)):
+            if not isinstance(context.normalized_entry["version"], str | int | float):
                 errors.append(f"{context.description} 'version' should be a string or number.")
 
     def _validate_dependencies_field(self, context, errors: list) -> None:
