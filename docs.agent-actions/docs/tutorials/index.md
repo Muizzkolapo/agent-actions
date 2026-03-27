@@ -34,6 +34,10 @@ agac init my_workflow
 cd my_workflow
 ```
 
+:::tip
+Want a fully working example instead? Run `agac init --example contract_reviewer my_workflow` to scaffold a complete project you can run immediately. See all examples with `agac init --list-examples`.
+:::
+
 This creates the standard project structure:
 
 ```
