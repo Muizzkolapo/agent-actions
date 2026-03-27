@@ -4,6 +4,7 @@
   --domino-accent: #94a3b8;
   --domino-main: #e2e8f0;
   --icon-stroke: #e2e8f0;
+  overflow-x: hidden;
 }
 
 :global([data-theme='light']) .page {
@@ -591,17 +592,50 @@
     font-size: 36px;
   }
 
+  .heroSub {
+    font-size: 16px;
+  }
+
+  .heroBadge {
+    font-size: 11px;
+    padding: 5px 12px;
+  }
+
   .featuresGrid {
     grid-template-columns: 1fr;
+  }
+
+  .features,
+  .codeSection,
+  .cta {
+    padding: 56px 20px;
   }
 
   .codeInner {
     flex-direction: column;
   }
 
+  .codeText {
+    flex: none;
+    width: 100%;
+  }
+
+  .codeWindow {
+    max-width: 100%;
+  }
+
+  .codeH2 {
+    font-size: 26px;
+  }
+
   .statsInner {
     gap: 32px;
     flex-wrap: wrap;
+  }
+
+  .featuresH2,
+  .ctaH2 {
+    font-size: 28px;
   }
 }
 
