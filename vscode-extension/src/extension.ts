@@ -67,7 +67,7 @@ async function startClient(context: ExtensionContext): Promise<void> {
 
   const startPromise = client.start();
 
-  let timer: NodeJS.Timeout;
+  let timer: NodeJS.Timeout | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(
       () => reject(new Error(`LSP server did not respond within ${ACTIVATION_TIMEOUT_MS / 1000}s`)),
@@ -80,11 +80,11 @@ async function startClient(context: ExtensionContext): Promise<void> {
     outputChannel.appendLine("LSP server started successfully.");
   } catch (err) {
     // Stop the half-started client so it doesn't linger
-    client.stop().catch(() => {});
+    client.stop().catch((e) => outputChannel.appendLine(`Stop error: ${e}`));
     client = undefined;
     throw err;
   } finally {
-    clearTimeout(timer!);
+    if (timer) clearTimeout(timer);
   }
 }
 

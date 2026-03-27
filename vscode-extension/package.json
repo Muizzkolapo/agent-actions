@@ -68,8 +68,9 @@
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "build": "node esbuild.js --production",
-    "package": "npm run build && vsce package",
-    "publish": "npm run build && vsce publish"
+    "typecheck": "tsc --noEmit",
+    "package": "npm run typecheck && npm run build && vsce package",
+    "publish": "npm run typecheck && npm run build && vsce publish"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
