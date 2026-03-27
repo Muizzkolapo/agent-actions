@@ -1,0 +1,740 @@
+[
+  {
+    "isbn": "9780134685991",
+    "title": "Effective Java",
+    "authors": ["Joshua Bloch"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2018,
+    "page_count": 412,
+    "description": "Best practices for the Java platform covering generics, enums, annotations, autoboxing, and concurrency."
+  },
+  {
+    "isbn": "9780596007126",
+    "title": "Head First Design Patterns",
+    "authors": ["Eric Freeman", "Elisabeth Robson"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2004,
+    "page_count": 638,
+    "description": "A brain-friendly guide to design patterns using real-world examples and visual learning."
+  },
+  {
+    "isbn": "9780132350884",
+    "title": "Clean Code",
+    "authors": ["Robert C. Martin"],
+    "publisher": "Prentice Hall",
+    "publish_year": 2008,
+    "page_count": 464,
+    "description": "Handbook of agile software craftsmanship covering principles, patterns, and practices of writing clean code."
+  },
+  {
+    "isbn": "9781449373320",
+    "title": "Designing Data-Intensive Applications",
+    "authors": ["Martin Kleppmann"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2017,
+    "page_count": 616,
+    "description": "The big ideas behind reliable, scalable, and maintainable systems including databases, streams, and distributed architectures."
+  },
+  {
+    "isbn": "9781492032557",
+    "title": "Hands-On Machine Learning with Scikit-Learn, Keras, and TensorFlow",
+    "authors": ["Aurélien Géron"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 861,
+    "description": "Practical machine learning with Python using Scikit-Learn, Keras, and TensorFlow with end-to-end examples."
+  },
+  {
+    "isbn": "9781491946008",
+    "title": "Building Microservices",
+    "authors": ["Sam Newman"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 612,
+    "description": "Designing fine-grained systems covering the full lifecycle of microservices from modeling to monitoring."
+  },
+  {
+    "isbn": "9781617294945",
+    "title": "Kubernetes in Action",
+    "authors": ["Marko Luksa"],
+    "publisher": "Manning Publications",
+    "publish_year": 2018,
+    "page_count": 624,
+    "description": "Deploy and manage containerized applications with Kubernetes covering pods, services, deployments, and stateful sets."
+  },
+  {
+    "isbn": "9780201633610",
+    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+    "authors": ["Erich Gamma", "Richard Helm", "Ralph Johnson", "John Vlissides"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 1994,
+    "page_count": 395,
+    "description": "Catalog of 23 patterns for object-oriented software design covering creational, structural, and behavioral patterns."
+  },
+  {
+    "isbn": "9780135957059",
+    "title": "The Pragmatic Programmer",
+    "authors": ["David Thomas", "Andrew Hunt"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2019,
+    "page_count": 352,
+    "description": "Practical advice for software developers covering topics from personal responsibility to career development and technical practices."
+  },
+  {
+    "isbn": "9781491950364",
+    "title": "Deep Learning",
+    "authors": ["Ian Goodfellow", "Yoshua Bengio", "Aaron Courville"],
+    "publisher": "MIT Press",
+    "publish_year": 2016,
+    "page_count": 800,
+    "description": "Comprehensive textbook on deep learning covering feedforward networks, regularization, optimization, and sequence modeling."
+  },
+  {
+    "isbn": "9781492034025",
+    "title": "Site Reliability Engineering",
+    "authors": ["Betsy Beyer", "Chris Jones", "Jennifer Petoff", "Niall Murphy"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2016,
+    "page_count": 552,
+    "description": "How Google runs production systems covering SLOs, error budgets, toil elimination, and incident management."
+  },
+  {
+    "isbn": "9781942788003",
+    "title": "The DevOps Handbook",
+    "authors": ["Gene Kim", "Jez Humble", "Patrick Debois", "John Willis"],
+    "publisher": "IT Revolution Press",
+    "publish_year": 2016,
+    "page_count": 480,
+    "description": "How to create world-class agility, reliability, and security in technology organizations through DevOps practices."
+  },
+  {
+    "isbn": "9780321125217",
+    "title": "Domain-Driven Design",
+    "authors": ["Eric Evans"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2003,
+    "page_count": 560,
+    "description": "Tackling complexity in software through domain modeling, bounded contexts, and ubiquitous language."
+  },
+  {
+    "isbn": "9781617291548",
+    "title": "Grokking Algorithms",
+    "authors": ["Aditya Bhargava"],
+    "publisher": "Manning Publications",
+    "publish_year": 2016,
+    "page_count": 256,
+    "description": "Illustrated guide to algorithms for programmers covering search, sort, graph algorithms, and dynamic programming."
+  },
+  {
+    "isbn": "9781491954614",
+    "title": "Fluent Python",
+    "authors": ["Luciano Ramalho"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 1012,
+    "description": "Effective, idiomatic Python covering data structures, functions as objects, object-oriented idioms, and concurrency."
+  },
+  {
+    "isbn": "9781492055525",
+    "title": "Practical MLOps",
+    "authors": ["Noah Gift", "Alfredo Deza"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 430,
+    "description": "Operationalizing machine learning models covering pipelines, monitoring, cloud platforms, and model deployment."
+  },
+  {
+    "isbn": "9781492077602",
+    "title": "Terraform: Up and Running",
+    "authors": ["Yevgeniy Brikman"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 466,
+    "description": "Infrastructure as code with Terraform covering modules, state management, testing, and multi-cloud deployments."
+  },
+  {
+    "isbn": "9781492032649",
+    "title": "Programming Rust",
+    "authors": ["Jim Blandy", "Jason Orendorff", "Leonora F.S. Tindall"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 622,
+    "description": "Systems programming in Rust covering ownership, borrowing, lifetimes, concurrency, and async programming."
+  },
+  {
+    "isbn": "9781617295027",
+    "title": "Go in Action",
+    "authors": ["William Kennedy", "Brian Ketelsen", "Erik St. Martin"],
+    "publisher": "Manning Publications",
+    "publish_year": 2015,
+    "page_count": 264,
+    "description": "Introduction to Go covering goroutines, channels, interfaces, testing, and building web services."
+  },
+  {
+    "isbn": "9781491960202",
+    "title": "Fundamentals of Data Engineering",
+    "authors": ["Joe Reis", "Matt Housley"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 414,
+    "description": "Planning and building data engineering systems covering the data engineering lifecycle, storage, ingestion, and orchestration."
+  },
+  {
+    "isbn": "9780321700698",
+    "title": "Test Driven Development: By Example",
+    "authors": ["Kent Beck"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2002,
+    "page_count": 240,
+    "description": "Practical TDD using examples in Java and Python covering the red-green-refactor cycle and test patterns."
+  },
+  {
+    "isbn": "9781593279509",
+    "title": "The Linux Command Line",
+    "authors": ["William E. Shotts"],
+    "publisher": "No Starch Press",
+    "publish_year": 2019,
+    "page_count": 480,
+    "description": "Complete guide to the Linux command line covering navigation, shell scripting, text processing, and system administration."
+  },
+  {
+    "isbn": "9781098107963",
+    "title": "Learning SQL",
+    "authors": ["Alan Beaulieu"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 340,
+    "description": "Introduction to SQL covering queries, joins, subqueries, indexes, and transactions for MySQL, Oracle, and SQL Server."
+  },
+  {
+    "isbn": "9781492034605",
+    "title": "Kafka: The Definitive Guide",
+    "authors": ["Neha Narkhede", "Gwen Shapira", "Todd Palino"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 464,
+    "description": "Real-time data streaming with Apache Kafka covering producers, consumers, brokers, and stream processing."
+  },
+  {
+    "isbn": "9781617291999",
+    "title": "Spring in Action",
+    "authors": ["Craig Walls"],
+    "publisher": "Manning Publications",
+    "publish_year": 2022,
+    "page_count": 520,
+    "description": "Comprehensive guide to Spring covering dependency injection, Spring MVC, Spring Boot, Spring Data, and Spring Security."
+  },
+  {
+    "isbn": "9781491912058",
+    "title": "High Performance Python",
+    "authors": ["Micha Gorelick", "Ian Ozsvald"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 468,
+    "description": "Profiling, optimization, and parallel computing in Python covering NumPy, Cython, and multiprocessing."
+  },
+  {
+    "isbn": "9781617295195",
+    "title": "Docker in Action",
+    "authors": ["Jeff Nickoloff", "Stephen Kuenzli"],
+    "publisher": "Manning Publications",
+    "publish_year": 2019,
+    "page_count": 350,
+    "description": "Developing and deploying containerized applications with Docker covering images, networking, volumes, and orchestration."
+  },
+  {
+    "isbn": "9781491919019",
+    "title": "Natural Language Processing with Python",
+    "authors": ["Steven Bird", "Ewan Klein", "Edward Loper"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2009,
+    "page_count": 504,
+    "description": "Text processing with NLTK covering tokenization, tagging, parsing, semantic analysis, and building NLP applications."
+  },
+  {
+    "isbn": "9781491946459",
+    "title": "Data Science from Scratch",
+    "authors": ["Joel Grus"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2019,
+    "page_count": 406,
+    "description": "Building data science tools from first principles covering statistics, linear algebra, machine learning, and data visualization."
+  },
+  {
+    "isbn": "9780137081073",
+    "title": "The Clean Coder",
+    "authors": ["Robert C. Martin"],
+    "publisher": "Prentice Hall",
+    "publish_year": 2011,
+    "page_count": 256,
+    "description": "Professional conduct for software developers covering commitment, saying no, coding under pressure, and time management."
+  },
+  {
+    "isbn": "9780201485677",
+    "title": "Refactoring: Improving the Design of Existing Code",
+    "authors": ["Martin Fowler"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2018,
+    "page_count": 448,
+    "description": "Catalog of refactorings for improving the design of existing code safely with examples in JavaScript."
+  },
+  {
+    "isbn": "9780131177055",
+    "title": "Working Effectively with Legacy Code",
+    "authors": ["Michael Feathers"],
+    "publisher": "Prentice Hall",
+    "publish_year": 2004,
+    "page_count": 456,
+    "description": "Techniques for safely changing and testing legacy codebases covering seams, dependency breaking, and characterization tests."
+  },
+  {
+    "isbn": "9780735619678",
+    "title": "Code Complete",
+    "authors": ["Steve McConnell"],
+    "publisher": "Microsoft Press",
+    "publish_year": 2004,
+    "page_count": 960,
+    "description": "Practical guide to software construction covering design, coding, debugging, testing, and software craftsmanship."
+  },
+  {
+    "isbn": "9781680502618",
+    "title": "The Rust Programming Language",
+    "authors": ["Steve Klabnik", "Carol Nichols"],
+    "publisher": "No Starch Press",
+    "publish_year": 2022,
+    "page_count": 560,
+    "description": "Official guide to Rust covering ownership, borrowing, structs, enums, error handling, generics, and cargo."
+  },
+  {
+    "isbn": "9781617295188",
+    "title": "Kotlin in Action",
+    "authors": ["Dmitry Jemerov", "Svetlana Isakova"],
+    "publisher": "Manning Publications",
+    "publish_year": 2017,
+    "page_count": 360,
+    "description": "Practical Kotlin for JVM developers covering null safety, extension functions, lambdas, coroutines, and DSLs."
+  },
+  {
+    "isbn": "9781119476009",
+    "title": "The Web Application Hacker's Handbook",
+    "authors": ["Dafydd Stuttard", "Marcus Pinto"],
+    "publisher": "Wiley",
+    "publish_year": 2011,
+    "page_count": 912,
+    "description": "Finding and exploiting security flaws in web applications covering injection, authentication bypass, and client-side attacks."
+  },
+  {
+    "isbn": "9781491977552",
+    "title": "Database Internals",
+    "authors": ["Alex Petrov"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2019,
+    "page_count": 376,
+    "description": "Deep dive into database storage engines, distributed systems algorithms, consensus protocols, and replication."
+  },
+  {
+    "isbn": "9780321601919",
+    "title": "Continuous Delivery",
+    "authors": ["Jez Humble", "David Farley"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2010,
+    "page_count": 512,
+    "description": "Reliable software releases through build, test, and deployment automation covering pipelines and deployment patterns."
+  },
+  {
+    "isbn": "9781942788317",
+    "title": "Accelerate",
+    "authors": ["Nicole Forsgren", "Jez Humble", "Gene Kim"],
+    "publisher": "IT Revolution Press",
+    "publish_year": 2018,
+    "page_count": 288,
+    "description": "Research-backed practices for high software delivery performance covering deployment frequency, lead time, and recovery."
+  },
+  {
+    "isbn": "9781491924242",
+    "title": "Infrastructure as Code",
+    "authors": ["Kief Morris"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 440,
+    "description": "Managing dynamic cloud infrastructure with code covering provisioning, configuration management, and immutable infrastructure."
+  },
+  {
+    "isbn": "9780262033848",
+    "title": "Introduction to Algorithms",
+    "authors": ["Thomas H. Cormen", "Charles E. Leiserson", "Ronald L. Rivest", "Clifford Stein"],
+    "publisher": "MIT Press",
+    "publish_year": 2022,
+    "page_count": 1312,
+    "description": "Comprehensive textbook on algorithms covering sorting, data structures, graph algorithms, dynamic programming, and NP-completeness."
+  },
+  {
+    "isbn": "9781492041139",
+    "title": "Feature Engineering for Machine Learning",
+    "authors": ["Alice Zheng", "Amanda Casari"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2018,
+    "page_count": 218,
+    "description": "Principles and techniques for engineering features covering numeric, categorical, text, and image data."
+  },
+  {
+    "isbn": "9781492041856",
+    "title": "Data Pipelines with Apache Airflow",
+    "authors": ["Bas Harenslak", "Julian de Ruiter"],
+    "publisher": "Manning Publications",
+    "publish_year": 2021,
+    "page_count": 464,
+    "description": "Building and scheduling data pipelines with Apache Airflow covering DAGs, operators, sensors, and deployment."
+  },
+  {
+    "isbn": "9780596517748",
+    "title": "JavaScript: The Good Parts",
+    "authors": ["Douglas Crockford"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2008,
+    "page_count": 172,
+    "description": "Identifying the reliable and elegant subset of JavaScript covering functions, objects, arrays, and inheritance."
+  },
+  {
+    "isbn": "9781491904244",
+    "title": "You Don't Know JS: Scope and Closures",
+    "authors": ["Kyle Simpson"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2014,
+    "page_count": 98,
+    "description": "Deep dive into JavaScript scope, hoisting, closures, and the module pattern."
+  },
+  {
+    "isbn": "9781491904930",
+    "title": "Learning React",
+    "authors": ["Alex Banks", "Eve Porcello"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 310,
+    "description": "Functional web development with React and hooks covering state management, side effects, and performance optimization."
+  },
+  {
+    "isbn": "9781484206522",
+    "title": "Pro Git",
+    "authors": ["Scott Chacon", "Ben Straub"],
+    "publisher": "Apress",
+    "publish_year": 2014,
+    "page_count": 574,
+    "description": "Comprehensive guide to Git covering branching, merging, rebasing, distributed workflows, and GitHub integration."
+  },
+  {
+    "isbn": "9781617290893",
+    "title": "The Art of Unit Testing",
+    "authors": ["Roy Osherove"],
+    "publisher": "Manning Publications",
+    "publish_year": 2013,
+    "page_count": 296,
+    "description": "Writing maintainable unit tests covering mocks, stubs, test doubles, and test-driven development practices."
+  },
+  {
+    "isbn": "9780201835953",
+    "title": "The Mythical Man-Month",
+    "authors": ["Frederick P. Brooks Jr."],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 1995,
+    "page_count": 336,
+    "description": "Essays on software engineering covering Brooks's Law, the second-system effect, and managing large programming projects."
+  },
+  {
+    "isbn": "9781492076988",
+    "title": "Spark: The Definitive Guide",
+    "authors": ["Bill Chambers", "Matei Zaharia"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2018,
+    "page_count": 604,
+    "description": "Complete guide to Apache Spark covering DataFrames, SQL, streaming, machine learning, and graph processing."
+  },
+  {
+    "isbn": "9781492050278",
+    "title": "Istio: Up and Running",
+    "authors": ["Lee Calcote", "Zack Butcher"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2019,
+    "page_count": 274,
+    "description": "Managing microservices with the Istio service mesh covering traffic management, security, observability, and policy."
+  },
+  {
+    "isbn": "9781617295539",
+    "title": "Grokking System Design Interview",
+    "authors": ["Donne Martin"],
+    "publisher": "Manning Publications",
+    "publish_year": 2021,
+    "page_count": 320,
+    "description": "Patterns and examples for system design interviews covering scalability, load balancing, caching, and distributed systems."
+  },
+  {
+    "isbn": "9780321127426",
+    "title": "Patterns of Enterprise Application Architecture",
+    "authors": ["Martin Fowler"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2002,
+    "page_count": 560,
+    "description": "Catalog of patterns for enterprise application architecture covering domain logic, data source, and web presentation patterns."
+  },
+  {
+    "isbn": "9780735684256",
+    "title": "The Staff Engineer's Path",
+    "authors": ["Tanya Reilly"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 318,
+    "description": "Guide for senior engineers navigating the staff engineer role covering technical vision, influence, and execution."
+  },
+  {
+    "isbn": "9781491973899",
+    "title": "Monolith to Microservices",
+    "authors": ["Sam Newman"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2019,
+    "page_count": 272,
+    "description": "Evolutionary patterns for decomposing monolithic applications into microservices incrementally and safely."
+  },
+  {
+    "isbn": "9780596004361",
+    "title": "Head First SQL",
+    "authors": ["Lynn Beighley"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2007,
+    "page_count": 608,
+    "description": "Visual, brain-friendly introduction to SQL covering SELECT, INSERT, UPDATE, DELETE, joins, and subqueries."
+  },
+  {
+    "isbn": "9781617292545",
+    "title": "Elasticsearch in Action",
+    "authors": ["Radu Gheorghe", "Matthew Lee Hinman", "Roy Russo"],
+    "publisher": "Manning Publications",
+    "publish_year": 2015,
+    "page_count": 400,
+    "description": "Building search applications with Elasticsearch covering indexing, querying, aggregations, and cluster management."
+  },
+  {
+    "isbn": "9781491901632",
+    "title": "Redis in Action",
+    "authors": ["Josiah Carlson"],
+    "publisher": "Manning Publications",
+    "publish_year": 2013,
+    "page_count": 320,
+    "description": "Using Redis as a database, cache, and message broker covering data structures, persistence, and clustering."
+  },
+  {
+    "isbn": "9781491953396",
+    "title": "Python Cookbook",
+    "authors": ["David Beazley", "Brian K. Jones"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2013,
+    "page_count": 706,
+    "description": "Recipes for mastering Python 3 covering data structures, strings, algorithms, metaprogramming, and network programming."
+  },
+  {
+    "isbn": "9781593275990",
+    "title": "Automate the Boring Stuff with Python",
+    "authors": ["Al Sweigart"],
+    "publisher": "No Starch Press",
+    "publish_year": 2019,
+    "page_count": 504,
+    "description": "Practical automation with Python covering files, spreadsheets, PDFs, web scraping, scheduling, and GUI automation."
+  },
+  {
+    "isbn": "9780596006754",
+    "title": "Learning Python",
+    "authors": ["Mark Lutz"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2013,
+    "page_count": 1594,
+    "description": "Comprehensive introduction to Python covering core language features, built-in types, functions, modules, and OOP."
+  },
+  {
+    "isbn": "9780321950215",
+    "title": "Growing Object-Oriented Software, Guided by Tests",
+    "authors": ["Steve Freeman", "Nat Pryce"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2009,
+    "page_count": 384,
+    "description": "Test-driven development for object-oriented systems covering walking skeleton, ports and adapters, and test smells."
+  },
+  {
+    "isbn": "9780262045483",
+    "title": "The Algorithm Design Manual",
+    "authors": ["Steven S. Skiena"],
+    "publisher": "Springer",
+    "publish_year": 2020,
+    "page_count": 800,
+    "description": "Practical algorithm design covering data structures, graph algorithms, combinatorial search, and the hitchhiker's guide to algorithms."
+  },
+  {
+    "isbn": "9781491970348",
+    "title": "Python for DevOps",
+    "authors": ["Noah Gift", "Kennedy Behrman", "Alfredo Deza", "Grig Gheorghiu"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 504,
+    "description": "Using Python for automation, infrastructure, and cloud management covering shell scripting, testing, and CI/CD."
+  },
+  {
+    "isbn": "9781098131944",
+    "title": "Building LLM Applications",
+    "authors": ["Valentina Alto"],
+    "publisher": "Packt Publishing",
+    "publish_year": 2023,
+    "page_count": 358,
+    "description": "Building applications with large language models covering prompt engineering, LangChain, retrieval-augmented generation, and deployment."
+  },
+  {
+    "isbn": "9781633437166",
+    "title": "AI Engineering",
+    "authors": ["Chip Huyen"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2025,
+    "page_count": 510,
+    "description": "Building production AI systems covering foundation models, RAG, fine-tuning, evaluation, and AI infrastructure."
+  },
+  {
+    "isbn": "9781098150945",
+    "title": "Prompt Engineering for LLMs",
+    "authors": ["John Berryman", "Albert Ziegler"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2024,
+    "page_count": 300,
+    "description": "Systematic approaches to prompt design covering chain-of-thought, few-shot learning, RAG integration, and evaluation."
+  },
+  {
+    "isbn": "9781098140960",
+    "title": "Developing Apps with GPT-4 and ChatGPT",
+    "authors": ["Olivier Caelen", "Marie-Alice Blete"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2023,
+    "page_count": 200,
+    "description": "Building applications with the OpenAI API covering completions, function calling, embeddings, and fine-tuning."
+  },
+  {
+    "isbn": "9781492092452",
+    "title": "Graph Algorithms",
+    "authors": ["Mark Needham", "Amy E. Hodler"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2019,
+    "page_count": 256,
+    "description": "Practical graph algorithms with Apache Spark and Neo4j covering pathfinding, centrality, community detection, and link prediction."
+  },
+  {
+    "isbn": "9781492075912",
+    "title": "Practical Statistics for Data Scientists",
+    "authors": ["Peter Bruce", "Andrew Bruce", "Peter Gedeck"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 368,
+    "description": "Statistical methods for data science covering exploratory analysis, regression, classification, and statistical machine learning."
+  },
+  {
+    "isbn": "9781617295416",
+    "title": "Deep Learning with Python",
+    "authors": ["François Chollet"],
+    "publisher": "Manning Publications",
+    "publish_year": 2021,
+    "page_count": 504,
+    "description": "Deep learning with Keras and TensorFlow covering computer vision, natural language processing, and generative models."
+  },
+  {
+    "isbn": "9781098107857",
+    "title": "Software Architecture: The Hard Parts",
+    "authors": ["Neal Ford", "Mark Richards", "Pramod Sadalage", "Zhamak Dehghani"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2021,
+    "page_count": 459,
+    "description": "Architecture trade-off analysis for distributed systems covering service granularity, data ownership, and workflow patterns."
+  },
+  {
+    "isbn": "9781491950357",
+    "title": "Python Cookbook",
+    "authors": ["David Beazley", "Brian K. Jones"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2013,
+    "page_count": 706,
+    "description": "Recipes for mastering Python 3 covering iterators, generators, decorators, context managers, and metaprogramming."
+  },
+  {
+    "isbn": "9780596802301",
+    "title": "JavaScript: The Definitive Guide",
+    "authors": ["David Flanagan"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 706,
+    "description": "Comprehensive JavaScript reference covering the core language, browser APIs, Node.js, and modern ES2020 features."
+  },
+  {
+    "isbn": "9781617297618",
+    "title": "TypeScript Quickly",
+    "authors": ["Yakov Fain", "Anton Moiseev"],
+    "publisher": "Manning Publications",
+    "publish_year": 2020,
+    "page_count": 416,
+    "description": "Practical TypeScript covering the type system, generics, decorators, and building full-stack applications with Angular."
+  },
+  {
+    "isbn": "9781492044352",
+    "title": "Network Programmability and Automation",
+    "authors": ["Jason Edelman", "Scott S. Lowe", "Matt Oswalt"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 600,
+    "description": "Automating networks with Python, Ansible, and APIs covering NETCONF, RESTCONF, and network data modeling."
+  },
+  {
+    "isbn": "9781098116743",
+    "title": "Ansible: Up and Running",
+    "authors": ["Bas Meijer", "Lorin Hochstein", "René Moser"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2022,
+    "page_count": 472,
+    "description": "Automating configuration management and deployment with Ansible covering playbooks, roles, inventories, and Ansible Galaxy."
+  },
+  {
+    "isbn": "9781491932704",
+    "title": "Learning Spark",
+    "authors": ["Jules Damji", "Brooke Wenig", "Tathagata Das", "Denny Lee"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2020,
+    "page_count": 398,
+    "description": "Big data processing with Apache Spark covering DataFrames, Spark SQL, streaming, and MLlib machine learning."
+  },
+  {
+    "isbn": "9781492051473",
+    "title": "Cloud Native Patterns",
+    "authors": ["Cornelia Davis"],
+    "publisher": "Manning Publications",
+    "publish_year": 2019,
+    "page_count": 400,
+    "description": "Design patterns for cloud-native applications covering dynamic configuration, service discovery, circuit breakers, and observability."
+  },
+  {
+    "isbn": "9781492078005",
+    "title": "The Manager's Path",
+    "authors": ["Camille Fournier"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2017,
+    "page_count": 244,
+    "description": "Guide for tech leads and engineering managers covering mentorship, team management, technical roadmaps, and culture."
+  },
+  {
+    "isbn": "9781491927625",
+    "title": "A Philosophy of Software Design",
+    "authors": ["John Ousterhout"],
+    "publisher": "Yaknyam Press",
+    "publish_year": 2021,
+    "page_count": 196,
+    "description": "Reducing software complexity through deep modules, good naming, error handling, and incremental design."
+  },
+  {
+    "isbn": "9781098121648",
+    "title": "Generative AI on AWS",
+    "authors": ["Chris Fregly", "Antje Barth", "Shelbee Eigenbrode"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2023,
+    "page_count": 472,
+    "description": "Building generative AI applications on AWS covering foundation models, SageMaker, Bedrock, fine-tuning, and RLHF."
+  }
+]

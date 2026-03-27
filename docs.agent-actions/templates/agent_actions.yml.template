@@ -1,0 +1,178 @@
+# Agent Actions Project Configuration Template
+# This file demonstrates all available configuration options
+# Copy this file to your project as agent_actions.yml and customize as needed
+
+# ============================================================================
+# PROJECT-LEVEL CONFIGURATION
+# ============================================================================
+# Settings defined here apply to ALL workflows and actions unless overridden
+# This is the base layer of the configuration hierarchy
+
+# Model vendor for all agents (can be overridden at workflow or action level)
+# Supported vendors: openai, anthropic, gemini, groq, deepseek, perplexity
+model_vendor: openai
+
+# Model name to use (vendor-specific)
+# The vendor will validate the model name, so any valid model is accepted
+model_name: gpt-4o-mini
+
+# API key for authentication
+# RECOMMENDED: Use environment variables instead of hardcoding
+# Supported formats:
+#   - Environment variable: ${OPENAI_API_KEY}
+#   - Direct reference: OPENAI_API_KEY
+#   - Hardcoded (NOT RECOMMENDED): sk-proj-...
+api_key: ${OPENAI_API_KEY}
+
+# Optional: Temperature for model responses (0.0 to 2.0)
+# Lower = more deterministic, Higher = more creative
+# temperature: 0.7
+
+# Optional: Maximum tokens in response
+# max_tokens: 4096
+
+# Optional: Top-p sampling (0.0 to 1.0)
+# top_p: 1.0
+
+# Optional: Frequency penalty (-2.0 to 2.0)
+# frequency_penalty: 0.0
+
+# Optional: Presence penalty (-2.0 to 2.0)
+# presence_penalty: 0.0
+
+# Optional: Stop sequences to end generation (string or list)
+# stop: "\n"
+# stop: ["\n", "END"]
+
+# ============================================================================
+# MULTI-VENDOR EXAMPLE
+# ============================================================================
+# You can configure defaults for different vendors in your project
+# Then override at workflow/action level as needed
+
+# Example: Using Anthropic Claude
+# model_vendor: anthropic
+# model_name: claude-sonnet-4-20250514
+# api_key: ${ANTHROPIC_API_KEY}
+
+# Example: Using Google Gemini
+# model_vendor: gemini
+# model_name: gemini-2.0-flash
+# api_key: ${GEMINI_API_KEY}
+
+# Example: Using Groq
+# model_vendor: groq
+# model_name: llama-3.1-70b-versatile
+# api_key: ${GROQ_API_KEY}
+
+# Example: Using DeepSeek
+# model_vendor: deepseek
+# model_name: deepseek-chat
+# api_key: ${DEEPSEEK_API_KEY}
+
+# Example: Using Perplexity
+# model_vendor: perplexity
+# model_name: llama-3.1-sonar-small-128k-online
+# api_key: ${PERPLEXITY_API_KEY}
+
+# ============================================================================
+# WORKFLOWS
+# ============================================================================
+# Workflows can override project-level settings
+# Place your workflow files in the workflows/ directory
+
+# Example workflow structure:
+# workflows/
+#   ├── summarize.yml      # Simple single-step workflow
+#   ├── analyze.yml        # Multi-step workflow
+#   └── extract.yml        # Batch processing workflow
+
+# To use a different vendor for a specific workflow, override in the workflow file:
+# workflows/summarize.yml:
+#   model_vendor: anthropic
+#   model_name: claude-sonnet-4-20250514
+#   api_key: ${ANTHROPIC_API_KEY}
+#   actions:
+#     - name: summarize_text
+#       # ... action configuration
+
+# ============================================================================
+# CONFIGURATION HIERARCHY
+# ============================================================================
+# Agent Actions uses a 3-level configuration hierarchy:
+#
+# 1. PROJECT (agent_actions.yml)        ← Base defaults
+#    ↓
+# 2. WORKFLOW (workflows/*.yml)          ← Can override project settings
+#    ↓
+# 3. ACTION (action in workflow)         ← Can override workflow settings
+#
+# Lower levels take precedence over higher levels
+# Missing fields are inherited from the level above
+
+# ============================================================================
+# ENVIRONMENT VARIABLES
+# ============================================================================
+# Best practice: Store API keys in environment variables
+# Create a .env file (add to .gitignore!):
+#
+# export OPENAI_API_KEY=sk-proj-...
+# export ANTHROPIC_API_KEY=sk-ant-...
+# export GEMINI_API_KEY=...
+# export GROQ_API_KEY=...
+# export DEEPSEEK_API_KEY=...
+# export PERPLEXITY_API_KEY=...
+#
+# Then reference in config using ${VAR_NAME} or VAR_NAME
+
+# ============================================================================
+# BATCH MODE
+# ============================================================================
+# For processing large datasets efficiently:
+#
+# actions:
+#   - name: process_batch
+#     model_vendor: openai
+#     model_name: gpt-4o-mini
+#     api_key: ${OPENAI_API_KEY}
+#     batch_mode: true           # Enable batch processing
+#     batch_size: 100            # Items per batch
+#     # ... rest of action config
+
+# ============================================================================
+# TOOL ACTIONS
+# ============================================================================
+# For non-LLM actions (Python functions, APIs, etc.):
+#
+# actions:
+#   - name: validate_data
+#     kind: tool                 # Mark as tool action
+#     impl: my_module.validate   # Python function path
+#     reads: [raw_data]          # Fields this tool reads
+#     writes: [validated_data]   # Fields this tool produces
+#
+# Tool actions automatically set model_vendor='tool' and run in online mode only
+
+# ============================================================================
+# CONDITIONAL EXECUTION
+# ============================================================================
+# Use guards to filter or skip items:
+#
+# actions:
+#   - name: process_important
+#     guard:
+#       condition: 'priority == "high"'
+#       on_false: filter        # or 'skip' to pass through
+#     # ... rest of action config
+
+# ============================================================================
+# NEXT STEPS
+# ============================================================================
+# 1. Copy this template to your project root as agent_actions.yml
+# 2. Set your default model_vendor, model_name, and api_key
+# 3. Create workflows/ directory for your workflow files
+# 4. See templates/workflows/ for workflow examples
+# 5. See docs/examples/configurations/ for detailed examples
+#
+# Documentation: https://agent-actions.readthedocs.io
+# Repository: https://github.com/yourusername/agent-actions

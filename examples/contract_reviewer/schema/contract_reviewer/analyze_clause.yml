@@ -1,0 +1,38 @@
+name: analyze_clause
+description: Schema for per-clause risk analysis results
+fields:
+  - id: risk_level
+    type: string
+    description: "Risk classification: 'high', 'medium', or 'low'"
+  - id: risk_score
+    type: number
+    description: "Numeric risk score from 0.0 (no risk) to 1.0 (maximum risk)"
+  - id: risk_indicators
+    type: array
+    items:
+      type: string
+    description: "Specific risk indicators found in this clause"
+  - id: obligations
+    type: array
+    items:
+      type: object
+    description: "Obligations identified in this clause, each with party, description, and type"
+  - id: deadlines
+    type: array
+    items:
+      type: object
+    description: "Deadlines or time-bound requirements found in this clause"
+  - id: reasoning
+    type: string
+    description: "Explanation of the risk assessment for this clause"
+  - id: recommended_action
+    type: string
+    description: "Suggested action: 'accept', 'negotiate', 'reject', or 'flag_for_legal'"
+required:
+  - risk_level
+  - risk_score
+  - risk_indicators
+  - obligations
+  - reasoning
+  - recommended_action
+additionalProperties: false

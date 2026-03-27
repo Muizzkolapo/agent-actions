@@ -1,0 +1,163 @@
+{
+  "incidents": [
+    {
+      "id": "INC-2024-001",
+      "title": "Auth service high error rate",
+      "root_cause": "Redis cache memory exhaustion causing cache miss storm",
+      "symptoms": [
+        "auth-service error rate spiked to 15%",
+        "user-db query latency increased 10x",
+        "api-gateway timeout rate increased"
+      ],
+      "causal_chain": [
+        "Redis memory usage reached 100%",
+        "New cache entries evicted immediately",
+        "Cache hit rate dropped from 95% to 20%",
+        "Auth service hit database for every request",
+        "Database connection pool exhausted",
+        "Auth service timeouts and errors"
+      ],
+      "resolution": {
+        "immediate_action": "Increased Redis memory limit from 4GB to 8GB",
+        "mitigation": "Restarted auth-service pods to reset connection pool",
+        "preventive_measure": "Added Redis memory usage alerts at 80% threshold"
+      },
+      "time_to_detect": "3 minutes",
+      "time_to_resolve": "12 minutes",
+      "business_impact": "15% of login attempts failed, $5K revenue impact"
+    },
+    {
+      "id": "INC-2024-005",
+      "title": "Order service degradation during flash sale",
+      "root_cause": "Database lock contention from inefficient query",
+      "symptoms": [
+        "order-service completion time increased from 200ms to 5s",
+        "Failed order rate spiked to 8%",
+        "order-db lock wait time spiked"
+      ],
+      "causal_chain": [
+        "Flash sale triggered 10x normal order volume",
+        "Inventory check query used table-level lock",
+        "Multiple concurrent orders blocked on same lock",
+        "Lock wait queue grew to 200+ transactions",
+        "Transactions timed out waiting for lock",
+        "Order failures cascaded"
+      ],
+      "resolution": {
+        "immediate_action": "Killed long-running lock-holding query",
+        "mitigation": "Temporarily rate-limited order creation",
+        "preventive_measure": "Refactored query to use row-level locks only"
+      },
+      "time_to_detect": "5 minutes",
+      "time_to_resolve": "25 minutes",
+      "business_impact": "8% order failure rate during 30min window, $50K revenue impact"
+    },
+    {
+      "id": "INC-2024-012",
+      "title": "Payment service webhook timeouts",
+      "root_cause": "Stripe webhook retry storm amplified by slow fraud detection",
+      "symptoms": [
+        "payment-service CPU utilization at 95%",
+        "Webhook processing time increased to 30s+",
+        "Stripe webhook delivery failing"
+      ],
+      "causal_chain": [
+        "Fraud detection API latency increased to 10s (normal: 200ms)",
+        "Webhook processing exceeded 5s Stripe timeout",
+        "Stripe retried failed webhooks exponentially",
+        "Retry storm amplified load by 5x",
+        "Payment service overwhelmed",
+        "More webhooks timed out, creating feedback loop"
+      ],
+      "resolution": {
+        "immediate_action": "Temporarily disabled fraud detection in webhook handler",
+        "mitigation": "Scaled payment-service replicas from 3 to 10",
+        "preventive_measure": "Moved fraud detection to async background job"
+      },
+      "time_to_detect": "8 minutes",
+      "time_to_resolve": "35 minutes",
+      "business_impact": "Payment confirmation delays, customer support spike"
+    },
+    {
+      "id": "INC-2024-018",
+      "title": "API gateway cascading failure",
+      "root_cause": "Order-service connection leak caused by unclosed database connections",
+      "symptoms": [
+        "api-gateway error rate increased to 25%",
+        "Multiple service timeouts",
+        "order-service unresponsive"
+      ],
+      "causal_chain": [
+        "Deployed order-service with connection leak bug",
+        "Database connections not closed in error path",
+        "Connection pool slowly exhausted over 2 hours",
+        "Order-service stopped responding to health checks",
+        "API gateway marked order-service unhealthy",
+        "All orders routed to remaining instances",
+        "Remaining instances also exhausted connections",
+        "Complete order-service outage"
+      ],
+      "resolution": {
+        "immediate_action": "Rolled back order-service deployment",
+        "mitigation": "Restarted order-db to release connections",
+        "preventive_measure": "Added connection pool monitoring and alerts"
+      },
+      "time_to_detect": "120 minutes (slow degradation)",
+      "time_to_resolve": "15 minutes",
+      "business_impact": "Complete order outage for 15 minutes, $80K revenue impact"
+    },
+    {
+      "id": "INC-2024-023",
+      "title": "Inventory service data staleness",
+      "root_cause": "Warehouse API rate limiting triggered by sync job misconfiguration",
+      "symptoms": [
+        "inventory-service sync lag exceeded 30 minutes",
+        "Order failures due to overselling",
+        "Customer complaints about out-of-stock items"
+      ],
+      "causal_chain": [
+        "Deployed new inventory sync job with 10x poll frequency",
+        "Warehouse API rate limit hit (1000 req/hour)",
+        "API returned 429 errors",
+        "Sync job entered backoff retry loop",
+        "Inventory data became stale",
+        "Orders placed for out-of-stock items",
+        "Fulfillment failures discovered after payment"
+      ],
+      "resolution": {
+        "immediate_action": "Reverted sync job to original poll frequency",
+        "mitigation": "Manually triggered full inventory sync",
+        "preventive_measure": "Added rate limit monitoring and exponential backoff"
+      },
+      "time_to_detect": "45 minutes",
+      "time_to_resolve": "90 minutes (data staleness + manual sync)",
+      "business_impact": "Customer satisfaction impact, 50+ refunds required"
+    }
+  ],
+  "common_patterns": {
+    "resource_exhaustion": {
+      "examples": ["INC-2024-001", "INC-2024-018"],
+      "typical_symptoms": ["error_rate_spike", "timeout_increase", "service_unresponsive"],
+      "typical_causes": ["memory_leak", "connection_leak", "cache_eviction"],
+      "resolution_pattern": "Scale resource → restart service → fix leak"
+    },
+    "cascading_failure": {
+      "examples": ["INC-2024-018"],
+      "typical_symptoms": ["multiple_service_degradation", "error_propagation"],
+      "typical_causes": ["upstream_timeout", "connection_pool_exhaustion"],
+      "resolution_pattern": "Identify origin → isolate failing component → rollback or scale"
+    },
+    "external_dependency_failure": {
+      "examples": ["INC-2024-012", "INC-2024-023"],
+      "typical_symptoms": ["specific_operation_failure", "latency_spike"],
+      "typical_causes": ["third_party_api_issue", "rate_limiting", "network_issue"],
+      "resolution_pattern": "Implement fallback → add circuit breaker → improve retry logic"
+    },
+    "database_contention": {
+      "examples": ["INC-2024-005"],
+      "typical_symptoms": ["slow_transactions", "lock_wait_time_increase"],
+      "typical_causes": ["inefficient_query", "lock_escalation", "deadlock"],
+      "resolution_pattern": "Kill blocking query → optimize query → add indexes"
+    }
+  }
+}

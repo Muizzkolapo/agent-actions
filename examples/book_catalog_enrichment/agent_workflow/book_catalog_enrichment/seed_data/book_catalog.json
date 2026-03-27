@@ -1,0 +1,650 @@
+[
+  {
+    "isbn": "978-0-13-468599-1",
+    "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+    "authors": ["Robert C. Martin"],
+    "genres": ["COM051000", "COM051230"],
+    "description": "A guide to writing clean, maintainable code with best practices for software development.",
+    "keywords": ["software engineering", "programming", "best practices", "agile", "refactoring"]
+  },
+  {
+    "isbn": "978-0-201-63361-0",
+    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+    "authors": ["Erich Gamma", "Richard Helm", "Ralph Johnson", "John Vlissides"],
+    "genres": ["COM051000", "COM051210"],
+    "description": "The classic guide to software design patterns and object-oriented design.",
+    "keywords": ["design patterns", "object-oriented", "software architecture", "programming"]
+  },
+  {
+    "isbn": "978-0-596-51774-8",
+    "title": "JavaScript: The Good Parts",
+    "authors": ["Douglas Crockford"],
+    "genres": ["COM060160", "COM051000"],
+    "description": "A deep dive into the elegant and effective parts of JavaScript.",
+    "keywords": ["javascript", "web development", "programming", "frontend"]
+  },
+  {
+    "isbn": "978-1-491-95038-8",
+    "title": "Python for Data Analysis",
+    "authors": ["Wes McKinney"],
+    "genres": ["COM051360", "COM018000"],
+    "description": "Data wrangling with Pandas, NumPy, and IPython for data science.",
+    "keywords": ["python", "data science", "pandas", "analytics", "data analysis"]
+  },
+  {
+    "isbn": "978-1-492-03255-5",
+    "title": "Hands-On Machine Learning with Scikit-Learn and TensorFlow",
+    "authors": ["Aurelien Geron"],
+    "genres": ["COM004000", "COM018000"],
+    "description": "Practical guide to building machine learning systems with Python.",
+    "keywords": ["machine learning", "tensorflow", "python", "deep learning", "AI"]
+  },
+  {
+    "isbn": "978-0-13-235088-4",
+    "title": "The Pragmatic Programmer",
+    "authors": ["David Thomas", "Andrew Hunt"],
+    "genres": ["COM051000", "COM051230"],
+    "description": "Your journey to mastery in software development with practical advice.",
+    "keywords": ["programming", "software development", "best practices", "career"]
+  },
+  {
+    "isbn": "978-1-449-37321-8",
+    "title": "Designing Data-Intensive Applications",
+    "authors": ["Martin Kleppmann"],
+    "genres": ["COM051230", "COM018000"],
+    "description": "The big ideas behind reliable, scalable, and maintainable systems.",
+    "keywords": ["distributed systems", "databases", "scalability", "architecture"]
+  },
+  {
+    "isbn": "978-0-13-411024-0",
+    "title": "The Art of Scalability",
+    "authors": ["Martin L. Abbott", "Michael T. Fisher"],
+    "genres": ["COM051230", "BUS070060"],
+    "description": "Scalable web architecture, processes, and organizations for the modern enterprise.",
+    "keywords": ["scalability", "architecture", "enterprise", "web systems"]
+  },
+  {
+    "isbn": "978-1-491-95099-9",
+    "title": "Deep Learning",
+    "authors": ["Ian Goodfellow", "Yoshua Bengio", "Aaron Courville"],
+    "genres": ["COM004000", "COM051000"],
+    "description": "Comprehensive textbook on deep learning theory and practice.",
+    "keywords": ["deep learning", "neural networks", "AI", "machine learning"]
+  },
+  {
+    "isbn": "978-0-13-468083-5",
+    "title": "Kubernetes in Action",
+    "authors": ["Marko Luksa"],
+    "genres": ["COM051230", "COM043000"],
+    "description": "Deploy and manage containerized applications with Kubernetes.",
+    "keywords": ["kubernetes", "containers", "devops", "cloud", "microservices"]
+  },
+  {
+    "isbn": "978-1-491-95046-3",
+    "title": "Building Microservices",
+    "authors": ["Sam Newman"],
+    "genres": ["COM051230", "COM043000"],
+    "description": "Designing fine-grained systems for modern distributed architectures.",
+    "keywords": ["microservices", "architecture", "distributed systems", "APIs"]
+  },
+  {
+    "isbn": "978-0-596-51817-1",
+    "title": "Learning Python",
+    "authors": ["Mark Lutz"],
+    "genres": ["COM051360", "COM051000"],
+    "description": "Comprehensive introduction to Python programming language.",
+    "keywords": ["python", "programming", "beginner", "scripting"]
+  },
+  {
+    "isbn": "978-1-491-94635-0",
+    "title": "Data Science from Scratch",
+    "authors": ["Joel Grus"],
+    "genres": ["COM018000", "COM051360"],
+    "description": "First principles approach to data science with Python.",
+    "keywords": ["data science", "python", "statistics", "machine learning"]
+  },
+  {
+    "isbn": "978-0-321-12521-7",
+    "title": "Domain-Driven Design",
+    "authors": ["Eric Evans"],
+    "genres": ["COM051230", "COM051000"],
+    "description": "Tackling complexity in the heart of software through domain modeling.",
+    "keywords": ["domain-driven design", "architecture", "modeling", "software design"]
+  },
+  {
+    "isbn": "978-1-617-29550-7",
+    "title": "Grokking Algorithms",
+    "authors": ["Aditya Bhargava"],
+    "genres": ["COM051000", "COM051310"],
+    "description": "An illustrated guide to algorithms for programmers.",
+    "keywords": ["algorithms", "data structures", "programming", "beginner"]
+  },
+  {
+    "isbn": "978-0-596-00712-6",
+    "title": "Head First Design Patterns",
+    "authors": ["Eric Freeman", "Elisabeth Robson"],
+    "genres": ["COM051000", "COM051210"],
+    "description": "A brain-friendly guide to design patterns.",
+    "keywords": ["design patterns", "object-oriented", "java", "programming"]
+  },
+  {
+    "isbn": "978-1-492-05254-6",
+    "title": "Fluent Python",
+    "authors": ["Luciano Ramalho"],
+    "genres": ["COM051360", "COM051000"],
+    "description": "Clear, concise, and effective programming in Python.",
+    "keywords": ["python", "programming", "advanced", "idioms"]
+  },
+  {
+    "isbn": "978-1-617-29500-2",
+    "title": "The Well-Grounded Java Developer",
+    "authors": ["Benjamin Evans", "Jason Clark", "Martijn Verburg"],
+    "genres": ["COM051280", "COM051000"],
+    "description": "Modern Java development with best practices.",
+    "keywords": ["java", "programming", "jvm", "development"]
+  },
+  {
+    "isbn": "978-0-13-757881-5",
+    "title": "AWS Certified Solutions Architect Study Guide",
+    "authors": ["Ben Piper", "David Clinton"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Complete guide to AWS certification and cloud architecture.",
+    "keywords": ["AWS", "cloud", "certification", "architecture", "amazon"]
+  },
+  {
+    "isbn": "978-1-492-03471-9",
+    "title": "Google Cloud Platform in Action",
+    "authors": ["JJ Geewax"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Building and deploying applications on Google Cloud Platform.",
+    "keywords": ["GCP", "cloud", "google", "infrastructure", "deployment"]
+  },
+  {
+    "isbn": "978-0-13-801410-6",
+    "title": "Azure Solutions Architect Handbook",
+    "authors": ["Sjoukje Zaal", "Brett Hargreaves"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Design and implement solutions on Microsoft Azure.",
+    "keywords": ["Azure", "cloud", "microsoft", "architecture", "certification"]
+  },
+  {
+    "isbn": "978-1-491-94419-6",
+    "title": "Natural Language Processing with Python",
+    "authors": ["Steven Bird", "Ewan Klein", "Edward Loper"],
+    "genres": ["COM004000", "COM051360"],
+    "description": "Analyzing text with the Natural Language Toolkit.",
+    "keywords": ["NLP", "python", "text analysis", "linguistics", "AI"]
+  },
+  {
+    "isbn": "978-1-617-29519-4",
+    "title": "Docker in Action",
+    "authors": ["Jeff Nickoloff", "Stephen Kuenzli"],
+    "genres": ["COM051230", "COM043000"],
+    "description": "Containerize your applications with Docker.",
+    "keywords": ["docker", "containers", "devops", "deployment", "virtualization"]
+  },
+  {
+    "isbn": "978-1-492-03400-9",
+    "title": "Site Reliability Engineering",
+    "authors": ["Betsy Beyer", "Chris Jones", "Jennifer Petoff", "Niall Murphy"],
+    "genres": ["COM051230", "COM043000"],
+    "description": "How Google runs production systems at scale.",
+    "keywords": ["SRE", "reliability", "operations", "google", "devops"]
+  },
+  {
+    "isbn": "978-0-13-211047-5",
+    "title": "Introduction to Algorithms",
+    "authors": ["Thomas H. Cormen", "Charles E. Leiserson", "Ronald L. Rivest", "Clifford Stein"],
+    "genres": ["COM051310", "COM051000"],
+    "description": "The comprehensive textbook on algorithms and data structures.",
+    "keywords": ["algorithms", "data structures", "computer science", "theory"]
+  },
+  {
+    "isbn": "978-1-491-96016-5",
+    "title": "Fundamentals of Data Engineering",
+    "authors": ["Joe Reis", "Matt Housley"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Plan and build robust data engineering systems.",
+    "keywords": ["data engineering", "pipelines", "ETL", "big data", "architecture"]
+  },
+  {
+    "isbn": "978-1-492-05525-7",
+    "title": "Practical MLOps",
+    "authors": ["Noah Gift", "Alfredo Deza"],
+    "genres": ["COM004000", "COM051230"],
+    "description": "Operationalizing machine learning models in production.",
+    "keywords": ["MLOps", "machine learning", "devops", "deployment", "operations"]
+  },
+  {
+    "isbn": "978-0-13-711024-8",
+    "title": "Effective Java",
+    "authors": ["Joshua Bloch"],
+    "genres": ["COM051280", "COM051000"],
+    "description": "Best practices for the Java platform.",
+    "keywords": ["java", "programming", "best practices", "effective"]
+  },
+  {
+    "isbn": "978-1-680-50261-6",
+    "title": "Programming Rust",
+    "authors": ["Jim Blandy", "Jason Orendorff", "Leonora F.S. Tindall"],
+    "genres": ["COM051000", "COM051390"],
+    "description": "Fast, safe systems development with Rust.",
+    "keywords": ["rust", "systems programming", "memory safety", "performance"]
+  },
+  {
+    "isbn": "978-1-617-29502-6",
+    "title": "Go in Action",
+    "authors": ["William Kennedy", "Brian Ketelsen", "Erik St. Martin"],
+    "genres": ["COM051000", "COM051390"],
+    "description": "A guide to the Go programming language.",
+    "keywords": ["go", "golang", "programming", "concurrency", "systems"]
+  },
+  {
+    "isbn": "978-0-13-597685-0",
+    "title": "The Clean Coder: A Code of Conduct for Professional Programmers",
+    "authors": ["Robert C. Martin"],
+    "genres": ["COM051000", "COM051230"],
+    "description": "A guide to professional conduct and ethics in software engineering.",
+    "keywords": ["professionalism", "software engineering", "career", "clean code", "agile"]
+  },
+  {
+    "isbn": "978-0-201-48567-7",
+    "title": "Refactoring: Improving the Design of Existing Code",
+    "authors": ["Martin Fowler"],
+    "genres": ["COM051230", "COM051000"],
+    "description": "A catalog of refactorings for improving the design of existing code safely.",
+    "keywords": ["refactoring", "software design", "code quality", "legacy code", "patterns"]
+  },
+  {
+    "isbn": "978-0-131-17705-5",
+    "title": "Working Effectively with Legacy Code",
+    "authors": ["Michael Feathers"],
+    "genres": ["COM051230", "COM051260"],
+    "description": "Strategies and techniques for safely changing legacy codebases.",
+    "keywords": ["legacy code", "testing", "refactoring", "software maintenance"]
+  },
+  {
+    "isbn": "978-1-732-10210-1",
+    "title": "A Philosophy of Software Design",
+    "authors": ["John Ousterhout"],
+    "genres": ["COM051230", "COM051000"],
+    "description": "How to decompose complex software systems into modules with clean interfaces.",
+    "keywords": ["software design", "complexity", "modularity", "interfaces", "systems"]
+  },
+  {
+    "isbn": "978-0-201-83595-3",
+    "title": "The Mythical Man-Month",
+    "authors": ["Frederick P. Brooks Jr."],
+    "genres": ["COM051230", "BUS070060"],
+    "description": "Essays on software engineering and project management, including Brooks's Law.",
+    "keywords": ["software engineering", "project management", "team dynamics", "planning"]
+  },
+  {
+    "isbn": "978-0-735-61967-8",
+    "title": "Code Complete",
+    "authors": ["Steve McConnell"],
+    "genres": ["COM051000", "COM051230"],
+    "description": "A practical guide to software construction, covering design, code quality, and debugging.",
+    "keywords": ["software construction", "programming", "code quality", "best practices"]
+  },
+  {
+    "isbn": "978-0-262-51087-5",
+    "title": "Structure and Interpretation of Computer Programs",
+    "authors": ["Harold Abelson", "Gerald Jay Sussman"],
+    "genres": ["COM051000", "COM051310"],
+    "description": "A foundational text on programming using Lisp, covering abstraction and metalinguistic programming.",
+    "keywords": ["computer science", "programming", "lisp", "functional", "fundamentals"]
+  },
+  {
+    "isbn": "978-1-491-92432-7",
+    "title": "You Don't Know JS: Scope & Closures",
+    "authors": ["Kyle Simpson"],
+    "genres": ["COM060160", "COM051000"],
+    "description": "A deep dive into JavaScript's core mechanisms — scope, closures, and the this keyword.",
+    "keywords": ["javascript", "scope", "closures", "web development", "frontend"]
+  },
+  {
+    "isbn": "978-1-593-27584-1",
+    "title": "Eloquent JavaScript",
+    "authors": ["Marijn Haverbeke"],
+    "genres": ["COM060160", "COM051000"],
+    "description": "A modern introduction to JavaScript programming, covering the language and browser APIs.",
+    "keywords": ["javascript", "programming", "web", "frontend", "beginner"]
+  },
+  {
+    "isbn": "978-1-491-92790-8",
+    "title": "Learning React",
+    "authors": ["Alex Banks", "Eve Porcello"],
+    "genres": ["COM060160", "COM060000"],
+    "description": "Functional web development with React and modern JavaScript.",
+    "keywords": ["react", "javascript", "frontend", "UI", "web development"]
+  },
+  {
+    "isbn": "978-1-617-29613-9",
+    "title": "TypeScript in 50 Lessons",
+    "authors": ["Stefan Baumgartner"],
+    "genres": ["COM060160", "COM051000"],
+    "description": "A compact course on TypeScript, covering the type system, generics, and real-world patterns.",
+    "keywords": ["typescript", "javascript", "types", "web development", "frontend"]
+  },
+  {
+    "isbn": "978-0-596-51774-8",
+    "title": "CSS: The Definitive Guide",
+    "authors": ["Eric A. Meyer", "Estelle Weyl"],
+    "genres": ["COM060000", "COM060160"],
+    "description": "Comprehensive reference for CSS, covering layout, typography, animation, and transforms.",
+    "keywords": ["css", "web design", "frontend", "styling", "layout"]
+  },
+  {
+    "isbn": "978-1-484-20652-9",
+    "title": "Pro Git",
+    "authors": ["Scott Chacon", "Ben Straub"],
+    "genres": ["COM051300", "COM051000"],
+    "description": "The definitive guide to Git version control, from basics to advanced workflows.",
+    "keywords": ["git", "version control", "devops", "source control", "collaboration"]
+  },
+  {
+    "isbn": "978-0-321-70069-7",
+    "title": "Test-Driven Development: By Example",
+    "authors": ["Kent Beck"],
+    "genres": ["COM051260", "COM051000"],
+    "description": "A practical guide to test-driven development using simple examples in Java and Python.",
+    "keywords": ["TDD", "test-driven development", "unit testing", "agile", "java"]
+  },
+  {
+    "isbn": "978-0-321-50362-6",
+    "title": "Growing Object-Oriented Software, Guided by Tests",
+    "authors": ["Steve Freeman", "Nat Pryce"],
+    "genres": ["COM051260", "COM051210"],
+    "description": "A step-by-step guide to test-driven development in an object-oriented style.",
+    "keywords": ["TDD", "object-oriented", "testing", "design", "java"]
+  },
+  {
+    "isbn": "978-1-617-29089-2",
+    "title": "The Art of Unit Testing",
+    "authors": ["Roy Osherove"],
+    "genres": ["COM051260", "COM051000"],
+    "description": "Writing maintainable, readable, and trustworthy tests for real-world software.",
+    "keywords": ["unit testing", "TDD", "mocking", "software quality", "test automation"]
+  },
+  {
+    "isbn": "978-0-321-60191-2",
+    "title": "Continuous Delivery",
+    "authors": ["Jez Humble", "David Farley"],
+    "genres": ["COM051300", "COM043000"],
+    "description": "Reliable software releases through build, test, and deployment automation.",
+    "keywords": ["continuous delivery", "CI/CD", "deployment", "automation", "devops"]
+  },
+  {
+    "isbn": "978-1-942-78800-3",
+    "title": "The DevOps Handbook",
+    "authors": ["Gene Kim", "Jez Humble", "Patrick Debois", "John Willis"],
+    "genres": ["COM043000", "COM051300"],
+    "description": "How to create world-class agility, reliability, and security in technology organizations.",
+    "keywords": ["devops", "agile", "CI/CD", "operations", "culture"]
+  },
+  {
+    "isbn": "978-1-942-78833-1",
+    "title": "Accelerate: The Science of Lean Software and DevOps",
+    "authors": ["Nicole Forsgren", "Jez Humble", "Gene Kim"],
+    "genres": ["COM043000", "BUS070060"],
+    "description": "Research-backed practices that drive high software delivery performance.",
+    "keywords": ["devops", "lean", "performance", "metrics", "DORA"]
+  },
+  {
+    "isbn": "978-1-491-92437-2",
+    "title": "Infrastructure as Code",
+    "authors": ["Kief Morris"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Dynamic systems for the cloud age — managing infrastructure with code.",
+    "keywords": ["infrastructure as code", "cloud", "devops", "terraform", "automation"]
+  },
+  {
+    "isbn": "978-1-492-07708-2",
+    "title": "Terraform: Up & Running",
+    "authors": ["Yevgeniy Brikman"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Writing infrastructure as code with Terraform, the popular open-source tool.",
+    "keywords": ["terraform", "infrastructure as code", "AWS", "cloud", "devops"]
+  },
+  {
+    "isbn": "978-1-492-05162-4",
+    "title": "Ansible: Up and Running",
+    "authors": ["Lorin Hochstein", "Rene Moser"],
+    "genres": ["COM043000", "COM051300"],
+    "description": "Automating configuration management and deployment with Ansible.",
+    "keywords": ["ansible", "automation", "devops", "configuration management", "deployment"]
+  },
+  {
+    "isbn": "978-1-491-97180-2",
+    "title": "Database Internals",
+    "authors": ["Alex Petrov"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "A deep dive into how distributed data systems work — storage engines, consensus, replication.",
+    "keywords": ["databases", "distributed systems", "storage engines", "internals", "advanced"]
+  },
+  {
+    "isbn": "978-1-590-59656-3",
+    "title": "SQL Antipatterns: Avoiding the Pitfalls of Database Programming",
+    "authors": ["Bill Karwin"],
+    "genres": ["COM018000", "COM051000"],
+    "description": "Common mistakes developers make when working with SQL and relational databases.",
+    "keywords": ["SQL", "databases", "antipatterns", "PostgreSQL", "MySQL"]
+  },
+  {
+    "isbn": "978-1-491-95769-1",
+    "title": "MongoDB: The Definitive Guide",
+    "authors": ["Kristina Chodorow"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Powerful and scalable data storage with MongoDB.",
+    "keywords": ["MongoDB", "NoSQL", "databases", "document store", "scalability"]
+  },
+  {
+    "isbn": "978-1-617-29049-6",
+    "title": "Redis in Action",
+    "authors": ["Josiah Carlson"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Using Redis for data structures, caching, messaging, and real-time analytics.",
+    "keywords": ["redis", "caching", "NoSQL", "in-memory", "performance"]
+  },
+  {
+    "isbn": "978-1-491-95462-1",
+    "title": "Elasticsearch: The Definitive Guide",
+    "authors": ["Clinton Gormley", "Zachary Tong"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Distributed search and analytics with Elasticsearch.",
+    "keywords": ["elasticsearch", "search", "analytics", "distributed", "Lucene"]
+  },
+  {
+    "isbn": "978-1-449-35814-5",
+    "title": "Using Docker",
+    "authors": ["Adrian Mouat"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Developing and deploying software with containers using Docker.",
+    "keywords": ["docker", "containers", "devops", "microservices", "deployment"]
+  },
+  {
+    "isbn": "978-1-491-95035-7",
+    "title": "Python Cookbook",
+    "authors": ["David Beazley", "Brian K. Jones"],
+    "genres": ["COM051360", "COM051000"],
+    "description": "Recipes for mastering Python 3, covering data structures, algorithms, and system programming.",
+    "keywords": ["python", "recipes", "advanced", "programming", "cookbook"]
+  },
+  {
+    "isbn": "978-1-491-91205-8",
+    "title": "High Performance Python",
+    "authors": ["Micha Gorelick", "Ian Ozsvald"],
+    "genres": ["COM051360", "COM051230"],
+    "description": "Practical performant programming for humans — profiling, optimization, and concurrency in Python.",
+    "keywords": ["python", "performance", "optimization", "profiling", "concurrency"]
+  },
+  {
+    "isbn": "978-1-593-27584-1",
+    "title": "Automate the Boring Stuff with Python",
+    "authors": ["Al Sweigart"],
+    "genres": ["COM051360", "COM051000"],
+    "description": "Practical programming for total beginners using Python to automate real-world tasks.",
+    "keywords": ["python", "automation", "scripting", "beginner", "productivity"]
+  },
+  {
+    "isbn": "978-0-201-09512-0",
+    "title": "The C Programming Language",
+    "authors": ["Brian W. Kernighan", "Dennis M. Ritchie"],
+    "genres": ["COM051390", "COM051000"],
+    "description": "The authoritative reference for the C programming language by its creators.",
+    "keywords": ["C", "systems programming", "programming", "low-level", "foundations"]
+  },
+  {
+    "isbn": "978-1-718-50044-0",
+    "title": "The Rust Programming Language",
+    "authors": ["Steve Klabnik", "Carol Nichols"],
+    "genres": ["COM051390", "COM051000"],
+    "description": "The official guide to Rust, covering ownership, borrowing, and systems programming patterns.",
+    "keywords": ["rust", "systems programming", "memory safety", "ownership", "concurrency"]
+  },
+  {
+    "isbn": "978-1-617-29518-7",
+    "title": "Kotlin in Action",
+    "authors": ["Dmitry Jemerov", "Svetlana Isakova"],
+    "genres": ["COM051280", "COM051000"],
+    "description": "Idiomatic Kotlin for JVM, Android, and beyond.",
+    "keywords": ["kotlin", "JVM", "android", "programming", "java"]
+  },
+  {
+    "isbn": "978-0-596-51774-0",
+    "title": "Swift Programming: The Big Nerd Ranch Guide",
+    "authors": ["Matthew Mathias", "John Gallagher"],
+    "genres": ["COM051000", "COM051280"],
+    "description": "Essential Swift language fundamentals for iOS and macOS app development.",
+    "keywords": ["swift", "iOS", "macOS", "apple", "mobile development"]
+  },
+  {
+    "isbn": "978-1-491-91205-8",
+    "title": "Web Application Security: Exploitation and Countermeasures",
+    "authors": ["Andrew Hoffman"],
+    "genres": ["COM053000", "COM060160"],
+    "description": "Identifying, exploiting, and defending web application vulnerabilities.",
+    "keywords": ["web security", "XSS", "SQL injection", "OWASP", "penetration testing"]
+  },
+  {
+    "isbn": "978-1-119-55044-5",
+    "title": "The Web Application Hacker's Handbook",
+    "authors": ["Dafydd Stuttard", "Marcus Pinto"],
+    "genres": ["COM053000", "COM060160"],
+    "description": "Finding and exploiting security flaws in web applications.",
+    "keywords": ["web security", "hacking", "penetration testing", "vulnerabilities", "ethical hacking"]
+  },
+  {
+    "isbn": "978-1-593-27910-8",
+    "title": "Hacking: The Art of Exploitation",
+    "authors": ["Jon Erickson"],
+    "genres": ["COM053000", "COM051390"],
+    "description": "A deep-dive introduction to hacking techniques from shellcode to network protocols.",
+    "keywords": ["hacking", "exploitation", "security", "C", "shellcode", "buffer overflow"]
+  },
+  {
+    "isbn": "978-0-596-10013-3",
+    "title": "Network Security Assessment",
+    "authors": ["Chris McNab"],
+    "genres": ["COM053000", "COM043000"],
+    "description": "Know your network by identifying vulnerabilities through practical assessment.",
+    "keywords": ["network security", "assessment", "penetration testing", "firewalls", "protocols"]
+  },
+  {
+    "isbn": "978-1-492-04268-1",
+    "title": "Practical Deep Learning for Cloud, Mobile, and Edge",
+    "authors": ["Anirudh Koul", "Siddha Ganju", "Meher Kasam"],
+    "genres": ["COM004000", "COM043000"],
+    "description": "Real-world deep learning applications for deployment across cloud, mobile, and edge environments.",
+    "keywords": ["deep learning", "edge AI", "mobile", "cloud", "TensorFlow", "deployment"]
+  },
+  {
+    "isbn": "978-1-492-04136-3",
+    "title": "Feature Engineering for Machine Learning",
+    "authors": ["Alice Zheng", "Amanda Casari"],
+    "genres": ["COM004000", "COM018000"],
+    "description": "Principles and techniques for engineering features to improve machine learning model performance.",
+    "keywords": ["feature engineering", "machine learning", "data science", "preprocessing", "modeling"]
+  },
+  {
+    "isbn": "978-1-492-04185-1",
+    "title": "Data Pipelines with Apache Airflow",
+    "authors": ["Bas Harenslak", "Julian de Ruiter"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Building and maintaining data pipelines with Apache Airflow.",
+    "keywords": ["airflow", "data pipelines", "ETL", "orchestration", "data engineering"]
+  },
+  {
+    "isbn": "978-1-491-91205-0",
+    "title": "Spark: The Definitive Guide",
+    "authors": ["Bill Chambers", "Matei Zaharia"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Big data processing at scale with Apache Spark.",
+    "keywords": ["spark", "big data", "distributed computing", "data engineering", "scala"]
+  },
+  {
+    "isbn": "978-1-491-93517-1",
+    "title": "Kafka: The Definitive Guide",
+    "authors": ["Neha Narkhede", "Gwen Shapira", "Todd Palino"],
+    "genres": ["COM018000", "COM051230"],
+    "description": "Real-time data and stream processing with Apache Kafka.",
+    "keywords": ["kafka", "streaming", "event-driven", "messaging", "data pipelines"]
+  },
+  {
+    "isbn": "978-1-617-29547-7",
+    "title": "Grokking System Design Interview",
+    "authors": ["Donne Martin"],
+    "genres": ["COM051230", "COM051000"],
+    "description": "Practical patterns and examples to ace system design interviews.",
+    "keywords": ["system design", "interviews", "scalability", "architecture", "distributed systems"]
+  },
+  {
+    "isbn": "978-1-617-29413-5",
+    "title": "Grokking Deep Learning",
+    "authors": ["Andrew W. Trask"],
+    "genres": ["COM004000", "COM051360"],
+    "description": "Build deep learning networks from scratch in Python — no frameworks required.",
+    "keywords": ["deep learning", "neural networks", "python", "beginner", "from scratch"]
+  },
+  {
+    "isbn": "978-1-492-07676-4",
+    "title": "Building Machine Learning Pipelines",
+    "authors": ["Hannes Hapke", "Catherine Nelson"],
+    "genres": ["COM004000", "COM051230"],
+    "description": "Automating model life cycles with TensorFlow Extended for production ML systems.",
+    "keywords": ["MLOps", "TFX", "machine learning", "pipelines", "production"]
+  },
+  {
+    "isbn": "978-1-617-29535-4",
+    "title": "Istio in Action",
+    "authors": ["Christian Posta", "Rinor Maloku"],
+    "genres": ["COM043000", "COM051230"],
+    "description": "Connecting, securing, and managing microservices with the Istio service mesh.",
+    "keywords": ["istio", "service mesh", "kubernetes", "microservices", "observability"]
+  },
+  {
+    "isbn": "978-1-491-95086-9",
+    "title": "The Linux Command Line",
+    "authors": ["William E. Shotts Jr."],
+    "genres": ["COM051300", "COM051000"],
+    "description": "A complete introduction to the Linux command line, shell scripting, and system administration.",
+    "keywords": ["linux", "command line", "bash", "shell scripting", "administration"]
+  },
+  {
+    "isbn": "978-0-321-12521-9",
+    "title": "Enterprise Integration Patterns",
+    "authors": ["Gregor Hohpe", "Bobby Woolf"],
+    "genres": ["COM051230", "COM051000"],
+    "description": "Designing, building, and deploying messaging solutions for enterprise integration.",
+    "keywords": ["integration patterns", "messaging", "enterprise", "architecture", "EIP"]
+  },
+  {
+    "isbn": "978-1-617-29459-3",
+    "title": "Spring Boot in Action",
+    "authors": ["Craig Walls"],
+    "genres": ["COM051280", "COM060160"],
+    "description": "Rapid Spring application development with Spring Boot.",
+    "keywords": ["spring boot", "java", "web development", "REST", "microservices"]
+  }
+]

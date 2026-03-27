@@ -1,0 +1,35 @@
+name: hierarchy_test_workflow
+description: Test workflow with project config integration
+version: 2.0.0
+
+# Workflow-level defaults (should override project defaults)
+defaults:
+  model_name: gpt-4o-mini-workflow  # Override project default
+  json_mode: true              # Override project default
+  granularity: file           # Override project default
+  # chunk_size should inherit from project: 800
+  # vendor should inherit from project: openai
+
+actions:
+  - name: action_with_project_inheritance
+    intent: Action inheriting from project + workflow defaults
+    kind: llm
+    prompt: "Extract using hierarchy: project < workflow < action"
+    schema:
+      extracted_data: string
+    # Should get: model=gpt-4o-mini-workflow, vendor=openai, chunk_size=800, json_mode=true
+
+  - name: action_with_overrides
+    intent: Action overriding all levels
+    kind: llm
+    model_name: claude-3-sonnet      # Override workflow default
+    model_vendor: anthropic           # Override project default
+    json_mode: false           # Override workflow default
+    prompt: "Process with action-level overrides"
+    schema:
+      processed_data: string
+    # Should get: model=claude-3-sonnet, vendor=anthropic, json_mode=false
+
+plan:
+  - action_with_project_inheritance
+  - action_with_overrides <- action_with_project_inheritance

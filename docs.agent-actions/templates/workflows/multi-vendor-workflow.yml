@@ -1,0 +1,385 @@
+# Multi-Vendor Workflow Template
+# Demonstrates using multiple LLM vendors in a single workflow
+# Each action can use a different vendor based on its strengths
+
+# Workflow-level defaults (can be overridden by actions)
+# Set a baseline for actions that don't specify a vendor
+model_vendor: openai
+model_name: gpt-4o-mini
+api_key: ${OPENAI_API_KEY}
+temperature: 0.7
+
+# Actions using different vendors for their specific strengths
+actions:
+  # ACTION 1: Use OpenAI for initial processing
+  # Strength: Fast, cost-effective for straightforward tasks
+  - name: initial_extraction
+
+    reads:
+      - raw_text
+
+    writes:
+      - extracted_data
+      - metadata
+
+    prompt: |
+      Extract structured data from the following text:
+
+      {{ raw_text }}
+
+      Please extract:
+      1. Main entities (people, organizations, locations)
+      2. Key dates and numbers
+      3. Primary topics
+
+    schema:
+      extracted_data:
+        type: object
+        properties:
+          entities:
+            type: array
+            items: string
+          dates:
+            type: array
+            items: string
+          numbers:
+            type: array
+            items: number
+      metadata:
+        type: object
+        properties:
+          word_count: integer
+          complexity: string
+
+    # Uses workflow defaults (OpenAI)
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: ${OPENAI_API_KEY}
+    temperature: 0.5
+
+  # ACTION 2: Use Anthropic Claude for deep analysis
+  # Strength: Strong reasoning, comprehensive analysis, safety
+  - name: deep_analysis
+
+    reads:
+      - raw_text
+      - extracted_data
+
+    writes:
+      - analysis
+      - insights
+
+    prompt: |
+      Perform a deep analysis of this text, considering the extracted data.
+
+      Text: {{ raw_text }}
+
+      Extracted Data:
+      - Entities: {{ extracted_data.entities | join(', ') }}
+      - Dates: {{ extracted_data.dates | join(', ') }}
+
+      Provide:
+      1. Detailed thematic analysis
+      2. Relationship mapping between entities
+      3. Historical or contextual significance
+      4. Potential implications
+
+    schema:
+      analysis:
+        type: object
+        properties:
+          themes:
+            type: array
+            items: string
+          relationships:
+            type: array
+            items: string
+          context: string
+          implications:
+            type: array
+            items: string
+      insights:
+        type: array
+        items: string
+
+    # Override to use Anthropic
+    model_vendor: anthropic
+    model_name: claude-sonnet-4-20250514
+    api_key: ${ANTHROPIC_API_KEY}
+    temperature: 0.7
+    max_tokens: 4000
+    top_p: 0.95
+
+  # ACTION 3: Use Google Gemini for multimodal reasoning
+  # Strength: Large context window, multimodal capabilities
+  - name: comprehensive_summary
+
+    reads:
+      - raw_text
+      - extracted_data
+      - analysis
+      - insights
+
+    writes:
+      - comprehensive_summary
+      - key_points
+
+    prompt: |
+      Create a comprehensive summary incorporating all analysis.
+
+      Original Text: {{ raw_text }}
+
+      Extracted Data: {{ extracted_data }}
+      Analysis: {{ analysis }}
+      Insights: {{ insights | join(' | ') }}
+
+      Synthesize everything into:
+      1. Executive summary (200 words)
+      2. Key points (bullet list)
+      3. Notable patterns or trends
+      4. Questions for further research
+
+    schema:
+      comprehensive_summary: string
+      key_points:
+        type: array
+        items: string
+        minItems: 5
+        maxItems: 10
+
+    # Override to use Gemini
+    model_vendor: gemini
+    model_name: gemini-2.0-flash
+    api_key: ${GEMINI_API_KEY}
+    temperature: 0.6
+    max_tokens: 3000
+
+  # ACTION 4: Use Groq for fast classification
+  # Strength: Very fast inference, good for categorization
+  - name: fast_classification
+
+    reads:
+      - raw_text
+      - comprehensive_summary
+
+    writes:
+      - category
+      - tags
+      - priority
+
+    prompt: |
+      Quickly classify this content:
+
+      Text: {{ raw_text }}
+      Summary: {{ comprehensive_summary }}
+
+      Provide:
+      1. Primary category
+      2. Relevant tags (3-5)
+      3. Priority level (high/medium/low)
+
+    schema:
+      category:
+        type: string
+        enum: [news, research, opinion, report, other]
+      tags:
+        type: array
+        items: string
+        minItems: 3
+        maxItems: 5
+      priority:
+        type: string
+        enum: [high, medium, low]
+
+    # Override to use Groq for speed
+    model_vendor: groq
+    model_name: llama-3.1-70b-versatile
+    api_key: ${GROQ_API_KEY}
+    temperature: 0.3
+    stop: ["\n\n"]  # Stop at double newline for concise output
+
+  # ACTION 5: Use Perplexity for fact-checking with search
+  # Strength: Real-time web search, current information
+  - name: fact_check
+
+    reads:
+      - extracted_data
+      - analysis
+
+    writes:
+      - fact_check_results
+      - sources
+
+    prompt: |
+      Verify the key claims and facts in this analysis:
+
+      Entities: {{ extracted_data.entities | join(', ') }}
+      Dates: {{ extracted_data.dates | join(', ') }}
+      Context: {{ analysis.context }}
+
+      Check:
+      1. Accuracy of dates and numbers
+      2. Validity of entity relationships
+      3. Current relevance of information
+
+    schema:
+      fact_check_results:
+        type: object
+        properties:
+          verified_facts:
+            type: array
+            items: string
+          questionable_claims:
+            type: array
+            items: string
+          corrections:
+            type: array
+            items: string
+      sources:
+        type: array
+        items: string
+
+    # Override to use Perplexity with search
+    model_vendor: perplexity
+    model_name: llama-3.1-sonar-small-128k-online
+    api_key: ${PERPLEXITY_API_KEY}
+    temperature: 0.4
+
+  # ACTION 6: Use DeepSeek for cost-effective refinement
+  # Strength: Very cost-effective, good for final polish
+  - name: final_formatting
+
+    reads:
+      - comprehensive_summary
+      - key_points
+      - category
+      - tags
+      - fact_check_results
+
+    writes:
+      - final_report
+      - formatted_output
+
+    prompt: |
+      Format everything into a final polished report:
+
+      Summary: {{ comprehensive_summary }}
+      Key Points: {{ key_points | join('\n- ') }}
+      Category: {{ category }}
+      Tags: {{ tags | join(', ') }}
+
+      Fact Check: {{ fact_check_results }}
+
+      Create a well-formatted final report with:
+      1. Executive summary
+      2. Key findings (bullet points)
+      3. Detailed analysis
+      4. Fact-check summary
+      5. Metadata (category, tags)
+
+    schema:
+      final_report: string
+      formatted_output:
+        type: object
+        properties:
+          title: string
+          summary: string
+          findings:
+            type: array
+            items: string
+          analysis: string
+          verified: boolean
+
+    # Override to use DeepSeek for cost savings
+    model_vendor: deepseek
+    model_name: deepseek-chat
+    api_key: ${DEEPSEEK_API_KEY}
+    temperature: 0.5
+
+# ============================================================================
+# VENDOR SELECTION STRATEGY
+# ============================================================================
+# Choose vendors based on task requirements:
+#
+# 1. OPENAI (GPT-4o-mini, GPT-4o):
+#    - General-purpose tasks
+#    - Fast, reliable, cost-effective
+#    - Good for straightforward extraction and processing
+#
+# 2. ANTHROPIC (Claude):
+#    - Complex reasoning and analysis
+#    - Safety-critical applications
+#    - Long-form content generation
+#    - Ethical considerations
+#
+# 3. GOOGLE GEMINI:
+#    - Large context windows (up to 1M tokens)
+#    - Multimodal tasks (text + images)
+#    - Comprehensive synthesis
+#
+# 4. GROQ:
+#    - Speed-critical applications
+#    - Real-time processing
+#    - Classification and categorization
+#    - High-throughput needs
+#
+# 5. PERPLEXITY:
+#    - Fact-checking with web search
+#    - Current information needed
+#    - Research and verification
+#
+# 6. DEEPSEEK:
+#    - Cost-sensitive operations
+#    - High-volume processing
+#    - Final formatting and polish
+
+# ============================================================================
+# USAGE EXAMPLE
+# ============================================================================
+# Save this file as: workflows/multi-vendor-analysis.yml
+#
+# Set up environment variables:
+#   export OPENAI_API_KEY=sk-...
+#   export ANTHROPIC_API_KEY=sk-ant-...
+#   export GEMINI_API_KEY=...
+#   export GROQ_API_KEY=...
+#   export PERPLEXITY_API_KEY=...
+#   export DEEPSEEK_API_KEY=...
+#
+# Then run:
+#   agac run multi-vendor-analysis --input articles.jsonl
+#
+# Each action will use its specified vendor, leveraging their unique strengths
+
+# ============================================================================
+# COST CONSIDERATIONS
+# ============================================================================
+# Different vendors have different pricing:
+#
+# Approximate costs per 1M tokens (as of 2024):
+# - DeepSeek: ~$0.10-0.30 (cheapest)
+# - OpenAI GPT-4o-mini: ~$0.15-0.60
+# - Groq: ~$0.27-1.00 (but very fast)
+# - Gemini: ~$1.25-5.00
+# - OpenAI GPT-4o: ~$2.50-10.00
+# - Anthropic Claude: ~$3.00-15.00
+# - Perplexity: ~$1.00-5.00 (includes search)
+#
+# Strategy:
+# - Use cheaper models for simple tasks (extraction, formatting)
+# - Use expensive models for complex reasoning (analysis, synthesis)
+# - Use specialized models for specific features (search, speed)
+
+# ============================================================================
+# BEST PRACTICES
+# ============================================================================
+# 1. Match vendor to task requirements
+# 2. Use cheaper models for high-volume tasks
+# 3. Reserve expensive models for complex reasoning
+# 4. Consider latency requirements (Groq for speed)
+# 5. Test multiple vendors to find best fit
+# 6. Monitor costs across vendors
+# 7. Keep API keys in environment variables
+# 8. Handle vendor-specific rate limits
+# 9. Have fallback vendors for reliability
+# 10. Document why each vendor was chosen

@@ -1,0 +1,74 @@
+[
+  {
+    "description": "Caller Record #1 - Should match Split Record #1 (Branch A)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "final_output_xyz789_a",
+    "target_id": "caller-record-1-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_a_6",
+      "transform_a_7",
+      "aggregate_a_22",
+      "final_output_xyz789_a"
+    ],
+    "expected_match": {
+      "target_id": "split-record-1-target-id",
+      "content": {
+        "status": "active",
+        "priority": "high",
+        "tags": ["tag-a"]
+      }
+    }
+  },
+  {
+    "description": "Caller Record #2 - Should match Split Record #2 (Branch B with 2 tags) - THE BUG CASE",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "final_output_xyz789_b",
+    "target_id": "caller-record-2-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_b_6",
+      "transform_b_7",
+      "aggregate_b_22",
+      "final_output_xyz789_b"
+    ],
+    "expected_match": {
+      "target_id": "split-record-2-target-id",
+      "content": {
+        "status": "pending",
+        "priority": "medium",
+        "tags": ["tag-b", "tag-extra"]
+      }
+    }
+  },
+  {
+    "description": "Caller Record #3 - Should match Split Record #3 (Branch C)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "final_output_xyz789_c",
+    "target_id": "caller-record-3-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_c_6",
+      "transform_c_7",
+      "aggregate_c_22",
+      "final_output_xyz789_c"
+    ],
+    "expected_match": {
+      "target_id": "split-record-3-target-id",
+      "content": {
+        "status": "completed",
+        "priority": "low",
+        "tags": ["tag-c"]
+      }
+    }
+  }
+]

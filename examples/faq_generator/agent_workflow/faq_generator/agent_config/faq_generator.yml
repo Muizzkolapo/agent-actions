@@ -1,0 +1,215 @@
+################################################################################
+# Customer Issues → FAQ Generator
+################################################################################
+# Description: Transforms batches of support tickets into publishable FAQ
+#              entries by extracting issues, classifying topics, clustering
+#              related tickets, deduplicating against existing FAQs, and
+#              generating structured Q&A pairs.
+#
+# Patterns demonstrated:
+#   - Record → File granularity shift (extract per-ticket, cluster per-file)
+#   - Parallel consensus classification (3 independent voters)
+#   - Guards on cluster frequency (only generate FAQ for 3+ ticket clusters)
+#   - Seed data as deduplication reference (existing published FAQs)
+#   - Multi-vendor model selection
+#   - Version consumption with merge pattern
+#
+# Workflow:
+#   1. Extract issue + resolution   (per record, cheap model)
+#   2. Classify topic x3 parallel   (per record, independent voters)
+#   3. Aggregate classification      (tool, merge pattern)
+#   4. Cluster by topic              (tool, FILE granularity — sees all records)
+#   5. Generate FAQ draft            (per record, guarded on cluster size >= 3)
+#   6. Deduplicate against existing  (tool, checks seed_data.existing_faqs)
+#   7. Format output                 (tool)
+################################################################################
+name: faq_generator
+description: "Transform support tickets into publishable FAQ entries with consensus classification, frequency-based gating, and deduplication"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: true
+  context_scope:
+    seed_path:
+      existing_faqs: $file:existing_faqs.json
+
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 1: EXTRACT ISSUE & RESOLUTION FROM TICKET
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Distills raw ticket body + support answer into structured problem/solution.
+  # Drops customer PII fields. Passthrough preserves ticket metadata.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: extract_issue
+    intent: "Extract the core problem and resolution from a support ticket"
+    schema: faq_generator/extract_issue
+    prompt: $faq_generator.Extract_Issue
+    context_scope:
+      observe:
+        - source.subject
+        - source.body
+        - source.answer
+        - source.type
+        - source.tags
+      drop:
+        - source.priority                      # Not relevant to FAQ content
+      passthrough:
+        - source.ticket_id
+        - source.queue
+        - source.tags
+    retry:
+      enabled: true
+      max_attempts: 3
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 2: CLASSIFY TOPIC (3 independent voters)
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Three classifiers assign a FAQ category independently. Each sees the
+  # extracted issue but NOT each other's classifications.
+  # Uses seed_data categories as the taxonomy.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: classify_topic
+    dependencies: [extract_issue]
+    intent: "Classify the ticket into a FAQ category using seed taxonomy"
+    schema: faq_generator/classify_topic
+    prompt: $faq_generator.Classify_Topic
+    versions:
+      param: voter_id
+      range: [1, 2, 3]
+      mode: parallel
+    context_scope:
+      observe:
+        - extract_issue.core_problem
+        - extract_issue.resolution_summary
+        - extract_issue.product_area
+        - seed_data.existing_faqs.faq_categories
+      drop:
+        - source.body                          # Don't re-read raw ticket
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 3: AGGREGATE CLASSIFICATION VOTES
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Majority-rule consensus from 3 independent classifiers.
+  # Deterministic — no LLM, no tokens.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: aggregate_classification
+    dependencies: [classify_topic]
+    kind: tool
+    impl: aggregate_topic_votes
+    intent: "Compute majority-rule topic classification from 3 voters"
+    schema: faq_generator/aggregate_classification
+    version_consumption:
+      source: classify_topic
+      pattern: merge
+    context_scope:
+      observe:
+        - classify_topic.*
+      passthrough:
+        - extract_issue.*
+        - source.ticket_id
+        - source.queue
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 4: CLUSTER TICKETS BY TOPIC
+  # ═══════════════════════════════════════════════════════════════════════════
+  # FILE granularity — sees ALL records at once to group by topic.
+  # Counts frequency per cluster. Adds cluster_size to each record so
+  # downstream guards can filter on it.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: cluster_by_topic
+    dependencies: [aggregate_classification]
+    kind: tool
+    impl: cluster_tickets_by_topic
+    intent: "Group tickets by classified topic and compute cluster sizes"
+    schema: faq_generator/cluster_by_topic
+    granularity: File                          # ← Sees all records at once
+    context_scope:
+      observe:
+        - aggregate_classification.*
+        - extract_issue.*
+        - source.ticket_id
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 5: GENERATE FAQ DRAFT
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Guarded: only generates FAQ for clusters with 3+ tickets.
+  # Single-ticket issues are noise, not FAQ material.
+  # Uses Anthropic for better writing quality on the customer-facing output.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: generate_faq_draft
+    dependencies: [cluster_by_topic]
+    intent: "Draft a FAQ question and answer from clustered ticket patterns"
+    schema: faq_generator/generate_faq_draft
+    prompt: $faq_generator.Generate_FAQ_Draft
+    model_vendor: anthropic
+    model_name: claude-sonnet-4-20250514
+    api_key: ANTHROPIC_API_KEY
+    guard:
+      condition: 'cluster_size >= 3'           # ← Only FAQ-worthy clusters
+      on_false: "filter"                       #    Skips single-ticket noise
+    context_scope:
+      observe:
+        - cluster_by_topic.cluster_topic
+        - cluster_by_topic.cluster_size
+        - cluster_by_topic.representative_problems
+        - cluster_by_topic.representative_resolutions
+        - seed_data.existing_faqs.faq_guidelines
+      passthrough:
+        - cluster_by_topic.cluster_topic
+        - cluster_by_topic.cluster_size
+        - cluster_by_topic.ticket_ids
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 6: DEDUPLICATE AGAINST EXISTING FAQs
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Tool checks if the generated FAQ overlaps with already-published FAQs
+  # from seed data. Marks as "new", "update", or "duplicate".
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: deduplicate_faqs
+    dependencies: [generate_faq_draft]
+    intent: "Check generated FAQ against existing published FAQs for overlap"
+    schema: faq_generator/deduplicate_faqs
+    prompt: $faq_generator.Deduplicate_FAQs
+    context_scope:
+      observe:
+        - generate_faq_draft.faq_question
+        - generate_faq_draft.faq_answer
+        - generate_faq_draft.faq_category
+        - seed_data.existing_faqs.published_faqs
+      passthrough:
+        - generate_faq_draft.*
+        - cluster_by_topic.ticket_ids
+        - cluster_by_topic.cluster_size
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 7: FORMAT FINAL OUTPUT
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Packages everything into publishable FAQ entries.
+  # Filters out duplicates — only "new" and "update" entries pass.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: format_faq_output
+    dependencies: [deduplicate_faqs]
+    kind: tool
+    impl: format_faq_entry
+    intent: "Package FAQ entry for publication"
+    schema: faq_generator/format_faq_output
+    guard:
+      condition: 'dedup_status != "duplicate"'
+      on_false: "filter"
+    context_scope:
+      observe:
+        - deduplicate_faqs.*
+        - generate_faq_draft.*
+        - cluster_by_topic.*

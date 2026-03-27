@@ -1,0 +1,38 @@
+name: extract_claims
+description: Extracted factual claims, product aspects, and sentiment signals from a product review
+fields:
+  - id: claims
+    type: array
+    description: "Specific factual claims made in the review (e.g., 'battery lasts 8 hours', 'broke after 2 weeks')"
+    items:
+      type: string
+  - id: product_aspects
+    type: array
+    description: "Product aspects or features discussed (e.g., 'battery life', 'build quality', 'customer service')"
+    items:
+      type: string
+  - id: sentiment_signals
+    type: object
+    description: "Sentiment indicators extracted from the review"
+    properties:
+      overall_tone:
+        type: string
+        description: "Overall tone: positive, negative, mixed, or neutral"
+      positive_phrases:
+        type: array
+        items:
+          type: string
+      negative_phrases:
+        type: array
+        items:
+          type: string
+  - id: usage_duration
+    type: string
+    description: "How long the reviewer has used the product (e.g., '3 weeks', '6 months', 'not specified')"
+  - id: comparison_mentioned
+    type: boolean
+    description: "Whether the reviewer compares this product to alternatives"
+required:
+  - claims
+  - product_aspects
+  - sentiment_signals

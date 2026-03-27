@@ -1,0 +1,22 @@
+name: classify_genre
+description: Schema for BISAC book genre classification
+fields:
+  - id: primary_bisac_code
+    type: string
+    description: "Primary BISAC code (e.g., COM051000)"
+  - id: primary_bisac_name
+    type: string
+    description: "Human-readable BISAC category name"
+  - id: secondary_bisac_codes
+    type: array
+    items:
+      type: string
+    description: "Additional relevant BISAC codes"
+  - id: classification_reasoning
+    type: string
+    description: "Explanation for the classification choice"
+required:
+  - primary_bisac_code
+  - primary_bisac_name
+  - classification_reasoning
+additionalProperties: false

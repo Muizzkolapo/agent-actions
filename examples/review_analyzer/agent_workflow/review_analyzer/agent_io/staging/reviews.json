@@ -1,0 +1,167 @@
+[
+  {
+    "review_id": "R001",
+    "product_name": "CloudWalk Pro Running Shoes",
+    "product_category": "Footwear",
+    "reviewer_name": "Sarah M.",
+    "review_date": "2024-11-15",
+    "star_rating": 4,
+    "review_title": "Great cushioning but runs small",
+    "review_text": "I've been using these shoes for about 3 weeks now for my daily 5K runs. The cushioning is excellent and my knees feel significantly better compared to my old pair. Breathability is solid even on warmer days. However, they run about half a size small so I'd recommend sizing up. The lace system could be improved as they tend to come undone mid-run. The outsole grip on wet pavement is surprisingly good though. Overall a strong purchase for the price point.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R002",
+    "product_name": "BrewMaster 3000 Coffee Maker",
+    "product_category": "Kitchen Appliances",
+    "reviewer_name": "James T.",
+    "review_date": "2024-12-01",
+    "star_rating": 1,
+    "review_title": "Broke after 2 weeks",
+    "review_text": "Complete waste of money. The heating element failed after exactly 14 days — one day after the return window closed, which feels deliberate. The carafe handle also cracked when I hand-washed it gently. Customer service was unhelpful and kept transferring me between departments. I've owned cheaper coffee makers that lasted years. Avoid this product entirely.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R003",
+    "product_name": "ZenDesk Standing Desk",
+    "product_category": "Office Furniture",
+    "reviewer_name": "Priya K.",
+    "review_date": "2024-10-22",
+    "star_rating": 5,
+    "review_title": "Transformed my home office",
+    "review_text": "After 3 months of daily use, this desk has genuinely improved my work-from-home setup. The motor is whisper-quiet and transitions between sitting and standing take about 8 seconds. The memory presets (I use 3 heights) are a game-changer. Cable management tray underneath keeps things tidy. Assembly took about 45 minutes with one person. The bamboo top feels premium and has held up well with no scratches. My only minor gripe is the control panel could be more intuitive — took me a few days to figure out the preset programming.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R004",
+    "product_name": "AuraSound Wireless Earbuds",
+    "product_category": "Audio",
+    "reviewer_name": "Mike R.",
+    "review_date": "2024-11-30",
+    "star_rating": 3,
+    "review_title": "Decent sound, terrible app",
+    "review_text": "Sound quality is actually quite good for the price — clear mids and surprisingly punchy bass. Active noise cancellation works well on flights. Battery life matches the claimed 8 hours. However, the companion app is atrocious. It crashes constantly on Android, the EQ presets are limited, and firmware updates have failed three times. The touch controls are also too sensitive — I keep accidentally skipping tracks. If they fixed the software, these would be an easy 5 stars.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R005",
+    "product_name": "GreenGrow Indoor Herb Garden",
+    "product_category": "Home & Garden",
+    "reviewer_name": "Lisa Chen",
+    "review_date": "2024-09-18",
+    "star_rating": 5,
+    "review_title": "Fresh basil in January!",
+    "review_text": "I'm genuinely amazed. Growing basil, cilantro, and mint indoors during winter seemed impossible but this kit delivered. The LED grow lights are on an automatic timer and the water reservoir lasts about 10 days. Seeds sprouted within a week. After 6 weeks I'm harvesting enough herbs for daily cooking. The unit is compact enough for my kitchen counter and doesn't look ugly. Only downside is the seed pods are proprietary and a bit pricey, but I've had success transplanting store-bought seedlings into the empty pods.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R006",
+    "product_name": "FitTrack Pulse Smartwatch",
+    "product_category": "Wearables",
+    "reviewer_name": "anonymous_user_42",
+    "review_date": "2024-12-10",
+    "star_rating": 2,
+    "review_title": "not worth it",
+    "review_text": "meh. screen is ok i guess but the heart rate monitor is way off compared to my chest strap. showed 85 bpm when i was clearly at 150+ during intervals. sleep tracking is also inaccurate. gps takes forever to lock. for the price you can get a garmin that actually works.",
+    "verified_purchase": false
+  },
+  {
+    "review_id": "R007",
+    "product_name": "NovaCool Portable AC Unit",
+    "product_category": "Home Appliances",
+    "reviewer_name": "David Park",
+    "review_date": "2024-08-05",
+    "star_rating": 4,
+    "review_title": "Saved my summer but has quirks",
+    "review_text": "Bought this during the July heatwave when my central AC died. It cooled my 200 sq ft bedroom from 92F to 74F in about 40 minutes, which impressed me. Energy consumption is reasonable — my electricity bill went up about $30/month running it 8 hours daily. The noise level on high is noticeable but not unbearable with a white noise machine. The drainage system is annoying though — you need to empty the internal tank every 6-8 hours or it auto-shuts off. A continuous drain hose option would be a major improvement. The remote control feels cheap but works fine. Good emergency cooling solution.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R008",
+    "product_name": "PageTurn E-Reader Pro",
+    "product_category": "Electronics",
+    "reviewer_name": "Eleanor V.",
+    "review_date": "2024-11-08",
+    "star_rating": 5,
+    "review_title": "Finally replaced my Kindle",
+    "review_text": "After years on Kindle, I switched to PageTurn for the open epub support and I'm not looking back. The 7-inch e-ink display is crisp with adjustable warm lighting that's perfect for nighttime reading. Battery lasts about 3 weeks with WiFi off. Page turns are snappy — no ghosting. The built-in dictionary supports 12 languages which is great for my French novels. Storage is 32GB which holds thousands of books. The physical page-turn buttons on the sides are a feature I didn't know I needed. Build quality feels solid with an aluminum back. Syncs annotations across devices via their cloud service.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R009",
+    "product_name": "ChefPro 8-Quart Instant Pot",
+    "product_category": "Kitchen Appliances",
+    "reviewer_name": "Roberto G.",
+    "review_date": "2024-10-15",
+    "star_rating": 4,
+    "review_title": "Great for meal prep Sundays",
+    "review_text": "This has become the centerpiece of my weekly meal prep routine. Chicken thighs come out perfectly tender in 25 minutes. The yogurt function actually works — I make a batch every two weeks. Rice comes out better than my dedicated rice cooker. The slow cooker function is adequate but not as good as a standalone Crock-Pot. The inner pot coating has held up after 6 months of heavy use. My biggest complaint is the steam release valve — it's positioned so that steam blasts toward the cabinets and has started warping the wood above. Design oversight that should be fixed. The recipe book included is surprisingly useful with realistic prep times.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R010",
+    "product_name": "LumiGlow Smart Light Bulbs (4-pack)",
+    "product_category": "Smart Home",
+    "reviewer_name": "Kenji N.",
+    "review_date": "2024-12-05",
+    "star_rating": 3,
+    "review_title": "Works great when it works",
+    "review_text": "Color range is impressive — 16 million colors and the warm whites are actually warm, not that harsh bluish tone other brands have. Setup with HomeKit was straightforward. However, these bulbs lose WiFi connection at least twice a week and require power cycling to reconnect. In a standard 2-story house with a mesh network, this shouldn't happen. When connected, the app is responsive and the scenes/automations work well. At this price point, reliability should be a given. I've submitted multiple bug reports with no response from support.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R011",
+    "product_name": "TrailBlazer Hiking Backpack 45L",
+    "product_category": "Outdoor Gear",
+    "reviewer_name": "Amy Foster",
+    "review_date": "2024-09-28",
+    "star_rating": 5,
+    "review_title": "Survived a week in Patagonia",
+    "review_text": "Took this on a 7-day trek through Torres del Paine carrying about 35 lbs. The hip belt transfers weight beautifully — after 8-hour days my shoulders weren't sore. The rain cover is integrated (not a separate piece to lose) and kept everything dry through two full days of Patagonian rain. Ventilation channels on the back panel actually work. The organization is thoughtful: separate sleeping bag compartment on bottom, side zip access to main compartment, and stretch mesh pockets that hold Nalgene bottles securely even on scrambles. Compression straps keep the load stable on technical terrain. Only wish it came in more colors — all they had was gray and olive.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R012",
+    "product_name": "BrewMaster 3000 Coffee Maker",
+    "product_category": "Kitchen Appliances",
+    "reviewer_name": "Patricia L.",
+    "review_date": "2024-11-20",
+    "star_rating": 1,
+    "review_title": "DO NOT BUY",
+    "review_text": "WORST PURCHASE EVER. This thing leaked water all over my counter on the FIRST USE. The drip tray doesn't fit properly and wobbles. Coffee tastes like plastic even after running 5 cleaning cycles. The thermal carafe doesn't keep coffee hot for more than an hour. How does this have any positive reviews? I suspect fake reviews. Returning immediately.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R013",
+    "product_name": "ErgoFlex Office Chair",
+    "product_category": "Office Furniture",
+    "reviewer_name": "Thomas W.",
+    "review_date": "2024-10-02",
+    "star_rating": 4,
+    "review_title": "Solid chair, tricky assembly",
+    "review_text": "After 2 months of 8-hour workdays, my lower back pain has noticeably decreased. The lumbar support is adjustable and actually stays in position unlike my previous chair. Mesh back keeps you cool. The seat cushion is firm but supportive — if you prefer plush, look elsewhere. Armrests adjust in 4 directions which is rare at this price. However, assembly was frustrating — the instructions are just pictures with no text, two bolts were cross-threaded from the factory, and the gas cylinder was extremely tight to insert. Took me 90 minutes when the box says 30. Once assembled though, it's been rock solid with no squeaks or wobbles. The 12-year warranty gives me confidence in the build quality.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R014",
+    "product_name": "SonicClean Robot Vacuum",
+    "product_category": "Home Appliances",
+    "reviewer_name": "Jennifer B.",
+    "review_date": "2024-11-25",
+    "star_rating": 3,
+    "review_title": "Good at vacuuming, bad at navigating",
+    "review_text": "Suction power is genuinely impressive — picks up pet hair from carpet better than my upright Dyson. The dustbin is easy to empty and the filter is washable. Battery lasts about 90 minutes on standard mode. But the navigation is where it falls apart. It gets stuck under my couch daily, can't figure out chair legs, and maps the same room differently every time. The no-go zones in the app work maybe 60% of the time. I've resorted to putting physical barriers around problem areas. For the price, LiDAR navigation should work better than this. The mopping attachment is essentially useless — just drags a damp cloth around.",
+    "verified_purchase": true
+  },
+  {
+    "review_id": "R015",
+    "product_name": "CloudWalk Pro Running Shoes",
+    "product_category": "Footwear",
+    "reviewer_name": "BotReview_2024",
+    "review_date": "2024-12-12",
+    "star_rating": 5,
+    "review_title": "Best shoes ever amazing product!!!",
+    "review_text": "These are the best running shoes I have ever purchased in my entire life. They are comfortable and stylish and affordable. I would recommend these shoes to everyone. They are perfect in every way. Five stars. Buy them now you will not regret it. Amazing quality amazing product amazing brand. Best purchase I have made this year.",
+    "verified_purchase": false
+  }
+]

@@ -1,0 +1,72 @@
+################################################################################
+# {{WORKFLOW_TITLE}}
+################################################################################
+name: {{WORKFLOW_NAME}}
+description: "{{WORKFLOW_DESCRIPTION}}"
+version: "1.0.0"
+
+# Global defaults applied to all actions unless overridden
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: false
+  prompt_debug: false
+
+  # Retry: transient errors (rate limits, network)
+  retry:
+    max_attempts: 3
+    on_exhausted: continue  # continue | fail
+
+  # Reprompt: validation errors (bad JSON, schema violations)
+  # reprompt: false  # Uncomment to enable
+  # reprompt:
+  #   max_attempts: 3
+  #   json_repair: true
+  #   use_llm_critique: false
+  #   critique_after_attempt: 2
+  #   on_exhausted: continue
+
+actions:
+  # ============================================================================
+  # STEP 1: {{STEP_1_NAME}}
+  # ============================================================================
+  - name: {{step_1_name}}
+    intent: "{{Step 1 description}}"
+    schema: {
+      output_field_1: string,
+      output_field_2: array
+    }
+    prompt: ${{WORKFLOW_NAME}}.{{Step_1_Prompt}}
+    prompt_debug: true
+
+  # ============================================================================
+  # STEP 2: {{STEP_2_NAME}} (Tool Example)
+  # ============================================================================
+  - name: {{step_2_name}}
+    dependencies: [{{step_1_name}}]
+    kind: tool
+    impl: {{tool_function_name}}
+    intent: "{{Step 2 description}}"
+    granularity: Record
+
+  # ============================================================================
+  # STEP 3: {{STEP_3_NAME}} (LLM with Context Scope)
+  # ============================================================================
+  - name: {{step_3_name}}
+    dependencies: [{{step_2_name}}]
+    intent: "{{Step 3 description}}"
+    schema: {
+      final_output: string
+    }
+    context_scope:
+      observe:
+        - source.reference_data
+      passthrough:
+        - {{step_1_name}}.output_field_1
+        - {{step_2_name}}.processed_field
+    prompt: ${{WORKFLOW_NAME}}.{{Step_3_Prompt}}
+    prompt_debug: true

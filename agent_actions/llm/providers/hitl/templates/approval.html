@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HITL Review</title>
+    <script nonce="{{ csp_nonce }}">
+        (function(){
+            var s=localStorage.getItem('hitl-theme');
+            var t=s||(window.matchMedia('(prefers-color-scheme:light)').matches?'light':'dark');
+            document.documentElement.setAttribute('data-theme',t);
+        })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300;12..96,400;12..96,600;12..96,700;12..96,800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --ease: cubic-bezier(0.4, 0, 0.2, 1);
+            --spring: cubic-bezier(0.22, 1, 0.36, 1);
+            --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --smooth: cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        [data-theme="dark"] {
+            --bg: #09090b;
+            --bg-subtle: #0e0e12;
+            --surface: #141418;
+            --surface-2: #1c1c22;
+            --surface-3: #26262e;
+            --surface-hover: #2e2e38;
+            --border: rgba(255,255,255,0.06);
+            --border-2: rgba(255,255,255,0.1);
+            --border-3: rgba(255,255,255,0.16);
+            --text: #ececf1;
+            --text-2: #a0a0b0;
+            --text-3: #62627a;
+            --text-4: #3e3e50;
+            --green: #22c55e;
+            --green-dim: #16a34a;
+            --green-soft: rgba(34,197,94,0.08);
+            --green-border: rgba(34,197,94,0.2);
+            --green-glow: rgba(34,197,94,0.12);
+            --red: #ef4444;
+            --red-dim: #dc2626;
+            --red-soft: rgba(239,68,68,0.08);
+            --red-border: rgba(239,68,68,0.18);
+            --red-glow: rgba(239,68,68,0.1);
+            --blue: #60a5fa;
+            --blue-soft: rgba(96,165,250,0.07);
+            --blue-border: rgba(96,165,250,0.16);
+            --amber: #fbbf24;
+            --code-bg: #0c0c10;
+            --overlay: rgba(0,0,0,0.8);
+            --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25);
+            --shadow-lg: 0 8px 40px rgba(0,0,0,0.5);
+            --shadow-glow-g: 0 0 20px rgba(34,197,94,0.15), 0 0 40px rgba(34,197,94,0.05);
+            --shadow-glow-r: 0 0 20px rgba(239,68,68,0.12), 0 0 40px rgba(239,68,68,0.04);
+            --glass: rgba(20,20,24,0.75);
+            --glass-border: rgba(255,255,255,0.06);
+            --jk: #93c5fd; --js: #86efac; --jn: #c4b5fd; --jb: #fca5a5; --jl: #52526a;
+            --dot-color: rgba(255,255,255,0.04);
+            --logo-bar-1: #94a3b8;
+            --logo-bar-2: #e2e8f0;
+            color-scheme: dark;
+        }
+
+        [data-theme="light"] {
+            --bg: #f7f7f8;
+            --bg-subtle: #eeeff2;
+            --surface: #ffffff;
+            --surface-2: #f3f3f6;
+            --surface-3: #e8e8ee;
+            --surface-hover: #e0e0e8;
+            --border: rgba(0,0,0,0.06);
+            --border-2: rgba(0,0,0,0.1);
+            --border-3: rgba(0,0,0,0.15);
+            --text: #111118;
+            --text-2: #55556a;
+            --text-3: #8888a0;
+            --text-4: #b0b0c4;
+            --green: #16a34a;
+            --green-dim: #15803d;
+            --green-soft: rgba(22,163,74,0.06);
+            --green-border: rgba(22,163,74,0.16);
+            --green-glow: rgba(22,163,74,0.08);
+            --red: #dc2626;
+            --red-dim: #b91c1c;
+            --red-soft: rgba(220,38,38,0.05);
+            --red-border: rgba(220,38,38,0.14);
+            --red-glow: rgba(220,38,38,0.06);
+            --blue: #2563eb;
+            --blue-soft: rgba(37,99,235,0.05);
+            --blue-border: rgba(37,99,235,0.12);
+            --amber: #d97706;
+            --code-bg: #f3f3f6;
+            --overlay: rgba(200,200,220,0.4);
+            --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.06);
+            --shadow-glow-g: 0 0 16px rgba(22,163,74,0.1), 0 0 32px rgba(22,163,74,0.04);
+            --shadow-glow-r: 0 0 16px rgba(220,38,38,0.08), 0 0 32px rgba(220,38,38,0.03);
+            --glass: rgba(247,247,248,0.72);
+            --glass-border: rgba(0,0,0,0.05);
+            --jk: #1d4ed8; --js: #15803d; --jn: #7c3aed; --jb: #dc2626; --jl: #9898b0;
+            --dot-color: rgba(0,0,0,0.03);
+            --logo-bar-1: #64748b;
+            --logo-bar-2: #334155;
+            color-scheme: light;
+        }
+
+        html { font-size: 15px; }
+
+        body {
+            font-family: "Outfit", system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            transition: background 0.4s var(--ease), color 0.3s var(--ease);
+            position: relative;
+        }
+
+        /* ── Dot Grid Background (removed — too noisy at scale) ── */
+
+        /* ── Ambient Glow ── */
+        body::after {
+            content: '';
+            position: fixed;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse, var(--green-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.6;
+            transition: opacity 0.6s var(--ease);
+        }
+
+        /* ── Progress Strip ── */
+        .prog-strip {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 3px;
+            background: var(--border);
+            z-index: 50;
+            overflow: hidden;
+        }
+        .prog-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--green), #38bdf8, var(--green));
+            background-size: 200% 100%;
+            border-radius: 0 2px 2px 0;
+            transition: width 0.6s var(--spring);
+            box-shadow: 0 0 12px var(--green-glow);
+        }
+
+        /* ── Page ── */
+        .page {
+            position: relative;
+            z-index: 1;
+            max-width: 880px;
+            margin: 0 auto;
+            padding: 2.2rem 2rem 0;
+            padding-bottom: 240px;
+        }
+
+        /* ── Staggered Page Load ── */
+        @keyframes revealUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .header { animation: revealUp 0.5s var(--spring) 0.05s both; }
+        .nav-row { animation: revealUp 0.5s var(--spring) 0.12s both; }
+        .card { animation: revealUp 0.5s var(--spring) 0.16s both; }
+        .action-bar { animation: revealUp 0.4s var(--spring) 0.3s both; }
+
+        /* ── Header ── */
+        .header {
+            margin-bottom: 1.2rem;
+        }
+        .header-row {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1.2rem;
+            margin-bottom: 0.85rem;
+        }
+        .header h1 {
+            font-family: "Bricolage Grotesque", serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            color: var(--text);
+        }
+        .header-sub {
+            font-size: 0.68rem;
+            color: var(--text-4);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-top: 0.3rem;
+        }
+        .header-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.55rem;
+            flex-shrink: 0;
+        }
+        .header-utils {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .prog-label {
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--text-3);
+            white-space: nowrap;
+        }
+        .prog-label strong { color: var(--green); font-weight: 800; }
+        .stats { display: flex; gap: 0.4rem; }
+        .stat {
+            font-size: 0.62rem;
+            font-weight: 700;
+            padding: 0.22rem 0.6rem;
+            border-radius: 100px;
+            transition: all 0.2s var(--ease);
+        }
+        .stat-p { color: var(--blue); background: var(--blue-soft); border: 1px solid var(--blue-border); }
+        .stat-a { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); }
+        .stat-r { color: var(--red); background: var(--red-soft); border: 1px solid var(--red-border); }
+
+        /* ── Logo ── */
+        .logo-mark {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        /* ── Theme Toggle ── */
+        .theme-btn {
+            width: 36px; height: 36px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s var(--ease);
+            flex-shrink: 0;
+        }
+        .theme-btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--border-2); box-shadow: var(--shadow); }
+        .theme-btn svg { width: 16px; height: 16px; transition: transform 0.4s var(--bounce); }
+        .theme-btn:hover svg { transform: rotate(25deg) scale(1.05); }
+        [data-theme="dark"] .ico-sun { display: block; }
+        [data-theme="dark"] .ico-moon { display: none; }
+        [data-theme="light"] .ico-sun { display: none; }
+        [data-theme="light"] .ico-moon { display: block; }
+
+        /* ── Instructions (collapsible) ── */
+        .instructions {
+            background: var(--blue-soft);
+            border: 1px solid var(--blue-border);
+            border-radius: var(--radius);
+            padding: 1rem 1.2rem;
+            color: var(--text-2);
+            font-size: 0.84rem;
+            line-height: 1.7;
+            position: relative;
+            cursor: pointer;
+            transition: max-height 0.4s var(--spring), padding 0.3s var(--ease);
+            user-select: none;
+        }
+        .instructions::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: var(--blue);
+            border-radius: 3px 0 0 3px;
+            opacity: 0.6;
+        }
+        .instructions-inner { display: flex; align-items: flex-start; gap: 0.7rem; }
+        .instructions-text { flex: 1; min-width: 0; white-space: pre-wrap; }
+        .instructions-chevron {
+            flex-shrink: 0;
+            width: 18px; height: 18px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-4);
+            transition: transform 0.3s var(--spring);
+            margin-top: 0.15rem;
+        }
+        .instructions-chevron svg { width: 14px; height: 14px; }
+        .instructions.collapsed { padding-top: 0.7rem; padding-bottom: 0.7rem; }
+        .instructions.collapsed .instructions-text {
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        .instructions.collapsed .instructions-chevron { transform: rotate(-90deg); }
+
+        /* ── Nav Row ── */
+        .nav-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 1rem 0 0.5rem;
+            gap: 0.7rem;
+        }
+        .nav-left { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+        .nav-right { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+
+        .rec-nav {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 3px;
+        }
+        .nav-btn {
+            width: 32px; height: 32px;
+            border-radius: 9px;
+            border: none;
+            background: transparent;
+            color: var(--text-3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s var(--ease);
+        }
+        .nav-btn:hover { background: var(--surface-2); color: var(--text); }
+        .nav-btn:active { background: var(--surface-3); transform: scale(0.95); }
+        .nav-btn:disabled { opacity: 0.15; pointer-events: none; }
+        .nav-btn svg { width: 14px; height: 14px; }
+        .nav-num {
+            font-size: 0.76rem;
+            font-weight: 700;
+            color: var(--text-3);
+            min-width: 62px;
+            text-align: center;
+            white-space: nowrap;
+            padding: 0 0.15rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .nav-num strong { color: var(--text); }
+
+        .ghost-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.42rem 0.8rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-3);
+            cursor: pointer;
+            transition: all 0.15s var(--ease);
+        }
+        .ghost-btn:hover { border-color: var(--border-2); color: var(--text-2); background: var(--surface-2); }
+
+        .view-toggle {
+            display: flex;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 3px;
+            gap: 2px;
+        }
+        .vt-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 0.38rem 0.8rem;
+            border-radius: 9px;
+            border: none;
+            background: transparent;
+            color: var(--text-4);
+            cursor: pointer;
+            transition: all 0.2s var(--ease);
+        }
+        .vt-btn:hover { color: var(--text-3); }
+        .vt-btn.on {
+            background: var(--surface-3);
+            color: var(--text);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        /* ── Editor Controls ── */
+        .ctrl-pill {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 3px;
+        }
+        .ctrl-btn {
+            width: 30px; height: 30px;
+            border-radius: 9px;
+            border: none;
+            background: transparent;
+            color: var(--text-3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s var(--ease);
+            font-family: "Outfit", sans-serif;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .ctrl-btn:hover { background: var(--surface-2); color: var(--text); }
+        .ctrl-btn:active { background: var(--surface-3); transform: scale(0.93); }
+        .ctrl-btn:disabled { opacity: 0.15; pointer-events: none; }
+        .ctrl-btn svg { width: 13px; height: 13px; }
+        .ctrl-a-sm { font-size: 0.56rem; }
+        .ctrl-a-lg { font-size: 0.78rem; }
+        .ctrl-val {
+            font-size: 0.62rem;
+            font-weight: 700;
+            color: var(--text-3);
+            min-width: 26px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+            user-select: none;
+        }
+        .ctrl-sep {
+            width: 1px;
+            height: 16px;
+            background: var(--border-2);
+            margin: 0 1px;
+            flex-shrink: 0;
+        }
+        .ctrl-label {
+            font-size: 0.56rem;
+            color: var(--text-4);
+            min-width: auto;
+            padding: 0 0.25rem;
+        }
+
+        /* ── Button Flash (keyboard feedback) ── */
+        @keyframes flashGreen {
+            0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+            100% { box-shadow: 0 0 0 10px rgba(34,197,94,0); }
+        }
+        @keyframes flashRed {
+            0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+            100% { box-shadow: 0 0 0 10px rgba(239,68,68,0); }
+        }
+        .flash-approve { animation: flashGreen 0.45s var(--ease) !important; }
+        .flash-reject { animation: flashRed 0.45s var(--ease) !important; }
+
+        /* ── Skip to Unreviewed ── */
+        .skip-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.66rem;
+            font-weight: 700;
+            padding: 0.38rem 0.7rem;
+            border-radius: 9px;
+            border: 1px solid var(--blue-border);
+            background: var(--blue-soft);
+            color: var(--blue);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.15s var(--ease);
+            white-space: nowrap;
+        }
+        .skip-btn:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+        .skip-btn svg { width: 12px; height: 12px; }
+
+        /* ── Submit Ready Glow ── */
+        @keyframes readyPulse {
+            0%, 100% { box-shadow: var(--shadow); }
+            50% { box-shadow: var(--shadow), 0 0 20px var(--green-glow), 0 0 0 3px rgba(34,197,94,0.1); }
+        }
+        .btn-submit.ready {
+            background: var(--green);
+            color: #fff;
+            border-color: var(--green);
+            animation: readyPulse 2s var(--ease) infinite;
+        }
+        .btn-submit.ready:hover {
+            background: var(--green-dim);
+            animation: none;
+            box-shadow: 0 4px 16px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+
+        /* ── Batch Actions ── */
+        .batch-row {
+            display: none;
+            justify-content: center;
+            gap: 0.45rem;
+            margin-bottom: 0.45rem;
+        }
+        .batch-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.64rem;
+            font-weight: 600;
+            padding: 0.32rem 0.7rem;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text-3);
+            cursor: pointer;
+            transition: all 0.15s var(--ease);
+        }
+        .batch-btn:hover { border-color: var(--border-2); color: var(--text-2); background: var(--surface-2); }
+        .batch-btn:disabled { opacity: 0.3; pointer-events: none; }
+        .batch-approve:hover { color: var(--green) !important; border-color: var(--green-border) !important; }
+        .batch-reject:hover { color: var(--red) !important; border-color: var(--red-border) !important; }
+
+        /* ── Status Dots (removed — not useful at scale) ── */
+
+        /* ── Review Card ── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            margin-bottom: 1rem;
+            transition: box-shadow 0.35s var(--ease), border-color 0.35s var(--ease);
+            position: relative;
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            border-radius: 3px 0 0 3px;
+            background: var(--border-2);
+            transition: background 0.3s var(--ease), box-shadow 0.3s var(--ease);
+            z-index: 2;
+        }
+        .card[data-state="approved"]::before { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+        .card[data-state="rejected"]::before { background: var(--red); box-shadow: 0 0 8px var(--red-glow); }
+        .card[data-state="pending"]::before { background: var(--blue); opacity: 0.4; }
+
+        .card[data-state="approved"] { border-color: var(--green-border); box-shadow: var(--shadow), var(--shadow-glow-g); }
+        .card[data-state="rejected"] { border-color: var(--red-border); box-shadow: var(--shadow), var(--shadow-glow-r); }
+
+        .card-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.95rem 1.4rem 0.95rem 1.6rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-title {
+            font-family: "Bricolage Grotesque", serif;
+            font-size: 0.82rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-2);
+        }
+        .status-pill {
+            font-size: 0.58rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            padding: 0.22rem 0.65rem;
+            border-radius: 100px;
+            transition: all 0.3s var(--spring);
+        }
+        .status-pill.s-pending { color: var(--blue); background: var(--blue-soft); border: 1px solid var(--blue-border); }
+        .status-pill.s-approved { color: var(--green); background: var(--green-soft); border: 1px solid var(--green-border); }
+        .status-pill.s-rejected { color: var(--red); background: var(--red-soft); border: 1px solid var(--red-border); }
+
+        .card-meta {
+            padding: 0.6rem 1.4rem 0 1.6rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+        }
+        .meta-hint { color: var(--text-3); font-size: 0.76rem; line-height: 1.55; }
+        .meta-progress { color: var(--text-2); font-size: 0.74rem; font-weight: 700; }
+
+        /* ── Panels ── */
+        .panel { display: none; }
+        .panel.on { display: block; }
+
+        /* ── Fields Panel ── */
+        .fields-list { padding: 0.2rem 0; }
+        .fields-list:empty { padding: 0; }
+
+        .field {
+            padding: 0.75rem 1.4rem 0.75rem 1.6rem;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s var(--ease);
+        }
+        .field:last-child { border-bottom: none; }
+        .field:hover { background: var(--surface-2); }
+
+        /* Inline: label and value on same line */
+        .field-compact {
+            display: flex;
+            align-items: baseline;
+            gap: 0.75rem;
+        }
+
+        .field-key {
+            font-size: 0.72rem;
+            font-weight: 700;
+            color: var(--text-3);
+            letter-spacing: 0.01em;
+            flex-shrink: 0;
+            line-height: 1.55;
+        }
+
+        .field:not(.field-compact) .field-key {
+            margin-bottom: 0.5rem;
+        }
+
+        /* Field values */
+        .fv {
+            font-size: 0.92rem;
+            line-height: 1.75;
+            color: var(--text);
+            word-break: break-word;
+        }
+        .fv-long {
+            font-size: 0.92rem;
+            line-height: 1.85;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+        .fv-mono {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.82rem;
+            color: var(--text-2);
+            background: var(--surface-2);
+            padding: 0.14rem 0.45rem;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--border);
+        }
+        .fv-link {
+            color: var(--blue);
+            font-size: 0.88rem;
+            text-decoration: underline;
+            text-decoration-color: var(--blue-border);
+            text-underline-offset: 3px;
+            text-decoration-thickness: 1px;
+            word-break: break-all;
+            transition: text-decoration-color 0.15s var(--ease);
+        }
+        .fv-link:hover { text-decoration-color: var(--blue); }
+        .fv-empty {
+            color: var(--text-4);
+            font-style: italic;
+            font-size: 0.84rem;
+        }
+        .fv-code {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.72rem;
+            background: var(--code-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 0.65rem 0.95rem;
+            margin-top: 0.4rem;
+            line-height: 1.85;
+            overflow-x: auto;
+            max-height: 280px;
+            overflow-y: auto;
+            white-space: pre;
+            color: var(--text-2);
+        }
+
+        .fields-empty {
+            color: var(--text-4);
+            font-size: 0.84rem;
+            text-align: center;
+            padding: 2.6rem 1rem;
+        }
+
+        /* ── JSON Panel ── */
+        .json-wrap { padding: 0.95rem 1.4rem 1.1rem 1.6rem; }
+        .json-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+        }
+        .json-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: var(--text-4);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .copy-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.62rem;
+            font-weight: 600;
+            padding: 0.32rem 0.65rem;
+            border-radius: var(--radius-xs);
+            border: 1px solid var(--border);
+            background: var(--surface-2);
+            color: var(--text-3);
+            cursor: pointer;
+            transition: all 0.15s var(--ease);
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .copy-btn:hover { color: var(--text-2); border-color: var(--border-2); background: var(--surface-3); }
+        .copy-btn.copied { color: var(--green); border-color: var(--green-border); background: var(--green-soft); }
+        .copy-btn svg { width: 12px; height: 12px; }
+        .json-pre {
+            background: var(--code-bg);
+            padding: 1rem 1.1rem;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.72rem;
+            line-height: 1.9;
+            color: var(--text-2);
+            overflow-x: auto;
+            min-height: 100px;
+            max-height: 55vh;
+            tab-size: 2;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .jk { color: var(--jk); } .js { color: var(--js); }
+        .jn { color: var(--jn); } .jb { color: var(--jb); }
+        .jl { color: var(--jl); font-style: italic; }
+
+        /* ── Comment ── */
+        .comment-section { padding: 0 1.4rem 1.2rem 1.6rem; }
+        .comment-section label {
+            display: block;
+            margin-bottom: 0.45rem;
+            font-size: 0.74rem;
+            font-weight: 600;
+            color: var(--text-3);
+        }
+        textarea {
+            width: 100%;
+            min-height: 80px;
+            padding: 0.75rem 0.95rem;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: var(--surface-2);
+            color: var(--text);
+            font-family: "Outfit", sans-serif;
+            font-size: 0.86rem;
+            resize: vertical;
+            outline: none;
+            transition: all 0.2s var(--ease);
+            line-height: 1.65;
+        }
+        textarea::placeholder { color: var(--text-4); }
+        textarea:focus {
+            border-color: var(--blue-border);
+            box-shadow: 0 0 0 3px var(--blue-soft), 0 0 0 1px var(--blue-border);
+            background: var(--surface);
+        }
+
+
+        /* ── Status ── */
+        .status-msg {
+            margin: 0 1.4rem 1.1rem 1.6rem;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: 700;
+            font-size: 0.84rem;
+            display: none;
+        }
+        .status-success { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
+        .status-error { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+
+        /* ── Action Bar ── */
+        .action-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 0 2rem 0;
+            pointer-events: none;
+        }
+        .action-backdrop {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, var(--bg) 55%, transparent);
+            backdrop-filter: blur(20px) saturate(1.4);
+            -webkit-backdrop-filter: blur(20px) saturate(1.4);
+            mask-image: linear-gradient(to top, black 60%, transparent);
+            -webkit-mask-image: linear-gradient(to top, black 60%, transparent);
+        }
+        .action-inner {
+            max-width: 880px;
+            margin: 0 auto;
+            pointer-events: auto;
+            position: relative;
+            z-index: 1;
+            padding: 0.8rem 0 1.4rem;
+        }
+        .kb-row {
+            text-align: center;
+            font-size: 0.62rem;
+            color: var(--text-4);
+            font-weight: 600;
+            margin-bottom: 0.65rem;
+            letter-spacing: 0.01em;
+        }
+        .kb-row kbd {
+            font-family: "JetBrains Mono", monospace;
+            font-size: 0.52rem;
+            font-weight: 600;
+            padding: 0.15rem 0.38rem;
+            border-radius: 5px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-2);
+            color: var(--text-3);
+            margin: 0 0.06rem;
+            box-shadow: 0 1px 0 var(--border);
+        }
+        .action-btns { display: flex; gap: 0.6rem; }
+        .act-btn {
+            font-family: "Outfit", sans-serif;
+            font-size: 0.88rem;
+            font-weight: 700;
+            padding: 0.75rem 1.1rem;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.15s var(--ease);
+            flex: 1;
+            letter-spacing: -0.01em;
+            position: relative;
+            overflow: hidden;
+        }
+        .act-btn:active { transform: scale(0.975); }
+        .btn-approve {
+            background: var(--green);
+            color: #fff;
+            box-shadow: 0 2px 8px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+        .btn-approve:hover { background: var(--green-dim); box-shadow: 0 4px 16px var(--green-glow), inset 0 1px 0 rgba(255,255,255,0.15); }
+        .btn-reject {
+            background: var(--red);
+            color: #fff;
+            box-shadow: 0 2px 8px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+        .btn-reject:hover { background: var(--red-dim); box-shadow: 0 4px 16px var(--red-glow), inset 0 1px 0 rgba(255,255,255,0.15); }
+        .btn-submit {
+            background: var(--surface);
+            color: var(--text-2);
+            border: 1px solid var(--border-2);
+            box-shadow: var(--shadow);
+        }
+        .btn-submit:hover { background: var(--surface-2); border-color: var(--border-3); color: var(--text); }
+        .act-btn:disabled { opacity: 0.25; pointer-events: none; transform: none; filter: none; box-shadow: none; }
+
+        /* ── Toast ── */
+        .toast-wrap {
+            position: fixed;
+            top: 16px;
+            left: 50%; transform: translateX(-50%);
+            z-index: 300;
+            pointer-events: none;
+        }
+        .toast {
+            background: var(--surface);
+            border: 1px solid var(--border-2);
+            border-radius: 100px;
+            padding: 0.6rem 1.3rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            box-shadow: var(--shadow-lg);
+            opacity: 0;
+            transform: translateY(-18px) scale(0.92);
+            transition: all 0.4s var(--spring);
+            white-space: nowrap;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+        .toast.tg { color: var(--green); border-color: var(--green-border); background: var(--green-soft); }
+        .toast.tr { color: var(--red); border-color: var(--red-border); background: var(--red-soft); }
+
+        /* ── Animations ── */
+        @keyframes cardSlide {
+            0% { opacity: 1; transform: translateX(0); }
+            30% { opacity: 0.4; transform: translateX(-6px); }
+            60% { opacity: 0.4; transform: translateX(6px); }
+            100% { opacity: 1; transform: translateX(0); }
+        }
+        .card-switch { animation: cardSlide 0.32s var(--ease); }
+
+        /* ── Completion Celebration ── */
+        @keyframes celebratePulse {
+            0%, 100% { box-shadow: var(--shadow), var(--shadow-glow-g); }
+            50% { box-shadow: var(--shadow), 0 0 30px var(--green-glow), 0 0 60px rgba(34,197,94,0.05); }
+        }
+
+        /* ── Scrollbar ── */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--border-3); }
+
+        /* ── Responsive ── */
+        @media (max-width: 640px) {
+            .page { padding: 1.4rem 1rem 0; padding-bottom: 240px; }
+            .header-row { flex-direction: column; gap: 0.7rem; }
+            .header-right { align-items: flex-start; }
+            .stats { justify-content: flex-start; }
+            .nav-row { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+            .nav-left { justify-content: space-between; }
+            .nav-right { justify-content: flex-start; }
+            .action-btns { flex-direction: column; gap: 0.5rem; }
+            .field { padding-left: 1.1rem; padding-right: 1rem; }
+            .card-head, .card-meta, .json-wrap, .comment-section, .status-msg {
+                padding-left: 1.1rem; padding-right: 1rem;
+            }
+            .header h1 { font-size: 1.15rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="prog-strip"><div class="prog-fill" id="prog-fill"></div></div>
+
+    <div class="page">
+        <header class="header">
+            <div class="header-row">
+                <div style="display:flex;align-items:center;gap:1rem">
+                    <div class="logo-mark">
+                        <svg width="22" height="22" viewBox="0 10 100 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="8" y="20" width="13" height="54" rx="4" fill="var(--logo-bar-1)" transform="rotate(-30 14 68)"/>
+                            <rect x="28" y="22" width="13" height="56" rx="4" fill="var(--logo-bar-2)" opacity="0.6" transform="rotate(-15 34 76)"/>
+                            <rect x="50" y="22" width="13" height="60" rx="4" fill="var(--logo-bar-2)" opacity="0.8" transform="rotate(-5 56 80)"/>
+                            <rect x="72" y="18" width="15" height="68" rx="4" fill="var(--logo-bar-2)"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1>Approval Required</h1>
+                        <div class="header-sub">Human-in-the-loop review</div>
+                    </div>
+                </div>
+                <div class="header-right">
+                    <div class="header-utils">
+                        <div class="prog-label" id="prog-text"><strong>0</strong> of 0 reviewed</div>
+                        <button class="theme-btn" id="theme-toggle" type="button" aria-label="Toggle theme">
+                            <svg class="ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                            <svg class="ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                        </button>
+                    </div>
+                    <div class="stats">
+                        <span class="stat stat-p" id="stat-pending">0 pending</span>
+                        <span class="stat stat-a" id="stat-approved">0 approved</span>
+                        <span class="stat stat-r" id="stat-rejected">0 rejected</span>
+                    </div>
+                </div>
+            </div>
+            {% if instructions %}<div class="instructions" id="instructions-box">
+                <div class="instructions-inner">
+                    <span class="instructions-text">{{ instructions }}</span>
+                    <span class="instructions-chevron" id="instructions-chevron">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg>
+                    </span>
+                </div>
+            </div>{% endif %}
+        </header>
+
+        <div class="nav-row">
+            <div class="nav-left">
+                <div class="rec-nav" id="record-toolbar" style="display:none">
+                    <button class="nav-btn" id="prev-record" type="button" aria-label="Previous">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 3L5 8l5 5"/></svg>
+                    </button>
+                    <span class="nav-num" id="record-counter"><strong>1</strong> / 1</span>
+                    <button class="nav-btn" id="next-record" type="button" aria-label="Next">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 3l5 5-5 5"/></svg>
+                    </button>
+                </div>
+                <button class="skip-btn" id="skip-unreviewed" type="button">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 3l5 5-5 5M9 3l5 5-5 5"/></svg>
+                    Next unreviewed
+                </button>
+            </div>
+            <div class="nav-right">
+                <div class="ctrl-pill" title="Font size (+ / -)">
+                    <button class="ctrl-btn" id="font-down" type="button" aria-label="Decrease font size"><span class="ctrl-a-sm">A</span></button>
+                    <span class="ctrl-val" id="font-label">15</span>
+                    <button class="ctrl-btn" id="font-up" type="button" aria-label="Increase font size"><span class="ctrl-a-lg">A</span></button>
+                    <span class="ctrl-sep"></span>
+                    <span class="ctrl-val ctrl-label">Font</span>
+                </div>
+                <div class="ctrl-pill" title="Page width ([ / ])">
+                    <button class="ctrl-btn" id="width-down" type="button" aria-label="Narrower page">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M4 5.5L6 8 4 10.5M12 5.5L10 8l2 2.5"/></svg>
+                    </button>
+                    <span class="ctrl-val" id="width-label">M</span>
+                    <button class="ctrl-btn" id="width-up" type="button" aria-label="Wider page">
+                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 8h5M10 8h5"/><path d="M3.5 5.5L1 8l2.5 2.5M12.5 5.5L15 8l-2.5 2.5"/></svg>
+                    </button>
+                    <span class="ctrl-sep"></span>
+                    <span class="ctrl-val ctrl-label">Width</span>
+                </div>
+                <div class="view-toggle">
+                    <button class="vt-btn on" data-view="fields" id="view-fields-btn" type="button">Fields</button>
+                    <button class="vt-btn" data-view="json" id="view-json-btn" type="button">JSON</button>
+                </div>
+            </div>
+        </div>
+
+
+        <section class="card" id="review-card" data-state="pending">
+            <div class="card-head">
+                <div class="card-title">Review Data</div>
+                <span class="status-pill s-pending" id="rv-tag">PENDING</span>
+            </div>
+
+            <div class="card-meta">
+                <div id="record-hint" class="meta-hint" style="display:none"></div>
+                <div id="review-progress" class="meta-progress" style="display:none"></div>
+            </div>
+
+            <div class="panel on" id="panel-fields">
+                <div class="fields-list" id="fields-wrap"></div>
+            </div>
+
+            <div class="panel" id="panel-json">
+                <div class="json-wrap">
+                    <div class="json-head">
+                        <span class="json-label">Raw JSON</span>
+                        <button class="copy-btn" id="copy-json-btn" type="button">
+                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3 10.5V3a1.5 1.5 0 011.5-1.5H11"/></svg>
+                            <span id="copy-btn-text">Copy</span>
+                        </button>
+                    </div>
+                    <pre class="json-pre" id="data-display">Loading...</pre>
+                </div>
+            </div>
+
+            <div class="comment-section">
+                <label for="comment">Comment for current record (optional for approve{% if require_comment_on_reject %}, required for reject{% endif %})</label>
+                <textarea id="comment" placeholder="Add your feedback..."></textarea>
+            </div>
+
+
+            <div id="status" class="status-msg"></div>
+        </section>
+    </div>
+
+    <div class="action-bar">
+        <div class="action-backdrop"></div>
+        <div class="action-inner">
+            <div class="batch-row" id="batch-row">
+                <button class="batch-btn batch-approve" id="batch-approve" type="button">Approve remaining</button>
+                <button class="batch-btn batch-reject" id="batch-reject" type="button">Reject remaining</button>
+            </div>
+            <div class="kb-row"><kbd>A</kbd> Approve &nbsp; <kbd>R</kbd> Reject &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate &nbsp; <kbd>N</kbd> Skip &nbsp; <kbd>+</kbd><kbd>&minus;</kbd> Font &nbsp; <kbd>[</kbd><kbd>]</kbd> Width</div>
+            <div class="action-btns">
+                <button id="approve-record-btn" class="act-btn btn-approve" type="button">Approve</button>
+                <button id="reject-record-btn" class="act-btn btn-reject" type="button">Reject</button>
+                <button id="submit-review-btn" class="act-btn btn-submit" type="button" disabled>Submit All</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-wrap"><div id="toast" class="toast"></div></div>
+
+    <script nonce="{{ csp_nonce }}">
+        const requireCommentOnReject = {{ 'true' if require_comment_on_reject else 'false' }};
+        const HITL_TOKEN = {{ hitl_token | tojson }};
+
+        /* ── DOM ── */
+        const dataDisplay = document.getElementById('data-display');
+        const recordToolbar = document.getElementById('record-toolbar');
+        const recordCounter = document.getElementById('record-counter');
+        const recordHint = document.getElementById('record-hint');
+        const reviewProgress = document.getElementById('review-progress');
+        const prevRecordButton = document.getElementById('prev-record');
+        const nextRecordButton = document.getElementById('next-record');
+        const panelFields = document.getElementById('panel-fields');
+        const panelJson = document.getElementById('panel-json');
+        const fieldsWrap = document.getElementById('fields-wrap');
+        const viewButtons = document.querySelectorAll('.vt-btn');
+        const approveRecordButton = document.getElementById('approve-record-btn');
+        const rejectRecordButton = document.getElementById('reject-record-btn');
+        const submitReviewButton = document.getElementById('submit-review-btn');
+        const commentInput = document.getElementById('comment');
+        const statusEl = document.getElementById('status');
+        const rvTag = document.getElementById('rv-tag');
+        const progFill = document.getElementById('prog-fill');
+        const progText = document.getElementById('prog-text');
+        const statPending = document.getElementById('stat-pending');
+        const statApproved = document.getElementById('stat-approved');
+        const statRejected = document.getElementById('stat-rejected');
+        const toastEl = document.getElementById('toast');
+        const reviewCard = document.getElementById('review-card');
+        const copyJsonBtn = document.getElementById('copy-json-btn');
+        const copyBtnText = document.getElementById('copy-btn-text');
+        const themeToggle = document.getElementById('theme-toggle');
+        const skipUnreviewedBtn = document.getElementById('skip-unreviewed');
+        const batchRow = document.getElementById('batch-row');
+        const batchApproveBtn = document.getElementById('batch-approve');
+        const batchRejectBtn = document.getElementById('batch-reject');
+        const instructionsBox = document.getElementById('instructions-box');
+
+        let records = [];
+        let recordDecisions = [];
+        let fullDataset = null;
+        let fieldOrder = [];
+        let currentIndex = 0;
+        let currentView = 'fields';
+        let isPersistingDecision = false;
+
+        /* ── Theme ── */
+        function setTheme(t) {
+            document.documentElement.setAttribute('data-theme', t);
+            localStorage.setItem('hitl-theme', t);
+        }
+        themeToggle.addEventListener('click', function () {
+            var cur = document.documentElement.getAttribute('data-theme');
+            setTheme(cur === 'dark' ? 'light' : 'dark');
+        });
+
+        /* ── Utilities ── */
+        function normalizeRecords(data) {
+            if (Array.isArray(data)) return data;
+            if (data === null || data === undefined) return [];
+            return [data];
+        }
+
+        function escapeHtml(raw) {
+            return String(raw).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+
+        function formatFieldValue(value) {
+            if (value === undefined) return 'undefined';
+            if (value === null) return 'null';
+            if (typeof value === 'object') {
+                try { return JSON.stringify(value, null, 2); }
+                catch (_) { return String(value); }
+            }
+            return String(value);
+        }
+
+        function getFieldType(value) {
+            if (value === null || value === undefined) return 'null';
+            if (Array.isArray(value)) return 'arr';
+            if (typeof value === 'object') return 'obj';
+            if (typeof value === 'number') return 'num';
+            if (typeof value === 'boolean') return 'bool';
+            return 'str';
+        }
+
+        function humanizeKey(key) {
+            return key.replace(/^_+/, '').replace(/_+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+        }
+
+        function isUrl(val) {
+            return typeof val === 'string' && /^https?:\/\/.+/i.test(val.trim());
+        }
+
+        function linkifyText(escaped) {
+            return escaped.replace(/(https?:\/\/[^\s&lt;]+)/g, function (url) {
+                return '<a class="fv-link" href="' + url.replace(/&amp;/g, '&') + '" target="_blank" rel="noopener">' + url + '</a>';
+            });
+        }
+
+        function isShort(value, type) {
+            if (type === 'obj' || type === 'arr') return false;
+            if (type === 'null' || type === 'bool' || type === 'num') return true;
+            var s = String(value);
+            return s.length < 50 && s.indexOf('\n') === -1;
+        }
+
+        /* ── JSON Syntax Highlighting ── */
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                try { json = JSON.stringify(json, null, 2); } catch (_) { json = String(json); }
+            }
+            if (!json) json = 'null';
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(
+                /("(\\u[\da-fA-F]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+                function (match) {
+                    var cls = 'jn';
+                    if (/^"/.test(match)) { cls = /:$/.test(match) ? 'jk' : 'js'; }
+                    else if (/true|false/.test(match)) { cls = 'jb'; }
+                    else if (/null/.test(match)) { cls = 'jl'; }
+                    return '<span class="' + cls + '">' + match + '</span>';
+                }
+            );
+        }
+
+        /* ── Views ── */
+        function setView(view) {
+            if (view !== 'fields' && view !== 'json') view = 'fields';
+            currentView = view;
+            panelFields.classList.toggle('on', view === 'fields');
+            panelJson.classList.toggle('on', view === 'json');
+            viewButtons.forEach(function (btn) { btn.classList.toggle('on', btn.dataset.view === currentView); });
+        }
+
+        /* ── Fields Rendering ── */
+        var METADATA_KEYS = [
+            'source_guid', 'lineage', 'node_id', 'metadata', 'target_id',
+            'parent_target_id', 'root_target_id', 'chunk_info', '_recovery', '_unprocessed'
+        ];
+
+        function getDisplayRecord(record) {
+            if (!record || typeof record !== 'object' || Array.isArray(record)) return record;
+            if (record.content && typeof record.content === 'object' && !Array.isArray(record.content)) {
+                return record.content;
+            }
+            var filtered = {};
+            Object.keys(record).forEach(function (k) {
+                if (METADATA_KEYS.indexOf(k) === -1) filtered[k] = record[k];
+            });
+            return Object.keys(filtered).length > 0 ? filtered : record;
+        }
+
+        function renderFields(record) {
+            var display = getDisplayRecord(record);
+            if (!display || typeof display !== 'object' || Array.isArray(display)) {
+                fieldsWrap.innerHTML = '<div class="fields-empty">No fields available for this record.</div>';
+                return;
+            }
+            var allKeys = Object.keys(display);
+            /* field_order contains qualified refs like "action.field_name".
+               Strip only the leading action namespace (first dot) so nested
+               paths like "dep.nested.inner" resolve to "nested.inner", matching
+               the keys produced by _apply_observe_filter / parse_field_reference. */
+            var entries; /* [{key, label}] */
+            if (fieldOrder.length > 0) {
+                /* Match each ref to its data key. When _apply_observe_filter
+                   detects bare-key collisions (e.g. dep_a.title & dep_b.title),
+                   it uses the full qualified ref as the data key so both values
+                   are preserved. Non-colliding keys stay bare for compat. */
+                var keyLeaf = {};
+                var keyFullRef = {};
+                var keyOrder = [];
+                /* First pass: resolve data keys and compute leaf labels */
+                fieldOrder.forEach(function (ref) {
+                    var dot = ref.indexOf('.');
+                    var bareKey = dot >= 0 ? ref.substring(dot + 1) : ref;
+                    var dataKey = (ref in display) ? ref : ((bareKey in display) ? bareKey : null);
+                    if (dataKey === null) return;
+                    var lastDot = bareKey.lastIndexOf('.');
+                    var leafKey = lastDot >= 0 ? bareKey.substring(lastDot + 1) : bareKey;
+                    keyLeaf[dataKey] = humanizeKey(leafKey);
+                    keyFullRef[dataKey] = ref.replace(/\./g, ' > ');
+                    if (keyOrder.indexOf(dataKey) === -1) keyOrder.push(dataKey);
+                });
+                /* Second pass: detect duplicate leaf labels and promote to
+                   full qualified labels so collisions like dep_a.title and
+                   dep_b.title are visually distinguishable. */
+                var leafCounts = {};
+                keyOrder.forEach(function (k) {
+                    var lbl = keyLeaf[k];
+                    leafCounts[lbl] = (leafCounts[lbl] || 0) + 1;
+                });
+                var keyLabel = {};
+                keyOrder.forEach(function (k) {
+                    keyLabel[k] = leafCounts[keyLeaf[k]] > 1
+                        ? humanizeKey(keyFullRef[k].replace(/ > /g, '_'))
+                        : keyLeaf[k];
+                });
+                var usedKeys = new Set(keyOrder);
+                var ordered = keyOrder.map(function (k) { return { key: k, label: keyLabel[k], fullRef: keyFullRef[k] }; });
+                allKeys.forEach(function (k) {
+                    if (!usedKeys.has(k)) ordered.push({ key: k, label: humanizeKey(k) });
+                });
+                entries = ordered;
+            } else {
+                entries = allKeys.map(function (k) { return { key: k, label: humanizeKey(k) }; });
+            }
+            if (entries.length === 0) {
+                fieldsWrap.innerHTML = '<div class="fields-empty">No fields found.</div>';
+                return;
+            }
+            var html = entries.map(function (entry) {
+                var key = entry.key;
+                var value = display[key];
+                var type = getFieldType(value);
+                var isComplex = type === 'obj' || type === 'arr';
+                var isEmpty = value === undefined || value === null;
+                var short = isShort(value, type);
+                var label = escapeHtml(entry.label);
+                var titleAttr = entry.fullRef ? ' title="' + escapeHtml(entry.fullRef) + '"' : '';
+                var valueHtml;
+
+                if (isEmpty) {
+                    valueHtml = '<span class="fv fv-empty">Empty</span>';
+                } else if (isComplex) {
+                    valueHtml = '<pre class="fv-code">' + syntaxHighlight(formatFieldValue(value)) + '</pre>';
+                } else if (isUrl(value)) {
+                    var href = escapeHtml(String(value).trim());
+                    valueHtml = '<a class="fv fv-link" href="' + href + '" target="_blank" rel="noopener">' + href + '</a>';
+                } else if (type === 'bool' || type === 'num') {
+                    valueHtml = '<span class="fv fv-mono">' + escapeHtml(formatFieldValue(value)) + '</span>';
+                } else if (short) {
+                    valueHtml = '<span class="fv">' + linkifyText(escapeHtml(String(value))) + '</span>';
+                } else {
+                    valueHtml = '<div class="fv fv-long">' + linkifyText(escapeHtml(String(value))) + '</div>';
+                }
+
+                var cls = (short || isEmpty) && !isComplex ? 'field field-compact' : 'field';
+                return '<div class="' + cls + '">' +
+                    '<div class="field-key"' + titleAttr + '>' + label + '</div>' +
+                    valueHtml +
+                '</div>';
+            }).join('');
+            fieldsWrap.innerHTML = html;
+        }
+
+
+        /* ── Progress ── */
+        function reviewedCount() { return recordDecisions.filter(Boolean).length; }
+
+        function decisionStats() {
+            var a = 0, r = 0;
+            for (var i = 0; i < recordDecisions.length; i++) {
+                var d = recordDecisions[i]; if (!d) continue;
+                if (d.hitl_status === 'approved') a++; else if (d.hitl_status === 'rejected') r++;
+            }
+            return { approved: a, rejected: r, pending: Math.max(records.length - a - r, 0) };
+        }
+
+        function allReviewed() { return records.length > 0 && reviewedCount() === records.length; }
+
+        function updateProgressUI() {
+            var done = reviewedCount(), total = records.length;
+            var pct = total > 0 ? Math.round((done / total) * 100) : 0;
+            var s = decisionStats();
+            progFill.style.width = pct + '%';
+            progText.innerHTML = '<strong>' + done + '</strong> of ' + total + ' reviewed';
+            statPending.textContent = s.pending + ' pending';
+            statApproved.textContent = s.approved + ' approved';
+            statRejected.textContent = s.rejected + ' rejected';
+        }
+
+        function setRecordTag(decision) {
+            var state = (decision && decision.hitl_status) || 'pending';
+            rvTag.textContent = state.toUpperCase();
+            rvTag.className = 'status-pill s-' + state;
+            reviewCard.setAttribute('data-state', state);
+        }
+
+        /* ── Render ── */
+        function renderCurrentRecord() {
+            updateProgressUI();
+            if (records.length === 0) {
+                dataDisplay.textContent = 'No records found for review.';
+                fieldsWrap.innerHTML = '<div class="fields-empty">No records found for review.</div>';
+                recordToolbar.style.display = 'none';
+                recordHint.style.display = 'block';
+                recordHint.textContent = 'The payload is empty.';
+                reviewProgress.style.display = 'none';
+                submitReviewButton.disabled = true;
+                commentInput.value = '';
+                setRecordTag(null);
+                return;
+            }
+            var rec = records[currentIndex];
+            var dec = recordDecisions[currentIndex];
+            try { dataDisplay.innerHTML = syntaxHighlight(JSON.stringify(rec, null, 2)); }
+            catch (_) { dataDisplay.textContent = String(rec); }
+            renderFields(rec);
+            commentInput.value = dec ? dec.user_comment : '';
+            if (records.length > 1) {
+                recordToolbar.style.display = 'flex';
+                recordCounter.innerHTML = '<strong>' + (currentIndex + 1) + '</strong> / ' + records.length;
+                prevRecordButton.disabled = currentIndex === 0;
+                nextRecordButton.disabled = currentIndex === records.length - 1;
+            } else {
+                recordToolbar.style.display = 'none';
+            }
+            recordHint.style.display = 'block';
+            recordHint.textContent = dec
+                ? 'Current decision: ' + dec.hitl_status + '. Use Approve/Reject to update it.'
+                : 'Set a decision for this record.';
+            reviewProgress.style.display = 'block';
+            reviewProgress.textContent = 'Reviewed ' + reviewedCount() + ' of ' + records.length + ' record(s).';
+            var isAllDone = allReviewed();
+            submitReviewButton.disabled = !isAllDone;
+            submitReviewButton.classList.toggle('ready', isAllDone && records.length > 1);
+            setRecordTag(dec);
+
+            /* Skip + batch visibility */
+            var hasUnreviewed = recordDecisions.some(function (d) { return !d; });
+            skipUnreviewedBtn.style.display = (records.length > 1 && hasUnreviewed) ? 'flex' : 'none';
+            batchRow.style.display = (records.length > 1 && hasUnreviewed) ? 'flex' : 'none';
+            if (requireCommentOnReject) {
+                batchRejectBtn.disabled = true;
+                batchRejectBtn.title = 'Cannot batch reject when comments are required';
+            }
+        }
+
+        function setSubmitButtonsDisabled(d) {
+            approveRecordButton.disabled = d;
+            rejectRecordButton.disabled = d;
+            submitReviewButton.disabled = d || !allReviewed();
+        }
+
+        function goToNextRecordAfterDecision() {
+            if (records.length <= 1) { renderCurrentRecord(); return; }
+            reviewCard.classList.remove('card-switch');
+            void reviewCard.offsetWidth;
+            reviewCard.classList.add('card-switch');
+            if (currentIndex < records.length - 1) {
+                currentIndex += 1;
+            } else {
+                var first = recordDecisions.findIndex(function (d) { return !d; });
+                if (first >= 0) currentIndex = first;
+            }
+            renderCurrentRecord();
+        }
+
+        function showToast(message, kind) {
+            toastEl.textContent = message;
+            toastEl.className = 'toast t' + kind + ' show';
+            setTimeout(function () { toastEl.classList.remove('show'); }, 2000);
+        }
+
+        /* ── API ── */
+        async function persistRecordDecision(index, decision) {
+            var resp = await fetch('/api/review-record', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
+                body: JSON.stringify({ index: index, hitl_status: decision.hitl_status, user_comment: decision.user_comment || '' }),
+            });
+            if (!resp.ok) {
+                var p = await resp.json().catch(function () { return {}; });
+                throw new Error(p.error || 'Failed to save record review');
+            }
+            console.log('Persisted decision for record ' + index + ':', decision.hitl_status);
+        }
+
+        function normalizeDecision(decision) {
+            if (!decision || typeof decision !== 'object') return null;
+            var status = String(decision.hitl_status || '').toLowerCase();
+            if (status !== 'approved' && status !== 'rejected') return null;
+            return { hitl_status: status, user_comment: String(decision.user_comment || '') };
+        }
+
+        async function loadReviewState() {
+            var resp = await fetch('/api/review-state');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var payload = await resp.json();
+            console.log('Loaded review state from server:', payload);
+            var saved = Array.isArray(payload.record_reviews) ? payload.record_reviews : [];
+            var cnt = saved.filter(function (d) { return d !== null; }).length;
+            recordDecisions = records.map(function (_, i) { return normalizeDecision(saved[i]); });
+            console.log('Restored ' + cnt + ' of ' + records.length + ' reviews from server');
+        }
+
+        async function markCurrentRecord(decisionStatus) {
+            if (records.length === 0 || isPersistingDecision) return;
+            var comment = commentInput.value.trim();
+            if (decisionStatus === 'rejected' && requireCommentOnReject && !comment) {
+                alert('Please provide a comment explaining why you are rejecting this record.');
+                commentInput.focus();
+                return;
+            }
+            var prev = recordDecisions[currentIndex];
+            var next = { hitl_status: decisionStatus, user_comment: comment };
+            recordDecisions[currentIndex] = next;
+            renderCurrentRecord();
+            isPersistingDecision = true;
+            approveRecordButton.disabled = true;
+            rejectRecordButton.disabled = true;
+            try {
+                await persistRecordDecision(currentIndex, next);
+            } catch (error) {
+                recordDecisions[currentIndex] = prev;
+                renderCurrentRecord();
+                alert('Error saving review: ' + error.message);
+                return;
+            } finally {
+                isPersistingDecision = false;
+                approveRecordButton.disabled = false;
+                rejectRecordButton.disabled = false;
+            }
+            showToast(decisionStatus === 'approved' ? 'Approved record' : 'Rejected record', decisionStatus === 'approved' ? 'g' : 'r');
+            if (records.length === 1) { submitReviews(); return; }
+            goToNextRecordAfterDecision();
+        }
+
+        async function submitReviews() {
+            if (records.length === 0) { alert('No records available to submit.'); return; }
+            if (!allReviewed()) { alert('Please review all records before submitting.'); return; }
+            setSubmitButtonsDisabled(true);
+            try {
+                var overall = recordDecisions.every(function (d) { return d.hitl_status === 'approved'; }) ? 'approved' : 'rejected';
+                var resp = await fetch('/api/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN },
+                    body: JSON.stringify({ hitl_status: overall, record_reviews: recordDecisions, comment: commentInput.value.trim() }),
+                });
+                if (!resp.ok) {
+                    var p = await resp.json().catch(function () { return {}; });
+                    throw new Error(p.error || 'Failed to submit reviews');
+                }
+                showStatus('Reviews submitted! Workflow continuing...', 'success');
+                showToast('Submitted reviews', 'g');
+                setTimeout(async function () {
+                    try { await fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-HITL-Token': HITL_TOKEN } }); console.log('Server shutdown initiated'); }
+                    catch (e) { console.log('Shutdown requested'); }
+                    window.close();
+                    /* window.close() is a no-op when the tab was not opened by script; always show the fallback message */
+                    setTimeout(function () { showStatus('Complete! Workflow is continuing. You can close this tab now.', 'success'); }, 500);
+                }, 1500);
+            } catch (error) {
+                alert('Error submitting reviews: ' + error.message);
+                setSubmitButtonsDisabled(false);
+            }
+        }
+
+        async function loadContextData() {
+            try {
+                var resp = await fetch('/api/context');
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                var payload = await resp.json();
+                /* /api/context returns {_envelope: true, data, field_order?} when wrapped,
+                   or raw context data for backwards compatibility. */
+                if (payload && typeof payload === 'object' && !Array.isArray(payload) && payload._envelope === true) {
+                    fullDataset = payload.data;
+                    fieldOrder = Array.isArray(payload.field_order) ? payload.field_order : [];
+                } else {
+                    fullDataset = payload;
+                    fieldOrder = [];
+                }
+                records = normalizeRecords(fullDataset);
+                recordDecisions = records.map(function () { return null; });
+                try { await loadReviewState(); }
+                catch (error) { console.error('Failed to restore review state:', error); showToast('Could not restore previous reviews', 'r'); }
+                currentIndex = 0;
+                renderCurrentRecord();
+            } catch (error) {
+                dataDisplay.textContent = 'Error loading context data: ' + error.message;
+                recordToolbar.style.display = 'none';
+                recordHint.style.display = 'none';
+                reviewProgress.style.display = 'none';
+                submitReviewButton.disabled = true;
+                showStatus('Failed to load context data.', 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            statusEl.textContent = message;
+            statusEl.className = 'status-msg status-' + type;
+            statusEl.style.display = 'block';
+        }
+
+        /* ── Copy JSON ── */
+        copyJsonBtn.addEventListener('click', function () {
+            var rec = records[currentIndex];
+            if (!rec) return;
+            var text;
+            try { text = JSON.stringify(rec, null, 2); } catch (_) { text = String(rec); }
+            navigator.clipboard.writeText(text).then(function () {
+                copyBtnText.textContent = 'Copied!';
+                copyJsonBtn.classList.add('copied');
+                setTimeout(function () { copyBtnText.textContent = 'Copy'; copyJsonBtn.classList.remove('copied'); }, 1500);
+            }).catch(function () {
+                var ta = document.createElement('textarea');
+                ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+                copyBtnText.textContent = 'Copied!';
+                copyJsonBtn.classList.add('copied');
+                setTimeout(function () { copyBtnText.textContent = 'Copy'; copyJsonBtn.classList.remove('copied'); }, 1500);
+            });
+        });
+
+        /* ── Events ── */
+        prevRecordButton.addEventListener('click', function () { if (currentIndex > 0) { currentIndex -= 1; renderCurrentRecord(); } });
+        nextRecordButton.addEventListener('click', function () { if (currentIndex < records.length - 1) { currentIndex += 1; renderCurrentRecord(); } });
+        approveRecordButton.addEventListener('click', function () { markCurrentRecord('approved'); });
+        rejectRecordButton.addEventListener('click', function () { markCurrentRecord('rejected'); });
+        submitReviewButton.addEventListener('click', function () { submitReviews(); });
+        viewButtons.forEach(function (btn) { btn.addEventListener('click', function () { setView(btn.dataset.view); }); });
+
+        /* ── Keyboard Flash ── */
+        function flashButton(btn, cls) {
+            btn.classList.remove(cls);
+            void btn.offsetWidth;
+            btn.classList.add(cls);
+            setTimeout(function () { btn.classList.remove(cls); }, 500);
+        }
+
+        /* ── Skip to Next Unreviewed ── */
+        function skipToUnreviewed() {
+            var next = -1;
+            for (var i = currentIndex + 1; i < records.length; i++) {
+                if (!recordDecisions[i]) { next = i; break; }
+            }
+            if (next < 0) {
+                for (var j = 0; j < currentIndex; j++) {
+                    if (!recordDecisions[j]) { next = j; break; }
+                }
+            }
+            if (next >= 0 && next !== currentIndex) {
+                currentIndex = next;
+                reviewCard.classList.remove('card-switch');
+                void reviewCard.offsetWidth;
+                reviewCard.classList.add('card-switch');
+                renderCurrentRecord();
+            }
+        }
+        skipUnreviewedBtn.addEventListener('click', skipToUnreviewed);
+
+        /* ── Batch Actions ── */
+        async function batchDecision(status) {
+            var remaining = [];
+            for (var i = 0; i < records.length; i++) {
+                if (!recordDecisions[i]) remaining.push(i);
+            }
+            if (remaining.length === 0) return;
+            if (!confirm('Set ' + remaining.length + ' remaining record(s) to ' + status + '?')) return;
+            setSubmitButtonsDisabled(true);
+            try {
+                for (var j = 0; j < remaining.length; j++) {
+                    var idx = remaining[j];
+                    var decision = { hitl_status: status, user_comment: '' };
+                    recordDecisions[idx] = decision;
+                    await persistRecordDecision(idx, decision);
+                }
+                renderCurrentRecord();
+                showToast((status === 'approved' ? 'Approved ' : 'Rejected ') + remaining.length + ' records', status === 'approved' ? 'g' : 'r');
+            } catch (error) {
+                alert('Error in batch operation: ' + error.message);
+                renderCurrentRecord();
+            } finally {
+                setSubmitButtonsDisabled(false);
+            }
+        }
+        batchApproveBtn.addEventListener('click', function () { batchDecision('approved'); });
+        batchRejectBtn.addEventListener('click', function () { batchDecision('rejected'); });
+
+        /* ── Collapsible Instructions ── */
+        if (instructionsBox) {
+            instructionsBox.addEventListener('click', function () {
+                instructionsBox.classList.toggle('collapsed');
+            });
+        }
+
+        /* ── Auto-resize Textarea ── */
+        commentInput.addEventListener('input', function () {
+            this.style.height = 'auto';
+            this.style.height = Math.max(80, this.scrollHeight) + 'px';
+        });
+
+        /* ── Editor Controls (font size + page width) ── */
+        var FONT_SIZES = [12, 13, 14, 15, 16, 17, 18, 19, 20];
+        var WIDTH_PRESETS = [
+            { label: 'S', value: 640 },
+            { label: 'M', value: 880 },
+            { label: 'L', value: 1100 },
+            { label: 'XL', value: 1400 }
+        ];
+        var fontSizeIndex = 3;
+        var widthIndex = 1;
+
+        var fontLabelEl = document.getElementById('font-label');
+        var widthLabelEl = document.getElementById('width-label');
+        var fontDownBtn = document.getElementById('font-down');
+        var fontUpBtn = document.getElementById('font-up');
+        var widthDownBtn = document.getElementById('width-down');
+        var widthUpBtn = document.getElementById('width-up');
+        var pageEl = document.querySelector('.page');
+        var actionInnerEl = document.querySelector('.action-inner');
+
+        function loadEditorPrefs() {
+            var sf = localStorage.getItem('hitl-font-size');
+            var sw = localStorage.getItem('hitl-page-width');
+            if (sf !== null) {
+                var fi = FONT_SIZES.indexOf(parseInt(sf, 10));
+                if (fi >= 0) fontSizeIndex = fi;
+            }
+            if (sw !== null) {
+                var wi = WIDTH_PRESETS.findIndex(function (p) { return p.value === parseInt(sw, 10); });
+                if (wi >= 0) widthIndex = wi;
+            }
+        }
+
+        function applyFontSize() {
+            var size = FONT_SIZES[fontSizeIndex];
+            document.documentElement.style.fontSize = size + 'px';
+            fontLabelEl.textContent = size;
+            fontDownBtn.disabled = fontSizeIndex === 0;
+            fontUpBtn.disabled = fontSizeIndex === FONT_SIZES.length - 1;
+            localStorage.setItem('hitl-font-size', size);
+        }
+
+        function applyPageWidth() {
+            var preset = WIDTH_PRESETS[widthIndex];
+            pageEl.style.maxWidth = preset.value + 'px';
+            actionInnerEl.style.maxWidth = preset.value + 'px';
+            widthLabelEl.textContent = preset.label;
+            widthDownBtn.disabled = widthIndex === 0;
+            widthUpBtn.disabled = widthIndex === WIDTH_PRESETS.length - 1;
+            localStorage.setItem('hitl-page-width', preset.value);
+        }
+
+        function stepFont(dir) {
+            var next = fontSizeIndex + dir;
+            if (next >= 0 && next < FONT_SIZES.length) { fontSizeIndex = next; applyFontSize(); }
+        }
+        function stepWidth(dir) {
+            var next = widthIndex + dir;
+            if (next >= 0 && next < WIDTH_PRESETS.length) { widthIndex = next; applyPageWidth(); }
+        }
+
+        fontDownBtn.addEventListener('click', function () { stepFont(-1); });
+        fontUpBtn.addEventListener('click', function () { stepFont(1); });
+        widthDownBtn.addEventListener('click', function () { stepWidth(-1); });
+        widthUpBtn.addEventListener('click', function () { stepWidth(1); });
+
+        document.addEventListener('keydown', function (event) {
+            var el = document.activeElement;
+            if (el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT')) return;
+            if (event.key === 'ArrowRight' && currentIndex < records.length - 1) { event.preventDefault(); currentIndex += 1; renderCurrentRecord(); }
+            if (event.key === 'ArrowLeft' && currentIndex > 0) { event.preventDefault(); currentIndex -= 1; renderCurrentRecord(); }
+            if (event.key === 'a' || event.key === 'A') { event.preventDefault(); flashButton(approveRecordButton, 'flash-approve'); markCurrentRecord('approved'); }
+            if (event.key === 'r' || event.key === 'R') { event.preventDefault(); flashButton(rejectRecordButton, 'flash-reject'); markCurrentRecord('rejected'); }
+            if (event.key === 'n' || event.key === 'N') { event.preventDefault(); skipToUnreviewed(); }
+            if (event.key === '=' || event.key === '+') { event.preventDefault(); stepFont(1); }
+            if (event.key === '-' || event.key === '_') { event.preventDefault(); stepFont(-1); }
+            if (event.key === ']') { event.preventDefault(); stepWidth(1); }
+            if (event.key === '[') { event.preventDefault(); stepWidth(-1); }
+        });
+
+        /* ── Init ── */
+        loadEditorPrefs();
+        applyFontSize();
+        applyPageWidth();
+        setView('fields');
+        loadContextData();
+    </script>
+</body>
+</html>

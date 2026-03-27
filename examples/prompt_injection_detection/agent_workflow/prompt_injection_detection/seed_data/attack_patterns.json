@@ -1,0 +1,62 @@
+{
+  "patterns": {
+    "role_hijacking": [
+      "ignore (?:all )?(?:previous|prior|above) (?:instructions|prompts|rules)",
+      "you are now (?:a |an )?(?:new |different )?(?:assistant|AI|bot|system)",
+      "forget (?:everything|all|your) (?:you|instructions|rules)",
+      "disregard (?:all |any )?(?:previous|prior|above|safety)",
+      "override (?:your |all )?(?:instructions|rules|guidelines|safety)",
+      "act as (?:if you (?:are|were)|a |an )",
+      "pretend (?:you are|to be|that)",
+      "from now on,? you (?:are|will|must|should)",
+      "new (?:instruction|rule|directive|persona|role):",
+      "switch (?:to|into) (?:a |an )?(?:new |different )?(?:mode|role|persona)"
+    ],
+    "data_exfiltration": [
+      "(?:reveal|show|display|output|print|tell me) (?:your |the )?(?:system|initial|original|hidden|secret) (?:prompt|instructions|message|rules)",
+      "what (?:are|were) your (?:original|initial|system|hidden) (?:instructions|prompts|rules)",
+      "repeat (?:your |the )?(?:system|initial|original) (?:prompt|instructions|message)",
+      "(?:copy|paste|echo|dump) (?:your |the )?(?:entire|full|complete) (?:prompt|instructions|context)",
+      "output (?:everything|all) (?:before|above) (?:this|my) (?:message|input|prompt)",
+      "(?:list|enumerate) (?:all |every )?(?:rule|instruction|guideline|constraint)"
+    ],
+    "instruction_override": [
+      "(?:do not|don't|never) (?:follow|obey|listen to) (?:your |the )?(?:rules|instructions|guidelines)",
+      "\\[(?:system|SYSTEM)\\]",
+      "\\{\\{(?:system|SYSTEM)",
+      "<(?:system|SYSTEM)>",
+      "###\\s*(?:system|SYSTEM|instruction|INSTRUCTION)",
+      "(?:new|updated|revised) system (?:prompt|message|instruction):",
+      "(?:admin|root|sudo|superuser) (?:mode|access|override|command)",
+      "priority (?:override|instruction|directive|command)"
+    ],
+    "encoding_evasion": [
+      "(?:base64|rot13|hex|unicode|url)[ _-]?(?:encode|decode|convert)",
+      "\\\\u[0-9a-fA-F]{4}",
+      "\\\\x[0-9a-fA-F]{2}",
+      "&#(?:x[0-9a-fA-F]+|\\d+);",
+      "(?:%[0-9a-fA-F]{2}){3,}",
+      "(?:eval|exec|decode|unescape)\\s*\\(",
+      "atob\\s*\\(|btoa\\s*\\("
+    ],
+    "delimiter_injection": [
+      "---+\\s*(?:end|BEGIN|START|new)",
+      "={3,}\\s*(?:SYSTEM|ADMIN|OVERRIDE)",
+      "\\*{3,}\\s*(?:IMPORTANT|OVERRIDE|NEW)",
+      "<\\|(?:im_start|im_end|endoftext|system)\\|>",
+      "\\[INST\\]|\\[/INST\\]",
+      "<s>|</s>|<\\|(?:assistant|user|system)\\|>",
+      "Human:|Assistant:|System:",
+      "```(?:system|instructions|rules)"
+    ]
+  },
+  "category_weights": {
+    "role_hijacking": 0.90,
+    "data_exfiltration": 0.85,
+    "instruction_override": 0.95,
+    "encoding_evasion": 0.70,
+    "delimiter_injection": 0.88
+  },
+  "version": "1.0.0",
+  "description": "Regex patterns for detecting common prompt injection attack categories"
+}

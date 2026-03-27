@@ -1,0 +1,32 @@
+name: extract_anomaly_signals
+description: Schema for extracting anomaly signals from system data
+fields:
+  - id: anomaly_type
+    type: string
+    description: "Type of anomaly detected (latency/error-rate/resource/capacity)"
+  - id: affected_components
+    type: array
+    items:
+      type: string
+    description: "List of components affected by the anomaly"
+  - id: observed_symptoms
+    type: array
+    items:
+      type: string
+    description: "Observable symptoms of the anomaly"
+  - id: metric_deviations
+    type: array
+    items:
+      type: object
+    description: "Metrics showing deviation from normal"
+  - id: timestamp_range
+    type: string
+    description: "Time range when anomaly was observed"
+  - id: severity
+    type: string
+    description: "Severity of the anomaly (low/medium/high/critical)"
+required:
+  - anomaly_type
+  - affected_components
+  - severity
+additionalProperties: false

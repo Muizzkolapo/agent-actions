@@ -1,0 +1,99 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Lint & Type Check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Install go-task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Lint
+        run: task lint
+
+      - name: Format check
+        run: task format:check
+
+      - name: Type check
+        run: task mypy
+
+  changelog:
+    name: Changelog Entry
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changelog entry
+        run: |
+          if ls .changes/unreleased/*.yaml 1>/dev/null 2>&1; then
+            echo "Changelog entry found:"
+            ls .changes/unreleased/*.yaml
+          else
+            echo "::warning::No changelog entry found. Run 'task changelog:new' to create one."
+          fi
+
+  test:
+    name: Tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    needs: check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Run tests
+        run: uv run pytest
+
+  build:
+    name: Build Package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    needs: test
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Build
+        run: uv build
+
+      - name: Verify py.typed marker
+        run: unzip -l dist/agent_actions-*.whl | grep py.typed
+
+      - name: Verify entrypoints
+        run: |
+          uv pip install --force-reinstall dist/*.whl
+          uv run agac --help > /dev/null
+          uv run agac-lsp --help > /dev/null
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7

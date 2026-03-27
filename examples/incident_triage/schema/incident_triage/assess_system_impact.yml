@@ -1,0 +1,22 @@
+name: assess_system_impact
+description: Schema for technical system impact and blast radius assessment
+fields:
+  - id: system_impact_level
+    type: string
+    description: "Impact level (CRITICAL/HIGH/MEDIUM/LOW/MINIMAL)"
+  - id: affected_services
+    type: array
+    items:
+      type: string
+    description: "List of affected services/components"
+  - id: degradation_percentage
+    type: string
+    description: "Estimated degradation percentage or range"
+  - id: cascading_failure_risk
+    type: string
+    description: "Risk of cascading failure (CRITICAL/HIGH/MEDIUM/LOW/NONE)"
+required:
+  - system_impact_level
+  - affected_services
+  - cascading_failure_risk
+additionalProperties: false

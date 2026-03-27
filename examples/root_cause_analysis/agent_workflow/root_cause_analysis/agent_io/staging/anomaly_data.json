@@ -1,0 +1,72 @@
+[
+  {
+    "monitoring_data": {
+      "timestamp_range": "2024-01-15T14:00:00Z to 2024-01-15T14:45:00Z",
+      "metrics": [
+        {"time": "14:00", "service": "api-gateway", "cpu_percent": 45, "memory_percent": 62, "request_rate": 1200, "error_rate": 0.1, "latency_p99_ms": 150},
+        {"time": "14:05", "service": "api-gateway", "cpu_percent": 48, "memory_percent": 64, "request_rate": 1250, "error_rate": 0.2, "latency_p99_ms": 180},
+        {"time": "14:10", "service": "api-gateway", "cpu_percent": 52, "memory_percent": 68, "request_rate": 1350, "error_rate": 0.5, "latency_p99_ms": 250},
+        {"time": "14:15", "service": "api-gateway", "cpu_percent": 78, "memory_percent": 75, "request_rate": 1400, "error_rate": 2.5, "latency_p99_ms": 850},
+        {"time": "14:20", "service": "api-gateway", "cpu_percent": 92, "memory_percent": 82, "request_rate": 980, "error_rate": 15.2, "latency_p99_ms": 3500},
+        {"time": "14:25", "service": "api-gateway", "cpu_percent": 95, "memory_percent": 88, "request_rate": 650, "error_rate": 35.8, "latency_p99_ms": 8500},
+        {"time": "14:30", "service": "api-gateway", "cpu_percent": 98, "memory_percent": 92, "request_rate": 420, "error_rate": 52.3, "latency_p99_ms": 12000},
+        {"time": "14:00", "service": "user-service", "cpu_percent": 35, "memory_percent": 55, "request_rate": 800, "error_rate": 0.05, "latency_p99_ms": 80},
+        {"time": "14:15", "service": "user-service", "cpu_percent": 42, "memory_percent": 58, "request_rate": 950, "error_rate": 0.8, "latency_p99_ms": 320},
+        {"time": "14:25", "service": "user-service", "cpu_percent": 88, "memory_percent": 78, "request_rate": 450, "error_rate": 22.5, "latency_p99_ms": 5500},
+        {"time": "14:00", "service": "database-primary", "cpu_percent": 25, "memory_percent": 72, "connections_active": 45, "connections_max": 200, "query_time_avg_ms": 12},
+        {"time": "14:15", "service": "database-primary", "cpu_percent": 35, "memory_percent": 75, "connections_active": 85, "connections_max": 200, "query_time_avg_ms": 45},
+        {"time": "14:25", "service": "database-primary", "cpu_percent": 92, "memory_percent": 85, "connections_active": 198, "connections_max": 200, "query_time_avg_ms": 2500}
+      ]
+    },
+    "alerts": [
+      {"time": "14:12:32Z", "severity": "WARNING", "source": "prometheus", "alert": "HighLatencyWarning", "service": "api-gateway", "message": "P99 latency exceeded 200ms threshold"},
+      {"time": "14:18:45Z", "severity": "WARNING", "source": "prometheus", "alert": "ErrorRateElevated", "service": "api-gateway", "message": "Error rate above 1% threshold"},
+      {"time": "14:22:18Z", "severity": "CRITICAL", "source": "prometheus", "alert": "HighCPUUsage", "service": "api-gateway", "message": "CPU usage above 90%"},
+      {"time": "14:23:05Z", "severity": "CRITICAL", "source": "prometheus", "alert": "DatabaseConnectionPoolExhausted", "service": "database-primary", "message": "Connection pool at 99% capacity"},
+      {"time": "14:24:12Z", "severity": "CRITICAL", "source": "pagerduty", "alert": "ServiceDegraded", "service": "api-gateway", "message": "Service health check failing"},
+      {"time": "14:26:30Z", "severity": "CRITICAL", "source": "prometheus", "alert": "ErrorRateCritical", "service": "api-gateway", "message": "Error rate above 25%"},
+      {"time": "14:28:45Z", "severity": "CRITICAL", "source": "pagerduty", "alert": "CascadeFailure", "service": "user-service", "message": "Dependent service failing due to upstream issues"}
+    ],
+    "logs": [
+      {"timestamp": "2024-01-15T14:10:15.234Z", "level": "WARN", "service": "api-gateway", "message": "Slow response from database-primary: 450ms", "trace_id": "abc123"},
+      {"timestamp": "2024-01-15T14:15:22.567Z", "level": "WARN", "service": "database-primary", "message": "Connection pool utilization at 85%", "pool_active": 170, "pool_max": 200},
+      {"timestamp": "2024-01-15T14:18:45.890Z", "level": "ERROR", "service": "api-gateway", "message": "Request timeout waiting for database connection", "timeout_ms": 5000, "trace_id": "def456"},
+      {"timestamp": "2024-01-15T14:20:12.123Z", "level": "ERROR", "service": "user-service", "message": "Failed to fetch user profile: upstream timeout", "user_id": "usr_12345", "trace_id": "ghi789"},
+      {"timestamp": "2024-01-15T14:22:34.456Z", "level": "ERROR", "service": "database-primary", "message": "Connection pool exhausted - rejecting new connections", "waiting_requests": 45},
+      {"timestamp": "2024-01-15T14:23:01.789Z", "level": "ERROR", "service": "api-gateway", "message": "Circuit breaker OPEN for database-primary", "failures_count": 25, "threshold": 20},
+      {"timestamp": "2024-01-15T14:24:15.012Z", "level": "FATAL", "service": "api-gateway", "message": "Health check failed - service marked unhealthy", "consecutive_failures": 3},
+      {"timestamp": "2024-01-15T14:25:30.345Z", "level": "ERROR", "service": "user-service", "message": "Dependency api-gateway unhealthy, entering degraded mode"},
+      {"timestamp": "2024-01-15T14:10:00.000Z", "level": "INFO", "service": "batch-processor", "message": "Starting scheduled bulk data import job", "job_id": "import_20240115_1410"},
+      {"timestamp": "2024-01-15T14:10:05.000Z", "level": "INFO", "service": "batch-processor", "message": "Processing 50000 records from external feed", "batch_size": 1000},
+      {"timestamp": "2024-01-15T14:12:00.000Z", "level": "WARN", "service": "batch-processor", "message": "Batch insert taking longer than expected", "elapsed_ms": 120000, "records_processed": 15000}
+    ]
+  },
+  {
+    "monitoring_data": {
+      "timestamp_range": "2024-01-16T09:00:00Z to 2024-01-16T09:30:00Z",
+      "metrics": [
+        {"time": "09:00", "service": "payment-service", "cpu_percent": 32, "memory_percent": 58, "request_rate": 500, "error_rate": 0.02, "latency_p99_ms": 120},
+        {"time": "09:05", "service": "payment-service", "cpu_percent": 34, "memory_percent": 59, "request_rate": 520, "error_rate": 0.8, "latency_p99_ms": 450},
+        {"time": "09:10", "service": "payment-service", "cpu_percent": 35, "memory_percent": 60, "request_rate": 480, "error_rate": 5.2, "latency_p99_ms": 2200},
+        {"time": "09:15", "service": "payment-service", "cpu_percent": 38, "memory_percent": 62, "request_rate": 350, "error_rate": 18.5, "latency_p99_ms": 8500},
+        {"time": "09:00", "service": "payment-gateway-external", "cpu_percent": 0, "memory_percent": 0, "request_rate": 500, "error_rate": 0, "latency_p99_ms": 85},
+        {"time": "09:05", "service": "payment-gateway-external", "cpu_percent": 0, "memory_percent": 0, "request_rate": 520, "error_rate": 2.5, "latency_p99_ms": 350},
+        {"time": "09:10", "service": "payment-gateway-external", "cpu_percent": 0, "memory_percent": 0, "request_rate": 0, "error_rate": 100, "latency_p99_ms": 30000}
+      ]
+    },
+    "alerts": [
+      {"time": "09:06:15Z", "severity": "WARNING", "source": "prometheus", "alert": "PaymentGatewayLatencyHigh", "service": "payment-gateway-external", "message": "External payment gateway latency above 300ms"},
+      {"time": "09:08:30Z", "severity": "CRITICAL", "source": "prometheus", "alert": "PaymentGatewayUnreachable", "service": "payment-gateway-external", "message": "External payment gateway not responding"},
+      {"time": "09:10:45Z", "severity": "CRITICAL", "source": "pagerduty", "alert": "PaymentProcessingDown", "service": "payment-service", "message": "Payment processing completely unavailable"},
+      {"time": "09:12:00Z", "severity": "CRITICAL", "source": "statuspage", "alert": "ExternalVendorOutage", "service": "stripe-api", "message": "Stripe reporting widespread API issues"}
+    ],
+    "logs": [
+      {"timestamp": "2024-01-16T09:05:12.234Z", "level": "WARN", "service": "payment-service", "message": "Payment gateway response slow: 450ms", "gateway": "stripe", "trace_id": "pay123"},
+      {"timestamp": "2024-01-16T09:07:45.567Z", "level": "ERROR", "service": "payment-service", "message": "Payment gateway timeout", "gateway": "stripe", "timeout_ms": 10000, "trace_id": "pay456"},
+      {"timestamp": "2024-01-16T09:08:30.890Z", "level": "ERROR", "service": "payment-service", "message": "All payment gateway retries exhausted", "gateway": "stripe", "retries": 3, "trace_id": "pay789"},
+      {"timestamp": "2024-01-16T09:09:15.123Z", "level": "ERROR", "service": "payment-service", "message": "Circuit breaker OPEN for stripe-api", "failures_count": 15, "threshold": 10},
+      {"timestamp": "2024-01-16T09:10:00.456Z", "level": "FATAL", "service": "payment-service", "message": "No available payment gateways - all circuits open"},
+      {"timestamp": "2024-01-16T09:11:30.789Z", "level": "INFO", "service": "payment-service", "message": "Enabling fallback queue for payment requests", "queue_size": 0}
+    ]
+  }
+]

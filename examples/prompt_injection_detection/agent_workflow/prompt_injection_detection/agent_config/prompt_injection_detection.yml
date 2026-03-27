@@ -1,0 +1,235 @@
+name: prompt_injection_detection
+description: >-
+  Multi-layer prompt injection detection pipeline with heavy LLM involvement.
+  Four statistical detection layers run in parallel alongside an independent
+  LLM semantic threat analyzer. Statistical results are aggregated then
+  interpreted by an LLM analyst. A chief-arbiter LLM synthesizes both the
+  semantic and statistical interpretation streams into a final judgment.
+  A composite risk tool produces BLOCK/REVIEW/PASS, and LLM-generated
+  reports provide human-readable forensic analysis of the decision.
+version: "2.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  context_scope:
+    seed_path:
+      attack_patterns: $file:attack_patterns.json
+      legitimate_corpus_stats: $file:legitimate_corpus_stats.json
+      topic_reference_distribution: $file:topic_reference_distribution.json
+  retry:
+    enabled: true
+    max_attempts: 2
+
+actions:
+  # ═══════════════════════════════════════════════════════════════════════
+  #  PARALLEL LAYER: Statistical Tools (1-4) + Semantic LLM (5)
+  #  All five run simultaneously with no dependencies
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── [1] DLP Regex Scan (tool, parallel) ─────────────────────────────
+  - name: scan_dlp_regex
+    kind: tool
+    impl: scan_dlp_regex
+    intent: >-
+      Scan prompt text against categorized regex patterns for known injection
+      techniques including role hijacking, data exfiltration, instruction
+      override, encoding evasion, and delimiter injection.
+    context_scope:
+      observe:
+        - source.prompt_text
+        - seed.attack_patterns
+
+  # ── [2] Prompt Frechet Distance (tool, parallel) ────────────────────
+  - name: score_pfd_embedding
+    kind: tool
+    impl: score_pfd_embedding
+    intent: >-
+      Compute structural anomaly score via character entropy, instruction
+      density, structural metrics, and question density compared against
+      legitimate corpus baselines.
+    context_scope:
+      observe:
+        - source.prompt_text
+        - seed.legitimate_corpus_stats
+
+  # ── [3] Topic JSD (tool, parallel) ──────────────────────────────────
+  - name: score_topic_jsd
+    kind: tool
+    impl: score_topic_jsd
+    intent: >-
+      Compute keyword-based topic distribution and Jensen-Shannon Divergence
+      against reference distribution. Elevated system_control or
+      data_extraction topics signal injection risk.
+    context_scope:
+      observe:
+        - source.prompt_text
+        - seed.topic_reference_distribution
+
+  # ── [4] Bayesian ELBO (tool, parallel) ──────────────────────────────
+  - name: score_bayesian_elbo
+    kind: tool
+    impl: score_bayesian_elbo
+    intent: >-
+      Compute Bayesian anomaly score using bigram novelty, length anomaly,
+      repetition patterns, and vocabulary surprise combined into a
+      pseudo-ELBO metric.
+    context_scope:
+      observe:
+        - source.prompt_text
+        - seed.legitimate_corpus_stats
+
+  # ── [5] Semantic Threat Analysis (LLM, parallel with tools) ─────────
+  - name: semantic_threat_analysis
+    intent: >-
+      Independent LLM-based semantic and intent analysis of the raw prompt.
+      Detects social engineering, role manipulation, data extraction attempts,
+      and deception techniques that statistical layers cannot perceive.
+      Runs in parallel with statistical tools for maximum coverage.
+    schema: prompt_injection_detection/semantic_threat_analysis
+    prompt: $prompt_injection_detection.Semantic_Threat_Analysis
+    context_scope:
+      observe:
+        - source.prompt_text
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  AGGREGATION + INTERPRETATION LAYER
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── [6] Aggregate Detection Scores (tool, depends 1-4) ─────────────
+  - name: aggregate_detection_scores
+    dependencies:
+      - scan_dlp_regex
+      - score_pfd_embedding
+      - score_topic_jsd
+      - score_bayesian_elbo
+    kind: tool
+    impl: aggregate_detection_scores
+    intent: >-
+      Collect results from all four statistical detection layers and compute
+      a weighted aggregate score with unanimous-safe/risky flags and a
+      statistical verdict.
+    context_scope:
+      observe:
+        - scan_dlp_regex.*
+        - score_pfd_embedding.*
+        - score_topic_jsd.*
+        - score_bayesian_elbo.*
+
+  # ── [7] Interpret Statistical Signals (LLM, depends 6) ─────────────
+  - name: interpret_statistical_signals
+    dependencies:
+      - aggregate_detection_scores
+    intent: >-
+      LLM analyst interprets the raw statistical scores from all four
+      detection layers. Translates numbers into actionable intelligence:
+      what the signals mean for this specific prompt, which are strongest,
+      which might be false positives, and how layers correlate or
+      contradict each other.
+    schema: prompt_injection_detection/interpret_statistical_signals
+    prompt: $prompt_injection_detection.Interpret_Statistical_Signals
+    context_scope:
+      observe:
+        - source.prompt_text
+        - scan_dlp_regex.*
+        - score_pfd_embedding.*
+        - score_topic_jsd.*
+        - score_bayesian_elbo.*
+        - aggregate_detection_scores.*
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  JUDGMENT LAYER: Meta-Detector synthesizes both streams
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── [8] Meta-Detector Judgment (LLM, depends 5+7) ──────────────────
+  - name: meta_detector_judgment
+    dependencies:
+      - semantic_threat_analysis
+      - interpret_statistical_signals
+    intent: >-
+      Chief arbiter LLM that synthesizes two independent analysis streams:
+      the semantic threat analysis (LLM-based intent/manipulation detection)
+      and the statistical signal interpretation (LLM-interpreted scores).
+      Makes the final injection judgment with authority to override either
+      stream. Catches sophisticated attacks that individual analyses miss.
+    schema: prompt_injection_detection/meta_detector_judgment
+    prompt: $prompt_injection_detection.Meta_Detector_Judgment
+    context_scope:
+      observe:
+        - source.prompt_text
+        - semantic_threat_analysis.*
+        - interpret_statistical_signals.*
+        - aggregate_detection_scores.*
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  DECISION LAYER: Composite risk scoring
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── [9] Compute Composite Risk (tool, depends 8) ───────────────────
+  - name: compute_composite_risk
+    dependencies:
+      - meta_detector_judgment
+    kind: tool
+    impl: compute_composite_risk
+    intent: >-
+      Blend the LLM meta-detector confidence with statistical aggregate
+      scores to produce a final composite risk score and a decision of
+      BLOCK, REVIEW, or PASS.
+    context_scope:
+      observe:
+        - aggregate_detection_scores.*
+        - meta_detector_judgment.*
+
+  # ═══════════════════════════════════════════════════════════════════════
+  #  REPORT LAYER: LLM-generated forensic reports (guarded)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── [10] Generate Block Report (LLM, guard: BLOCK) ─────────────────
+  - name: generate_block_report
+    dependencies:
+      - compute_composite_risk
+    guard:
+      condition: 'decision == "BLOCK"'
+      on_false: filter
+    intent: >-
+      LLM generates a comprehensive forensic block report with attack
+      classification, evidence analysis from all layers, key indicators,
+      and recommended follow-up actions. Suitable for security team review
+      and threat intelligence logging.
+    schema: prompt_injection_detection/generate_block_report
+    prompt: $prompt_injection_detection.Generate_Block_Report
+    context_scope:
+      observe:
+        - source.prompt_text
+        - compute_composite_risk.*
+        - meta_detector_judgment.*
+        - semantic_threat_analysis.*
+        - interpret_statistical_signals.*
+        - aggregate_detection_scores.*
+
+  # ── [11] Generate Safe Report (LLM, guard: not BLOCK) ──────────────
+  - name: generate_safe_report
+    dependencies:
+      - compute_composite_risk
+    guard:
+      condition: 'decision != "BLOCK"'
+      on_false: filter
+    intent: >-
+      LLM generates a clearance or review report. For REVIEW decisions,
+      provides specific guidance to human reviewers on what to examine.
+      For PASS decisions, confirms safe passage with monitoring
+      recommendations for any subtle signals detected.
+    schema: prompt_injection_detection/generate_safe_report
+    prompt: $prompt_injection_detection.Generate_Safe_Report
+    context_scope:
+      observe:
+        - source.prompt_text
+        - compute_composite_risk.*
+        - meta_detector_judgment.*
+        - semantic_threat_analysis.*
+        - interpret_statistical_signals.*
+        - aggregate_detection_scores.*

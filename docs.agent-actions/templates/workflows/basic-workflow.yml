@@ -1,0 +1,110 @@
+# Basic Workflow Template
+# Demonstrates a simple single-step workflow
+# Use this as a starting point for straightforward tasks
+
+# Workflow-level configuration
+# These settings override project-level defaults from agent_actions.yml
+# If not specified, values are inherited from the project
+
+# Optional: Override model vendor for this workflow
+# model_vendor: openai
+
+# Optional: Override model name for this workflow
+# model_name: gpt-4o-mini
+
+# Optional: Override API key for this workflow
+# api_key: ${OPENAI_API_KEY}
+
+# Optional: Set temperature for all actions in this workflow
+# temperature: 0.7
+
+# Optional: Other generation parameters
+# max_tokens: 4096
+# top_p: 0.95
+# stop: ["\n\n"]
+
+# Actions to execute in this workflow
+actions:
+  # Single action example
+  - name: summarize_text
+
+    # Input/output field mappings
+    reads:
+      - text          # Read 'text' field from input data
+
+    writes:
+      - summary       # Write result to 'summary' field
+
+    # Prompt template using Jinja2 syntax
+    # Access input fields using {{ field_name }}
+    prompt: |
+      Please provide a concise summary of the following text.
+      Focus on the main points and key takeaways.
+
+      Text:
+      {{ text }}
+
+      Summary:
+
+    # Output schema definition
+    # Ensures structured, parseable output
+    schema:
+      summary: string
+
+    # Optional: Override model settings for this specific action
+    # model_vendor: anthropic
+    # model_name: claude-sonnet-4-20250514
+    # temperature: 0.5
+
+# ============================================================================
+# USAGE EXAMPLE
+# ============================================================================
+# Save this file as: workflows/summarize.yml
+#
+# Then run:
+#   agac run summarize --input data.jsonl
+#
+# Input data format (data.jsonl):
+#   {"text": "Long article text here..."}
+#   {"text": "Another article to summarize..."}
+#
+# Output format:
+#   {"text": "...", "summary": "Brief summary here"}
+#   {"text": "...", "summary": "Another summary here"}
+
+# ============================================================================
+# CONFIGURATION HIERARCHY
+# ============================================================================
+# The final configuration for the 'summarize_text' action is resolved as:
+#
+# 1. Start with project defaults (agent_actions.yml)
+# 2. Apply workflow-level overrides (if any in this file)
+# 3. Apply action-level overrides (if any in the action definition)
+#
+# Missing fields are inherited from the level above
+# Lower levels take precedence over higher levels
+
+# ============================================================================
+# CUSTOMIZATION IDEAS
+# ============================================================================
+# Customize this template for different use cases:
+#
+# 1. TRANSLATION:
+#    - Change action name to 'translate'
+#    - Update prompt to translate to target language
+#    - Modify schema: { translated_text: string, source_lang: string }
+#
+# 2. SENTIMENT ANALYSIS:
+#    - Change action name to 'analyze_sentiment'
+#    - Update prompt to analyze sentiment and tone
+#    - Modify schema: { sentiment: string, confidence: number }
+#
+# 3. EXTRACTION:
+#    - Change action name to 'extract_entities'
+#    - Update prompt to extract named entities
+#    - Modify schema: { entities: array }
+#
+# 4. CLASSIFICATION:
+#    - Change action name to 'classify_text'
+#    - Update prompt to classify into categories
+#    - Modify schema: { category: string, confidence: number }

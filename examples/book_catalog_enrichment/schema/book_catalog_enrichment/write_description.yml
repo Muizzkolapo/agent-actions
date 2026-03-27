@@ -1,0 +1,50 @@
+name: write_description
+description: Schema for book marketing description
+required:
+  - marketing_description
+  - hook_sentence
+  - key_benefits
+  - target_audience
+fields:
+  - id: isbn
+    type: string
+    description: "Book ISBN (passthrough)"
+  - id: title
+    type: string
+    description: "Book title (passthrough)"
+  - id: authors
+    type: array
+    items:
+      type: string
+    description: "Book authors (passthrough)"
+  - id: publisher
+    type: string
+    description: "Publisher (passthrough)"
+  - id: publish_year
+    type: integer
+    description: "Publication year (passthrough)"
+  - id: page_count
+    type: integer
+    description: "Page count (passthrough)"
+  - id: description
+    type: string
+    description: "Raw description (passthrough)"
+  - id: marketing_description
+    type: string
+    description: "Full marketing description (100-300 words)"
+    required: true
+  - id: hook_sentence
+    type: string
+    description: "Opening hook sentence to capture attention"
+    required: true
+  - id: key_benefits
+    type: array
+    items:
+      type: string
+    description: "Key benefits/selling points (3-7 items)"
+    required: true
+  - id: target_audience
+    type: string
+    description: "Description of the target reader"
+    required: true
+additionalProperties: false

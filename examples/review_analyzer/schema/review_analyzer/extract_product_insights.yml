@@ -1,0 +1,32 @@
+name: extract_product_insights
+description: Actionable product improvement insights extracted from a review
+fields:
+  - id: feedback_items
+    type: array
+    description: "Categorized product feedback items"
+    items:
+      type: object
+      properties:
+        category:
+          type: string
+          description: "Feedback category from rubric (e.g., 'Build Quality / Durability')"
+        issue:
+          type: string
+          description: "Specific issue or praise described"
+        severity:
+          type: string
+          description: "Impact level: critical, moderate, minor, or praise"
+        verbatim_evidence:
+          type: string
+          description: "Direct quote or close paraphrase from the review"
+  - id: improvement_priority
+    type: string
+    description: "Highest-priority improvement area for this product"
+  - id: positive_differentiators
+    type: array
+    description: "Features explicitly praised that could be marketing highlights"
+    items:
+      type: string
+required:
+  - feedback_items
+  - improvement_priority

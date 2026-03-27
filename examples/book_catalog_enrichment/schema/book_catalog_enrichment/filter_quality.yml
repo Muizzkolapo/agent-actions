@@ -1,0 +1,10 @@
+name: filter_quality
+description: Schema for quality filter output
+fields:
+  - id: passes_filter
+    type: boolean
+    description: "Whether entry passes quality thresholds"
+  - id: filter_reason
+    type: string
+    description: "Reason for pass/fail"
+additionalProperties: false

@@ -1,0 +1,51 @@
+name: aggregate_risk_summary
+description: Schema for the aggregated contract-level risk report produced by FILE granularity tool
+fields:
+  - id: contract_id
+    type: string
+    description: "Identifier of the reviewed contract"
+  - id: contract_title
+    type: string
+    description: "Title of the reviewed contract"
+  - id: overall_risk_level
+    type: string
+    description: "Overall contract risk: 'high', 'medium', or 'low'"
+  - id: overall_risk_score
+    type: number
+    description: "Weighted average risk score across all clauses (0.0-1.0)"
+  - id: total_clauses_analyzed
+    type: integer
+    description: "Total number of clauses that were analyzed"
+  - id: risk_distribution
+    type: object
+    description: "Count of clauses at each risk level: {high: N, medium: N, low: N}"
+  - id: high_risk_clauses
+    type: array
+    items:
+      type: object
+    description: "Details of each high-risk clause including clause_number, clause_title, risk_indicators, and recommended_action"
+  - id: total_obligations
+    type: array
+    items:
+      type: object
+    description: "All obligations across the contract grouped by responsible party"
+  - id: key_deadlines
+    type: array
+    items:
+      type: object
+    description: "All time-bound requirements sorted by urgency"
+  - id: negotiation_priority
+    type: array
+    items:
+      type: string
+    description: "Ordered list of clauses to prioritize for negotiation"
+required:
+  - contract_id
+  - overall_risk_level
+  - overall_risk_score
+  - total_clauses_analyzed
+  - risk_distribution
+  - high_risk_clauses
+  - total_obligations
+  - key_deadlines
+additionalProperties: false

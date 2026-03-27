@@ -1,0 +1,27 @@
+name: quantify_impact
+description: Schema for impact quantification
+fields:
+  - id: impact_magnitude
+    type: string
+    description: "Overall severity (CRITICAL/HIGH/MEDIUM/LOW)"
+  - id: affected_metrics
+    type: array
+    items:
+      type: object
+    description: "Metrics impacted with quantified changes"
+  - id: estimated_effect_size
+    type: string
+    description: "Quantified overall impact"
+  - id: blast_radius
+    type: array
+    items:
+      type: string
+    description: "Systems affected directly and indirectly"
+  - id: business_impact
+    type: string
+    description: "Business impact description"
+required:
+  - impact_magnitude
+  - blast_radius
+  - business_impact
+additionalProperties: false

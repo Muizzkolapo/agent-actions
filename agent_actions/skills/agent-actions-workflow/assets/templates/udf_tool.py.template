@@ -1,0 +1,16 @@
+"""{{TOOL_TITLE}}"""
+
+from typing import Any
+from agent_actions import udf_tool
+
+
+@udf_tool()
+def {{tool_function_name}}(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """{{Brief description of what this tool does.}}"""
+    content = data.get("content", data)
+    result = content.copy()
+
+    # Your processing logic here
+    result["output_field"] = content.get("input_field", "")
+
+    return [result]

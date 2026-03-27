@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400">
+  <!--
+    VARIATION 5: Minimal arc / semicircle
+    Three phases arranged along a semicircular arc,
+    ultra-minimal with thin connecting line. Clean and modern.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <marker id="dot-g" markerWidth="6" markerHeight="6" refX="3" refY="3">
+      <circle cx="3" cy="3" r="2.5" fill="#86efac" opacity="0.6"/>
+    </marker>
+    <marker id="dot-b" markerWidth="6" markerHeight="6" refX="3" refY="3">
+      <circle cx="3" cy="3" r="2.5" fill="#93c5fd" opacity="0.6"/>
+    </marker>
+    <marker id="dot-p" markerWidth="6" markerHeight="6" refX="3" refY="3">
+      <circle cx="3" cy="3" r="2.5" fill="#c4b5fd" opacity="0.6"/>
+    </marker>
+  </defs>
+
+  <rect width="800" height="400" fill="url(#bg)"/>
+
+  <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M 64 0 L 0 0 0 64" fill="none" stroke="rgba(255,255,255,0.015)" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="400" fill="url(#grid)"/>
+
+  <!-- ===== ARC (semicircle connecting the three phases) ===== -->
+  <!-- Three-segment arc: green → blue → purple -->
+  <path d="M 135,200 A 265,180 0 0,1 400,40"
+        fill="none" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.2"/>
+  <path d="M 400,40 A 265,180 0 0,1 665,200"
+        fill="none" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.2"/>
+
+  <!-- Connecting line at bottom between Execute and Validate (through center) -->
+  <path d="M 175,200 Q 400,260 625,200"
+        fill="none" stroke="#c4b5fd" stroke-width="1" stroke-opacity="0.12" stroke-dasharray="4,6"/>
+
+  <!-- ===== PHASE NODES ===== -->
+
+  <!-- DEFINE (left on arc) -->
+  <g transform="translate(135, 200)">
+    <!-- Glowing dot -->
+    <circle cx="0" cy="0" r="8" fill="#86efac" fill-opacity="0.1" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.5"/>
+    <circle cx="0" cy="0" r="3" fill="#86efac" opacity="0.8"/>
+    <!-- Label -->
+    <text x="0" y="30" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#86efac">Define</text>
+    <text x="0" y="48" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#86efac" fill-opacity="0.5">YAML · prompts · schemas</text>
+
+    <!-- Detail card (below) -->
+    <g transform="translate(-80, 60)">
+      <rect x="0" y="0" width="160" height="52" rx="10" fill="#86efac" fill-opacity="0.05" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.2"/>
+      <g transform="translate(12, 10)">
+        <rect x="0" y="0" width="12" height="15" rx="1.5" fill="none" stroke="#86efac" stroke-width="1" stroke-opacity="0.5"/>
+        <line x1="3" y1="4" x2="9" y2="4" stroke="#86efac" stroke-width="0.7" stroke-opacity="0.4"/>
+        <line x1="3" y1="7" x2="8" y2="7" stroke="#86efac" stroke-width="0.7" stroke-opacity="0.4"/>
+        <line x1="3" y1="10" x2="6" y2="10" stroke="#86efac" stroke-width="0.7" stroke-opacity="0.4"/>
+      </g>
+      <text x="32" y="18" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#86efac" fill-opacity="0.5">Declarative config</text>
+      <text x="32" y="34" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="10" fill="#86efac" fill-opacity="0.35">Version-controlled YAML</text>
+    </g>
+  </g>
+
+  <!-- VALIDATE (top center on arc) -->
+  <g transform="translate(400, 40)">
+    <circle cx="0" cy="0" r="8" fill="#93c5fd" fill-opacity="0.1" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <circle cx="0" cy="0" r="3" fill="#93c5fd" opacity="0.8"/>
+    <text x="0" y="-22" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#93c5fd">Validate</text>
+    <text x="0" y="-6" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#93c5fd" fill-opacity="0.5">static analysis · deps · field refs</text>
+
+    <!-- Detail card (above, since node is at top) — actually below the dot -->
+    <g transform="translate(-80, 18)">
+      <rect x="0" y="0" width="160" height="52" rx="10" fill="#93c5fd" fill-opacity="0.05" stroke="#93c5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <g transform="translate(12, 10)">
+        <path d="M6,1 L11,3 L11,8 Q11,13 6,15 Q1,13 1,8 L1,3 Z" fill="none" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.5"/>
+        <polyline points="3.5,8 5.5,10.5 9,6" fill="none" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.5"/>
+      </g>
+      <text x="30" y="18" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#93c5fd" fill-opacity="0.5">Pre-flight checks</text>
+      <text x="30" y="34" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="10" fill="#93c5fd" fill-opacity="0.35">Catch errors before API calls</text>
+    </g>
+  </g>
+
+  <!-- EXECUTE (right on arc) -->
+  <g transform="translate(665, 200)">
+    <circle cx="0" cy="0" r="8" fill="#c4b5fd" fill-opacity="0.1" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <circle cx="0" cy="0" r="3" fill="#c4b5fd" opacity="0.8"/>
+    <text x="0" y="30" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#c4b5fd">Execute</text>
+    <text x="0" y="48" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#c4b5fd" fill-opacity="0.5">DAG orchestration · parallel · batch</text>
+
+    <g transform="translate(-80, 60)">
+      <rect x="0" y="0" width="160" height="52" rx="10" fill="#c4b5fd" fill-opacity="0.05" stroke="#c4b5fd" stroke-width="0.8" stroke-opacity="0.2"/>
+      <g transform="translate(12, 10)">
+        <polygon points="0,0 12,7.5 0,15" fill="none" stroke="#c4b5fd" stroke-width="1" stroke-opacity="0.5"/>
+      </g>
+      <text x="30" y="18" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="10" fill="#c4b5fd" fill-opacity="0.5">Smart orchestration</text>
+      <text x="30" y="34" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="10" fill="#c4b5fd" fill-opacity="0.35">Parallel + batch + retry</text>
+    </g>
+  </g>
+
+  <!-- ===== CENTER LOGO ===== -->
+  <g transform="translate(369, 130) scale(0.45)">
+    <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+    <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+    <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+    <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+  </g>
+
+  <!-- ===== SCALE BADGES ===== -->
+  <text x="400" y="340" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="11" fill="#71717a" letter-spacing="2.5">WORKS AT ANY SCALE</text>
+
+  <g transform="translate(155, 355)">
+    <rect x="0" y="0" width="130" height="32" rx="16" fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="21" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#86efac" fill-opacity="0.8">Online</text>
+  </g>
+  <g transform="translate(315, 355)">
+    <rect x="0" y="0" width="130" height="32" rx="16" fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="21" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#93c5fd" fill-opacity="0.8">Batch</text>
+  </g>
+  <g transform="translate(475, 355)">
+    <rect x="0" y="0" width="160" height="32" rx="16" fill="#fbbf24" fill-opacity="0.06" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="80" y="21" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#fbbf24" fill-opacity="0.8">Multi-vendor</text>
+  </g>
+</svg>

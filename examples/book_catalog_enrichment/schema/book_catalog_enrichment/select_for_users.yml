@@ -1,0 +1,126 @@
+name: select_for_users
+description: User-specific views of the enriched catalog entry
+fields:
+  - id: isbn
+    type: string
+    description: "Book ISBN"
+  - id: title
+    type: string
+    description: "Book title"
+  - id: seo_view
+    type: object
+    description: "Fields for the SEO and marketing team"
+    properties:
+      isbn:
+        type: string
+      title:
+        type: string
+      meta_title:
+        type: string
+        description: "SEO-optimized title (max 60 chars)"
+      meta_description:
+        type: string
+        description: "SEO-optimized description (max 155 chars)"
+      seo_keywords:
+        type: array
+        items:
+          type: string
+        description: "Combined primary and long-tail keywords"
+      target_audience:
+        type: string
+        description: "Ideal reader profile"
+      marketing_description:
+        type: string
+        description: "Full marketing copy for the product page"
+      hook_sentence:
+        type: string
+        description: "Single compelling opening sentence"
+      key_selling_points:
+        type: array
+        items:
+          type: string
+        description: "3-5 key benefits"
+  - id: management_view
+    type: object
+    description: "Fields for catalog managers tracking enrichment quality"
+    properties:
+      isbn:
+        type: string
+      title:
+        type: string
+      catalog_id:
+        type: string
+      quality_score:
+        type: number
+        description: "Overall enrichment quality (1-5)"
+      publication_ready:
+        type: boolean
+        description: "Whether this entry is ready to publish"
+      primary_category:
+        type: string
+      target_audience:
+        type: string
+      enriched_fields:
+        type: array
+        items:
+          type: string
+        description: "Which enrichment steps completed successfully"
+      enrichment_version:
+        type: string
+      filter_reason:
+        type: string
+        description: "Why the entry passed or failed the quality filter"
+  - id: developer_view
+    type: object
+    description: "Fields for developers and technical readers"
+    properties:
+      isbn:
+        type: string
+      title:
+        type: string
+      bisac_codes:
+        type: array
+        items:
+          type: string
+      primary_category:
+        type: string
+      difficulty_level:
+        type: string
+        description: "Beginner / Intermediate / Advanced / Expert"
+      experience_required:
+        type: string
+        description: "Estimated years of relevant experience"
+      prerequisites:
+        type: array
+        items:
+          type: string
+        description: "Concepts the reader should already know"
+      reading_time_hours:
+        type: string
+        description: "Estimated hours to read thoroughly"
+      similar_titles:
+        type: array
+        description: "Grounded recommendations from the catalog"
+        items:
+          type: object
+          properties:
+            isbn:
+              type: string
+            title:
+              type: string
+            authors:
+              type: array
+              items:
+                type: string
+            relationship:
+              type: string
+      reading_path:
+        type: string
+        description: "Suggested reading order across similar titles"
+required:
+  - isbn
+  - title
+  - seo_view
+  - management_view
+  - developer_view
+additionalProperties: false

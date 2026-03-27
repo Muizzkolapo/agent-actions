@@ -1,0 +1,23 @@
+name: cluster_by_topic
+description: Clustered ticket data (FILE granularity output)
+fields:
+  - id: cluster_topic
+    type: string
+    description: "The topic/category for this cluster"
+  - id: cluster_size
+    type: number
+    description: "How many tickets in this cluster"
+  - id: ticket_ids
+    type: array
+    description: "IDs of tickets in this cluster"
+  - id: representative_problems
+    type: array
+    description: "Top 3 distilled problem statements"
+  - id: representative_resolutions
+    type: array
+    description: "Top 3 resolution summaries"
+required:
+  - cluster_topic
+  - cluster_size
+  - ticket_ids
+  - representative_problems

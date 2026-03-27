@@ -1,0 +1,21 @@
+name: Setup Python
+description: Setup Python environment for agent-actions
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      id: setup-python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Install dependencies
+      shell: bash
+      run: uv sync --dev

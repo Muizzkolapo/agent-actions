@@ -1,0 +1,219 @@
+################################################################################
+# Product Review Analyzer
+################################################################################
+# A context engineering showcase: each action gets its own model, its own
+# context window, its own schema, and its own pre-check gate.
+#
+# Patterns demonstrated:
+#   - Multi-vendor model selection (Groq, OpenAI, Anthropic)
+#   - Parallel consensus voting (3 independent scorers)
+#   - Pre-check guards (skip LLM calls for low-quality records)
+#   - Progressive context disclosure (observe / drop / passthrough)
+#   - Batch-native processing with record-level granularity
+#   - Schema enforcement on every LLM output
+#   - Version consumption with merge pattern
+#   - Seed data injection (evaluation rubric)
+#
+# Workflow:
+#   1. Extract claims & aspects  (Groq — cheap, fast)
+#   2. Score quality x3 parallel (OpenAI — balanced)
+#   3. Aggregate scores           (Tool — deterministic)
+#   4. Generate merchant response (Anthropic — best reasoning, guarded)
+#   5. Extract product insights   (OpenAI — structured extraction)
+#   6. Format final output        (Tool — deterministic)
+################################################################################
+name: review_analyzer
+description: "Product review analysis with multi-model context engineering, parallel consensus scoring, and pre-check quality gates"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: true
+  context_scope:
+    seed_path:
+      rubric: $file:evaluation_rubric.json
+
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 1: EXTRACT CLAIMS & ASPECTS
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Uses a cheap, fast model — extraction doesn't need expensive reasoning.
+  # Drops star_rating so downstream scoring isn't anchored by the user's number.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: extract_claims
+    intent: "Extract factual claims, product aspects, and sentiment signals from review text"
+    schema: review_analyzer/extract_claims
+    prompt: $review_analyzer.Extract_Claims
+    model_vendor: groq                          # ← Cheap model for extraction
+    model_name: llama-3.3-70b-versatile
+    api_key: GROQ_API_KEY
+    context_scope:
+      observe:
+        - source.review_text                    # ← LLM sees only the review body
+        - source.review_title                   #    and title — nothing else
+        - source.product_name
+        - source.product_category
+      drop:
+        - source.star_rating                    # ← Excluded: avoid anchoring bias
+        - source.verified_purchase
+      passthrough:
+        - source.review_id                      # ← Flows to output, zero tokens
+        - source.reviewer_name
+        - source.review_date
+        - source.product_name
+        - source.product_category
+    retry:
+      enabled: true
+      max_attempts: 3
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 2: SCORE REVIEW QUALITY (3 independent parallel scorers)
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Three scorers evaluate independently. Each sees the extracted claims
+  # and the rubric, but NEVER each other's scores. This is context isolation:
+  # biased reviewers = useless pipeline.
+  #
+  # Two lines of YAML = 3 parallel LLM calls. In n8n: 3 HTTP nodes + custom
+  # JavaScript merge node + manual wiring.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: score_quality
+    dependencies: [extract_claims]
+    intent: "Independently score review quality against rubric criteria"
+    schema: review_analyzer/score_quality
+    prompt: $review_analyzer.Score_Quality
+    versions:
+      param: scorer_id                          # ← 3 parallel scorers
+      range: [1, 2, 3]
+      mode: parallel
+    context_scope:
+      observe:
+        - extract_claims.claims                 # ← Scorers see extracted claims
+        - extract_claims.product_aspects
+        - extract_claims.sentiment_signals
+        - source.review_text                    # ← And original review text
+        - seed_data.rubric                      # ← And the scoring rubric
+      drop:
+        - source.star_rating                    # ← Still excluded from scoring
+        - extract_claims.review_id
+        - extract_claims.reviewer_name
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 3: AGGREGATE QUALITY SCORES
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Deterministic tool merges 3 parallel scores into weighted consensus.
+  # No LLM needed — math doesn't hallucinate.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: aggregate_scores
+    dependencies: [score_quality]
+    kind: tool
+    impl: aggregate_quality_scores
+    intent: "Compute weighted consensus score from 3 independent quality scorers"
+    schema: review_analyzer/aggregate_scores
+    version_consumption:
+      source: score_quality                     # ← Declarative fan-in
+      pattern: merge                            #    from parallel versions
+    context_scope:
+      observe:
+        - score_quality.*
+      passthrough:
+        - extract_claims.*
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 4: GENERATE MERCHANT RESPONSE (guarded, different vendor)
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Guard: only fires for reviews scoring >= 6 (quality threshold from rubric).
+  # Low-quality reviews are filtered — no tokens burned, no latency spent.
+  #
+  # Uses Anthropic Claude for response generation — better reasoning for
+  # nuanced, empathetic merchant replies. Different model for different task.
+  #
+  # Context: sees the review and extracted insights but NOT individual scorer
+  # reasoning. Clean context = better output.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: generate_response
+    dependencies: [aggregate_scores]
+    intent: "Draft a professional merchant response for high-quality reviews"
+    schema: review_analyzer/generate_response
+    prompt: $review_analyzer.Generate_Response
+    model_vendor: anthropic                     # ← Best reasoning for responses
+    model_name: claude-sonnet-4-20250514
+    api_key: ANTHROPIC_API_KEY
+    guard:
+      condition: 'consensus_score >= 6'         # ← Pre-check gate: skip low quality
+      on_false: "filter"                        #    LLM never fires for junk reviews
+    context_scope:
+      observe:
+        - source.review_text                    # ← Sees the original review
+        - source.review_title
+        - extract_claims.claims                 # ← Sees extracted claims
+        - extract_claims.product_aspects
+        - extract_claims.sentiment_signals
+        - aggregate_scores.consensus_score      # ← Sees the score
+        - aggregate_scores.strengths
+        - aggregate_scores.weaknesses
+      drop:
+        - score_quality.*                       # ← Does NOT see individual scorer reasoning
+      passthrough:
+        - source.review_id                      # ← Metadata flows through untouched
+        - source.reviewer_name
+        - source.product_name
+        - source.product_category
+        - source.review_date
+        - aggregate_scores.consensus_score
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 5: EXTRACT PRODUCT INSIGHTS
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Runs in parallel with generate_response (independent dependency).
+  # Classifies actionable product feedback using seed_data categories.
+  # Same guard — no point analyzing junk reviews for insights.
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: extract_product_insights
+    dependencies: [aggregate_scores]
+    intent: "Classify actionable product feedback into improvement categories"
+    schema: review_analyzer/extract_product_insights
+    prompt: $review_analyzer.Extract_Product_Insights
+    guard:
+      condition: 'consensus_score >= 6'         # ← Same gate — skip junk
+      on_false: "filter"
+    context_scope:
+      observe:
+        - source.review_text
+        - extract_claims.claims
+        - extract_claims.product_aspects
+        - seed_data.rubric.product_feedback_categories
+      passthrough:
+        - source.review_id
+        - source.product_name
+        - aggregate_scores.consensus_score
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # STEP 6: FORMAT FINAL OUTPUT
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Deterministic tool packages everything into the final structure.
+  # Fan-in from two parallel branches (response + insights).
+  # ═══════════════════════════════════════════════════════════════════════════
+  - name: format_output
+    dependencies: [generate_response, extract_product_insights]
+    kind: tool
+    impl: format_analysis_output
+    intent: "Package review analysis, merchant response, and product insights into final output"
+    schema: review_analyzer/format_output
+    context_scope:
+      observe:
+        - generate_response.*
+        - extract_product_insights.*
+        - extract_claims.*
+        - aggregate_scores.*
+        - source.*

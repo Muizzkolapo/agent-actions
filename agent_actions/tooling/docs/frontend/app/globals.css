@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  /* ─── LIGHT MODE ─── */
+  :root {
+    --background: 216 20% 95%;
+    --foreground: 222 25% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 25% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 25% 8%;
+    --primary: 174 65% 40%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 18% 90%;
+    --secondary-foreground: 222 20% 18%;
+    --muted: 216 18% 90%;
+    --muted-foreground: 218 12% 46%;
+    --accent: 216 18% 90%;
+    --accent-foreground: 222 25% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 16% 86%;
+    --input: 216 16% 86%;
+    --ring: 174 65% 40%;
+    --chart-1: 174 65% 40%;
+    --chart-2: 250 55% 57%;
+    --chart-3: 142 55% 42%;
+    --chart-4: 0 72% 51%;
+    --chart-5: 280 55% 55%;
+    --radius: 0.5rem;
+    --sidebar-background: 216 20% 97%;
+    --sidebar-foreground: 218 10% 35%;
+    --sidebar-primary: 174 65% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 216 18% 92%;
+    --sidebar-accent-foreground: 222 25% 8%;
+    --sidebar-border: 216 16% 89%;
+    --sidebar-ring: 174 65% 40%;
+    --success: 152 56% 38%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 8%;
+  }
+
+  /* ─── DARK MODE (hero theme) ─── */
+  .dark {
+    --background: 225 28% 6%;
+    --foreground: 210 20% 93%;
+    --card: 225 22% 9%;
+    --card-foreground: 210 20% 93%;
+    --popover: 225 22% 9%;
+    --popover-foreground: 210 20% 93%;
+    --primary: 174 65% 50%;
+    --primary-foreground: 225 28% 6%;
+    --secondary: 225 18% 13%;
+    --secondary-foreground: 210 15% 78%;
+    --muted: 225 16% 14%;
+    --muted-foreground: 218 12% 48%;
+    --accent: 225 16% 14%;
+    --accent-foreground: 210 20% 93%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 225 16% 14%;
+    --input: 225 16% 14%;
+    --ring: 174 65% 50%;
+    --chart-1: 174 65% 50%;
+    --chart-2: 250 55% 62%;
+    --chart-3: 152 55% 48%;
+    --chart-4: 0 72% 55%;
+    --chart-5: 280 55% 62%;
+    --sidebar-background: 225 28% 7%;
+    --sidebar-foreground: 218 12% 50%;
+    --sidebar-primary: 174 65% 50%;
+    --sidebar-primary-foreground: 225 28% 6%;
+    --sidebar-accent: 225 18% 11%;
+    --sidebar-accent-foreground: 210 20% 93%;
+    --sidebar-border: 225 16% 12%;
+    --sidebar-ring: 174 65% 50%;
+    --success: 152 56% 46%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 54%;
+    --warning-foreground: 0 0% 5%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-size: 14px;
+    background-image: radial-gradient(circle at 1px 1px, hsl(var(--muted-foreground) / 0.04) 1px, transparent 0);
+    background-size: 24px 24px;
+  }
+
+  .dark body {
+    background-image: radial-gradient(circle at 1px 1px, hsl(var(--muted-foreground) / 0.07) 1px, transparent 0);
+  }
+
+  /* Smooth transitions when toggling themes */
+  html.transitioning,
+  html.transitioning *,
+  html.transitioning *::before,
+  html.transitioning *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.15s ease, box-shadow 0.3s ease !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* ─── Card styles ─── */
+@layer components {
+  :root .card-elevated {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+  }
+  .dark .card-elevated {
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
+  }
+
+}
+
+/* ─── Custom scrollbar ─── */
+@layer base {
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.15);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+}
+
+/* ─── Focus ring ─── */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ─── Table density ─── */
+@layer components {
+  .dense-table th,
+  .dense-table td {
+    @apply px-3 py-2 text-xs;
+  }
+  .dense-table th {
+    @apply text-[10px] uppercase tracking-wider text-muted-foreground font-semibold bg-secondary/40;
+  }
+  .dense-table tr {
+    @apply border-b border-border;
+  }
+  .dense-table tr:last-child {
+    @apply border-0;
+  }
+}
+
+/* ─── Metric text ─── */
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,0 +1,56 @@
+[
+  {
+    "description": "Split Record #1 - Branch A (status: active)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "split_operation_abc123",
+    "target_id": "split-record-1-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_a_6"
+    ],
+    "content": {
+      "status": "active",
+      "priority": "high",
+      "tags": ["tag-a"]
+    }
+  },
+  {
+    "description": "Split Record #2 - Branch B (status: pending, priority: medium) - THE BUG CASE",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "split_operation_abc123",
+    "target_id": "split-record-2-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_b_6"
+    ],
+    "content": {
+      "status": "pending",
+      "priority": "medium",
+      "tags": ["tag-b", "tag-extra"]
+    }
+  },
+  {
+    "description": "Split Record #3 - Branch C (status: completed)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "split_operation_abc123",
+    "target_id": "split-record-3-target-id",
+    "lineage": [
+      "initial_process_0",
+      "extract_data_1",
+      "validate_input_4",
+      "split_operation_abc123",
+      "process_branch_c_6"
+    ],
+    "content": {
+      "status": "completed",
+      "priority": "low",
+      "tags": ["tag-c"]
+    }
+  }
+]

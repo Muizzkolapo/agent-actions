@@ -1,0 +1,54 @@
+[
+  {
+    "_description": "Parent record that forks into 3 parallel branches",
+    "source_guid": "book-001-catalog",
+    "target_id": "parent-001",
+    "parent_target_id": null,
+    "root_target_id": "parent-001",
+    "node_id": "node_3_validate_description",
+    "lineage": ["node_0_extract", "node_1_enrich", "node_3_validate"],
+    "content": {
+      "title": "Clean Code",
+      "description": "A handbook of agile software craftsmanship"
+    }
+  },
+  {
+    "_description": "Branch A: SEO keywords - child of parent-001",
+    "source_guid": "book-001-catalog",
+    "target_id": "branch-a-001",
+    "parent_target_id": "parent-001",
+    "root_target_id": "parent-001",
+    "node_id": "node_4_generate_seo",
+    "lineage": ["node_0_extract", "node_1_enrich", "node_3_validate", "node_4_seo"],
+    "content": {
+      "primary_keywords": ["java", "clean code", "refactoring"],
+      "seo_score": 85
+    }
+  },
+  {
+    "_description": "Branch B: Recommendations - child of parent-001",
+    "source_guid": "book-001-catalog",
+    "target_id": "branch-b-001",
+    "parent_target_id": "parent-001",
+    "root_target_id": "parent-001",
+    "node_id": "node_5_generate_recommendations",
+    "lineage": ["node_0_extract", "node_1_enrich", "node_3_validate", "node_5_recs"],
+    "content": {
+      "similar_books": ["Refactoring", "Design Patterns"],
+      "confidence": 0.92
+    }
+  },
+  {
+    "_description": "Branch C: Reading level - child of parent-001",
+    "source_guid": "book-001-catalog",
+    "target_id": "branch-c-001",
+    "parent_target_id": "parent-001",
+    "root_target_id": "parent-001",
+    "node_id": "node_6_assess_reading_level",
+    "lineage": ["node_0_extract", "node_1_enrich", "node_3_validate", "node_6_level"],
+    "content": {
+      "reading_level": "advanced",
+      "grade_equivalent": "graduate"
+    }
+  }
+]

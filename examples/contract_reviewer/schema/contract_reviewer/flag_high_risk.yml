@@ -1,0 +1,34 @@
+name: flag_high_risk
+description: Schema for deep analysis of high-risk contract clauses
+fields:
+  - id: severity
+    type: string
+    description: "Severity classification: 'critical', 'major', or 'significant'"
+  - id: legal_exposure
+    type: string
+    description: "Description of potential legal exposure from this clause"
+  - id: financial_impact
+    type: string
+    description: "Estimated financial impact or exposure range"
+  - id: cross_references
+    type: array
+    items:
+      type: string
+    description: "Other clauses in the contract that interact with or modify this clause"
+  - id: negotiation_points
+    type: array
+    items:
+      type: object
+    description: "Specific points to negotiate, each with current_language, proposed_change, and rationale"
+  - id: precedent_concerns
+    type: string
+    description: "Any concerns about legal precedent or enforceability"
+  - id: mitigation_strategy
+    type: string
+    description: "Recommended approach to mitigate the identified risks"
+required:
+  - severity
+  - legal_exposure
+  - negotiation_points
+  - mitigation_strategy
+additionalProperties: false

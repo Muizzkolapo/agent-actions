@@ -1,0 +1,83 @@
+name: format_listing
+description: Final marketplace-ready product listing
+fields:
+  - id: product_id
+    type: string
+    description: "Original product identifier"
+  - id: product_name
+    type: string
+    description: "Original product name"
+  - id: brand
+    type: string
+    description: "Product brand"
+  - id: category
+    type: string
+    description: "Product category"
+  - id: price
+    type: number
+    description: "Current listing price"
+  - id: listing
+    type: object
+    description: "Marketplace listing content"
+    properties:
+      title:
+        type: string
+      description:
+        type: string
+      bullet_points:
+        type: array
+        items:
+          type: string
+      value_proposition:
+        type: string
+  - id: seo
+    type: object
+    description: "Search optimization metadata"
+    properties:
+      primary_keywords:
+        type: array
+        items:
+          type: string
+      long_tail_keywords:
+        type: array
+        items:
+          type: string
+      backend_keywords:
+        type: array
+        items:
+          type: string
+      seo_score:
+        type: string
+  - id: competitive_intel
+    type: object
+    description: "Competitor pricing summary"
+    properties:
+      price_position:
+        type: string
+      average_competitor_price:
+        type: number
+      competitor_count:
+        type: integer
+  - id: compliance
+    type: object
+    description: "Compliance validation summary"
+    properties:
+      passed:
+        type: boolean
+      violations:
+        type: array
+        items:
+          type: string
+  - id: enrichment_version
+    type: string
+    description: "Pipeline version that produced this listing"
+  - id: enriched_at
+    type: string
+    description: "ISO timestamp of enrichment"
+required:
+  - product_id
+  - brand
+  - listing
+  - seo
+  - compliance
+additionalProperties: false

@@ -1,0 +1,144 @@
+{
+  "schema_version": "1.0",
+  "workflow_name": "review_analyzer",
+  "workflow_run_id": "run_20260323_110556",
+  "started_at": "2026-03-23T11:05:56.055508",
+  "completed_at": "2026-03-23T11:05:57.690066",
+  "status": "failed",
+  "execution_order": [
+    "extract_claims",
+    "score_quality_3",
+    "score_quality_2",
+    "score_quality_1",
+    "aggregate_scores",
+    "extract_product_insights",
+    "generate_response",
+    "format_output"
+  ],
+  "levels": [
+    [
+      "extract_claims"
+    ],
+    [
+      "score_quality_3",
+      "score_quality_2",
+      "score_quality_1"
+    ],
+    [
+      "aggregate_scores"
+    ],
+    [
+      "extract_product_insights",
+      "generate_response"
+    ],
+    [
+      "format_output"
+    ]
+  ],
+  "actions": {
+    "extract_claims": {
+      "index": 0,
+      "level": 0,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "extract_claims",
+      "dependencies": [],
+      "record_count": null,
+      "error": null
+    },
+    "score_quality_3": {
+      "index": 1,
+      "level": 1,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "score_quality_3",
+      "dependencies": [
+        "extract_claims"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "score_quality_2": {
+      "index": 2,
+      "level": 1,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "score_quality_2",
+      "dependencies": [
+        "extract_claims"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "score_quality_1": {
+      "index": 3,
+      "level": 1,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "score_quality_1",
+      "dependencies": [
+        "extract_claims"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "aggregate_scores": {
+      "index": 4,
+      "level": 2,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "aggregate_scores",
+      "dependencies": [
+        "score_quality"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "extract_product_insights": {
+      "index": 5,
+      "level": 3,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "extract_product_insights",
+      "dependencies": [
+        "aggregate_scores"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "generate_response": {
+      "index": 6,
+      "level": 3,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "generate_response",
+      "dependencies": [
+        "aggregate_scores"
+      ],
+      "record_count": null,
+      "error": null
+    },
+    "format_output": {
+      "index": 7,
+      "level": 4,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "output_dir": "format_output",
+      "dependencies": [
+        "generate_response",
+        "extract_product_insights"
+      ],
+      "record_count": null,
+      "error": null
+    }
+  },
+  "error": "Failed to submit batch job: Error calling groq API endpoint batches.create [Context: vendor=groq]"
+}

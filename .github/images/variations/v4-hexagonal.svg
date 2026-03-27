@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <!--
+    VARIATION 4: Hexagonal / honeycomb style
+    Three hexagonal nodes connected by glowing lines,
+    with the logo in a central hexagon. More geometric/tech feel.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="45%">
+      <stop offset="0%" stop-color="rgba(148,163,184,0.06)"/>
+      <stop offset="100%" stop-color="rgba(148,163,184,0)"/>
+    </radialGradient>
+    <!-- Glow filters for connections -->
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-purple" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="800" height="520" fill="url(#bg)"/>
+  <rect width="800" height="520" fill="url(#glow)"/>
+
+  <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M 64 0 L 0 0 0 64" fill="none" stroke="rgba(255,255,255,0.015)" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="520" fill="url(#grid)"/>
+
+  <!-- Hex path reusable: pointy-top hexagon, centered at origin, ~100px wide -->
+  <!-- M 0,-55 L 48,-27.5 L 48,27.5 L 0,55 L -48,27.5 L -48,-27.5 Z -->
+
+  <!-- ===== CONNECTION LINES (behind nodes) ===== -->
+  <!-- Define (400,95) → Validate (610,285) -->
+  <line x1="440" y1="130" x2="575" y2="255" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.2" filter="url(#glow-blue)"/>
+  <!-- Validate (610,285) → Execute (190,285) -->
+  <line x1="565" y1="285" x2="240" y2="285" stroke="#c4b5fd" stroke-width="1" stroke-opacity="0.2" filter="url(#glow-purple)"/>
+  <!-- Execute (190,285) → Define (400,95) -->
+  <line x1="225" y1="255" x2="360" y2="130" stroke="#86efac" stroke-width="1" stroke-opacity="0.2" filter="url(#glow-green)"/>
+
+  <!-- ===== DEFINE HEXAGON (top center) ===== -->
+  <g transform="translate(400, 95)">
+    <polygon points="0,-58 50,-29 50,29 0,58 -50,29 -50,-29"
+             fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.4"/>
+    <g transform="translate(-8, -8)">
+      <rect x="0" y="0" width="16" height="20" rx="2" fill="none" stroke="#86efac" stroke-width="1.2" stroke-opacity="0.6"/>
+      <line x1="4" y1="6" x2="12" y2="6" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.4"/>
+      <line x1="4" y1="10" x2="10" y2="10" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.4"/>
+      <line x1="4" y1="14" x2="8" y2="14" stroke="#86efac" stroke-width="0.8" stroke-opacity="0.4"/>
+    </g>
+    <!-- Label below hex -->
+    <text x="0" y="82" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#86efac">Define</text>
+    <text x="0" y="100" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#86efac" fill-opacity="0.5">YAML · prompts · schemas</text>
+  </g>
+
+  <!-- ===== VALIDATE HEXAGON (bottom-right) ===== -->
+  <g transform="translate(610, 285)">
+    <polygon points="0,-58 50,-29 50,29 0,58 -50,29 -50,-29"
+             fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.4"/>
+    <g transform="translate(-8, -8)">
+      <path d="M8,1 L15,4 L15,11 Q15,18 8,21 Q1,18 1,11 L1,4 Z" fill="none" stroke="#93c5fd" stroke-width="1.2" stroke-opacity="0.6"/>
+      <polyline points="5,11 7.5,14 12,8" fill="none" stroke="#93c5fd" stroke-width="1.2" stroke-opacity="0.6"/>
+    </g>
+    <text x="0" y="82" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#93c5fd">Validate</text>
+    <text x="0" y="100" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#93c5fd" fill-opacity="0.5">static analysis · deps · refs</text>
+  </g>
+
+  <!-- ===== EXECUTE HEXAGON (bottom-left) ===== -->
+  <g transform="translate(190, 285)">
+    <polygon points="0,-58 50,-29 50,29 0,58 -50,29 -50,-29"
+             fill="#c4b5fd" fill-opacity="0.06" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.4"/>
+    <g transform="translate(-8, -8)">
+      <polygon points="0,0 16,10 0,20" fill="none" stroke="#c4b5fd" stroke-width="1.2" stroke-opacity="0.6"/>
+    </g>
+    <text x="0" y="82" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="17" fill="#c4b5fd">Execute</text>
+    <text x="0" y="100" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="11" fill="#c4b5fd" fill-opacity="0.5">DAG · parallel · batch</text>
+  </g>
+
+  <!-- ===== CENTER LOGO (small hex) ===== -->
+  <g transform="translate(400, 225)">
+    <polygon points="0,-28 24,-14 24,14 0,28 -24,14 -24,-14"
+             fill="rgba(148,163,184,0.04)" stroke="#94a3b8" stroke-width="1" stroke-opacity="0.2"/>
+    <g transform="translate(-18, -16) scale(0.38)">
+      <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+      <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+      <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+      <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+    </g>
+  </g>
+
+  <!-- ===== WORKS AT ANY SCALE ===== -->
+  <text x="400" y="430" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="11" fill="#71717a" letter-spacing="2.5">WORKS AT ANY SCALE</text>
+
+  <g transform="translate(155, 448)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#86efac" fill-opacity="0.8">Online</text>
+  </g>
+  <g transform="translate(315, 448)">
+    <rect x="0" y="0" width="130" height="36" rx="18" fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="65" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#93c5fd" fill-opacity="0.8">Batch</text>
+  </g>
+  <g transform="translate(475, 448)">
+    <rect x="0" y="0" width="160" height="36" rx="18" fill="#fbbf24" fill-opacity="0.06" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="80" y="23" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="13" fill="#fbbf24" fill-opacity="0.8">Multi-vendor</text>
+  </g>
+</svg>

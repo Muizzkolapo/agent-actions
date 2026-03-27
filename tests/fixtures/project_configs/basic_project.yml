@@ -1,0 +1,13 @@
+# Test project-level config (like agent_actions.yml)
+default_agent_config:
+  model_name: gpt-4-project-default
+  model_vendor: openai
+  chunk_config:
+    chunk_size: 800
+    chunk_overlap: 150
+  is_operational: true
+  run_mode: online
+  json_mode: false
+  granularity: record
+
+tool_path: "project_tools/"

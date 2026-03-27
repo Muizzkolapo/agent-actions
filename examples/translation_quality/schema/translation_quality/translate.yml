@@ -1,0 +1,36 @@
+name: translate
+description: Translation of source text using a specific strategy
+fields:
+  - id: translated_text
+    type: string
+    description: "The full translated text in the target language"
+  - id: strategy_used
+    type: string
+    description: "Translation strategy applied: literal, idiomatic, or domain_adapted"
+  - id: confidence
+    type: number
+    description: "Self-assessed confidence in the translation (1-10)"
+  - id: notes
+    type: array
+    description: "Translation decisions and trade-offs made"
+    items:
+      type: string
+  - id: term_handling
+    type: array
+    description: "How key domain terms were handled"
+    items:
+      type: object
+      properties:
+        source_term:
+          type: string
+          description: "Original term"
+        translated_as:
+          type: string
+          description: "How it was translated"
+        rationale:
+          type: string
+          description: "Why this translation was chosen"
+required:
+  - translated_text
+  - strategy_used
+  - confidence

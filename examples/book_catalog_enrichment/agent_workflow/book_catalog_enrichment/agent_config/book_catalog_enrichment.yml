@@ -1,0 +1,257 @@
+################################################################################
+# Book Catalog Enrichment Pipeline
+#  model_vendor: agac-provider
+#  model_name: agac-model
+#  api_key: not_required
+#AGAC_BATCH_COMPLETE_AFTER_SECONDS
+################################################################################
+name: book_catalog_enrichment
+description: "Enrich book catalog entries with BISAC classification, marketing descriptions, SEO keywords, recommendations, and quality scoring"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: true
+  prompt_debug: false  # Enable to see reprompt feedback in action
+  context_scope:
+    seed_path:
+      book_catalog: $file:book_catalog.json
+  retry:
+    enabled: true
+    max_attempts: 2
+
+actions:
+  # ============================================================================
+  # STEP 1: CLASSIFY BOOK GENRE (BISAC)
+  # ============================================================================
+  - name: classify_genre
+    intent: "Classify book into BISAC categories based on title, author, and description"
+    schema: classify_genre
+    prompt: $book_catalog_enrichment.Classify_Book_Genre
+    prompt_debug: true
+    context_scope:
+      observe:
+        - source.*
+      # Add reprompt configuration                                                                                                                                                                                   
+    reprompt:                                                                                                                                                                                                      
+      validation: "check_valid_bisac"   # Name of registered validation UDF                                                                                                                                        
+      max_attempts: 3                    # Max reprompt attempts                                                                                                                                                   
+      on_exhausted: "return_last"        # or "raise"       
+  # ============================================================================
+  # STEP 2: VALIDATE BISAC CODES
+  # ============================================================================
+  - name: validate_bisac
+    dependencies: [classify_genre]
+    kind: tool
+    impl: validate_bisac_codes
+    intent: "Validate and normalize BISAC classification codes"
+    schema: validate_bisac
+    granularity: Record
+    context_scope:
+      observe:
+        - classify_genre.*
+
+  # ============================================================================
+  # STEP 3: WRITE MARKETING DESCRIPTION
+  # ============================================================================
+  - name: write_description
+    dependencies: [validate_bisac]
+    intent: "Write compelling marketing description for the book"
+    schema: write_description
+    prompt: $book_catalog_enrichment.Write_Marketing_Description
+    prompt_debug: false
+    context_scope:
+      observe:
+        - validate_bisac.*
+      passthrough:
+        - source.isbn
+        - source.title
+        - source.authors
+        - source.publisher
+        - source.publish_year
+        - source.page_count
+        - source.description
+    # Reprompt: Validate marketing description quality
+    reprompt:
+      validation: check_description_word_count  # Must have at least 50 words
+      max_attempts: 3  # Try up to 3 times
+      on_exhausted: return_last  # Return best attempt even if validation fails
+
+
+  # ============================================================================
+  # STEP 4: VALIDATE DESCRIPTION
+  # ============================================================================
+  - name: validate_description
+    dependencies: [write_description]
+    kind: tool
+    impl: validate_description
+    intent: "Validate marketing description meets quality standards"
+    schema: validate_description
+    granularity: Record
+    context_scope:
+      observe:
+        - write_description.*
+
+  # ============================================================================
+  # STEP 5: GENERATE SEO KEYWORDS
+  # ============================================================================
+  - name: generate_seo
+    dependencies: [write_description]
+    intent: "Generate SEO-optimized keywords and metadata"
+    schema: generate_seo
+    prompt: $book_catalog_enrichment.Generate_SEO_Keywords
+    context_scope:
+      observe:
+        - validate_bisac.*
+        - write_description.*
+
+  # ============================================================================
+  # STEP 6a: GENERATE SEARCH CRITERIA FOR RECOMMENDATIONS
+  # ============================================================================
+  - name: generate_search_criteria
+    dependencies: [write_description]
+    intent: "Generate search criteria to find similar books in catalog"
+    schema: search_criteria
+    prompt: $book_catalog_enrichment.Generate_Search_Criteria
+    context_scope:
+      observe:
+        - validate_bisac.*
+        - write_description.*
+
+  # ============================================================================
+  # STEP 6b: RETRIEVE CANDIDATE BOOKS FROM CATALOG
+  # ============================================================================
+  - name: retrieve_candidates
+    dependencies: [generate_search_criteria]
+    kind: tool
+    impl: search_book_catalog  # Abstraction layer - swap backend anytime
+    intent: "Search catalog for similar books (vector/SQL/JSON)"
+    schema: search_book_catalog
+    granularity: Record
+    context_scope:
+      observe:
+        - generate_search_criteria.*
+
+  # ============================================================================
+  # STEP 6c: RANK AND SELECT RECOMMENDATIONS
+  # ============================================================================
+  - name: generate_recommendations
+    dependencies: [retrieve_candidates]
+    intent: "Rank and select top recommendations from retrieved candidates"
+    schema: generate_recommendations
+    prompt: $book_catalog_enrichment.Rank_Recommendations
+    context_scope:
+      observe:
+        - validate_bisac.*
+        - write_description.*
+        - retrieve_candidates.*
+
+  # ============================================================================
+  # STEP 7: ASSESS READING LEVEL
+  # ============================================================================
+  - name: assess_reading_level
+    dependencies: [write_description]
+    intent: "Assess reading difficulty and prerequisites"
+    schema: assess_reading_level
+    prompt: $book_catalog_enrichment.Assess_Reading_Level
+    context_scope:
+      observe:
+        - validate_bisac.*
+        - write_description.*
+
+  # ============================================================================
+  # STEP 8: SCORE CATALOG QUALITY (merges all parallel branches)
+  # ============================================================================
+  - name: score_quality
+    dependencies: [generate_recommendations]
+    intent: "Score the overall quality of the enriched catalog entry"
+    schema: score_quality
+    prompt: $book_catalog_enrichment.Score_Catalog_Quality
+    context_scope:
+      observe:
+        - generate_recommendations.*
+        - generate_seo.*
+        - write_description.*
+        - validate_bisac.*
+        - assess_reading_level.*
+      passthrough:
+        # Source metadata
+        - write_description.isbn
+        - write_description.title
+        - write_description.authors
+        - write_description.publisher
+        - write_description.publish_year
+        - write_description.page_count
+        - write_description.description
+        # Classification
+        - validate_bisac.bisac_codes
+        - validate_bisac.bisac_names
+        # Marketing
+        - write_description.marketing_description
+        - write_description.hook_sentence
+        - write_description.key_benefits
+        - write_description.target_audience
+        # SEO
+        - generate_seo.primary_keywords
+        - generate_seo.long_tail_keywords
+        - generate_seo.meta_title
+        - generate_seo.meta_description
+        # Recommendations
+        - generate_recommendations.similar_books
+        - generate_recommendations.reading_path
+        # Reading level
+        - assess_reading_level.reading_level
+        - assess_reading_level.years_experience_needed
+        - assess_reading_level.prerequisites
+        - assess_reading_level.estimated_reading_time
+
+  # ============================================================================
+  # STEP 9: FORMAT FINAL CATALOG ENTRY
+  # ============================================================================
+  - name: format_entry
+    dependencies: [score_quality]
+    kind: tool
+    impl: format_catalog_entry
+    intent: "Format all enriched data into final catalog entry"
+    schema: format_catalog_entry
+    granularity: Record
+    context_scope:
+      observe:
+        - score_quality.*
+
+  # ============================================================================
+  # STEP 10: FILTER BY QUALITY
+  # ============================================================================
+  - name: filter_quality
+    dependencies: [format_entry]
+    kind: tool
+    impl: filter_by_quality
+    intent: "Filter entries that don't meet quality thresholds"
+    schema: filter_quality
+    granularity: Record
+    context_scope:
+      observe:
+        - format_entry.*
+
+  # ============================================================================
+  # STEP 11: SELECT USER VIEWS
+  # ============================================================================
+  - name: select_for_users
+    dependencies: [filter_quality]
+    kind: tool
+    impl: select_for_users
+    intent: "Build SEO, management, and developer views from the enriched entry"
+    schema: select_for_users
+    granularity: Record
+    guard:
+      condition: 'passes_filter'
+      on_false: filter
+    context_scope:
+      observe:
+        - filter_quality.*
+        - format_entry.*

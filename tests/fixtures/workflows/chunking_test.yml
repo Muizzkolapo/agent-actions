@@ -1,0 +1,22 @@
+name: chunking_test_workflow
+description: Test workflow with chunking configuration
+version: 2.0.0
+
+defaults:
+  chunk_config:
+    chunk_size: 1000
+    chunk_overlap: 200
+
+actions:
+  - name: chunked_action
+    intent: Action with chunking config
+    kind: llm
+    chunk_config:
+      chunk_size: 500
+      chunk_overlap: 100
+    prompt: "Process with chunking"
+    schema:
+      processed: string
+
+plan:
+  - chunked_action

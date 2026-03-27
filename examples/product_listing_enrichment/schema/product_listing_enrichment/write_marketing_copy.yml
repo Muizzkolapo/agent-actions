@@ -1,0 +1,32 @@
+name: write_marketing_copy
+description: Marketplace marketing copy with competitive positioning
+fields:
+  - id: listing_title
+    type: string
+    description: "Final marketplace listing title (max 200 chars)"
+  - id: listing_description
+    type: string
+    description: "Full product description for listing page (max 2000 chars)"
+  - id: bullet_points
+    type: array
+    description: "Key selling points as bullet text (max 5, each max 250 chars)"
+    items:
+      type: string
+  - id: search_keywords
+    type: array
+    description: "Optimized search keywords (max 10)"
+    items:
+      type: string
+  - id: value_proposition
+    type: string
+    description: "One-sentence value proposition highlighting competitive advantage"
+  - id: competitive_angle
+    type: string
+    description: "How the product is positioned against competitors without naming them"
+required:
+  - listing_title
+  - listing_description
+  - bullet_points
+  - search_keywords
+  - value_proposition
+additionalProperties: false

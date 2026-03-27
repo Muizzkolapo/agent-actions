@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="360" viewBox="0 0 800 360">
+  <!--
+    VARIATION 1: Horizontal flow with loopback
+    Linear left-to-right layout: Define → Validate → Execute
+    with a curved loopback arrow from Execute back to Define
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="rgba(148,163,184,0.06)"/>
+      <stop offset="100%" stop-color="rgba(148,163,184,0)"/>
+    </radialGradient>
+    <marker id="arr-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#93c5fd" stroke-width="1.2" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#c4b5fd" stroke-width="1.2" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#86efac" stroke-width="1.2" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="800" height="360" fill="url(#bg)"/>
+  <rect width="800" height="360" fill="url(#glow)"/>
+
+  <!-- Subtle grid -->
+  <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse">
+    <path d="M 64 0 L 0 0 0 64" fill="none" stroke="rgba(255,255,255,0.015)" stroke-width="1"/>
+  </pattern>
+  <rect width="800" height="360" fill="url(#grid)"/>
+
+  <!-- ===== STEP NUMBERS (above nodes) ===== -->
+  <text x="148" y="80" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="11" fill="#71717a" letter-spacing="1">01</text>
+  <text x="400" y="80" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="11" fill="#71717a" letter-spacing="1">02</text>
+  <text x="652" y="80" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="11" fill="#71717a" letter-spacing="1">03</text>
+
+  <!-- ===== DEFINE NODE ===== -->
+  <g transform="translate(48, 95)">
+    <rect x="0" y="0" width="200" height="80" rx="12"
+          fill="#86efac" fill-opacity="0.08" stroke="#86efac" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(16, 14)">
+      <rect x="0" y="0" width="16" height="20" rx="2" fill="none" stroke="#86efac" stroke-width="1.3" stroke-opacity="0.7"/>
+      <line x1="4" y1="6" x2="12" y2="6" stroke="#86efac" stroke-width="1" stroke-opacity="0.5"/>
+      <line x1="4" y1="10" x2="10" y2="10" stroke="#86efac" stroke-width="1" stroke-opacity="0.5"/>
+      <line x1="4" y1="14" x2="8" y2="14" stroke="#86efac" stroke-width="1" stroke-opacity="0.5"/>
+    </g>
+    <text x="40" y="30" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#86efac" letter-spacing="-0.3">Define</text>
+    <text x="16" y="58" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="12" fill="#86efac" fill-opacity="0.6">YAML · prompts · schemas</text>
+  </g>
+
+  <!-- ===== VALIDATE NODE ===== -->
+  <g transform="translate(300, 95)">
+    <rect x="0" y="0" width="200" height="80" rx="12"
+          fill="#93c5fd" fill-opacity="0.08" stroke="#93c5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(16, 14)">
+      <path d="M8,1 L15,4 L15,11 Q15,18 8,21 Q1,18 1,11 L1,4 Z" fill="none" stroke="#93c5fd" stroke-width="1.3" stroke-opacity="0.7"/>
+      <polyline points="5,11 7.5,14 12,8" fill="none" stroke="#93c5fd" stroke-width="1.3" stroke-opacity="0.7"/>
+    </g>
+    <text x="40" y="30" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#93c5fd" letter-spacing="-0.3">Validate</text>
+    <text x="16" y="58" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="12" fill="#93c5fd" fill-opacity="0.6">static analysis · deps · field refs</text>
+  </g>
+
+  <!-- ===== EXECUTE NODE ===== -->
+  <g transform="translate(552, 95)">
+    <rect x="0" y="0" width="200" height="80" rx="12"
+          fill="#c4b5fd" fill-opacity="0.08" stroke="#c4b5fd" stroke-width="1.5" stroke-opacity="0.5"/>
+    <g transform="translate(16, 14)">
+      <polygon points="0,0 16,10 0,20" fill="none" stroke="#c4b5fd" stroke-width="1.3" stroke-opacity="0.7"/>
+    </g>
+    <text x="40" y="30" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="700" font-size="18" fill="#c4b5fd" letter-spacing="-0.3">Execute</text>
+    <text x="16" y="58" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="12" fill="#c4b5fd" fill-opacity="0.6">DAG orchestration · parallel · batch</text>
+  </g>
+
+  <!-- ===== FORWARD ARROWS ===== -->
+  <!-- Define → Validate -->
+  <line x1="250" y1="135" x2="297" y2="135" stroke="#93c5fd" stroke-width="1.5" stroke-dasharray="6,4" stroke-opacity="0.5" marker-end="url(#arr-blue)"/>
+  <!-- Validate → Execute -->
+  <line x1="502" y1="135" x2="549" y2="135" stroke="#c4b5fd" stroke-width="1.5" stroke-dasharray="6,4" stroke-opacity="0.5" marker-end="url(#arr-purple)"/>
+
+  <!-- ===== LOOPBACK ARROW (Execute → Define, curves below) ===== -->
+  <path d="M 652,178 Q 652,230 400,240 Q 148,250 148,178"
+        fill="none" stroke="#86efac" stroke-width="1.5" stroke-dasharray="6,4" stroke-opacity="0.35"
+        marker-end="url(#arr-green)"/>
+
+  <!-- Loopback label -->
+  <text x="400" y="265" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="400" font-size="10" fill="#86efac" fill-opacity="0.45" letter-spacing="0.5">iterate</text>
+
+  <!-- ===== SCALE BADGES ===== -->
+  <text x="400" y="305" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="500" font-size="11" fill="#71717a" letter-spacing="2.5">WORKS AT ANY SCALE</text>
+
+  <g transform="translate(140, 318)">
+    <rect x="0" y="0" width="120" height="30" rx="15" fill="#86efac" fill-opacity="0.06" stroke="#86efac" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="60" y="20" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#86efac" fill-opacity="0.8">Online</text>
+  </g>
+  <g transform="translate(280, 318)">
+    <rect x="0" y="0" width="120" height="30" rx="15" fill="#93c5fd" fill-opacity="0.06" stroke="#93c5fd" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="60" y="20" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#93c5fd" fill-opacity="0.8">Batch</text>
+  </g>
+  <g transform="translate(420, 318)">
+    <rect x="0" y="0" width="140" height="30" rx="15" fill="#fbbf24" fill-opacity="0.06" stroke="#fbbf24" stroke-width="1" stroke-opacity="0.15"/>
+    <text x="70" y="20" text-anchor="middle" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="600" font-size="12" fill="#fbbf24" fill-opacity="0.8">Multi-vendor</text>
+  </g>
+</svg>

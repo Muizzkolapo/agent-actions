@@ -1,0 +1,35 @@
+{
+    "extract_incident_details": {
+        "status": "completed"
+    },
+    "classify_severity_3": {
+        "status": "completed"
+    },
+    "classify_severity_2": {
+        "status": "completed"
+    },
+    "classify_severity_1": {
+        "status": "completed"
+    },
+    "aggregate_severity": {
+        "status": "completed"
+    },
+    "assess_system_impact": {
+        "status": "completed"
+    },
+    "assess_customer_impact": {
+        "status": "completed"
+    },
+    "assign_response_team": {
+        "status": "completed"
+    },
+    "generate_response_plan": {
+        "status": "completed"
+    },
+    "generate_executive_summary": {
+        "status": "completed"
+    },
+    "format_triage_output": {
+        "status": "completed"
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "extract_claims": {
+        "status": "failed"
+    },
+    "score_quality_3": {
+        "status": "pending"
+    },
+    "score_quality_2": {
+        "status": "pending"
+    },
+    "score_quality_1": {
+        "status": "pending"
+    },
+    "aggregate_scores": {
+        "status": "pending"
+    },
+    "extract_product_insights": {
+        "status": "pending"
+    },
+    "generate_response": {
+        "status": "pending"
+    },
+    "format_output": {
+        "status": "pending"
+    }
+}

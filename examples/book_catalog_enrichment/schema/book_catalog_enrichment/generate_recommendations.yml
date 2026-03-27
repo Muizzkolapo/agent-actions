@@ -1,0 +1,32 @@
+name: generate_recommendations
+description: Schema for similar book recommendations
+fields:
+  - id: similar_books
+    type: array
+    description: "List of similar book recommendations"
+    items:
+      type: object
+      properties:
+        isbn:
+          type: string
+          description: "ISBN from the candidate list"
+        title:
+          type: string
+          description: "Exact title from the candidate list"
+        authors:
+          type: array
+          items:
+            type: string
+          description: "Authors from candidate list"
+        relationship:
+          type: string
+          description: "Why this book complements the current book"
+      required:
+        - isbn
+        - title
+        - authors
+        - relationship
+  - id: reading_path
+    type: string
+    description: "Suggested reading path/progression"
+additionalProperties: false

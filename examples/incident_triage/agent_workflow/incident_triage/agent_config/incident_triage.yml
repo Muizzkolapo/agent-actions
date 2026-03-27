@@ -1,0 +1,166 @@
+################################################################################
+# Incident Triage Workflow
+################################################################################
+# Description: Automated incident triage system that classifies severity,
+#              assesses impact, assigns teams, and generates initial response plan
+#
+# Showcases:
+#   - Parallel evaluation with multiple classifiers (loop pattern)
+#   - Aggregation and consensus patterns
+#   - Dynamic content injection (team assignment)
+#   - Conditional escalation based on severity
+#   - Guard-based filtering
+################################################################################
+
+name: incident_triage
+description: "Automated incident triage and team assignment workflow"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  context_scope:
+    seed_path:
+      team_roster: $file:team_roster.json
+      service_catalog: $file:service_catalog.json
+      runbook_catalog: $file:runbook_catalog.json
+
+
+actions:
+  # ==========================================================================
+  # STAGE 1: EXTRACT KEY INFORMATION FROM INCIDENT REPORT
+  # ==========================================================================
+  - name: extract_incident_details
+    intent: "Extract structured information from raw incident report"
+    schema: extract_incident_details
+    prompt: $incident_triage.Extract_Incident_Details
+    context_scope:
+      observe:
+        - source.incident_report
+        - source.monitoring_data
+        - source.timestamp
+
+  # ==========================================================================
+  # STAGE 2: PARALLEL SEVERITY CLASSIFICATION (3 independent classifiers)
+  # ==========================================================================
+  - name: classify_severity
+    dependencies: [extract_incident_details]
+    intent: "Classify incident severity using multiple independent evaluators"
+    versions:
+      range: [1, 3]
+      mode: parallel
+    schema: classify_severity
+    prompt: $incident_triage.Classify_Severity
+    context_scope:
+      observe:
+        - extract_incident_details.*
+        - source.incident_report
+
+  # ==========================================================================
+  # STAGE 3: AGGREGATE SEVERITY CLASSIFICATIONS
+  # ==========================================================================
+  - name: aggregate_severity
+    dependencies: [classify_severity]
+    kind: tool
+    impl: aggregate_severity_votes
+    intent: "Aggregate severity classifications using weighted consensus"
+    version_consumption:
+      source: classify_severity
+      pattern: merge
+    context_scope:
+      observe:
+        - classify_severity.*
+      passthrough:
+        - extract_incident_details.*
+
+  # ==========================================================================
+  # STAGE 4: PARALLEL IMPACT ASSESSMENT
+  # ==========================================================================
+  - name: assess_customer_impact
+    dependencies: [aggregate_severity]
+    intent: "Assess impact on customers and revenue"
+    schema: assess_customer_impact
+    prompt: $incident_triage.Assess_Customer_Impact
+    context_scope:
+      observe:
+        - extract_incident_details.*
+        - aggregate_severity.*
+
+  - name: assess_system_impact
+    dependencies: [aggregate_severity]
+    intent: "Assess technical system impact and blast radius"
+    schema: assess_system_impact
+    prompt: $incident_triage.Assess_System_Impact
+    context_scope:
+      observe:
+        - extract_incident_details.*
+        - aggregate_severity.*
+
+  # ==========================================================================
+  # STAGE 5: INJECT DYNAMIC TEAM ASSIGNMENT (with seed data enrichment)
+  # ==========================================================================
+  - name: assign_response_team
+    dependencies: [assess_customer_impact, assess_system_impact]
+    kind: tool
+    impl: assign_team_based_on_impact
+    intent: "Dynamically assign response team based on affected systems and severity"
+    context_scope:
+      observe:
+        - aggregate_severity.final_severity
+        - assess_system_impact.affected_services
+      passthrough:
+        - aggregate_severity.*
+        - assess_customer_impact.*
+        - assess_system_impact.*
+
+  # ==========================================================================
+  # STAGE 6: GENERATE INITIAL RESPONSE PLAN (enriched with runbooks)
+  # ==========================================================================
+  - name: generate_response_plan
+    dependencies: [assign_response_team]
+    intent: "Generate initial incident response plan with action items"
+    schema: generate_response_plan
+    prompt: $incident_triage.Generate_Response_Plan
+    context_scope:
+      observe:
+        - assign_response_team.*
+        - extract_incident_details.*
+
+  # ==========================================================================
+  # STAGE 7: EXECUTIVE NOTIFICATION (SEV1/SEV2 only)
+  # ==========================================================================
+  - name: generate_executive_summary
+    dependencies: [generate_response_plan]
+    intent: "Generate executive summary for high-severity incidents"
+    guard:
+      condition: 'final_severity == "SEV1" or final_severity == "SEV2"'
+      on_false: "filter"
+    schema: generate_executive_summary
+    prompt: $incident_triage.Generate_Executive_Summary
+    context_scope:
+      observe:
+        - aggregate_severity.*
+        - assess_customer_impact.*
+        - generate_response_plan.*
+
+  # ==========================================================================
+  # STAGE 8: FORMAT FINAL TRIAGE OUTPUT
+  # ==========================================================================
+  - name: format_triage_output
+    dependencies: [generate_response_plan]
+    kind: tool
+    impl: format_incident_triage
+    intent: "Format complete triage output with all assessments"
+    context_scope:
+      observe:
+        - extract_incident_details.*
+        - aggregate_severity.*
+        - assess_customer_impact.*
+        - assess_system_impact.*
+        - assign_response_team.*
+        - generate_response_plan.*
+        - generate_executive_summary.*

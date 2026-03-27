@@ -1,0 +1,253 @@
+# Configuration Hierarchy Example
+# Demonstrates how project → workflow → action overrides work
+# Shows the complete 3-level configuration hierarchy in action
+
+# ============================================================================
+# WORKFLOW-LEVEL CONFIGURATION
+# ============================================================================
+# These settings override project defaults from agent_actions.yml
+# and apply to all actions in this workflow (unless action overrides)
+
+# Override project's model vendor for this workflow
+model_vendor: openai
+model_name: gpt-4o-mini
+api_key: ${OPENAI_API_KEY}
+
+# Set default temperature for all actions
+temperature: 0.8
+
+# Set default max tokens
+max_tokens: 2000
+
+# ============================================================================
+# ACTIONS WITH DIFFERENT OVERRIDE LEVELS
+# ============================================================================
+actions:
+  # ACTION 1: Uses all workflow-level settings (no overrides)
+  - name: action_with_workflow_defaults
+
+    reads:
+      - input_text
+
+    writes:
+      - creative_output
+
+    prompt: |
+      Generate a creative response to: {{ input_text }}
+
+    schema:
+      creative_output: string
+
+    # This action inherits:
+    # - model_vendor: openai (from workflow)
+    # - model_name: gpt-4o-mini (from workflow)
+    # - api_key: ${OPENAI_API_KEY} (from workflow)
+    # - temperature: 0.8 (from workflow)
+    # - max_tokens: 2000 (from workflow)
+
+  # ACTION 2: Overrides temperature only
+  - name: action_with_low_temperature
+
+    reads:
+      - input_text
+
+    writes:
+      - structured_output
+
+    prompt: |
+      Extract structured data from: {{ input_text }}
+
+    schema:
+      structured_output: string
+
+    # Override just temperature for more deterministic output
+    temperature: 0.2
+
+    # This action uses:
+    # - model_vendor: openai (from workflow)
+    # - model_name: gpt-4o-mini (from workflow)
+    # - api_key: ${OPENAI_API_KEY} (from workflow)
+    # - temperature: 0.2 (OVERRIDDEN)
+    # - max_tokens: 2000 (from workflow)
+
+  # ACTION 3: Switches to different vendor
+  - name: action_with_different_vendor
+
+    reads:
+      - input_text
+
+    writes:
+      - anthropic_output
+
+    prompt: |
+      Analyze this text: {{ input_text }}
+
+    schema:
+      anthropic_output: string
+
+    # Override vendor, model, and API key
+    model_vendor: anthropic
+    model_name: claude-sonnet-4-20250514
+    api_key: ${ANTHROPIC_API_KEY}
+
+    # This action uses:
+    # - model_vendor: anthropic (OVERRIDDEN)
+    # - model_name: claude-sonnet-4-20250514 (OVERRIDDEN)
+    # - api_key: ${ANTHROPIC_API_KEY} (OVERRIDDEN)
+    # - temperature: 0.8 (from workflow)
+    # - max_tokens: 2000 (from workflow)
+
+  # ACTION 4: Complete custom configuration
+  - name: action_fully_customized
+
+    reads:
+      - input_text
+
+    writes:
+      - custom_output
+
+    prompt: |
+      Process this with specific settings: {{ input_text }}
+
+    schema:
+      custom_output: string
+
+    # Override everything
+    model_vendor: gemini
+    model_name: gemini-2.0-flash
+    api_key: ${GEMINI_API_KEY}
+    temperature: 0.5
+    max_tokens: 4000
+    top_p: 0.9
+
+    # This action uses:
+    # - model_vendor: gemini (OVERRIDDEN)
+    # - model_name: gemini-2.0-flash (OVERRIDDEN)
+    # - api_key: ${GEMINI_API_KEY} (OVERRIDDEN)
+    # - temperature: 0.5 (OVERRIDDEN)
+    # - max_tokens: 4000 (OVERRIDDEN)
+    # - top_p: 0.9 (OVERRIDDEN - new field)
+
+  # ACTION 5: Partial vendor override (model only)
+  - name: action_with_better_model
+
+    reads:
+      - input_text
+
+    writes:
+      - premium_output
+
+    prompt: |
+      Use advanced reasoning for: {{ input_text }}
+
+    schema:
+      premium_output: string
+
+    # Keep same vendor but use better model
+    model_name: gpt-4o
+    temperature: 0.6
+
+    # This action uses:
+    # - model_vendor: openai (from workflow)
+    # - model_name: gpt-4o (OVERRIDDEN - upgraded model)
+    # - api_key: ${OPENAI_API_KEY} (from workflow)
+    # - temperature: 0.6 (OVERRIDDEN)
+    # - max_tokens: 2000 (from workflow)
+
+# ============================================================================
+# CONFIGURATION RESOLUTION EXAMPLES
+# ============================================================================
+# Assume agent_actions.yml contains:
+#   model_vendor: anthropic
+#   model_name: claude-sonnet-4-20250514
+#   api_key: ${ANTHROPIC_API_KEY}
+#   temperature: 0.7
+#
+# And this workflow file has:
+#   model_vendor: openai
+#   model_name: gpt-4o-mini
+#   api_key: ${OPENAI_API_KEY}
+#   temperature: 0.8
+#   max_tokens: 2000
+#
+# Then the resolution for each action is:
+#
+# action_with_workflow_defaults:
+#   ✓ model_vendor: openai (workflow overrides project)
+#   ✓ model_name: gpt-4o-mini (workflow overrides project)
+#   ✓ api_key: ${OPENAI_API_KEY} (workflow overrides project)
+#   ✓ temperature: 0.8 (workflow overrides project's 0.7)
+#   ✓ max_tokens: 2000 (workflow adds new field)
+#
+# action_with_low_temperature:
+#   ✓ model_vendor: openai (from workflow)
+#   ✓ model_name: gpt-4o-mini (from workflow)
+#   ✓ api_key: ${OPENAI_API_KEY} (from workflow)
+#   ✓ temperature: 0.2 (action overrides workflow's 0.8)
+#   ✓ max_tokens: 2000 (from workflow)
+#
+# action_with_different_vendor:
+#   ✓ model_vendor: anthropic (action overrides workflow)
+#   ✓ model_name: claude-sonnet-4-20250514 (action overrides workflow)
+#   ✓ api_key: ${ANTHROPIC_API_KEY} (action overrides workflow)
+#   ✓ temperature: 0.8 (from workflow)
+#   ✓ max_tokens: 2000 (from workflow)
+
+# ============================================================================
+# HIERARCHY RULES
+# ============================================================================
+# 1. PRECEDENCE: Action > Workflow > Project
+#    Lower levels override higher levels
+#
+# 2. PARTIAL OVERRIDES: Can override just one field
+#    Other fields continue to inherit from above
+#
+# 3. NEW FIELDS: Can add fields at any level
+#    New fields are inherited by lower levels
+#
+# 4. REQUIRED FIELDS: Must be present at some level
+#    model_vendor, model_name, api_key must be defined
+#    (Can be at project, workflow, or action level)
+#
+# 5. VALIDATION: Happens after full resolution
+#    The system validates the final merged config
+
+# ============================================================================
+# USE CASES FOR HIERARCHY
+# ============================================================================
+# 1. COST OPTIMIZATION:
+#    - Project default: Cheap model (gpt-4o-mini)
+#    - Override for complex actions: Expensive model (gpt-4o)
+#
+# 2. VENDOR COMPARISON:
+#    - Project default: OpenAI
+#    - Override specific actions to test Anthropic, Gemini, etc.
+#
+# 3. TEMPERATURE TUNING:
+#    - Workflow default: Creative (0.8)
+#    - Override for structured extraction: Deterministic (0.2)
+#
+# 4. ENVIRONMENT-SPECIFIC:
+#    - Project: Development API keys
+#    - Workflow: Production API keys for critical workflows
+#
+# 5. BATCH PROCESSING:
+#    - Project: Standard settings
+#    - Workflow: Enable batch_mode for specific high-volume workflows
+
+# ============================================================================
+# USAGE EXAMPLE
+# ============================================================================
+# Save this file as: workflows/hierarchy-demo.yml
+#
+# Create agent_actions.yml with:
+#   model_vendor: anthropic
+#   model_name: claude-sonnet-4-20250514
+#   api_key: ${ANTHROPIC_API_KEY}
+#   temperature: 0.7
+#
+# Then run:
+#   agac run hierarchy-demo --input data.jsonl
+#
+# Observe how different actions use different configurations
+# despite starting from the same project defaults

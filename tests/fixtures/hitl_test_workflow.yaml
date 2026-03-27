@@ -1,0 +1,52 @@
+name: hitl_test
+description: Test workflow with HITL action
+version: "1.0"
+
+defaults:
+  model_vendor: anthropic
+  model_name: claude-sonnet-4
+
+actions:
+  - name: extract_data
+    intent: "Extract test data from source"
+    schema: test/extraction
+    prompt: |
+      Extract the following information:
+      - title: The document title
+      - summary: A brief summary
+
+  - name: review_extraction
+    kind: hitl
+    dependencies: [extract_data]
+    intent: "Human reviews extracted data before downstream processing"
+    hitl:
+      port: 3001
+      instructions: |
+        Please review the extracted data for quality and accuracy.
+
+        Check:
+        - Is the title correct?
+        - Is the summary accurate and concise?
+
+        Approve if the data looks good, or reject with feedback if corrections are needed.
+      timeout: 300
+    observe:
+      - extract_data.title
+      - extract_data.summary
+      - source.original_text
+
+  - name: final_processing
+    dependencies: [review_extraction]
+    guard:
+      condition: "hitl_status == 'approved'"
+      on_false: skip
+    intent: "Process approved data (only runs if approved)"
+    schema: test/final
+    prompt: |
+      Create a final output using the reviewed data:
+      Title: {{ extract_data.title }}
+      Summary: {{ extract_data.summary }}
+
+      Generate:
+      - formatted_title: Title in uppercase
+      - word_count: Number of words in summary

@@ -1,0 +1,121 @@
+name: format_catalog_entry
+description: Schema for formatted catalog entry output
+fields:
+  - id: isbn
+    type: string
+    description: "ISBN"
+  - id: catalog_id
+    type: string
+    description: "Catalog identifier"
+  - id: title
+    type: string
+    description: "Book title"
+  - id: authors
+    type: array
+    items:
+      type: string
+    description: "Authors"
+  - id: publisher
+    type: string
+    description: "Publisher"
+  - id: publish_year
+    type: integer
+    description: "Publish year"
+  - id: page_count
+    type: integer
+    description: "Page count"
+  - id: primary_category
+    type: string
+    description: "Primary category name"
+  - id: categories
+    type: array
+    items:
+      type: string
+    description: "All category names"
+  - id: bisac_codes
+    type: array
+    items:
+      type: string
+    description: "BISAC codes"
+  - id: short_description
+    type: string
+    description: "Short marketing description"
+  - id: full_description
+    type: string
+    description: "Full marketing description"
+  - id: key_selling_points
+    type: array
+    items:
+      type: string
+    description: "Key selling points"
+  - id: target_audience
+    type: string
+    description: "Target audience"
+  - id: seo_keywords
+    type: array
+    items:
+      type: string
+    description: "SEO keywords"
+  - id: meta_title
+    type: string
+    description: "Meta title"
+  - id: meta_description
+    type: string
+    description: "Meta description"
+  - id: similar_titles
+    type: array
+    description: "Similar titles"
+    items:
+      type: object
+      properties:
+        isbn:
+          type: string
+          description: "ISBN of the similar book"
+        title:
+          type: string
+          description: "Title of the similar book"
+        authors:
+          type: array
+          items:
+            type: string
+          description: "Authors of the similar book"
+        relationship:
+          type: string
+          description: "Why this book complements the current book"
+      required:
+        - isbn
+        - title
+        - authors
+        - relationship
+  - id: reading_path
+    type: string
+    description: "Suggested reading path"
+  - id: difficulty_level
+    type: string
+    description: "Difficulty level"
+  - id: experience_required
+    type: string
+    description: "Experience required"
+  - id: prerequisites
+    type: array
+    items:
+      type: string
+    description: "Prerequisites"
+  - id: reading_time_hours
+    type: string
+    description: "Estimated reading time"
+  - id: quality_score
+    type: number
+    description: "Quality score"
+  - id: publication_ready
+    type: boolean
+    description: "Publication readiness"
+  - id: enrichment_version
+    type: string
+    description: "Enrichment version"
+  - id: enriched_fields
+    type: array
+    items:
+      type: string
+    description: "List of enriched fields"
+additionalProperties: false

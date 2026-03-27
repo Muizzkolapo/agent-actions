@@ -1,0 +1,74 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write  # Required for OIDC trusted publishing
+
+jobs:
+  publish:
+    name: Build & Publish
+    runs-on: ubuntu-24.04
+    environment: pypi
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Validate version consistency
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Strip leading 'v' if present
+          TAG_VERSION="${TAG#v}"
+
+          PYPROJECT_VERSION=$(python3 -c "
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          ")
+
+          MODULE_VERSION=$(python3 -c "
+          import re
+          with open('agent_actions/__version__.py') as f:
+              print(re.search(r'__version__ = \"(.+)\"', f.read()).group(1))
+          ")
+
+          echo "Git tag version:    $TAG_VERSION"
+          echo "pyproject.toml:     $PYPROJECT_VERSION"
+          echo "__version__.py:     $MODULE_VERSION"
+
+          if [ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match pyproject.toml ($PYPROJECT_VERSION)"
+            exit 1
+          fi
+
+          if [ "$TAG_VERSION" != "$MODULE_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match __version__.py ($MODULE_VERSION)"
+            exit 1
+          fi
+
+          echo "All versions match: $TAG_VERSION"
+
+      - name: Build package
+        run: uv build
+
+      - name: Verify build artifacts
+        run: |
+          ls -la dist/
+          # Ensure py.typed marker is included
+          unzip -l dist/agent_actions-*.whl | grep py.typed
+          uv pip install --force-reinstall dist/*.whl
+          uv run agac --help > /dev/null
+          uv run agac-lsp --help > /dev/null
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No API token needed — uses OIDC trusted publishing
+        # Configure at: https://pypi.org/manage/project/agent-actions/settings/publishing/

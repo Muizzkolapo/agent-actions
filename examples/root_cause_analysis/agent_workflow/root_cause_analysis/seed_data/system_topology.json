@@ -1,0 +1,100 @@
+{
+  "services": {
+    "api-gateway": {
+      "type": "gateway",
+      "dependencies": ["auth-service", "order-service", "inventory-service"],
+      "health_metrics": ["request_rate", "error_rate", "latency_p99"],
+      "failure_modes": ["connection_pool_exhausted", "timeout", "circuit_breaker_open"]
+    },
+    "auth-service": {
+      "type": "service",
+      "dependencies": ["user-db", "redis-cache"],
+      "health_metrics": ["auth_success_rate", "token_validation_time", "cache_hit_rate"],
+      "failure_modes": ["db_connection_timeout", "cache_miss_storm", "token_expiry_issue"]
+    },
+    "order-service": {
+      "type": "service",
+      "dependencies": ["order-db", "payment-service", "inventory-service", "notification-service"],
+      "health_metrics": ["order_creation_rate", "order_completion_time", "failed_orders"],
+      "failure_modes": ["db_lock_contention", "payment_timeout", "inventory_sync_failure"]
+    },
+    "payment-service": {
+      "type": "service",
+      "dependencies": ["payment-db", "stripe-api", "fraud-detection"],
+      "health_metrics": ["payment_success_rate", "payment_processing_time", "refund_rate"],
+      "failure_modes": ["stripe_webhook_timeout", "fraud_check_failure", "db_write_failure"]
+    },
+    "inventory-service": {
+      "type": "service",
+      "dependencies": ["inventory-db", "warehouse-api"],
+      "health_metrics": ["inventory_sync_lag", "stock_accuracy", "reservation_success_rate"],
+      "failure_modes": ["sync_lag_exceeded", "stale_data", "warehouse_api_down"]
+    },
+    "notification-service": {
+      "type": "service",
+      "dependencies": ["notification-queue", "email-provider", "sms-provider"],
+      "health_metrics": ["notification_sent_rate", "delivery_rate", "queue_depth"],
+      "failure_modes": ["queue_overflow", "provider_rate_limit", "template_error"]
+    },
+    "user-db": {
+      "type": "database",
+      "dependencies": [],
+      "health_metrics": ["connection_count", "query_time_p99", "replication_lag"],
+      "failure_modes": ["connection_pool_exhausted", "slow_query", "replication_lag_high"]
+    },
+    "order-db": {
+      "type": "database",
+      "dependencies": [],
+      "health_metrics": ["connection_count", "transaction_rate", "lock_wait_time"],
+      "failure_modes": ["deadlock", "connection_exhausted", "disk_space_low"]
+    },
+    "redis-cache": {
+      "type": "cache",
+      "dependencies": [],
+      "health_metrics": ["hit_rate", "memory_usage", "eviction_rate"],
+      "failure_modes": ["memory_full", "connection_refused", "cache_invalidation_storm"]
+    }
+  },
+  "causal_relationships": {
+    "db_connection_timeout": {
+      "can_cause": ["service_error_spike", "request_timeout", "cascade_failure"],
+      "typical_propagation_time": "1-5 minutes",
+      "blast_radius": "dependent_services"
+    },
+    "cache_miss_storm": {
+      "can_cause": ["db_load_spike", "response_time_increase", "service_degradation"],
+      "typical_propagation_time": "30-60 seconds",
+      "blast_radius": "cache_dependent_services"
+    },
+    "slow_query": {
+      "can_cause": ["connection_pool_exhausted", "request_timeout", "service_unavailable"],
+      "typical_propagation_time": "2-10 minutes",
+      "blast_radius": "database_clients"
+    },
+    "payment_timeout": {
+      "can_cause": ["order_failure", "user_retry_storm", "inventory_lock"],
+      "typical_propagation_time": "immediate",
+      "blast_radius": "checkout_flow"
+    }
+  },
+  "metric_correlations": {
+    "high_correlation": [
+      ["api-gateway.error_rate", "auth-service.db_connection_timeout"],
+      ["order-service.failed_orders", "payment-service.payment_timeout"],
+      ["auth-service.cache_hit_rate", "user-db.query_time_p99"],
+      ["inventory-service.sync_lag", "order-service.order_completion_time"]
+    ],
+    "lagging_indicators": [
+      {
+        "leading": "redis-cache.memory_usage",
+        "lagging": "auth-service.cache_hit_rate",
+        "lag_time": "5 minutes"
+      },
+      {
+        "leading": "order-db.lock_wait_time",
+        "lagging": "order-service.order_completion_time",
+        "lag_time": "2 minutes"
+      }
+    ]
+  }
+}

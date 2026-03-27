@@ -1,0 +1,33 @@
+name: generate_executive_summary
+description: Schema for the human-readable executive risk summary
+fields:
+  - id: executive_summary
+    type: string
+    description: "3-5 sentence plain-language overview of the contract risk assessment"
+  - id: risk_verdict
+    type: string
+    description: "One-line verdict: 'Approve', 'Approve with Conditions', 'Requires Negotiation', or 'Reject'"
+  - id: top_concerns
+    type: array
+    items:
+      type: object
+    description: "Top 3-5 concerns ranked by severity, each with title, description, and impact"
+  - id: recommended_next_steps
+    type: array
+    items:
+      type: string
+    description: "Ordered list of recommended next steps for the legal/business team"
+  - id: approval_conditions
+    type: array
+    items:
+      type: string
+    description: "Conditions that must be met before the contract can be approved (empty if unconditional)"
+  - id: estimated_negotiation_effort
+    type: string
+    description: "Estimated effort to negotiate: 'minimal', 'moderate', 'significant', or 'extensive'"
+required:
+  - executive_summary
+  - risk_verdict
+  - top_concerns
+  - recommended_next_steps
+additionalProperties: false

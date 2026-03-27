@@ -1,0 +1,67 @@
+[
+  {
+    "_description": "Root document before chunking",
+    "source_guid": "doc-001",
+    "target_id": "root-doc-001",
+    "parent_target_id": null,
+    "root_target_id": "root-doc-001",
+    "node_id": "node_0_ingest",
+    "lineage": ["node_0_ingest"],
+    "content": {
+      "doc_title": "Large Document",
+      "total_pages": 100
+    }
+  },
+  {
+    "_description": "Chunk 1 - child of root-doc-001",
+    "source_guid": "doc-001",
+    "target_id": "chunk-001",
+    "parent_target_id": "root-doc-001",
+    "root_target_id": "root-doc-001",
+    "node_id": "node_1_chunk",
+    "lineage": ["node_0_ingest", "node_1_chunk"],
+    "content": {
+      "chunk_index": 0,
+      "text": "Chapter 1 content..."
+    }
+  },
+  {
+    "_description": "Chunk 2 - child of root-doc-001",
+    "source_guid": "doc-001",
+    "target_id": "chunk-002",
+    "parent_target_id": "root-doc-001",
+    "root_target_id": "root-doc-001",
+    "node_id": "node_1_chunk",
+    "lineage": ["node_0_ingest", "node_1_chunk"],
+    "content": {
+      "chunk_index": 1,
+      "text": "Chapter 2 content..."
+    }
+  },
+  {
+    "_description": "Processed chunk 1 - grandchild of root",
+    "source_guid": "doc-001",
+    "target_id": "processed-001",
+    "parent_target_id": "chunk-001",
+    "root_target_id": "root-doc-001",
+    "node_id": "node_2_process",
+    "lineage": ["node_0_ingest", "node_1_chunk", "node_2_process"],
+    "content": {
+      "summary": "Summary of chapter 1",
+      "word_count": 500
+    }
+  },
+  {
+    "_description": "Processed chunk 2 - grandchild of root",
+    "source_guid": "doc-001",
+    "target_id": "processed-002",
+    "parent_target_id": "chunk-002",
+    "root_target_id": "root-doc-001",
+    "node_id": "node_2_process",
+    "lineage": ["node_0_ingest", "node_1_chunk", "node_2_process"],
+    "content": {
+      "summary": "Summary of chapter 2",
+      "word_count": 600
+    }
+  }
+]

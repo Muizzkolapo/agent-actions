@@ -1,0 +1,83 @@
+[
+  {
+    "incident_report": "URGENT: Multiple users reporting 502 errors when accessing the checkout page. Error rate spiked from 0.1% to 45% in the last 15 minutes. Payment processing appears to be failing. Customer support receiving high volume of complaints. Initial investigation shows checkout-service pods are restarting frequently. Database connection pool errors visible in logs.",
+    "monitoring_data": {
+      "error_rate": {
+        "checkout_service": 45.2,
+        "payment_gateway": 23.1,
+        "api_gateway": 12.5
+      },
+      "latency_p99_ms": {
+        "checkout_service": 8500,
+        "payment_gateway": 12000,
+        "database": 450
+      },
+      "pod_restarts": {
+        "checkout-service-pod-1": 5,
+        "checkout-service-pod-2": 4,
+        "checkout-service-pod-3": 6
+      },
+      "connection_pool": {
+        "active_connections": 98,
+        "max_connections": 100,
+        "waiting_threads": 45
+      }
+    },
+    "timestamp": "2024-01-15T14:32:00Z"
+  },
+  {
+    "incident_report": "Authentication service intermittently failing. Users getting logged out randomly. SSO integration showing timeouts. Redis cluster appears healthy but auth tokens are being invalidated unexpectedly. Issue started after the 10am deployment of auth-service v2.3.1.",
+    "monitoring_data": {
+      "error_rate": {
+        "auth_service": 18.5,
+        "sso_gateway": 8.2,
+        "user_service": 3.1
+      },
+      "latency_p99_ms": {
+        "auth_service": 2500,
+        "redis_cluster": 15,
+        "sso_gateway": 4500
+      },
+      "session_metrics": {
+        "active_sessions": 45000,
+        "invalidated_sessions_last_hour": 12000,
+        "failed_token_validations": 8500
+      },
+      "deployment_info": {
+        "service": "auth-service",
+        "version": "2.3.1",
+        "deployed_at": "2024-01-15T10:00:00Z"
+      }
+    },
+    "timestamp": "2024-01-15T11:45:00Z"
+  },
+  {
+    "incident_report": "Search functionality completely down. Elasticsearch cluster showing red status. Primary shards unassigned on 2 of 5 nodes. Users seeing 'Search unavailable' errors. Product catalog search, order history search, and admin search all affected. Started around 3:15 PM after scheduled index rebuild job.",
+    "monitoring_data": {
+      "error_rate": {
+        "search_service": 100,
+        "product_catalog": 35.2,
+        "order_service": 15.8
+      },
+      "elasticsearch": {
+        "cluster_status": "red",
+        "unassigned_shards": 12,
+        "active_shards": 48,
+        "nodes_online": 3,
+        "nodes_expected": 5,
+        "heap_usage_percent": {
+          "node_1": 92,
+          "node_2": 88,
+          "node_3": 95
+        }
+      },
+      "disk_usage": {
+        "node_1": 94,
+        "node_2": 91,
+        "node_4_offline": null,
+        "node_5_offline": null
+      }
+    },
+    "timestamp": "2024-01-15T15:22:00Z"
+  }
+]

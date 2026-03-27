@@ -1,0 +1,22 @@
+name: basic_test_workflow
+description: Basic test workflow in new format
+version: 2.0.0
+
+actions:
+  - name: extract_data
+    intent: Extract structured data from content
+    kind: llm
+    prompt: "Extract data from the content"
+    schema:
+      extracted_data: string
+
+  - name: process_data
+    intent: Process extracted data
+    kind: llm
+    prompt: "Process the extracted data"
+    schema:
+      processed_data: string
+
+plan:
+  - extract_data
+  - process_data <- extract_data

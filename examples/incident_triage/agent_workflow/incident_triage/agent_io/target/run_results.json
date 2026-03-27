@@ -1,0 +1,19 @@
+{
+  "metadata": {
+    "invocation_id": "run_incident_triage_028",
+    "workflow_name": "incident_triage",
+    "agent_count": 11,
+    "execution_mode": "async",
+    "started_at": "2026-01-31T20:25:49.226685+00:00",
+    "completed_at": "2026-01-31T20:26:00.052211+00:00",
+    "elapsed_time": 10.825896,
+    "status": "success"
+  },
+  "results": [],
+  "elapsed_time": 10.825896,
+  "tokens": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0
+  }
+}

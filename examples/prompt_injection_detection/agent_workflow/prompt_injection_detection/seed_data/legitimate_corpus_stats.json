@@ -1,0 +1,69 @@
+{
+  "description": "Statistical baselines computed from a corpus of legitimate user prompts",
+  "corpus_size": 10000,
+  "character_entropy": {
+    "mean": 4.18,
+    "std": 0.42,
+    "min": 2.80,
+    "max": 5.10
+  },
+  "instruction_density": {
+    "mean": 0.08,
+    "std": 0.05,
+    "description": "Ratio of imperative verbs to total tokens"
+  },
+  "structural_metrics": {
+    "special_char_ratio": {
+      "mean": 0.04,
+      "std": 0.03,
+      "description": "Ratio of special characters to total characters"
+    },
+    "avg_line_length": {
+      "mean": 62.5,
+      "std": 28.0,
+      "description": "Average characters per line"
+    }
+  },
+  "question_density": {
+    "mean": 0.15,
+    "std": 0.12,
+    "description": "Ratio of question marks to sentence count"
+  },
+  "length_stats": {
+    "mean_chars": 285,
+    "std_chars": 180,
+    "mean_tokens": 52,
+    "std_tokens": 35
+  },
+  "bigram_stats": {
+    "vocabulary_size": 18500,
+    "mean_novelty_rate": 0.35,
+    "std_novelty_rate": 0.12,
+    "description": "Fraction of bigrams not seen in reference corpus"
+  },
+  "vocabulary_stats": {
+    "mean_unique_ratio": 0.72,
+    "std_unique_ratio": 0.10,
+    "description": "Ratio of unique tokens to total tokens"
+  },
+  "repetition_stats": {
+    "mean_score": 0.05,
+    "std_score": 0.04,
+    "description": "Fraction of repeated n-grams (n=3)"
+  },
+  "imperative_verbs": [
+    "ignore", "forget", "disregard", "override", "pretend", "act",
+    "switch", "change", "reveal", "show", "display", "output",
+    "print", "tell", "repeat", "copy", "paste", "echo", "dump",
+    "list", "enumerate", "execute", "run", "eval", "decode",
+    "do", "make", "create", "write", "generate", "produce",
+    "explain", "describe", "summarize", "analyze", "help",
+    "find", "search", "look", "check", "verify", "translate"
+  ],
+  "benign_imperative_verbs": [
+    "explain", "describe", "summarize", "analyze", "help",
+    "find", "search", "look", "check", "verify", "translate",
+    "write", "generate", "create", "make", "produce",
+    "compare", "suggest", "recommend", "calculate", "convert"
+  ]
+}

@@ -1,0 +1,30 @@
+name: test_anthropic
+description: "Test workflow for Anthropic provider"
+version: "1.0.0"
+
+defaults:
+  model_vendor: anthropic
+  model_name: claude-sonnet-4-5-20250929
+  api_key: ANTHROPIC_API_KEY
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  temperature: 0.7
+  max_tokens: 1024
+  top_p: 0.9
+  stop: "\n\n"          # mapped to stop_sequences automatically
+
+actions:
+  - name: summarize
+    intent: "Summarize input content"
+    prompt: "Summarize the following content in 2-3 sentences."
+    json_mode: true
+    schema:
+      summary: string
+
+  - name: classify
+    intent: "Classify the content"
+    prompt: "Classify the content into one of: news, research, opinion, other."
+    json_mode: false
+    temperature: 0.3
+    stop: null

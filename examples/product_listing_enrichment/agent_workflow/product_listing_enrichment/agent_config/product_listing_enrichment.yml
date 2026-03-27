@@ -1,0 +1,190 @@
+################################################################################
+# Product Listing Enrichment Pipeline
+################################################################################
+# A Tool + LLM Hybrid showcase: alternating between LLM reasoning and
+# deterministic tool operations. LLM does language (describe, write, optimize).
+# Tools do data (pricing, validation, formatting). Neither does the other's job.
+#
+# Patterns demonstrated:
+#   - Alternating LLM ↔ Tool actions (hybrid pipeline)
+#   - Seed data injection (brand voice, marketplace rules)
+#   - Progressive context disclosure (observe / drop / passthrough)
+#   - Guard-based conditional execution (skip SEO if compliance fails)
+#   - Schema enforcement on every action output
+#
+# Workflow:
+#   1. generate_description   (LLM)  — Describe product from raw specs
+#   2. fetch_competitor_prices (Tool) — Look up competitor pricing data
+#   3. write_marketing_copy    (LLM)  — Write compelling copy with positioning
+#   4. validate_compliance     (Tool) — Check copy against marketplace limits
+#   5. optimize_seo            (LLM)  — Optimize for search (guarded)
+#   6. format_listing          (Tool) — Package final marketplace listing
+################################################################################
+name: product_listing_enrichment
+description: "Enrich raw product specs into marketplace-ready listings with competitive positioning, compliance validation, and SEO optimization"
+version: "1.0.0"
+
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  api_key: OPENAI_API_KEY
+  is_operational: true
+  prompt_debug: false
+  context_scope:
+    seed_path:
+      brand_voice: $file:brand_voice.json
+      marketplace_rules: $file:marketplace_rules.json
+  retry:
+    enabled: true
+    max_attempts: 2
+
+  data_source:
+    type: local
+    folder: ./staging
+    file_type: [json]
+
+actions:
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 1: GENERATE PRODUCT DESCRIPTION (LLM)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Transforms raw technical specs into a human-readable product description.
+  # The LLM interprets dimensions, materials, and features to craft language
+  # that a tool could never produce. Seed data brand_voice shapes the tone.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: generate_description
+    intent: "Generate a structured product description from raw technical specs and image context"
+    schema: product_listing_enrichment/generate_description
+    prompt: $product_listing_enrichment.Generate_Product_Description
+    context_scope:
+      observe:
+        - source.raw_specs
+        - source.product_images_description
+        - source.product_name
+        - source.brand
+        - seed_data.brand_voice
+      passthrough:
+        - source.product_id
+        - source.product_category
+        - source.current_price
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 2: FETCH COMPETITOR PRICES (Tool)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Deterministic tool — no LLM needed for data lookup. Returns simulated
+  # competitor pricing based on category and current price. In production
+  # this would call a pricing API or database.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: fetch_competitor_prices
+    dependencies: [generate_description]
+    kind: tool
+    impl: fetch_competitor_prices
+    intent: "Look up competitor pricing data for competitive positioning"
+    schema: product_listing_enrichment/fetch_competitor_prices
+    granularity: Record
+    context_scope:
+      observe:
+        - generate_description.search_keywords
+        - source.product_category
+        - source.current_price
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 3: WRITE MARKETING COPY (LLM)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Now the LLM has both the product description AND competitor context.
+  # It writes copy that positions the product against the competition —
+  # something a tool cannot do. Note: source.raw_specs is dropped because
+  # generate_description already distilled that into readable language.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: write_marketing_copy
+    dependencies: [fetch_competitor_prices]
+    intent: "Write compelling marketplace copy with competitive positioning"
+    schema: product_listing_enrichment/write_marketing_copy
+    prompt: $product_listing_enrichment.Write_Marketing_Copy
+    context_scope:
+      observe:
+        - generate_description.*
+        - fetch_competitor_prices.competitor_prices
+        - fetch_competitor_prices.price_position
+        - seed_data.brand_voice
+        - seed_data.marketplace_rules
+      drop:
+        - source.raw_specs
+      passthrough:
+        - source.product_id
+        - source.product_category
+        - source.current_price
+        - source.brand
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 4: VALIDATE MARKETPLACE COMPLIANCE (Tool)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Deterministic character-count and field-presence checks. A tool does
+  # this perfectly — no LLM ambiguity on "is it 200 chars or 201?"
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: validate_compliance
+    dependencies: [write_marketing_copy]
+    kind: tool
+    impl: validate_marketplace_compliance
+    intent: "Check marketing copy against marketplace character limits and required fields"
+    schema: product_listing_enrichment/validate_compliance
+    granularity: Record
+    context_scope:
+      observe:
+        - write_marketing_copy.*
+        - seed_data.marketplace_rules
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 5: OPTIMIZE SEO (LLM, guarded)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Only fires if compliance passed — no point optimizing copy that will
+  # be rejected. The LLM refines keywords and metadata for search ranking,
+  # a task that requires understanding user search intent.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: optimize_seo
+    dependencies: [validate_compliance]
+    intent: "Optimize listing for marketplace search ranking and discoverability"
+    schema: product_listing_enrichment/optimize_seo
+    prompt: $product_listing_enrichment.Optimize_SEO
+    guard:
+      condition: 'compliance_passed == true'
+      on_false: "filter"
+    context_scope:
+      observe:
+        - write_marketing_copy.*
+        - validate_compliance.*
+        - source.product_category
+        - source.brand
+      passthrough:
+        - source.product_id
+        - source.current_price
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # STEP 6: FORMAT MARKETPLACE LISTING (Tool)
+  # ══════════════════════════════════════════════════════════════════════════
+  # Final deterministic packaging. Assembles all upstream outputs into the
+  # marketplace-ready JSON structure. No creativity needed — just structure.
+  # ══════════════════════════════════════════════════════════════════════════
+  - name: format_listing
+    dependencies: [optimize_seo]
+    kind: tool
+    impl: format_marketplace_listing
+    intent: "Package all enriched data into final marketplace-ready listing format"
+    schema: product_listing_enrichment/format_listing
+    granularity: Record
+    context_scope:
+      observe:
+        - generate_description.*
+        - write_marketing_copy.*
+        - validate_compliance.*
+        - optimize_seo.*
+        - fetch_competitor_prices.*
+      passthrough:
+        - source.product_id
+        - source.product_name
+        - source.brand
+        - source.current_price
+        - source.product_category

@@ -1,0 +1,38 @@
+name: optimize_seo
+description: SEO-optimized listing metadata for marketplace search ranking
+fields:
+  - id: optimized_title
+    type: string
+    description: "SEO-optimized listing title with high-value keywords front-loaded"
+  - id: optimized_bullets
+    type: array
+    description: "Bullet points refined with search-relevant terms"
+    items:
+      type: string
+  - id: primary_keywords
+    type: array
+    description: "Top 5 high-volume search keywords for this product"
+    items:
+      type: string
+  - id: long_tail_keywords
+    type: array
+    description: "Long-tail keyword phrases for niche discoverability"
+    items:
+      type: string
+  - id: backend_keywords
+    type: array
+    description: "Hidden search terms not visible in listing but indexed"
+    items:
+      type: string
+  - id: seo_score_estimate
+    type: string
+    description: "Estimated search optimization level: low, medium, high"
+  - id: optimization_notes
+    type: string
+    description: "Summary of SEO changes made and rationale"
+required:
+  - optimized_title
+  - primary_keywords
+  - long_tail_keywords
+  - seo_score_estimate
+additionalProperties: false

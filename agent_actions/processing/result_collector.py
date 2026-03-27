@@ -1,0 +1,312 @@
+"""Shared result aggregation for processing output records."""
+
+import collections
+import logging
+from typing import TYPE_CHECKING, Any, Optional
+
+from agent_actions.errors import AgentActionsError
+from agent_actions.logging import fire_event
+from agent_actions.logging.events import (
+    ExhaustedRecordEvent,
+    ResultCollectedEvent,
+    ResultCollectionCompleteEvent,
+    ResultCollectionStartedEvent,
+)
+from agent_actions.processing.types import ProcessingResult, ProcessingStatus
+from agent_actions.storage.backend import (
+    DISPOSITION_EXHAUSTED,
+    DISPOSITION_FAILED,
+    DISPOSITION_FILTERED,
+    DISPOSITION_SKIPPED,
+    DISPOSITION_UNPROCESSED,
+)
+
+if TYPE_CHECKING:
+    from agent_actions.storage.backend import StorageBackend
+
+logger = logging.getLogger(__name__)
+
+
+def _get_retry_attempts(result: ProcessingResult) -> str | int:
+    """Extract retry attempt count from a result's recovery metadata.
+
+    Returns the integer attempt count if available, otherwise ``"unknown"``.
+    """
+    if result.recovery_metadata and result.recovery_metadata.retry:
+        return result.recovery_metadata.retry.attempts
+    return "unknown"
+
+
+def _safe_set_disposition(
+    backend: "StorageBackend",
+    action_name: str,
+    record_id: str,
+    disposition: str,
+    **kwargs: Any,
+) -> None:
+    """Write a disposition record, logging and swallowing errors.
+
+    Disposition writes are telemetry — they must not crash the data pipeline.
+    """
+    try:
+        backend.set_disposition(action_name, record_id, disposition, **kwargs)
+    except Exception:
+        logger.warning(
+            "Failed to write disposition action=%s record=%s disp=%s",
+            action_name,
+            record_id,
+            disposition,
+            exc_info=True,
+        )
+
+
+class ResultCollector:
+    """Collect output records from processing results."""
+
+    @staticmethod
+    def collect_results(
+        results: list[ProcessingResult],
+        agent_config: dict[str, Any],
+        agent_name: str,
+        *,
+        is_first_stage: bool,
+        storage_backend: Optional["StorageBackend"] = None,
+    ) -> list[dict[str, Any]]:
+        """Flatten ProcessingResult entries into output records.
+
+        Raises:
+            AgentActionsError: If on_exhausted=raise and records exhausted retries.
+        """
+        fire_event(
+            ResultCollectionStartedEvent(
+                action_name=agent_name,
+                total_results=len(results),
+            )
+        )
+
+        ResultCollector._check_exhausted_raise(results, agent_config, agent_name, storage_backend)
+
+        output: list[dict[str, Any]] = []
+        stats: collections.Counter[str] = collections.Counter()
+
+        for idx, result in enumerate(results):
+            status = result.status
+            status_key = status.value
+            stats[status_key] += 1
+
+            if status == ProcessingStatus.SUCCESS:
+                data = result.data or []
+                if data:
+                    output.extend(data)
+                logger.debug(
+                    "Collected SUCCESS result source_guid=%s count=%d",
+                    result.source_guid,
+                    len(data),
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="success",
+                    )
+                )
+
+            elif status == ProcessingStatus.SKIPPED:
+                data = result.data or []
+                if data:
+                    output.extend(data)
+                logger.debug(
+                    "Collected SKIPPED result source_guid=%s count=%d",
+                    result.source_guid,
+                    len(data),
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="skipped",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_SKIPPED,
+                        reason=result.skip_reason or "guard_skip",
+                    )
+
+            elif status == ProcessingStatus.EXHAUSTED:
+                data = result.data or []
+                if data:
+                    output.extend(data)
+                attempts = _get_retry_attempts(result)
+                logger.debug(
+                    "Collected EXHAUSTED result source_guid=%s attempts=%s",
+                    result.source_guid,
+                    attempts,
+                )
+                fire_event(
+                    ExhaustedRecordEvent(
+                        action_name=agent_name,
+                        record_index=idx,
+                        source_guid=result.source_guid or "",
+                        reason=f"exhausted_after_{attempts}_attempts",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_EXHAUSTED,
+                        reason=f"exhausted_after_{attempts}_attempts",
+                    )
+
+            elif status == ProcessingStatus.FAILED:
+                logger.error(
+                    "[%s] Processing failed for source_guid=%s: %s",
+                    agent_name,
+                    result.source_guid,
+                    result.error,
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="failed",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_FAILED,
+                        reason=result.error or "processing_error",
+                    )
+
+            elif status == ProcessingStatus.FILTERED:
+                logger.debug("Collected FILTERED result source_guid=%s", result.source_guid)
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="filtered",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_FILTERED,
+                        reason=result.skip_reason or "guard_filter",
+                    )
+
+            elif status == ProcessingStatus.UNPROCESSED:
+                data = result.data or []
+                if data:
+                    output.extend(data)  # Preserve in output for lineage
+                logger.debug(
+                    "Collected UNPROCESSED result source_guid=%s count=%d",
+                    result.source_guid,
+                    len(data),
+                )
+                fire_event(
+                    ResultCollectedEvent(
+                        action_name=agent_name,
+                        result_index=idx,
+                        status="unprocessed",
+                    )
+                )
+                if storage_backend and result.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        result.source_guid,
+                        DISPOSITION_UNPROCESSED,
+                        reason=result.skip_reason or "unprocessed",
+                    )
+
+            elif status == ProcessingStatus.DEFERRED:
+                logger.info(
+                    "Collected DEFERRED result source_guid=%s",
+                    result.source_guid,
+                )
+
+            else:
+                logger.debug("Unhandled result status=%s", status)  # type: ignore[unreachable]
+
+        fire_event(
+            ResultCollectionCompleteEvent(
+                action_name=agent_name,
+                total_success=stats["success"],
+                total_skipped=stats["skipped"],
+                total_filtered=stats["filtered"],
+                total_failed=stats["failed"],
+                total_exhausted=stats["exhausted"],
+                total_unprocessed=stats["unprocessed"],
+            )
+        )
+
+        tombstone_count = stats["skipped"] + stats["exhausted"] + stats["unprocessed"]
+        if tombstone_count > 0:
+            logger.info(
+                "[%s] %d/%d records are tombstones (skipped=%d, exhausted=%d, unprocessed=%d)",
+                agent_name,
+                tombstone_count,
+                len(results),
+                stats["skipped"],
+                stats["exhausted"],
+                stats["unprocessed"],
+            )
+
+        return output
+
+    @staticmethod
+    def _check_exhausted_raise(
+        results: list[ProcessingResult],
+        agent_config: dict[str, Any],
+        agent_name: str,
+        storage_backend: Optional["StorageBackend"],
+    ) -> None:
+        """Raise if on_exhausted=raise and any results exhausted retries."""
+        exhausted_results = [r for r in results if r.status == ProcessingStatus.EXHAUSTED]
+        if not exhausted_results:
+            return
+
+        retry_config = agent_config.get("retry", {})
+        on_exhausted = retry_config.get("on_exhausted", "return_last")
+
+        logger.warning(
+            "[%s] %d records have exhausted retries (on_exhausted=%s)",
+            agent_name,
+            len(exhausted_results),
+            on_exhausted,
+        )
+
+        if on_exhausted != "raise":
+            return
+
+        if storage_backend:
+            for er in exhausted_results:
+                if er.source_guid:
+                    _safe_set_disposition(
+                        storage_backend,
+                        agent_name,
+                        er.source_guid,
+                        DISPOSITION_EXHAUSTED,
+                        reason=f"exhausted_after_{_get_retry_attempts(er)}_attempts",
+                    )
+
+        first = exhausted_results[0]
+        raise AgentActionsError(
+            f"Retry exhausted for record {first.source_guid} after "
+            f"{_get_retry_attempts(first)} attempts (on_exhausted=raise)",
+            context={
+                "agent_name": agent_name,
+                "exhausted_records": len(exhausted_results),
+                "on_exhausted": "raise",
+            },
+        )

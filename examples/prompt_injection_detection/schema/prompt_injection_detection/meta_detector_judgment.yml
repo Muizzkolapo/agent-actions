@@ -1,0 +1,30 @@
+name: meta_detector_judgment
+description: Schema for LLM meta-detector judgment on prompt injection detection
+fields:
+  - id: is_injection
+    type: boolean
+    description: "Whether the prompt is classified as an injection attempt"
+  - id: confidence
+    type: number
+    description: "Confidence in the judgment (0.0-1.0)"
+  - id: risk_level
+    type: string
+    description: "Risk level: critical, high, medium, low, or safe"
+  - id: reasoning
+    type: string
+    description: "Detailed explanation of the judgment and evidence considered"
+  - id: override_statistical
+    type: boolean
+    description: "Whether the LLM judgment overrides the statistical consensus"
+  - id: anomaly_signals
+    type: array
+    items:
+      type: string
+    description: "Specific anomaly signals detected by the LLM that statistics may have missed"
+required:
+  - is_injection
+  - confidence
+  - risk_level
+  - reasoning
+  - override_statistical
+additionalProperties: false

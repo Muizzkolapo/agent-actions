@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="253" height="48" viewBox="0 0 253 48" fill="none">
+  <svg x="0" y="0" width="48" height="48" viewBox="0 0 100 100">
+    <rect x="8" y="20" width="13" height="54" rx="4" fill="#94a3b8" opacity="1" transform="rotate(-30 14 68)"/>
+    <rect x="28" y="22" width="13" height="56" rx="4" fill="#e2e8f0" opacity="0.45" transform="rotate(-15 34 76)"/>
+    <rect x="50" y="22" width="13" height="60" rx="4" fill="#e2e8f0" opacity="0.65" transform="rotate(-5 56 80)"/>
+    <rect x="72" y="18" width="15" height="68" rx="4" fill="#e2e8f0" opacity="1"/>
+  </svg>
+  <text x="52" y="30" font-family="Plus Jakarta Sans, -apple-system, Helvetica, Arial, sans-serif" font-weight="800" font-size="23" letter-spacing="-0.5">
+    <tspan fill="#e2e8f0">agent</tspan><tspan fill="#94a3b8">-actions</tspan>
+  </text>
+</svg>
