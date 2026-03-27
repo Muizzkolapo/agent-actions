@@ -1,4 +1,4 @@
-"""Tests for ``agac init --example`` functionality (GitHub-fetch approach)."""
+"""Tests for ``agac init`` subcommands and GitHub-fetch functionality."""
 
 import io
 import json
@@ -8,11 +8,13 @@ from unittest.mock import patch
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from agent_actions.cli.init import (
     _fetch_example,
     _list_remote_examples,
     _print_available_examples,
+    init,
 )
 
 # ---------------------------------------------------------------------------
@@ -192,17 +194,52 @@ class TestFetchExampleErrors:
 
 
 # ---------------------------------------------------------------------------
-# Mutual exclusivity: --example vs --template
+# CLI subcommand integration tests
 # ---------------------------------------------------------------------------
 
 
-class TestMutualExclusivity:
-    def test_example_and_template_raises(self) -> None:
-        from click.testing import CliRunner
-
-        from agent_actions.cli.init import init
-
+class TestInitSubcommands:
+    def test_init_list(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(init, ["my_proj", "--example", "contract_reviewer", "-t", "full"])
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(init, ["list"])
+        assert result.exit_code == 0
+        assert "contract_reviewer" in result.output
+        assert "book_catalog" in result.output
+
+    def test_init_example(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                init, ["example", "contract_reviewer", "my_proj", "-o", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "my_proj" / "agent_actions.yml").exists()
+
+    def test_init_example_defaults_name_to_example(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                init, ["example", "contract_reviewer", "-o", str(tmp_path)]
+            )
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "contract_reviewer" / "agent_actions.yml").exists()
+
+    def test_init_example_unknown(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        with patch("agent_actions.cli.init._github_request", side_effect=_mock_github_request):
+            result = runner.invoke(
+                init, ["example", "nonexistent", "-o", str(tmp_path)]
+            )
         assert result.exit_code != 0
-        assert "mutually exclusive" in result.output.lower()
+
+    def test_init_default_scaffolding(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        result = runner.invoke(init, ["my_proj", "-o", str(tmp_path)])
+        assert result.exit_code == 0, result.output
+        assert (tmp_path / "my_proj").is_dir()
+
+    def test_init_no_args_shows_usage(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(init, [])
+        assert result.exit_code != 0
