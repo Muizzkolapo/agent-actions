@@ -198,7 +198,7 @@ class MistralBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         # Ensure we return bytes
         if isinstance(result_content, str):
             return result_content.encode("utf-8")
-        return bytes(result_content)  # type: ignore[arg-type]
+        return result_content  # type: ignore[return-value, no-any-return]
 
     # -- Mistral-specific overrides for response paths that differ from
     # the standard OpenAI-compatible format (body fallback at top level).

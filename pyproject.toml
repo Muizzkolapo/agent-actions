@@ -147,7 +147,8 @@ module = [
     "anthropic.*",
     "pypdf.*",
     "docx.*",
-    "networkx.*"
+    "networkx.*",
+    "agent_actions.llm.batch.*"
 ]
 ignore_missing_imports = true
 
