@@ -77,6 +77,8 @@ Think of this like `npm init` or `git init` - it gives you a working starting po
 |--------|-------------|
 | `-o, --output-dir` | Directory to create the project in (default: current directory) |
 | `-t, --template` | Template to use for project initialization (default: `default`) |
+| `-e, --example` | Scaffold from a built-in example (fetched from GitHub) |
+| `--list-examples` | List available example names and exit |
 | `-f, --force` | Force project creation even if directory exists |
 
 **Examples:**
@@ -90,9 +92,19 @@ agac init my_project -o ~/projects
 # Use a specific template
 agac init my_project -t advanced
 
+# Scaffold from a built-in example
+agac init my_project --example contract_reviewer
+
+# See all available examples
+agac init --list-examples
+
 # Force overwrite existing files
 agac init my_project -f
 ```
+
+:::tip Start from an Example
+Use `--example` to scaffold a fully working project you can run immediately. Examples are fetched from GitHub so the package stays lightweight. Available examples: `book_catalog_enrichment`, `contract_reviewer`, `incident_triage`, `product_listing_enrichment`, `review_analyzer`.
+:::
 
 ## clean
 
