@@ -300,7 +300,9 @@ class InitCommand:
 class _InitGroup(click.Group):
     """Route unknown subcommands to ``new`` so ``agac init my_proj`` works."""
 
-    def resolve_command(self, ctx: click.Context, args: list[str]):
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
         cmd_name = args[0] if args else None
         if cmd_name and self.get_command(ctx, cmd_name) is None:
             # Not a known subcommand — treat as ``new <project_name> ...``
