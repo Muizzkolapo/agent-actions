@@ -1,0 +1,72 @@
+{
+  "name": "agent-actions",
+  "displayName": "Agent Actions",
+  "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
+  "version": "0.1.0",
+  "publisher": "runagac",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Muizzkolapo/agent-actions"
+  },
+  "homepage": "https://docs.runagac.com",
+  "bugs": {
+    "url": "https://github.com/Muizzkolapo/agent-actions/issues"
+  },
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Other"
+  ],
+  "keywords": [
+    "agent-actions",
+    "llm",
+    "yaml",
+    "workflow",
+    "ai",
+    "agents",
+    "agac"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/agent_config/*.yml",
+    "workspaceContains:agent_actions.yml"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Agent Actions",
+      "properties": {
+        "agentActions.serverPath": {
+          "type": "string",
+          "default": "agac-lsp",
+          "description": "Path to the agac-lsp binary. Defaults to 'agac-lsp' on PATH."
+        },
+        "agentActions.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "off",
+          "description": "Trace LSP communication for debugging."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}
