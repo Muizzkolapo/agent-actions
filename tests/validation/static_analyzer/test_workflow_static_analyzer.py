@@ -667,9 +667,7 @@ class TestContextScopeValidation:
 
         # context_scope references are valid implicit dependencies;
         # no "undeclared dependency" errors should be raised.
-        context_errors = [
-            e for e in result.errors if "undeclared dependency" in e.message
-        ]
+        context_errors = [e for e in result.errors if "undeclared dependency" in e.message]
         assert len(context_errors) == 0
 
     def test_context_scope_inferred_dep_still_validates_fields(self):
@@ -890,9 +888,9 @@ class TestContextScopeValidation:
         context_errors = [e for e in result.errors if "context_scope" in e.message]
         assert len(context_errors) >= 1
         assert any(
-            "not found" in e.message or "could not be loaded" in e.message
-            for e in context_errors
+            "not found" in e.message or "could not be loaded" in e.message for e in context_errors
         )
+
 
 class TestPrimaryDependencyValidation:
     """Tests for primary_dependency validation."""

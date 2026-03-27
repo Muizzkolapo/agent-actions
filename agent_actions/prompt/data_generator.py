@@ -117,7 +117,9 @@ class DataGenerator(IGenerator):
             elif result.status == ProcessingStatus.UNPROCESSED:
                 return (result.data, False, result.passthrough_fields)
             elif result.status == ProcessingStatus.FAILED:
-                raise GenerationError(f"Processing failed for action '{self.agent_name}': {result.error}")
+                raise GenerationError(
+                    f"Processing failed for action '{self.agent_name}': {result.error}"
+                )
             else:
                 # SUCCESS
                 return (result.data, True, result.passthrough_fields)
@@ -125,4 +127,6 @@ class DataGenerator(IGenerator):
         except GenerationError:
             raise
         except Exception as e:
-            raise GenerationError(f"Failed to create agent '{self.agent_name}' with data: {str(e)}", cause=e) from e
+            raise GenerationError(
+                f"Failed to create agent '{self.agent_name}' with data: {str(e)}", cause=e
+            ) from e

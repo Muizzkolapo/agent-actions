@@ -155,8 +155,7 @@ class GuardFilter:
 
         if parse_result.ast is None:
             raise RuntimeError(
-                "ParseResult indicates success but ast is None; "
-                "expected a WhereClauseAST node"
+                "ParseResult indicates success but ast is None; expected a WhereClauseAST node"
             )
         return parse_result.ast.evaluate(data, functions)
 

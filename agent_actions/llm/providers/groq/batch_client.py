@@ -151,7 +151,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from Groq API."""
         batch_job = self.client.batches.retrieve(batch_id)
-        return batch_job.status
+        return str(batch_job.status)
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Groq status to standard format."""

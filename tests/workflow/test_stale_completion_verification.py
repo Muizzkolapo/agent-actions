@@ -418,7 +418,9 @@ class TestExecuteLevelAsyncMixedLevel:
             dispatched.append(action_name)
             from agent_actions.workflow.executor import ActionExecutionResult, ExecutionMetrics
 
-            return ActionExecutionResult(success=True, status="completed", metrics=ExecutionMetrics())
+            return ActionExecutionResult(
+                success=True, status="completed", metrics=ExecutionMetrics()
+            )
 
         action_executor.execute_action_async.side_effect = _fake_execute
 

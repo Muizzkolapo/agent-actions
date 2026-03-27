@@ -23,7 +23,7 @@ class GuardConfig:
     def __init__(self, condition: str, on_false: GuardBehavior | str):
         """Initialize guard configuration."""
         self.condition = condition
-        if not isinstance(on_false, (GuardBehavior, str)):
+        if not isinstance(on_false, GuardBehavior | str):
             raise ConfigValidationError(
                 "on_false",
                 f"on_false must be a GuardBehavior or string, got {type(on_false).__name__}",

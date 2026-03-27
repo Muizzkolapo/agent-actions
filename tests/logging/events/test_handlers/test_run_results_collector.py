@@ -334,7 +334,9 @@ class TestGetSummary:
 
         collector.handle(ActionCompleteEvent(action_name="ok", action_index=0))
         collector.handle(ActionSkipEvent(action_name="skip1", action_index=1, skip_reason="done"))
-        collector.handle(ActionFailedEvent(action_name="fail1", action_index=2, error_message="boom"))
+        collector.handle(
+            ActionFailedEvent(action_name="fail1", action_index=2, error_message="boom")
+        )
         # Simulate a running agent (created by RecordEmptyOutputEvent before completion)
         from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
@@ -455,7 +457,9 @@ class TestAgentIndexUpdatedOnExistingEntry:
         from agent_actions.logging.events.data_pipeline_events import RecordEmptyOutputEvent
 
         collector.handle(RecordEmptyOutputEvent(action_name="agent_y", record_index=0))
-        collector.handle(ActionSkipEvent(action_name="agent_y", action_index=2, skip_reason="cached"))
+        collector.handle(
+            ActionSkipEvent(action_name="agent_y", action_index=2, skip_reason="cached")
+        )
         assert collector._results["agent_y"].action_index == 2
 
     def test_empty_output_then_failed_updates_index(self, collector):

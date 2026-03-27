@@ -221,7 +221,7 @@ class FieldReferenceResolver:
         """Format a resolved value for string substitution."""
         if value is None:
             return ""
-        if isinstance(value, (dict, list)):
+        if isinstance(value, dict | list):
             return json.dumps(value, indent=2, ensure_ascii=False)
         if isinstance(value, bool):
             return str(value).lower()

@@ -13,6 +13,7 @@ from agent_actions.output.saver import UnifiedSourceDataSaver
 # Construction
 # ---------------------------------------------------------------------------
 
+
 class TestSaverInit:
     """Tests for UnifiedSourceDataSaver initialization."""
 
@@ -44,6 +45,7 @@ class TestSaverInit:
 # ---------------------------------------------------------------------------
 # save_source_items — happy path
 # ---------------------------------------------------------------------------
+
 
 class TestSaveSourceItems:
     """Tests for save_source_items."""
@@ -116,6 +118,7 @@ class TestSaveSourceItems:
 # Event firing
 # ---------------------------------------------------------------------------
 
+
 class TestSaverEvents:
     """Tests for event firing during save."""
 
@@ -160,6 +163,7 @@ class TestSaverEvents:
 # ---------------------------------------------------------------------------
 # Error handling
 # ---------------------------------------------------------------------------
+
 
 class TestSaverErrors:
     """Tests for error handling in save_source_items."""

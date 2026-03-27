@@ -221,7 +221,7 @@ class PromptUtils:
                 value = PromptUtils.resolve_field_reference(
                     ref["reference"], ref["field_path"], context
                 )
-                if isinstance(value, (dict, list)):
+                if isinstance(value, dict | list):
                     value_str = json.dumps(value, indent=2)
                 else:
                     value_str = str(value)

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from agent_actions.cli.compile import RenderCommand, _execute_render
+from agent_actions.cli.compile import RenderCommand
 from agent_actions.validation.render_validator import RenderCommandArgs
 
 

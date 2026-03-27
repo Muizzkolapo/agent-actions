@@ -21,9 +21,7 @@ class TestBatchEntryTimestampIsUTCAware:
         """UTC must be importable via the submission module (proves the import was added)."""
         import agent_actions.llm.batch.services.submission as submission_mod
 
-        assert hasattr(submission_mod, "UTC"), (
-            "submission module must import UTC from datetime"
-        )
+        assert hasattr(submission_mod, "UTC"), "submission module must import UTC from datetime"
 
     def test_utc_isoformat_is_timezone_aware(self):
         """datetime.now(UTC).isoformat() produces a timezone-aware string."""
@@ -51,8 +49,9 @@ class TestBatchEntryTimestampIsUTCAware:
             submit_batch=MagicMock(return_value=("b-001", "in_progress"))
         )
 
-        with patch("agent_actions.llm.batch.services.submission.fire_event"), patch(
-            "agent_actions.llm.batch.services.submission.get_manager"
+        with (
+            patch("agent_actions.llm.batch.services.submission.fire_event"),
+            patch("agent_actions.llm.batch.services.submission.get_manager"),
         ):
             svc._submit_to_provider(
                 agent_config={"model_vendor": "openai"},
@@ -383,9 +382,7 @@ class TestSerializationRepromptRoundTrip:
             success=True,
         )
         original.recovery_metadata = RecoveryMetadata(
-            retry=RetryMetadata(
-                attempts=3, failures=2, succeeded=True, reason="missing"
-            ),
+            retry=RetryMetadata(attempts=3, failures=2, succeeded=True, reason="missing"),
             reprompt=RepromptMetadata(attempts=1, passed=True, validation="my_udf"),
         )
 

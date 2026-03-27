@@ -1,6 +1,5 @@
 """Wave 9 Group H regression tests — Error class constructor P1 fixes."""
 
-
 from agent_actions.errors import ConfigurationError
 from agent_actions.errors.base import AgentActionsError
 from agent_actions.errors.configuration import ConfigValidationError

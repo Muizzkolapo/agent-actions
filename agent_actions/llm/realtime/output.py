@@ -89,4 +89,3 @@ class OutputHandler:
         """Ensure the directory for the file path exists."""
         directory = Path(file_path).parent
         directory.mkdir(parents=True, exist_ok=True)
-

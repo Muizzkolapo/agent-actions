@@ -31,12 +31,14 @@ def _run_config_stage(fn: Any, stage: str, manager: ConfigManager, *args: Any) -
     except Exception as e:
         agent = getattr(manager, "agent_name", "unknown")
         logger.debug("Config stage '%s' failed for agent '%s': %s", stage, agent, e)
-        if not hasattr(e, "context") or not isinstance(e.context, dict):
+        if not hasattr(e, "context") or not isinstance(e.context, dict):  # type: ignore[attr-defined]
             e.context = {}  # type: ignore[attr-defined]
-        e.context.update({  # type: ignore[attr-defined]
-            "agent": agent,
-            "pipeline_stage": stage,
-        })
+        e.context.update(  # type: ignore[attr-defined]
+            {
+                "agent": agent,
+                "pipeline_stage": stage,
+            }
+        )
         raise
 
 
@@ -69,9 +71,7 @@ def load_workflow_configs(config: WorkflowRuntimeConfig, console: Console) -> Wo
 
     user_agents = _run_config_stage(manager.get_user_agents, "get_user_agents", manager)
     _run_config_stage(manager.merge_agent_configs, "merge_agent_configs", manager, user_agents)
-    _run_config_stage(
-        manager.determine_execution_order, "determine_execution_order", manager
-    )
+    _run_config_stage(manager.determine_execution_order, "determine_execution_order", manager)
 
     execution_order = manager.execution_order
     action_configs = manager.get_all_agent_configs_as_dicts()

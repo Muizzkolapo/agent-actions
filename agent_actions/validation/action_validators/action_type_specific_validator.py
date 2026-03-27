@@ -61,7 +61,9 @@ class ActionTypeSpecificValidator(BaseActionEntryValidator):
 
     def _validate_type_specific_keys(self, context, agent_type: str, errors: list) -> None:
         """Validate type-specific required keys are present."""
-        type_specific_keys = ActionConfigValidationUtilities.get_action_type_specific_keys(agent_type)
+        type_specific_keys = ActionConfigValidationUtilities.get_action_type_specific_keys(
+            agent_type
+        )
 
         if not type_specific_keys:
             return

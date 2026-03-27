@@ -14,7 +14,7 @@ class DataTransformer:
             result: list[Any] = []
         elif isinstance(data, list):
             result = data
-        elif isinstance(data, (str, dict, int, float, bool)):
+        elif isinstance(data, str | dict | int | float | bool):
             result = [data]
         else:
             try:

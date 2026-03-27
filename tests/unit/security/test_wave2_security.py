@@ -7,10 +7,6 @@ Tests critical security paths:
 - Batch flush failure preserves queue state (L1)
 """
 
-import json
-import os
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,9 +19,7 @@ class TestDropObserveNoLeak:
         """If dep.api_key is dropped, observe: [dep.*] must NOT include api_key in llm_context."""
         from agent_actions.prompt.context.scope_application import apply_context_scope
 
-        field_context = {
-            "dep": {"api_key": "sk-secret-123", "name": "test", "value": "safe_data"}
-        }
+        field_context = {"dep": {"api_key": "sk-secret-123", "name": "test", "value": "safe_data"}}
         context_scope = {
             "drop": ["dep.api_key"],
             "observe": ["dep.*"],

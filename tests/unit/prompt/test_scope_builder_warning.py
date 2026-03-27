@@ -60,13 +60,10 @@ class TestInferDependenciesFallbackWarning:
 
         # Verify the warning was emitted
         warning_messages = [
-            record.message
-            for record in caplog.records
-            if record.levelno == logging.WARNING
+            record.message for record in caplog.records if record.levelno == logging.WARNING
         ]
         assert any(
-            "infer_dependencies failed" in msg and "current" in msg
-            for msg in warning_messages
+            "infer_dependencies failed" in msg and "current" in msg for msg in warning_messages
         ), (
             f"Expected a WARNING containing 'infer_dependencies failed' and "
             f"'current', got: {warning_messages}"
@@ -96,8 +93,7 @@ class TestInferDependenciesFallbackWarning:
         warning_messages = [
             record.message
             for record in caplog.records
-            if record.levelno == logging.WARNING
-            and "infer_dependencies failed" in record.message
+            if record.levelno == logging.WARNING and "infer_dependencies failed" in record.message
         ]
         assert warning_messages == [], (
             f"No fallback warning expected on success, got: {warning_messages}"

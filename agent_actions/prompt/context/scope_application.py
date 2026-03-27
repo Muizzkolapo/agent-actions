@@ -80,13 +80,18 @@ def apply_context_scope(
                 logger.warning(
                     "Drop directive '%s' in action '%s' matched zero fields — "
                     "namespace '%s' not found in context.",
-                    field_ref, action_name, ns_name,
+                    field_ref,
+                    action_name,
+                    ns_name,
                 )
             elif not isinstance(prompt_context[ns_name], dict):
                 logger.warning(
                     "Drop directive '%s' in action '%s' matched zero fields — "
                     "namespace '%s' is not a dict (got %s).",
-                    field_ref, action_name, ns_name, type(prompt_context[ns_name]).__name__,
+                    field_ref,
+                    action_name,
+                    ns_name,
+                    type(prompt_context[ns_name]).__name__,
                 )
             elif field_name == "*":
                 # Wildcard: clear entire namespace
@@ -94,7 +99,9 @@ def apply_context_scope(
                     logger.warning(
                         "Drop directive '%s' in action '%s' matched zero fields — "
                         "namespace '%s' is empty.",
-                        field_ref, action_name, ns_name,
+                        field_ref,
+                        action_name,
+                        ns_name,
                     )
                 prompt_context[ns_name].clear()
             else:
@@ -103,7 +110,10 @@ def apply_context_scope(
                     logger.warning(
                         "Drop directive '%s' in action '%s' matched zero fields — "
                         "field '%s' not found in namespace '%s'.",
-                        field_ref, action_name, field_name, ns_name,
+                        field_ref,
+                        action_name,
+                        field_name,
+                        ns_name,
                     )
                 prompt_context[ns_name].pop(field_name, None)
 

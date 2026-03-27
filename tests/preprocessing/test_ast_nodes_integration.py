@@ -7,9 +7,7 @@ the evaluate_node() recursive evaluator.
 
 import pytest
 
-from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 from agent_actions.input.preprocessing.parsing.ast_nodes import (
-    MissingFieldError,
     ComparisonNode,
     ComparisonOperator,
     FieldNode,
@@ -17,10 +15,12 @@ from agent_actions.input.preprocessing.parsing.ast_nodes import (
     LiteralNode,
     LogicalNode,
     LogicalOperator,
+    MissingFieldError,
     WhereClauseAST,
     _field_exists,
     evaluate_node,
 )
+from agent_actions.input.preprocessing.parsing.parser import WhereClauseParser
 
 
 class TestEvaluateNodeIntegration:
@@ -322,8 +322,12 @@ class TestParserBooleanLiterals:
     @pytest.mark.parametrize(
         "literal,expected_bool",
         [
-            ("true", True), ("True", True), ("TRUE", True),
-            ("false", False), ("False", False), ("FALSE", False),
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
         ],
     )
     def test_boolean_literals_parse_correctly(self, parser, literal, expected_bool):
@@ -337,9 +341,13 @@ class TestParserBooleanLiterals:
         """Evaluating 'field == true' must NOT raise MissingFieldError for 'true'."""
         result = parser.parse("passes_filter == true")
         assert result.success
-        assert result.ast.evaluate({"passes_filter": True}) is True  # correct value, not just no-raise
+        assert (
+            result.ast.evaluate({"passes_filter": True}) is True
+        )  # correct value, not just no-raise
 
-    @pytest.mark.parametrize("keyword", ["null", "and", "or", "not", "in", "is", "like", "between", "contains"])
+    @pytest.mark.parametrize(
+        "keyword", ["null", "and", "or", "not", "in", "is", "like", "between", "contains"]
+    )
     def test_reserved_words_do_not_parse_as_field_names(self, parser, keyword):
         """Reserved SQL keywords must not be accepted as field names regardless of case."""
         # A condition using the keyword as a bare operand should not yield a FieldNode.
@@ -354,10 +362,14 @@ class TestParserBooleanLiterals:
             except MissingFieldError as e:
                 pytest.fail(f"Reserved word '{keyword}' was treated as a field reference: {e}")
 
-    @pytest.mark.parametrize("field", ["true_count", "nothing", "is_active", "not_valid", "inner", "android"])
+    @pytest.mark.parametrize(
+        "field", ["true_count", "nothing", "is_active", "not_valid", "inner", "android"]
+    )
     def test_reserved_word_prefix_fields_still_parse(self, parser, field):
         """Field names that begin with or contain reserved words must still be valid identifiers."""
         result = parser.parse(f"{field} == 1")
-        assert result.success, f"Field name '{field}' should parse successfully, got: {result.error}"
+        assert result.success, (
+            f"Field name '{field}' should parse successfully, got: {result.error}"
+        )
         assert result.ast.evaluate({field: 1}) is True
         assert result.ast.evaluate({field: 2}) is False

@@ -200,5 +200,7 @@ class TestDiscoverWorkflowUDFsManagerNone:
             manager=None,
         )
         console = MagicMock()
-        with patch("agent_actions.workflow.config_pipeline._discover_udfs_from_path", return_value=0):
+        with patch(
+            "agent_actions.workflow.config_pipeline._discover_udfs_from_path", return_value=0
+        ):
             discover_workflow_udfs(config, console)  # no AttributeError

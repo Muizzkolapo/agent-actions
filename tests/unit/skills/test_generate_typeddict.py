@@ -70,6 +70,7 @@ class TestInferPythonType:
         # Using an object that's none of the above — falls through to the final return "Any"
         class Custom:
             pass
+
         result = infer_python_type(Custom())
         assert result == "Any"
 

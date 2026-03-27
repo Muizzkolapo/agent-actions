@@ -42,13 +42,13 @@ from agent_actions.errors import (
     VendorConfigError,
     WorkflowError,
 )
-from agent_actions.errors.preflight import ContextStructureError
 from agent_actions.errors.operations import TemplateVariableError
-
+from agent_actions.errors.preflight import ContextStructureError
 
 # ---------------------------------------------------------------------------
 # Factory helpers for classes with non-standard __init__ signatures
 # ---------------------------------------------------------------------------
+
 
 def _make(cls):
     """Construct any error class with minimal required arguments."""
@@ -128,6 +128,7 @@ ALL_CLASSES = [
     PathValidationError,
 ]
 
+
 def test_all_classes_count():
     """Catch accidental addition/removal of exception classes."""
     assert len(ALL_CLASSES) == 38, f"Expected 38 classes, found {len(ALL_CLASSES)}"
@@ -162,7 +163,13 @@ def test_context_dict_is_copied_on_construction(cls):
     original_ctx = {"key": "original"}
     if cls is ConfigValidationError:
         exc = cls(message="msg", context=original_ctx)
-    elif cls in (DuplicateFunctionError, UDFLoadError, VendorAPIError, AnthropicError, RateLimitError):
+    elif cls in (
+        DuplicateFunctionError,
+        UDFLoadError,
+        VendorAPIError,
+        AnthropicError,
+        RateLimitError,
+    ):
         exc = cls(message="msg", context=original_ctx)
     elif cls in (
         PreFlightValidationError,
@@ -180,8 +187,7 @@ def test_context_dict_is_copied_on_construction(cls):
 
     # Stored context should still have the original value
     assert exc.context.get("key") == "original", (
-        f"{cls.__name__}.context was not defensively copied: "
-        f"mutation propagated from caller's dict"
+        f"{cls.__name__}.context was not defensively copied: mutation propagated from caller's dict"
     )
 
 

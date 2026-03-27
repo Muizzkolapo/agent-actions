@@ -290,9 +290,7 @@ class TestResolveUpstreamWorkflows:
         mock_factory.return_value = mock_wf
 
         configs = {"agent1": {"dependencies": [{"workflow": "fail_wf"}]}}
-        with pytest.raises(
-            RuntimeError, match=r"Recursive execution failed.*ValueError.*boom"
-        ):
+        with pytest.raises(RuntimeError, match=r"Recursive execution failed.*ValueError.*boom"):
             orchestrator.resolve_upstream_workflows(configs, None, None, False)
 
 

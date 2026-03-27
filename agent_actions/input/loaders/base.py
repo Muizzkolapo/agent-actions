@@ -78,7 +78,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     def load_file(self, file_path: str) -> str:
         """Safely load a file's content with retry logic."""
         try:
-            return read_file_with_retry(file_path)
+            return str(read_file_with_retry(file_path))
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise

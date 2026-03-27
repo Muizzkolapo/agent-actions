@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import patch
 
 import jsonschema
 import pytest
@@ -14,7 +14,6 @@ from agent_actions.validation.preflight.vendor_compatibility_validator import (
 from agent_actions.validation.project_validator import ProjectValidator
 from agent_actions.validation.schema_validator import SchemaValidator
 from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
-
 
 # ---------------------------------------------------------------------------
 # D-2  ·  SchemaExtractor._extract_field_name — flattened, no dead branch
@@ -223,7 +222,9 @@ class TestProcessSchemaFileNoFallThrough:
         schema_file.write_text(json.dumps(schema_data))
 
         with (
-            patch.object(v, "_validate_against_meta_schema_static", side_effect=OSError("disk err")),
+            patch.object(
+                v, "_validate_against_meta_schema_static", side_effect=OSError("disk err")
+            ),
             patch.object(v, "_check_common_schema_issues_static", return_value=[]) as mock_common,
         ):
             v._process_schema_file(

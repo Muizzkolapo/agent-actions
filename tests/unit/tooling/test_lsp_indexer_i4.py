@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from agent_actions.tooling.lsp.indexer import _index_workflow_file
 from agent_actions.tooling.lsp.models import ProjectIndex
 
@@ -69,7 +67,9 @@ actions:
         assert action is not None
         assert "upstream.field_a" in action.context_observe
         # The key 'intent: should_not_be_in_observe' must NOT appear in observe
-        assert not any("intent" in v or "should_not_be_in_observe" in v for v in action.context_observe)
+        assert not any(
+            "intent" in v or "should_not_be_in_observe" in v for v in action.context_observe
+        )
 
     def test_new_action_after_context_scope_not_collected(self, tmp_path):
         """Items in a subsequent action should not bleed into the previous action's observe."""

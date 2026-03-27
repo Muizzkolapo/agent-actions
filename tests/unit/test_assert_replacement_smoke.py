@@ -69,9 +69,7 @@ class TestManifestManagerInitGuard:
 
         # The manifest property lazily loads, so we mock it to return actions
         # while keeping _manifest as None to hit the guard
-        with patch.object(
-            type(mgr), "manifest", new_callable=PropertyMock
-        ) as mock_manifest:
+        with patch.object(type(mgr), "manifest", new_callable=PropertyMock) as mock_manifest:
             mock_manifest.return_value = {"actions": {"extract": {"status": "pending"}}}
             mgr._manifest = None
 

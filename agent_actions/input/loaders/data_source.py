@@ -237,7 +237,7 @@ def _fetch_api_data(config: DataSourceConfig, cache_file: Path) -> None:
             cause=e,
         ) from e
     except Exception as e:
-        if isinstance(e, (ConfigurationError, FileSystemError)):
+        if isinstance(e, ConfigurationError | FileSystemError):
             raise
         raise ConfigurationError(
             f"Failed to fetch API data source: {e}",

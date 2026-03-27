@@ -8,25 +8,31 @@ Thank you for contributing to Agent Actions! This guide covers coding standards 
 # Install dependencies
 task dev
 
-# Install pre-commit hooks
-task hooks:install
+# Install pre-commit hooks (run once after cloning)
+pre-commit install
 ```
 
 ## Running Quality Checks
 
+Pre-commit hooks run automatically on every commit, catching the same issues as CI before they reach GitHub.
+
 ```bash
-# Run all checks
+# Run all checks (matches CI)
 task check
 
 # Individual checks
-task lint          # ruff linting
-task lint:ruff     # ruff (logging rules)
-task lint:logging  # AST-based logging checker
+task lint          # ruff linting + import sorting
+task format:check  # ruff format check
 task mypy          # type checking
 
-# Run pre-commit on all files
-task hooks:run
+# Run pre-commit manually across all files
+pre-commit run --all-files
 ```
+
+The pre-commit hooks run:
+- **ruff** — lint and auto-fix (import sorting, style)
+- **ruff-format** — formatting
+- **mypy** — type checking
 
 ## Logging Guidelines
 

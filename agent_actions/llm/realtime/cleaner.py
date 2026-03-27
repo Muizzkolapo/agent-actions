@@ -68,4 +68,4 @@ class Cleaner:
         click.echo(f"The following directories for '{self.agent}' will be removed:")
         for path in directories:
             click.echo(f"  • {path}")
-        return click.confirm(click.style("Proceed?", fg="yellow"), default=False)
+        return bool(click.confirm(click.style("Proceed?", fg="yellow"), default=False))

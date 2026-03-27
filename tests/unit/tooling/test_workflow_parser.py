@@ -1,6 +1,5 @@
 """I-6: Coverage of WorkflowParser.parse_workflow() — happy path and None on malformed input."""
 
-import pytest
 import yaml
 
 from agent_actions.tooling.docs.parser import WorkflowParser
@@ -11,11 +10,7 @@ class TestWorkflowParserHappyPath:
 
     def test_minimal_workflow(self, tmp_path):
         yml = tmp_path / "workflow.yml"
-        yml.write_text(
-            "name: test_wf\n"
-            "description: A simple workflow\n"
-            "actions: []\n"
-        )
+        yml.write_text("name: test_wf\ndescription: A simple workflow\nactions: []\n")
         result = WorkflowParser.parse_workflow(str(yml))
         assert result is not None
         assert isinstance(result, dict)

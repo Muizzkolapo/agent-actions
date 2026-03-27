@@ -229,7 +229,7 @@ class WhereClauseParser:
         args: list[ASTNode] = []
 
         for token in tokens[1:]:
-            if isinstance(token, (FieldNode, LiteralNode, FunctionNode)):
+            if isinstance(token, FieldNode | LiteralNode | FunctionNode):
                 args.append(token)
 
         return FunctionNode(func_name, args)
@@ -354,8 +354,7 @@ class WhereClauseParser:
         """Parse clause and build AST, returning ParseResult."""
         if self._grammar is None:
             raise RuntimeError(
-                "WhereClauseParser._grammar is None; "
-                "_build_grammar() must complete before parsing"
+                "WhereClauseParser._grammar is None; _build_grammar() must complete before parsing"
             )
         parsed = self._grammar.parse_string(where_clause, parse_all=True)
 

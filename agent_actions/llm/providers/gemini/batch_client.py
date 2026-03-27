@@ -187,7 +187,7 @@ class GeminiBatchClient(BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
-        return batch_job.state.name  # type: ignore[union-attr]
+        return str(batch_job.state.name)  # type: ignore[union-attr]
 
     def _normalize_status(self, raw_status: str) -> str:
         """Normalize Gemini status to standard format."""
@@ -240,4 +240,4 @@ class GeminiBatchClient(BaseBatchClient):
                 },
             )
 
-        return file_content_bytes
+        return file_content_bytes  # type: ignore[return-value, no-any-return]

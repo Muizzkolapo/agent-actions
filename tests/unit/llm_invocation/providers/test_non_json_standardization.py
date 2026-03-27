@@ -536,7 +536,9 @@ class TestOllamaTokenCounts:
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
-    def test_call_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire, mock_rb_fire):
+    def test_call_json_extracts_token_counts(
+        self, mock_get_client, mock_inject, mock_fire, mock_rb_fire
+    ):
         from agent_actions.llm.providers.ollama.client import OllamaClient
         from agent_actions.logging.events import LLMResponseEvent
 
@@ -566,7 +568,9 @@ class TestOllamaTokenCounts:
     @patch("agent_actions.llm.providers.ollama.client.fire_event")
     @patch("agent_actions.llm.providers.ollama.client.maybe_inject_online_failure")
     @patch("agent_actions.llm.providers.ollama.client.OllamaClient._get_client")
-    def test_call_non_json_extracts_token_counts(self, mock_get_client, mock_inject, mock_fire, mock_rb_fire):
+    def test_call_non_json_extracts_token_counts(
+        self, mock_get_client, mock_inject, mock_fire, mock_rb_fire
+    ):
         from agent_actions.llm.providers.ollama.client import OllamaClient
         from agent_actions.logging.events import LLMResponseEvent
 

@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import sys
 import types
-from unittest.mock import MagicMock
-
-import pytest
 
 from agent_actions.utils.udf_management.registry import (
     UDF_REGISTRY,

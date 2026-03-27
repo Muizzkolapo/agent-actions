@@ -139,18 +139,22 @@ class TestPrimaryDependencyValidation:
 
     def test_valid_primary_dependency_passes(self):
         """K-1: primary_dependency pointing to an existing action must pass."""
-        self._make_workflow([
-            self._action("a"),
-            self._action("b", dependencies=["a"], primary_dependency="a"),
-        ])
+        self._make_workflow(
+            [
+                self._action("a"),
+                self._action("b", dependencies=["a"], primary_dependency="a"),
+            ]
+        )
 
     def test_invalid_primary_dependency_raises(self):
         """K-1: primary_dependency pointing to non-existent action must raise at config load."""
         with pytest.raises(Exception, match="primary_dependency"):
-            self._make_workflow([
-                self._action("a"),
-                self._action("b", primary_dependency="nonexistent"),
-            ])
+            self._make_workflow(
+                [
+                    self._action("a"),
+                    self._action("b", primary_dependency="nonexistent"),
+                ]
+            )
 
 
 # ---------------------------------------------------------------------------

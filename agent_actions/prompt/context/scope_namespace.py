@@ -31,7 +31,7 @@ _RECORD_METADATA_KEYS = frozenset(
     }
 )
 
-__all__ = []
+__all__: list[str] = []
 
 
 def _extract_content_data(source_content: Any) -> dict:

@@ -76,7 +76,9 @@ def _save_failed_render(rendered_yaml_content, workflow_name, project_root: Path
     Returns:
         Error message string or empty string if save fails
     """
-    cache_dir = resolve_project_root(project_root) / ".agent-actions" / "cache" / "rendered_workflows"
+    cache_dir = (
+        resolve_project_root(project_root) / ".agent-actions" / "cache" / "rendered_workflows"
+    )
     cache_dir.mkdir(parents=True, exist_ok=True)
     failed_render_path = cache_dir / f"{workflow_name}_failed.yml"
     try:
@@ -117,7 +119,7 @@ def _resolve_prompt_fields(item, project_root: Path | None = None):
                             value,
                         )
                         item[key] = value
-            elif isinstance(value, (dict, list)):
+            elif isinstance(value, dict | list):
                 _resolve_prompt_fields(value, project_root=project_root)
     elif isinstance(item, list):
         for sub_item in item:
@@ -245,9 +247,7 @@ def _compile_action_schemas(
     schema_name = action.get("schema_name")
     if schema_name and isinstance(schema_name, str):
         try:
-            loaded_schema = SchemaLoader.load_schema(
-                schema_name, project_root=project_root
-            )
+            loaded_schema = SchemaLoader.load_schema(schema_name, project_root=project_root)
             action["schema"] = loaded_schema
             del action["schema_name"]
             logger.debug("Inlined named schema '%s' for action '%s'", schema_name, action_name)
@@ -262,9 +262,7 @@ def _compile_action_schemas(
     schema_value = action.get("schema")
     if schema_value and isinstance(schema_value, str):
         try:
-            loaded_schema = SchemaLoader.load_schema(
-                schema_value, project_root=project_root
-            )
+            loaded_schema = SchemaLoader.load_schema(schema_value, project_root=project_root)
             action["schema"] = loaded_schema
             logger.debug("Inlined schema reference '%s' for action '%s'", schema_value, action_name)
         except FileNotFoundError as e:

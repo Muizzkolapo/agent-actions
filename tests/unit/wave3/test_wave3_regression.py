@@ -189,5 +189,3 @@ class TestDeferredStatusHandling:
 
         # Verify the DEFERRED branch exists as a known status
         assert hasattr(ProcessingStatus, "DEFERRED")
-
-

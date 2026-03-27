@@ -223,7 +223,7 @@ class ProjectPathsFactory:
             return paths
         except Exception as e:
             logger.exception("Failed to create project paths for agent %s: %s", agent_name, e)
-            if isinstance(e, (DirectoryError, ValidationError, FileLoadError)):
+            if isinstance(e, DirectoryError | ValidationError | FileLoadError):
                 raise
             raise ValidationError(
                 "Failed to create project paths",
