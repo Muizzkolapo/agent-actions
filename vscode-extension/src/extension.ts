@@ -20,17 +20,21 @@ function findAgacLsp(): string {
     return configured;
   }
 
-  // Search venv locations relative to workspace root
+  // Scan all top-level directories for bin/agac-lsp (catches any venv name)
+  const binDir = process.platform === "win32" ? "Scripts" : "bin";
   const workspaceFolders = workspace.workspaceFolders;
   if (workspaceFolders) {
     const root = workspaceFolders[0].uri.fsPath;
-    const venvNames = [".venv", "venv", ".env", "env", ".env_agac"];
-    const binDir = process.platform === "win32" ? "Scripts" : "bin";
-    for (const venv of venvNames) {
-      const candidate = path.join(root, venv, binDir, "agac-lsp");
-      if (fs.existsSync(candidate)) {
-        return candidate;
+    try {
+      for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name === "node_modules") continue;
+        const candidate = path.join(root, entry.name, binDir, "agac-lsp");
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
       }
+    } catch {
+      // readdir failed (permissions, etc.) — continue to PATH fallback
     }
   }
 
