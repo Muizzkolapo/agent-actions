@@ -319,10 +319,26 @@ Packages are published to PyPI automatically when a GitHub Release is created.
 3. Create a GitHub Release with tag `vX.Y.Z`
 4. The `publish.yml` workflow validates versions and publishes to PyPI
 
+## Signed Commits
+
+All commits must include a `Signed-off-by` trailer. Use the `--signoff` flag:
+
+```bash
+git commit --signoff -m "your message"
+```
+
+To set this automatically on every commit:
+
+```bash
+git config --local commit.gpgsign false
+git config --local format.signoff true
+```
+
 ## Pull Request Process
 
 1. Create a feature branch from `main`
 2. Make your changes
-3. Ensure `task check` passes
-4. Ensure `task test` passes
-5. Submit PR with clear description
+3. Add a changelog entry: `task changelog:new`
+4. Ensure `task check` passes
+5. Ensure `task test` passes
+6. Submit PR with signed commits
