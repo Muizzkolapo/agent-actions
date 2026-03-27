@@ -1,9 +1,7 @@
 """J-4: Coverage of SchemaExtractor — field extraction from action configs."""
 
-import pytest
-
-from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
 from agent_actions.validation.static_analyzer.data_flow_graph import OutputSchema
+from agent_actions.validation.static_analyzer.schema_extractor import SchemaExtractor
 
 
 class TestSchemaExtractorLLMAction:

@@ -29,10 +29,20 @@ class ErrorContextService:
             if hasattr(exception, "context") and isinstance(exception.context, dict):
                 merged_context.update(exception.context)
 
-        _ALLOWED_ATTRS = frozenset({
-            "reason", "status", "status_code", "url", "request",
-            "response", "message", "code", "detail", "name",
-        })
+        _ALLOWED_ATTRS = frozenset(
+            {
+                "reason",
+                "status",
+                "status_code",
+                "url",
+                "request",
+                "response",
+                "message",
+                "code",
+                "detail",
+                "name",
+            }
+        )
         excluded_attrs = {"args", "with_traceback", "context"}
         for attr_name in dir(exc):
             if (
@@ -43,13 +53,15 @@ class ErrorContextService:
                 try:
                     attr_value = getattr(exc, attr_name)
                     if not callable(attr_value) and isinstance(
-                        attr_value, (str, int, float, bool, type(None))
+                        attr_value, str | int | float | bool | type(None)
                     ):
                         merged_context[attr_name] = attr_value
                 except Exception as exc_inner:
                     logger.debug(
                         "Failed to extract attribute %r from %s: %s",
-                        attr_name, type(exc).__name__, exc_inner,
+                        attr_name,
+                        type(exc).__name__,
+                        exc_inner,
                     )
 
         if additional_context:

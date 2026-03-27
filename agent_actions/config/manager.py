@@ -86,8 +86,7 @@ class ConfigManager:
         except Exception as e:
             config_name = Path(config_path).name
             raise ConfigurationError(
-                f"Failed to load {config_type} config '{config_name}': "
-                f"{type(e).__name__}: {e}",
+                f"Failed to load {config_type} config '{config_name}': {type(e).__name__}: {e}",
                 context={
                     "config_path": str(config_path),
                     "operation": f"load_{config_type}_config",

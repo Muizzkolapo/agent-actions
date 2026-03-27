@@ -387,7 +387,9 @@ class SQLiteBackend(StorageBackend):
                         "files": files,
                         "error": f"File '{relative_path}' not found for node '{action_name}'",
                     }
-                file_metadata = [row for row in file_metadata if row["relative_path"] == relative_path]
+                file_metadata = [
+                    row for row in file_metadata if row["relative_path"] == relative_path
+                ]
 
             total_count = sum(row["record_count"] for row in file_metadata)
 

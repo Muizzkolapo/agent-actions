@@ -78,31 +78,23 @@ class TestValidateFile:
     def test_valid_file(self, validator, tmp_path):
         f = tmp_path / "test.txt"
         f.write_text("hello")
-        result = validator.validate(
-            {"operation": "validate_file", "path": f}
-        )
+        result = validator.validate({"operation": "validate_file", "path": f})
         assert result is True
 
     def test_nonexistent_file(self, validator, tmp_path):
-        result = validator.validate(
-            {"operation": "validate_file", "path": tmp_path / "nope.txt"}
-        )
+        result = validator.validate({"operation": "validate_file", "path": tmp_path / "nope.txt"})
         assert result is False
         assert any("does not exist" in e for e in validator.get_errors())
 
     def test_path_is_directory_not_file(self, validator, tmp_path):
-        result = validator.validate(
-            {"operation": "validate_file", "path": tmp_path}
-        )
+        result = validator.validate({"operation": "validate_file", "path": tmp_path})
         assert result is False
         assert any("not a file" in e for e in validator.get_errors())
 
     def test_file_with_string_path(self, validator, tmp_path):
         f = tmp_path / "test.txt"
         f.write_text("content")
-        result = validator.validate(
-            {"operation": "validate_file", "path": str(f)}
-        )
+        result = validator.validate({"operation": "validate_file", "path": str(f)})
         assert result is True
 
     def test_not_required_and_missing(self, validator, tmp_path):
@@ -137,9 +129,7 @@ class TestValidateDirectory:
     """Test directory validation via validate()."""
 
     def test_valid_directory(self, validator, tmp_path):
-        result = validator.validate(
-            {"operation": "validate_directory", "path": tmp_path}
-        )
+        result = validator.validate({"operation": "validate_directory", "path": tmp_path})
         assert result is True
 
     def test_nonexistent_directory(self, validator, tmp_path):
@@ -151,9 +141,7 @@ class TestValidateDirectory:
     def test_path_is_file_not_directory(self, validator, tmp_path):
         f = tmp_path / "file.txt"
         f.write_text("hi")
-        result = validator.validate(
-            {"operation": "validate_directory", "path": f}
-        )
+        result = validator.validate({"operation": "validate_directory", "path": f})
         assert result is False
         assert any("not a directory" in e for e in validator.get_errors())
 
@@ -178,16 +166,12 @@ class TestEnsureDirectoryExists:
 
     def test_create_missing_directory(self, validator, tmp_path):
         new_dir = tmp_path / "new_subdir"
-        result = validator.validate(
-            {"operation": "ensure_directory_exists", "path": new_dir}
-        )
+        result = validator.validate({"operation": "ensure_directory_exists", "path": new_dir})
         assert result is True
         assert new_dir.is_dir()
 
     def test_existing_directory(self, validator, tmp_path):
-        result = validator.validate(
-            {"operation": "ensure_directory_exists", "path": tmp_path}
-        )
+        result = validator.validate({"operation": "ensure_directory_exists", "path": tmp_path})
         assert result is True
 
     def test_do_not_create_missing(self, validator, tmp_path):
@@ -205,9 +189,7 @@ class TestEnsureDirectoryExists:
     def test_path_exists_but_is_file(self, validator, tmp_path):
         f = tmp_path / "afile"
         f.write_text("data")
-        result = validator.validate(
-            {"operation": "ensure_directory_exists", "path": f}
-        )
+        result = validator.validate({"operation": "ensure_directory_exists", "path": f})
         assert result is False
         assert any("not a directory" in e for e in validator.get_errors())
 
@@ -221,15 +203,11 @@ class TestValidateUserCodePath:
     """Test user code path validation via validate()."""
 
     def test_none_path_is_valid(self, validator):
-        result = validator.validate(
-            {"operation": "validate_user_code_path", "path": None}
-        )
+        result = validator.validate({"operation": "validate_user_code_path", "path": None})
         assert result is True
 
     def test_valid_directory(self, validator, tmp_path):
-        result = validator.validate(
-            {"operation": "validate_user_code_path", "path": str(tmp_path)}
-        )
+        result = validator.validate({"operation": "validate_user_code_path", "path": str(tmp_path)})
         assert result is True
 
     def test_nonexistent_path(self, validator, tmp_path):
@@ -241,24 +219,18 @@ class TestValidateUserCodePath:
     def test_path_is_file(self, validator, tmp_path):
         f = tmp_path / "file.py"
         f.write_text("x = 1")
-        result = validator.validate(
-            {"operation": "validate_user_code_path", "path": str(f)}
-        )
+        result = validator.validate({"operation": "validate_user_code_path", "path": str(f)})
         assert result is False
         assert any("not a directory" in e for e in validator.get_errors())
 
     def test_non_string_path_error(self, validator):
-        result = validator.validate(
-            {"operation": "validate_user_code_path", "path": 12345}
-        )
+        result = validator.validate({"operation": "validate_user_code_path", "path": 12345})
         assert result is False
         assert any("string or None" in e for e in validator.get_errors())
 
     def test_empty_string_path_valid(self, validator):
         """Empty string is falsy, so treated like None (not provided)."""
-        result = validator.validate(
-            {"operation": "validate_user_code_path", "path": ""}
-        )
+        result = validator.validate({"operation": "validate_user_code_path", "path": ""})
         assert result is True
 
 

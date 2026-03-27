@@ -184,7 +184,7 @@ class PreviewCommand:
                 values = [str(idx)]
                 for key in display_keys:
                     val = data.get(key, "")
-                    if isinstance(val, (dict, list)):
+                    if isinstance(val, dict | list):
                         serialized = json.dumps(val, ensure_ascii=False)
                         val = serialized[:100] + "..." if len(serialized) > 100 else serialized
                     else:

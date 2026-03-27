@@ -1,7 +1,5 @@
 """Tests for get_schema_path configuration helper."""
 
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -25,9 +23,7 @@ class TestGetSchemaPath:
 
     def test_returns_configured_value(self, tmp_path):
         """Config has schema_path → returns that value."""
-        (tmp_path / "agent_actions.yml").write_text(
-            yaml.dump({"schema_path": "custom_schemas"})
-        )
+        (tmp_path / "agent_actions.yml").write_text(yaml.dump({"schema_path": "custom_schemas"}))
         assert get_schema_path(tmp_path) == "custom_schemas"
 
     def test_raises_on_empty_config(self, tmp_path):

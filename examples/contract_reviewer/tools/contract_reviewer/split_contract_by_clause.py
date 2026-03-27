@@ -11,20 +11,19 @@ from typing import Any
 
 from agent_actions import udf_tool
 
-
 # Pattern matches common clause heading formats:
 #   "1. DEFINITIONS"
 #   "2. SCOPE OF WORK"
 #   "Section 1: Definitions"
 #   "ARTICLE 1 - DEFINITIONS"
 CLAUSE_PATTERN = re.compile(
-    r"(?:^|\n)"                         # Start of text or newline
+    r"(?:^|\n)"  # Start of text or newline
     r"(?:"
-    r"(\d+)\.\s+"                       # "1. " style numbering
-    r"|Section\s+(\d+)[:\s]+"           # "Section 1:" style
-    r"|ARTICLE\s+(\d+)\s*[-:]\s*"       # "ARTICLE 1 -" style
+    r"(\d+)\.\s+"  # "1. " style numbering
+    r"|Section\s+(\d+)[:\s]+"  # "Section 1:" style
+    r"|ARTICLE\s+(\d+)\s*[-:]\s*"  # "ARTICLE 1 -" style
     r")"
-    r"([A-Z][A-Z\s&,]+)"               # Title in ALL CAPS
+    r"([A-Z][A-Z\s&,]+)"  # Title in ALL CAPS
     r"(?:\n|$)",
     re.MULTILINE,
 )
@@ -72,9 +71,7 @@ def split_contract_by_clause(data: dict[str, Any]) -> list[dict[str, Any]]:
 
     for i, match in enumerate(matches):
         # Extract clause number from whichever capture group matched
-        clause_num = int(
-            match.group(1) or match.group(2) or match.group(3) or str(i + 1)
-        )
+        clause_num = int(match.group(1) or match.group(2) or match.group(3) or str(i + 1))
         clause_title = match.group(4).strip()
 
         # Clause body runs from this heading to the next heading (or end of text)

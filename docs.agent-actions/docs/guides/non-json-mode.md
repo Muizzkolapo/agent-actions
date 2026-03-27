@@ -126,6 +126,3 @@ Progressive context narrowing applies identically. Later actions can observe spe
 | Prototyping / testing | Non-JSON is faster to set up (no schemas) |
 | Production with capable models | JSON mode with schemas for validation |
 
-## Example
-
-See the [support_resolution example](https://github.com/Muizzkolapo/agent-actions/tree/main/examples/support_resolution) for a complete 7-step field-by-field triage pipeline using Ollama.

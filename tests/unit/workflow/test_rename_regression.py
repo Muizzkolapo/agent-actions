@@ -46,11 +46,10 @@ class TestInitialStrategyKwargs:
             idx=0,
         )
 
-        with patch(
-            "agent_actions.workflow.strategies.process_initial_stage"
-        ) as mock_process, patch(
-            "agent_actions.workflow.strategies.InitialStageContext"
-        ) as mock_ctx_cls:
+        with (
+            patch("agent_actions.workflow.strategies.process_initial_stage") as mock_process,
+            patch("agent_actions.workflow.strategies.InitialStageContext") as mock_ctx_cls,
+        ):
             mock_process.return_value = "/tmp/output/result.json"
 
             strategy.execute(params)
@@ -58,9 +57,7 @@ class TestInitialStrategyKwargs:
             # The InitialStageContext constructor must receive agent_config and agent_name as kwargs
             mock_ctx_cls.assert_called_once()
             call_kwargs = mock_ctx_cls.call_args.kwargs
-            assert call_kwargs, (
-                "InitialStageContext must be called with keyword arguments"
-            )
+            assert call_kwargs, "InitialStageContext must be called with keyword arguments"
             assert "agent_config" in call_kwargs, (
                 "InitialStageContext should receive 'agent_config', not 'action_config'"
             )
@@ -107,12 +104,8 @@ class TestActionStrategyPipelineKwargs:
             call_kwargs = mock_create.call_args.kwargs
 
             # Pipeline params now use action_* naming (unified in Wave 2)
-            assert "action_config" in call_kwargs, (
-                "Should pass 'action_config' to pipeline factory"
-            )
-            assert "action_name" in call_kwargs, (
-                "Should pass 'action_name' to pipeline factory"
-            )
+            assert "action_config" in call_kwargs, "Should pass 'action_config' to pipeline factory"
+            assert "action_name" in call_kwargs, "Should pass 'action_name' to pipeline factory"
             assert "action_configs" in call_kwargs, (
                 "Should pass 'action_configs' to pipeline factory"
             )
@@ -247,10 +240,6 @@ class TestCoordinatorUpstreamKwargs:
         call_kwargs = mock_orchestrator.resolve_upstream_workflows.call_args.kwargs
 
         # Must use agent_configs=, not action_configs=
-        assert "agent_configs" in call_kwargs, (
-            "Should pass 'agent_configs=', not 'action_configs='"
-        )
-        assert "action_configs" not in call_kwargs, (
-            "Should not pass 'action_configs=' (old name)"
-        )
+        assert "agent_configs" in call_kwargs, "Should pass 'agent_configs=', not 'action_configs='"
+        assert "action_configs" not in call_kwargs, "Should not pass 'action_configs=' (old name)"
         assert call_kwargs["agent_configs"] == {"action_a": {"model_vendor": "openai"}}

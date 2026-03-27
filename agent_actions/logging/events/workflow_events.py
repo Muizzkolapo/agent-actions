@@ -253,5 +253,3 @@ class ActionCachedEvent(BaseEvent):
     @property
     def code(self) -> str:
         return "A005"
-
-

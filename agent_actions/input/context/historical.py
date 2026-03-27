@@ -314,7 +314,9 @@ class HistoricalNodeDataLoader:
 
             if not is_parallel_sibling and caller_lineage is not None:
                 record_lineage = record.get("lineage", [])
-                if record_lineage and HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
+                if record_lineage and HistoricalNodeDataLoader._lineages_match(
+                    record_lineage, caller_lineage
+                ):
                     logger.debug("Lineage match found")
                     return record
 

@@ -56,7 +56,7 @@ def _sql_like(left: Any, right: Any = None) -> bool:
 
 
 def _validate_range(range_val: Any) -> bool:
-    return isinstance(range_val, (list, tuple)) and len(range_val) == 2
+    return isinstance(range_val, list | tuple) and len(range_val) == 2
 
 
 OPERATORS: dict[str, Any] = {
@@ -70,10 +70,10 @@ OPERATORS: dict[str, Any] = {
     "GE": _safe_compare(lambda left, right: left >= right),
     # Membership
     "IN": lambda left, right=None: left in right
-    if isinstance(right, (list, tuple, set))
+    if isinstance(right, list | tuple | set)
     else False,
     "NOT_IN": lambda left, right=None: (
-        left not in right if isinstance(right, (list, tuple, set)) else False
+        left not in right if isinstance(right, list | tuple | set) else False
     ),
     # String
     "CONTAINS": lambda left, right=None: str(right) in str(left) if left is not None else False,
@@ -106,7 +106,7 @@ def _length(args: list[Any]) -> int:
     arg = args[0]
     if arg is None:
         return 0
-    if isinstance(arg, (list, tuple, dict, str)):
+    if isinstance(arg, list | tuple | dict | str):
         return len(arg)
     return len(str(arg))
 

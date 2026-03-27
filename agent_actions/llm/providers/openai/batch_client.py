@@ -110,7 +110,7 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status from OpenAI API."""
         batch_job = self.client.batches.retrieve(batch_id)
-        return batch_job.status
+        return str(batch_job.status)
 
     def _normalize_status(self, raw_status: str) -> str:
         """OpenAI statuses are already in standard format."""
@@ -168,4 +168,4 @@ class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 },
             )
 
-        return result_content
+        return result_content  # type: ignore[return-value, no-any-return]

@@ -194,7 +194,11 @@ class ProcessingPipeline:
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
-        if result.is_passthrough and result.passthrough is not None and result.passthrough.get("type") == "tombstone":
+        if (
+            result.is_passthrough
+            and result.passthrough is not None
+            and result.passthrough.get("type") == "tombstone"
+        ):
             file_writer = FileWriter(
                 str(output_file_path),
                 storage_backend=params.storage_backend,

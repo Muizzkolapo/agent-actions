@@ -113,8 +113,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                         writer.writerows(data)
             else:
                 raise AgentActionsError(
-                    f"Unsupported file type for staging: {self.file_type} "
-                    f"for file {self.file_path}"
+                    f"Unsupported file type for staging: {self.file_type} for file {self.file_path}"
                 )
             return Path(self.file_path).stat().st_size
 

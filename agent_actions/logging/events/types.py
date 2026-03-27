@@ -60,7 +60,7 @@ def _safe_value_repr(value: Any, max_length: int = 100) -> str:
     if value is None:
         return ""
     try:
-        if isinstance(value, (str, int, float, bool)):
+        if isinstance(value, str | int | float | bool):
             result = str(value)
         else:
             result = repr(value)

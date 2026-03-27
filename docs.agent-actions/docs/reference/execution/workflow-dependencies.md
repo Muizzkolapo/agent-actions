@@ -35,8 +35,8 @@ Created using `versions` - multiple executions of the same action that get merge
   versions:
     range: [1, 3]      # Creates research_1, research_2, research_3
     mode: parallel
-  schema: support_resolution/research_findings
-  prompt: $support_resolution.Research_Issue
+  schema: issue_resolution/research_findings
+  prompt: $issue_resolution.Research_Issue
   context_scope:
     observe:
       - analyze_issue.*

@@ -395,9 +395,7 @@ class SchemaValidator(BaseValidator):
             # deduplication).  SchemaLoader handles name-collision warnings
             # at runtime; the validator checks structural correctness of
             # each file regardless.
-            files_to_process = sorted(
-                p for ext in SCHEMA_FILE_GLOBS for p in schema_dir.rglob(ext)
-            )
+            files_to_process = sorted(p for ext in SCHEMA_FILE_GLOBS for p in schema_dir.rglob(ext))
             if not files_to_process:
                 self.add_warning(
                     f"No schema files ({', '.join(SCHEMA_FILE_GLOBS)}) found in "

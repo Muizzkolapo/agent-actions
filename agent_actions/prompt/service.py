@@ -333,7 +333,7 @@ class PromptPreparationService:
             template = jinja_env.from_string(raw_prompt)
             formatted_prompt = template.render(**prompt_context)
             logger.debug("Rendered prompt template with Jinja2")
-            return formatted_prompt
+            return str(formatted_prompt)
 
         except TemplateSyntaxError as e:
             logger.debug("Jinja2 template syntax error: %s", e)

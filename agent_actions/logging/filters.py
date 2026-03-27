@@ -154,7 +154,7 @@ class RedactingFilter(logging.Filter):
 
             if any(key in attr.lower() for key in sensitive_keys):
                 setattr(record, attr, "[REDACTED]")
-            elif isinstance(value, (dict, list)):
+            elif isinstance(value, dict | list):
                 setattr(record, attr, self._redact_nested(value))
             elif isinstance(value, str):
                 redacted_value = value

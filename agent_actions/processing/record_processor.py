@@ -41,7 +41,7 @@ def _is_empty_output(response: Any) -> bool:
     """Check if a tool/LLM response is effectively empty."""
     if response is None:
         return True
-    if isinstance(response, (dict, list)) and len(response) == 0:
+    if isinstance(response, dict | list) and len(response) == 0:
         return True
     return False
 

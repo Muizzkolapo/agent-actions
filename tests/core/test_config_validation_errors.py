@@ -120,7 +120,9 @@ class TestSchemaPreValidationErrors:
 
     def test_invalid_type_raises_via_get_user_agents(self):
         """Type-invalid value raises ConfigurationError through get_user_agents()."""
-        mgr = _make_workflow_manager(actions=[{"name": "a", "intent": "i", "temperature": "banana"}])
+        mgr = _make_workflow_manager(
+            actions=[{"name": "a", "intent": "i", "temperature": "banana"}]
+        )
         with pytest.raises(ConfigurationError) as exc_info:
             mgr.get_user_agents()
         assert exc_info.value.context["workflow_name"] == "test_workflow"

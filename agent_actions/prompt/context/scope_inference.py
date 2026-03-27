@@ -227,7 +227,10 @@ def infer_dependencies(
             "Action '%s': Fan-in detected with dependencies %s. "
             "Input sources: %s. "
             "Context sources (lineage-matched): %s",
-            action_name, all_deps, input_sources, fan_in_context_sources,
+            action_name,
+            all_deps,
+            input_sources,
+            fan_in_context_sources,
         )
     else:
         # Single dependency, parallel branches, or aggregation (reduce_key) - all are input sources

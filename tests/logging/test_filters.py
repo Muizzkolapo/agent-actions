@@ -157,8 +157,13 @@ class TestRedactingFilter:
 
         # Valid pattern should still work
         record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="test.py",
-            lineno=1, msg="secret=mysecret", args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg="secret=mysecret",
+            args=(),
+            exc_info=None,
         )
         filter_instance.filter(record)
         assert "mysecret" not in record.msg

@@ -181,7 +181,7 @@ export default function Home(): ReactNode {
             <p className={styles.ctaDesc}>Build reliable AI agent pipelines with YAML-native workflows, schema validation, and multi-provider orchestration.</p>
             <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
               <a className={`${styles.btn} ${styles.btnPrimary}`} href="/docs/">Get Started</a>
-              <a className={`${styles.btn} ${styles.btnSecondary}`} href="#">Give a star On github</a>
+              <a className={`${styles.btn} ${styles.btnSecondary}`} href="https://github.com/Muizzkolapo/agent-actions">Give a star On github</a>
             </div>
           </div>
         </section>

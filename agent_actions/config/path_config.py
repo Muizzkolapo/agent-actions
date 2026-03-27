@@ -86,7 +86,9 @@ def get_tool_dirs(project_root: Path) -> list[str]:
     try:
         config = load_project_config(project_root)
     except (OSError, ConfigValidationError) as exc:
-        logger.debug("Could not load tool_path from project config, defaulting to ['tools']: %s", exc)
+        logger.debug(
+            "Could not load tool_path from project config, defaulting to ['tools']: %s", exc
+        )
         return ["tools"]
 
     raw = config.get("tool_path")
@@ -124,4 +126,4 @@ def get_schema_path(project_root: Path) -> str:
             "Add 'schema_path: schema' (or your custom folder name) to your project config.",
             context={"project_root": str(project_root), "operation": "get_schema_path"},
         )
-    return schema_path
+    return str(schema_path)

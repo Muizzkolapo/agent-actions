@@ -12,6 +12,7 @@ from agent_actions.logging.events.formatters import AgentActionsFormatter
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_event(
     event_type: str,
     data: dict | None = None,
@@ -37,6 +38,7 @@ def _make_event(
 # ---------------------------------------------------------------------------
 # Construction / init
 # ---------------------------------------------------------------------------
+
 
 class TestFormatterInit:
     """Tests for AgentActionsFormatter initialization."""
@@ -69,6 +71,7 @@ class TestFormatterInit:
 # Timestamp formatting
 # ---------------------------------------------------------------------------
 
+
 class TestTimestamp:
     """Tests for _timestamp helper."""
 
@@ -95,6 +98,7 @@ class TestTimestamp:
 # ---------------------------------------------------------------------------
 # Status formatting
 # ---------------------------------------------------------------------------
+
 
 class TestStatus:
     """Tests for _status helper."""
@@ -123,6 +127,7 @@ class TestStatus:
 # ---------------------------------------------------------------------------
 # Dispatch table — all event types
 # ---------------------------------------------------------------------------
+
 
 class TestWorkflowStartEvent:
     """Tests for _format_workflow_start."""
@@ -467,6 +472,7 @@ class TestBatchCompleteEvent:
 # Default / unknown event types
 # ---------------------------------------------------------------------------
 
+
 class TestDefaultFormatting:
     """Tests for unknown event types falling through to _format_default."""
 
@@ -490,6 +496,7 @@ class TestDefaultFormatting:
 # ---------------------------------------------------------------------------
 # Dispatch table completeness
 # ---------------------------------------------------------------------------
+
 
 class TestDispatchCompleteness:
     """Verify all dispatch entries resolve to real methods."""

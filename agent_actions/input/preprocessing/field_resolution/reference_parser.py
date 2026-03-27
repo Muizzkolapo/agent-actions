@@ -224,4 +224,3 @@ class ReferenceParser:
             (self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE),
             (self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR),
         ]
-

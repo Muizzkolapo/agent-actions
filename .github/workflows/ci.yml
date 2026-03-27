@@ -14,7 +14,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
         uses: ./.github/actions/setup-python
@@ -39,7 +39,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Check for changelog entry
         run: |
@@ -47,8 +47,18 @@ jobs:
             echo "Changelog entry found:"
             ls .changes/unreleased/*.yaml
           else
-            echo "::warning::No changelog entry found. Run 'task changelog:new' to create one."
+            echo "::error::No changelog entry found. Run 'task changelog:new' to create one."
+            exit 1
           fi
+
+      - name: Check for signed commits
+        run: |
+          git log origin/main..HEAD --format="%H %s" | while read hash subject; do
+            if ! git log -1 --format="%B" "$hash" | grep -q "Signed-off-by:"; then
+              echo "::error::Commit $hash is missing Signed-off-by. Use 'git commit --signoff'."
+              exit 1
+            fi
+          done
 
   test:
     name: Tests
@@ -58,7 +68,7 @@ jobs:
     needs: check
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
         uses: ./.github/actions/setup-python
@@ -74,7 +84,7 @@ jobs:
     needs: test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python
         uses: ./.github/actions/setup-python

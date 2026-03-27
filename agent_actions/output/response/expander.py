@@ -96,7 +96,9 @@ class ActionExpander:
         return process_guard_config(agent, action)
 
     @staticmethod
-    def _process_tool_action(agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode) -> None:
+    def _process_tool_action(
+        agent: dict[str, Any], action: dict[str, Any], run_mode: RunMode
+    ) -> None:
         return process_tool_action(agent, action, run_mode)
 
     @staticmethod

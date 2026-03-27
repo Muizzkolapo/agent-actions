@@ -1,7 +1,5 @@
 """I-6: Coverage of CatalogGenerator.generate() — happy path and empty input."""
 
-import pytest
-
 from agent_actions.tooling.docs.generator import CatalogGenerator
 
 
@@ -67,13 +65,15 @@ class TestCatalogGeneratorHappyPath:
 
         wf_yml = tmp_path / "my_workflow.yml"
         wf_yml.write_text(
-            yaml.dump({
-                "name": "my_workflow",
-                "description": "A test workflow",
-                "actions": [
-                    {"name": "step_one", "intent": "Does something"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "name": "my_workflow",
+                    "description": "A test workflow",
+                    "actions": [
+                        {"name": "step_one", "intent": "Does something"},
+                    ],
+                }
+            )
         )
         # workflows_data maps name -> {"rendered": path_or_none, "original": path}
         workflows_data = {"my_workflow": {"rendered": None, "original": str(wf_yml)}}

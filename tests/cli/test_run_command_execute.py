@@ -7,7 +7,6 @@ import pytest
 from agent_actions.cli.run import RunCommand
 from agent_actions.utils.path_utils import get_path_manager, reset_path_manager
 from agent_actions.validation.run_validator import RunCommandArgs
-from agent_actions.workflow.coordinator import AgentWorkflow
 
 
 def _make_args(**overrides) -> RunCommandArgs:
@@ -39,9 +38,7 @@ class TestRunCommandProjectRootWiring:
         cmd = RunCommand(_make_args())
 
         with (
-            patch(
-                "agent_actions.cli.run.ProjectPathsFactory.create_project_paths"
-            ) as mock_paths,
+            patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
             patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
             patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),
@@ -75,9 +72,7 @@ class TestRunCommandProjectRootWiring:
         cmd = RunCommand(_make_args())
 
         with (
-            patch(
-                "agent_actions.cli.run.ProjectPathsFactory.create_project_paths"
-            ) as mock_paths,
+            patch("agent_actions.cli.run.ProjectPathsFactory.create_project_paths") as mock_paths,
             patch("agent_actions.cli.run.find_config_file", return_value=tmp_path / "cfg.yml"),
             patch("agent_actions.cli.run.PromptValidator"),
             patch("agent_actions.cli.run.ConfigRenderingService.render_and_load_config"),

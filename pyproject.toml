@@ -24,7 +24,7 @@ dependencies = [
     "flask>=3.0.3,<4",
     "flask-cors>=4.0.1,<5",
     "networkx>=3.3,<4",
-    "pypdf>=4.0.0,<6",
+    "pypdf>=4.0.0,<7",
     "python-docx>=1.1.2,<2",
     "pandas>=2.2.2,<4",
     "openpyxl>=3.1.2,<4",
@@ -43,8 +43,8 @@ dependencies = [
     "ollama>=0.1.0,<1",
     "mistralai>=0.1.0,<2",
     "cohere>=5.0.0,<6",
-    "groq>=0.1.0,<1",
-    "rich>=13.0.0,<14",
+    "groq>=0.1.0,<2",
+    "rich>=13.0.0,<15",
     "pyyaml>=6.0.0,<7",
     "jinja2>=3.1.0,<4",
     "portalocker>=2.8.2,<3",
@@ -66,8 +66,10 @@ agac-lsp = "agent_actions.tooling.lsp.server:main"
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0,<9",
+    "pytest>=7.4.0,<10",
     "pytest-cov>=4.1.0,<7",
+    "pytest>=7.4.0,<9",
+    "pytest-cov>=4.1.0,<8",
     "mypy>=1.8.0,<2",
     "types-PyYAML>=6.0.12,<7",
     "pandas-stubs>=2.0.3,<3",
@@ -93,8 +95,10 @@ packages = ["agent_actions"]
 
 [tool.uv]
 dev-dependencies = [
-    "pytest>=7.4.0,<9",
+    "pytest>=7.4.0,<10",
     "pytest-cov>=4.1.0,<7",
+    "pytest>=7.4.0,<9",
+    "pytest-cov>=4.1.0,<8",
     "mypy>=1.8.0,<2",
     "types-PyYAML>=6.0.12,<7",
     "pandas-stubs>=2.0.3,<3",
@@ -114,6 +118,7 @@ dev-dependencies = [
 
 [tool.mypy]
 python_version = "3.11"
+exclude = ["^examples/"]
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
@@ -146,7 +151,8 @@ module = [
     "anthropic.*",
     "pypdf.*",
     "docx.*",
-    "networkx.*"
+    "networkx.*",
+    "agent_actions.llm.batch.*"
 ]
 ignore_missing_imports = true
 

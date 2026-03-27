@@ -373,7 +373,9 @@ class TestGetUpstreamDirectoriesGuard:
         # version_correlator returns empty map so we fall through to the guard
         mgr.version_correlator.detect_explicit_version_consumption.return_value = {}
 
-        with pytest.raises(ConfigurationError, match="declared dependencies that could not be resolved"):
+        with pytest.raises(
+            ConfigurationError, match="declared dependencies that could not be resolved"
+        ):
             mgr.get_upstream_directories(0)
 
     def test_idx_one_returns_correct_upstream_path(self, make_manager, tmp_path):

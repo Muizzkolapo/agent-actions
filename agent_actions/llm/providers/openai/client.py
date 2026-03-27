@@ -76,7 +76,7 @@ class OpenAIClient(BaseClient):
         envelope = MessageBuilder.build(
             "openai", prompt_config, context_data, schema=schema, json_mode=True
         )
-        messages: list[ChatCompletionSystemMessageParam] = envelope.to_dicts()
+        messages: list[ChatCompletionSystemMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())
@@ -172,7 +172,7 @@ class OpenAIClient(BaseClient):
         client = OpenAI(api_key=api_key)
         model_name: str = agent_config[MODEL_NAME_KEY]
         envelope = MessageBuilder.build("openai", prompt_config, context_data, json_mode=False)
-        messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()
+        messages: list[ChatCompletionUserMessageParam] = envelope.to_dicts()  # type: ignore[assignment]
 
         # Generate request ID for correlation
         request_id = str(uuid.uuid4())

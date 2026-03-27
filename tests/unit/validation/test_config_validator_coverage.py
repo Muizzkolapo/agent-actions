@@ -137,9 +137,7 @@ class TestIsValidArrayObjectType:
         assert result is True
 
     def test_valid_python_notation(self, validator):
-        result = validator._is_valid_array_object_type(
-            "array[object:{'name': 'string'}]"
-        )
+        result = validator._is_valid_array_object_type("array[object:{'name': 'string'}]")
         assert result is True
 
     def test_invalid_prefix(self, validator):
@@ -149,9 +147,7 @@ class TestIsValidArrayObjectType:
         assert validator._is_valid_array_object_type("array[object:invalid]") is False
 
     def test_invalid_property_type(self, validator):
-        result = validator._is_valid_array_object_type(
-            'array[object:{"name": "unknown_type"}]'
-        )
+        result = validator._is_valid_array_object_type('array[object:{"name": "unknown_type"}]')
         assert result is False
 
 
@@ -172,9 +168,7 @@ class TestIsValidSchemaType:
         assert validator._is_valid_schema_type("array[string]", set(), valid_array) is True
 
     def test_array_object_fallthrough(self, validator):
-        result = validator._is_valid_schema_type(
-            'array[object:{"x": "string"}]', set(), set()
-        )
+        result = validator._is_valid_schema_type('array[object:{"x": "string"}]', set(), set())
         assert result is True
 
     def test_invalid_type(self, validator):
@@ -224,15 +218,11 @@ class TestExtractDependenciesFromEntry:
         assert deps == set()
 
     def test_valid_dependencies(self, validator):
-        deps = validator._extract_dependencies_from_entry(
-            {"dependencies": ["AgentA", "AgentB"]}
-        )
+        deps = validator._extract_dependencies_from_entry({"dependencies": ["AgentA", "AgentB"]})
         assert deps == {"agenta", "agentb"}
 
     def test_non_string_dependencies_ignored(self, validator):
-        deps = validator._extract_dependencies_from_entry(
-            {"dependencies": [123, "AgentA"]}
-        )
+        deps = validator._extract_dependencies_from_entry({"dependencies": [123, "AgentA"]})
         assert deps == {"agenta"}
 
     def test_non_list_dependencies(self, validator):

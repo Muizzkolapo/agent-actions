@@ -32,7 +32,7 @@ class PromptASTAnalyzer:
         in an unsupported node (e.g., a literal).
         """
         if isinstance(node, nodes.Name):
-            return node.name
+            return str(node.name)
         elif isinstance(node, nodes.Getattr):
             parent_path = self._build_path_from_node(node.node)
             if not parent_path:
@@ -76,11 +76,11 @@ class PromptASTAnalyzer:
         # First pass: identify chain structure
         for node in template_ast.find_all((nodes.Getattr, nodes.Getitem)):  # type: ignore[assignment]
             # Mark child nodes as intermediate (not outermost)
-            if isinstance(node.node, (nodes.Getattr, nodes.Getitem)):  # type: ignore[attr-defined]
+            if isinstance(node.node, nodes.Getattr | nodes.Getitem):  # type: ignore[attr-defined]
                 intermediate_nodes.add(id(node.node))  # type: ignore[attr-defined]
             # Mark root Name nodes as part of chains
             current = node
-            while isinstance(current, (nodes.Getattr, nodes.Getitem)):  # type: ignore[unreachable]
+            while isinstance(current, nodes.Getattr | nodes.Getitem):  # type: ignore[unreachable]
                 current = current.node  # type: ignore[unreachable]
             if isinstance(current, nodes.Name):
                 names_in_chains.add(id(current))

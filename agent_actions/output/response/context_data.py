@@ -36,7 +36,7 @@ def _prepare_context_data_str(
     """
     if not tools_path:
         return "{}"
-    if isinstance(context_data, (dict, list)):
+    if isinstance(context_data, dict | list):
         return json.dumps(context_data, ensure_ascii=False)
     return str(context_data or "{}")
 

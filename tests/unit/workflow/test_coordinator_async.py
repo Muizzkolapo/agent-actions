@@ -370,9 +370,7 @@ class TestAsyncRunErrorHandling:
 
         orchestrator = wf.services.core.action_level_orchestrator
         orchestrator.compute_execution_levels.return_value = [["agent_a"]]
-        orchestrator.execute_level_async = AsyncMock(
-            side_effect=RuntimeError("level failed")
-        )
+        orchestrator.execute_level_async = AsyncMock(side_effect=RuntimeError("level failed"))
 
         mgr = _mock_manager()
         with (
