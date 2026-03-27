@@ -37,6 +37,12 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "agentActions.restartServer",
+        "title": "Agent Actions: Restart LSP Server"
+      }
+    ],
     "configuration": {
       "title": "Agent Actions",
       "properties": {
@@ -59,10 +65,12 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "package": "vsce package",
-    "publish": "vsce publish"
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "build": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run typecheck && npm run build && vsce package",
+    "publish": "npm run typecheck && npm run build && vsce publish"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
@@ -71,6 +79,7 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.0.0"
   }
 }
