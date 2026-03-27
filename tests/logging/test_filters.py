@@ -88,12 +88,12 @@ class TestRedactingFilter:
             level=logging.INFO,
             pathname="test.py",
             lineno=1,
-            msg="Using key AIzaSyC1234567890abcdefghijklmnopqrstuv",
+            msg="Using key AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
             args=(),
             exc_info=None,
         )
         filter_instance.filter(record)
-        assert "AIzaSyC1234567890abcdefghijklmnopqrstuv" not in record.msg
+        assert "AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" not in record.msg
         assert "AIza***" in record.msg
 
     def test_multiple_patterns_in_single_message(self):
