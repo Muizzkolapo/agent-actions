@@ -1,5 +1,3 @@
-import * as fs from "fs";
-import * as path from "path";
 import { workspace, ExtensionContext, window, commands, OutputChannel } from "vscode";
 import {
   LanguageClient,
@@ -7,46 +5,60 @@ import {
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
+import { PythonExtension } from "@vscode/python-extension";
 
 let client: LanguageClient | undefined;
 let outputChannel: OutputChannel;
 
 const ACTIVATION_TIMEOUT_MS = 10_000;
+const MODULE_ARGS = ["-m", "agent_actions.tooling.lsp.server", "--stdio"];
 
-function findAgacLsp(): string {
+async function getPythonPath(): Promise<string | undefined> {
+  try {
+    const api = await PythonExtension.api();
+    const envPath = api.environments.getActiveEnvironmentPath();
+    if (!envPath) return undefined;
+    const env = await api.environments.resolveEnvironment(envPath);
+    return env?.executable.uri?.fsPath;
+  } catch {
+    outputChannel.appendLine(
+      "Python extension not available; skipping interpreter discovery."
+    );
+    return undefined;
+  }
+}
+
+async function resolveServerOptions(): Promise<ServerOptions> {
   const config = workspace.getConfiguration("agentActions");
-  const configured: string = config.get("serverPath") || "";
-  if (configured && configured !== "agac-lsp") {
-    return configured;
+
+  // 1. Explicit serverPath override (escape hatch)
+  const serverPath: string = config.get("serverPath") || "";
+  if (serverPath && serverPath !== "agac-lsp") {
+    outputChannel.appendLine(`Using explicit server path: ${serverPath}`);
+    return { command: serverPath, args: ["--stdio"], transport: TransportKind.stdio };
   }
 
-  // Search venv locations relative to workspace root
-  const workspaceFolders = workspace.workspaceFolders;
-  if (workspaceFolders) {
-    const root = workspaceFolders[0].uri.fsPath;
-    const venvNames = [".venv", "venv", ".env", "env", ".env_agac"];
-    const binDir = process.platform === "win32" ? "Scripts" : "bin";
-    for (const venv of venvNames) {
-      const candidate = path.join(root, venv, binDir, "agac-lsp");
-      if (fs.existsSync(candidate)) {
-        return candidate;
-      }
-    }
+  // 2. Explicit interpreter setting
+  const interpreter: string[] = config.get("interpreter") || [];
+  if (interpreter.length > 0) {
+    outputChannel.appendLine(`Using interpreter from setting: ${interpreter[0]}`);
+    return { command: interpreter[0], args: MODULE_ARGS, transport: TransportKind.stdio };
   }
 
-  // Fall back to system PATH
-  return "agac-lsp";
+  // 3. Python extension API
+  const pythonPath = await getPythonPath();
+  if (pythonPath) {
+    outputChannel.appendLine(`Using Python from extension: ${pythonPath}`);
+    return { command: pythonPath, args: MODULE_ARGS, transport: TransportKind.stdio };
+  }
+
+  // 4. Fall back to agac-lsp on PATH
+  outputChannel.appendLine("Falling back to agac-lsp on PATH");
+  return { command: "agac-lsp", args: ["--stdio"], transport: TransportKind.stdio };
 }
 
 async function startClient(context: ExtensionContext): Promise<void> {
-  const serverPath = findAgacLsp();
-  outputChannel.appendLine(`Using LSP server: ${serverPath}`);
-
-  const serverOptions: ServerOptions = {
-    command: serverPath,
-    args: ["--stdio"],
-    transport: TransportKind.stdio,
-  };
+  const serverOptions = await resolveServerOptions();
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "yaml" }],
@@ -79,7 +91,6 @@ async function startClient(context: ExtensionContext): Promise<void> {
     await Promise.race([startPromise, timeoutPromise]);
     outputChannel.appendLine("LSP server started successfully.");
   } catch (err) {
-    // Stop the half-started client so it doesn't linger
     client.stop().catch((e) => outputChannel.appendLine(`Stop error: ${e}`));
     client = undefined;
     throw err;
@@ -91,6 +102,30 @@ async function startClient(context: ExtensionContext): Promise<void> {
 export async function activate(context: ExtensionContext): Promise<void> {
   outputChannel = window.createOutputChannel("Agent Actions");
   context.subscriptions.push(outputChannel);
+
+  // Restart server when Python interpreter changes
+  try {
+    const pythonApi = await PythonExtension.api();
+    context.subscriptions.push(
+      pythonApi.environments.onDidChangeActiveEnvironmentPath(async () => {
+        outputChannel.appendLine("Python interpreter changed, restarting LSP server...");
+        try {
+          if (client) {
+            await client.stop();
+            client = undefined;
+          }
+          await startClient(context);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          outputChannel.appendLine(`Restart after interpreter change failed: ${msg}`);
+        }
+      })
+    );
+  } catch {
+    outputChannel.appendLine(
+      "Python extension not available; interpreter change detection disabled."
+    );
+  }
 
   context.subscriptions.push(
     commands.registerCommand("agentActions.restartServer", async () => {
@@ -117,7 +152,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
     outputChannel.appendLine(`Activation error: ${msg}`);
     window.showErrorMessage(
       `Agent Actions LSP failed to start: ${msg}\n` +
-        `Make sure agent-actions is installed: pip install agent-actions`
+        `Ensure agent-actions is installed (pip install agent-actions) ` +
+        `and either the Python extension is active or agac-lsp is on your PATH.`
     );
   }
 }
