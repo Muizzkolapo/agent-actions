@@ -205,10 +205,11 @@ export function DataCard({ record, index, state }: DataCardProps) {
   const displayRecord = getDisplayFields(record)
   const { identity, content, metadata } = classifyRecord(record)
 
-  // Re-classify the unpacked display fields (these are all "content" role)
+  // Re-classify the unpacked display fields (these are all "content" role), sorted alphabetically
   const displayFields = Object.entries(displayRecord)
     .filter(([key]) => classifyField(key) === "content")
     .map(([key, value]) => ({ key, value, role: "content" as const }))
+    .sort((a, b) => a.key.localeCompare(b.key))
 
   const headline = pickHeadlineField(displayFields)
 
@@ -232,8 +233,8 @@ export function DataCard({ record, index, state }: DataCardProps) {
     >
       {/* Header zone */}
       <div className="px-4 pt-3 pb-2">
-        {/* Identity line: index + source_guid */}
-        <div className="flex items-center gap-2 mb-1">
+        {/* Identity line: index + source_guid + file */}
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           {typeof index === "number" && (
             <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
               #{index}
@@ -248,6 +249,11 @@ export function DataCard({ record, index, state }: DataCardProps) {
               {formatValue(f.value, 32)}
             </span>
           ))}
+          {typeof record._file === "string" && (
+            <span className="text-[10px] font-mono text-muted-foreground/50 truncate" title={record._file}>
+              {record._file}
+            </span>
+          )}
         </div>
 
         {/* Headline */}

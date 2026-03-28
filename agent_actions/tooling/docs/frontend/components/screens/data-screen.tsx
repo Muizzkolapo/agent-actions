@@ -258,9 +258,9 @@ function WorkflowDetail({
 type ViewMode = "table" | "json" | "card"
 
 const VIEW_MODES: { key: ViewMode; label: string }[] = [
-  { key: "table", label: "Table" },
-  { key: "json", label: "JSON" },
   { key: "card", label: "Card" },
+  { key: "json", label: "JSON" },
+  { key: "table", label: "Table" },
 ]
 
 function NodeDetail({
@@ -403,7 +403,7 @@ function NodeDetail({
           </div>
         ) : (
           /* Card view */
-          <div className="flex flex-col gap-3 pt-3 max-w-[720px]">
+          <div className="flex flex-col gap-3 pt-3 max-w-[720px] mx-auto w-full">
             {pageRecords.map((row, i) => {
               const idx = page * RECORDS_PER_PAGE + i
               const key = typeof row.source_guid === "string" ? row.source_guid : idx
