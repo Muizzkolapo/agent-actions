@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
