@@ -36,19 +36,19 @@ export function CellValue({ value }: { value: unknown }) {
     )
   }
   if (typeof value === "number") {
-    return <span className="font-mono tabular-nums text-foreground text-[1em]">{value.toLocaleString()}</span>
+    return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
   }
   if (typeof value === "object") {
     const str = JSON.stringify(value)
     return (
-      <span className="font-mono text-muted-foreground truncate block max-w-[300px] text-[0.85em]" title={str}>
+      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
         {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
       </span>
     )
   }
   const str = String(value)
   return (
-    <span className="font-mono text-foreground truncate block max-w-[300px] text-[1em]" title={str}>
+    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
       {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
     </span>
   )

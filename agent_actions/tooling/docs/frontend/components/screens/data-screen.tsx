@@ -293,40 +293,45 @@ const WIDTH_PRESETS = [
 const DEFAULT_FONT_IDX = 2 // 15px
 const DEFAULT_WIDTH_IDX = 1 // 720px
 
-function useTypographyPrefs() {
-  const [fontIdx, setFontIdx] = useState(DEFAULT_FONT_IDX)
-  const [widthIdx, setWidthIdx] = useState(DEFAULT_WIDTH_IDX)
+function readStoredIndex<T>(key: string, lookup: (v: number) => number): number | null {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) { const i = lookup(Number(raw)); if (i >= 0) return i }
+  } catch { /* SSR / private browsing */ }
+  return null
+}
 
+function useTypographyPrefs() {
+  const [fontIdx, setFontIdx] = useState(() =>
+    readStoredIndex("docs-card-font-size", (v) =>
+      FONT_SIZES.indexOf(v as (typeof FONT_SIZES)[number]),
+    ) ?? DEFAULT_FONT_IDX,
+  )
+  const [widthIdx, setWidthIdx] = useState(() =>
+    readStoredIndex("docs-card-width", (v) =>
+      WIDTH_PRESETS.findIndex((p) => p.value === v),
+    ) ?? DEFAULT_WIDTH_IDX,
+  )
+
+  // Persist to localStorage whenever indices change
   useEffect(() => {
-    try {
-      const sf = localStorage.getItem("docs-card-font-size")
-      const sw = localStorage.getItem("docs-card-width")
-      if (sf) {
-        const i = FONT_SIZES.indexOf(Number(sf) as (typeof FONT_SIZES)[number])
-        if (i >= 0) setFontIdx(i)
-      }
-      if (sw) {
-        const i = WIDTH_PRESETS.findIndex((p) => p.value === Number(sw))
-        if (i >= 0) setWidthIdx(i)
-      }
-    } catch { /* SSR / private browsing */ }
-  }, [])
+    try { localStorage.setItem("docs-card-font-size", String(FONT_SIZES[fontIdx])) } catch {}
+  }, [fontIdx])
+  useEffect(() => {
+    try { localStorage.setItem("docs-card-width", String(WIDTH_PRESETS[widthIdx].value)) } catch {}
+  }, [widthIdx])
 
   const stepFont = useCallback((dir: 1 | -1) => {
     setFontIdx((prev) => {
       const next = prev + dir
-      if (next < 0 || next >= FONT_SIZES.length) return prev
-      localStorage.setItem("docs-card-font-size", String(FONT_SIZES[next]))
-      return next
+      return (next < 0 || next >= FONT_SIZES.length) ? prev : next
     })
   }, [])
 
   const stepWidth = useCallback((dir: 1 | -1) => {
     setWidthIdx((prev) => {
       const next = prev + dir
-      if (next < 0 || next >= WIDTH_PRESETS.length) return prev
-      localStorage.setItem("docs-card-width", String(WIDTH_PRESETS[next].value))
-      return next
+      return (next < 0 || next >= WIDTH_PRESETS.length) ? prev : next
     })
   }, [])
 
@@ -349,6 +354,7 @@ function TypographyControls({
       {/* Font size stepper */}
       <div className="typo-pill" title="Font size">
         <button
+          type="button"
           className="typo-btn"
           onClick={() => stepFont(-1)}
           disabled={fontIdx === 0}
@@ -358,6 +364,7 @@ function TypographyControls({
         </button>
         <span className="typo-val">{fontSize}</span>
         <button
+          type="button"
           className="typo-btn"
           onClick={() => stepFont(1)}
           disabled={fontIdx === FONT_SIZES.length - 1}
@@ -370,6 +377,7 @@ function TypographyControls({
       {/* Width stepper */}
       <div className="typo-pill" title="Card width">
         <button
+          type="button"
           className="typo-btn"
           onClick={() => stepWidth(-1)}
           disabled={widthIdx === 0}
@@ -379,6 +387,7 @@ function TypographyControls({
         </button>
         <span className="typo-val">{widthLabel}</span>
         <button
+          type="button"
           className="typo-btn"
           onClick={() => stepWidth(1)}
           disabled={widthIdx === WIDTH_PRESETS.length - 1}
