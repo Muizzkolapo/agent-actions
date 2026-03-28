@@ -1226,7 +1226,7 @@
 
         /* ── Fields Rendering ── */
         /* METADATA_KEYS injected from Python (single source of truth) */
-        var METADATA_KEYS = {{ metadata_keys | safe }};
+        var METADATA_KEYS = {{ metadata_keys | tojson }};
 
         function getDisplayRecord(record) {
             if (!record || typeof record !== 'object' || Array.isArray(record)) return record;

@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { ChevronRight } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
+  classifyField,
   classifyRecord,
   humanizeKey,
   isInlineArray,
@@ -75,15 +76,13 @@ function CodeBlock({ value }: { value: unknown }) {
 }
 
 function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
-  const type = getValueType(value)
-
   // Inline pills for short arrays
   if (isInlineArray(value)) {
     return <InlinePills items={value as (string | number)[]} />
   }
 
   // Code block for complex objects/arrays
-  if (type === "object") {
+  if (getValueType(value) === "object") {
     return <CodeBlock value={value} />
   }
 
@@ -92,31 +91,8 @@ function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
     return <ProseBlock text={value} />
   }
 
-  // Everything else: use shared CellValue (no truncation for card view)
-  if (type === "null") {
-    return <span className="text-[10px] italic text-muted-foreground/50">null</span>
-  }
-  if (type === "boolean") {
-    return (
-      <Badge
-        variant="outline"
-        className={`text-[10px] font-normal rounded-md ${
-          value
-            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))] border-[hsl(var(--success))]/20"
-            : "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20"
-        }`}
-      >
-        {String(value)}
-      </Badge>
-    )
-  }
-  if (type === "number") {
-    return <span className="font-mono tabular-nums text-foreground">{(value as number).toLocaleString()}</span>
-  }
-
-  // String — show full value in card (no truncation)
-  const str = String(value)
-  return <span className="font-mono text-foreground break-words">{str}</span>
+  // Delegate simple types (null, boolean, number, string) to shared CellValue
+  return <CellValue value={value} />
 }
 
 function ProseBlock({ text }: { text: string }) {
@@ -210,14 +186,36 @@ export interface DataCardProps {
   state?: "approved" | "rejected" | "pending"
 }
 
+/**
+ * Unpack a record for display — mirrors HITL's getDisplayRecord() logic.
+ * If the record has a `.content` object, unpack its inner fields as the
+ * display fields (this is the standard agent-actions record envelope).
+ * Otherwise, filter out metadata keys and show remaining fields.
+ */
+function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
+  const contentVal = record.content
+  if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
+    return contentVal as Record<string, unknown>
+  }
+  return record
+}
+
 export function DataCard({ record, index, state }: DataCardProps) {
+  // Unpack content envelope — show inner fields, not the raw content blob
+  const displayRecord = getDisplayFields(record)
   const { identity, content, metadata } = classifyRecord(record)
-  const headline = pickHeadlineField(content)
+
+  // Re-classify the unpacked display fields (these are all "content" role)
+  const displayFields = Object.entries(displayRecord)
+    .filter(([key]) => classifyField(key) === "content")
+    .map(([key, value]) => ({ key, value, role: "content" as const }))
+
+  const headline = pickHeadlineField(displayFields)
 
   // Separate headline from other content fields
   const otherContent = headline
-    ? content.filter((f) => f.key !== headline.key)
-    : content
+    ? displayFields.filter((f) => f.key !== headline.key)
+    : displayFields
 
   // Split content into short (inline) and long (block) groups
   const shortFields = otherContent.filter(

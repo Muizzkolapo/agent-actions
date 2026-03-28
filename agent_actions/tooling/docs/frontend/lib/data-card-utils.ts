@@ -6,7 +6,10 @@
  * Single source of truth for which fields are "metadata" vs "content".
  */
 
-// ── Metadata keys (mirrored in agent_actions/tooling/rendering/data_card.py) ──
+// ── Metadata keys ──────────────────────────────────────────────────────────
+// IMPORTANT: Keep in sync with the Python source of truth:
+//   agent_actions/tooling/rendering/data_card.py :: METADATA_KEYS
+// The HITL template receives these from the Python server at runtime.
 export const METADATA_KEYS = new Set([
   "source_guid",
   "lineage",

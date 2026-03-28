@@ -257,6 +257,12 @@ function WorkflowDetail({
 
 type ViewMode = "table" | "json" | "card"
 
+const VIEW_MODES: { key: ViewMode; label: string }[] = [
+  { key: "table", label: "Table" },
+  { key: "json", label: "JSON" },
+  { key: "card", label: "Card" },
+]
+
 function NodeDetail({
   node,
   workflow,
@@ -267,7 +273,7 @@ function NodeDetail({
   onBack: () => void
 }) {
   const [page, setPage] = useState(0)
-  const [viewMode, setViewMode] = useState<ViewMode>("table")
+  const [viewMode, setViewMode] = useState<ViewMode>("card")
 
   const columns = useMemo(() => {
     if (node.preview.length === 0) return []
@@ -285,12 +291,6 @@ function NodeDetail({
     page * RECORDS_PER_PAGE,
     (page + 1) * RECORDS_PER_PAGE,
   )
-
-  const VIEW_MODES: { key: ViewMode; label: string }[] = [
-    { key: "table", label: "Table" },
-    { key: "json", label: "JSON" },
-    { key: "card", label: "Card" },
-  ]
 
   return (
     <div className="flex flex-col gap-4">
@@ -404,13 +404,17 @@ function NodeDetail({
         ) : (
           /* Card view */
           <div className="flex flex-col gap-3 pt-3 max-w-[720px]">
-            {pageRecords.map((row, i) => (
-              <DataCard
-                key={page * RECORDS_PER_PAGE + i}
-                record={row}
-                index={page * RECORDS_PER_PAGE + i + 1}
-              />
-            ))}
+            {pageRecords.map((row, i) => {
+              const idx = page * RECORDS_PER_PAGE + i
+              const key = typeof row.source_guid === "string" ? row.source_guid : idx
+              return (
+                <DataCard
+                  key={key}
+                  record={row}
+                  index={idx + 1}
+                />
+              )
+            })}
           </div>
         )}
 
