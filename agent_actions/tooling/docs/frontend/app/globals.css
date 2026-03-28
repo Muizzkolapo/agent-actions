@@ -160,10 +160,9 @@
   .data-card[data-state="pending"]  { border-left-color: hsl(var(--warning)); }
 
   /* Headline zone */
-  /* Field label — tinted primary for clear key/value distinction */
+  /* Field label — muted but distinct from values */
   .data-card-label {
-    @apply text-[10px] uppercase tracking-wider font-semibold;
-    color: hsl(var(--primary) / 0.7);
+    @apply text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/70;
   }
 
   /* Inline pill for short array items */
