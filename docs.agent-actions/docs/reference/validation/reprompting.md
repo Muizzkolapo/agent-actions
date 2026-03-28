@@ -163,25 +163,49 @@ actions:
 
 ## Combined with Retry
 
-Retry and reprompt work together but handle different error types:
+Retry and reprompt solve different problems and can both trigger for the same record:
+
+| | Retry | Reprompt |
+|--|-------|---------|
+| **Trigger** | LLM never responded (network error, rate limit, missing from batch) | LLM responded but output is invalid |
+| **Action** | Resubmit same request, wait with backoff | Append error feedback to prompt, call LLM again |
+| **Cost** | Same tokens (identical request) | More tokens (prompt grows with feedback) |
 
 ```yaml
 defaults:
-  # Retry: transient errors (rate limits, network)
   retry:
     max_attempts: 3
     on_exhausted: raise
 
-  # Reprompt: validation errors (bad JSON, schema violations)
   reprompt:
     max_attempts: 4
     on_exhausted: return_last
 ```
 
-The execution flow:
-1. Action runs → transient error → **retry** kicks in
-2. Action runs → success but invalid JSON → **reprompt** kicks in
-3. Both can trigger for the same record (retry first, then reprompt)
+### Online Mode
+
+In online mode, retry and reprompt operate in sequence on each record:
+
+```mermaid
+flowchart LR
+    A[LLM Call] -->|NetworkError / RateLimitError| B[Retry: backoff + same request]
+    B --> A
+    A -->|Success| C{Schema Valid?}
+    C -->|No| D[Reprompt: feedback + new request]
+    D --> A
+    C -->|Yes| E[Done]
+```
+
+A single record might be retried twice (transport failures), then reprompted once (schema failure) — that's 4 LLM calls total. The recovery metadata captures the full history.
+
+### Batch Mode
+
+In batch mode, recovery is two-phase. See [Batch Recovery](../execution/batch-recovery.md) for the complete flow.
+
+1. **Phase 1 (Retry):** Detect missing records by comparing expected vs received IDs, resubmit as a new batch
+2. **Phase 2 (Reprompt):** Validate all results against the configured UDF, resubmit failures with feedback
+
+Retry metadata from Phase 1 is preserved through Phase 2 — a record that was missing and then failed validation will carry both `_recovery.retry` and `_recovery.reprompt` in its output.
 
 ## Best Practices
 

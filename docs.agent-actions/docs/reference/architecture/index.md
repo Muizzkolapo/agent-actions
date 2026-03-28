@@ -112,9 +112,9 @@ flowchart TB
         PROVIDERS["Provider Clients"]
     end
 
-    subgraph Response["Response Processing"]
+    subgraph Recovery["Error Recovery"]
+        RETRY["Transport Retry"]
         SCHEMA["Schema Validator"]
-        REPAIR["JSON Repair"]
         REPROMPT["Reprompting"]
     end
 
@@ -122,12 +122,17 @@ flowchart TB
     DAG --> LEVELS --> PARALLEL
     PARALLEL --> CONTEXT --> TEMPLATE
     TEMPLATE --> REFS --> ONLINE
-    ONLINE --> PROVIDERS --> SCHEMA
-    SCHEMA --> REPAIR --> REPROMPT
-    REPROMPT -.->|retry| TEMPLATE
+    ONLINE --> PROVIDERS --> RETRY
+    RETRY -.->|"NetworkError / RateLimitError"| PROVIDERS
+    RETRY --> SCHEMA --> REPROMPT
+    REPROMPT -.->|"validation failure"| TEMPLATE
 ```
 
-Notice the dotted line from Reprompting back to Template—this is the retry loop that fires when validation fails.
+Two recovery loops are visible here:
+- **Transport retry** (Retry → Providers): same request resubmitted with exponential backoff when network errors or rate limits occur
+- **Validation reprompt** (Reprompt → Template): prompt rebuilt with error feedback when schema validation fails
+
+In batch mode, these run as two sequential phases after the batch completes. See [Batch Recovery](../execution/batch-recovery.md) for details.
 
 ## Execution Lifecycle
 
@@ -174,6 +179,7 @@ This lineage tracking is important: it lets you trace any output back through th
 ## See Also
 
 - [Run Modes](../execution/run-modes.md) — Batch vs online execution
+- [Batch Recovery](../execution/batch-recovery.md) — Two-phase recovery for batch processing
 - [Granularity](../execution/granularity.md) — Record vs file processing
 - [Data I/O](../data-io/) — Directory structure and file formats
 - [Validation](../validation/) — Pre-flight and schema validation
