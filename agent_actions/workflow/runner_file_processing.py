@@ -32,6 +32,15 @@ def is_target_directory(path: str) -> bool:
     return "target" in path and "staging" not in path
 
 
+def _file_limit_reached(action_config: dict, count: int, action_name: str) -> bool:
+    """Return True (and log) if file_limit has been reached."""
+    file_limit = action_config.get("file_limit")
+    if file_limit is not None and count >= file_limit:
+        logger.info("file_limit=%d reached for %s", count, action_name)
+        return True
+    return False
+
+
 def should_skip_item(
     item: Path,
     input_path: Path,
@@ -134,11 +143,7 @@ def process_directory_files(
             )
         )
         count += 1
-        if (
-            params.action_config.get("file_limit") is not None
-            and count >= params.action_config["file_limit"]
-        ):
-            logger.info("file_limit=%d reached for %s", count, params.action_name)
+        if _file_limit_reached(params.action_config, count, params.action_name):
             break
     return count
 
@@ -219,11 +224,7 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
                 )
 
         files_processed_count += 1
-        if (
-            params.action_config.get("file_limit") is not None
-            and files_processed_count >= params.action_config["file_limit"]
-        ):
-            logger.info("file_limit=%d reached for %s", files_processed_count, params.action_name)
+        if _file_limit_reached(params.action_config, files_processed_count, params.action_name):
             break
 
     return files_processed_count
@@ -330,11 +331,7 @@ def process_from_storage_backend(
                 )
             )
             files_processed += 1
-            if (
-                params.action_config.get("file_limit") is not None
-                and files_processed >= params.action_config["file_limit"]
-            ):
-                logger.info("file_limit=%d reached for %s", files_processed, params.action_name)
+            if _file_limit_reached(params.action_config, files_processed, params.action_name):
                 break
 
         except Exception as e:

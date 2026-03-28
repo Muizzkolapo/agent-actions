@@ -128,6 +128,29 @@ class ActionExecutor:
             return False
         return self.deps == other.deps
 
+    @staticmethod
+    def _limit_metadata(action_config: ActionConfigDict) -> dict[str, int | None]:
+        """Extract limit fields for status metadata storage."""
+        return {
+            "record_limit": action_config.get("record_limit"),
+            "file_limit": action_config.get("file_limit"),
+        }
+
+    def _maybe_invalidate_completed_status(
+        self, action_name: str, action_config: ActionConfigDict, current_status: str
+    ) -> str:
+        """Reset to pending if limit config changed since last completion."""
+        if current_status != "completed":
+            return current_status
+        details = self.deps.state_manager.get_status_details(action_name)
+        if details.get("record_limit") != action_config.get("record_limit") or details.get(
+            "file_limit"
+        ) != action_config.get("file_limit"):
+            logger.info("Limit config changed for %s, resetting to pending", action_name)
+            self.deps.state_manager.update_status(action_name, "pending")
+            return "pending"
+        return current_status
+
     def verify_completion_status(self, action_name: str) -> bool:
         """Return True if the action has valid output and should be skipped.
 
@@ -190,10 +213,7 @@ class ActionExecutor:
         """Handle action skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(action_idx, action_name)
         self.deps.state_manager.update_status(
-            action_name,
-            "completed",
-            record_limit=action_config.get("record_limit"),
-            file_limit=action_config.get("file_limit"),
+            action_name, "completed", **self._limit_metadata(action_config)
         )
 
         duration = (datetime.now() - start_time).total_seconds()
@@ -264,10 +284,7 @@ class ActionExecutor:
 
         if batch_status == "passthrough":
             self.deps.state_manager.update_status(
-                params.action_name,
-                "completed",
-                record_limit=params.action_config.get("record_limit"),
-                file_limit=params.action_config.get("file_limit"),
+                params.action_name, "completed", **self._limit_metadata(params.action_config)
             )
             logger.info(
                 "Action completed (passthrough)",
@@ -289,10 +306,7 @@ class ActionExecutor:
 
         # Normal completion
         self.deps.state_manager.update_status(
-            params.action_name,
-            "completed",
-            record_limit=params.action_config.get("record_limit"),
-            file_limit=params.action_config.get("file_limit"),
+            params.action_name, "completed", **self._limit_metadata(params.action_config)
         )
         tokens = get_last_usage()
 
@@ -381,15 +395,9 @@ class ActionExecutor:
             },
         )
 
-        if current_status == "completed":
-            # Invalidate if limit config changed since last completion
-            details = self.deps.state_manager.get_status_details(action_name)
-            if details.get("record_limit") != action_config.get("record_limit") or details.get(
-                "file_limit"
-            ) != action_config.get("file_limit"):
-                logger.info("Limit config changed for %s, resetting to pending", action_name)
-                self.deps.state_manager.update_status(action_name, "pending")
-                current_status = "pending"
+        current_status = self._maybe_invalidate_completed_status(
+            action_name, action_config, current_status
+        )
 
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
@@ -441,15 +449,9 @@ class ActionExecutor:
             },
         )
 
-        if current_status == "completed":
-            # Invalidate if limit config changed since last completion
-            details = self.deps.state_manager.get_status_details(action_name)
-            if details.get("record_limit") != action_config.get("record_limit") or details.get(
-                "file_limit"
-            ) != action_config.get("file_limit"):
-                logger.info("Limit config changed for %s, resetting to pending", action_name)
-                self.deps.state_manager.update_status(action_name, "pending")
-                current_status = "pending"
+        current_status = self._maybe_invalidate_completed_status(
+            action_name, action_config, current_status
+        )
 
         if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
@@ -501,10 +503,7 @@ class ActionExecutor:
 
         if batch_status == "completed":
             self.deps.state_manager.update_status(
-                action_name,
-                "completed",
-                record_limit=action_config.get("record_limit"),
-                file_limit=action_config.get("file_limit"),
+                action_name, "completed", **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
@@ -577,10 +576,7 @@ class ActionExecutor:
 
         if batch_status == "completed":
             self.deps.state_manager.update_status(
-                action_name,
-                "completed",
-                record_limit=action_config.get("record_limit"),
-                file_limit=action_config.get("file_limit"),
+                action_name, "completed", **self._limit_metadata(action_config)
             )
             fire_event(
                 BatchCompleteEvent(
