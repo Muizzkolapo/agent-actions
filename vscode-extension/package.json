@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "Language support and workflow navigation for Agent Actions projects",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -61,7 +61,9 @@
         "agentActions.interpreter": {
           "type": "array",
           "default": [],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "scope": "resource",
           "description": "Path to the Python interpreter used to run the LSP server. If empty, the interpreter from the Python extension is used."
         },
@@ -72,7 +74,11 @@
         },
         "agentActions.trace.server": {
           "type": "string",
-          "enum": ["off", "messages", "verbose"],
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
           "default": "off",
           "description": "Trace LSP communication for debugging."
         },
@@ -108,7 +114,10 @@
         },
         "agentActions.dagLayout": {
           "type": "string",
-          "enum": ["vertical", "horizontal"],
+          "enum": [
+            "vertical",
+            "horizontal"
+          ],
           "default": "vertical",
           "description": "Layout direction for the workflow DAG visualization."
         },
@@ -120,7 +129,13 @@
         },
         "agentActions.logLevel": {
           "type": "string",
-          "enum": ["debug", "info", "warn", "error", "off"],
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error",
+            "off"
+          ],
           "default": "info",
           "description": "Controls the verbosity of Agent Actions logs in the Output panel."
         },
@@ -142,9 +157,24 @@
     },
     "views": {
       "agentActions": [
-        { "id": "agentActionsWorkflow", "name": "Workflows", "icon": "$(list-tree)", "contextualTitle": "Workflow Navigator" },
-        { "id": "agentActionsInfo", "name": "Extension Info", "visibility": "collapsed", "contextualTitle": "Agent Actions Info" },
-        { "id": "agentActionsHelp", "name": "Help", "visibility": "collapsed", "contextualTitle": "Agent Actions Help" }
+        {
+          "id": "agentActionsWorkflow",
+          "name": "Workflows",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Workflow Navigator"
+        },
+        {
+          "id": "agentActionsInfo",
+          "name": "Extension Info",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Info"
+        },
+        {
+          "id": "agentActionsHelp",
+          "name": "Help",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Help"
+        }
       ]
     },
     "viewsWelcome": [
@@ -160,53 +190,205 @@
         "title": "Agent Actions Walkthrough",
         "description": "Set up your Agent Actions project and explore the extension features.",
         "steps": [
-          { "id": "openProject", "title": "Open an Agent Actions project", "description": "Open a folder containing `agent_actions.yml` to activate the extension.\n\n[Open Folder](command:vscode.openFolder)", "media": { "image": "media/icons/agent-actions.svg", "altText": "Agent Actions" }, "completionEvents": ["onContext:agentActions.isAgentProject"] },
-          { "id": "configureEnvironment", "title": "Configure Python environment", "description": "Set up the Python path for the LSP server and data preview.\n\n[Open Settings](command:workbench.action.openSettings?%5B%22agentActions.pythonPath%22%5D)", "media": { "image": "media/icons/agent-actions.svg", "altText": "Python Config" }, "completionEvents": ["onSettingChanged:agentActions.pythonPath"] },
-          { "id": "exploreWorkflow", "title": "Explore your workflow", "description": "Use the Workflow Navigator to browse actions, view the DAG, and preview data.\n\n[Show DAG](command:agentActions.showDAG)", "media": { "image": "media/icons/agent-actions.svg", "altText": "Workflow Explorer" }, "completionEvents": ["onCommand:agentActions.showDAG"] },
-          { "id": "previewData", "title": "Preview action data", "description": "Click any action in the tree to preview its output data.\n\n[Go to Action](command:agentActions.goToAction)", "media": { "image": "media/icons/agent-actions.svg", "altText": "Data Preview" }, "completionEvents": ["onCommand:agentActions.previewData"] }
+          {
+            "id": "openProject",
+            "title": "Open an Agent Actions project",
+            "description": "Open a folder containing `agent_actions.yml` to activate the extension.\n\n[Open Folder](command:vscode.openFolder)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Agent Actions"
+            },
+            "completionEvents": [
+              "onContext:agentActions.isAgentProject"
+            ]
+          },
+          {
+            "id": "configureEnvironment",
+            "title": "Configure Python environment",
+            "description": "Set up the Python path for the LSP server and data preview.\n\n[Open Settings](command:workbench.action.openSettings?%5B%22agentActions.pythonPath%22%5D)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Python Config"
+            },
+            "completionEvents": [
+              "onSettingChanged:agentActions.pythonPath"
+            ]
+          },
+          {
+            "id": "exploreWorkflow",
+            "title": "Explore your workflow",
+            "description": "Use the Workflow Navigator to browse actions, view the DAG, and preview data.\n\n[Show DAG](command:agentActions.showDAG)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Workflow Explorer"
+            },
+            "completionEvents": [
+              "onCommand:agentActions.showDAG"
+            ]
+          },
+          {
+            "id": "previewData",
+            "title": "Preview action data",
+            "description": "Click any action in the tree to preview its output data.\n\n[Go to Action](command:agentActions.goToAction)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Data Preview"
+            },
+            "completionEvents": [
+              "onCommand:agentActions.previewData"
+            ]
+          }
         ]
       }
     ],
     "commands": [
-      { "command": "agentActions.restartServer", "title": "Restart LSP Server", "category": "Agent Actions" },
-      { "command": "agentActions.openConfig", "title": "Open Action Config", "category": "Agent Actions", "icon": "$(go-to-file)" },
-      { "command": "agentActions.previewData", "title": "Preview Data", "category": "Agent Actions", "icon": "$(database)" },
-      { "command": "agentActions.showDAG", "title": "Show Workflow DAG", "category": "Agent Actions", "icon": "$(graph)" },
-      { "command": "agentActions.goToAction", "title": "Go to Action...", "category": "Agent Actions", "icon": "$(search)" },
-      { "command": "agentActions.refresh", "title": "Refresh Workflow", "category": "Agent Actions", "icon": "$(refresh)" },
-      { "command": "agentActions.showWorkflowTree", "title": "Show Workflow Navigator", "category": "Agent Actions", "icon": "$(list-tree)" },
-      { "command": "agentActions.nextPage", "title": "Next Page", "category": "Agent Actions", "icon": "$(arrow-right)" },
-      { "command": "agentActions.previousPage", "title": "Previous Page", "category": "Agent Actions", "icon": "$(arrow-left)" },
-      { "command": "agentActions.openDocs", "title": "Open Documentation", "category": "Agent Actions", "icon": "$(book)" },
-      { "command": "agentActions.openSettings", "title": "Open Settings", "category": "Agent Actions", "icon": "$(gear)" }
+      {
+        "command": "agentActions.restartServer",
+        "title": "Restart LSP Server",
+        "category": "Agent Actions"
+      },
+      {
+        "command": "agentActions.openConfig",
+        "title": "Open Action Config",
+        "category": "Agent Actions",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "agentActions.previewData",
+        "title": "Preview Data",
+        "category": "Agent Actions",
+        "icon": "$(database)"
+      },
+      {
+        "command": "agentActions.showDAG",
+        "title": "Show Workflow DAG",
+        "category": "Agent Actions",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "title": "Go to Action...",
+        "category": "Agent Actions",
+        "icon": "$(search)"
+      },
+      {
+        "command": "agentActions.refresh",
+        "title": "Refresh Workflow",
+        "category": "Agent Actions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentActions.showWorkflowTree",
+        "title": "Show Workflow Navigator",
+        "category": "Agent Actions",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Next Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Previous Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "agentActions.openDocs",
+        "title": "Open Documentation",
+        "category": "Agent Actions",
+        "icon": "$(book)"
+      },
+      {
+        "command": "agentActions.openSettings",
+        "title": "Open Settings",
+        "category": "Agent Actions",
+        "icon": "$(gear)"
+      }
     ],
     "menus": {
       "view/title": [
-        { "command": "agentActions.refresh", "when": "view == agentActionsWorkflow", "group": "navigation@1" },
-        { "command": "agentActions.showDAG", "when": "view == agentActionsWorkflow", "group": "navigation@2" },
-        { "command": "agentActions.goToAction", "when": "view == agentActionsWorkflow", "group": "navigation@3" }
+        {
+          "command": "agentActions.refresh",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.showDAG",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@3"
+        }
       ],
       "view/item/context": [
-        { "command": "agentActions.openConfig", "when": "view == agentActionsWorkflow && viewItem == agentActions.action", "group": "navigation@1" },
-        { "command": "agentActions.previewData", "when": "view == agentActionsWorkflow && viewItem == agentActions.action", "group": "navigation@2" }
+        {
+          "command": "agentActions.openConfig",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.previewData",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@2"
+        }
       ],
       "commandPalette": [
-        { "command": "agentActions.showDAG", "when": "agentActions.isAgentProject" },
-        { "command": "agentActions.goToAction", "when": "agentActions.isAgentProject" },
-        { "command": "agentActions.refresh", "when": "agentActions.isAgentProject" }
+        {
+          "command": "agentActions.showDAG",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.refresh",
+          "when": "agentActions.isAgentProject"
+        }
       ]
     },
     "keybindings": [
-      { "command": "agentActions.showDAG", "key": "cmd+shift+d", "mac": "cmd+shift+d", "win": "ctrl+shift+d", "linux": "ctrl+shift+d", "when": "agentActions.isAgentProject" },
-      { "command": "agentActions.goToAction", "key": "cmd+shift+a", "mac": "cmd+shift+a", "win": "ctrl+shift+a", "linux": "ctrl+shift+a", "when": "agentActions.isAgentProject" },
-      { "command": "agentActions.refresh", "key": "cmd+shift+r", "mac": "cmd+shift+r", "win": "ctrl+shift+r", "linux": "ctrl+shift+r", "when": "agentActions.isAgentProject" }
+      {
+        "command": "agentActions.showDAG",
+        "key": "cmd+shift+d",
+        "mac": "cmd+shift+d",
+        "win": "ctrl+shift+d",
+        "linux": "ctrl+shift+d",
+        "when": "agentActions.isAgentProject"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "key": "cmd+shift+a",
+        "mac": "cmd+shift+a",
+        "win": "ctrl+shift+a",
+        "linux": "ctrl+shift+a",
+        "when": "agentActions.isAgentProject"
+      },
+      {
+        "command": "agentActions.refresh",
+        "key": "cmd+shift+r",
+        "mac": "cmd+shift+r",
+        "win": "ctrl+shift+r",
+        "linux": "ctrl+shift+r",
+        "when": "agentActions.isAgentProject"
+      }
     ],
     "grammars": [
       {
         "scopeName": "markdown.prompt-blocks.injection",
         "path": "./syntaxes/prompt-blocks.tmLanguage.json",
-        "injectTo": ["text.html.markdown"],
-        "embeddedLanguages": { "meta.embedded.block.prompt": "markdown" }
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.prompt": "markdown"
+        }
       }
     ]
   },
