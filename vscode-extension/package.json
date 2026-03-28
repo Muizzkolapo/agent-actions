@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -88,6 +88,36 @@
       {
         "command": "agentActions.openDocs",
         "title": "Agent Actions: Open Documentation"
+      },
+      {
+        "command": "agentActions.previewData",
+        "title": "Agent Actions: Preview Action Data",
+        "icon": "$(database)"
+      },
+      {
+        "command": "agentActions.showDAG",
+        "title": "Agent Actions: Show Workflow DAG",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "title": "Agent Actions: Go to Action"
+      },
+      {
+        "command": "agentActions.showWorkflowTree",
+        "title": "Agent Actions: Show Workflow Tree"
+      },
+      {
+        "command": "agentActions.openSettings",
+        "title": "Agent Actions: Open Settings"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Agent Actions: Next Page"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Agent Actions: Previous Page"
       }
     ],
     "configuration": {

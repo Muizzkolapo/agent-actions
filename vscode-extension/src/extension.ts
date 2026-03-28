@@ -7,10 +7,14 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import { PythonExtension } from "@vscode/python-extension";
+import { ActionInfo } from "./model/types";
 import { WorkflowModel } from "./model/workflowModel";
 import { WorkflowTreeProvider } from "./providers/treeViewProvider";
 import { ExtensionInfoProvider } from "./providers/extensionInfoProvider";
 import { HelpProvider } from "./providers/helpProvider";
+import { DagWebview } from "./views/dagWebview";
+import { QueryResultsPanel } from "./views/queryResultsPanel";
+import { createStorageReader, isPreviewError } from "./utils/storageReader";
 
 let client: LanguageClient | undefined;
 let outputChannel: OutputChannel;
@@ -177,28 +181,85 @@ export async function activate(context: ExtensionContext): Promise<void> {
   const treeProvider = new WorkflowTreeProvider(model);
   const infoProvider = new ExtensionInfoProvider(() => client, context);
   const helpProvider = new HelpProvider();
+  const dagWebview = new DagWebview(context, model);
+  const queryResultsPanel = new QueryResultsPanel(context.extensionUri, context);
 
   context.subscriptions.push(
-    model,
-    treeProvider,
-    infoProvider,
+    model, treeProvider, infoProvider, dagWebview, queryResultsPanel,
     vscode.window.registerTreeDataProvider("agentActionsWorkflow", treeProvider),
     vscode.window.registerTreeDataProvider("agentActionsInfo", infoProvider),
     vscode.window.registerTreeDataProvider("agentActionsHelp", helpProvider),
   );
 
-  // Sidebar commands
+  // Workflow commands
   context.subscriptions.push(
     commands.registerCommand("agentActions.refreshWorkflows", () => void model.refresh()),
-    commands.registerCommand("agentActions.openConfig", (action: { configLocation?: vscode.Location }) => {
+    commands.registerCommand("agentActions.openConfig", (arg: ActionInfo | { action: ActionInfo }) => {
+      const action: ActionInfo | undefined = arg && "action" in arg ? arg.action : arg;
       if (action?.configLocation) {
-        vscode.window.showTextDocument(action.configLocation.uri, {
-          selection: new vscode.Range(action.configLocation.range.start, action.configLocation.range.start),
+        vscode.workspace.openTextDocument(action.configLocation.uri).then((doc) => {
+          vscode.window.showTextDocument(doc, { preview: false }).then((editor) => {
+            const pos = action.configLocation.range.start;
+            editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+            editor.selection = new vscode.Selection(pos, pos);
+          });
         });
       }
     }),
     commands.registerCommand("agentActions.openDocs", () => {
       vscode.env.openExternal(Uri.parse("https://docs.runagac.com"));
+    }),
+    commands.registerCommand("agentActions.showDAG", () => dagWebview.show()),
+    commands.registerCommand("agentActions.goToAction", async () => {
+      const workflows = model.getWorkflows();
+      if (workflows.length === 0) {
+        window.showInformationMessage("No Agent Actions workflows detected.");
+        return;
+      }
+      const items = workflows.flatMap((wf) =>
+        wf.actions.map((a) => ({
+          label: `[${a.index}] ${a.name}`,
+          description: `${a.status} | ${wf.name}`,
+          action: a,
+        }))
+      );
+      const selected = await window.showQuickPick(items, {
+        title: "Go to Action",
+        placeHolder: "Select an action to navigate to",
+      });
+      if (selected) {
+        commands.executeCommand("agentActions.openConfig", selected.action);
+      }
+    }),
+    commands.registerCommand("agentActions.previewData", async (arg: ActionInfo | { action: ActionInfo }) => {
+      const action: ActionInfo | undefined = arg && "action" in arg ? arg.action : arg;
+      if (!action) return;
+      const workflow = model.getWorkflows().find((w) => w.actions.some((a) => a.name === action.name));
+      if (!workflow) {
+        window.showErrorMessage(`Could not find workflow for action ${action.name}`);
+        return;
+      }
+      const config = workspace.getConfiguration("agentActions");
+      const limit = config.get<number>("previewPageSize", 50);
+      const reader = createStorageReader(workflow.rootPath, workflow.name);
+      const result = await reader.previewAction(action.name, limit, 0);
+      if (!result) {
+        queryResultsPanel.showError(action.name, "Failed to load data from storage backend");
+        return;
+      }
+      if (isPreviewError(result)) {
+        queryResultsPanel.showError(action.name, result.error, result.traceback ?? result.stderr);
+        return;
+      }
+      queryResultsPanel.showResults(result, action.name, workflow.rootPath, workflow.name, limit, 0);
+    }),
+    commands.registerCommand("agentActions.nextPage", () => navigatePreviewPage(model, queryResultsPanel, "next")),
+    commands.registerCommand("agentActions.previousPage", () => navigatePreviewPage(model, queryResultsPanel, "previous")),
+    commands.registerCommand("agentActions.openSettings", () => {
+      commands.executeCommand("workbench.action.openSettings", "agentActions");
+    }),
+    commands.registerCommand("agentActions.showWorkflowTree", () => {
+      commands.executeCommand("workbench.view.extension.agentActions");
     }),
   );
 
@@ -254,6 +315,30 @@ export async function activate(context: ExtensionContext): Promise<void> {
         `and either the Python extension is active or agac-lsp is on your PATH.`
     );
   }
+}
+
+async function navigatePreviewPage(
+  model: WorkflowModel,
+  panel: QueryResultsPanel,
+  direction: "next" | "previous"
+): Promise<void> {
+  const pagination = panel.getPagination();
+  if (!pagination) return;
+  const { actionName, workflowPath, workflowName, limit, offset, totalCount } = pagination;
+  const newOffset = direction === "next" ? offset + limit : Math.max(0, offset - limit);
+  if (direction === "previous" && offset === 0) return;
+  if (direction === "next" && offset + limit >= totalCount) return;
+  const reader = createStorageReader(workflowPath, workflowName);
+  const result = await reader.previewAction(actionName, limit, newOffset);
+  if (!result) {
+    panel.showError(actionName, "Failed to load data");
+    return;
+  }
+  if (isPreviewError(result)) {
+    panel.showError(actionName, result.error, result.traceback ?? result.stderr);
+    return;
+  }
+  panel.showResults(result, actionName, workflowPath, workflowName, limit, newOffset);
 }
 
 export function deactivate(): Thenable<void> | undefined {

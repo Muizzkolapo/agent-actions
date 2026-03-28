@@ -176,6 +176,14 @@ export class WorkflowModel implements vscode.Disposable {
         return Array.from(this.workflows.values());
     }
 
+    getActionByName(actionName: string): ActionInfo | undefined {
+        for (const workflow of this.workflows.values()) {
+            const action = workflow.actions.find((a) => a.name === actionName);
+            if (action) return action;
+        }
+        return undefined;
+    }
+
     async refresh(): Promise<void> {
         if (this.refreshInProgress) {
             this.pendingRefresh = true;
