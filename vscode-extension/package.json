@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -49,7 +49,9 @@
         "agentActions.interpreter": {
           "type": "array",
           "default": [],
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "scope": "resource",
           "description": "Path to the Python interpreter used to run the LSP server. If empty, the interpreter from the Python extension is used."
         },
