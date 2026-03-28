@@ -161,7 +161,8 @@
 
   /* Field label — indigo 600, matching accent */
   .data-card-label {
-    @apply text-[11px] uppercase font-semibold;
+    @apply uppercase font-semibold;
+    font-size: 0.75em;
     letter-spacing: 0.5px;
     color: #534AB7;
   }
@@ -171,7 +172,8 @@
 
   /* Inline pill — indigo tinted */
   .data-card-pill {
-    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-mono;
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 font-mono;
+    font-size: 0.75em;
     background: #EEEDFE;
     color: #3C3489;
     border: 1px solid #EEEDFE;
@@ -197,7 +199,8 @@
 
   /* Long-form text — recedes behind values */
   .data-card-prose {
-    @apply text-sm leading-relaxed;
+    @apply leading-relaxed;
+    font-size: 1em;
     color: rgb(from currentColor r g b / 0.72);
     font-family: var(--font-sora), sans-serif;
   }

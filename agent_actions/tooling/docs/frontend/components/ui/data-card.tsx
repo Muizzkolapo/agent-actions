@@ -36,19 +36,19 @@ export function CellValue({ value }: { value: unknown }) {
     )
   }
   if (typeof value === "number") {
-    return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
+    return <span className="font-mono tabular-nums text-foreground text-[1em]">{value.toLocaleString()}</span>
   }
   if (typeof value === "object") {
     const str = JSON.stringify(value)
     return (
-      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
+      <span className="font-mono text-muted-foreground truncate block max-w-[300px] text-[0.85em]" title={str}>
         {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
       </span>
     )
   }
   const str = String(value)
   return (
-    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
+    <span className="font-mono text-foreground truncate block max-w-[300px] text-[1em]" title={str}>
       {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
     </span>
   )
@@ -68,7 +68,7 @@ function InlinePills({ items }: { items: (string | number)[] }) {
 
 function CodeBlock({ value }: { value: unknown }) {
   return (
-    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[0.8em] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
       {JSON.stringify(value, null, 2)}
     </pre>
   )
@@ -117,7 +117,7 @@ function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
     return (
       <div className="flex items-baseline gap-3 min-w-0">
         <span className="data-card-label shrink-0 min-w-[80px]">{humanizeKey(fieldKey)}</span>
-        <div className="min-w-0 flex-1 text-sm text-foreground">
+        <div className="min-w-0 flex-1 text-[1em] text-foreground">
           <FieldValue fieldKey={fieldKey} value={value} />
         </div>
       </div>
@@ -127,7 +127,7 @@ function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="data-card-label">{humanizeKey(fieldKey)}</span>
-      <div className="text-sm text-foreground">
+      <div className="text-[1em] text-foreground">
         <FieldValue fieldKey={fieldKey} value={value} />
       </div>
     </div>
