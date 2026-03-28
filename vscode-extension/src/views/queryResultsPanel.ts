@@ -697,10 +697,17 @@ function allStyles(): string {
         }
         .card {
             border: 1px solid var(--vscode-panel-border);
+            border-left: 4px solid #7F77DD;
             border-radius: 6px;
             background: var(--vscode-editor-background);
-            margin-bottom: 8px;
+            margin-bottom: 10px;
             overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
+            transition: transform 150ms ease, box-shadow 150ms ease;
+        }
+        .card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.35), 0 2px 4px -1px rgb(0 0 0 / 0.25);
         }
         .card-header {
             padding: 8px 12px;
@@ -751,8 +758,9 @@ function allStyles(): string {
         .field-label {
             font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--vscode-descriptionForeground);
+            letter-spacing: 0.5px;
+            font-weight: 600;
+            color: #AFA9EC;
             flex-shrink: 0;
             min-width: 80px;
         }
@@ -784,12 +792,15 @@ function allStyles(): string {
             color: var(--vscode-testing-iconFailed);
         }
         .pill {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
             padding: 1px 8px;
-            border-radius: 10px;
+            border-radius: 6px;
             font-size: 11px;
-            background: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
+            font-family: var(--vscode-editor-font-family);
+            background: #3C3489;
+            color: #CECBF6;
+            border: 1px solid #3C3489;
             margin-right: 4px;
         }
         .prose {
@@ -861,8 +872,9 @@ function allStyles(): string {
         .meta-key {
             font-size: 9px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: var(--vscode-descriptionForeground);
+            letter-spacing: 0.5px;
+            font-weight: 500;
+            color: #AFA9EC;
             opacity: 0.6;
             flex-shrink: 0;
             min-width: 60px;
