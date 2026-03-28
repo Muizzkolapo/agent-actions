@@ -71,6 +71,23 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "agentActionsWorkflow",
+        "contents": "No Agent Actions project detected.\n[Open Folder](command:vscode.openFolder)\nTo learn more about Agent Actions, [read the docs](command:agentActions.openDocs).",
+        "when": "!agentActions.isAgentProject"
+      }
+    ],
+    "grammars": [
+      {
+        "scopeName": "markdown.prompt-blocks.injection",
+        "path": "./syntaxes/prompt-blocks.tmLanguage.json",
+        "injectTo": ["text.html.markdown"],
+        "embeddedLanguages": {
+          "meta.embedded.block.prompt": "markdown"
+        }
+      }
+    ],
     "commands": [
       {
         "command": "agentActions.restartServer",

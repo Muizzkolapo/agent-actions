@@ -1,0 +1,74 @@
+{
+  "scopeName": "markdown.prompt-blocks.injection",
+  "injectionSelector": "L:text.html.markdown",
+  "patterns": [
+    {
+      "comment": "Prompt block start tag - highlighted prominently",
+      "name": "meta.tag.prompt.start",
+      "match": "(\\{prompt)\\s+(\\w+)(\\})",
+      "captures": {
+        "1": { "name": "keyword.control.directive.prompt punctuation.definition.tag" },
+        "2": { "name": "entity.name.tag.prompt support.class.prompt" },
+        "3": { "name": "keyword.control.directive.prompt punctuation.definition.tag" }
+      }
+    },
+    {
+      "comment": "Prompt block end tag",
+      "name": "meta.tag.prompt.end",
+      "match": "(\\{end_prompt\\})",
+      "captures": {
+        "1": { "name": "keyword.control.directive.prompt punctuation.definition.tag" }
+      }
+    },
+    {
+      "comment": "Jinja2 variable expressions {{ variable.path }}",
+      "name": "meta.template.expression.jinja",
+      "match": "(\\{\\{)\\s*([^}]+?)\\s*(\\}\\})",
+      "captures": {
+        "1": { "name": "punctuation.section.embedded.begin.jinja constant.character.escape" },
+        "2": { "name": "variable.other.readwrite.jinja source.jinja" },
+        "3": { "name": "punctuation.section.embedded.end.jinja constant.character.escape" }
+      }
+    },
+    {
+      "comment": "Jinja2 block start {% for/if/etc %}",
+      "name": "meta.template.block.jinja",
+      "match": "(\\{%)\\s*(for|endfor|if|endif|else|elif|macro|endmacro|block|endblock|set)\\b([^%]*)(\\%\\})",
+      "captures": {
+        "1": { "name": "punctuation.section.embedded.begin.jinja keyword.operator" },
+        "2": { "name": "keyword.control.flow.jinja storage.type" },
+        "3": { "name": "variable.parameter.jinja" },
+        "4": { "name": "punctuation.section.embedded.end.jinja keyword.operator" }
+      }
+    },
+    {
+      "comment": "Jinja2 comments {# comment #}",
+      "name": "comment.block.jinja",
+      "begin": "\\{#",
+      "end": "#\\}",
+      "captures": {
+        "0": { "name": "punctuation.definition.comment.jinja" }
+      }
+    },
+    {
+      "comment": "Critical sections in prompts",
+      "name": "markup.bold.critical invalid.deprecated",
+      "match": "\\*\\*CRITICAL\\*\\*|CRITICAL:"
+    },
+    {
+      "comment": "Important warning markers",
+      "name": "markup.bold.warning string.regexp",
+      "match": "⚠️|WARNING|IMPORTANT"
+    },
+    {
+      "comment": "Valid/Invalid markers",
+      "name": "markup.inserted.valid",
+      "match": "✅|VALID"
+    },
+    {
+      "comment": "Error/Invalid markers",
+      "name": "markup.deleted.invalid",
+      "match": "❌|INVALID|ERROR"
+    }
+  ]
+}
