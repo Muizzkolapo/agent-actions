@@ -205,11 +205,10 @@ export function DataCard({ record, index, state }: DataCardProps) {
   const displayRecord = getDisplayFields(record)
   const { identity, content, metadata } = classifyRecord(record)
 
-  // Re-classify the unpacked display fields (these are all "content" role), sorted alphabetically
+  // Re-classify the unpacked display fields (these are all "content" role)
   const displayFields = Object.entries(displayRecord)
     .filter(([key]) => classifyField(key) === "content")
     .map(([key, value]) => ({ key, value, role: "content" as const }))
-    .sort((a, b) => a.key.localeCompare(b.key))
 
   const headline = pickHeadlineField(displayFields)
 
@@ -258,8 +257,11 @@ export function DataCard({ record, index, state }: DataCardProps) {
 
         {/* Headline */}
         {headline && (
-          <div className="data-card-headline mb-2">
-            {String(headline.value)}
+          <div className="mb-2">
+            <span className="data-card-label">{humanizeKey(headline.key)}</span>
+            <div className="data-card-headline mt-0.5">
+              {String(headline.value)}
+            </div>
           </div>
         )}
       </div>

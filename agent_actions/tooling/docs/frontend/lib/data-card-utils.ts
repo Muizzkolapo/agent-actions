@@ -152,10 +152,14 @@ export function pickHeadlineField(
     )
     if (found) return found
   }
-  // Fallback: first string field with >20 chars
+  // Fallback: first short-ish string field (skip long-form prose fields)
   return (
     contentFields.find(
-      (f) => typeof f.value === "string" && f.value.length > 20,
+      (f) =>
+        typeof f.value === "string" &&
+        f.value.length > 20 &&
+        f.value.length <= 200 &&
+        !isLongFormField(f.key),
     ) ?? null
   )
 }
