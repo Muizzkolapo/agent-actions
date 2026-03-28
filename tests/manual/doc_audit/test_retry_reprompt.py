@@ -21,10 +21,11 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
-# --- path fixup for standalone execution ---
-_root = Path(__file__).resolve().parents[3]
-if str(_root) not in sys.path:
-    sys.path.insert(0, str(_root))
+# --- path fixup for standalone execution only ---
+if __name__ == "__main__":
+    _root = Path(__file__).resolve().parents[3]
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
 
 # --- project imports ---
 from agent_actions.errors import NetworkError, RateLimitError, VendorAPIError
@@ -350,8 +351,13 @@ def check_REPROMPT_DOC_retry_vs_reprompt_different_errors():
 
     prompts: list[str] = []
     validator = SimpleValidator(pass_on_attempt=2, feedback="fix format")
+
+    def tracking_llm(prompt: str):
+        prompts.append(prompt)
+        return {"r": 1}, True
+
     RepromptService(validator=validator, max_attempts=3).execute(
-        lambda p: (prompts.append(p) or ({"r": 1}, True)),  # type: ignore[func-returns-value]
+        tracking_llm,
         original_prompt="do stuff",
     )
     assert prompts[0] != prompts[1], "reprompt must modify the prompt"

@@ -11,6 +11,11 @@ from agent_actions.processing.recovery.validation import (
 )
 from agent_actions.processing.types import RecoveryMetadata
 
+# _REGISTRY_LOCK and _VALIDATION_REGISTRY are private internals used only for
+# test isolation (clearing the global UDF registry between tests).  If the
+# validation module is refactored, these imports will need updating.  A public
+# clear_registry() on the validation module would be a better long-term solution.
+
 # ---------------------------------------------------------------------------
 # Mock validators (implement the ResponseValidator protocol)
 # ---------------------------------------------------------------------------

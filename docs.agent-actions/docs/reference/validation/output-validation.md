@@ -30,7 +30,7 @@ Guards run last because they evaluate semantic conditions that require valid, sc
 
 | Layer | Purpose | Mechanism |
 |-------|---------|-----------|
-| **1. JSON** | Structural integrity | JSON repair + reprompt |
+| **1. JSON** | Structural integrity | Reprompt with error feedback |
 | **2. Schema** | Type/field validation | Schema constraints + reprompt |
 | **3. Guard** | Semantic validation | Condition expressions |
 
@@ -145,9 +145,6 @@ When schema validation fails, reprompting retries with error context:
   schema: analysis_schema
   reprompt:
     max_attempts: 4
-
-
-
     on_exhausted: return_last
 ```
 
@@ -227,9 +224,6 @@ actions:
     schema: candidate_facts_list  # Layer 2: type/structure
     reprompt:
       max_attempts: 4
-  
-  
-  
       on_exhausted: return_last
 
   # Step 2: Filter empty results (Layer 3)
@@ -245,8 +239,6 @@ actions:
     schema: quality_score  # Ensures score is 0-100
     reprompt:
       max_attempts: 3
-  
-  
       on_exhausted: return_last
 
   # Step 4: Filter low quality (Layer 3)
@@ -269,9 +261,6 @@ actions:
     schema: content_schema
     reprompt:
       max_attempts: 4
-  
-  
-  
       on_exhausted: return_last
 
   # LLM validates the content
@@ -314,8 +303,6 @@ properties:
   schema: classification
   reprompt:
     max_attempts: 3
-
-
     on_exhausted: return_last
 
 - name: process_valid
@@ -349,10 +336,6 @@ properties:
   schema: score_schema
   reprompt:
     max_attempts: 5
-
-
-
-
     on_exhausted: return_last
 
 # Guard for business threshold
@@ -375,8 +358,6 @@ actions:
     schema: content_schema
     reprompt:
       max_attempts: 3
-  
-  
       on_exhausted: return_last
 
   - name: custom_validate
@@ -464,9 +445,6 @@ The limitation here: reprompting costs API tokens. Guards are free. If you're fi
   schema: extraction_schema
   reprompt:
     max_attempts: 4
-
-
-
     on_exhausted: return_last
 
 # Layer 3: Guard for quality
