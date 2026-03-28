@@ -184,6 +184,17 @@ export class WorkflowModel implements vscode.Disposable {
         return undefined;
     }
 
+    getActionByPath(filePath: string): ActionInfo | undefined {
+        const normalized = path.normalize(filePath);
+        for (const workflow of this.workflows.values()) {
+            const action = workflow.actions.find((a) =>
+                normalized.startsWith(path.normalize(a.folderPath))
+            );
+            if (action) return action;
+        }
+        return undefined;
+    }
+
     async refresh(): Promise<void> {
         if (this.refreshInProgress) {
             this.pendingRefresh = true;

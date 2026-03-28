@@ -15,6 +15,10 @@ import { HelpProvider } from "./providers/helpProvider";
 import { DagWebview } from "./views/dagWebview";
 import { QueryResultsPanel } from "./views/queryResultsPanel";
 import { createStorageReader, isPreviewError } from "./utils/storageReader";
+import { WorkflowCodeLensProvider } from "./providers/codeLensProvider";
+import { ActionDecorationProvider } from "./providers/decorationProvider";
+import { WorkflowStatusBar } from "./providers/statusBarProvider";
+import { DataPreviewProvider, DATA_PREVIEW_SCHEME } from "./providers/dataPreviewProvider";
 
 let client: LanguageClient | undefined;
 let outputChannel: OutputChannel;
@@ -176,19 +180,27 @@ export async function activate(context: ExtensionContext): Promise<void> {
   outputChannel = window.createOutputChannel("Agent Actions");
   context.subscriptions.push(outputChannel);
 
-  // Sidebar panels
+  // Sidebar panels + UX providers
   const model = new WorkflowModel();
   const treeProvider = new WorkflowTreeProvider(model);
   const infoProvider = new ExtensionInfoProvider(() => client, context);
   const helpProvider = new HelpProvider();
   const dagWebview = new DagWebview(context, model);
   const queryResultsPanel = new QueryResultsPanel(context.extensionUri, context);
+  const codeLensProvider = new WorkflowCodeLensProvider(model);
+  const decorationProvider = new ActionDecorationProvider(model);
+  const statusBar = new WorkflowStatusBar(model);
+  const dataPreviewProvider = new DataPreviewProvider();
 
   context.subscriptions.push(
     model, treeProvider, infoProvider, dagWebview, queryResultsPanel,
+    codeLensProvider, decorationProvider, statusBar, dataPreviewProvider,
     vscode.window.registerTreeDataProvider("agentActionsWorkflow", treeProvider),
     vscode.window.registerTreeDataProvider("agentActionsInfo", infoProvider),
     vscode.window.registerTreeDataProvider("agentActionsHelp", helpProvider),
+    vscode.languages.registerCodeLensProvider({ language: "yaml" }, codeLensProvider),
+    vscode.window.registerFileDecorationProvider(decorationProvider),
+    vscode.workspace.registerTextDocumentContentProvider(DATA_PREVIEW_SCHEME, dataPreviewProvider),
   );
 
   // Workflow commands
