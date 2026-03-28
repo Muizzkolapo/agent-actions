@@ -48,6 +48,9 @@ const DEBOUNCE_MS = 300;
 const ACTIVATION_TIMEOUT_MS = 10_000;
 const MODULE_ARGS = ['-m', 'agent_actions.tooling.lsp.server', '--stdio'];
 
+// File watchers for LSP synchronization — created once in activate(), reused across restarts
+let lspFileWatchers: vscode.FileSystemWatcher[];
+
 // ── LSP lifecycle (from PR #44) ──────────────────────────────────────
 
 async function getPythonPath(): Promise<string | undefined> {
@@ -109,15 +112,7 @@ async function startClient(context: vscode.ExtensionContext): Promise<void> {
             { scheme: 'file', language: 'yaml', pattern: '**/agent_workflow/**/*.yml' },
             { scheme: 'file', language: 'markdown', pattern: '**/prompt_store/**/*.md' },
         ],
-        synchronize: {
-            fileEvents: [
-                vscode.workspace.createFileSystemWatcher('**/agent_config/**/*.yml'),
-                vscode.workspace.createFileSystemWatcher('**/agent_config/**/*.yaml'),
-                vscode.workspace.createFileSystemWatcher('**/prompt_store/**/*.md'),
-                vscode.workspace.createFileSystemWatcher('**/tools/**/*.py'),
-                vscode.workspace.createFileSystemWatcher('**/schema/**/*.yml'),
-            ],
-        },
+        synchronize: { fileEvents: lspFileWatchers },
         outputChannel,
     };
 
@@ -184,6 +179,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(outputChannel);
     logger.info('Activating Agent Actions extension');
 
+    // ── LSP file watchers (created once, reused across restarts) ──
+    lspFileWatchers = [
+        vscode.workspace.createFileSystemWatcher('**/agent_config/**/*.yml'),
+        vscode.workspace.createFileSystemWatcher('**/agent_config/**/*.yaml'),
+        vscode.workspace.createFileSystemWatcher('**/prompt_store/**/*.md'),
+        vscode.workspace.createFileSystemWatcher('**/tools/**/*.py'),
+        vscode.workspace.createFileSystemWatcher('**/schema/**/*.yml'),
+    ];
+    context.subscriptions.push(...lspFileWatchers);
+
     // ── Interpreter change listener (debounced) ──
     try {
         const pythonApi = await PythonExtension.api();
@@ -204,10 +209,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         outputChannel.appendLine('Python extension not available; interpreter change detection disabled.');
     }
 
-    // ── Workflow Model ──
+    // ── Workflow Model (constructor schedules initial refresh via debounce) ──
     const workflowModel = new WorkflowModel();
     context.subscriptions.push(workflowModel);
-    await workflowModel.refresh();
 
     // ── UI Providers ──
 

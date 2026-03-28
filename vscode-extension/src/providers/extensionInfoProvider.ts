@@ -91,31 +91,19 @@ export class ExtensionInfoProvider implements vscode.TreeDataProvider<InfoNode>,
         const ext = this.extensionContext.extension;
         const version = ext?.packageJSON?.version ?? 'unknown';
 
+        const currentClient = this.getClient();
         let lspStatus: string;
         let lspIcon: vscode.ThemeIcon;
-        const currentClient = this.getClient();
-        if (!currentClient) {
-            return [
-                new InfoItemNode('Version', `v${version}`, { icon: new vscode.ThemeIcon('tag') }),
-                new InfoItemNode('LSP Server', 'Stopped', {
-                    icon: new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('charts.red')),
-                }),
-            ];
-        }
 
-        switch (currentClient.state) {
-            case State.Running:
-                lspStatus = 'Running';
-                lspIcon = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
-                break;
-            case State.Starting:
-                lspStatus = 'Starting';
-                lspIcon = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'));
-                break;
-            default:
-                lspStatus = 'Stopped';
-                lspIcon = new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('charts.red'));
-                break;
+        if (currentClient?.state === State.Running) {
+            lspStatus = 'Running';
+            lspIcon = new vscode.ThemeIcon('check', new vscode.ThemeColor('charts.green'));
+        } else if (currentClient?.state === State.Starting) {
+            lspStatus = 'Starting';
+            lspIcon = new vscode.ThemeIcon('sync~spin', new vscode.ThemeColor('charts.yellow'));
+        } else {
+            lspStatus = 'Stopped';
+            lspIcon = new vscode.ThemeIcon('circle-slash', new vscode.ThemeColor('charts.red'));
         }
 
         return [
