@@ -183,6 +183,21 @@ def process_initial_stage(ctx: InitialStageContext):
     else:
         data_chunk, src_text = _prepare_online_data(prep_ctx)
 
+    # Slice BEFORE source save to prevent dedup poisoning
+    record_limit = ctx.agent_config.get("record_limit")
+    if record_limit is not None and isinstance(data_chunk, list) and len(data_chunk) > 0:
+        total = len(data_chunk)
+        data_chunk = data_chunk[:record_limit]
+        if isinstance(src_text, list):
+            src_text = src_text[:record_limit]
+        logger.info(
+            "record_limit=%d: processing %d of %d records for %s",
+            record_limit,
+            len(data_chunk),
+            total,
+            ctx.agent_name,
+        )
+
     _save_source_data(
         src_text,
         data_chunk,
