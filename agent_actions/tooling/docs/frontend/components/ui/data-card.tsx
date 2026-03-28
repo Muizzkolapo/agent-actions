@@ -159,14 +159,14 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
       </button>
       <div className="data-card-drawer" data-open={open}>
         <div>
-          <div className="px-4 pb-3 flex flex-wrap gap-x-4 gap-y-2">
+          <div className="px-4 pb-3 flex flex-col gap-1.5">
             {fields.map((f) => (
-              <div key={f.key} className="flex items-baseline gap-1.5 min-w-0">
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0">
+              <div key={f.key} className="flex items-baseline gap-2 min-w-0">
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0 min-w-[60px]">
                   {humanizeKey(f.key)}
                 </span>
-                <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[220px]" title={formatValue(f.value, 0)}>
-                  {formatValue(f.value, 40)}
+                <span className="text-[11px] font-mono text-muted-foreground break-all">
+                  {formatValue(f.value, 120)}
                 </span>
               </div>
             ))}
