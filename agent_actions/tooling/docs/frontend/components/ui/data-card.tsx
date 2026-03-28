@@ -12,7 +12,6 @@ import {
   isShortValue,
   getValueType,
   formatValue,
-  pickHeadlineField,
   type ClassifiedField,
 } from "@/lib/data-card-utils"
 
@@ -210,18 +209,11 @@ export function DataCard({ record, index, state }: DataCardProps) {
     .filter(([key]) => classifyField(key) === "content")
     .map(([key, value]) => ({ key, value, role: "content" as const }))
 
-  const headline = pickHeadlineField(displayFields)
-
-  // Separate headline from other content fields
-  const otherContent = headline
-    ? displayFields.filter((f) => f.key !== headline.key)
-    : displayFields
-
   // Split content into short (inline) and long (block) groups
-  const shortFields = otherContent.filter(
+  const shortFields = displayFields.filter(
     (f) => isShortValue(f.value) && !isLongFormField(f.key),
   )
-  const longFields = otherContent.filter(
+  const longFields = displayFields.filter(
     (f) => !isShortValue(f.value) || isLongFormField(f.key),
   )
 
@@ -255,15 +247,6 @@ export function DataCard({ record, index, state }: DataCardProps) {
           )}
         </div>
 
-        {/* Headline */}
-        {headline && (
-          <div className="mb-2">
-            <span className="data-card-label">{humanizeKey(headline.key)}</span>
-            <div className="data-card-headline mt-0.5">
-              {String(headline.value)}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Key-value zone */}
@@ -280,8 +263,8 @@ export function DataCard({ record, index, state }: DataCardProps) {
         </div>
       )}
 
-      {/* No headline, no content: show all fields flat */}
-      {!headline && shortFields.length === 0 && longFields.length === 0 && (
+      {/* No content fields */}
+      {shortFields.length === 0 && longFields.length === 0 && (
         <div className="px-4 pb-3 text-xs text-muted-foreground italic">
           No content fields
         </div>
