@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect, useCallback } from "react"
 import {
   Database,
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
   Rows3,
   ChevronRight,
   LayoutGrid,
+  Minus,
+  Plus,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -280,6 +282,124 @@ function WorkflowDetail({
   )
 }
 
+/* ─── Typography controls (font size + page width) ────────────────────── */
+
+const FONT_SIZES = [13, 14, 15, 16, 17, 18] as const
+const WIDTH_PRESETS = [
+  { label: "S", value: 560 },
+  { label: "M", value: 720 },
+  { label: "L", value: 920 },
+] as const
+const DEFAULT_FONT_IDX = 2 // 15px
+const DEFAULT_WIDTH_IDX = 1 // 720px
+
+function readStoredIndex<T>(key: string, lookup: (v: number) => number): number | null {
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) { const i = lookup(Number(raw)); if (i >= 0) return i }
+  } catch { /* SSR / private browsing */ }
+  return null
+}
+
+function useTypographyPrefs() {
+  const [fontIdx, setFontIdx] = useState(() =>
+    readStoredIndex("docs-card-font-size", (v) =>
+      FONT_SIZES.indexOf(v as (typeof FONT_SIZES)[number]),
+    ) ?? DEFAULT_FONT_IDX,
+  )
+  const [widthIdx, setWidthIdx] = useState(() =>
+    readStoredIndex("docs-card-width", (v) =>
+      WIDTH_PRESETS.findIndex((p) => p.value === v),
+    ) ?? DEFAULT_WIDTH_IDX,
+  )
+
+  // Persist to localStorage whenever indices change
+  useEffect(() => {
+    try { localStorage.setItem("docs-card-font-size", String(FONT_SIZES[fontIdx])) } catch {}
+  }, [fontIdx])
+  useEffect(() => {
+    try { localStorage.setItem("docs-card-width", String(WIDTH_PRESETS[widthIdx].value)) } catch {}
+  }, [widthIdx])
+
+  const stepFont = useCallback((dir: 1 | -1) => {
+    setFontIdx((prev) => {
+      const next = prev + dir
+      return (next < 0 || next >= FONT_SIZES.length) ? prev : next
+    })
+  }, [])
+
+  const stepWidth = useCallback((dir: 1 | -1) => {
+    setWidthIdx((prev) => {
+      const next = prev + dir
+      return (next < 0 || next >= WIDTH_PRESETS.length) ? prev : next
+    })
+  }, [])
+
+  return {
+    fontSize: FONT_SIZES[fontIdx],
+    fontIdx,
+    maxWidth: WIDTH_PRESETS[widthIdx].value,
+    widthLabel: WIDTH_PRESETS[widthIdx].label,
+    widthIdx,
+    stepFont,
+    stepWidth,
+  }
+}
+
+function TypographyControls({
+  fontSize, fontIdx, widthLabel, widthIdx, stepFont, stepWidth,
+}: ReturnType<typeof useTypographyPrefs>) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {/* Font size stepper */}
+      <div className="typo-pill" title="Font size">
+        <button
+          type="button"
+          className="typo-btn"
+          onClick={() => stepFont(-1)}
+          disabled={fontIdx === 0}
+          aria-label="Decrease font size"
+        >
+          <span className="text-[10px] font-medium">A</span>
+        </button>
+        <span className="typo-val">{fontSize}</span>
+        <button
+          type="button"
+          className="typo-btn"
+          onClick={() => stepFont(1)}
+          disabled={fontIdx === FONT_SIZES.length - 1}
+          aria-label="Increase font size"
+        >
+          <span className="text-sm font-medium">A</span>
+        </button>
+      </div>
+
+      {/* Width stepper */}
+      <div className="typo-pill" title="Card width">
+        <button
+          type="button"
+          className="typo-btn"
+          onClick={() => stepWidth(-1)}
+          disabled={widthIdx === 0}
+          aria-label="Narrower"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <span className="typo-val">{widthLabel}</span>
+        <button
+          type="button"
+          className="typo-btn"
+          onClick={() => stepWidth(1)}
+          disabled={widthIdx === WIDTH_PRESETS.length - 1}
+          aria-label="Wider"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ─── Node Detail with paginated data views ──────────────────────────────── */
 
 type ViewMode = "table" | "json" | "card"
@@ -301,6 +421,7 @@ function NodeDetail({
 }) {
   const [page, setPage] = useState(0)
   const [viewMode, setViewMode] = useState<ViewMode>("card")
+  const typo = useTypographyPrefs()
 
   const columns = useMemo(() => {
     if (node.preview.length === 0) return []
@@ -374,20 +495,23 @@ function NodeDetail({
               )}
             </span>
           </div>
-          <div className="flex items-center gap-1">
-            {VIEW_MODES.map((m) => (
-              <button
-                key={m.key}
-                onClick={() => setViewMode(m.key)}
-                className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
-                  viewMode === m.key
-                    ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))]"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            {viewMode === "card" && <TypographyControls {...typo} />}
+            <div className="flex items-center gap-1">
+              {VIEW_MODES.map((m) => (
+                <button
+                  key={m.key}
+                  onClick={() => setViewMode(m.key)}
+                  className={`rounded-md px-2 py-1 text-[10px] font-medium transition-all ${
+                    viewMode === m.key
+                      ? "bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary))]"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -430,7 +554,10 @@ function NodeDetail({
           </div>
         ) : (
           /* Card view */
-          <div className="flex flex-col gap-3 pt-3 max-w-[720px] mx-auto w-full">
+          <div
+            className="flex flex-col gap-3 pt-3 mx-auto w-full"
+            style={{ maxWidth: `${typo.maxWidth}px` }}
+          >
             {pageRecords.map((row, i) => {
               const idx = page * RECORDS_PER_PAGE + i
               const key = typeof row.source_guid === "string" ? row.source_guid : idx
@@ -439,6 +566,7 @@ function NodeDetail({
                   key={key}
                   record={row}
                   index={idx + 1}
+                  fontSize={typo.fontSize}
                 />
               )
             })}
