@@ -10,6 +10,17 @@ import { PythonExtension } from "@vscode/python-extension";
 let client: LanguageClient | undefined;
 let outputChannel: OutputChannel;
 
+// Lifecycle serialization — all start/stop transitions chain through this promise
+// so at most one cycle is in-flight at any time.
+let lifecycleQueue: Promise<void> = Promise.resolve();
+let lifecyclePending = 0;
+let disposed = false;
+
+// Debounce timer for interpreter change events — the Python extension can emit
+// 2-4 rapid events during its own activation; collapse them into one restart.
+let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+const DEBOUNCE_MS = 300;
+
 const ACTIVATION_TIMEOUT_MS = 10_000;
 const MODULE_ARGS = ["-m", "agent_actions.tooling.lsp.server", "--stdio"];
 
@@ -99,29 +110,87 @@ async function startClient(context: ExtensionContext): Promise<void> {
   }
 }
 
+/**
+ * Serialized restart — every caller (activation, interpreter change, manual command)
+ * goes through this single gate. The promise chain guarantees at most one stop→start
+ * cycle is in-flight. Errors are caught internally so the chain never jams.
+ *
+ * Returns a promise that resolves when this particular cycle completes (or is skipped).
+ * Callers that need the result (activate, restart command) can await it.
+ * Fire-and-forget callers (debounced interpreter change) can ignore it.
+ */
+function restartServer(context: ExtensionContext): Promise<void> {
+  if (lifecyclePending > 0) {
+    outputChannel.appendLine("LSP restart requested (queued behind in-flight cycle).");
+  }
+  lifecyclePending++;
+  const cycle = lifecycleQueue.then(async () => {
+    try {
+      if (disposed) {
+        outputChannel.appendLine("LSP lifecycle: skipped (extension disposing).");
+        return;
+      }
+
+      outputChannel.appendLine("LSP lifecycle: starting...");
+
+      if (client) {
+        await client.stop();
+        client = undefined;
+      }
+      await startClient(context);
+      outputChannel.appendLine("LSP lifecycle: started.");
+    } catch (err: unknown) {
+      // Invariant: client must be undefined if not fully started.
+      // startClient() already enforces this in its catch block, but guard
+      // against any path where client could be left half-initialized.
+      client = undefined;
+      const msg = err instanceof Error ? err.message : String(err);
+      outputChannel.appendLine(`LSP lifecycle: failed — ${msg}`);
+      // Re-throw so callers that await the returned `cycle` promise see the
+      // error (activate shows a user-facing message, restart command shows a
+      // toast). The queue itself is insulated via cycle.catch(() => {}) below.
+      // Fire-and-forget callers (interpreter change) must attach their own .catch().
+      throw err;
+    } finally {
+      lifecyclePending--;
+    }
+  });
+
+  // The queue promise never rejects — errors are visible to the caller via
+  // the returned `cycle` promise, but the queue itself stays healthy.
+  lifecycleQueue = cycle.catch(() => {});
+
+  return cycle;
+}
+
 export async function activate(context: ExtensionContext): Promise<void> {
   outputChannel = window.createOutputChannel("Agent Actions");
   context.subscriptions.push(outputChannel);
 
-  // Restart server when Python interpreter changes
+  // Register interpreter change listener unconditionally — before startClient() —
+  // so "install package → switch interpreter → auto-start" recovery works even
+  // when initial startup fails. The 300ms debounce collapses rapid-fire events
+  // from the Python extension's own activation into a single queued restart.
   try {
     const pythonApi = await PythonExtension.api();
     context.subscriptions.push(
-      pythonApi.environments.onDidChangeActiveEnvironmentPath(async () => {
-        outputChannel.appendLine("Python interpreter changed, restarting LSP server...");
-        try {
-          if (client) {
-            await client.stop();
-            client = undefined;
-          }
-          await startClient(context);
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          outputChannel.appendLine(`Restart after interpreter change failed: ${msg}`);
-        }
+      pythonApi.environments.onDidChangeActiveEnvironmentPath(() => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          debounceTimer = undefined;
+          outputChannel.appendLine("Python interpreter changed; scheduling LSP restart...");
+          restartServer(context).catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            outputChannel.appendLine(`Restart after interpreter change failed: ${msg}`);
+          });
+        }, DEBOUNCE_MS);
       })
     );
   } catch {
+    // TODO(#43): re-register interpreter listener if Python extension activates
+    // after us. Currently, if the Python extension isn't available at activation
+    // time (slow extension host, workspace trust delay), interpreter change
+    // detection is permanently dead for the session.
     outputChannel.appendLine(
       "Python extension not available; interpreter change detection disabled."
     );
@@ -130,23 +199,17 @@ export async function activate(context: ExtensionContext): Promise<void> {
   context.subscriptions.push(
     commands.registerCommand("agentActions.restartServer", async () => {
       try {
-        if (client) {
-          outputChannel.appendLine("Restarting LSP server...");
-          await client.stop();
-          client = undefined;
-        }
-        await startClient(context);
+        await restartServer(context);
         window.showInformationMessage("Agent Actions LSP restarted.");
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        outputChannel.appendLine(`Restart failed: ${msg}`);
         window.showErrorMessage(`Agent Actions: restart failed — ${msg}`);
       }
     })
   );
 
   try {
-    await startClient(context);
+    await restartServer(context);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     outputChannel.appendLine(`Activation error: ${msg}`);
@@ -159,5 +222,22 @@ export async function activate(context: ExtensionContext): Promise<void> {
 }
 
 export function deactivate(): Thenable<void> | undefined {
-  return client?.stop();
+  disposed = true;
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+    debounceTimer = undefined;
+  }
+  // Chain onto the lifecycle queue so we wait for any in-flight cycle to
+  // complete before stopping, avoiding orphan processes.
+  lifecycleQueue = lifecycleQueue.then(async () => {
+    if (client) {
+      try {
+        await client.stop();
+      } catch (err) {
+        outputChannel.appendLine(`Shutdown error: ${err}`);
+      }
+      client = undefined;
+    }
+  });
+  return lifecycleQueue;
 }
