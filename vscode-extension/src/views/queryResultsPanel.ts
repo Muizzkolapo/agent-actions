@@ -167,37 +167,15 @@ export class QueryResultsPanel implements vscode.Disposable {
         offset: number
     ): void {
         const nonce = getNonce();
-        const from = offset + 1;
-        const to = Math.min(offset + limit, result.totalCount);
-        const hasPrev = offset > 0;
-        const hasNext = offset + limit < result.totalCount;
-
-        // Pre-serialize records as JSON for the webview script to classify and render
+        const { from, to, hasPrev, hasNext } = paginationVars(offset, limit, result.totalCount);
         const recordsJson = JSON.stringify(result.records);
 
-        webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-    <title>Query Results</title>
-    <style>${allStyles()}</style>
-</head>
-<body>
-    <div class="toolbar">
-        <span class="action-name">${escapeHtml(actionName)}</span>
-        <span class="meta">rows ${from}&ndash;${to} of ${result.totalCount}</span>
-        <span class="meta secondary">${escapeHtml(result.backendType)}</span>
-        <span class="spacer"></span>
-        <button class="view-toggle" data-mode="card" disabled aria-pressed="true">Cards</button>
-        <button class="view-toggle" data-mode="table" aria-pressed="false">Table</button>
-        <button class="view-toggle" data-mode="json" aria-pressed="false">JSON</button>
-        <button class="nav-btn" id="prevBtn" ${hasPrev ? '' : 'disabled'} title="Previous page">&larr; Prev</button>
-        <button class="nav-btn" id="nextBtn" ${hasNext ? '' : 'disabled'} title="Next page">Next &rarr;</button>
-    </div>
-    <div class="cards-wrap" id="cardsContainer"></div>
-    <script nonce="${nonce}">
+        const toolbar = buildToolbar({
+            actionName, meta: `rows ${from}&ndash;${to} of ${result.totalCount}`,
+            backendType: result.backendType, activeMode: 'card', hasPrev, hasNext,
+        });
+
+        const cardScript = `
         const vscode = acquireVsCodeApi();
         const records = ${recordsJson};
         const offset = ${offset};
@@ -232,7 +210,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         }
         function isInlineArray(value) {
             if (!Array.isArray(value)) return false;
-            if (value.length === 0 || value.length > 5) return false;
+            if (value.length === 0 || value.length > 3) return false;
             return value.every(v => typeof v === 'string' || typeof v === 'number');
         }
         function humanize(key) {
@@ -405,9 +383,10 @@ export class QueryResultsPanel implements vscode.Disposable {
                 return;
             }
         });
-    </script>
-</body>
-</html>`;
+        `;
+
+        const body = toolbar + '\n    <div class="cards-wrap" id="cardsContainer"></div>';
+        webview.html = buildPage(nonce, body, cardScript);
     }
 
     // ── Table view ────────────────────────────────────────────────────
@@ -428,10 +407,7 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         const columns = Object.keys(firstRecord);
         const colCount = columns.length;
-        const from = offset + 1;
-        const to = Math.min(offset + limit, result.totalCount);
-        const hasPrev = offset > 0;
-        const hasNext = offset + limit < result.totalCount;
+        const { from, to, hasPrev, hasNext } = paginationVars(offset, limit, result.totalCount);
 
         const headerCells = columns
             .map((col) => `<th role="columnheader">${escapeHtml(col)}</th>`)
@@ -447,36 +423,18 @@ export class QueryResultsPanel implements vscode.Disposable {
             })
             .join('');
 
-        webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-    <title>Query Results</title>
-    <style>${allStyles()}</style>
-</head>
-<body>
-    <div class="toolbar">
-        <span class="action-name">${escapeHtml(actionName)}</span>
-        <span class="meta">${colCount} ${colCount === 1 ? 'column' : 'columns'} &middot; rows ${from}&ndash;${to} of ${result.totalCount}</span>
-        <span class="meta secondary">${escapeHtml(result.backendType)}</span>
-        <span class="spacer"></span>
-        <button class="view-toggle" data-mode="card" aria-pressed="false">Cards</button>
-        <button class="view-toggle" data-mode="table" disabled aria-pressed="true">Table</button>
-        <button class="view-toggle" data-mode="json" aria-pressed="false">JSON</button>
-        <button class="nav-btn" id="prevBtn" ${hasPrev ? '' : 'disabled'} title="Previous page">&larr; Prev</button>
-        <button class="nav-btn" id="nextBtn" ${hasNext ? '' : 'disabled'} title="Next page">Next &rarr;</button>
-    </div>
+        const toolbar = buildToolbar({
+            actionName, meta: `${colCount} ${colCount === 1 ? 'column' : 'columns'} &middot; rows ${from}&ndash;${to} of ${result.totalCount}`,
+            backendType: result.backendType, activeMode: 'table', hasPrev, hasNext,
+        });
+        const body = `${toolbar}
     <div class="table-wrap">
         <table role="grid" aria-label="Query results for ${escapeHtml(actionName)}">
             <thead><tr role="row">${headerCells}</tr></thead>
             <tbody>${bodyRows}</tbody>
         </table>
-    </div>
-    <script nonce="${nonce}">${viewScript()}</script>
-</body>
-</html>`;
+    </div>`;
+        webview.html = buildPage(nonce, body, viewScript());
     }
 
     // ── JSON view ─────────────────────────────────────────────────────
@@ -489,10 +447,7 @@ export class QueryResultsPanel implements vscode.Disposable {
         offset: number
     ): void {
         const nonce = getNonce();
-        const from = offset + 1;
-        const to = Math.min(offset + limit, result.totalCount);
-        const hasPrev = offset > 0;
-        const hasNext = offset + limit < result.totalCount;
+        const { from, to, hasPrev, hasNext } = paginationVars(offset, limit, result.totalCount);
 
         const jsonData = {
             _metadata: {
@@ -506,33 +461,15 @@ export class QueryResultsPanel implements vscode.Disposable {
 
         const jsonString = JSON.stringify(jsonData, null, 2);
 
-        webview.html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-    <title>Query Results</title>
-    <style>${allStyles()}</style>
-</head>
-<body>
-    <div class="toolbar">
-        <span class="action-name">${escapeHtml(actionName)}</span>
-        <span class="meta">rows ${from}&ndash;${to} of ${result.totalCount}</span>
-        <span class="meta secondary">${escapeHtml(result.backendType)}</span>
-        <span class="spacer"></span>
-        <button class="view-toggle" data-mode="card" aria-pressed="false">Cards</button>
-        <button class="view-toggle" data-mode="table" aria-pressed="false">Table</button>
-        <button class="view-toggle" data-mode="json" disabled aria-pressed="true">JSON</button>
-        <button class="nav-btn" id="prevBtn" ${hasPrev ? '' : 'disabled'} title="Previous page">&larr; Prev</button>
-        <button class="nav-btn" id="nextBtn" ${hasNext ? '' : 'disabled'} title="Next page">Next &rarr;</button>
-    </div>
+        const toolbar = buildToolbar({
+            actionName, meta: `rows ${from}&ndash;${to} of ${result.totalCount}`,
+            backendType: result.backendType, activeMode: 'json', hasPrev, hasNext,
+        });
+        const body = `${toolbar}
     <div class="json-wrap">
         <pre role="region" aria-label="JSON formatted data"><code>${escapeHtml(jsonString)}</code></pre>
-    </div>
-    <script nonce="${nonce}">${viewScript()}</script>
-</body>
-</html>`;
+    </div>`;
+        webview.html = buildPage(nonce, body, viewScript());
     }
 
     // ── Error / Empty ─────────────────────────────────────────────────
@@ -607,6 +544,61 @@ function formatCell(value: unknown): string {
     if (value === null || value === undefined) return '';
     if (typeof value === 'object') return JSON.stringify(value);
     return String(value);
+}
+
+/** Compute common pagination display variables. */
+function paginationVars(offset: number, limit: number, totalCount: number) {
+    return {
+        from: offset + 1,
+        to: Math.min(offset + limit, totalCount),
+        hasPrev: offset > 0,
+        hasNext: offset + limit < totalCount,
+    };
+}
+
+/** Build the toolbar HTML with view toggles and pagination. */
+function buildToolbar(opts: {
+    actionName: string;
+    meta: string;
+    backendType: string;
+    activeMode: ViewMode;
+    hasPrev: boolean;
+    hasNext: boolean;
+}): string {
+    const modes: ViewMode[] = ['card', 'table', 'json'];
+    const labels: Record<ViewMode, string> = { card: 'Cards', table: 'Table', json: 'JSON' };
+    const toggles = modes.map((m) => {
+        const active = m === opts.activeMode;
+        return `<button class="view-toggle" data-mode="${m}" ${active ? 'disabled aria-pressed="true"' : 'aria-pressed="false"'}>${labels[m]}</button>`;
+    }).join('');
+
+    return `<div class="toolbar">
+        <span class="action-name">${escapeHtml(opts.actionName)}</span>
+        <span class="meta">${opts.meta}</span>
+        <span class="meta secondary">${escapeHtml(opts.backendType)}</span>
+        <span class="spacer"></span>
+        ${toggles}
+        <button class="nav-btn" id="prevBtn" ${opts.hasPrev ? '' : 'disabled'} title="Previous page">&larr; Prev</button>
+        <button class="nav-btn" id="nextBtn" ${opts.hasNext ? '' : 'disabled'} title="Next page">Next &rarr;</button>
+    </div>`;
+}
+
+/** Build the HTML document wrapper. */
+function buildPage(nonce: string, body: string, script: string): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+    <title>Query Results</title>
+    <style>${allStyles()}</style>
+</head>
+<body>
+    ${body}
+    <script nonce="${nonce}">${script}</script>
+</body>
+</html>`;
 }
 
 /** Shared script for table/JSON views (pagination + view toggle). */
