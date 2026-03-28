@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -33,14 +33,91 @@
   ],
   "activationEvents": [
     "workspaceContains:**/agent_actions.yml",
-    "workspaceContains:**/agent_config/*.yml"
+    "workspaceContains:**/agent_config/*.yml",
+    "onView:agentActionsWorkflow",
+    "onView:agentActionsInfo",
+    "onView:agentActionsHelp"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentActions",
+          "title": "Agent Actions",
+          "icon": "media/icons/agent-actions-sidebar.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentActions": [
+        {
+          "id": "agentActionsWorkflow",
+          "name": "Workflows",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Workflow Navigator"
+        },
+        {
+          "id": "agentActionsInfo",
+          "name": "Extension Info",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Info"
+        },
+        {
+          "id": "agentActionsHelp",
+          "name": "Help",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Help"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "agentActions.restartServer",
         "title": "Agent Actions: Restart LSP Server"
+      },
+      {
+        "command": "agentActions.refreshWorkflows",
+        "title": "Agent Actions: Refresh Workflows",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentActions.openConfig",
+        "title": "Agent Actions: Open Action Config"
+      },
+      {
+        "command": "agentActions.openDocs",
+        "title": "Agent Actions: Open Documentation"
+      },
+      {
+        "command": "agentActions.previewData",
+        "title": "Agent Actions: Preview Action Data",
+        "icon": "$(database)"
+      },
+      {
+        "command": "agentActions.showDAG",
+        "title": "Agent Actions: Show Workflow DAG",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "title": "Agent Actions: Go to Action"
+      },
+      {
+        "command": "agentActions.showWorkflowTree",
+        "title": "Agent Actions: Show Workflow Tree"
+      },
+      {
+        "command": "agentActions.openSettings",
+        "title": "Agent Actions: Open Settings"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Agent Actions: Next Page"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Agent Actions: Previous Page"
       }
     ],
     "configuration": {
@@ -83,7 +160,8 @@
   },
   "dependencies": {
     "@vscode/python-extension": "^1.0.5",
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^9.0.1",
+    "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
