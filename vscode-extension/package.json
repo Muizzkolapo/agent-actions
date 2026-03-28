@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -82,7 +82,9 @@
       {
         "scopeName": "markdown.prompt-blocks.injection",
         "path": "./syntaxes/prompt-blocks.tmLanguage.json",
-        "injectTo": ["text.html.markdown"],
+        "injectTo": [
+          "text.html.markdown"
+        ],
         "embeddedLanguages": {
           "meta.embedded.block.prompt": "markdown"
         }
