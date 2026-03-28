@@ -104,5 +104,6 @@ actions:
 ## See Also
 
 - [batch Commands](../cli/batch) - CLI reference for batch operations
+- [Batch Recovery](./batch-recovery) - Two-phase retry and reprompt for batch processing
 - [Context Handling](./context-handling) - Batch vs online context differences
 - [Granularity](./granularity) - Record vs file processing
