@@ -146,6 +146,10 @@ function restartServer(context: ExtensionContext): Promise<void> {
       client = undefined;
       const msg = err instanceof Error ? err.message : String(err);
       outputChannel.appendLine(`LSP lifecycle: failed — ${msg}`);
+      // Re-throw so callers that await the returned `cycle` promise see the
+      // error (activate shows a user-facing message, restart command shows a
+      // toast). The queue itself is insulated via cycle.catch(() => {}) below.
+      // Fire-and-forget callers (interpreter change) must attach their own .catch().
       throw err;
     } finally {
       lifecyclePending--;
