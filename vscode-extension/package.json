@@ -46,10 +46,17 @@
     "configuration": {
       "title": "Agent Actions",
       "properties": {
+        "agentActions.interpreter": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string" },
+          "scope": "resource",
+          "description": "Path to the Python interpreter used to run the LSP server. If empty, the interpreter from the Python extension is used."
+        },
         "agentActions.serverPath": {
           "type": "string",
           "default": "agac-lsp",
-          "description": "Path to the agac-lsp binary. Defaults to 'agac-lsp' on PATH."
+          "description": "Path to a standalone agac-lsp binary. Overrides interpreter-based discovery. Defaults to 'agac-lsp' on PATH."
         },
         "agentActions.trace.server": {
           "type": "string",
@@ -73,6 +80,7 @@
     "publish": "npm run typecheck && npm run build && vsce publish"
   },
   "dependencies": {
+    "@vscode/python-extension": "^1.0.5",
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
