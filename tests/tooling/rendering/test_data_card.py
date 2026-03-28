@@ -17,8 +17,17 @@ class TestClassifyField:
         assert classify_field("target_id") == "identity"
 
     def test_metadata_keys(self):
-        for key in ("lineage", "node_id", "metadata", "parent_target_id",
-                     "root_target_id", "chunk_info", "_recovery", "_unprocessed", "_file"):
+        for key in (
+            "lineage",
+            "node_id",
+            "metadata",
+            "parent_target_id",
+            "root_target_id",
+            "chunk_info",
+            "_recovery",
+            "_unprocessed",
+            "_file",
+        ):
             assert classify_field(key) == "metadata", f"{key} should be metadata"
 
     def test_identity_keys_are_also_metadata(self):
