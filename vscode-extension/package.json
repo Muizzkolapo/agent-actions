@@ -32,8 +32,8 @@
     "agac"
   ],
   "activationEvents": [
-    "workspaceContains:**/agent_config/*.yml",
-    "workspaceContains:agent_actions.yml"
+    "workspaceContains:**/agent_actions.yml",
+    "workspaceContains:**/agent_config/*.yml"
   ],
   "main": "./out/extension.js",
   "contributes": {
