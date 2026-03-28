@@ -1,0 +1,288 @@
+"use client"
+
+import React, { useState } from "react"
+import { ChevronRight } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  classifyRecord,
+  humanizeKey,
+  isInlineArray,
+  isLongFormField,
+  isShortValue,
+  getValueType,
+  formatValue,
+  pickHeadlineField,
+  type ClassifiedField,
+} from "@/lib/data-card-utils"
+
+// ── Shared value renderer (used by both DataCard and table CellValue) ──────
+
+export function CellValue({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-[10px] italic text-muted-foreground/50">null</span>
+  }
+  if (typeof value === "boolean") {
+    return (
+      <Badge
+        variant="outline"
+        className={`text-[10px] font-normal rounded-md ${
+          value
+            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))] border-[hsl(var(--success))]/20"
+            : "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20"
+        }`}
+      >
+        {String(value)}
+      </Badge>
+    )
+  }
+  if (typeof value === "number") {
+    return <span className="font-mono tabular-nums text-foreground">{value.toLocaleString()}</span>
+  }
+  if (typeof value === "object") {
+    const str = JSON.stringify(value)
+    return (
+      <span className="font-mono text-muted-foreground truncate block max-w-[300px]" title={str}>
+        {str.length > 80 ? str.slice(0, 80) + "\u2026" : str}
+      </span>
+    )
+  }
+  const str = String(value)
+  return (
+    <span className="font-mono text-foreground truncate block max-w-[300px]" title={str}>
+      {str.length > 120 ? str.slice(0, 120) + "\u2026" : str}
+    </span>
+  )
+}
+
+// ── Field renderers ────────────────────────────────────────────────────────
+
+function InlinePills({ items }: { items: (string | number)[] }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item, i) => (
+        <span key={i} className="data-card-pill">{String(item)}</span>
+      ))}
+    </div>
+  )
+}
+
+function CodeBlock({ value }: { value: unknown }) {
+  return (
+    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  )
+}
+
+function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
+  const type = getValueType(value)
+
+  // Inline pills for short arrays
+  if (isInlineArray(value)) {
+    return <InlinePills items={value as (string | number)[]} />
+  }
+
+  // Code block for complex objects/arrays
+  if (type === "object") {
+    return <CodeBlock value={value} />
+  }
+
+  // Long-form prose
+  if (isLongFormField(fieldKey) && typeof value === "string" && value.length > 80) {
+    return <ProseBlock text={value} />
+  }
+
+  // Everything else: use shared CellValue (no truncation for card view)
+  if (type === "null") {
+    return <span className="text-[10px] italic text-muted-foreground/50">null</span>
+  }
+  if (type === "boolean") {
+    return (
+      <Badge
+        variant="outline"
+        className={`text-[10px] font-normal rounded-md ${
+          value
+            ? "bg-[hsl(var(--success))]/10 text-[hsl(var(--success))] border-[hsl(var(--success))]/20"
+            : "bg-[hsl(var(--destructive))]/10 text-[hsl(var(--destructive))] border-[hsl(var(--destructive))]/20"
+        }`}
+      >
+        {String(value)}
+      </Badge>
+    )
+  }
+  if (type === "number") {
+    return <span className="font-mono tabular-nums text-foreground">{(value as number).toLocaleString()}</span>
+  }
+
+  // String — show full value in card (no truncation)
+  const str = String(value)
+  return <span className="font-mono text-foreground break-words">{str}</span>
+}
+
+function ProseBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const needsClamp = text.length > 200
+
+  return (
+    <div>
+      <p className={`data-card-prose ${needsClamp && !expanded ? "clamped" : ""}`}>
+        {text}
+      </p>
+      {needsClamp && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="text-[10px] text-[hsl(var(--primary))] hover:underline mt-1"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Compact field row (for key-value pairs) ────────────────────────────────
+
+function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
+  const short = isShortValue(value) && !isLongFormField(fieldKey)
+
+  if (short) {
+    return (
+      <div className="flex items-baseline gap-3 min-w-0">
+        <span className="data-card-label shrink-0 min-w-[80px]">{humanizeKey(fieldKey)}</span>
+        <div className="min-w-0 flex-1">
+          <FieldValue fieldKey={fieldKey} value={value} />
+        </div>
+      </div>
+    )
+  }
+
+  // Full-width block layout for complex or long values
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="data-card-label">{humanizeKey(fieldKey)}</span>
+      <FieldValue fieldKey={fieldKey} value={value} />
+    </div>
+  )
+}
+
+// ── Metadata drawer ────────────────────────────────────────────────────────
+
+function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
+  const [open, setOpen] = useState(false)
+
+  if (fields.length === 0) return null
+
+  return (
+    <div className="border-t border-border/50 mt-1">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 py-2 px-4 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
+      >
+        <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
+        <span className="uppercase tracking-wider font-semibold">Metadata</span>
+        <span className="text-muted-foreground/50 ml-1">{fields.length} fields</span>
+      </button>
+      <div className="data-card-drawer" data-open={open}>
+        <div>
+          <div className="px-4 pb-3 flex flex-wrap gap-x-4 gap-y-2">
+            {fields.map((f) => (
+              <div key={f.key} className="flex items-baseline gap-1.5 min-w-0">
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0">
+                  {humanizeKey(f.key)}
+                </span>
+                <span className="text-[11px] font-mono text-muted-foreground truncate max-w-[220px]" title={formatValue(f.value, 0)}>
+                  {formatValue(f.value, 40)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── DataCard ───────────────────────────────────────────────────────────────
+
+export interface DataCardProps {
+  record: Record<string, unknown>
+  index?: number
+  state?: "approved" | "rejected" | "pending"
+}
+
+export function DataCard({ record, index, state }: DataCardProps) {
+  const { identity, content, metadata } = classifyRecord(record)
+  const headline = pickHeadlineField(content)
+
+  // Separate headline from other content fields
+  const otherContent = headline
+    ? content.filter((f) => f.key !== headline.key)
+    : content
+
+  // Split content into short (inline) and long (block) groups
+  const shortFields = otherContent.filter(
+    (f) => isShortValue(f.value) && !isLongFormField(f.key),
+  )
+  const longFields = otherContent.filter(
+    (f) => !isShortValue(f.value) || isLongFormField(f.key),
+  )
+
+  return (
+    <div
+      className="data-card"
+      data-state={state}
+    >
+      {/* Header zone */}
+      <div className="px-4 pt-3 pb-2">
+        {/* Identity line: index + source_guid */}
+        <div className="flex items-center gap-2 mb-1">
+          {typeof index === "number" && (
+            <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
+              #{index}
+            </span>
+          )}
+          {identity.map((f) => (
+            <span
+              key={f.key}
+              className="text-[10px] font-mono text-muted-foreground/60 truncate"
+              title={`${f.key}: ${formatValue(f.value, 0)}`}
+            >
+              {formatValue(f.value, 32)}
+            </span>
+          ))}
+        </div>
+
+        {/* Headline */}
+        {headline && (
+          <div className="data-card-headline mb-2">
+            {String(headline.value)}
+          </div>
+        )}
+      </div>
+
+      {/* Key-value zone */}
+      {(shortFields.length > 0 || longFields.length > 0) && (
+        <div className="px-4 pb-3 flex flex-col gap-2.5">
+          {/* Short fields */}
+          {shortFields.map((f) => (
+            <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
+          ))}
+          {/* Long/complex fields */}
+          {longFields.map((f) => (
+            <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
+          ))}
+        </div>
+      )}
+
+      {/* No headline, no content: show all fields flat */}
+      {!headline && shortFields.length === 0 && longFields.length === 0 && (
+        <div className="px-4 pb-3 text-xs text-muted-foreground italic">
+          No content fields
+        </div>
+      )}
+
+      {/* Metadata drawer */}
+      <MetadataDrawer fields={metadata} />
+    </div>
+  )
+}
