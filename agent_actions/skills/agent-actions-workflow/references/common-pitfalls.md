@@ -241,7 +241,23 @@ Use this opener: {{ inject_opener.suggested_opener }}
 
 See: **[Dynamic Content Injection](dynamic-content-injection.md)**
 
-## 14. Missing passthrough When Injecting Content
+## 14. Running Full Data During Development
+
+**Symptom:** Workflow takes 30 minutes to run while iterating on prompts.
+
+**Cause:** Processing all records and files when you only need a few to validate.
+
+**Fix:** Use `record_limit` and `file_limit` to cap processing:
+```yaml
+actions:
+  - name: extract
+    record_limit: 10   # Process only 10 records per file
+    file_limit: 2       # Walk only 2 files
+```
+
+Remove limits when ready for production. Changing limits between runs automatically invalidates the action's completion status so it re-executes.
+
+## 15. Missing passthrough When Injecting Content
 
 **Symptom:** Downstream action can't access upstream fields after injection.
 

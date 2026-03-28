@@ -52,6 +52,8 @@ actions:
 | `max_tokens` | integer | Maximum response tokens |
 | `top_p` | float | Top-p (nucleus) sampling (0.0-1.0) |
 | `stop` | string/list | Stop sequence(s) to end generation |
+| `record_limit` | integer | Max records per file at start nodes (default: unlimited) |
+| `file_limit` | integer | Max files to walk per action (default: unlimited) |
 
 :::note Schema vs Runtime
 The `DefaultsConfig` schema defines only the core defaultable fields above. Additional fields like `api_key`, `context_scope`, `is_operational`, and `prompt_debug` are resolved at runtime through configuration merging and may not be explicitly defined in the defaults schema.
@@ -312,7 +314,24 @@ actions:
     stop: ["\n"]      # Stop at newline
 ```
 
-### 6. Environment-Specific Defaults
+### 6. Use Limits for Test Runs
+
+Cap processing to validate pipelines quickly before committing to full data:
+
+```yaml
+# testing config
+defaults:
+  record_limit: 10    # Process only 10 records per file
+  file_limit: 3       # Walk only 3 files per action
+
+# production config — remove limits
+defaults:
+  # record_limit and file_limit omitted = unlimited
+```
+
+`record_limit` applies at start nodes only (initial data ingestion). `file_limit` applies at all stages. If you change limits between runs, actions automatically re-execute instead of being skipped.
+
+### 7. Environment-Specific Defaults
 
 Create separate config files for different environments:
 
