@@ -68,7 +68,7 @@ function InlinePills({ items }: { items: (string | number)[] }) {
 
 function CodeBlock({ value }: { value: unknown }) {
   return (
-    <pre className="rounded-md bg-secondary/30 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
       {JSON.stringify(value, null, 2)}
     </pre>
   )
@@ -99,7 +99,7 @@ function ProseBlock({ text }: { text: string }) {
       {needsClamp && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-[10px] text-muted-foreground hover:text-foreground hover:underline mt-1"
+          className="text-[10px] text-[hsl(var(--primary))] hover:underline mt-1"
         >
           {expanded ? "Show less" : "Show more"}
         </button>
@@ -142,13 +142,13 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
   if (fields.length === 0) return null
 
   return (
-    <div className="border-t border-border/40 mt-1">
+    <div className="border-t border-border/50 mt-1">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 py-2 px-4 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
       >
         <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
-        <span className="font-medium">Metadata</span>
+        <span className="uppercase tracking-wider font-semibold">Metadata</span>
         <span className="text-muted-foreground/50 ml-1">{fields.length} fields</span>
       </button>
       <div className="data-card-drawer" data-open={open}>
@@ -156,7 +156,7 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
           <div className="px-4 pb-3 flex flex-col gap-1.5">
             {fields.map((f) => (
               <div key={f.key} className="flex items-baseline gap-2 min-w-0">
-                <span className="text-[10px] text-muted-foreground/50 font-normal shrink-0 min-w-[60px]">
+                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0 min-w-[60px]">
                   {humanizeKey(f.key)}
                 </span>
                 <span className="text-[11px] font-mono text-muted-foreground break-all">
@@ -218,14 +218,14 @@ export function DataCard({ record, index, fontSize }: DataCardProps) {
           {identity.map((f) => (
             <span
               key={f.key}
-              className="text-[10px] font-mono text-muted-foreground/50 truncate"
+              className="text-[10px] font-mono text-muted-foreground/60 truncate"
               title={`${f.key}: ${formatValue(f.value, 0)}`}
             >
               {formatValue(f.value, 32)}
             </span>
           ))}
           {typeof record._file === "string" && (
-            <span className="text-[10px] font-mono text-muted-foreground/40 truncate" title={record._file}>
+            <span className="text-[10px] font-mono text-muted-foreground/50 truncate" title={record._file}>
               {record._file}
             </span>
           )}
