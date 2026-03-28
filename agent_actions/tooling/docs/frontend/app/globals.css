@@ -133,17 +133,17 @@
   }
 }
 
-/* ─── Data card (specimen card) ─── */
+/* ─── Data card (specimen card) — indigo accent system ─── */
 @layer components {
   .data-card {
     @apply relative rounded-lg border bg-card text-card-foreground overflow-hidden;
-    border-left: 3px solid hsl(var(--primary));
+    border-left: 4px solid #534AB7;
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px -1px rgb(0 0 0 / 0.04);
     transition: transform 150ms ease, box-shadow 150ms ease;
-    /* Solid bg — no dot-grid bleed-through */
     background-image: none;
   }
   .dark .data-card {
+    border-left-color: #7F77DD;
     box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.2), 0 1px 2px -1px rgb(0 0 0 / 0.15);
   }
   .data-card:hover {
@@ -159,16 +159,27 @@
   .data-card[data-state="rejected"] { border-left-color: hsl(var(--destructive)); }
   .data-card[data-state="pending"]  { border-left-color: hsl(var(--warning)); }
 
-  /* Headline zone */
-  /* Field label — muted but distinct from values */
+  /* Field label — indigo 600, matching accent */
   .data-card-label {
-    @apply text-[10px] uppercase tracking-wider font-semibold text-muted-foreground/70;
+    @apply text-[11px] uppercase font-semibold;
+    letter-spacing: 0.5px;
+    color: #534AB7;
+  }
+  .dark .data-card-label {
+    color: #AFA9EC;
   }
 
-  /* Inline pill for short array items */
+  /* Inline pill — indigo tinted */
   .data-card-pill {
-    @apply inline-flex items-center rounded-md bg-secondary/60 border border-border/50
-           px-1.5 py-0.5 text-[11px] font-mono text-foreground;
+    @apply inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-mono;
+    background: #EEEDFE;
+    color: #3C3489;
+    border: 1px solid #EEEDFE;
+  }
+  .dark .data-card-pill {
+    background: #3C3489;
+    color: #CECBF6;
+    border-color: #3C3489;
   }
 
   /* Metadata drawer */
@@ -184,9 +195,10 @@
     overflow: hidden;
   }
 
-  /* Long-form text with fade */
+  /* Long-form text — recedes behind values */
   .data-card-prose {
-    @apply text-sm leading-relaxed text-foreground/90;
+    @apply text-sm leading-relaxed;
+    color: rgb(from currentColor r g b / 0.72);
     font-family: var(--font-sora), sans-serif;
   }
   .data-card-prose.clamped {
