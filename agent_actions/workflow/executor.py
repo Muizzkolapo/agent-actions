@@ -131,9 +131,10 @@ class ActionExecutor:
     @staticmethod
     def _limit_metadata(action_config: ActionConfigDict) -> dict[str, int | None]:
         """Extract limit fields for status metadata storage."""
+        cfg: dict[str, Any] = action_config  # type: ignore[assignment]
         return {
-            "record_limit": action_config.get("record_limit"),
-            "file_limit": action_config.get("file_limit"),
+            "record_limit": cfg.get("record_limit"),
+            "file_limit": cfg.get("file_limit"),
         }
 
     def _maybe_invalidate_completed_status(
