@@ -1,4 +1,5 @@
-import { workspace, ExtensionContext, window, commands, OutputChannel } from "vscode";
+import * as vscode from "vscode";
+import { workspace, ExtensionContext, window, commands, OutputChannel, Uri } from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -6,6 +7,10 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import { PythonExtension } from "@vscode/python-extension";
+import { WorkflowModel } from "./model/workflowModel";
+import { WorkflowTreeProvider } from "./providers/treeViewProvider";
+import { ExtensionInfoProvider } from "./providers/extensionInfoProvider";
+import { HelpProvider } from "./providers/helpProvider";
 
 let client: LanguageClient | undefined;
 let outputChannel: OutputChannel;
@@ -166,6 +171,36 @@ function restartServer(context: ExtensionContext): Promise<void> {
 export async function activate(context: ExtensionContext): Promise<void> {
   outputChannel = window.createOutputChannel("Agent Actions");
   context.subscriptions.push(outputChannel);
+
+  // Sidebar panels
+  const model = new WorkflowModel();
+  const treeProvider = new WorkflowTreeProvider(model);
+  const infoProvider = new ExtensionInfoProvider(() => client, context);
+  const helpProvider = new HelpProvider();
+
+  context.subscriptions.push(
+    model,
+    treeProvider,
+    infoProvider,
+    vscode.window.registerTreeDataProvider("agentActionsWorkflow", treeProvider),
+    vscode.window.registerTreeDataProvider("agentActionsInfo", infoProvider),
+    vscode.window.registerTreeDataProvider("agentActionsHelp", helpProvider),
+  );
+
+  // Sidebar commands
+  context.subscriptions.push(
+    commands.registerCommand("agentActions.refreshWorkflows", () => void model.refresh()),
+    commands.registerCommand("agentActions.openConfig", (action: { configLocation?: vscode.Location }) => {
+      if (action?.configLocation) {
+        vscode.window.showTextDocument(action.configLocation.uri, {
+          selection: new vscode.Range(action.configLocation.range.start, action.configLocation.range.start),
+        });
+      }
+    }),
+    commands.registerCommand("agentActions.openDocs", () => {
+      vscode.env.openExternal(Uri.parse("https://docs.runagac.com"));
+    }),
+  );
 
   // Register interpreter change listener unconditionally — before startClient() —
   // so "install package → switch interpreter → auto-start" recovery works even
