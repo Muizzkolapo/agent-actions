@@ -68,29 +68,22 @@ function InlinePills({ items }: { items: (string | number)[] }) {
 
 function CodeBlock({ value }: { value: unknown }) {
   return (
-    <pre className="rounded-md bg-secondary/40 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
+    <pre className="rounded-md bg-secondary/30 border border-border/30 px-3 py-2 text-[11px] font-mono text-foreground/80 leading-relaxed overflow-x-auto whitespace-pre-wrap">
       {JSON.stringify(value, null, 2)}
     </pre>
   )
 }
 
 function FieldValue({ fieldKey, value }: { fieldKey: string; value: unknown }) {
-  // Inline pills for short arrays
   if (isInlineArray(value)) {
     return <InlinePills items={value as (string | number)[]} />
   }
-
-  // Code block for complex objects/arrays
   if (getValueType(value) === "object") {
     return <CodeBlock value={value} />
   }
-
-  // Long-form prose
   if (isLongFormField(fieldKey) && typeof value === "string" && value.length > 80) {
     return <ProseBlock text={value} />
   }
-
-  // Delegate simple types (null, boolean, number, string) to shared CellValue
   return <CellValue value={value} />
 }
 
@@ -106,7 +99,7 @@ function ProseBlock({ text }: { text: string }) {
       {needsClamp && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-[10px] text-[hsl(var(--primary))] hover:underline mt-1"
+          className="text-[10px] text-muted-foreground hover:text-foreground hover:underline mt-1"
         >
           {expanded ? "Show less" : "Show more"}
         </button>
@@ -115,7 +108,7 @@ function ProseBlock({ text }: { text: string }) {
   )
 }
 
-// ── Compact field row (for key-value pairs) ────────────────────────────────
+// ── Field row ─────────────────────────────────────────────────────────────
 
 function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
   const short = isShortValue(value) && !isLongFormField(fieldKey)
@@ -124,23 +117,24 @@ function FieldRow({ fieldKey, value }: { fieldKey: string; value: unknown }) {
     return (
       <div className="flex items-baseline gap-3 min-w-0">
         <span className="data-card-label shrink-0 min-w-[80px]">{humanizeKey(fieldKey)}</span>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 text-sm text-foreground">
           <FieldValue fieldKey={fieldKey} value={value} />
         </div>
       </div>
     )
   }
 
-  // Full-width block layout for complex or long values
   return (
     <div className="flex flex-col gap-1">
       <span className="data-card-label">{humanizeKey(fieldKey)}</span>
-      <FieldValue fieldKey={fieldKey} value={value} />
+      <div className="text-sm text-foreground">
+        <FieldValue fieldKey={fieldKey} value={value} />
+      </div>
     </div>
   )
 }
 
-// ── Metadata drawer ────────────────────────────────────────────────────────
+// ── Metadata drawer ───────────────────────────────────────────────────────
 
 function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
   const [open, setOpen] = useState(false)
@@ -148,13 +142,13 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
   if (fields.length === 0) return null
 
   return (
-    <div className="border-t border-border/50 mt-1">
+    <div className="border-t border-border/40 mt-1">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 py-2 px-4 text-[10px] text-muted-foreground hover:text-foreground transition-colors w-full"
       >
         <ChevronRight className={`h-3 w-3 transition-transform ${open ? "rotate-90" : ""}`} />
-        <span className="uppercase tracking-wider font-semibold">Metadata</span>
+        <span className="font-medium">Metadata</span>
         <span className="text-muted-foreground/50 ml-1">{fields.length} fields</span>
       </button>
       <div className="data-card-drawer" data-open={open}>
@@ -162,7 +156,7 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
           <div className="px-4 pb-3 flex flex-col gap-1.5">
             {fields.map((f) => (
               <div key={f.key} className="flex items-baseline gap-2 min-w-0">
-                <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-medium shrink-0 min-w-[60px]">
+                <span className="text-[10px] text-muted-foreground/50 font-normal shrink-0 min-w-[60px]">
                   {humanizeKey(f.key)}
                 </span>
                 <span className="text-[11px] font-mono text-muted-foreground break-all">
@@ -177,20 +171,14 @@ function MetadataDrawer({ fields }: { fields: ClassifiedField[] }) {
   )
 }
 
-// ── DataCard ───────────────────────────────────────────────────────────────
+// ── DataCard ──────────────────────────────────────────────────────────────
 
 export interface DataCardProps {
   record: Record<string, unknown>
   index?: number
-  state?: "approved" | "rejected" | "pending"
+  fontSize?: number
 }
 
-/**
- * Unpack a record for display — mirrors HITL's getDisplayRecord() logic.
- * If the record has a `.content` object, unpack its inner fields as the
- * display fields (this is the standard agent-actions record envelope).
- * Otherwise, filter out metadata keys and show remaining fields.
- */
 function getDisplayFields(record: Record<string, unknown>): Record<string, unknown> {
   const contentVal = record.content
   if (contentVal && typeof contentVal === "object" && !Array.isArray(contentVal)) {
@@ -199,17 +187,14 @@ function getDisplayFields(record: Record<string, unknown>): Record<string, unkno
   return record
 }
 
-export function DataCard({ record, index, state }: DataCardProps) {
-  // Unpack content envelope — show inner fields, not the raw content blob
+export function DataCard({ record, index, fontSize }: DataCardProps) {
   const displayRecord = getDisplayFields(record)
-  const { identity, content, metadata } = classifyRecord(record)
+  const { identity, metadata } = classifyRecord(record)
 
-  // Re-classify the unpacked display fields (these are all "content" role)
   const displayFields = Object.entries(displayRecord)
     .filter(([key]) => classifyField(key) === "content")
     .map(([key, value]) => ({ key, value, role: "content" as const }))
 
-  // Split content into short (inline) and long (block) groups
   const shortFields = displayFields.filter(
     (f) => isShortValue(f.value) && !isLongFormField(f.key),
   )
@@ -220,12 +205,11 @@ export function DataCard({ record, index, state }: DataCardProps) {
   return (
     <div
       className="data-card"
-      data-state={state}
+      style={fontSize ? { fontSize: `${fontSize}px` } : undefined}
     >
-      {/* Header zone */}
-      <div className="px-4 pt-3 pb-2">
-        {/* Identity line: index + source_guid + file */}
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
+      {/* Identity header */}
+      <div className="px-4 pt-3 pb-1">
+        <div className="flex items-center gap-2 flex-wrap">
           {typeof index === "number" && (
             <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums">
               #{index}
@@ -234,43 +218,38 @@ export function DataCard({ record, index, state }: DataCardProps) {
           {identity.map((f) => (
             <span
               key={f.key}
-              className="text-[10px] font-mono text-muted-foreground/60 truncate"
+              className="text-[10px] font-mono text-muted-foreground/50 truncate"
               title={`${f.key}: ${formatValue(f.value, 0)}`}
             >
               {formatValue(f.value, 32)}
             </span>
           ))}
           {typeof record._file === "string" && (
-            <span className="text-[10px] font-mono text-muted-foreground/50 truncate" title={record._file}>
+            <span className="text-[10px] font-mono text-muted-foreground/40 truncate" title={record._file}>
               {record._file}
             </span>
           )}
         </div>
-
       </div>
 
-      {/* Key-value zone */}
+      {/* Content fields */}
       {(shortFields.length > 0 || longFields.length > 0) && (
-        <div className="px-4 pb-3 flex flex-col gap-2.5">
-          {/* Short fields */}
+        <div className="px-4 pb-3 pt-1 flex flex-col gap-2.5">
           {shortFields.map((f) => (
             <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
           ))}
-          {/* Long/complex fields */}
           {longFields.map((f) => (
             <FieldRow key={f.key} fieldKey={f.key} value={f.value} />
           ))}
         </div>
       )}
 
-      {/* No content fields */}
       {shortFields.length === 0 && longFields.length === 0 && (
         <div className="px-4 pb-3 text-xs text-muted-foreground italic">
           No content fields
         </div>
       )}
 
-      {/* Metadata drawer */}
       <MetadataDrawer fields={metadata} />
     </div>
   )
