@@ -125,27 +125,27 @@ function restartServer(context: ExtensionContext): Promise<void> {
   }
   lifecyclePending++;
   const cycle = lifecycleQueue.then(async () => {
-    if (disposed) {
-      outputChannel.appendLine("LSP restart skipped (extension disposing).");
-      return;
-    }
-
-    outputChannel.appendLine("LSP restart starting...");
-
     try {
+      if (disposed) {
+        outputChannel.appendLine("LSP lifecycle: skipped (extension disposing).");
+        return;
+      }
+
+      outputChannel.appendLine("LSP lifecycle: starting...");
+
       if (client) {
         await client.stop();
         client = undefined;
       }
       await startClient(context);
-      outputChannel.appendLine("LSP restart complete.");
+      outputChannel.appendLine("LSP lifecycle: started.");
     } catch (err: unknown) {
       // Invariant: client must be undefined if not fully started.
       // startClient() already enforces this in its catch block, but guard
       // against any path where client could be left half-initialized.
       client = undefined;
       const msg = err instanceof Error ? err.message : String(err);
-      outputChannel.appendLine(`LSP restart failed: ${msg}`);
+      outputChannel.appendLine(`LSP lifecycle: failed — ${msg}`);
       throw err;
     } finally {
       lifecyclePending--;
@@ -227,7 +227,11 @@ export function deactivate(): Thenable<void> | undefined {
   // complete before stopping, avoiding orphan processes.
   lifecycleQueue = lifecycleQueue.then(async () => {
     if (client) {
-      await client.stop();
+      try {
+        await client.stop();
+      } catch (err) {
+        outputChannel.appendLine(`Shutdown error: ${err}`);
+      }
       client = undefined;
     }
   });
