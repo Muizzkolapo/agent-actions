@@ -134,6 +134,12 @@ def process_directory_files(
             )
         )
         count += 1
+        if (
+            params.action_config.get("file_limit") is not None
+            and count >= params.action_config["file_limit"]
+        ):
+            logger.info("file_limit=%d reached for %s", count, params.action_name)
+            break
     return count
 
 
@@ -213,6 +219,12 @@ def process_merged_files(runner: ActionRunner, params: FileProcessParams) -> int
                 )
 
         files_processed_count += 1
+        if (
+            params.action_config.get("file_limit") is not None
+            and files_processed_count >= params.action_config["file_limit"]
+        ):
+            logger.info("file_limit=%d reached for %s", files_processed_count, params.action_name)
+            break
 
     return files_processed_count
 
@@ -318,6 +330,12 @@ def process_from_storage_backend(
                 )
             )
             files_processed += 1
+            if (
+                params.action_config.get("file_limit") is not None
+                and files_processed >= params.action_config["file_limit"]
+            ):
+                logger.info("file_limit=%d reached for %s", files_processed, params.action_name)
+                break
 
         except Exception as e:
             error_msg = f"{relative_path}: {e}"

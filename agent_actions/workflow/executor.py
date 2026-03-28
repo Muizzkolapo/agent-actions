@@ -189,7 +189,12 @@ class ActionExecutor:
     ) -> ActionExecutionResult:
         """Handle action skip due to WHERE clause condition."""
         self.deps.output_manager.create_passthrough_output(action_idx, action_name)
-        self.deps.state_manager.update_status(action_name, "completed")
+        self.deps.state_manager.update_status(
+            action_name,
+            "completed",
+            record_limit=action_config.get("record_limit"),
+            file_limit=action_config.get("file_limit"),
+        )
 
         duration = (datetime.now() - start_time).total_seconds()
         total_actions = (
@@ -258,7 +263,12 @@ class ActionExecutor:
             )
 
         if batch_status == "passthrough":
-            self.deps.state_manager.update_status(params.action_name, "completed")
+            self.deps.state_manager.update_status(
+                params.action_name,
+                "completed",
+                record_limit=params.action_config.get("record_limit"),
+                file_limit=params.action_config.get("file_limit"),
+            )
             logger.info(
                 "Action completed (passthrough)",
                 extra={
@@ -278,7 +288,12 @@ class ActionExecutor:
             )
 
         # Normal completion
-        self.deps.state_manager.update_status(params.action_name, "completed")
+        self.deps.state_manager.update_status(
+            params.action_name,
+            "completed",
+            record_limit=params.action_config.get("record_limit"),
+            file_limit=params.action_config.get("file_limit"),
+        )
         tokens = get_last_usage()
 
         if self.run_tracker is not None and self.run_id is not None:
@@ -367,6 +382,16 @@ class ActionExecutor:
         )
 
         if current_status == "completed":
+            # Invalidate if limit config changed since last completion
+            details = self.deps.state_manager.get_status_details(action_name)
+            if details.get("record_limit") != action_config.get("record_limit") or details.get(
+                "file_limit"
+            ) != action_config.get("file_limit"):
+                logger.info("Limit config changed for %s, resetting to pending", action_name)
+                self.deps.state_manager.update_status(action_name, "pending")
+                current_status = "pending"
+
+        if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -417,6 +442,16 @@ class ActionExecutor:
         )
 
         if current_status == "completed":
+            # Invalidate if limit config changed since last completion
+            details = self.deps.state_manager.get_status_details(action_name)
+            if details.get("record_limit") != action_config.get("record_limit") or details.get(
+                "file_limit"
+            ) != action_config.get("file_limit"):
+                logger.info("Limit config changed for %s, resetting to pending", action_name)
+                self.deps.state_manager.update_status(action_name, "pending")
+                current_status = "pending"
+
+        if current_status == "completed":
             should_skip, result = self._verify_completion_status(action_name)
             if should_skip:
                 if result is None:
@@ -465,7 +500,12 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(action_name, "completed")
+            self.deps.state_manager.update_status(
+                action_name,
+                "completed",
+                record_limit=action_config.get("record_limit"),
+                file_limit=action_config.get("file_limit"),
+            )
             fire_event(
                 BatchCompleteEvent(
                     batch_id=action_config.get("batch_id", ""),
@@ -536,7 +576,12 @@ class ActionExecutor:
         duration = (datetime.now() - start_time).total_seconds()
 
         if batch_status == "completed":
-            self.deps.state_manager.update_status(action_name, "completed")
+            self.deps.state_manager.update_status(
+                action_name,
+                "completed",
+                record_limit=action_config.get("record_limit"),
+                file_limit=action_config.get("file_limit"),
+            )
             fire_event(
                 BatchCompleteEvent(
                     batch_id=action_config.get("batch_id", ""),

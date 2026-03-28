@@ -232,6 +232,12 @@ class ActionConfig(BaseModel):
     )
     enable_caching: bool | None = Field(default=None, description="Enable caching for performance")
 
+    # --- Limit controls ---
+    record_limit: int | None = Field(
+        default=None, ge=1, description="Max records per file (start nodes only)"
+    )
+    file_limit: int | None = Field(default=None, ge=1, description="Max files to walk per action")
+
     # --- Expander-consumed keys ---
     interceptors: list[dict[str, Any]] | None = Field(
         default=None, description="Interceptor configuration"
@@ -355,6 +361,10 @@ class DefaultsConfig(BaseModel):
     )
     chunk_size: int | None = Field(default=None, description="Default chunk size")
     chunk_overlap: int | None = Field(default=None, description="Default chunk overlap")
+
+    # --- Limit controls ---
+    record_limit: int | None = Field(default=None, ge=1, description="Default record limit")
+    file_limit: int | None = Field(default=None, ge=1, description="Default file limit")
 
     @field_validator("retry", mode="before")
     @classmethod
