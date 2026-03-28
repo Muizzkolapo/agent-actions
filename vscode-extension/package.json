@@ -120,6 +120,55 @@
         "title": "Agent Actions: Previous Page"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentActions.refreshWorkflows",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.showDAG",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentActions.openConfig",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.previewData",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "agentActions.showDAG",
+        "key": "cmd+shift+d",
+        "mac": "cmd+shift+d",
+        "win": "ctrl+shift+d",
+        "linux": "ctrl+shift+d",
+        "when": "agentActions.isAgentProject"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "key": "cmd+shift+a",
+        "mac": "cmd+shift+a",
+        "win": "ctrl+shift+a",
+        "linux": "ctrl+shift+a",
+        "when": "agentActions.isAgentProject"
+      }
+    ],
     "configuration": {
       "title": "Agent Actions",
       "properties": {
