@@ -325,6 +325,7 @@ export class WorkflowModel implements vscode.Disposable {
             const workflows = new Map<string, WorkflowInfo>();
 
             for (const configUri of configFiles) {
+                try {
                 const parsedConfig = await parseWorkflowConfig(configUri);
                 if (!parsedConfig || parsedConfig.actions.length === 0) {
                     continue;
@@ -332,6 +333,9 @@ export class WorkflowModel implements vscode.Disposable {
 
                 const workflow = await this.buildWorkflow(configUri, parsedConfig);
                 workflows.set(workflow.name, workflow);
+                } catch {
+                    // Skip malformed configs so other workflows still load
+                }
             }
 
             this.workflows = workflows;

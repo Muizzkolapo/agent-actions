@@ -152,7 +152,7 @@ export class DagWebview implements vscode.Disposable {
         // Define nodes with status styling
         for (const action of actions) {
             const nodeId = this.sanitizeId(action.name);
-            const label = `${action.name}`;
+            const label = action.name.replace(/["\]\\]/g, '_');
             const statusClass = this.getStatusClass(action.status);
 
             lines.push(`  ${nodeId}["[${action.index}] ${label}"]:::${statusClass}`);
@@ -216,7 +216,7 @@ export class DagWebview implements vscode.Disposable {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${webview.cspSource} 'nonce-${nonce}'; style-src 'unsafe-inline';">
-    <title>${workflowName} - Workflow DAG</title>
+    <title>${this.escapeHtml(workflowName)} - Workflow DAG</title>
     <style>
         body {
             margin: 0;
@@ -274,7 +274,7 @@ export class DagWebview implements vscode.Disposable {
 </head>
 <body>
     <div class="header">
-        <h1>${workflowName}</h1>
+        <h1>${this.escapeHtml(workflowName)}</h1>
         <div class="legend">
             <div class="legend-item"><div class="legend-dot completed"></div> Completed</div>
             <div class="legend-item"><div class="legend-dot running"></div> Running</div>
@@ -321,5 +321,13 @@ ${diagram}
             text += possible.charAt(Math.floor(Math.random() * possible.length));
         }
         return text;
+    }
+
+    private escapeHtml(value: string): string {
+        return value
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
     }
 }

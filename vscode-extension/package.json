@@ -33,8 +33,6 @@
     "agac"
   ],
   "activationEvents": [
-    "onLanguage:yaml",
-    "onLanguage:markdown",
     "onView:agentActionsWorkflow",
     "onView:agentActionsInfo",
     "onView:agentActionsHelp",
@@ -353,32 +351,7 @@
         }
       ]
     },
-    "keybindings": [
-      {
-        "command": "agentActions.showDAG",
-        "key": "cmd+shift+d",
-        "mac": "cmd+shift+d",
-        "win": "ctrl+shift+d",
-        "linux": "ctrl+shift+d",
-        "when": "agentActions.isAgentProject"
-      },
-      {
-        "command": "agentActions.goToAction",
-        "key": "cmd+shift+a",
-        "mac": "cmd+shift+a",
-        "win": "ctrl+shift+a",
-        "linux": "ctrl+shift+a",
-        "when": "agentActions.isAgentProject"
-      },
-      {
-        "command": "agentActions.refresh",
-        "key": "cmd+shift+r",
-        "mac": "cmd+shift+r",
-        "win": "ctrl+shift+r",
-        "linux": "ctrl+shift+r",
-        "when": "agentActions.isAgentProject"
-      }
-    ],
+    "keybindings": [],
     "grammars": [
       {
         "scopeName": "markdown.prompt-blocks.injection",
