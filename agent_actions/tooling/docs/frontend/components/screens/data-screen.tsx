@@ -20,8 +20,20 @@ import type { DataNode, WorkflowDataSummary } from "@/lib/mock-data"
 
 const RECORDS_PER_PAGE = 5
 
+/** Build an execution-order index from workflow levels: action name → position. */
+function buildExecutionOrder(levels: string[][]): Map<string, number> {
+  const order = new Map<string, number>()
+  let pos = 0
+  for (const level of levels) {
+    for (const action of level) {
+      order.set(action, pos++)
+    }
+  }
+  return order
+}
+
 export function DataScreen() {
-  const { workflowData } = useCatalogData()
+  const { workflowData, workflows } = useCatalogData()
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowDataSummary | null>(null)
   const [selectedNode, setSelectedNode] = useState<DataNode | null>(null)
 
@@ -51,6 +63,9 @@ export function DataScreen() {
     return (
       <WorkflowDetail
         wf={selectedWorkflow}
+        executionOrder={buildExecutionOrder(
+          workflows.find((w) => w.name === selectedWorkflow.workflow)?.levels ?? [],
+        )}
         onBack={() => setSelectedWorkflow(null)}
         onSelectNode={setSelectedNode}
       />
@@ -139,23 +154,35 @@ export function DataScreen() {
 
 function WorkflowDetail({
   wf,
+  executionOrder,
   onBack,
   onSelectNode,
 }: {
   wf: WorkflowDataSummary
+  executionOrder: Map<string, number>
   onBack: () => void
   onSelectNode: (n: DataNode) => void
 }) {
   const [search, setSearch] = useState("")
 
+  // Sort nodes by execution order (actions not in levels go last, then alphabetical)
+  const sortedNodes = useMemo(() => {
+    return [...wf.nodes].sort((a, b) => {
+      const orderA = executionOrder.get(a.node) ?? Infinity
+      const orderB = executionOrder.get(b.node) ?? Infinity
+      if (orderA !== orderB) return orderA - orderB
+      return a.node.localeCompare(b.node)
+    })
+  }, [wf.nodes, executionOrder])
+
   const filteredNodes = useMemo(() => {
-    if (!search) return wf.nodes
-    return wf.nodes.filter(
+    if (!search) return sortedNodes
+    return sortedNodes.filter(
       (n) =>
         n.node.toLowerCase().includes(search.toLowerCase()) ||
         n.files.some((f) => f.toLowerCase().includes(search.toLowerCase())),
     )
-  }, [wf.nodes, search])
+  }, [sortedNodes, search])
 
   const totalRecords = wf.nodes.reduce((s, n) => s + n.recordCount, 0)
 
