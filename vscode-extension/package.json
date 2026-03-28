@@ -2,7 +2,7 @@
   "name": "agent-actions",
   "displayName": "Agent Actions",
   "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.2",
+  "version": "0.1.5",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -32,18 +32,33 @@
     "agac"
   ],
   "activationEvents": [
-    "workspaceContains:**/agent_config/*.yml",
-    "workspaceContains:agent_actions.yml"
+    "workspaceContains:**/agent_actions.yml",
+    "workspaceContains:**/agent_config/*.yml"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "agentActions.restartServer",
+        "title": "Agent Actions: Restart LSP Server"
+      }
+    ],
     "configuration": {
       "title": "Agent Actions",
       "properties": {
+        "agentActions.interpreter": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "Path to the Python interpreter used to run the LSP server. If empty, the interpreter from the Python extension is used."
+        },
         "agentActions.serverPath": {
           "type": "string",
           "default": "agac-lsp",
-          "description": "Path to the agac-lsp binary. Defaults to 'agac-lsp' on PATH."
+          "description": "Path to a standalone agac-lsp binary. Overrides interpreter-based discovery. Defaults to 'agac-lsp' on PATH."
         },
         "agentActions.trace.server": {
           "type": "string",
@@ -59,18 +74,22 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "package": "vsce package",
-    "publish": "vsce publish"
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "build": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run typecheck && npm run build && vsce package",
+    "publish": "npm run typecheck && npm run build && vsce publish"
   },
   "dependencies": {
+    "@vscode/python-extension": "^1.0.5",
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.24.0",
     "typescript": "^5.0.0"
   }
 }

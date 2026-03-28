@@ -14,3 +14,4 @@ references, and expose hover/definition/navigation for editors.
 | `resolver.py` | Module | Detects references at cursor positions (`get_reference_at_position`) and resolves them to file `Location`s (`resolve_reference`). | `lsprotocol`, `pathlib`, `utils` |
 | `server.py` | Module | `AgentActionsLanguageServer` setup plus LSP handlers for initialize/definition/hover using the indexer/resolver/navigator. | `pygls`, `lsprotocol`, `utils` |
 | `utils.py` | Module | Shared LSP utilities: `uri_to_path()` for URI conversion, `is_in_dependencies_context()` and `is_in_context_scope_list()` for YAML block detection. | `pathlib` |
+| `__main__.py` | Entry | Enables `python -m agent_actions.tooling.lsp` invocation. Delegates to `server.main()`. | — |

@@ -124,7 +124,7 @@ def _fetch_example(example_name: str, dest: Path, *, force: bool = False) -> Non
                 names = "(could not fetch list)"
             raise click.BadParameter(
                 f"Unknown example '{example_name}'. Available examples: {names}",
-                param_hint="'--example'",
+                param_hint="'NAME'",
             )
 
         shutil.copytree(example_src, dest, ignore=_COPY_IGNORE_PATTERNS)
@@ -297,25 +297,40 @@ class InitCommand:
         click.echo("  agac run -a sample_agent")
 
 
-@click.command()
-@click.argument("project_name", required=False, default=None)
+class _InitGroup(click.Group):
+    """Route unknown subcommands to ``new`` so ``agac init my_proj`` works."""
+
+    def resolve_command(
+        self, ctx: click.Context, args: list[str]
+    ) -> tuple[str | None, click.Command | None, list[str]]:
+        cmd_name = args[0] if args else None
+        if cmd_name and self.get_command(ctx, cmd_name) is None:
+            # Not a known subcommand — treat as ``new <project_name> ...``
+            return super().resolve_command(ctx, ["new"] + args)
+        return super().resolve_command(ctx, args)
+
+
+@click.group(cls=_InitGroup)
+def init() -> None:
+    """
+    Initialize a new Agent Actions project.
+
+    \b
+    Examples:
+        agac init my_project
+        agac init my_project --template minimal
+        agac init list
+        agac init example contract_reviewer my_project
+    """
+
+
+@init.command("new")
+@click.argument("project_name")
 @click.option(
     "-o", "--output-dir", help="Directory to create the project in (default: current directory)"
 )
 @click.option(
     "-t", "--template", default="default", help="Template to use for project initialization"
-)
-@click.option(
-    "-e",
-    "--example",
-    default=None,
-    help="Create project from a GitHub example (e.g. contract_reviewer)",
-)
-@click.option(
-    "--list-examples",
-    is_flag=True,
-    default=False,
-    help="List available example projects and exit",
 )
 @click.option(
     "-f",
@@ -325,52 +340,19 @@ class InitCommand:
     help="Force project creation even if directory exists",
 )
 @handles_user_errors("init")
-def init(
-    project_name: str | None = None,
+def init_new(
+    project_name: str,
     output_dir: str | None = None,
     template: str = "default",
-    example: str | None = None,
-    list_examples: bool = False,
     force: bool = False,
 ) -> None:
+    """Create a new project from a template.
+
+    \b
+    Examples:
+        agac init my_project
+        agac init new my_project --template minimal
     """
-    Initialize a new Agent Actions project.
-
-    This command creates a new project with the specified name.
-    It sets up the directory structure, configuration files, and
-    templates needed to start working with Agent Actions.
-
-    Examples:\n
-        agac init my_project\n
-        agac init my_project --template minimal\n
-        agac init --example contract_reviewer my_project\n
-        agac init --list-examples
-    """
-    # --- list-examples: print and exit --------------------------------
-    if list_examples:
-        _print_available_examples()
-        return
-
-    # --- project_name is required for all other paths -----------------
-    if project_name is None:
-        raise click.UsageError("Missing argument 'PROJECT_NAME'.")
-
-    # --- mutual exclusivity: --example vs --template ------------------
-    if example and template != "default":
-        raise click.UsageError("--example and --template are mutually exclusive.")
-
-    # --- example path: fetch from GitHub --------------------------------
-    if example:
-        out = Path(output_dir) if output_dir else Path.cwd()
-        dest = out / project_name
-        _fetch_example(example, dest, force=force)
-        click.echo(f"Created project from example '{example}': {dest}")
-        click.echo("\nNext steps:")
-        click.echo(f"  cd {project_name}")
-        click.echo("  agac run")
-        return
-
-    # --- default template path ----------------------------------------
     args = InitCommandArgs(
         project_name=project_name,
         output_dir=Path(output_dir) if output_dir else None,
@@ -379,3 +361,47 @@ def init(
     )
     command = InitCommand(args)
     command.execute()
+
+
+@init.command("list")
+@handles_user_errors("init list")
+def init_list() -> None:
+    """List available example projects from GitHub."""
+    _print_available_examples()
+
+
+@init.command("example")
+@click.argument("name")
+@click.argument("project_name", required=False, default=None)
+@click.option(
+    "-o", "--output-dir", help="Directory to create the project in (default: current directory)"
+)
+@click.option(
+    "-f",
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force project creation even if directory exists",
+)
+@handles_user_errors("init example")
+def init_example(
+    name: str,
+    project_name: str | None = None,
+    output_dir: str | None = None,
+    force: bool = False,
+) -> None:
+    """Create a project from a GitHub example.
+
+    \b
+    Examples:
+        agac init example contract_reviewer
+        agac init example contract_reviewer my_project
+    """
+    dest_name = project_name or name
+    out = Path(output_dir) if output_dir else Path.cwd()
+    dest = out / dest_name
+    _fetch_example(name, dest, force=force)
+    click.echo(f"Created project from example '{name}': {dest}")
+    click.echo("\nNext steps:")
+    click.echo(f"  cd {dest_name}")
+    click.echo("  agac run")
