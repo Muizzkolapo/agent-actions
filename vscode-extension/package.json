@@ -1,8 +1,8 @@
 {
   "name": "agent-actions",
   "displayName": "Agent Actions",
-  "description": "YAML language support for Agent Actions workflows — autocomplete, validation, and go-to-definition.",
-  "version": "0.1.7",
+  "description": "Language support and workflow navigation for Agent Actions projects",
+  "version": "0.1.12",
   "publisher": "runagac",
   "license": "Apache-2.0",
   "repository": {
@@ -19,30 +19,40 @@
   },
   "categories": [
     "Programming Languages",
-    "Linters",
-    "Other"
+    "Visualization"
   ],
   "keywords": [
     "agent-actions",
-    "llm",
-    "yaml",
     "workflow",
+    "dag",
+    "yaml",
+    "data-pipeline",
+    "llm",
     "ai",
     "agents",
     "agac"
   ],
   "activationEvents": [
+    "onView:agentActionsWorkflow",
+    "onView:agentActionsInfo",
+    "onView:agentActionsHelp",
     "workspaceContains:**/agent_actions.yml",
-    "workspaceContains:**/agent_config/*.yml"
+    "workspaceContains:**/agent_config/*.yml",
+    "workspaceContains:**/agent_config/*.yaml",
+    "workspaceContains:**/prompt_store/*.md",
+    "workspaceContains:**/agent_io/target/.manifest.json"
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
-      {
-        "command": "agentActions.restartServer",
-        "title": "Agent Actions: Restart LSP Server"
-      }
-    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentActions",
+          "title": "Agent Actions",
+          "icon": "media/icons/agent-actions-sidebar.svg"
+        }
+      ]
+    },
     "configuration": {
       "title": "Agent Actions",
       "properties": {
@@ -58,7 +68,7 @@
         "agentActions.serverPath": {
           "type": "string",
           "default": "agac-lsp",
-          "description": "Path to a standalone agac-lsp binary. Overrides interpreter-based discovery. Defaults to 'agac-lsp' on PATH."
+          "description": "Path to a standalone agac-lsp binary. Overrides interpreter-based discovery."
         },
         "agentActions.trace.server": {
           "type": "string",
@@ -69,9 +79,291 @@
           ],
           "default": "off",
           "description": "Trace LSP communication for debugging."
+        },
+        "agentActions.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Python interpreter (legacy). Leave empty to auto-detect."
+        },
+        "agentActions.modulePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the agent-actions module directory. Used for data preview features."
+        },
+        "agentActions.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show workflow status in the VS Code status bar."
+        },
+        "agentActions.autoRevealSidebar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically reveal Agent Actions sidebar when opening a project with workflows."
+        },
+        "agentActions.showCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens actions above workflow YAML action definitions."
+        },
+        "agentActions.showFileDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show execution order badges in the file explorer for action folders."
+        },
+        "agentActions.dagLayout": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical",
+          "description": "Layout direction for the workflow DAG visualization."
+        },
+        "agentActions.refreshInterval": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Polling interval (ms) for workflow status updates. 0 = disabled."
+        },
+        "agentActions.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error",
+            "off"
+          ],
+          "default": "info",
+          "description": "Controls the verbosity of Agent Actions logs in the Output panel."
+        },
+        "agentActions.previewCacheTTL": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 0,
+          "maximum": 60000,
+          "description": "Cache duration (ms) for data preview. 0 to disable."
+        },
+        "agentActions.previewPageSize": {
+          "type": "number",
+          "default": 50,
+          "minimum": 10,
+          "maximum": 500,
+          "description": "Number of rows per page in data preview."
         }
       }
-    }
+    },
+    "views": {
+      "agentActions": [
+        {
+          "id": "agentActionsWorkflow",
+          "name": "Workflows",
+          "icon": "$(list-tree)",
+          "contextualTitle": "Workflow Navigator"
+        },
+        {
+          "id": "agentActionsInfo",
+          "name": "Extension Info",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Info"
+        },
+        {
+          "id": "agentActionsHelp",
+          "name": "Help",
+          "visibility": "collapsed",
+          "contextualTitle": "Agent Actions Help"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "agentActionsWorkflow",
+        "contents": "No Agent Actions project detected.\n[Open Folder](command:vscode.openFolder)\nTo learn more about Agent Actions, [read the docs](command:agentActions.openDocs).",
+        "when": "!agentActions.isAgentProject"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "agentActionsGetStarted",
+        "title": "Agent Actions Walkthrough",
+        "description": "Set up your Agent Actions project and explore the extension features.",
+        "steps": [
+          {
+            "id": "openProject",
+            "title": "Open an Agent Actions project",
+            "description": "Open a folder containing `agent_actions.yml` to activate the extension.\n\n[Open Folder](command:vscode.openFolder)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Agent Actions"
+            },
+            "completionEvents": [
+              "onContext:agentActions.isAgentProject"
+            ]
+          },
+          {
+            "id": "configureEnvironment",
+            "title": "Configure Python environment",
+            "description": "Set up the Python path for the LSP server and data preview.\n\n[Open Settings](command:workbench.action.openSettings?%5B%22agentActions.pythonPath%22%5D)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Python Config"
+            },
+            "completionEvents": [
+              "onSettingChanged:agentActions.pythonPath"
+            ]
+          },
+          {
+            "id": "exploreWorkflow",
+            "title": "Explore your workflow",
+            "description": "Use the Workflow Navigator to browse actions, view the DAG, and preview data.\n\n[Show DAG](command:agentActions.showDAG)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Workflow Explorer"
+            },
+            "completionEvents": [
+              "onCommand:agentActions.showDAG"
+            ]
+          },
+          {
+            "id": "previewData",
+            "title": "Preview action data",
+            "description": "Click any action in the tree to preview its output data.\n\n[Go to Action](command:agentActions.goToAction)",
+            "media": {
+              "image": "media/icons/agent-actions.svg",
+              "altText": "Data Preview"
+            },
+            "completionEvents": [
+              "onCommand:agentActions.previewData"
+            ]
+          }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "agentActions.restartServer",
+        "title": "Restart LSP Server",
+        "category": "Agent Actions"
+      },
+      {
+        "command": "agentActions.openConfig",
+        "title": "Open Action Config",
+        "category": "Agent Actions",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "agentActions.previewData",
+        "title": "Preview Data",
+        "category": "Agent Actions",
+        "icon": "$(database)"
+      },
+      {
+        "command": "agentActions.showDAG",
+        "title": "Show Workflow DAG",
+        "category": "Agent Actions",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "agentActions.goToAction",
+        "title": "Go to Action...",
+        "category": "Agent Actions",
+        "icon": "$(search)"
+      },
+      {
+        "command": "agentActions.refresh",
+        "title": "Refresh Workflow",
+        "category": "Agent Actions",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "agentActions.showWorkflowTree",
+        "title": "Show Workflow Navigator",
+        "category": "Agent Actions",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "agentActions.nextPage",
+        "title": "Next Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "agentActions.previousPage",
+        "title": "Previous Page",
+        "category": "Agent Actions",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "agentActions.openDocs",
+        "title": "Open Documentation",
+        "category": "Agent Actions",
+        "icon": "$(book)"
+      },
+      {
+        "command": "agentActions.openSettings",
+        "title": "Open Settings",
+        "category": "Agent Actions",
+        "icon": "$(gear)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "agentActions.refresh",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.showDAG",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@2"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "view == agentActionsWorkflow",
+          "group": "navigation@3"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "agentActions.openConfig",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@1"
+        },
+        {
+          "command": "agentActions.previewData",
+          "when": "view == agentActionsWorkflow && viewItem == agentActions.action",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "agentActions.showDAG",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.goToAction",
+          "when": "agentActions.isAgentProject"
+        },
+        {
+          "command": "agentActions.refresh",
+          "when": "agentActions.isAgentProject"
+        }
+      ]
+    },
+    "keybindings": [],
+    "grammars": [
+      {
+        "scopeName": "markdown.prompt-blocks.injection",
+        "path": "./syntaxes/prompt-blocks.tmLanguage.json",
+        "injectTo": [
+          "text.html.markdown"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.prompt": "markdown"
+        }
+      }
+    ]
   },
   "scripts": {
     "compile": "node esbuild.js",
@@ -83,7 +375,8 @@
   },
   "dependencies": {
     "@vscode/python-extension": "^1.0.5",
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^9.0.1",
+    "yaml": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
